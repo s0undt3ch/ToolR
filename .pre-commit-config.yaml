@@ -16,6 +16,25 @@ repos:
   # ----- Local Hooks --------------------------------------------------------------------------->
   # <---- Local Hooks ----------------------------------------------------------------------------
 
+  # ----- Static Requirements ------------------------------------------------------------------->
+  - repo: https://github.com/jazzband/pip-tools
+    rev: 7.4.1
+    hooks:
+      - id: pip-compile
+        name: pip-compile requirements.in
+        files: ^requirements\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements.in
+
+      - id: pip-compile
+        name: pip-compile requirements-dev.in
+        files: ^requirements(-dev)?\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements-dev.in
+  # <---- Static Requirements --------------------------------------------------------------------
+
   # ----- Code Formatting and Analysis ---------------------------------------------------------->
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: "v0.5.6"
