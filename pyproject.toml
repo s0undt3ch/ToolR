@@ -13,12 +13,12 @@ classifiers = [
 dynamic = ["version"]
 
 [tool.setuptools_scm]
-write_to = "src/python/toolr/version.py"
+write_to = "src/toolr/version.py"
 write_to_template = "# pylint: skip-file\n\n__version__ = \"{version}\"\n"
 
 [tool.setuptools.packages]
 # Pure Python packages/modules
-find = { where = ["src/python"] }
+find = { where = ["src"] }
 
 [[tool.setuptools-rust.ext-modules]]
 # Private Rust extension module to be nested into the Python package
