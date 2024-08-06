@@ -12,7 +12,7 @@ classifiers = [
 dynamic = ["version"]
 
 [tool.setuptools_scm]
-write_to = "src/toolr/version.py"
+write_to = "src/toolr/_version.py"
 write_to_template = "# pylint: skip-file\n\n__version__ = \"{version}\"\n"
 
 [tool.setuptools.packages]
