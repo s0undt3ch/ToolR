@@ -1,0 +1,10 @@
+--constraint=base.txt
+--constraint=test.txt
+--requirement=changelog.txt
+
+furo
+sphinx
+sphinx-copybutton
+sphinx-prompt
+sphinxcontrib-spelling
+sphinxcontrib-towncrier

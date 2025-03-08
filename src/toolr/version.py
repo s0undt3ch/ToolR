@@ -1,4 +1,5 @@
 # pylint: skip-file
+from __future__ import annotations
 
 try:
     from toolr._version import __version__  # type: ignore[import-not-found]

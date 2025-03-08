@@ -232,3 +232,6 @@ tags
 
 # Ignore Setuptools VCS generated version file
 src/toolr/_version.py
+
+# Ignore the python-tools-scripts virtual environments
+.tools-venvs/

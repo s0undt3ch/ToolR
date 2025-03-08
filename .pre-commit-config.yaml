@@ -14,30 +14,22 @@ repos:
       - id: check-ast             # Simply check whether files parse as valid python.
 
   # ----- Local Hooks --------------------------------------------------------------------------->
-  # <---- Local Hooks ----------------------------------------------------------------------------
-
-  # ----- Static Requirements ------------------------------------------------------------------->
-  - repo: https://github.com/jazzband/pip-tools
-    rev: 7.4.1
+  - repo: https://github.com/saltstack/python-tools-scripts
+    # While we can't use ToolR
+    rev: "0.20.5"
     hooks:
-      - id: pip-compile
-        name: pip-compile requirements.in
-        files: ^requirements\.(in|txt)$
+      - id: tools
+        alias: check-changelog-entries
+        name: Check Changelog Entries
         args:
-          - --strip-extras
-          - requirements.in
-
-      - id: pip-compile
-        name: pip-compile requirements-dev.in
-        files: ^requirements(-dev)?\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements-dev.in
-  # <---- Static Requirements --------------------------------------------------------------------
+          - pre-commit
+          - changelog
+          - pre-commit-checks
+  # <---- Local Hooks ----------------------------------------------------------------------------
 
   # ----- Code Formatting and Analysis ---------------------------------------------------------->
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.5.6"
+    rev: "v0.6.0"
     hooks:
       - id: ruff
         args:
@@ -72,3 +64,57 @@ repos:
           - types-setuptools
           - types-requests
   # <---- Code Formatting and Analysis -----------------------------------------------------------
+
+  # ----- Static Requirements ------------------------------------------------------------------->
+  - repo: https://github.com/jazzband/pip-tools
+    rev: 7.4.1
+    hooks:
+      - id: pip-compile
+        name: pip-compile requirements/base.in
+        files: ^requirements/base\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements/base.in
+
+      - id: pip-compile
+        name: pip-compile requirements/test.in
+        files: ^requirements/(base|test)\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements/test.in
+
+      - id: pip-compile
+        name: pip-compile requirements/changelog.in
+        files: ^requirements/changelog\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements/changelog.in
+
+      - id: pip-compile
+        name: pip-compile requirements/docs.in
+        files: ^requirements/(base|docs|docs)\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements/docs.in
+
+      - id: pip-compile
+        name: pip-compile requirements/tools.in
+        files: ^requirements/(base|test|tools)\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements/tools.in
+
+      - id: pip-compile
+        name: pip-compile requirements/dev.in
+        files: ^requirements/(base|test|tools|dev)\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements/dev.in
+
+      - id: pip-compile
+        name: pip-compile requirements/build.in
+        files: ^requirements/build\.(in|txt)$
+        args:
+          - --strip-extras
+          - requirements/build.in
+  # <---- Static Requirements --------------------------------------------------------------------

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import toolr  # type: ignore[import-not-found]
 
 
