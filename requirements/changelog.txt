@@ -6,9 +6,9 @@
 #
 click==8.1.7
     # via towncrier
-jinja2==3.1.4
+jinja2==3.1.6
     # via towncrier
 markupsafe==2.1.5
     # via jinja2
 towncrier==24.7.1
-    # via -r requirements/changelog.in
+    # via -r changelog.in
