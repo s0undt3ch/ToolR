@@ -2,7 +2,7 @@
 minimum_pre_commit_version: 3.0.0
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
       - id: check-merge-conflict  # Check for files that contain merge conflict strings.
       - id: trailing-whitespace   # Trims trailing whitespace.
@@ -13,108 +13,50 @@ repos:
       - id: check-merge-conflict  # Check for files that contain merge conflict strings.
       - id: check-ast             # Simply check whether files parse as valid python.
 
-  # ----- Local Hooks --------------------------------------------------------------------------->
-  - repo: https://github.com/saltstack/python-tools-scripts
-    # While we can't use ToolR
-    rev: "0.20.5"
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.7.3
     hooks:
-      - id: tools
-        alias: check-changelog-entries
-        name: Check Changelog Entries
-        args:
-          - pre-commit
-          - changelog
-          - pre-commit-checks
-  # <---- Local Hooks ----------------------------------------------------------------------------
+      - id: uv-lock
 
-  # ----- Code Formatting and Analysis ---------------------------------------------------------->
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.6.0"
+    rev: "v0.11.9"
     hooks:
+      - id: ruff-format
       - id: ruff
         args:
           - --fix
         exclude: (.pre-commit-hooks/.*|docs/.*)\.py
 
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black
-        args: [-l 100]
-        exclude: src/toolr/version.py
-
-  - repo: https://github.com/asottile/blacken-docs
-    rev: 1.18.0
-    hooks:
-      - id: blacken-docs
-        args: [--skip-errors]
-        files: ^(docs/.*\.rst|src/toolr/.*\.py)$
-        additional_dependencies:
-          - black==24.8.0
-
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.1
+    rev: v1.15.0
     hooks:
       - id: mypy
         name: Run mypy against the code base
         files: ^(src/|tests/).*\.py$
         args: []
         additional_dependencies:
-          - types-attrs
-          - types-setuptools
-          - types-requests
-  # <---- Code Formatting and Analysis -----------------------------------------------------------
+          - pytest
 
-  # ----- Static Requirements ------------------------------------------------------------------->
-  - repo: https://github.com/jazzband/pip-tools
-    rev: 7.4.1
+  - repo: local
     hooks:
-      - id: pip-compile
-        name: pip-compile requirements/base.in
-        files: ^requirements/base\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements/base.in
+      # Does it compile?
+      - id: cargo-check
+        name: cargo check
+        entry: cargo check
+        language: system
+        types: [rust]
+        pass_filenames: false
 
-      - id: pip-compile
-        name: pip-compile requirements/test.in
-        files: ^requirements/(base|test)\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements/test.in
+      - id: clippy
+        name: clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
 
-      - id: pip-compile
-        name: pip-compile requirements/changelog.in
-        files: ^requirements/changelog\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements/changelog.in
-
-      - id: pip-compile
-        name: pip-compile requirements/docs.in
-        files: ^requirements/(base|docs|docs)\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements/docs.in
-
-      - id: pip-compile
-        name: pip-compile requirements/tools.in
-        files: ^requirements/(base|test|tools)\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements/tools.in
-
-      - id: pip-compile
-        name: pip-compile requirements/dev.in
-        files: ^requirements/(base|test|tools|dev)\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements/dev.in
-
-      - id: pip-compile
-        name: pip-compile requirements/build.in
-        files: ^requirements/build\.(in|txt)$
-        args:
-          - --strip-extras
-          - requirements/build.in
-  # <---- Static Requirements --------------------------------------------------------------------
+      - id: cargo-check
+        name: cargo check
+        entry: cargo check --all-targets --all-features
+        language: system
+        types: [rust]
+        pass_filenames: false

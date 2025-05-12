@@ -1,0 +1,11 @@
+[tools]
+python = "3.11.12"
+actionlint = "latest"
+shellcheck = "latest"
+rust = { version = "stable" }
+
+[env]
+'_'.python.venv = {path = ".venv", create = true, uv_create_args = ['--seed']}
+
+[settings]
+python.uv_venv_auto = true

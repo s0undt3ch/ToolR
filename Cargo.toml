@@ -1,0 +1,25 @@
+[package]
+name = "toolr-command"
+version = "0.0.0"  # Not published independently, versioned with Python package
+edition = "2021"
+authors = ["Pedro Algarvio <pedro@algarvio.me>"]
+license = "Apache-2.0"
+description = "Rust extension to run commands with advanced features"
+repository = "https://github.com/s0undt3ch/toolr"
+
+[lib]
+name = "toolr_command"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.20", features = ["extension-module"], optional = true }
+tokio = { version = "1.33.0", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3.8"
+anyhow = "1.0"
+libc = "0.2"
+
+[features]
+default = []
+python = ["pyo3"]
