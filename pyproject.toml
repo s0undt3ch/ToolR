@@ -176,6 +176,10 @@ ignore = [
   "D104",   # Missing docstring in public package
   "D107",   # Missing docstring in `__init__`
 ]
+"tools/**/*.py" = [
+  "D104",   # missing docstring in public package
+  "D107",   # missing docstring in `__init__`
+]
 
 [tool.ruff.lint.pydocstyle]
 # Use Google-style docstrings.
