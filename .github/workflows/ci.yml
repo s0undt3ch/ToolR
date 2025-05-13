@@ -1,0 +1,138 @@
+name: CI Workflow
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  pre-commit:
+    name: Pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - run: pip install pre-commit
+
+      - id: python-version-checksum
+        run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - id: pre-commit-version-checksum
+        run: echo "version-sha256sum=$(pre-commit --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: >-
+            precommit|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
+
+      - run: pre-commit install --install-hooks
+      - run: pre-commit run --all-files --show-diff-on-failure --color=always
+
+  tests:
+    name: Tests
+    runs-on: ${{ matrix.os }}
+    needs: [pre-commit]
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        python-version:
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: >-
+            venv|${{ runner.os }}|${{ matrix.python-version }}|${{ hashFiles('**/uv.lock') }}
+
+      - run: uv sync --all-extras --dev
+
+      - name: Run Python Tests
+        run: uv run coverage run -m pytest --color=yes
+
+      - name: Run Rust Tests
+        run: cargo test --release
+
+      - name: Report Coverage
+        run: |
+          uv run coverage combine
+          uv run coverage report
+
+  build:
+    name: Build Wheels
+    runs-on: ${{ matrix.os }}
+    needs: [tests]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: pip install cibuildwheel
+
+      - name: Build wheels
+        run: cibuildwheel --output-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist
+
+  publish-testpypi:
+    name: Publish to Test PyPI
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Flatten dist/ directory
+        run: |
+          mkdir all_dists
+          find dist/ -type f -name '*.whl' -exec mv {} all_dists/ \;
+
+      - name: Publish to Test PyPI (Trusted Publisher)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: all_dists/
