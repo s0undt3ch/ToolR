@@ -7,10 +7,20 @@ use crate::command::{
     CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError
 };
 
+#[cfg(windows)]
+use std::os::windows::io::RawHandle;
+#[cfg(windows)]
+use crate::command::ThreadSafeHandle;
+
 // Define Python-specific exceptions
 pyo3::create_exception!(_command, CommandError, PyException);
 pyo3::create_exception!(_command, CommandTimeoutError, CommandError);
 pyo3::create_exception!(_command, CommandTimeoutNoOutputError, CommandError);
+
+#[cfg(windows)]
+fn fd_to_handle(fd: i32) -> RawHandle {
+    unsafe { libc::get_osfhandle(fd) as RawHandle }
+}
 
 #[pyfunction]
 #[pyo3(signature = (
@@ -63,10 +73,30 @@ pub(crate) fn run_command_impl(
         args,
         env,
         input: input_vec,
+        #[cfg(unix)]
         stdout_fd,
+        #[cfg(unix)]
         stderr_fd,
+        #[cfg(unix)]
         sys_stdout_fd,
+        #[cfg(unix)]
         sys_stderr_fd,
+        #[cfg(windows)]
+        stdout_fd: stdout_fd.map(|fd| {
+            ThreadSafeHandle::new(fd_to_handle(fd))
+        }),
+        #[cfg(windows)]
+        stderr_fd: stderr_fd.map(|fd| {
+            ThreadSafeHandle::new(fd_to_handle(fd))
+        }),
+        #[cfg(windows)]
+        sys_stdout_fd: sys_stdout_fd.map(|fd| {
+            ThreadSafeHandle::new(fd_to_handle(fd))
+        }),
+        #[cfg(windows)]
+        sys_stderr_fd: sys_stderr_fd.map(|fd| {
+            ThreadSafeHandle::new(fd_to_handle(fd))
+        }),
         timeout_secs,
         no_output_timeout_secs,
         cwd: cwd_path,
