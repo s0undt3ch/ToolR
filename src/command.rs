@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::os::unix::io::FromRawFd;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -10,6 +9,12 @@ use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
 use std::env;
+
+#[cfg(unix)]
+use std::os::unix::io::{RawFd, FromRawFd};
+
+#[cfg(windows)]
+use std::os::windows::io::{RawHandle, FromRawHandle};
 
 // Custom error types
 #[derive(Debug)]
@@ -69,15 +74,50 @@ impl CommandNoOutputTimeoutError {
     }
 }
 
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+pub struct ThreadSafeHandle {
+    raw_handle: RawHandle,
+}
+
+#[cfg(windows)]
+unsafe impl Send for ThreadSafeHandle {}
+
+#[cfg(windows)]
+unsafe impl Sync for ThreadSafeHandle {}
+
+#[cfg(windows)]
+impl ThreadSafeHandle {
+    pub fn new(handle: RawHandle) -> Self {
+        Self { raw_handle: handle }
+    }
+
+    pub fn raw(&self) -> RawHandle {
+        self.raw_handle
+    }
+}
+
 // Pure Rust implementation - available always
 pub struct CommandConfig {
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub input: Option<Vec<u8>>,
-    pub stdout_fd: Option<i32>,     // For capturing output to file
-    pub stderr_fd: Option<i32>,     // For capturing output to file
-    pub sys_stdout_fd: Option<i32>, // For streaming to output
-    pub sys_stderr_fd: Option<i32>, // For streaming to error
+    #[cfg(unix)]
+    pub stdout_fd: Option<RawFd>,     // For capturing output to file
+    #[cfg(unix)]
+    pub stderr_fd: Option<RawFd>,     // For capturing output to file
+    #[cfg(unix)]
+    pub sys_stdout_fd: Option<RawFd>, // For streaming to output
+    #[cfg(unix)]
+    pub sys_stderr_fd: Option<RawFd>, // For streaming to error
+    #[cfg(windows)]
+    pub stdout_fd: Option<ThreadSafeHandle>,     // For capturing output to file
+    #[cfg(windows)]
+    pub stderr_fd: Option<ThreadSafeHandle>,     // For capturing output to file
+    #[cfg(windows)]
+    pub sys_stdout_fd: Option<ThreadSafeHandle>, // For streaming to output
+    #[cfg(windows)]
+    pub sys_stderr_fd: Option<ThreadSafeHandle>, // For streaming to error
     pub timeout_secs: Option<f64>,
     pub no_output_timeout_secs: Option<f64>,
     pub cwd: Option<PathBuf>,       // Current working directory
@@ -89,9 +129,21 @@ impl Default for CommandConfig {
             args: Vec::new(),
             env: HashMap::new(),
             input: None,
+            #[cfg(unix)]
             stdout_fd: None,
+            #[cfg(unix)]
             stderr_fd: None,
+            #[cfg(unix)]
             sys_stdout_fd: None,
+            #[cfg(unix)]
+            sys_stderr_fd: None,
+            #[cfg(windows)]
+            stdout_fd: None,
+            #[cfg(windows)]
+            stderr_fd: None,
+            #[cfg(windows)]
+            sys_stdout_fd: None,
+            #[cfg(windows)]
             sys_stderr_fd: None,
             timeout_secs: None,
             no_output_timeout_secs: None,
@@ -183,8 +235,18 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
 
     // Setup stdout handling
     let last_output_clone = Arc::clone(&last_output);
+
+    // Clone these Option values so they can be moved into the thread
+    #[cfg(windows)]
+    let stdout_fd_clone = config.stdout_fd.clone();
+    #[cfg(windows)]
+    let sys_stdout_fd_clone = config.sys_stdout_fd.clone();
+
+    #[cfg(unix)]
     let stdout_fd = config.stdout_fd;
+    #[cfg(unix)]
     let sys_stdout_fd = config.sys_stdout_fd;
+
     let stdout_thread = thread::spawn(move || {
         let mut buffer = [0; 8192];
         let mut reader = stdout;
@@ -199,9 +261,9 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                     }
 
                     // Write to capture file if requested
+                    #[cfg(unix)]
                     if let Some(fd) = stdout_fd {
                         let mut file = unsafe {
-                            // Just borrow the file descriptor - create directly without let binding
                             File::from_raw_fd(fd)
                         };
                         if file.write_all(&buffer[0..n]).is_err() {
@@ -214,10 +276,25 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                         std::mem::forget(file);
                     }
 
+                    #[cfg(windows)]
+                    if let Some(ref handle) = stdout_fd_clone {
+                        let mut file = unsafe {
+                            File::from_raw_handle(handle.raw())
+                        };
+                        if file.write_all(&buffer[0..n]).is_err() {
+                            break;
+                        }
+                        if file.flush().is_err() {
+                            break;
+                        }
+                        // Don't close the handle - it's owned by Python
+                        std::mem::forget(file);
+                    }
+
                     // Stream to stdout if requested
+                    #[cfg(unix)]
                     if let Some(fd) = sys_stdout_fd {
                         let mut file = unsafe {
-                            // Just borrow the file descriptor - create directly without let binding
                             File::from_raw_fd(fd)
                         };
                         if file.write_all(&buffer[0..n]).is_err() {
@@ -227,6 +304,21 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                             break;
                         }
                         // Don't close the file descriptor - it's owned by Python
+                        std::mem::forget(file);
+                    }
+
+                    #[cfg(windows)]
+                    if let Some(ref handle) = sys_stdout_fd_clone {
+                        let mut file = unsafe {
+                            File::from_raw_handle(handle.raw())
+                        };
+                        if file.write_all(&buffer[0..n]).is_err() {
+                            break;
+                        }
+                        if file.flush().is_err() {
+                            break;
+                        }
+                        // Don't close the handle - it's owned by Python
                         std::mem::forget(file);
                     }
                 }
@@ -237,8 +329,18 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
 
     // Setup stderr handling - similar to stdout
     let last_output_clone = Arc::clone(&last_output);
+
+    // Clone these Option values so they can be moved into the thread
+    #[cfg(windows)]
+    let stderr_fd_clone = config.stderr_fd.clone();
+    #[cfg(windows)]
+    let sys_stderr_fd_clone = config.sys_stderr_fd.clone();
+
+    #[cfg(unix)]
     let stderr_fd = config.stderr_fd;
+    #[cfg(unix)]
     let sys_stderr_fd = config.sys_stderr_fd;
+
     let stderr_thread = thread::spawn(move || {
         let mut buffer = [0; 8192];
         let mut reader = stderr;
@@ -253,9 +355,9 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                     }
 
                     // Write to capture file if requested
+                    #[cfg(unix)]
                     if let Some(fd) = stderr_fd {
                         let mut file = unsafe {
-                            // Just borrow the file descriptor - create directly without let binding
                             File::from_raw_fd(fd)
                         };
                         if file.write_all(&buffer[0..n]).is_err() {
@@ -268,10 +370,25 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                         std::mem::forget(file);
                     }
 
+                    #[cfg(windows)]
+                    if let Some(ref handle) = stderr_fd_clone {
+                        let mut file = unsafe {
+                            File::from_raw_handle(handle.raw())
+                        };
+                        if file.write_all(&buffer[0..n]).is_err() {
+                            break;
+                        }
+                        if file.flush().is_err() {
+                            break;
+                        }
+                        // Don't close the handle - it's owned by Python
+                        std::mem::forget(file);
+                    }
+
                     // Stream to stderr if requested
+                    #[cfg(unix)]
                     if let Some(fd) = sys_stderr_fd {
                         let mut file = unsafe {
-                            // Just borrow the file descriptor - create directly without let binding
                             File::from_raw_fd(fd)
                         };
                         if file.write_all(&buffer[0..n]).is_err() {
@@ -281,6 +398,21 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                             break;
                         }
                         // Don't close the file descriptor - it's owned by Python
+                        std::mem::forget(file);
+                    }
+
+                    #[cfg(windows)]
+                    if let Some(ref handle) = sys_stderr_fd_clone {
+                        let mut file = unsafe {
+                            File::from_raw_handle(handle.raw())
+                        };
+                        if file.write_all(&buffer[0..n]).is_err() {
+                            break;
+                        }
+                        if file.flush().is_err() {
+                            break;
+                        }
+                        // Don't close the handle - it's owned by Python
                         std::mem::forget(file);
                     }
                 }

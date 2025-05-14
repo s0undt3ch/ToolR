@@ -7,9 +7,120 @@ mod test_suite {
     use tempfile::NamedTempFile;
     use anyhow::{Result, anyhow};
     use std::collections::HashMap;
-    use std::os::unix::io::AsRawFd;
     use std::fs::File;
+
+    // Platform-specific imports
+    #[cfg(unix)]
+    use std::os::unix::io::AsRawFd;
+    #[cfg(windows)]
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle};
+    #[cfg(windows)]
+    use winapi::um::handleapi::{INVALID_HANDLE_VALUE, DuplicateHandle};
+    #[cfg(windows)]
+    use winapi::um::processthreadsapi::GetCurrentProcess;
+    #[cfg(windows)]
+    use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
+    #[cfg(windows)]
+    use winapi::um::namedpipeapi::CreatePipe;
+    #[cfg(windows)]
+    use winapi::um::fileapi::ReadFile;
+    #[cfg(windows)]
+    use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
+    #[cfg(windows)]
+    use winapi::ctypes::c_void;  // Use winapi's c_void consistently
+    #[cfg(windows)]
+    use crate::command::ThreadSafeHandle;
+
     use crate::{CommandConfig, run_command_internal};
+
+    // Helper function to get file descriptor/handle from File in a cross-platform way
+    #[cfg(unix)]
+    fn get_file_descriptor(file: &File) -> i32 {
+        file.as_raw_fd()
+    }
+
+    #[cfg(windows)]
+    fn get_file_descriptor(file: &File) -> ThreadSafeHandle {
+        // Get the actual Windows handle from the file
+        let handle = file.as_raw_handle();
+        // Ensure we duplicate the handle so it remains valid
+        unsafe {
+            let mut new_handle = INVALID_HANDLE_VALUE;
+            if DuplicateHandle(
+                GetCurrentProcess(),
+                handle as *mut _,  // Let the compiler infer the void type
+                GetCurrentProcess(),
+                &mut new_handle,
+                0,
+                1,
+                DUPLICATE_SAME_ACCESS,
+            ) != 0 {
+                ThreadSafeHandle::new(new_handle as *mut _)  // Convert to RawHandle
+            } else {
+                // For tests, fallback to a dummy handle if duplication fails
+                ThreadSafeHandle::new(handle as *mut _)  // Convert to RawHandle
+            }
+        }
+    }
+
+    // Helper function for Option wrapping to handle platform differences
+    #[cfg(unix)]
+    fn wrap_fd(fd: i32) -> Option<i32> {
+        Some(fd)
+    }
+
+    #[cfg(windows)]
+    fn wrap_fd(handle: ThreadSafeHandle) -> Option<ThreadSafeHandle> {
+        Some(handle)
+    }
+
+    #[cfg(windows)]
+    fn create_pipe() -> Result<(ThreadSafeHandle, ThreadSafeHandle)> {
+        unsafe {
+            let mut read_handle = INVALID_HANDLE_VALUE;
+            let mut write_handle = INVALID_HANDLE_VALUE;
+            let mut sa = SECURITY_ATTRIBUTES {
+                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+                lpSecurityDescriptor: std::ptr::null_mut(),
+                bInheritHandle: 1,
+            };
+
+            if CreatePipe(&mut read_handle, &mut write_handle, &mut sa, 0) == 0 {
+                // Fallback to temp file if pipe creation fails
+                let file = NamedTempFile::new()?;
+                let read = file.reopen()?;
+                let write = file.into_file();
+                Ok((
+                    ThreadSafeHandle::new(read.as_raw_handle() as *mut _),
+                    ThreadSafeHandle::new(write.as_raw_handle() as *mut _)
+                ))
+            } else {
+                Ok((
+                    ThreadSafeHandle::new(read_handle as *mut _),
+                    ThreadSafeHandle::new(write_handle as *mut _)
+                ))
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn read_pipe(handle: ThreadSafeHandle, buffer: &mut [u8]) -> i32 {
+        let mut bytes_read = 0;
+        unsafe {
+            let raw_handle = handle.raw() as *mut winapi::ctypes::c_void;
+            if raw_handle != INVALID_HANDLE_VALUE as *mut winapi::ctypes::c_void && ReadFile(
+                raw_handle,
+                buffer.as_mut_ptr() as *mut winapi::ctypes::c_void,
+                buffer.len() as u32,
+                &mut bytes_read,
+                std::ptr::null_mut(),
+            ) != 0 {
+                bytes_read as i32
+            } else {
+                0
+            }
+        }
+    }
 
     #[test]
     fn test_command_execution() -> Result<()> {
@@ -137,7 +248,6 @@ mod test_suite {
 
     #[test]
     fn test_environment_variables() -> Result<()> {
-        // Create a command that uses environment variables
         let mut env = HashMap::new();
         env.insert("TEST_VAR".to_string(), "test_value".to_string());
         env.insert("ANOTHER_VAR".to_string(), "another_value".to_string());
@@ -146,19 +256,23 @@ mod test_suite {
         let mut stdout_file = NamedTempFile::new()?;
         let stderr_file = NamedTempFile::new()?;
 
-        let stdout_fd = stdout_file.as_file().as_raw_fd();
-        let stderr_fd = stderr_file.as_file().as_raw_fd();
+        // Get file descriptors in a cross-platform way
+        let stdout_fd = get_file_descriptor(stdout_file.as_file());
+        let stderr_fd = get_file_descriptor(stderr_file.as_file());
 
-        // Command to echo environment variables
+        // Use platform-specific Python executable name
         let config = CommandConfig {
             args: vec![
-                "bash".to_string(),
+                #[cfg(unix)]
+                "python".to_string(),
+                #[cfg(windows)]
+                "python.exe".to_string(),
                 "-c".to_string(),
-                "echo \"TEST_VAR=$TEST_VAR\"; echo \"ANOTHER_VAR=$ANOTHER_VAR\"".to_string(),
+                "import os; print('TEST_VAR=' + os.environ['TEST_VAR']); print('ANOTHER_VAR=' + os.environ['ANOTHER_VAR'])".to_string(),
             ],
             env,
-            stdout_fd: Some(stdout_fd),
-            stderr_fd: Some(stderr_fd),
+            stdout_fd: wrap_fd(stdout_fd),
+            stderr_fd: wrap_fd(stderr_fd),
             ..Default::default()
         };
 
@@ -193,15 +307,22 @@ mod test_suite {
         let mut stdout_file = NamedTempFile::new()?;
         let stderr_file = NamedTempFile::new()?;
 
-        let stdout_fd = stdout_file.as_file().as_raw_fd();
-        let stderr_fd = stderr_file.as_file().as_raw_fd();
+        let stdout_fd = get_file_descriptor(stdout_file.as_file());
+        let stderr_fd = get_file_descriptor(stderr_file.as_file());
 
         // Create a command config that runs 'pwd' with the temp directory as working directory
         let config = CommandConfig {
-            args: vec!["pwd".to_string()],
+            args: vec![
+                #[cfg(unix)]
+                "python".to_string(),
+                #[cfg(windows)]
+                "python.exe".to_string(),
+                "-c".to_string(),
+                "import os; print(os.getcwd())".to_string(),
+            ],
             cwd: Some(temp_path.clone()),
-            stdout_fd: Some(stdout_fd),
-            stderr_fd: Some(stderr_fd),
+            stdout_fd: wrap_fd(stdout_fd),
+            stderr_fd: wrap_fd(stderr_fd),
             ..Default::default()
         };
 
@@ -238,14 +359,21 @@ mod test_suite {
         let mut stdout_file2 = NamedTempFile::new()?;
         let stderr_file2 = NamedTempFile::new()?;
 
-        let stdout_fd2 = stdout_file2.as_file().as_raw_fd();
-        let stderr_fd2 = stderr_file2.as_file().as_raw_fd();
+        let stdout_fd2 = get_file_descriptor(stdout_file2.as_file());
+        let stderr_fd2 = get_file_descriptor(stderr_file2.as_file());
 
         // Create a command config that runs 'pwd' without setting the working directory
         let config2 = CommandConfig {
-            args: vec!["pwd".to_string()],
-            stdout_fd: Some(stdout_fd2),
-            stderr_fd: Some(stderr_fd2),
+            args: vec![
+                #[cfg(unix)]
+                "python".to_string(),
+                #[cfg(windows)]
+                "python.exe".to_string(),
+                "-c".to_string(),
+                "import os; print(os.getcwd())".to_string(),
+            ],
+            stdout_fd: wrap_fd(stdout_fd2),
+            stderr_fd: wrap_fd(stderr_fd2),
             ..Default::default()
         };
 
@@ -270,11 +398,11 @@ mod test_suite {
 
     mod tokio_tests {
         use super::*;
-        // We need to run the tokio tests with the runtime
         use tokio::runtime::Runtime;
 
-        // Function to create OS pipes using libc
-        fn create_os_pipe() -> Result<(i32, i32)> {
+        // Cross-platform pipe creation
+        #[cfg(unix)]
+        fn create_pipe() -> Result<(i32, i32)> {
             let (pipe_read, pipe_write) = unsafe {
                 let mut fds = [0; 2];
                 if libc::pipe(fds.as_mut_ptr()) == 0 {
@@ -286,29 +414,41 @@ mod test_suite {
             Ok((pipe_read, pipe_write))
         }
 
+        #[cfg(windows)]
+        fn create_pipe() -> Result<(ThreadSafeHandle, ThreadSafeHandle)> {
+            super::create_pipe()
+        }
+
+        // Platform-specific read operation
+        #[cfg(unix)]
+        unsafe fn read_pipe(fd: i32, buffer: &mut [u8]) -> i32 {
+            libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) as i32
+        }
+
+        #[cfg(windows)]
+        fn read_pipe(fd: ThreadSafeHandle, buffer: &mut [u8]) -> i32 {
+            super::read_pipe(fd, buffer)
+        }
+
         #[test]
         fn test_sys_fd_streaming() -> Result<()> {
-            // Create a Tokio runtime for this test
             let rt = Runtime::new()?;
 
             rt.block_on(async {
-                // Create pipes using OS pipes
-                let (stdout_read, stdout_write) = create_os_pipe()?;
-                let (stderr_read, stderr_write) = create_os_pipe()?;
+                let (stdout_read, stdout_write) = create_pipe()?;
+                let (stderr_read, stderr_write) = create_pipe()?;
 
-                // Use these pipe file descriptors
-                let sys_stdout_fd = stdout_write;
-                let sys_stderr_fd = stderr_write;
-
-                // Create a command config
                 let config = CommandConfig {
                     args: vec![
-                        "bash".to_string(),
+                        #[cfg(unix)]
+                        "python".to_string(),
+                        #[cfg(windows)]
+                        "python.exe".to_string(),
                         "-c".to_string(),
-                        "echo 'to sys stdout'; echo 'to sys stderr' >&2".to_string(),
+                        "import sys; sys.stdout.write('to sys stdout'); sys.stdout.flush(); sys.stderr.write('to sys stderr'); sys.stderr.flush()".to_string(),
                     ],
-                    sys_stdout_fd: Some(sys_stdout_fd),
-                    sys_stderr_fd: Some(sys_stderr_fd),
+                    sys_stdout_fd: wrap_fd(stdout_write),
+                    sys_stderr_fd: wrap_fd(stderr_write),
                     ..Default::default()
                 };
 
@@ -321,8 +461,15 @@ mod test_suite {
                 let mut stdout_buffer = [0u8; 1024];
                 let mut stderr_buffer = [0u8; 1024];
 
-                let stdout_bytes = unsafe { libc::read(stdout_read, stdout_buffer.as_mut_ptr() as *mut libc::c_void, stdout_buffer.len()) };
-                let stderr_bytes = unsafe { libc::read(stderr_read, stderr_buffer.as_mut_ptr() as *mut libc::c_void, stderr_buffer.len()) };
+                #[cfg(unix)]
+                let stdout_bytes = unsafe { read_pipe(stdout_read, &mut stdout_buffer) };
+                #[cfg(unix)]
+                let stderr_bytes = unsafe { read_pipe(stderr_read, &mut stderr_buffer) };
+
+                #[cfg(windows)]
+                let stdout_bytes = read_pipe(stdout_read, &mut stdout_buffer);
+                #[cfg(windows)]
+                let stderr_bytes = read_pipe(stderr_read, &mut stderr_buffer);
 
                 // Wait for command to finish
                 let result = handle.join().expect("Thread panicked");
@@ -333,11 +480,17 @@ mod test_suite {
                 }?;
 
                 // Clean up
+                #[cfg(unix)]
                 unsafe {
                     libc::close(stdout_read);
                     libc::close(stderr_read);
                     libc::close(stdout_write);
                     libc::close(stderr_write);
+                }
+
+                #[cfg(windows)]
+                {
+                    // On Windows our test files will close automatically
                 }
 
                 // Convert output to strings
@@ -354,61 +507,58 @@ mod test_suite {
 
         #[test]
         fn test_sys_fd_with_capture() -> Result<()> {
-            // Create a Tokio runtime for this test
             let rt = Runtime::new()?;
 
             rt.block_on(async {
-                // Create pipes using OS pipes
-                let (stdout_read, stdout_write) = create_os_pipe()?;
-                let (stderr_read, stderr_write) = create_os_pipe()?;
+                let (stdout_read, stdout_write) = create_pipe()?;
+                let (stderr_read, stderr_write) = create_pipe()?;
 
-                // Create capture files
                 let mut stdout_capture = NamedTempFile::new()?;
                 let mut stderr_capture = NamedTempFile::new()?;
 
-                // Get file descriptors for capture files
-                // First get the raw file descriptors
-                let stdout_file: File = stdout_capture.reopen()?;
-                let stderr_file: File = stderr_capture.reopen()?;
+                let stdout_fd = get_file_descriptor(stdout_capture.as_file());
+                let stderr_fd = get_file_descriptor(stderr_capture.as_file());
 
-                let stdout_fd = stdout_file.as_raw_fd();
-                let stderr_fd = stderr_file.as_raw_fd();
-
-                // Create a command config
                 let config = CommandConfig {
                     args: vec![
-                        "bash".to_string(),
+                        #[cfg(unix)]
+                        "python".to_string(),
+                        #[cfg(windows)]
+                        "python.exe".to_string(),
                         "-c".to_string(),
-                        "echo 'captured stdout'; echo 'captured stderr' >&2".to_string(),
+                        "import sys; sys.stdout.write('captured stdout'); sys.stdout.flush(); sys.stderr.write('captured stderr'); sys.stderr.flush()".to_string(),
                     ],
-                    stdout_fd: Some(stdout_fd),
-                    stderr_fd: Some(stderr_fd),
-                    sys_stdout_fd: Some(stdout_write),
-                    sys_stderr_fd: Some(stderr_write),
+                    stdout_fd: wrap_fd(stdout_fd),
+                    stderr_fd: wrap_fd(stderr_fd),
+                    sys_stdout_fd: wrap_fd(stdout_write),
+                    sys_stderr_fd: wrap_fd(stderr_write),
                     ..Default::default()
                 };
 
-                // Run the command in a separate thread to avoid blocking
                 let handle = std::thread::spawn(move || {
                     run_command_internal(config)
                 });
 
-                // Read from the pipes
                 let mut stdout_buffer = [0u8; 1024];
                 let mut stderr_buffer = [0u8; 1024];
 
-                let stdout_bytes = unsafe { libc::read(stdout_read, stdout_buffer.as_mut_ptr() as *mut libc::c_void, stdout_buffer.len()) };
-                let stderr_bytes = unsafe { libc::read(stderr_read, stderr_buffer.as_mut_ptr() as *mut libc::c_void, stderr_buffer.len()) };
+                #[cfg(unix)]
+                let stdout_bytes = unsafe { read_pipe(stdout_read, &mut stdout_buffer) };
+                #[cfg(unix)]
+                let stderr_bytes = unsafe { read_pipe(stderr_read, &mut stderr_buffer) };
 
-                // Wait for command to finish
+                #[cfg(windows)]
+                let stdout_bytes = read_pipe(stdout_read, &mut stdout_buffer);
+                #[cfg(windows)]
+                let stderr_bytes = read_pipe(stderr_read, &mut stderr_buffer);
+
                 let result = handle.join().expect("Thread panicked");
-                // Convert Result<i32, Box<dyn Error>> to anyhow::Result<i32>
                 let exit_code = match result {
                     Ok(code) => Ok(code),
                     Err(e) => Err(anyhow!("{}", e)),
                 }?;
 
-                // Clean up
+                #[cfg(unix)]
                 unsafe {
                     libc::close(stdout_read);
                     libc::close(stderr_read);
@@ -416,11 +566,14 @@ mod test_suite {
                     libc::close(stderr_write);
                 }
 
-                // Convert streamed output to strings
+                #[cfg(windows)]
+                {
+                    // On Windows our test files will close automatically
+                }
+
                 let stdout_streamed = String::from_utf8_lossy(&stdout_buffer[0..stdout_bytes as usize]);
                 let stderr_streamed = String::from_utf8_lossy(&stderr_buffer[0..stderr_bytes as usize]);
 
-                // Read the captured output
                 let mut stdout_captured = String::new();
                 let mut stderr_captured = String::new();
 
@@ -432,11 +585,9 @@ mod test_suite {
 
                 assert_eq!(exit_code, 0, "Command should succeed");
 
-                // Check streamed output
                 assert!(stdout_streamed.contains("captured stdout"), "Streamed stdout should contain 'captured stdout'");
                 assert!(stderr_streamed.contains("captured stderr"), "Streamed stderr should contain 'captured stderr'");
 
-                // Check captured output
                 assert!(stdout_captured.contains("captured stdout"), "Captured stdout should contain 'captured stdout'");
                 assert!(stderr_captured.contains("captured stderr"), "Captured stderr should contain 'captured stderr'");
 
@@ -446,15 +597,18 @@ mod test_suite {
 
         #[test]
         fn test_timeout_exception() -> Result<()> {
-            // Create a Tokio runtime for this test
             let rt = Runtime::new()?;
 
             rt.block_on(async {
                 // Create a command that will run longer than our timeout
                 let config = CommandConfig {
                     args: vec![
-                        "sleep".to_string(),
-                        "10".to_string(),
+                        #[cfg(unix)]
+                        "python".to_string(),
+                        #[cfg(windows)]
+                        "python.exe".to_string(),
+                        "-c".to_string(),
+                        "import time; time.sleep(10)".to_string(),
                     ],
                     timeout_secs: Some(0.1), // Very short timeout
                     ..Default::default()
@@ -476,23 +630,25 @@ mod test_suite {
 
         #[test]
         fn test_no_output_timeout() -> Result<()> {
-            // Create a Tokio runtime for this test
             let rt = Runtime::new()?;
 
             rt.block_on(async {
-                // Create pipes using OS pipes
-                let (stdout_read, stdout_write) = create_os_pipe()?;
-                let (stderr_read, stderr_write) = create_os_pipe()?;
+                // Create pipes for output
+                let (stdout_read, stdout_write) = create_pipe()?;
+                let (stderr_read, stderr_write) = create_pipe()?;
 
                 // Create a command that outputs once then waits, triggering no-output timeout
                 let config = CommandConfig {
                     args: vec![
-                        "bash".to_string(),
+                        #[cfg(unix)]
+                        "python".to_string(),
+                        #[cfg(windows)]
+                        "python.exe".to_string(),
                         "-c".to_string(),
-                        "echo 'initial output'; sleep 10".to_string(),
+                        "import sys, time; sys.stdout.write('initial output'); sys.stdout.flush(); time.sleep(10)".to_string(),
                     ],
-                    sys_stdout_fd: Some(stdout_write),
-                    sys_stderr_fd: Some(stderr_write),
+                    sys_stdout_fd: wrap_fd(stdout_write),
+                    sys_stderr_fd: wrap_fd(stderr_write),
                     no_output_timeout_secs: Some(0.1), // Very short no-output timeout
                     ..Default::default()
                 };
@@ -504,17 +660,26 @@ mod test_suite {
 
                 // Read the initial output
                 let mut stdout_buffer = [0u8; 1024];
-                unsafe { libc::read(stdout_read, stdout_buffer.as_mut_ptr() as *mut libc::c_void, stdout_buffer.len()) };
+                #[cfg(unix)]
+                unsafe { read_pipe(stdout_read, &mut stdout_buffer) };
+                #[cfg(windows)]
+                read_pipe(stdout_read, &mut stdout_buffer);
 
                 // Wait for command to fail
                 let result = handle.join().expect("Thread panicked");
 
                 // Clean up
+                #[cfg(unix)]
                 unsafe {
                     libc::close(stdout_read);
                     libc::close(stderr_read);
                     libc::close(stdout_write);
                     libc::close(stderr_write);
+                }
+
+                #[cfg(windows)]
+                {
+                    // On Windows our test files will close automatically
                 }
 
                 // Should fail with no-output timeout

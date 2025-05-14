@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import os
 import pathlib
+import sys
 import tempfile
 import threading
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -14,19 +16,21 @@ from toolr.utils.command import CommandTimeoutNoOutputError
 from toolr.utils.command import run_command
 from toolr.utils.command import run_command_impl
 
+IS_WINDOWS = sys.platform.startswith("win")
 
-def test_simple_command():
+
+def test_simple_command(echo_command):
     """Test basic command execution"""
-    result = run_command(["echo", "Hello, World!"], capture_output=True)
+    result = run_command(echo_command("Hello, World!"), capture_output=True)
     assert result.returncode == 0
     result.stdout.seek(0)  # Reset position to start of file
     assert "Hello, World!" in result.stdout.read()
 
 
-def test_with_environment():
+def test_with_environment(env_var_echo_command):
     """Test command execution with custom environment variables"""
     result = run_command(
-        ["sh", "-c", "echo $CUSTOM_VAR"],
+        env_var_echo_command("CUSTOM_VAR"),
         env={"CUSTOM_VAR": "test_value"},
         capture_output=True,
     )
@@ -35,25 +39,26 @@ def test_with_environment():
     assert "test_value" in result.stdout.read()
 
 
-def test_input_string():
+def test_input_string(stdin_cat_command):
     """Test providing input as string"""
-    result = run_command(["cat"], input="hello from stdin", capture_output=True)
+    input_data = "hello from stdin"
+    result = run_command(stdin_cat_command, input=input_data, capture_output=True)
     assert result.returncode == 0
     result.stdout.seek(0)
-    assert "hello from stdin" in result.stdout.read()
+    assert input_data in result.stdout.read()
 
 
-def test_input_bytes():
+def test_input_bytes(stdin_cat_command):
     """Test providing input as bytes"""
-    result = run_command(["cat"], input=b"hello bytes", capture_output=True, text=False)
+    result = run_command(stdin_cat_command, input=b"hello bytes", capture_output=True, text=False)
     assert result.returncode == 0
     result.stdout.seek(0)
     assert b"hello bytes" in result.stdout.read()
 
 
-def test_text_mode():
+def test_text_mode(echo_command):
     """Test text mode output handling"""
-    result = run_command(["echo", "text mode test"], capture_output=True, text=True)
+    result = run_command(echo_command("text mode test"), capture_output=True, text=True)
     assert result.returncode == 0
     result.stdout.seek(0)
     content = result.stdout.read()
@@ -62,9 +67,9 @@ def test_text_mode():
     assert "text mode test" in content
 
 
-def test_bytes_mode():
+def test_bytes_mode(echo_command):
     """Test bytes mode output handling"""
-    result = run_command(["echo", "bytes mode test"], capture_output=True, text=False)
+    result = run_command(echo_command("bytes mode test"), capture_output=True, text=False)
     assert result.returncode == 0
     result.stdout.seek(0)
     content = result.stdout.read()
@@ -73,48 +78,48 @@ def test_bytes_mode():
     assert b"bytes mode test" in content
 
 
-def test_command_timeout():
+def test_command_timeout(sleep_command):
     """Test command timeout functionality"""
     with pytest.raises(CommandTimeoutError):
-        run_command(["sleep", "1"], timeout_secs=0.5)
+        run_command(sleep_command(1), timeout_secs=0.5)
 
 
-def test_no_output_timeout_secs():
+def test_no_output_timeout_secs(sleep_command):
     """Test no-output timeout functionality with stream_output=True"""
     with pytest.raises(CommandTimeoutNoOutputError):
         run_command(
-            ["sleep", "1"],  # This command produces no output
+            sleep_command(1),  # This command produces no output
             stream_output=True,  # Required for no_output_timeout_secs to work
             no_output_timeout_secs=0.5,
         )
 
 
-def test_capture_output():
+def test_capture_output(echo_command):
     """Test capture_output functionality"""
-    result = run_command(["echo", "captured output"], capture_output=True)
+    result = run_command(echo_command("captured output"), capture_output=True)
     assert result.stdout is not None
     result.stdout.seek(0)
     content = result.stdout.read()
     assert "captured output" in content
 
 
-def test_with_tmp_path(tmp_path):
+def test_with_tmp_path(tmp_path, cat_command):
     """Test using the tmp_path fixture"""
     # Create a file in the temporary directory
     test_file = tmp_path / "test.txt"
     test_file.write_text("test content")
 
     # Run a command that reads the file
-    result = run_command(["cat", str(test_file)], capture_output=True)
+    result = run_command(cat_command(str(test_file)), capture_output=True)
     assert result.returncode == 0
     result.stdout.seek(0)
     assert "test content" in result.stdout.read()
 
 
-def test_stream_and_capture(capfd):
+def test_stream_and_capture(echo_command, capfd):
     """Test streaming and capturing output simultaneously"""
     result = run_command(
-        ["echo", "should be streamed and captured"],
+        echo_command("should be streamed and captured"),
         stream_output=True,
         capture_output=True,
     )
@@ -128,69 +133,66 @@ def test_stream_and_capture(capfd):
     assert "should be streamed and captured" in result.stdout.read()
 
 
-def test_float_timeout_secs():
+def test_float_timeout_secs(sleep_command):
     """Test that float timeout_secs works properly"""
-    start_time = pytest.importorskip("time").time()
+    start_time = time.time()
 
     with pytest.raises(CommandTimeoutError):
         run_command(
-            ["sleep", "3"],
+            sleep_command(3),
             timeout_secs=0.5,  # Half second timeout
         )
 
-    elapsed = pytest.importorskip("time").time() - start_time
+    elapsed = time.time() - start_time
     assert elapsed < 2.0  # Verify timeout happened quickly
 
 
-def test_float_no_output_timeout_secs():
+def test_float_no_output_timeout_secs(sleep_command):
     """Test that float no_output_timeout_secs works properly"""
-    start_time = pytest.importorskip("time").time()
+    start_time = time.time()
 
     with pytest.raises(CommandTimeoutNoOutputError):
         run_command(
-            ["sleep", "3"],
+            sleep_command(3),
             stream_output=True,  # Required for no_output_timeout_secs
             no_output_timeout_secs=0.5,  # Half second timeout
         )
 
-    elapsed = pytest.importorskip("time").time() - start_time
+    elapsed = time.time() - start_time
     assert elapsed < 2.0  # Verify timeout happened quickly
 
 
-def test_environ_inheritance():
+def test_environ_inheritance(env_var_echo_command):
     """Test that os.environ is used when env=None"""
     # Set a unique environment variable
     test_var = "TOOLR_TEST_VAR"
-    test_value = "test_value_" + str(os.getpid())
-    os.environ[test_var] = test_value
+    test_value = f"test_value_{os.getpid()}"
+    with patch.dict(os.environ, {test_var: test_value}):
+        # Ensure the environment variable is set
+        assert os.environ.get(test_var) == test_value
 
-    try:
         # Run a command without specifying env
-        result = run_command(["sh", "-c", f"echo ${test_var}"], capture_output=True)
+        result = run_command(env_var_echo_command(test_var), capture_output=True)
 
         # Should inherit the environment variable
         result.stdout.seek(0)
         assert test_value in result.stdout.read()
-    finally:
-        # Clean up
-        if test_var in os.environ:
-            del os.environ[test_var]
 
 
-def test_stream_output_text_only():
+def test_stream_output_text_only(echo_command):
     """Test that stream_output=True requires text=True"""
     with pytest.raises(ValueError, match="stream_output=True requires text=True"):
-        run_command(["echo", "test"], stream_output=True, text=False)
+        run_command(echo_command("test"), stream_output=True, text=False)
 
 
-def test_stream_output_both_fd_required():
+def test_stream_output_both_fd_required(echo_command):
     """Test that sys_stdout_fd and sys_stderr_fd must both be provided"""
     # Directly access the low-level implementation to test the requirement
 
     with pytest.raises(CommandError, match="Both sys_stdout_fd and sys_stderr_fd must be provided together"):
         # Mock case where only stdout fd is provided
         run_command_impl(
-            ["echo", "test"],
+            echo_command("test"),
             sys_stdout_fd=1,  # stdout fd
             sys_stderr_fd=None,
         )
@@ -198,15 +200,14 @@ def test_stream_output_both_fd_required():
     with pytest.raises(CommandError, match="Both sys_stdout_fd and sys_stderr_fd must be provided together"):
         # Mock case where only stderr fd is provided
         run_command_impl(
-            ["echo", "test"],
+            echo_command("test"),
             sys_stdout_fd=None,
             sys_stderr_fd=2,  # stderr fd
         )
 
 
-def test_fd_streaming_works():
+def test_fd_streaming_works(echo_command):
     """Test that streaming with file descriptors works correctly"""
-    import os
 
     # Create pipe pairs for stdout and stderr
     r_stdout, w_stdout = os.pipe()
@@ -222,7 +223,7 @@ def test_fd_streaming_works():
         nonlocal result_code, exception
         try:
             result_code = run_command_impl(
-                ["bash", "-c", "echo 'to stdout'; echo 'to stderr' >&2"],
+                echo_command("to stdout", "to stderr"),
                 sys_stdout_fd=w_stdout,
                 sys_stderr_fd=w_stderr,
             )
@@ -253,23 +254,23 @@ def test_fd_streaming_works():
     assert "to stderr" in stderr_content
 
 
-def test_timeout():
+def test_timeout(sleep_command):
     start = time.time()
     with pytest.raises(CommandTimeoutError):
-        run_command(["sleep", "1"], timeout_secs=0.1)
+        run_command(sleep_command(1), timeout_secs=0.1)
     elapsed = time.time() - start
     assert elapsed < 1.0  # Verify timeout happened quickly
 
 
-def test_no_output_timeout():
+def test_no_output_timeout(sleep_command):
     start = time.time()
     with pytest.raises(CommandTimeoutNoOutputError):
-        run_command(["sleep", "1"], stream_output=True, no_output_timeout_secs=0.1)
+        run_command(sleep_command(1), stream_output=True, no_output_timeout_secs=0.1)
     elapsed = time.time() - start
     assert elapsed < 1.0  # Verify timeout happened quickly
 
 
-def test_specific_fd_with_capture():
+def test_specific_fd_with_capture(echo_command):
     """Test streaming to specific file descriptors while also capturing."""
     # Create pipe pairs for custom stdout and stderr
     r_stdout, w_stdout = os.pipe()
@@ -284,7 +285,7 @@ def test_specific_fd_with_capture():
             nonlocal result_code, exception
             try:
                 result_code = run_command_impl(
-                    ["bash", "-c", "echo 'to both stdout'; echo 'to both stderr' >&2"],
+                    echo_command("to both stdout", "to both stderr"),
                     sys_stdout_fd=w_stdout,
                     sys_stderr_fd=w_stderr,
                     stdout_fd=stdout_capture.fileno(),
@@ -325,7 +326,7 @@ def test_specific_fd_with_capture():
         assert "to both stderr" in stderr_captured
 
 
-def test_command_with_cwd(tmp_path):
+def test_command_with_cwd(tmp_path, cat_command, cwd_command):
     """Test that commands execute in the specified working directory."""
 
     # Create a unique marker file in the temporary directory
@@ -334,7 +335,7 @@ def test_command_with_cwd(tmp_path):
     marker_file.write_text(marker_content)
 
     # 1. Run 'cat marker.txt' in the temp directory - should succeed
-    result = run_command(["cat", "marker.txt"], cwd=str(tmp_path), capture_output=True)
+    result = run_command(cat_command("marker.txt"), cwd=str(tmp_path), capture_output=True)
 
     assert result.returncode == 0
     result.stdout.seek(0)
@@ -342,20 +343,29 @@ def test_command_with_cwd(tmp_path):
     assert marker_content in content, f"Expected content '{marker_content}' in output: '{content}'"
 
     # 2. Try running without cwd - should fail because the file doesn't exist in the current directory
-    result = run_command(["cat", "marker.txt"], capture_output=True)
+    result = run_command(cat_command("marker.txt"), capture_output=True)
     assert result.returncode != 0, "Expected command to fail without the right cwd"
 
-    # 3. Test with pwd to verify we get back the expected directory
-    result = run_command(["pwd"], cwd=str(tmp_path), capture_output=True)
+    # 3. Test with cwd to verify we get back the expected directory
+    result = run_command(cwd_command, cwd=str(tmp_path), capture_output=True)
     assert result.returncode == 0
     result.stdout.seek(0)
-    pwd_output = result.stdout.read().strip()
+    cwd_output = result.stdout.read().strip()
 
     # Convert paths to resolved Path objects to handle symlinks
     resolved_tmp_path = tmp_path.resolve()
-    resolved_pwd_path = pathlib.Path(pwd_output).resolve()
+    cwd_path = pathlib.Path(cwd_output)
 
-    assert resolved_pwd_path == resolved_tmp_path, f"Expected directory {resolved_tmp_path}, got {resolved_pwd_path}"
+    # On Windows, cmd's 'cd' outputs just the drive letter and path without any quotes
+    # On Unix, 'cwd' outputs the full path
+    if IS_WINDOWS:
+        # Just verify that tmp_path is in the output
+        assert str(resolved_tmp_path) in cwd_output
+    else:
+        resolved_cwd_path = cwd_path.resolve()
+        assert resolved_cwd_path == resolved_tmp_path, (
+            f"Expected directory {resolved_tmp_path}, got {resolved_cwd_path}"
+        )
 
     # 4. Test relative path handling with cwd
     # Create a subdirectory in tmp_path
@@ -368,7 +378,7 @@ def test_command_with_cwd(tmp_path):
     sub_file.write_text(sub_content)
 
     # Run a command with relative path from tmp_path
-    result = run_command(["cat", "subdir/sub_marker.txt"], cwd=str(tmp_path), capture_output=True)
+    result = run_command(cat_command("subdir/sub_marker.txt"), cwd=str(tmp_path), capture_output=True)
 
     assert result.returncode == 0
     result.stdout.seek(0)
