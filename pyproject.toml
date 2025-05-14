@@ -120,6 +120,9 @@ ignore = [
   "TCH002",   # Move third-party import into a type-checking block
   "BLE001",   # Do not catch blind exception: `Exception`
 ]
+"tests/support/coverage/*.py" = [
+  "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
+]
 "tools/**/*.py" = [
   "D104",   # missing docstring in public package
   "D107",   # missing docstring in `__init__`

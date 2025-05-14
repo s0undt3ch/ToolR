@@ -75,14 +75,20 @@ jobs:
       - run: uv sync --all-extras --dev
 
       - name: Run Python Tests
-        run: uv run coverage run -m pytest --color=yes
+        env:
+          PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
+          COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
+        run: |
+          uv run coverage run -m pytest -ra -s -v --color=yes
 
       - name: Run Rust Tests
-        run: cargo test --release
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --workspace --tests --skip-clean --timeout 120
 
       - name: Report Coverage
         run: |
-          uv run coverage combine
+          uv run coverage combine || true
           uv run coverage report
 
   build:
