@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
+use pyo3::types::PyModule;
 use crate::command::{
     CommandConfig, run_command_internal,
     CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError
@@ -123,14 +124,14 @@ pub(crate) fn run_command_impl(
 
 // Python module definition
 #[pymodule]
-pub fn _command(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+pub fn _command(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register our function
     m.add_function(wrap_pyfunction!(run_command_impl, m)?)?;
 
-    // Register exception types
-    m.add("CommandError", py.get_type::<CommandError>())?;
-    m.add("CommandTimeoutError", py.get_type::<CommandTimeoutError>())?;
-    m.add("CommandTimeoutNoOutputError", py.get_type::<CommandTimeoutNoOutputError>())?;
+    // Register our exceptions
+    m.add("CommandError", m.py().get_type::<CommandError>())?;
+    m.add("CommandTimeoutError", m.py().get_type::<CommandTimeoutError>())?;
+    m.add("CommandTimeoutNoOutputError", m.py().get_type::<CommandTimeoutNoOutputError>())?;
 
     Ok(())
 }
