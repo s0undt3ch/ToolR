@@ -25,6 +25,13 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/s0undt3ch/toolr"
 
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch-vcs]
+# Use PEP 440 compatible versioning
+version-scheme = "pep440"
+
 [tool.maturin]
 features = ["python"]
 module-name = "toolr.utils._command"
@@ -32,12 +39,20 @@ python-source = "python"
 bindings = "pyo3"
 strip = true
 
-[tool.hatch.version]
-source = "vcs"
+[tool.cibuildwheel]
+# Skip problematic or irrelevant platforms
+skip = "pp* *-i686 *-win32 *-s390x *-musllinux_i686"
+# Explicitly define supported Python versions (optional if you're okay with all supported)
+build = "cp311-* cp312-* cp313-*"
 
-[tool.hatch-vcs]
-# Use PEP 440 compatible versioning
-version-scheme = "pep440"
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/"]
