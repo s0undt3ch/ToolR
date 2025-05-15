@@ -7,8 +7,7 @@ name = "toolr"
 dynamic = ["version"]
 description = "Run commands with advanced features like output streaming and timeouts"
 readme = "README.md"
-# PyO3 does not support 3.13 yet
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.14"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "Pedro Algarvio", email = "pedro@algarvio.me"},
@@ -18,6 +17,7 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Rust",
     "License :: OSI Approved :: Apache Software License",
 ]
