@@ -78,12 +78,19 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+            target/release
+          key: ${{ runner.os }}-cargo-${{ matrix.python-version }}-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
           restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.python-version }}-
             ${{ runner.os }}-cargo-
 
-      - run: uv sync --all-extras --dev
+      - name: Carego Build
+        run: |
+          cargo build --release --target-dir target/release
+
+      - name: Install Python Dependencies
+        run: |
+          uv sync --all-extras --dev
 
       - name: Run Python Tests
         env:
@@ -92,9 +99,26 @@ jobs:
         run: |
           uv run coverage run -m pytest -ra -s -v --color=yes
 
+      - name: Cache Rust Tarpaulin
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/coverage
+          key: ${{ runner.os }}-tarpaulin-${{ matrix.python-version }}-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tarpaulin-${{ matrix.python-version }}-
+            ${{ runner.os }}-tarpaulin-
+
+      - name: Install Tarpaulin
+        run: |
+          cargo install cargo-tarpaulin --target-dir target/coverage
+
+      - name: Tarpaulin Build
+        run: |
+          cargo tarpaulin --no-run --target-dir target/coverage
+
       - name: Run Rust Tests
         run: |
-          cargo install cargo-tarpaulin
           cargo tarpaulin --workspace --tests --skip-clean --timeout 120
 
       - name: Report Coverage
