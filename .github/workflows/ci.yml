@@ -65,38 +65,47 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - id: python-version-checksum
+        run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - id: rust-version-checksum
+        run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Cache virtualenv
         uses: actions/cache@v4
         with:
           path: .venv
           key: >-
-            venv|${{ runner.os }}|${{ matrix.python-version }}|${{ hashFiles('**/uv.lock') }}
+            venv|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
 
-      - name: Cache Rust Dependencies
+      - name: Cache `~/.cargo`
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target/release
-          key: ${{ runner.os }}-cargo-${{ matrix.python-version }}-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.python-version }}-
-            ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}|cargo|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust `target/release`
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/release
+          key: ${{ runner.os }}|target|release|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+
+      - name: Cache Rust `target/coverage`
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/coverage
+          key: ${{ runner.os }}|target|coverage|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Build Rust Release
         run: |
           cargo build --release --target-dir target/release
-
-      - name: Cache virtualenv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: >-
-            venv|${{ runner.os }}|${{ matrix.python-version }}|${{ hashFiles('**/uv.lock') }}
 
       - name: Install Python Dependencies
         run: |
@@ -113,16 +122,6 @@ jobs:
         run: |
           uv run coverage combine || true
           uv run coverage report
-
-      - name: Cache Tarpaulin Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            target/coverage
-          key: ${{ runner.os }}-tarpaulin-${{ matrix.python-version }}-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-tarpaulin-${{ matrix.python-version }}-
-            ${{ runner.os }}-tarpaulin-
 
       - name: Install Tarpaulin
         run: |
