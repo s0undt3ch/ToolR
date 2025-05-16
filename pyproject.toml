@@ -3,12 +3,12 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "toolr"
+name = "ToolR"
 version = "0.1.0"
-description = "Run commands with advanced features like output streaming and timeouts"
+description = "In-project CLI tooling support"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
-license = {text = "Apache-2.0"}
+license = {file = "LICENSE"}
 authors = [
     {name = "Pedro Algarvio", email = "pedro@algarvio.me"},
 ]
@@ -23,7 +23,10 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/s0undt3ch/toolr"
+Repository = "https://github.com/s0undt3ch/ToolR"
+Documentation = "https://s0undt3ch.github.io/ToolR"
+Issues = "https://github.com/s0undt3ch/ToolR/issues"
+Changelog = "https://github.com/s0undt3ch/ToolR/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 source = "vcs"
@@ -156,7 +159,7 @@ convention = "google"
 combine-as-imports = false
 force-single-line = true
 known-first-party = [
-  "refine",
+  "toolr",
 ]
 forced-separate = [
   "tests"
