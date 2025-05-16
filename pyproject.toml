@@ -1,10 +1,10 @@
 [build-system]
-requires = ["maturin>=1.0,<2.0", "hatch-vcs>=0.3.0"]
+requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "toolr"
-dynamic = ["version"]
+version = "0.1.0"
 description = "Run commands with advanced features like output streaming and timeouts"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -38,6 +38,8 @@ module-name = "toolr.utils._command"
 python-source = "python"
 bindings = "pyo3"
 strip = true
+# Require Cargo.lock is up to date
+locked = true
 
 [tool.cibuildwheel]
 # Skip problematic or irrelevant platforms
