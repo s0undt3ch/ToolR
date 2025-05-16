@@ -141,6 +141,7 @@ jobs:
     needs:
       - tests
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -163,6 +164,12 @@ jobs:
       - name: Set up QEMU for ARM emulation
         uses: docker/setup-qemu-action@v3
         if: matrix.os == 'ubuntu-latest'
+
+      - name: Install Rust target for macOS cross-compilation
+        if: startsWith(matrix.os, 'mac')
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
 
       - name: Build wheels
         run: |

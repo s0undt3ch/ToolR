@@ -54,6 +54,9 @@ archs = ["x86_64", "arm64"]
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
 
+[tool.cibuildwheel.environment]
+MACOSX_DEPLOYMENT_TARGET = "10.12"
+
 [tool.pytest.ini_options]
 testpaths = ["tests/"]
 python_files = "test_*.py"
