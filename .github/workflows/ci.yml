@@ -39,8 +39,8 @@ jobs:
       - run: pre-commit install --install-hooks
       - run: pre-commit run --all-files --show-diff-on-failure --color=always
 
-  tests:
-    name: Tests
+  test:
+    name: Test
     runs-on: ${{ matrix.os }}
     needs:
       - pre-commit
@@ -136,10 +136,10 @@ jobs:
           cargo tarpaulin --workspace --tests --skip-clean --timeout 120
 
   build:
-    name: Build Wheels
+    name: Build
     runs-on: ${{ matrix.os }}
     needs:
-      - tests
+      - test
     strategy:
       fail-fast: false
       matrix:
@@ -180,9 +180,10 @@ jobs:
           name: dist-${{ matrix.os }}
           path: dist
 
-  publish-testpypi:
+  publish:
     name: Publish to Test PyPI
     needs:
+      - test
       - build
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
@@ -202,3 +203,27 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: all_dists/
+
+
+  set-pipeline-exit-status:
+    permissions:
+      actions: read
+    # This step is just so we can make github require this step, to pass checks
+    # on a pull request instead of requiring all
+    name: Set the ${{ github.workflow }} Pipeline Exit Status
+    if: always()
+    runs-on: ubuntu-latest
+    needs:
+      - pre-commit
+      - test
+      - build
+      - publish
+    steps:
+      - uses: martialonline/workflow-status@v4
+        id: check
+      - run: echo "Workflow failed"
+        if: steps.check.outputs.status == 'failure'
+      - run: echo "Workflow was cancelled"
+        if: steps.check.outputs.status == 'cancelled'
+      - run: echo "Workflow was successful"
+        if: steps.check.outputs.status == 'success'
