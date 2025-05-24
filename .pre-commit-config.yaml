@@ -47,6 +47,8 @@ repos:
         args: []
         additional_dependencies:
           - pytest
+          - rich
+          - rich-argparse
 
   - repo: local
     hooks:
