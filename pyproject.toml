@@ -21,6 +21,9 @@ classifiers = [
     "Programming Language :: Rust",
     "License :: OSI Approved :: Apache Software License",
 ]
+dependencies = [
+    "rich-argparse>=1.7.0",
+]
 
 [project.urls]
 Repository = "https://github.com/s0undt3ch/ToolR"
