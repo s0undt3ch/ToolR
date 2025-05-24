@@ -27,7 +27,7 @@ from ._command import run_command_impl
 
 # Define our type variables
 T = TypeVar("T", str, bytes)
-_ENV: TypeAlias = dict[str, str] | None
+ENVIRON: TypeAlias = dict[str, str] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,11 +42,11 @@ class CommandResult(Generic[T]):
     returncode: int
 
 
-def run_command(  # noqa: PLR0913, PLR0915
+def run(  # noqa: PLR0913, PLR0915
     args: list[str],
     *,
     cwd: str | pathlib.Path | None = None,
-    env: _ENV = None,
+    env: ENVIRON = None,
     input: str | bytes | None = None,  # noqa: A002
     stream_output: bool = False,
     capture_output: bool = False,
