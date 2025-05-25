@@ -11,8 +11,8 @@ from unittest import mock
 
 import pytest
 
-from toolr.context import ConsoleVerbosity
-from toolr.context import Context
+from toolr._context import ConsoleVerbosity
+from toolr._context import Context
 from toolr.utils.command import CommandResult
 
 
@@ -115,19 +115,14 @@ def test_chdir_nonexistent_original(ctx, temp_cwd, tmp_path):
         mock_log.assert_called_with(f"Unable to change back to path {temp_cwd}", style="log-error", _stack_offset=2)
 
 
-def test_chdir_str_path(ctx):
+def test_chdir_str_path(ctx, tmp_path):
     """Test chdir with string path."""
-    path_str = "/test/dir"
-    test_dir = pathlib.Path(path_str).resolve()
+    initial_path = tmp_path.joinpath("test/dir").resolve()
+    initial_path.mkdir(parents=True, exist_ok=True)
 
-    with (
-        mock.patch("os.chdir") as mock_chdir,
-        mock.patch("pathlib.Path.resolve", return_value=test_dir),
-        mock.patch("pathlib.Path.exists", return_value=True),
-    ):
-        with ctx.chdir(path_str) as path:
-            assert path == test_dir
-            mock_chdir.assert_called_with(test_dir)
+    assert pathlib.Path.cwd() != initial_path
+    with ctx.chdir(str(initial_path)) as path:
+        assert pathlib.Path.cwd() == initial_path == path
 
 
 def test_debug_output(parser, repo_root):
