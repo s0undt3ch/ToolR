@@ -74,8 +74,9 @@ class Context:
         if os.environ.get("CI"):
             console_kwargs["force_terminal"] = True
             console_kwargs["force_interactive"] = False
-        object.__setattr__(self, "console", Console(stderr=True, log_path=False, **console_kwargs))
-        object.__setattr__(self, "console_stdout", Console(log_path=False, **console_kwargs))
+        log_path = self.verbosity >= ConsoleVerbosity.VERBOSE
+        object.__setattr__(self, "console", Console(stderr=True, log_path=log_path, **console_kwargs))
+        object.__setattr__(self, "console_stdout", Console(log_path=log_path, **console_kwargs))
         rich.reconfigure(stderr=True, **console_kwargs)
 
     def print(self, *args, **kwargs) -> None:
