@@ -46,6 +46,7 @@ repos:
         exclude: ^tests/support/coverage/.*\.py$
         args: []
         additional_dependencies:
+          - attrs
           - pytest
           - rich
           - rich-argparse
