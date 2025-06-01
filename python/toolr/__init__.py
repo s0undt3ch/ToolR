@@ -8,5 +8,9 @@ except ImportError:
     __version__ = "0.0.0.not-installed"
 
 from toolr._context import Context
+from toolr._registry import registry
 
-__all__ = ["Context"]
+# Create a command group alias
+command_group = registry.command_group
+
+__all__ = ["Context", "command_group", "registry"]
