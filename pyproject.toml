@@ -25,6 +25,9 @@ dependencies = [
     "rich-argparse>=1.7.0",
 ]
 
+[project.scripts]
+toolr = "toolr.__main__:main"
+
 [project.urls]
 Repository = "https://github.com/s0undt3ch/ToolR"
 Documentation = "https://s0undt3ch.github.io/ToolR"
