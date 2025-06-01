@@ -1,0 +1,240 @@
+name: CI Workflow
+
+on:
+  push:
+  pull_request:
+  release:
+    types:
+      - published
+
+concurrency:
+  # Concurrency is defined in a way that concurrent builds against branches do
+  # not cancel previous builds.
+  # However, for every new build against the same pull request source branch,
+  # all older builds against that same branch get canceled.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  FORCE_COLOR: "1"
+
+jobs:
+  pre-commit:
+    name: Pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - run: pip install pre-commit
+
+      - id: python-version-checksum
+        run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - id: pre-commit-version-checksum
+        run: echo "version-sha256sum=$(pre-commit --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: >-
+            precommit|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
+
+      - run: pre-commit install --install-hooks
+      - run: pre-commit run --all-files --show-diff-on-failure --color=always
+
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    needs:
+      - pre-commit
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - id: python-version-checksum
+        run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - id: rust-version-checksum
+        run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: >-
+            venv|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
+
+      - name: Cache `~/.cargo`
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}|cargo|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+
+      - name: Cache Rust `target/release`
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/release
+          key: ${{ runner.os }}|target|release|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+
+      - name: Cache Rust `target/coverage`
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/coverage
+          key: ${{ runner.os }}|target|coverage|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+
+      - name: Build Rust Release
+        run: |
+          cargo build --release --target-dir target/release
+
+      - name: Install Python Dependencies
+        run: |
+          uv sync --all-extras --dev
+
+      - name: Run Python Tests
+        env:
+          PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
+          COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
+        run: |
+          uv run coverage run -m pytest -ra -s -v --color=yes
+
+      - name: Report Python Coverage
+        run: |
+          uv run coverage combine || true
+          uv run coverage report
+
+      - name: Install Tarpaulin
+        run: |
+          cargo install cargo-tarpaulin --target-dir target/coverage
+
+      - name: Tarpaulin Build
+        run: |
+          cargo tarpaulin --no-run --target-dir target/coverage
+
+      - name: Run Rust Tests
+        run: |
+          cargo tarpaulin --workspace --tests --skip-clean --timeout 120
+
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    needs:
+      - test
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install `cibuildwheel`
+        run: |
+          pip install cibuildwheel
+
+      - name: Set up QEMU for ARM emulation
+        uses: docker/setup-qemu-action@v3
+        if: matrix.os == 'ubuntu-latest'
+
+      - name: Install Rust target for macOS cross-compilation
+        if: startsWith(matrix.os, 'mac')
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+
+      - name: Build wheels
+        run: |
+          cibuildwheel --output-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist
+
+  publish:
+    name: Publish to Test PyPI
+    needs:
+      - test
+      - build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Flatten dist/ directory
+        run: |
+          mkdir all_dists
+          find dist/ -type f -name '*.whl' -exec mv {} all_dists/ \;
+
+      - name: Publish to Test PyPI (Trusted Publisher)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: all_dists/
+
+
+  set-pipeline-exit-status:
+    permissions:
+      actions: read
+    # This step is just so we can make github require this step, to pass checks
+    # on a pull request instead of requiring all
+    name: Set the ${{ github.workflow }} Pipeline Exit Status
+    if: always()
+    runs-on: ubuntu-latest
+    needs:
+      - pre-commit
+      - test
+      - build
+      - publish
+    steps:
+      - uses: martialonline/workflow-status@v4
+        id: check
+      - run: echo "Workflow failed"
+        if: steps.check.outputs.status == 'failure'
+      - run: echo "Workflow was cancelled"
+        if: steps.check.outputs.status == 'cancelled'
+      - run: echo "Workflow was successful"
+        if: steps.check.outputs.status == 'success'

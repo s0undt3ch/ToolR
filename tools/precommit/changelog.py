@@ -77,10 +77,7 @@ def check_changelog_entries(ctx: Context, files: list[pathlib.Path]) -> None:
                 exitcode = 1
                 continue
             if path.suffix != ".md":
-                ctx.error(
-                    f"Please rename '{path.relative_to(REPO_ROOT)}' to "
-                    f"'{path.relative_to(REPO_ROOT)}.md'"
-                )
+                ctx.error(f"Please rename '{path.relative_to(REPO_ROOT)}' to '{path.relative_to(REPO_ROOT)}.md'")
                 exitcode = 1
                 continue
         except ValueError:
@@ -119,9 +116,6 @@ def check_changelog_entries(ctx: Context, files: list[pathlib.Path]) -> None:
                 f"not '{path.relative_to(REPO_ROOT).parent}'"
             )
         if path.suffix != ".md":
-            ctx.error(
-                f"Please rename '{path.relative_to(REPO_ROOT)}' to "
-                f"'{path.relative_to(REPO_ROOT)}.md'"
-            )
+            ctx.error(f"Please rename '{path.relative_to(REPO_ROOT)}' to '{path.relative_to(REPO_ROOT)}.md'")
             exitcode = 1
     ctx.exit(exitcode)
