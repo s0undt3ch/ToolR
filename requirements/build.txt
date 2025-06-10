@@ -5,7 +5,7 @@
 #    pip-compile --strip-extras requirements/build.in
 #
 build==1.2.1
-    # via -r requirements/build.in
+    # via -r build.in
 certifi==2024.7.4
     # via requests
 cffi==1.17.0
@@ -34,11 +34,11 @@ keyring==25.3.0
     # via twine
 markdown-it-py==3.0.0
     # via
-    #   -c /home/vampas/projects/me/toolr/branches/main/requirements/base.txt
+    #   -c base.txt
     #   rich
 mdurl==0.1.2
     # via
-    #   -c /home/vampas/projects/me/toolr/branches/main/requirements/base.txt
+    #   -c base.txt
     #   markdown-it-py
 more-itertools==10.4.0
     # via
@@ -54,14 +54,14 @@ pycparser==2.22
     # via cffi
 pygments==2.18.0
     # via
-    #   -c /home/vampas/projects/me/toolr/branches/main/requirements/base.txt
+    #   -c base.txt
     #   readme-renderer
     #   rich
 pyproject-hooks==1.1.0
     # via build
 readme-renderer==44.0
     # via twine
-requests==2.32.3
+requests==2.32.4
     # via
     #   requests-toolbelt
     #   twine
@@ -71,12 +71,12 @@ rfc3986==2.0.0
     # via twine
 rich==13.7.1
     # via
-    #   -c /home/vampas/projects/me/toolr/branches/main/requirements/base.txt
+    #   -c base.txt
     #   twine
 secretstorage==3.3.3
     # via keyring
 twine==5.1.1
-    # via -r requirements/build.in
+    # via -r build.in
 urllib3==2.2.2
     # via
     #   requests
