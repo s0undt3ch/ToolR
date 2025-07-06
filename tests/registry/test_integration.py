@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from toolr._parser import Parser
 from toolr._registry import CommandRegistry
 
 from .conftest import RegistryTestCase
@@ -178,7 +179,6 @@ def test_command_group_hierarchy_storage(registry):
 
 def test_multiple_registries_isolation(tmp_path):
     """Test that multiple registry instances are properly isolated."""
-    from toolr._parser import Parser
 
     parser1 = Parser(repo_root=tmp_path / "registry1")
     parser2 = Parser(repo_root=tmp_path / "registry2")
