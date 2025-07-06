@@ -21,11 +21,12 @@ def main() -> NoReturn:  # type: ignore[misc]
     """
     parser = Parser()
     log.debug("Searching for tools in %s", parser.repo_root)
-    if parser.repo_root in sys.path:
-        sys.path.remove(parser.repo_root)
-    sys.path.insert(0, parser.repo_root)
+    str_repo_root_path = str(parser.repo_root)
+    if str_repo_root_path in sys.path:
+        sys.path.remove(str_repo_root_path)
+    sys.path.insert(0, str_repo_root_path)
     try:
-        import tools  # noqa: F401,PLC0415
+        import tools  # type: ignore[import-not-found]
     except ImportError as exc:
         if os.environ.get("TOOLR_DEBUG_IMPORTS", "0") == "1":
             raise exc from None

@@ -133,6 +133,10 @@ ignore = [
   "D104",   # Missing docstring in public package
   "D107",   # Missing docstring in `__init__`
 ]
+"python/toolr/__main__.py" = [
+  "F401",   #  `tools` imported but unused
+  "PLC0415" # `import` should be at the top-level of a file
+]
 "python/toolr/utils/_command.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
   "N818",   # Exception name `*` should be named with an Error suffix"
