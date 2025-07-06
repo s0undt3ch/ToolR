@@ -25,7 +25,7 @@ def main() -> NoReturn:  # type: ignore[misc]
         sys.path.remove(parser.repo_root)
     sys.path.insert(0, parser.repo_root)
     try:
-        import tools  # noqa: F401
+        import tools  # noqa: F401,PLC0415
     except ImportError as exc:
         if os.environ.get("TOOLR_DEBUG_IMPORTS", "0") == "1":
             raise exc from None
