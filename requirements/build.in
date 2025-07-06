@@ -1,4 +1,0 @@
---constraint=base.txt
-
-twine
-build>=0.7.0
