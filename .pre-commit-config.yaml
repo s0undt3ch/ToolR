@@ -50,6 +50,7 @@ repos:
           - pytest
           - rich
           - rich-argparse
+          - msgspec
 
   - repo: local
     hooks:

@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from toolr._parser import Parser
-from toolr._registry import CommandRegistry
-
 from .conftest import RegistryTestCase
 
 CASES_PATH = Path(__file__).parent / "cases"
@@ -102,11 +99,8 @@ def test_discover_mixed_case():
         assert len(k8s_commands) >= 2  # deploy, scale
 
 
-def test_build_parsers_empty_registry(tmp_path):
+def test_build_parsers_empty_registry(registry):
     """Test building parsers with an empty registry."""
-    parser = Parser(repo_root=tmp_path)
-    registry = CommandRegistry(parser=parser)
-
     # Verify initial state
     assert not registry._built
     assert len(registry._command_groups) == 0
@@ -122,10 +116,8 @@ def test_build_parsers_empty_registry(tmp_path):
     assert len(registry._pending_commands) == 0
 
 
-def test_build_simple_command_group(tmp_path):
+def test_build_simple_command_group(registry):
     """Test building parsers for a simple command group."""
-    parser = Parser(repo_root=tmp_path)
-    registry = CommandRegistry(parser=parser)
 
     # Create a simple command group with a command
     group = registry.command_group("test", "Test", "Test description")
@@ -155,10 +147,8 @@ def test_build_simple_command_group(tmp_path):
     assert test_group.description == "Test description"
 
 
-def test_build_nested_command_groups(tmp_path):
+def test_build_nested_command_groups(registry):
     """Test building parsers for nested command groups."""
-    parser = Parser(repo_root=tmp_path)
-    registry = CommandRegistry(parser=parser)
 
     # Create nested command groups
     parent = registry.command_group("parent", "Parent", "Parent desc")
@@ -193,10 +183,8 @@ def test_build_nested_command_groups(tmp_path):
     assert child_group.full_name == "tools.parent.child"
 
 
-def test_build_parsers_called_once(tmp_path):
+def test_build_parsers_called_once(registry):
     """Test that _build_parsers can be called multiple times safely."""
-    parser = Parser(repo_root=tmp_path)
-    registry = CommandRegistry(parser=parser)
 
     group = registry.command_group("test", "Test", "Test desc")
 
@@ -253,10 +241,8 @@ def test_discover_and_build_integration():
         assert len(registry._pending_commands) >= 4  # 2 docker + 2 git commands
 
 
-def test_discover_and_build_with_manual_groups(tmp_path):
+def test_discover_and_build_with_manual_groups(registry):
     """Test discover_and_build works with manually created groups."""
-    parser = Parser(repo_root=tmp_path)
-    registry = CommandRegistry(parser=parser)
 
     # Create some command groups manually before discovery
     group1 = registry.command_group("group1", "Group 1", "Description 1")

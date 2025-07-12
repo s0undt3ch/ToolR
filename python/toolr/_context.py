@@ -9,20 +9,18 @@ import pathlib
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from dataclasses import field
 from enum import IntEnum
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import NoReturn
 
-import rich
-from rich.console import Console
-from rich.theme import Theme
+from msgspec import Struct
 
 from toolr.utils import command
 
 if TYPE_CHECKING:
+    from rich.console import Console
+
     from toolr.utils.command import CommandResult
 
 
@@ -40,44 +38,14 @@ class ConsoleVerbosity(IntEnum):
         return self.name.lower()
 
 
-@dataclass(frozen=True, slots=True)
-class Context:
+class Context(Struct, frozen=True):
     """Context object passed to every command group function as the first argument."""
 
     repo_root: pathlib.Path
-    parser: ArgumentParser = field(repr=False)
-    verbosity: ConsoleVerbosity = field(default=ConsoleVerbosity.NORMAL)
-    console: Console = field(repr=False, init=False)
-    console_stdout: Console = field(repr=False, init=False)
-
-    def __post_init__(self) -> None:
-        """Initialize the context after dataclass initialization.
-
-        Since this is a frozen dataclass, we need to use object.__setattr__
-        to set attributes in __post_init__.
-        """
-        theme = Theme(
-            {
-                "log-debug": "dim blue",
-                "log-info": "dim cyan",
-                "log-warning": "magenta",
-                "log-error": "bold red",
-                "exit-ok": "green",
-                "exit-failure": "bold red",
-                "logging.level.stdout": "dim blue",
-                "logging.level.stderr": "dim red",
-            }
-        )
-        console_kwargs: dict[str, Any] = {
-            "theme": theme,
-        }
-        if os.environ.get("CI"):
-            console_kwargs["force_terminal"] = True
-            console_kwargs["force_interactive"] = False
-        log_path = self.verbosity >= ConsoleVerbosity.VERBOSE
-        object.__setattr__(self, "console", Console(stderr=True, log_path=log_path, **console_kwargs))
-        object.__setattr__(self, "console_stdout", Console(log_path=log_path, **console_kwargs))
-        rich.reconfigure(stderr=True, **console_kwargs)
+    parser: ArgumentParser
+    verbosity: ConsoleVerbosity
+    console: Console
+    console_stdout: Console
 
     def print(self, *args, **kwargs) -> None:
         """

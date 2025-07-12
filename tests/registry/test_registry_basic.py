@@ -2,19 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from toolr._parser import Parser
 from toolr._registry import CommandGroup
-from toolr._registry import CommandRegistry
-
-
-@pytest.fixture
-def registry(tmp_path):
-    """Create a fresh registry with a real parser for each test."""
-
-    parser = Parser(repo_root=tmp_path)
-    return CommandRegistry(parser=parser)
 
 
 def test_create_registry(registry):

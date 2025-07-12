@@ -6,10 +6,12 @@ import pathlib
 import sys
 from argparse import ArgumentParser
 from argparse import _SubParsersAction
-from dataclasses import dataclass
-from dataclasses import field
+from typing import TYPE_CHECKING
 from typing import Any
 
+from msgspec import Struct
+from msgspec import field
+from msgspec import structs
 from rich_argparse import RawDescriptionRichHelpFormatter
 
 from toolr import __version__
@@ -20,17 +22,16 @@ from toolr.utils import _logs
 log = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class Parser:
+class Parser(Struct, frozen=True):
     """
     Singleton parser class that wraps argparse.
     """
 
     repo_root: pathlib.Path = field(default_factory=pathlib.Path.cwd)
-    parser: ArgumentParser = field(init=False, repr=False)
-    subparsers: _SubParsersAction[ArgumentParser] = field(init=False, repr=False)
-    context: Context = field(init=False, repr=False)
-    options: argparse.Namespace = field(init=False, repr=False)
+    parser: ArgumentParser | None = None
+    subparsers: _SubParsersAction[ArgumentParser] | None = None
+    context: Context | None = None
+    options: argparse.Namespace | None = None
 
     def __post_init__(self) -> None:
         # Let's do a little manual parsing so that we can set debug or quiet early
@@ -45,12 +46,20 @@ class Parser:
                 verbosity = ConsoleVerbosity.VERBOSE
                 break
 
+        # Late import to avoid circular import issues
+        from toolr.utils._console import setup_consoles  # noqa: PLC0415
+
+        console, console_stdout = setup_consoles(verbosity)
+
         context = Context(
             parser=self,  # type: ignore[arg-type]
             repo_root=self.repo_root,
             verbosity=verbosity,
+            console=console,
+            console_stdout=console_stdout,
         )
-        object.__setattr__(self, "context", context)
+        structs.force_setattr(self, "context", context)
+
         parser = argparse.ArgumentParser(
             prog="toolr",
             description="In-project CLI tooling support",
@@ -114,7 +123,7 @@ class Parser:
             metavar="SECONDS",
             dest="no_output_timeout_secs",
         )
-        object.__setattr__(self, "parser", parser)
+        structs.force_setattr(self, "parser", parser)
 
         subparsers = parser.add_subparsers(
             title="Commands",
@@ -122,12 +131,16 @@ class Parser:
             required=True,
             description="These commands are discovered under `<repo-root>/tools` recursively.",
         )
-        object.__setattr__(self, "subparsers", subparsers)
+        structs.force_setattr(self, "subparsers", subparsers)
 
     def parse_args(self) -> None:
         """
         Parse CLI.
         """
+        if TYPE_CHECKING:
+            assert self.context is not None
+            assert self.parser is not None
+
         # Log the argv getting executed
         self.context.debug(f"Tools executing 'sys.argv': {sys.argv}")
         # Process registered imports to allow other modules to register commands
@@ -145,11 +158,11 @@ class Parser:
         else:
             for handler in logging.root.handlers:
                 handler.setFormatter(_logs.NO_TIMESTAMP_FORMATTER)
-        object.__setattr__(self, "options", options)
+        structs.force_setattr(self, "options", options)
         if "func" not in options:
             self.context.exit(1, "No command was passed.")
         log.debug("CLI parsed options %s", options)
-        options.func(options)
+        options.func(self.context, options)
 
     def __getattr__(self, attr: str) -> Any:
         """

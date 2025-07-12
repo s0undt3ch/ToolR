@@ -1,12 +1,12 @@
 from argparse import ArgumentParser
 from collections.abc import Iterator
-from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
 from typing import Any
 from typing import Literal
 from typing import NoReturn
 
+from msgspec import Struct
 from rich.console import Console
 from rich.console import ConsoleRenderable
 from rich.console import RichCast
@@ -18,15 +18,13 @@ class ConsoleVerbosity(IntEnum):
     NORMAL = 1
     VERBOSE = 2
 
-@dataclass(frozen=True, slots=True)
-class Context:
+class Context(Struct, frozen=True):
     repo_root: Path
     parser: ArgumentParser
     verbosity: ConsoleVerbosity = ...
     console: Console = ...
     console_stdout: Console = ...
 
-    def __post_init__(self) -> None: ...
     def print(
         self,
         *args: ConsoleRenderable | RichCast | str,

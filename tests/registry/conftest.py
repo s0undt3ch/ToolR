@@ -6,6 +6,7 @@ from types import ModuleType
 from unittest.mock import _patch
 from unittest.mock import patch
 
+import pytest
 from attrs import define
 from attrs import field
 
@@ -29,7 +30,7 @@ class RegistryTestCase:
 
     @registry.default
     def _default_registry(self) -> CommandRegistry:
-        return CommandRegistry(parser=self.parser)
+        return CommandRegistry(_parser=self.parser)
 
     @sys_path.default
     def _default_sys_path(self) -> list[str]:
@@ -59,3 +60,10 @@ class RegistryTestCase:
         sys.path[:] = self.sys_path
         sys.modules.clear()
         sys.modules.update(self.sys_modules)
+
+
+@pytest.fixture
+def registry(tmp_path: Path) -> CommandRegistry:
+    """Create a registry with a parser."""
+    parser = Parser(repo_root=tmp_path)
+    return CommandRegistry(_parser=parser)

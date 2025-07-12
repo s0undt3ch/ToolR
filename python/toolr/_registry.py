@@ -5,22 +5,25 @@ import logging
 import pkgutil
 from argparse import _SubParsersAction
 from collections.abc import Callable
-from dataclasses import dataclass
-from dataclasses import field
 from operator import itemgetter
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import TypeVar
 
-from toolr._parser import Parser
+from msgspec import Struct
+from msgspec import field
+from msgspec import structs
+
+if TYPE_CHECKING:
+    from toolr._parser import Parser
 
 log = logging.getLogger(__name__)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-@dataclass(frozen=True, slots=True)
-class CommandGroup:
+class CommandGroup(Struct, frozen=True):
     """A group of commands under a common namespace."""
 
     name: str
@@ -28,7 +31,7 @@ class CommandGroup:
     description: str
     registry: CommandRegistry
     parent: str | None = None
-    _subparsers: _SubParsersAction | None = field(default=None, init=False, repr=False)
+    _subparsers: _SubParsersAction | None = None
 
     @property
     def full_name(self) -> str:
@@ -74,14 +77,21 @@ class CommandGroup:
         return self.registry.command_group(name, title, description, parent=self.full_name)
 
 
-@dataclass(slots=True)
-class CommandRegistry:
+class CommandRegistry(Struct, frozen=True):
     """Registry for CLI commands and their subcommands."""
 
-    parser: Parser = field(default_factory=Parser)
-    _command_groups: dict[str, CommandGroup] = field(default_factory=dict, init=False, repr=False)
-    _pending_commands: list[dict[str, Any]] = field(default_factory=list, init=False, repr=False)
-    _built: bool = field(default=False, init=False, repr=False)
+    _command_groups: dict[str, CommandGroup] = field(default_factory=dict)
+    _pending_commands: list[dict[str, Any]] = field(default_factory=list)
+    _built: bool = False
+    _parser: Parser | None = None
+
+    @property
+    def parser(self) -> Parser:
+        """Get the parser for this registry."""
+        if self._parser is None:
+            err_msg = "The parser is not set. Please pass a parser instance when calling self.discover_and_build()"
+            raise RuntimeError(err_msg)
+        return self._parser
 
     def _discover_commands(self) -> None:
         """Recursively discover and import command modules from tools/."""
@@ -150,6 +160,9 @@ class CommandRegistry:
                 parent_subparsers = parser_hierarchy[group.parent]
 
             # Create subparsers for this group
+            if TYPE_CHECKING:
+                assert parent_subparsers is not None
+
             group_parser = parent_subparsers.add_parser(
                 group.name, help=f"{group.title} - {group.description}", description=group.description
             )
@@ -162,7 +175,7 @@ class CommandRegistry:
             parser_hierarchy[full_name] = subparsers
 
             # Store reference in the group object
-            object.__setattr__(group, "_subparsers", subparsers)
+            structs.force_setattr(group, "_subparsers", subparsers)
 
         # Now add all the pending commands to their respective groups
         for cmd_info in sorted(self._pending_commands, key=itemgetter("group_path")):
@@ -180,10 +193,15 @@ class CommandRegistry:
             cmd_parser = subparsers.add_parser(cmd_info["name"], help=cmd_info["help"], **cmd_info["kwargs"])
             cmd_parser.set_defaults(func=cmd_info["func"])
 
-        self._built = True
+        structs.force_setattr(self, "_built", True)  # noqa: FBT003
 
-    def discover_and_build(self) -> None:
+    def discover_and_build(self, parser: Parser | None = None) -> None:
         """Discover all commands and build the parser hierarchy."""
+        if parser is not None:
+            if self._parser is not None:
+                err_msg = "A parser has already been set?!"
+                raise RuntimeError(err_msg)
+            structs.force_setattr(self, "_parser", parser)
         self._discover_commands()
         self._build_parsers()
 

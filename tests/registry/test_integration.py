@@ -182,8 +182,8 @@ def test_multiple_registries_isolation(tmp_path):
 
     parser1 = Parser(repo_root=tmp_path / "registry1")
     parser2 = Parser(repo_root=tmp_path / "registry2")
-    registry1 = CommandRegistry(parser=parser1)
-    registry2 = CommandRegistry(parser=parser2)
+    registry1 = CommandRegistry(_parser=parser1)
+    registry2 = CommandRegistry(_parser=parser2)
 
     # Create different structures in each registry
     group1 = registry1.command_group("test1", "Test 1", "Test registry 1")

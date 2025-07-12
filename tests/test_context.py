@@ -6,13 +6,13 @@ import os
 import pathlib
 import shutil
 from argparse import ArgumentParser
-from dataclasses import FrozenInstanceError
 from unittest import mock
 
 import pytest
 
 from toolr._context import ConsoleVerbosity
 from toolr._context import Context
+from toolr.utils._console import setup_consoles
 from toolr.utils.command import CommandResult
 
 
@@ -42,13 +42,18 @@ def parser():
 
 @pytest.fixture
 def ctx(parser, repo_root):
-    return Context(parser=parser, repo_root=repo_root)
+    verbosity = ConsoleVerbosity.NORMAL
+    console, console_stdout = setup_consoles(verbosity)
+    return Context(
+        parser=parser, repo_root=repo_root, verbosity=verbosity, console=console, console_stdout=console_stdout
+    )
 
 
 def test_context_frozen(ctx):
-    """Test that Context is a frozen dataclass."""
-    with pytest.raises(FrozenInstanceError):
+    """Test that Context is frozen."""
+    with pytest.raises(AttributeError) as excinfo:
         ctx.console = None
+    assert "immutable type: 'Context'" in str(excinfo.value)
 
 
 def test_run_basic(ctx):
@@ -127,7 +132,11 @@ def test_chdir_str_path(ctx, tmp_path):
 
 def test_debug_output(parser, repo_root):
     """Test debug output during command execution."""
-    ctx = Context(parser=parser, repo_root=repo_root, verbosity=ConsoleVerbosity.VERBOSE)
+    verbosity = ConsoleVerbosity.VERBOSE
+    console, console_stdout = setup_consoles(verbosity)
+    ctx = Context(
+        parser=parser, repo_root=repo_root, verbosity=verbosity, console=console, console_stdout=console_stdout
+    )
 
     with mock.patch("toolr.utils.command.run") as mock_run, mock.patch.object(ctx.console, "log") as mock_log:
         args = ("echo", "hello")

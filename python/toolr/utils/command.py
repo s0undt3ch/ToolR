@@ -11,7 +11,6 @@ import os
 import pathlib
 import sys
 import tempfile
-from dataclasses import dataclass
 from typing import IO
 from typing import TYPE_CHECKING
 from typing import Any
@@ -19,6 +18,8 @@ from typing import Generic
 from typing import TypeAlias
 from typing import TypeVar
 from typing import cast
+
+from msgspec import Struct
 
 from ._command import CommandError  # noqa: F401
 from ._command import CommandTimeoutError  # noqa: F401
@@ -30,8 +31,7 @@ T = TypeVar("T", str, bytes)
 ENVIRON: TypeAlias = dict[str, str] | None
 
 
-@dataclass(frozen=True, slots=True)
-class CommandResult(Generic[T]):
+class CommandResult(Struct, Generic[T], frozen=True):
     """
     The result of a command execution.
     """
