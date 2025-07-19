@@ -68,7 +68,7 @@ class CommandGroup(Struct, frozen=True):
     ) -> CommandGroup:
         """Create a nested command group within this group.
 
-        This is a wrapper around the registry's command_group method that
+        This is a wrapper around the :func:`CommandRegistry.command_group` method that
         passes this group's full name as the parent.
 
         Args:
