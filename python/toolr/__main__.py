@@ -11,6 +11,7 @@ from multiprocessing import freeze_support
 from typing import NoReturn
 
 from toolr._parser import Parser
+from toolr._registry import registry
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,9 @@ def main() -> NoReturn:  # type: ignore[misc]
     except ImportError as exc:
         if os.environ.get("TOOLR_DEBUG_IMPORTS", "0") == "1":
             raise exc from None
+
+    # Let's discover and build the command registry
+    registry.discover_and_build(parser)
 
     parser.parse_args()
 
