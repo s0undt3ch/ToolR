@@ -15,6 +15,7 @@ from typing import TypeVar
 from msgspec import Struct
 from msgspec import field
 from msgspec import structs
+from rich.markdown import Markdown
 
 if TYPE_CHECKING:
     from toolr._parser import Parser
@@ -201,13 +202,16 @@ class CommandRegistry(Struct, frozen=True):
                 assert parent_subparsers is not None
 
             group_parser = parent_subparsers.add_parser(
-                group.name, help=f"{group.title} - {group.description}", description=group.description
+                group.name,
+                help=f"{group.title} - {group.description}",
+                description=Markdown(group.description, style="argparse.text"),
+                formatter_class=self.parser.formatter_class,
             )
 
             # Create subparsers for this group's commands
             subparsers = group_parser.add_subparsers(
                 title=group.title,
-                description=group.long_description or group.description,
+                description=Markdown(group.long_description or group.description, style="argparse.text"),
                 dest=f"{full_name.replace('.', '_')}_command",
             )
 
@@ -234,6 +238,7 @@ class CommandRegistry(Struct, frozen=True):
                 help=cmd_info["help"],
                 description=cmd_info["kwargs"].get("description", ""),
                 **cmd_info["kwargs"],
+                formatter_class=self.parser.formatter_class,
             )
             cmd_parser.set_defaults(func=cmd_info["func"])
 

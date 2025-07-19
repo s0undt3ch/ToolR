@@ -12,6 +12,9 @@ logging.STDERR = STDERR  # type: ignore[attr-defined]
 logging.addLevelName(STDOUT, "STDOUT")
 logging.addLevelName(STDERR, "STDERR")
 
+# Tone down some logging handlers
+logging.getLogger("markdown_it").setLevel(logging.INFO)
+
 
 class LevelFilter(logging.Filter):
     def __init__(

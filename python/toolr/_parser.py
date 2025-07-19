@@ -12,7 +12,7 @@ from typing import Any
 from msgspec import Struct
 from msgspec import field
 from msgspec import structs
-from rich_argparse import RawDescriptionRichHelpFormatter
+from rich_argparse import RichHelpFormatter
 
 from toolr import __version__
 from toolr._context import ConsoleVerbosity
@@ -65,7 +65,7 @@ class Parser(Struct, frozen=True):
             description="In-project CLI tooling support",
             epilog="More information about ToolR can be found at https://github.com/s0undt3ch/toolr",
             allow_abbrev=False,
-            formatter_class=RawDescriptionRichHelpFormatter,
+            formatter_class=RichHelpFormatter,
         )
         parser.add_argument("--version", action="version", version=__version__)
         log_group = parser.add_argument_group("Logging")
