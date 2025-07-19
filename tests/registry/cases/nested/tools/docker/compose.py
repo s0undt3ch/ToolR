@@ -2,25 +2,30 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from . import docker_group
+
+if TYPE_CHECKING:
+    from toolr import Context
 
 # Create a nested compose command group
 compose_group = docker_group.command_group("compose", "Compose Commands", "Docker Compose orchestration tools")
 
 
 @compose_group.command("up", help="Start services")
-def compose_up(args):
+def compose_up(ctx: Context) -> None:
     """Start services."""
-    return "docker compose up executed"
+    ctx.print("docker compose up executed")
 
 
 @compose_group.command("down", help="Stop services")
-def compose_down(args):
+def compose_down(ctx: Context) -> None:
     """Stop services."""
-    return "docker compose down executed"
+    ctx.print("docker compose down executed")
 
 
 @compose_group.command("logs", help="View service logs")
-def compose_logs(args):
+def compose_logs(ctx: Context) -> None:
     """View service logs."""
-    return "docker compose logs executed"
+    ctx.print("docker compose logs executed")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from toolr import Context
 from toolr import registry
 
 # Create a simple command group
@@ -9,12 +10,12 @@ docker_group = registry.command_group("docker", "Docker Commands", "Docker-relat
 
 
 @docker_group.command("build", help="Build a Docker image")
-def docker_build(args):
+def docker_build(ctx: Context) -> None:
     """Build a Docker image."""
-    return "docker build executed"
+    ctx.print("docker build executed")
 
 
 @docker_group.command("run", help="Run a Docker container")
-def docker_run(args):
+def docker_run(ctx: Context) -> None:
     """Run a Docker container."""
-    return "docker run executed"
+    ctx.print("docker run executed")

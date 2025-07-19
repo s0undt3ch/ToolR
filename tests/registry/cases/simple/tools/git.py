@@ -10,12 +10,12 @@ git_group = command_group("git", "Git Commands", "Git-related tools")
 
 
 @git_group.command("status", help="Show git status")
-def git_status(ctx: Context, args):
+def git_status(ctx: Context) -> None:
     """Show git status."""
-    return "git status executed"
+    ctx.print("git status executed")
 
 
 @git_group.command("commit", help="Commit changes")
-def git_commit(args):
+def git_commit(ctx: Context) -> None:
     """Commit changes."""
-    return "git commit executed"
+    ctx.print("git commit executed")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from toolr import Context
 from toolr import registry
 
 # Create a simple utilities group
@@ -9,18 +10,18 @@ utils_group = registry.command_group("utils", "Utilities", "General utility comm
 
 
 @utils_group.command("clean", help="Clean temporary files")
-def utils_clean(args):
+def utils_clean(ctx: Context) -> None:
     """Clean temporary files."""
-    return "utils clean executed"
+    ctx.print("utils clean executed")
 
 
 @utils_group.command("backup", help="Create backup")
-def utils_backup(args):
+def utils_backup(ctx: Context) -> None:
     """Create backup."""
-    return "utils backup executed"
+    ctx.print("utils backup executed")
 
 
 @utils_group.command("restore", help="Restore from backup")
-def utils_restore(args):
+def utils_restore(ctx: Context) -> None:
     """Restore from backup."""
-    return "utils restore executed"
+    ctx.print("utils restore executed")
