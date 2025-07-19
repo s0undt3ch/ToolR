@@ -272,11 +272,17 @@ class CommandRegistry(Struct, frozen=True):
                 )
                 raise ValueError(err_msg)
 
+            short_description = long_description = None
+            if func.__doc__ is not None:
+                parsed_docstring = parse_docstring(func.__doc__)
+                short_description = parsed_docstring.short_description
+                long_description = parsed_docstring.long_description
+
             subparsers = parser_hierarchy[group_path]
             cmd_parser = subparsers.add_parser(
                 command_name,
-                help=func.__doc__ or "",
-                description=func.__doc__ or "",
+                help=short_description,
+                description=long_description or short_description,
                 formatter_class=self.parser.formatter_class,
             )
             cmd_parser.set_defaults(func=func)
