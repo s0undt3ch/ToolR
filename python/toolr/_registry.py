@@ -31,6 +31,7 @@ class CommandGroup(Struct, frozen=True):
     title: str
     description: str
     registry: CommandRegistry
+    long_description: str | None = None
     parent: str | None = None
     _subparsers: _SubParsersAction | None = None
 
@@ -61,7 +62,9 @@ class CommandGroup(Struct, frozen=True):
 
         return decorator
 
-    def command_group(self, name: str, title: str, description: str) -> CommandGroup:
+    def command_group(
+        self, name: str, title: str, description: str, long_description: str | None = None
+    ) -> CommandGroup:
         """Create a nested command group within this group.
 
         This is a wrapper around the registry's command_group method that
@@ -71,11 +74,18 @@ class CommandGroup(Struct, frozen=True):
             name: Name of the command group
             title: Title for the command group
             description: Description for the command group
+            long_description: Long description for the command group
 
         Returns:
             A CommandGroup instance
         """
-        return self.registry.command_group(name, title, description, parent=self.full_name)
+        return self.registry.command_group(
+            name,
+            title,
+            description,
+            parent=self.full_name,
+            long_description=long_description,
+        )
 
 
 class CommandRegistry(Struct, frozen=True):
@@ -123,13 +133,21 @@ class CommandRegistry(Struct, frozen=True):
 
         import_commands(tools_dir, "tools")
 
-    def command_group(self, name: str, title: str, description: str, parent: str | None = None) -> CommandGroup:
+    def command_group(
+        self,
+        name: str,
+        title: str,
+        description: str,
+        long_description: str | None = None,
+        parent: str | None = None,
+    ) -> CommandGroup:
         """Register a new command group.
 
         Args:
             name: Name of the command group
             title: Title for the command group
             description: Description for the command group
+            long_description: Long description for the command group
             parent: Optional parent command path using dot notation (e.g. "tools.docker.build")
 
         Returns:
@@ -139,7 +157,14 @@ class CommandRegistry(Struct, frozen=True):
         if parent is None:
             parent = "tools"
         # Create the command group
-        group = CommandGroup(name=name, title=title, description=description, registry=self, parent=parent)
+        group = CommandGroup(
+            name=name,
+            title=title,
+            description=description,
+            registry=self,
+            parent=parent,
+            long_description=long_description,
+        )
 
         # Store the command group for later parser building
         self._command_groups[group.full_name] = group
@@ -181,7 +206,9 @@ class CommandRegistry(Struct, frozen=True):
 
             # Create subparsers for this group's commands
             subparsers = group_parser.add_subparsers(
-                title=group.title, description=group.description, dest=f"{full_name.replace('.', '_')}_command"
+                title=group.title,
+                description=group.long_description or group.description,
+                dest=f"{full_name.replace('.', '_')}_command",
             )
 
             parser_hierarchy[full_name] = subparsers
@@ -202,7 +229,12 @@ class CommandRegistry(Struct, frozen=True):
                 raise ValueError(err_msg)
 
             subparsers = parser_hierarchy[group_path]
-            cmd_parser = subparsers.add_parser(cmd_info["name"], help=cmd_info["help"], **cmd_info["kwargs"])
+            cmd_parser = subparsers.add_parser(
+                cmd_info["name"],
+                help=cmd_info["help"],
+                description=cmd_info["kwargs"].get("description", ""),
+                **cmd_info["kwargs"],
+            )
             cmd_parser.set_defaults(func=cmd_info["func"])
 
         structs.force_setattr(self, "_built", True)  # noqa: FBT003
