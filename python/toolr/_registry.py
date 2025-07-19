@@ -93,6 +93,13 @@ class CommandRegistry(Struct, frozen=True):
             raise RuntimeError(err_msg)
         return self._parser
 
+    def _set_parser(self, parser: Parser) -> None:
+        """Set the parser for this registry."""
+        if self._parser is not None:
+            err_msg = "A parser has already been set?!"
+            raise RuntimeError(err_msg)
+        structs.force_setattr(self, "_parser", parser)
+
     def _discover_commands(self) -> None:
         """Recursively discover and import command modules from tools/."""
         tools_dir = self.parser.repo_root / "tools"
@@ -198,10 +205,7 @@ class CommandRegistry(Struct, frozen=True):
     def discover_and_build(self, parser: Parser | None = None) -> None:
         """Discover all commands and build the parser hierarchy."""
         if parser is not None:
-            if self._parser is not None:
-                err_msg = "A parser has already been set?!"
-                raise RuntimeError(err_msg)
-            structs.force_setattr(self, "_parser", parser)
+            self._set_parser(parser)
         self._discover_commands()
         self._build_parsers()
 
