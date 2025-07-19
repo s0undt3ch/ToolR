@@ -9,13 +9,13 @@ from toolr import registry
 docker_group = registry.command_group("docker", "Docker Commands", "Docker-related tools")
 
 
-@docker_group.command("build", help="Build a Docker image")
+@docker_group.command("build")
 def docker_build(ctx: Context) -> None:
     """Build a Docker image."""
     ctx.print("docker build executed")
 
 
-@docker_group.command("run", help="Run a Docker container")
+@docker_group.command("run")
 def docker_run(ctx: Context) -> None:
     """Run a Docker container."""
     ctx.print("docker run executed")

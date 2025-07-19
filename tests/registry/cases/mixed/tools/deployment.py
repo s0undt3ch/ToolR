@@ -10,13 +10,13 @@ deployment_group = registry.command_group("deployment", "Deployment Tools", "App
 
 
 # Simple commands directly on the deployment group
-@deployment_group.command("status", help="Check deployment status")
-def deployment_status(ctx: Context) -> None:
+@deployment_group.command
+def status(ctx: Context) -> None:
     """Check deployment status."""
     ctx.print("deployment status executed")
 
 
-@deployment_group.command("rollback", help="Rollback deployment")
+@deployment_group.command("rollback")
 def deployment_rollback(ctx: Context) -> None:
     """Rollback deployment."""
     ctx.print("deployment rollback executed")
@@ -28,26 +28,26 @@ aws_group = deployment_group.command_group("aws", "AWS", "AWS deployment tools")
 
 
 # Commands in k8s group
-@k8s_group.command("deploy", help="Deploy to Kubernetes")
-def k8s_deploy(ctx: Context) -> None:
+@k8s_group.command
+def deploy(ctx: Context) -> None:
     """Deploy to Kubernetes."""
     ctx.print("k8s deploy executed")
 
 
-@k8s_group.command("scale", help="Scale Kubernetes deployment")
+@k8s_group.command("scale")
 def k8s_scale(ctx: Context) -> None:
     """Scale Kubernetes deployment."""
     ctx.print("k8s scale executed")
 
 
 # Commands in aws group
-@aws_group.command("deploy", help="Deploy to AWS")
+@aws_group.command("deploy")
 def aws_deploy(ctx: Context) -> None:
     """Deploy to AWS."""
     ctx.print("aws deploy executed")
 
 
-@aws_group.command("update", help="Update AWS deployment")
+@aws_group.command("update")
 def aws_update(ctx: Context) -> None:
     """Update AWS deployment."""
     ctx.print("aws update executed")

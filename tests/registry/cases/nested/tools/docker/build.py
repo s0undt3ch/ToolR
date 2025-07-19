@@ -13,19 +13,19 @@ if TYPE_CHECKING:
 build_group = docker_group.command_group("build", "Build Commands", "Docker image build tools")
 
 
-@build_group.command("image", help="Build a Docker image")
+@build_group.command("image")
 def build_image(ctx: Context) -> None:
     """Build a Docker image."""
     ctx.print("docker build image executed")
 
 
-@build_group.command("context", help="Build with context")
+@build_group.command("context")
 def build_context(ctx: Context) -> None:
     """Build with context."""
     ctx.print("docker build context executed")
 
 
-@build_group.command("multi-stage", help="Build multi-stage image")
+@build_group.command("multi-stage")
 def build_multi_stage(ctx: Context) -> None:
     """Build multi-stage image."""
     ctx.print("docker build multi-stage executed")

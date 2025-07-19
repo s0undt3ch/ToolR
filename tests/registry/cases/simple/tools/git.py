@@ -9,13 +9,13 @@ from toolr import command_group
 git_group = command_group("git", "Git Commands", "Git-related tools")
 
 
-@git_group.command("status", help="Show git status")
+@git_group.command("status")
 def git_status(ctx: Context) -> None:
     """Show git status."""
     ctx.print("git status executed")
 
 
-@git_group.command("commit", help="Commit changes")
+@git_group.command("commit")
 def git_commit(ctx: Context) -> None:
     """Commit changes."""
     ctx.print("git commit executed")

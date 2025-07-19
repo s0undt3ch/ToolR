@@ -8,10 +8,12 @@ from argparse import _SubParsersAction
 from collections.abc import Callable
 from operator import itemgetter
 from pathlib import Path
+from types import FunctionType
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TypeVar
 from typing import cast
+from typing import overload
 
 from msgspec import Struct
 from msgspec import field
@@ -46,22 +48,31 @@ class CommandGroup(Struct, frozen=True):
             return self.name
         return f"{self.parent}.{self.name}"
 
-    def command(self, name: str, help: str = "", **kwargs: Any) -> Callable[[F], F]:  # noqa: A002
+    @overload
+    def command(self, name: F) -> F: ...
+
+    @overload
+    def command(self, name: str) -> Callable[[F], F]: ...
+
+    def command(self, name: str | F) -> Callable[[F], F] | F:
         """Register a new command.
 
         Args:
-            name: Name of the command
-            help: Help text for the command
-            **kwargs: Additional arguments passed to add_parser()
+            name: Name of the command. If not passed, the function name will be used.
 
         Returns:
             A decorator function that registers the command
         """
+        if isinstance(name, FunctionType):
+            # If we were not passed a name in the decorator call, we're being called with a function
+            # and we need to use the function name as the command name
+            return self.command(name.__name__)(name)
+
+        if TYPE_CHECKING:
+            assert isinstance(name, str)
 
         def decorator(func: F) -> F:
-            self.registry._pending_commands.append(  # noqa: SLF001
-                {"group_path": self.full_name, "name": name, "help": help, "func": func, "kwargs": kwargs}
-            )
+            self.registry._pending_commands.append((self.full_name, name, func))  # noqa: SLF001
             return func
 
         return decorator
@@ -98,7 +109,7 @@ class CommandRegistry(Struct, frozen=True):
     """Registry for CLI commands and their subcommands."""
 
     _command_groups: dict[str, CommandGroup] = field(default_factory=dict)
-    _pending_commands: list[dict[str, Any]] = field(default_factory=list)
+    _pending_commands: list[tuple[str, str, Callable[..., Any]]] = field(default_factory=list)
     _built: bool = False
     _parser: Parser | None = None
 
@@ -252,26 +263,23 @@ class CommandRegistry(Struct, frozen=True):
             structs.force_setattr(group, "_subparsers", subparsers)
 
         # Now add all the pending commands to their respective groups
-        for cmd_info in sorted(self._pending_commands, key=itemgetter("group_path")):
-            group_path = cmd_info["group_path"]
+        for group_path, command_name, func in sorted(self._pending_commands, key=itemgetter(0)):
             if group_path not in parser_hierarchy:
                 # This shouldn't happen with our sorting and because we also check
                 # for this when building the subparsers.
                 err_msg = (
-                    f"Command group '{group_path}' for command '{cmd_info['name']}' "
-                    "does not exist. Please check your code."
+                    f"Command group '{group_path}' for command '{command_name}' does not exist. Please check your code."
                 )
                 raise ValueError(err_msg)
 
             subparsers = parser_hierarchy[group_path]
             cmd_parser = subparsers.add_parser(
-                cmd_info["name"],
-                help=cmd_info["help"],
-                description=cmd_info["kwargs"].get("description", ""),
-                **cmd_info["kwargs"],
+                command_name,
+                help=func.__doc__ or "",
+                description=func.__doc__ or "",
                 formatter_class=self.parser.formatter_class,
             )
-            cmd_parser.set_defaults(func=cmd_info["func"])
+            cmd_parser.set_defaults(func=func)
 
         structs.force_setattr(self, "_built", True)  # noqa: FBT003
 
