@@ -18,6 +18,8 @@ from msgspec import field
 from msgspec import structs
 from rich.markdown import Markdown
 
+from toolr.utils._docstrings import parse_docstring
+
 if TYPE_CHECKING:
     from toolr._parser import Parser
 
@@ -65,18 +67,19 @@ class CommandGroup(Struct, frozen=True):
         return decorator
 
     def command_group(
-        self, name: str, title: str, description: str, long_description: str | None = None
+        self,
+        name: str,
+        title: str,
+        description: str | None = None,
+        long_description: str | None = None,
+        docstring: str | None = None,
     ) -> CommandGroup:
         """Create a nested command group within this group.
 
         This is a wrapper around the :func:`CommandRegistry.command_group` method that
         passes this group's full name as the parent.
 
-        Args:
-            name: Name of the command group
-            title: Title for the command group
-            description: Description for the command group
-            long_description: Long description for the command group
+        See :func:`CommandRegistry.command_group` for more details.
 
         Returns:
             A CommandGroup instance
@@ -84,9 +87,10 @@ class CommandGroup(Struct, frozen=True):
         return self.registry.command_group(
             name,
             title,
-            description,
+            description=description,
             parent=self.full_name,
             long_description=long_description,
+            docstring=docstring,
         )
 
 
@@ -139,17 +143,23 @@ class CommandRegistry(Struct, frozen=True):
         self,
         name: str,
         title: str,
-        description: str,
+        description: str | None = None,
         long_description: str | None = None,
+        docstring: str | None = None,
         parent: str | None = None,
     ) -> CommandGroup:
         """Register a new command group.
+
+        If you pass ``docstring``, you won't be allowed to pass ``description`` or ``long_description``.
+        Those will be parsed by [docstring-parser](https://pypi.org/project/docstring-parser/).
+        The first line of the docstring will be used as the description, the rest will be used as the long description.
 
         Args:
             name: Name of the command group
             title: Title for the command group
             description: Description for the command group
             long_description: Long description for the command group
+            docstring: Docstring for the command group
             parent: Optional parent command path using dot notation (e.g. "tools.docker.build")
 
         Returns:
@@ -158,6 +168,21 @@ class CommandRegistry(Struct, frozen=True):
         """
         if parent is None:
             parent = "tools"
+
+        if docstring is not None:
+            if description is not None or long_description is not None:
+                err_msg = "You can't pass both docstring and description or long_description"
+                raise ValueError(err_msg)
+            parsed_docstring = parse_docstring(docstring)
+            description = parsed_docstring.short_description
+            long_description = parsed_docstring.long_description
+        elif description is None:
+            err_msg = "You must at least pass either the 'docstring' or 'description' argument"
+            raise ValueError(err_msg)
+
+        if TYPE_CHECKING:
+            assert description is not None
+
         # Create the command group
         group = CommandGroup(
             name=name,
