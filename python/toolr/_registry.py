@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
 import pkgutil
 from argparse import _SubParsersAction
 from collections.abc import Callable
@@ -109,12 +110,16 @@ class CommandRegistry(Struct, frozen=True):
         def import_commands(path: Path, package: str) -> None:
             log.debug("Importing commands from %s with package %s", path, package)
             for item in pkgutil.iter_modules([str(path)]):
-                if item.ispkg:
-                    # Recurse into subpackages
-                    import_commands(path / item.name, f"{package}.{item.name}")
-                else:
-                    # Import the module which will trigger command registration
-                    importlib.import_module(f"{package}.{item.name}")
+                try:
+                    if item.ispkg:
+                        # Recurse into subpackages
+                        import_commands(path / item.name, f"{package}.{item.name}")
+                    else:
+                        # Import the module which will trigger command registration
+                        importlib.import_module(f"{package}.{item.name}")
+                except ImportError as exc:
+                    if os.environ.get("TOOLR_DEBUG_IMPORTS", "0") == "1":
+                        raise exc from None
 
         import_commands(tools_dir, "tools")
 
