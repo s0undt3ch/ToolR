@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 try:
     import importlib.metadata
 
@@ -9,6 +11,12 @@ except ImportError:
 
 from toolr._context import Context
 from toolr._registry import registry
+
+if TYPE_CHECKING:
+    from toolr._registry import CommandRegistry
+
+    assert registry is not None
+    assert isinstance(registry, CommandRegistry)
 
 # Create a command group alias
 command_group = registry.command_group

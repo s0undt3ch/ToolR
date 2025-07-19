@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TypeVar
+from typing import cast
 
 from msgspec import Struct
 from msgspec import field
@@ -201,17 +202,22 @@ class CommandRegistry(Struct, frozen=True):
             if TYPE_CHECKING:
                 assert parent_subparsers is not None
 
+            # Cast description to str to satisfy mypy since the formatter_class will know what to do with it
+            group_parser_description = cast("str", Markdown(group.description, style="argparse.text"))
             group_parser = parent_subparsers.add_parser(
                 group.name,
                 help=f"{group.title} - {group.description}",
-                description=Markdown(group.description, style="argparse.text"),
+                description=group_parser_description,
                 formatter_class=self.parser.formatter_class,
             )
 
             # Create subparsers for this group's commands
+            subparsers_description = cast(
+                "str", Markdown(group.long_description or group.description, style="argparse.text")
+            )
             subparsers = group_parser.add_subparsers(
                 title=group.title,
-                description=Markdown(group.long_description or group.description, style="argparse.text"),
+                description=subparsers_description,
                 dest=f"{full_name.replace('.', '_')}_command",
             )
 

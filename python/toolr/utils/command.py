@@ -11,6 +11,7 @@ import os
 import pathlib
 import sys
 import tempfile
+from collections.abc import Sequence
 from typing import IO
 from typing import TYPE_CHECKING
 from typing import Any
@@ -42,8 +43,8 @@ class CommandResult(Struct, Generic[T], frozen=True):
     returncode: int
 
 
-def run(  # noqa: PLR0913, PLR0915
-    args: list[str],
+def run(  # noqa: PLR0915
+    args: Sequence[str],
     *,
     cwd: str | pathlib.Path | None = None,
     env: ENVIRON = None,
@@ -137,8 +138,9 @@ def run(  # noqa: PLR0913, PLR0915
                 sys_stderr_fd = sys.__stderr__.fileno()
 
         # Run the command implementation
+        command_args = list(args)
         returncode = run_command_impl(
-            args,
+            command_args,
             cwd=str(cwd),
             env=env_dict,
             input=input_bytes,
@@ -164,11 +166,11 @@ def run(  # noqa: PLR0913, PLR0915
         if text is True:
             return cast(
                 "CommandResult[str]",
-                CommandResult(args=args, stdout=stdout_file, stderr=stderr_file, returncode=returncode),
+                CommandResult(args=command_args, stdout=stdout_file, stderr=stderr_file, returncode=returncode),
             )
         return cast(
             "CommandResult[bytes]",
-            CommandResult(args=args, stdout=stdout_file, stderr=stderr_file, returncode=returncode),
+            CommandResult(args=command_args, stdout=stdout_file, stderr=stderr_file, returncode=returncode),
         )
 
     except Exception as exc:  # noqa: BLE001

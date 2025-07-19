@@ -47,39 +47,63 @@ class Context(Struct, frozen=True):
     console: Console
     console_stdout: Console
 
-    def print(self, *args, **kwargs) -> None:
+    def print(self, *args: Any, **kwargs: Any) -> None:
         """
         Print to stdout.
+
+        This is a wrapper around :func:`rich.console.Console.print`.
+
+        See :func:`rich.console.Console.print` for more details.
         """
         self.console_stdout.print(*args, **kwargs)
 
-    def debug(self, *args) -> None:
+    def debug(self, *args: Any, **kwargs: Any) -> None:
         """
         Print debug message to stderr.
+
+        This is a wrapper around :func:`rich.console.Console.log`.
+
+        See :func:`rich.console.Console.log` for more details.
         """
         if self.verbosity >= ConsoleVerbosity.VERBOSE:
-            self.console.log(*args, style="log-debug", _stack_offset=2)
+            kwargs.update(style="log-debug", _stack_offset=2)
+            self.console.log(*args, **kwargs)
 
-    def info(self, *args) -> None:
+    def info(self, *args: Any, **kwargs: Any) -> None:
         """
         Print info message to stderr.
+
+        This is a wrapper around :func:`rich.console.Console.log`.
+
+        See :func:`rich.console.Console.log` for more details.
         """
         if self.verbosity >= ConsoleVerbosity.NORMAL:
-            self.console.log(*args, style="log-info", _stack_offset=2)
+            kwargs.update(style="log-info", _stack_offset=2)
+            self.console.log(*args, **kwargs)
 
-    def warn(self, *args) -> None:
+    def warn(self, *args: Any, **kwargs: Any) -> None:
         """
         Print warning message to stderr.
-        """
-        self.console.log(*args, style="log-warning", _stack_offset=2)
 
-    def error(self, *args) -> None:
+        This is a wrapper around :func:`rich.console.Console.log`.
+
+        See :func:`rich.console.Console.log` for more details.
+        """
+        kwargs.update(style="log-warning", _stack_offset=2)
+        self.console.log(*args, **kwargs)
+
+    def error(self, *args: Any, **kwargs: Any) -> None:
         """
         Print error message to stderr.
-        """
-        self.console.log(*args, style="log-error", _stack_offset=2)
 
-    def exit(self, status: int = 0, message: str | None = None) -> NoReturn:  # type: ignore[misc]
+        This is a wrapper around :func:`rich.console.Console.log`.
+
+        See :func:`rich.console.Console.log` for more details.
+        """
+        kwargs.update(style="log-error", _stack_offset=2)
+        self.console.log(*args, **kwargs)
+
+    def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
         """
         Exit the command execution.
         """

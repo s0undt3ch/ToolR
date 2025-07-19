@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 class CommandError(Exception):
     def __init__(self, message: str) -> None: ...
 
@@ -8,7 +10,7 @@ class CommandTimeoutNoOutputError(CommandError):
     def __init__(self, message: str) -> None: ...
 
 def run_command_impl(
-    args: list[str],
+    args: Sequence[str],
     cwd: str | None = ...,
     env: dict[str, str] = ...,
     input: bytes | None = ...,

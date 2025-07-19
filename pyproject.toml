@@ -216,3 +216,11 @@ disallow_untyped_calls = false
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+  "toolr.__main__"
+]
+disable_error_code = [
+  "unused-ignore"
+]
