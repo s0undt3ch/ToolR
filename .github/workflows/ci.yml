@@ -33,6 +33,11 @@ jobs:
         with:
           python-version: 3.11
 
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy,rustfmt
+
       - run: pip install pre-commit
 
       - id: python-version-checksum
@@ -79,8 +84,9 @@ jobs:
       - id: python-version-checksum
         run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
 
       - id: rust-version-checksum
         run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
