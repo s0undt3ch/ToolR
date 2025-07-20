@@ -139,6 +139,7 @@ jobs:
       - name: Report Python Coverage
         run: |
           uv run coverage combine || true
+          uv run coverage xml
           uv run coverage report
 
       - name: Install Tarpaulin
@@ -152,6 +153,12 @@ jobs:
       - name: Run Rust Tests
         run: |
           cargo tarpaulin --workspace --tests --skip-clean --timeout 120
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ matrix.os }},${{ matrix.python-version }}
 
   build:
     name: Build
