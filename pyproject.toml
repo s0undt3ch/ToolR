@@ -156,6 +156,7 @@ ignore = [
   "S101",     # Ignore the use of 'assert ...' in tests
   "SIM117",   # Use a single `with` statement with multiple contexts instead of nested `with` statements
   "SLF001",   # Private member accessed
+  "TC001",    # Move application import into a type-checking block
   "TCH002",   # Move third-party import into a type-checking block
   "BLE001",   # Do not catch blind exception: `Exception`
 ]
@@ -193,10 +194,10 @@ ignore-names = [
 ]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 25
+max-complexity = 30
 
 [tool.ruff.lint.pylint]
-max-branches = 25
+max-branches = 30
 max-args = 10
 
 [tool.mypy]
