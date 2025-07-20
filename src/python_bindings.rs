@@ -116,7 +116,7 @@ pub(crate) fn run_command_impl(
                 Err(CommandError::new_err(cmd_err.to_string()))
             } else {
                 // Fall back to generic error message for unknown error types
-                Err(CommandError::new_err(format!("Command failed: {}", err)))
+                Err(CommandError::new_err(format!("Command failed: {err}")))
             }
         }
     }

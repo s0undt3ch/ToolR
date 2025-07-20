@@ -160,8 +160,8 @@ mod test_suite {
         stderr_file.read_to_string(&mut stderr_content)?;
 
         // Check content
-        assert!(stdout_content.contains("to stdout"), "Expected 'to stdout' in '{}'", stdout_content);
-        assert!(stderr_content.contains("to stderr"), "Expected 'to stderr' in '{}'", stderr_content);
+        assert!(stdout_content.contains("to stdout"), "Expected 'to stdout' in '{stdout_content}'");
+        assert!(stderr_content.contains("to stderr"), "Expected 'to stderr' in '{stderr_content}'");
 
         Ok(())
     }
@@ -213,9 +213,9 @@ mod test_suite {
         stderr_capture.read_to_string(&mut stderr_capture_content)?;
 
         assert!(stdout_capture_content.contains("to both stdout"),
-                "Expected 'to both stdout' in '{}'", stdout_capture_content);
+                "Expected 'to both stdout' in '{stdout_capture_content}'");
         assert!(stderr_capture_content.contains("to both stderr"),
-                "Expected 'to both stderr' in '{}'", stderr_capture_content);
+                "Expected 'to both stderr' in '{stderr_capture_content}'");
 
         Ok(())
     }
@@ -240,7 +240,7 @@ mod test_suite {
         let bytes_read = reader_file.read(&mut buf)?;
 
         // Since we're using a tempfile and not a real pipe, we might get 0 or EOF
-        assert_eq!(bytes_read, 0, "Expected 0 bytes read, got {}", bytes_read);
+        assert_eq!(bytes_read, 0, "Expected 0 bytes read, got {bytes_read}");
         assert!(start_time.elapsed() >= timeout, "Timeout not respected");
 
         Ok(())
@@ -280,7 +280,7 @@ mod test_suite {
         let result = run_command_internal(config);
 
         // Check command completed successfully
-        assert!(result.is_ok(), "Command failed: {:?}", result);
+        assert!(result.is_ok(), "Command failed: {result:?}");
         assert_eq!(result.unwrap(), 0, "Command should return exit code 0");
 
         // Read captured stdout
@@ -290,9 +290,9 @@ mod test_suite {
 
         // Verify environment variables were correctly set
         assert!(stdout_content.contains("TEST_VAR=test_value"),
-                "Expected 'TEST_VAR=test_value' in stdout, got: {}", stdout_content);
+                "Expected 'TEST_VAR=test_value' in stdout, got: {stdout_content}");
         assert!(stdout_content.contains("ANOTHER_VAR=another_value"),
-                "Expected 'ANOTHER_VAR=another_value' in stdout, got: {}", stdout_content);
+                "Expected 'ANOTHER_VAR=another_value' in stdout, got: {stdout_content}");
 
         Ok(())
     }
@@ -330,7 +330,7 @@ mod test_suite {
         let result = run_command_internal(config);
 
         // Check command completed successfully
-        assert!(result.is_ok(), "Command failed: {:?}", result);
+        assert!(result.is_ok(), "Command failed: {result:?}");
         assert_eq!(result.unwrap(), 0, "Command should return exit code 0");
 
         // Read captured stdout
@@ -381,7 +381,7 @@ mod test_suite {
         let result2 = run_command_internal(config2);
 
         // Check command completed successfully
-        assert!(result2.is_ok(), "Command failed: {:?}", result2);
+        assert!(result2.is_ok(), "Command failed: {result2:?}");
         assert_eq!(result2.unwrap(), 0, "Command should return exit code 0");
 
         // Read captured stdout
@@ -498,8 +498,8 @@ mod test_suite {
                 let stderr_content = String::from_utf8_lossy(&stderr_buffer[0..stderr_bytes as usize]);
 
                 assert_eq!(exit_code, 0, "Command should succeed");
-                assert!(stdout_content.contains("to sys stdout"), "Expected 'to sys stdout', got '{}'", stdout_content);
-                assert!(stderr_content.contains("to sys stderr"), "Expected 'to sys stderr', got '{}'", stderr_content);
+                assert!(stdout_content.contains("to sys stdout"), "Expected 'to sys stdout', got '{stdout_content}'");
+                assert!(stderr_content.contains("to sys stderr"), "Expected 'to sys stderr', got '{stderr_content}'");
 
                 Ok(())
             })
