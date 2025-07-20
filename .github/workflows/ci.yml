@@ -134,7 +134,7 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
           COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
         run: |
-          uv run coverage run -m pytest -ra -s -v --color=yes
+          uv run coverage run -m pytest -ra -s -v --color=yes --junitxml=junit-${{ matrix.python-version }}-${{ matrix.os }}.xml
 
       - name: Report Python Coverage
         run: |
@@ -152,10 +152,18 @@ jobs:
 
       - name: Run Rust Tests
         run: |
-          cargo tarpaulin --workspace --tests --skip-clean --timeout 120 --out Xml --output-dir target/coverage
+          cargo tarpaulin --workspace --tests --skip-clean --timeout 120 --out Xml --out Json --output-dir target/coverage
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
+        with:
+          # Use OpenID Connect for secure authentication (no token needed)
+          use_oidc: true
+          flags: ${{ matrix.os }},${{ matrix.python-version }}
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
         with:
           # Use OpenID Connect for secure authentication (no token needed)
           use_oidc: true
