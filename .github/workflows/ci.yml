@@ -160,9 +160,6 @@ jobs:
           # Use OpenID Connect for secure authentication (no token needed)
           use_oidc: true
           flags: ${{ matrix.os }},${{ matrix.python-version }}
-          files: |
-            coverage.xml
-            target/coverage/tarpaulin-report.xml
 
   build-linux:
     name: Build Linux
