@@ -13,7 +13,7 @@ mod test_suite {
     #[cfg(unix)]
     use std::os::unix::io::AsRawFd;
     #[cfg(windows)]
-    use std::os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle};
+    use std::os::windows::io::AsRawHandle;
     #[cfg(windows)]
     use winapi::um::handleapi::{INVALID_HANDLE_VALUE, DuplicateHandle};
     #[cfg(windows)]
@@ -27,7 +27,6 @@ mod test_suite {
     #[cfg(windows)]
     use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
     #[cfg(windows)]
-    use winapi::ctypes::c_void;  // Use winapi's c_void consistently
     #[cfg(windows)]
     use crate::command::ThreadSafeHandle;
 
@@ -635,7 +634,7 @@ mod test_suite {
             rt.block_on(async {
                 // Create pipes for output
                 let (stdout_read, stdout_write) = create_pipe()?;
-                let (stderr_read, stderr_write) = create_pipe()?;
+                let (_stderr_read, stderr_write) = create_pipe()?;
 
                 // Create a command that outputs once then waits, triggering no-output timeout
                 let config = CommandConfig {
@@ -672,7 +671,7 @@ mod test_suite {
                 #[cfg(unix)]
                 unsafe {
                     libc::close(stdout_read);
-                    libc::close(stderr_read);
+                    libc::close(_stderr_read);
                     libc::close(stdout_write);
                     libc::close(stderr_write);
                 }
