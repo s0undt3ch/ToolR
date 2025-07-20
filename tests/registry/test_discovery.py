@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .conftest import RegistryTestCase
+
+if TYPE_CHECKING:
+    from toolr import Context
 
 CASES_PATH = Path(__file__).parent / "cases"
 
@@ -92,8 +96,12 @@ def test_discover_mixed_case():
         assert "tools.deployment.aws" in registry._command_groups
 
         # Check that we have both top-level and nested commands
-        deployment_commands = [cmd for cmd in registry._pending_commands if cmd["group_path"] == "tools.deployment"]
-        k8s_commands = [cmd for cmd in registry._pending_commands if cmd["group_path"] == "tools.deployment.k8s"]
+        deployment_commands = [
+            full_name for (full_name, _, _) in registry._pending_commands if full_name == "tools.deployment"
+        ]
+        k8s_commands = [
+            full_name for (full_name, _, _) in registry._pending_commands if full_name == "tools.deployment.k8s"
+        ]
 
         assert len(deployment_commands) >= 2  # status, rollback
         assert len(k8s_commands) >= 2  # deploy, scale
@@ -122,8 +130,9 @@ def test_build_simple_command_group(registry):
     # Create a simple command group with a command
     group = registry.command_group("test", "Test", "Test description")
 
-    @group.command("hello", help="Say hello")
-    def hello_cmd(args):
+    @group.command("hello")
+    def hello_cmd(ctx: Context):
+        """Say hello."""
         return "hello"
 
     # Verify initial state
@@ -154,12 +163,14 @@ def test_build_nested_command_groups(registry):
     parent = registry.command_group("parent", "Parent", "Parent desc")
     child = parent.command_group("child", "Child", "Child desc")
 
-    @parent.command("parent_cmd", help="Parent command")
-    def parent_cmd(args):
+    @parent.command("parent_cmd")
+    def parent_cmd(ctx: Context):
+        """Parent command."""
         return "parent"
 
-    @child.command("child_cmd", help="Child command")
-    def child_cmd(args):
+    @child.command("child_cmd")
+    def child_cmd(ctx: Context):
+        """Child command."""
         return "child"
 
     # Verify initial state
@@ -188,8 +199,9 @@ def test_build_parsers_called_once(registry):
 
     group = registry.command_group("test", "Test", "Test desc")
 
-    @group.command("cmd", help="Test command")
-    def test_cmd(args):
+    @group.command("cmd")
+    def test_cmd(ctx: Context):
+        """Test command."""
         return "test"
 
     # Verify initial state
@@ -248,12 +260,14 @@ def test_discover_and_build_with_manual_groups(registry):
     group1 = registry.command_group("group1", "Group 1", "Description 1")
     group2 = registry.command_group("group2", "Group 2", "Description 2")
 
-    @group1.command("cmd1", help="Command 1")
-    def cmd1(args):
+    @group1.command("cmd1")
+    def cmd1(ctx: Context):
+        """Command 1."""
         return "cmd1"
 
-    @group2.command("cmd2", help="Command 2")
-    def cmd2(args):
+    @group2.command("cmd2")
+    def cmd2(ctx: Context):
+        """Command 2."""
         return "cmd2"
 
     # Verify initial state

@@ -212,14 +212,14 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
 
     // Start the command
     let mut child = command.spawn().map_err(|e| {
-        Box::new(CommandExecutionError::new(format!("Failed to execute command: {}", e)))
+        Box::new(CommandExecutionError::new(format!("Failed to execute command: {e}")))
     })?;
 
     // If there's input, write it to stdin
     if let Some(input_data) = &config.input {
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(input_data).map_err(|e| {
-                Box::new(CommandExecutionError::new(format!("Failed to write to stdin: {}", e)))
+                Box::new(CommandExecutionError::new(format!("Failed to write to stdin: {e}")))
             })?;
             // Explicitly drop stdin to close it
             drop(stdin);
@@ -437,7 +437,7 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                         let _ = child.wait();  // Make sure it's dead
 
                         return Err(Box::new(CommandTimeoutExceededError::new(
-                            format!("Command timed out after {:.2} seconds", timeout)
+                            format!("Command timed out after {timeout:.2} seconds")
                         )));
                     }
                 }
@@ -453,7 +453,7 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                         let _ = child.wait();  // Make sure it's dead
 
                         return Err(Box::new(CommandNoOutputTimeoutError::new(
-                            format!("Command timed out due to no output for {:.2} seconds", no_output_timeout)
+                            format!("Command timed out due to no output for {no_output_timeout:.2} seconds")
                         )));
                     }
                 }
@@ -462,7 +462,7 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
             },
             Err(e) => {
                 return Err(Box::new(CommandExecutionError::new(
-                    format!("Failed to wait for process: {}", e)
+                    format!("Failed to wait for process: {e}")
                 )));
             }
         }

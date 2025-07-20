@@ -21,6 +21,7 @@ permissions:
 
 env:
   FORCE_COLOR: "1"
+  PRE_COMMIT_HOME: ${{ github.workspace }}/.cache/pre-commit
 
 jobs:
   pre-commit:
@@ -33,6 +34,11 @@ jobs:
         with:
           python-version: 3.11
 
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy,rustfmt
+
       - run: pip install pre-commit
 
       - id: python-version-checksum
@@ -43,7 +49,7 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/pre-commit
+          path: ${{ env.PRE_COMMIT_HOME }}
           key: >-
             precommit|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
 
@@ -79,8 +85,9 @@ jobs:
       - id: python-version-checksum
         run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
 
       - id: rust-version-checksum
         run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
@@ -132,6 +139,7 @@ jobs:
       - name: Report Python Coverage
         run: |
           uv run coverage combine || true
+          uv run coverage xml
           uv run coverage report
 
       - name: Install Tarpaulin
@@ -145,6 +153,12 @@ jobs:
       - name: Run Rust Tests
         run: |
           cargo tarpaulin --workspace --tests --skip-clean --timeout 120
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ matrix.os }},${{ matrix.python-version }}
 
   build:
     name: Build

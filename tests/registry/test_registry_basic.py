@@ -55,34 +55,42 @@ def test_command_registration(registry):
     """Test registering commands on a command group."""
     group = registry.command_group("test", "Test Commands", "Test description")
 
-    @group.command("hello", help="Say hello")
+    @group.command("hello")
     def hello_cmd(args):
+        """Say hello."""
         return "hello"
 
     # Check that the command was registered
     assert len(registry._pending_commands) == 1
-    cmd_info = registry._pending_commands[0]
-    assert cmd_info["group_path"] == "tools.test"
-    assert cmd_info["name"] == "hello"
-    assert cmd_info["help"] == "Say hello"
-    assert cmd_info["func"] == hello_cmd
+    full_name, name, func = registry._pending_commands[0]
+    assert full_name == "tools.test"
+    assert name == "hello"
+    assert func == hello_cmd
 
 
 def test_multiple_commands_same_group(registry):
     """Test registering multiple commands on the same group."""
     group = registry.command_group("test", "Test Commands", "Test description")
 
-    @group.command("cmd1", help="Command 1")
+    @group.command("cmd1")
     def cmd1(args):
+        """Command 1."""
         return "cmd1"
 
-    @group.command("cmd2", help="Command 2")
+    @group.command("cmd2")
     def cmd2(args):
+        """Command 2."""
         return "cmd2"
 
     assert len(registry._pending_commands) == 2
-    assert registry._pending_commands[0]["name"] == "cmd1"
-    assert registry._pending_commands[1]["name"] == "cmd2"
+    full_name, name, func = registry._pending_commands[0]
+    assert full_name == "tools.test"
+    assert name == "cmd1"
+    assert func == cmd1
+    full_name, name, func = registry._pending_commands[1]
+    assert full_name == "tools.test"
+    assert name == "cmd2"
+    assert func == cmd2
 
 
 def test_commands_on_nested_groups(registry):
@@ -90,22 +98,24 @@ def test_commands_on_nested_groups(registry):
     parent = registry.command_group("parent", "Parent", "Parent desc")
     child = parent.command_group("child", "Child", "Child desc")
 
-    @parent.command("parent_cmd", help="Parent command")
+    @parent.command("parent_cmd")
     def parent_cmd(args):
+        """Parent command."""
         return "parent"
 
-    @child.command("child_cmd", help="Child command")
+    @child.command("child_cmd")
     def child_cmd(args):
+        """Child command."""
         return "child"
 
     assert len(registry._pending_commands) == 2
 
     # Find the commands by their group paths
-    parent_cmd_info = next(cmd for cmd in registry._pending_commands if cmd["group_path"] == "tools.parent")
-    child_cmd_info = next(cmd for cmd in registry._pending_commands if cmd["group_path"] == "tools.parent.child")
+    parent_cmd_info = next(cmd for cmd in registry._pending_commands if cmd[0] == "tools.parent")
+    child_cmd_info = next(cmd for cmd in registry._pending_commands if cmd[0] == "tools.parent.child")
 
-    assert parent_cmd_info["name"] == "parent_cmd"
-    assert child_cmd_info["name"] == "child_cmd"
+    assert parent_cmd_info[1] == "parent_cmd"
+    assert child_cmd_info[1] == "child_cmd"
 
 
 def test_command_group_storage(registry):
@@ -155,8 +165,9 @@ def test_command_decorator_returns_function(registry):
     """Test that the command decorator returns the original function."""
     group = registry.command_group("test", "Test", "Test desc")
 
-    @group.command("test_cmd", help="Test command")
+    @group.command("test_cmd")
     def original_function(args):
+        """Test command."""
         return "test"
 
     # The decorator should return the original function unchanged

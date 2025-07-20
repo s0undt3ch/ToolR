@@ -23,12 +23,14 @@ def test_complete_workflow_example(registry):
     docker_group = registry.command_group("docker", "Docker Tools", "Docker container management")
 
     # Add some direct commands to docker group
-    @docker_group.command("version", help="Show Docker version")
+    @docker_group.command("version")
     def docker_version(args):
+        """Show Docker version."""
         return "Docker version 20.10.7"
 
-    @docker_group.command("info", help="Show Docker system info")
+    @docker_group.command("info")
     def docker_info(args):
+        """Show Docker system info."""
         return "Docker system info"
 
     # Create nested command groups
@@ -36,28 +38,33 @@ def test_complete_workflow_example(registry):
     compose_group = docker_group.command_group("compose", "Compose Tools", "Docker Compose operations")
 
     # Add commands to build group
-    @build_group.command("image", help="Build an image")
+    @build_group.command("image")
     def build_image(args):
+        """Build an image."""
         return "Building Docker image"
 
-    @build_group.command("cache", help="Manage build cache")
+    @build_group.command("cache")
     def build_cache(args):
+        """Manage build cache."""
         return "Managing build cache"
 
     # Add commands to compose group
-    @compose_group.command("up", help="Start services")
+    @compose_group.command("up")
     def compose_up(args):
+        """Start services."""
         return "Starting services"
 
-    @compose_group.command("down", help="Stop services")
+    @compose_group.command("down")
     def compose_down(args):
+        """Stop services."""
         return "Stopping services"
 
     # Create deeply nested group
     advanced_group = build_group.command_group("advanced", "Advanced Build", "Advanced build features")
 
-    @advanced_group.command("multi-stage", help="Multi-stage build")
+    @advanced_group.command("multi-stage")
     def multi_stage_build(args):
+        """Multi-stage build."""
         return "Multi-stage build"
 
     # Verify the structure was created correctly
@@ -86,56 +93,66 @@ def test_real_world_tool_structure(registry):
     # Development tools
     dev_group = registry.command_group("dev", "Development", "Development workflow tools")
 
-    @dev_group.command("setup", help="Set up development environment")
+    @dev_group.command("setup")
     def dev_setup(args):
+        """Set up development environment."""
         return "Setting up dev environment"
 
-    @dev_group.command("clean", help="Clean development artifacts")
+    @dev_group.command("clean")
     def dev_clean(args):
+        """Clean development artifacts."""
         return "Cleaning dev artifacts"
 
     # Testing tools
     test_group = dev_group.command_group("test", "Testing", "Test execution and management")
 
-    @test_group.command("unit", help="Run unit tests")
+    @test_group.command("unit")
     def test_unit(args):
+        """Run unit tests."""
         return "Running unit tests"
 
-    @test_group.command("integration", help="Run integration tests")
+    @test_group.command("integration")
     def test_integration(args):
+        """Run integration tests."""
         return "Running integration tests"
 
-    @test_group.command("e2e", help="Run end-to-end tests")
+    @test_group.command("e2e")
     def test_e2e(args):
+        """Run end-to-end tests."""
         return "Running e2e tests"
 
     # Coverage tools under testing
     coverage_group = test_group.command_group("coverage", "Coverage", "Test coverage tools")
 
-    @coverage_group.command("report", help="Generate coverage report")
+    @coverage_group.command("report")
     def coverage_report(args):
+        """Generate coverage report."""
         return "Generating coverage report"
 
-    @coverage_group.command("html", help="Generate HTML coverage report")
+    @coverage_group.command("html")
     def coverage_html(args):
+        """Generate HTML coverage report."""
         return "Generating HTML coverage"
 
     # CI/CD tools
     ci_group = registry.command_group("ci", "CI/CD", "Continuous integration and deployment")
 
-    @ci_group.command("validate", help="Validate CI configuration")
+    @ci_group.command("validate")
     def ci_validate(args):
+        """Validate CI configuration."""
         return "Validating CI config"
 
     # Deployment under CI
     deploy_group = ci_group.command_group("deploy", "Deploy", "Deployment operations")
 
-    @deploy_group.command("staging", help="Deploy to staging")
+    @deploy_group.command("staging")
     def deploy_staging(args):
+        """Deploy to staging."""
         return "Deploying to staging"
 
-    @deploy_group.command("production", help="Deploy to production")
+    @deploy_group.command("production")
     def deploy_production(args):
+        """Deploy to production."""
         return "Deploying to production"
 
     # Verify the complex structure
@@ -150,10 +167,12 @@ def test_real_world_tool_structure(registry):
     assert len(registry._pending_commands) == 10
 
     # Test specific command paths
-    coverage_commands = [cmd for cmd in registry._pending_commands if cmd["group_path"] == "tools.dev.test.coverage"]
+    coverage_commands = [
+        (full_name, cmd) for (full_name, cmd, _) in registry._pending_commands if full_name == "tools.dev.test.coverage"
+    ]
     assert len(coverage_commands) == 2
-    assert any(cmd["name"] == "report" for cmd in coverage_commands)
-    assert any(cmd["name"] == "html" for cmd in coverage_commands)
+    assert any(cmd == "report" for (_, cmd) in coverage_commands)
+    assert any(cmd == "html" for (_, cmd) in coverage_commands)
 
 
 def test_command_group_hierarchy_storage(registry):
@@ -189,12 +208,14 @@ def test_multiple_registries_isolation(tmp_path):
     group1 = registry1.command_group("test1", "Test 1", "Test registry 1")
     group2 = registry2.command_group("test2", "Test 2", "Test registry 2")
 
-    @group1.command("cmd1", help="Command 1")
+    @group1.command("cmd1")
     def cmd1(args):
+        """Command 1."""
         return "cmd1"
 
-    @group2.command("cmd2", help="Command 2")
+    @group2.command("cmd2")
     def cmd2(args):
+        """Command 2."""
         return "cmd2"
 
     # Verify isolation
@@ -207,5 +228,5 @@ def test_multiple_registries_isolation(tmp_path):
 
     assert len(registry1._pending_commands) == 1
     assert len(registry2._pending_commands) == 1
-    assert registry1._pending_commands[0]["name"] == "cmd1"
-    assert registry2._pending_commands[0]["name"] == "cmd2"
+    assert registry1._pending_commands[0][1] == "cmd1"
+    assert registry2._pending_commands[0][1] == "cmd2"
