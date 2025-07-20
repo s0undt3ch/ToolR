@@ -54,8 +54,10 @@ locked = true
 
 [tool.cibuildwheel]
 # Skip problematic or irrelevant platforms
-skip = "pp* *-i686 *-win32 *-s390x *-musllinux_i686"
-# Explicitly define supported Python versions (optional if you're okay with all supported)
+# Only include skip patterns that match enabled builds
+# Removed: pp* (no PyPy builds enabled), *-i686 (no 32-bit builds), *-s390x (no s390x builds)
+skip = "*-win32 *-musllinux_i686"
+# Explicitly define supported Python versions
 build = "cp311-* cp312-* cp313-*"
 
 [tool.cibuildwheel.linux]
