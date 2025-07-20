@@ -8,6 +8,8 @@ import rich
 from rich.console import Console
 from rich.theme import Theme
 
+from toolr.utils._logs import include_timestamps
+
 if TYPE_CHECKING:
     from toolr._context import ConsoleVerbosity
 
@@ -36,7 +38,8 @@ def setup_consoles(verbosity: ConsoleVerbosity) -> tuple[Console, Console]:
         console_kwargs["force_terminal"] = True
         console_kwargs["force_interactive"] = False
     log_path = verbosity >= ConsoleVerbosity.VERBOSE
-    stderr = Console(stderr=True, log_path=log_path, **console_kwargs)
-    stdout = Console(log_path=log_path, **console_kwargs)
+    log_time = include_timestamps()
+    stderr = Console(stderr=True, log_path=log_path, log_time=log_time, **console_kwargs)
+    stdout = Console(log_path=log_path, log_time=log_time, **console_kwargs)
     rich.reconfigure(stderr=True, **console_kwargs)
     return stderr, stdout
