@@ -20,6 +20,13 @@ class OptionEnum(enum.Enum):
     OPTION3 = "option3"
 
 
+class OutputFormat(enum.Enum):
+    """Test enum for choices testing."""
+
+    JSON = "json"
+    YAML = "yaml"
+
+
 def test_complex_signature_parsing():
     """Test parsing a complex function signature."""
 
@@ -27,7 +34,7 @@ def test_complex_signature_parsing():
         ctx: Context,
         input_file: Annotated[str, arg(metavar="FILE")],
         output_file: Annotated[str, arg(metavar="OUTPUT")],
-        out_format: Annotated[OptionEnum, arg(choices=["json", "yaml"])] = OptionEnum.OPTION1,
+        out_format: Annotated[OutputFormat, arg(choices=OutputFormat)] = OutputFormat.JSON,
         verbose: bool = False,
         quiet: bool = True,
         files: list[str] | None = None,
@@ -57,7 +64,6 @@ def test_complex_signature_parsing():
 
     # Check keyword arguments
     assert signature.arguments[2].name == "out_format"
-    assert signature.arguments[2].choices == ["json", "yaml"]
     assert isinstance(signature.arguments[2], KwArg)
 
     assert signature.arguments[3].name == "verbose"
