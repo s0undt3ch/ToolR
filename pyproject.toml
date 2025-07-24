@@ -76,7 +76,13 @@ MACOSX_DEPLOYMENT_TARGET = "11.0"
 testpaths = ["tests/"]
 python_files = "test_*.py"
 junit_family = "xunit2"
-
+addopts = [
+  "-ra",
+  "-s",
+  "--showlocals",
+  "--strict-config",
+  "--strict-markers",
+]
 [tool.uv]
 
 [dependency-groups]
