@@ -19,6 +19,9 @@ from toolr._context import ConsoleVerbosity
 from toolr._context import Context
 from toolr.utils import _logs
 
+if TYPE_CHECKING:
+    from argparse import Namespace
+
 log = logging.getLogger(__name__)
 
 
@@ -31,7 +34,7 @@ class Parser(Struct, frozen=True):
     parser: ArgumentParser | None = None
     subparsers: _SubParsersAction[ArgumentParser] | None = None
     context: Context | None = None
-    options: argparse.Namespace | None = None
+    options: Namespace | None = None
 
     def __post_init__(self) -> None:
         # Let's do a little manual parsing so that we can set debug or quiet early
@@ -133,7 +136,7 @@ class Parser(Struct, frozen=True):
         )
         structs.force_setattr(self, "subparsers", subparsers)
 
-    def parse_args(self) -> None:
+    def parse_args(self, argv: list[str] | None = None) -> Namespace:
         """
         Parse CLI.
         """
@@ -145,7 +148,7 @@ class Parser(Struct, frozen=True):
         self.context.debug(f"Tools executing 'sys.argv': {sys.argv}")
         # Process registered imports to allow other modules to register commands
         # self._process_registered_tool_modules()
-        options = self.parser.parse_args()
+        options = self.parser.parse_args(argv)
         if options.quiet:
             logging.root.setLevel(logging.CRITICAL + 1)
         elif options.debug:
@@ -158,11 +161,20 @@ class Parser(Struct, frozen=True):
         else:
             for handler in logging.root.handlers:
                 handler.setFormatter(_logs.NO_TIMESTAMP_FORMATTER)
-        structs.force_setattr(self, "options", options)
         if "func" not in options:
             self.context.exit(1, "No command was passed.")
+        structs.force_setattr(self, "options", options)
         log.debug("CLI parsed options %s", options)
-        options.func(self.context, options)
+        return options
+
+    def run(self) -> None:
+        """
+        Run the command.
+        """
+        if self.options is None:
+            err_msg = "parser.parse_args() was not called."
+            raise RuntimeError(err_msg)
+        self.options.func(self.context, self.options)
 
     def __getattr__(self, attr: str) -> Any:
         """

@@ -36,6 +36,7 @@ def main() -> NoReturn:  # type: ignore[misc]
     registry.discover_and_build(parser)
 
     parser.parse_args()
+    parser.run()
 
 
 if __name__ == "__main__":
