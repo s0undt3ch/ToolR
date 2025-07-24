@@ -83,6 +83,7 @@ class KwArg(Arg, Struct, frozen=True):
 
     def _build_parser_kwargs(self) -> dict[str, Any]:
         kwargs = super()._build_parser_kwargs()
+        kwargs["dest"] = self.name
         kwargs["required"] = self.required
         return kwargs
 
