@@ -306,8 +306,15 @@ def _parse_parameter(  # noqa: PLR0915
             err_msg = f"{klass.__name__} {param_name} cannot have aliases"
             raise SignatureError(err_msg)
         aliases = [param_name]
-    elif positional is False and not aliases:
-        aliases = [f"--{param_name.replace('_', '-')}"]
+    else:
+        default_alias = f"--{param_name.replace('_', '-')}"
+        if aliases is None:
+            aliases = [default_alias]
+        else:
+            if default_alias in aliases and aliases[0] != default_alias:
+                aliases.remove(default_alias)
+            if default_alias not in aliases:
+                aliases.insert(0, default_alias)
 
     if TYPE_CHECKING:
         assert aliases is not None
