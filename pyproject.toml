@@ -167,6 +167,9 @@ ignore = [
   "TCH002",   # Move third-party import into a type-checking block
   "BLE001",   # Do not catch blind exception: `Exception`
 ]
+"tests/cli/**/*.py" = [
+  "RUF013",   # PEP 484 prohibits implicit `Optional`
+]
 "tests/support/coverage/*.py" = [
   "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
 ]
@@ -236,4 +239,12 @@ module = [
 ]
 disable_error_code = [
   "unused-ignore"
+]
+
+[[tool.mypy.overrides]]
+module = [
+  "tests.cli.*",
+]
+disable_error_code = [
+  "assignment",
 ]
