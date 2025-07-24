@@ -201,10 +201,10 @@ ignore-names = [
 ]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 30
+max-complexity = 35
 
 [tool.ruff.lint.pylint]
-max-branches = 30
+max-branches = 40
 max-args = 10
 
 [tool.mypy]

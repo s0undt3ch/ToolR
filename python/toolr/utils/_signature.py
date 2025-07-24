@@ -4,10 +4,13 @@ Utilities to parse function signatures.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import logging
+from argparse import Action
 from collections.abc import Callable
 from enum import Enum
+from functools import partial
 from types import UnionType
 from typing import TYPE_CHECKING
 from typing import Annotated
@@ -40,7 +43,7 @@ log = logging.getLogger(__name__)
 class Arg(Struct, frozen=True):
     name: str
     type: Any
-    action: str | None
+    action: partial[EnumAction] | str | None
     description: str
     aliases: list[str]
     default: Any | None
@@ -203,6 +206,32 @@ def get_signature(func: F) -> Signature:
     )
 
 
+class EnumAction(Action):
+    def __init__(self, choices_mapping: dict[str, Enum], **kwargs: Any):
+        super().__init__(**kwargs)
+        self.choices_mapping = choices_mapping
+
+    def __call__(
+        self,
+        parser: ArgumentParser,
+        namespace: Namespace,
+        values: Any,
+        option_string: str | None = None,  # noqa: ARG002
+    ) -> None:
+        err_msg = (
+            f"Invalid choice: '{values}'. Available choices are {', '.join(repr(c) for c in self.choices_mapping)}."
+        )
+        if isinstance(values, Enum):
+            if values in self.choices_mapping.values():
+                setattr(namespace, self.dest, values)
+                return
+            parser.error(err_msg)
+        with contextlib.suppress(KeyError):
+            setattr(namespace, self.dest, self.choices_mapping[values.lower()])
+            return
+        parser.error(err_msg)
+
+
 def _parse_parameter(  # noqa: PLR0915
     param_name: str,
     param: Parameter,
@@ -215,7 +244,7 @@ def _parse_parameter(  # noqa: PLR0915
     positional: bool = default is param.empty
     metavar: str | None = param_name.upper()
     aliases: list[str] | None = None
-    action = None
+    action: partial[EnumAction] | str | None = None
     choices: list[Any] | None = None
     klass: type[Arg | KwArg]
     if positional:
@@ -281,15 +310,32 @@ def _parse_parameter(  # noqa: PLR0915
         if arg_config.choices is not None:
             choices = arg_config.choices
 
-    if inspect.isclass(actual_type) and issubclass(actual_type, Enum) and choices is None:
-        choices = [actual_type.value for actual_type in actual_type]
-        if not description.endswith("."):
-            description += "."
-        description += f" Choices: {', '.join(repr(c) for c in choices)}."
-
     if default is param.empty:
         # Reset default to None if it's empty
         default = None
+
+    if inspect.isclass(actual_type) and issubclass(actual_type, Enum):
+        if choices is None:
+            choices = list(actual_type)
+        else:
+            for choice in choices:
+                if not isinstance(choice, Enum):
+                    err_msg = f"{klass.__name__} {param_name!r} has choices and they are not of an Enum type."
+                    raise SignatureError(err_msg)
+
+                if not isinstance(choice, actual_type):
+                    err_msg = (
+                        f"{klass.__name__} {param_name!r} has choices and they are not of the same type as the enum."
+                    )
+                    raise SignatureError(err_msg)
+        choices_mapping = {choice.name.lower(): choice for choice in choices}
+        # Now reset choices to None so that argparse does not handle them, our action does.
+        choices = None
+        action = partial(EnumAction, choices_mapping=choices_mapping)
+        if not description.endswith("."):
+            description += "."
+        description += f" Choices: {', '.join(repr(c) for c in choices_mapping)}."
+        actual_type = str
 
     if action is None:
         if default is True:

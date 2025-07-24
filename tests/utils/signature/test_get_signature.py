@@ -113,7 +113,6 @@ def test_get_signature_with_enum():
     assert len(signature.arguments) == 1
     arg = signature.arguments[0]
     assert arg.name == "option"
-    assert arg.type is OptionEnum
     assert arg.choices == ["option1", "option2", "option3"]
     assert "Choices: 'option1', 'option2', 'option3'." in arg.description
 
