@@ -11,6 +11,7 @@ from argparse import Action
 from collections.abc import Callable
 from enum import Enum
 from functools import partial
+from types import GenericAlias
 from types import UnionType
 from typing import TYPE_CHECKING
 from typing import Annotated
@@ -43,7 +44,7 @@ log = logging.getLogger(__name__)
 class Arg(Struct, frozen=True):
     name: str
     type: Any
-    action: partial[EnumAction] | str | None
+    action: partial[EnumAction] | type[AppendBoolAction] | str | None
     description: str
     aliases: list[str]
     default: Any | None
@@ -195,7 +196,8 @@ def get_signature(func: F) -> Signature:
     for param_name, param in params[1:]:
         # Use resolved type hint if available, otherwise fall back to raw annotation
         resolved_annotation = type_hints.get(param_name, param.annotation)
-        arguments.append(_parse_parameter(param_name, param, resolved_annotation, parsed_docstring))
+        parameter = _parse_parameter(param_name, param, resolved_annotation, parsed_docstring)
+        arguments.append(parameter)
 
     return Signature(
         func=func,
@@ -232,6 +234,27 @@ class EnumAction(Action):
         parser.error(err_msg)
 
 
+class AppendBoolAction(Action):
+    def __call__(
+        self,
+        parser: ArgumentParser,
+        namespace: Namespace,
+        values: Any,
+        option_string: str | None = None,  # noqa: ARG002
+    ) -> None:
+        if isinstance(values, str):
+            values = values.lower()
+            if values not in ("true", "false"):
+                parser.error(f"Invalid value for {self.dest}: {values}")
+            values = values == "true"
+        if values not in (True, False):
+            parser.error(f"Invalid value for {self.dest}: {values}")
+        try:
+            getattr(namespace, self.dest).append(values)
+        except AttributeError:
+            setattr(namespace, self.dest, [values])
+
+
 def _parse_parameter(  # noqa: PLR0915
     param_name: str,
     param: Parameter,
@@ -244,7 +267,7 @@ def _parse_parameter(  # noqa: PLR0915
     positional: bool = default is param.empty
     metavar: str | None = param_name.upper()
     aliases: list[str] | None = None
-    action: partial[EnumAction] | str | None = None
+    action: partial[EnumAction] | type[AppendBoolAction] | str | None = None
     choices: list[Any] | None = None
     klass: type[Arg | KwArg]
     if positional:
@@ -257,6 +280,7 @@ def _parse_parameter(  # noqa: PLR0915
     # Extract Argument config from Annotated if present
     arg_config = None
     actual_type: Any = annotation
+    original_type = actual_type
 
     # Note: String annotations should already be resolved by get_type_hints()
     # in the calling function, so annotation should be the actual type object
@@ -344,8 +368,22 @@ def _parse_parameter(  # noqa: PLR0915
         elif default is False:
             # We should not pass type to boolean actions
             action = "store_true"
-        elif isinstance(actual_type, (list, tuple, set)):
-            action = "append"
+        elif isinstance(actual_type, GenericAlias):
+            if len(actual_type.__args__) > 1:
+                err_msg = f"{klass.__name__} {param_name!r} has more than one type: {original_type}"
+                raise SignatureError(err_msg)
+
+            # Now, the type that we're really interested in is the first one
+            actual_type = actual_type.__args__[0]
+            if isinstance(actual_type, UnionType):
+                err_msg = f"{klass.__name__} {param_name!r} has more than one type: {original_type}"
+                raise SignatureError(err_msg)
+            if actual_type is bool:
+                action = AppendBoolAction
+                # We need to make argparse handle the boolean values as strings since 'bool("False")' is True
+                actual_type = str
+            else:
+                action = "append"
 
     if positional is True:
         if aliases:
