@@ -181,6 +181,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-subtests"
+version = "0.14.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/59/30/6ec8dfc678ddfd1c294212bbd7088c52d3f7fbf3f05e6d8a440c13b9741a/pytest_subtests-0.14.2.tar.gz", hash = "sha256:7154a8665fd528ee70a76d00216a44d139dc3c9c83521a0f779f7b0ad4f800de", size = 18083, upload-time = "2025-06-13T10:50:01.636Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/d4/9bf12e59fb882b0cf4f993871e1adbee094802224c429b00861acee1a169/pytest_subtests-0.14.2-py3-none-any.whl", hash = "sha256:8da0787c994ab372a13a0ad7d390533ad2e4385cac167b3ac501258c885d0b66", size = 9115, upload-time = "2025-06-13T10:50:00.543Z" },
+]
+
+[[package]]
 name = "rich"
 version = "14.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -220,6 +233,7 @@ dev = [
     { name = "attrs" },
     { name = "coverage" },
     { name = "pytest" },
+    { name = "pytest-subtests" },
 ]
 
 [package.metadata]
@@ -234,4 +248,5 @@ dev = [
     { name = "attrs", specifier = ">=25.3.0" },
     { name = "coverage", specifier = ">=7.8.0" },
     { name = "pytest", specifier = ">=8.3.5" },
+    { name = "pytest-subtests", specifier = ">=0.14.2" },
 ]

@@ -90,6 +90,7 @@ dev = [
     "attrs>=25.3.0",
     "coverage>=7.8.0",
     "pytest>=8.3.5",
+    "pytest-subtests>=0.14.2",
 ]
 
 [tool.ruff]
