@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
 from typing import Generic
-from typing import TypeAlias
 from typing import TypeVar
 from typing import get_args
 from typing import get_origin
@@ -34,8 +33,6 @@ if TYPE_CHECKING:
 
 
 F = TypeVar("F", bound=Callable[..., Any])
-
-ChoiceTypes: TypeAlias = Enum
 
 log = logging.getLogger(__name__)
 
