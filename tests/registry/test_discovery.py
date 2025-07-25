@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+from toolr import Context
 
 from .conftest import RegistryTestCase
-
-if TYPE_CHECKING:
-    from toolr import Context
 
 CASES_PATH = Path(__file__).parent / "cases"
 
