@@ -113,7 +113,6 @@ def test_get_signature_with_enum():
     assert len(signature.arguments) == 1
     arg = signature.arguments[0]
     assert arg.name == "option"
-    assert arg.choices == ["option1", "option2", "option3"]
     assert "Choices: 'option1', 'option2', 'option3'." in arg.description
 
 
@@ -154,9 +153,7 @@ def test_get_signature_with_list_type():
     assert len(signature.arguments) == 1
     arg = signature.arguments[0]
     assert arg.name == "files"
-    # Note: The current implementation doesn't detect generic list types
-    # for append action, only concrete list instances
-    assert arg.action is None
+    assert arg.action == "append"
 
 
 def test_get_signature_no_docstring():

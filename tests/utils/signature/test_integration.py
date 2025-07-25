@@ -75,7 +75,5 @@ def test_complex_signature_parsing():
     assert isinstance(signature.arguments[4], KwArg)
 
     assert signature.arguments[5].name == "files"
-    # Note: The current implementation doesn't detect generic list types
-    # for append action, only concrete list instances
-    assert signature.arguments[5].action is None
+    assert signature.arguments[5].action == "append"
     assert isinstance(signature.arguments[5], KwArg)
