@@ -92,11 +92,15 @@ logging.root.setLevel(logging.INFO)
 NO_TIMESTAMP_FORMATTER = logging.Formatter(fmt="%(message)s")
 TIMESTAMP_FORMATTER = DuplicateTimesFormatter(fmt="%(asctime)s%(message)s", datefmt="[%H:%M:%S] ")
 
-DEFAULT_FORMATTER: logging.Formatter | DuplicateTimesFormatter
-if "CI" in os.environ:
-    DEFAULT_FORMATTER = TIMESTAMP_FORMATTER
-else:
-    DEFAULT_FORMATTER = NO_TIMESTAMP_FORMATTER
+
+def _get_default_formatter() -> logging.Formatter | DuplicateTimesFormatter:
+    if "CI" in os.environ:
+        return TIMESTAMP_FORMATTER
+    return NO_TIMESTAMP_FORMATTER
+
+
+DEFAULT_FORMATTER = _get_default_formatter()
+
 STDERR_HANDLER = logging.StreamHandler(stream=sys.stderr)
 STDERR_HANDLER.setLevel(STDERR)
 STDERR_HANDLER.addFilter(LevelFilter(level=STDERR))
