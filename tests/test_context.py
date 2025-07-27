@@ -127,6 +127,9 @@ def test_chdir(ctx, temp_cwd, tmp_path):
     assert pathlib.Path.cwd() == temp_cwd
 
 
+@pytest.mark.skip_on_windows(
+    reason="[WinError 32] The process cannot access the file because it is being used by another process"
+)
 def test_chdir_nonexistent_original(verbose_ctx, tmp_path, capfd):
     """Test chdir when original directory doesn't exist."""
     new_cwd = tmp_path / "new_cwd"
