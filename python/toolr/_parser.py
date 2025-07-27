@@ -39,15 +39,12 @@ class Parser(Struct, frozen=True):
     def __post_init__(self) -> None:
         # Let's do a little manual parsing so that we can set debug or quiet early
         verbosity = ConsoleVerbosity.NORMAL
-        for arg in sys.argv[1:]:
-            if not arg.startswith("-"):
-                break
-            if arg in ("-q", "--quiet"):
-                verbosity = ConsoleVerbosity.QUIET
-                break
-            if arg in ("-d", "--debug"):
-                verbosity = ConsoleVerbosity.VERBOSE
-                break
+        if any(arg in sys.argv for arg in ["-d", "--debug"]):
+            verbosity = ConsoleVerbosity.VERBOSE
+        elif any(arg in sys.argv for arg in ["-q", "--quiet"]):
+            verbosity = ConsoleVerbosity.QUIET
+        else:
+            verbosity = ConsoleVerbosity.NORMAL
 
         # Late import to avoid circular import issues
         from toolr.utils._console import setup_consoles  # noqa: PLC0415
@@ -149,9 +146,12 @@ class Parser(Struct, frozen=True):
         # Process registered imports to allow other modules to register commands
         # self._process_registered_tool_modules()
         options = self.parser.parse_args(argv)
+        verbosity = ConsoleVerbosity.NORMAL
         if options.quiet:
+            verbosity = ConsoleVerbosity.QUIET
             logging.root.setLevel(logging.CRITICAL + 1)
         elif options.debug:
+            verbosity = ConsoleVerbosity.VERBOSE
             logging.root.setLevel(logging.DEBUG)
         else:
             logging.root.setLevel(logging.INFO)
@@ -161,6 +161,15 @@ class Parser(Struct, frozen=True):
         else:
             for handler in logging.root.handlers:
                 handler.setFormatter(_logs.NO_TIMESTAMP_FORMATTER)
+
+        # Late import to avoid circular import issues
+        from toolr.utils._console import setup_consoles  # noqa: PLC0415
+
+        # Reset verbosity and consoles after parsing the CLI
+        console, console_stdout = setup_consoles(verbosity)
+        structs.force_setattr(self.context, "verbosity", verbosity)
+        structs.force_setattr(self.context, "console", console)
+        structs.force_setattr(self.context, "console_stdout", console_stdout)
         if "func" not in options:
             self.context.exit(1, "No command was passed.")
         structs.force_setattr(self, "options", options)
