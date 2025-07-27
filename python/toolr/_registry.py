@@ -11,7 +11,6 @@ from pathlib import Path
 from types import FunctionType
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import TypeVar
 from typing import cast
 from typing import overload
 
@@ -21,13 +20,13 @@ from msgspec import structs
 from rich.markdown import Markdown
 
 from toolr.utils._docstrings import parse_docstring
+from toolr.utils._signature import F
+from toolr.utils._signature import get_signature
 
 if TYPE_CHECKING:
     from toolr._parser import Parser
 
 log = logging.getLogger(__name__)
-
-F = TypeVar("F", bound=Callable[..., Any])
 
 
 class CommandGroup(Struct, frozen=True):
@@ -272,20 +271,16 @@ class CommandRegistry(Struct, frozen=True):
                 )
                 raise ValueError(err_msg)
 
-            short_description = long_description = None
-            if func.__doc__ is not None:
-                parsed_docstring = parse_docstring(func.__doc__)
-                short_description = parsed_docstring.short_description
-                long_description = parsed_docstring.long_description
+            signature = get_signature(func)
 
             subparsers = parser_hierarchy[group_path]
             cmd_parser = subparsers.add_parser(
                 command_name,
-                help=short_description,
-                description=long_description or short_description,
+                help=signature.short_description,
+                description=signature.long_description,
                 formatter_class=self.parser.formatter_class,
             )
-            cmd_parser.set_defaults(func=func)
+            signature.setup_parser(cmd_parser)
 
         structs.force_setattr(self, "_built", True)  # noqa: FBT003
 

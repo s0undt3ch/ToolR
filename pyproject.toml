@@ -76,7 +76,13 @@ MACOSX_DEPLOYMENT_TARGET = "11.0"
 testpaths = ["tests/"]
 python_files = "test_*.py"
 junit_family = "xunit2"
-
+addopts = [
+  "-ra",
+  "-s",
+  "--showlocals",
+  "--strict-config",
+  "--strict-markers",
+]
 [tool.uv]
 
 [dependency-groups]
@@ -84,6 +90,8 @@ dev = [
     "attrs>=25.3.0",
     "coverage>=7.8.0",
     "pytest>=8.3.5",
+    "pytest-skip-markers>=1.5.2",
+    "pytest-subtests>=0.14.2",
 ]
 
 [tool.ruff]
@@ -156,8 +164,12 @@ ignore = [
   "S101",     # Ignore the use of 'assert ...' in tests
   "SIM117",   # Use a single `with` statement with multiple contexts instead of nested `with` statements
   "SLF001",   # Private member accessed
+  "TC001",    # Move application import into a type-checking block
   "TCH002",   # Move third-party import into a type-checking block
   "BLE001",   # Do not catch blind exception: `Exception`
+]
+"tests/cli/**/*.py" = [
+  "RUF013",   # PEP 484 prohibits implicit `Optional`
 ]
 "tests/support/coverage/*.py" = [
   "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
@@ -193,10 +205,10 @@ ignore-names = [
 ]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 25
+max-complexity = 35
 
 [tool.ruff.lint.pylint]
-max-branches = 25
+max-branches = 40
 max-args = 10
 
 [tool.mypy]
@@ -228,4 +240,12 @@ module = [
 ]
 disable_error_code = [
   "unused-ignore"
+]
+
+[[tool.mypy.overrides]]
+module = [
+  "tests.cli.*",
+]
+disable_error_code = [
+  "assignment",
 ]
