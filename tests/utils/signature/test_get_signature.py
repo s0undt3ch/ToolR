@@ -213,7 +213,7 @@ def test_get_signature_positional_with_aliases():
             name: The name parameter.
         """
 
-    with pytest.raises(SignatureError, match="Arg name cannot have aliases"):
+    with pytest.raises(SignatureError, match="Positional parameter 'name' cannot have aliases."):
         get_signature(test_func)
 
 

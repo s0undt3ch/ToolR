@@ -18,6 +18,7 @@ def test_arg_creation():
         default=None,
         metavar="TEST",
         choices=None,
+        nargs=None,
     )
     assert arg_instance.name == "test"
     assert arg_instance.type is str
@@ -36,6 +37,7 @@ def test_arg_build_parser_kwargs():
         default="default_value",
         metavar="TEST",
         choices=["a", "b", "c"],
+        nargs=None,
     )
     kwargs = arg_instance._build_parser_kwargs()
     assert kwargs["help"] == "Test argument"
@@ -57,6 +59,7 @@ def test_arg_build_parser_kwargs_store_true():
         default=None,
         metavar="TEST",
         choices=None,
+        nargs=None,
     )
     kwargs = arg_instance._build_parser_kwargs()
     assert kwargs["help"] == "Test argument"
@@ -77,6 +80,7 @@ def test_arg_setup_parser():
         default="default_value",
         metavar="TEST",
         choices=["a", "b", "c"],
+        nargs=None,
     )
     arg_instance.setup_parser(parser)
     # Verify the argument was added by checking parser actions

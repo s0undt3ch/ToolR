@@ -17,6 +17,7 @@ def test_kwarg_creation():
         metavar="TEST",
         choices=["a", "b", "c"],
         required=True,
+        nargs=None,
     )
     assert kwarg_instance.name == "test"
     assert kwarg_instance.type is str
@@ -36,6 +37,7 @@ def test_kwarg_build_parser_kwargs():
         metavar="TEST",
         choices=["a", "b", "c"],
         required=True,
+        nargs=None,
     )
     kwargs = kwarg_instance._build_parser_kwargs()
     assert kwargs["help"] == "Test argument"

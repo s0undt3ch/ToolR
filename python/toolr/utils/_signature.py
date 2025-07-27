@@ -11,12 +11,15 @@ from argparse import Action
 from collections.abc import Callable
 from enum import Enum
 from functools import partial
+from inspect import Parameter
 from types import GenericAlias
 from types import UnionType
 from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
 from typing import Generic
+from typing import Literal
+from typing import TypeAlias
 from typing import TypeVar
 from typing import get_args
 from typing import get_origin
@@ -30,13 +33,13 @@ from toolr.utils._docstrings import parse_docstring
 if TYPE_CHECKING:
     from argparse import ArgumentParser
     from argparse import Namespace
-    from inspect import Parameter
 
     from toolr._context import Context
     from toolr.utils._docstrings import Docstring
 
 
 F = TypeVar("F", bound=Callable[..., Any])
+NargsType: TypeAlias = Literal["*", "+", "?"] | int
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +53,7 @@ class Arg(Struct, frozen=True):
     default: Any | None
     metavar: str | None
     choices: list[Any] | None
+    nargs: NargsType | None
 
     def __repr__(self) -> str:
         repr_str = f"{self.__class__.__name__}(name={self.name!r}, type={self.type!r}, "
@@ -75,11 +79,17 @@ class Arg(Struct, frozen=True):
             kwargs["default"] = self.default
         if self.choices is not None:
             kwargs["choices"] = self.choices
+        if self.nargs is not None:
+            kwargs["nargs"] = self.nargs
         return kwargs
 
     def setup_parser(self, parser: ArgumentParser) -> None:
         args = self.aliases
         parser.add_argument(*args, **self._build_parser_kwargs())
+
+
+class VarArg(Arg, Struct, frozen=True):
+    """VarArg is a special case of Arg that is used to represent a variable number of arguments."""
 
 
 class KwArg(Arg, Struct, frozen=True):
@@ -116,10 +126,15 @@ class Signature(Struct, Generic[F], frozen=True):
         kwargs: dict[str, Any] = {}
         for argument in self.arguments:
             argument_value = getattr(options, argument.name)
-            if isinstance(argument, Arg):
+            if isinstance(argument, VarArg):
+                args.extend(argument_value)
+            elif isinstance(argument, Arg):
                 args.append(argument_value)
-            else:
+            elif isinstance(argument, KwArg):
                 kwargs[argument.name] = argument_value
+            else:  # pragma: no cover
+                err_msg = f"Unknown argument type: {argument}"
+                raise TypeError(err_msg)
         bound = self.signature.bind_partial(*args, **kwargs)
         self.func(ctx, *bound.args, **bound.kwargs)
 
@@ -130,6 +145,7 @@ class ArgumentAnnotation(Struct, frozen=True):
     metavar: str | None = None
     action: str | None = None
     choices: list[Any] | None = None
+    nargs: NargsType | None = None
 
 
 def arg(
@@ -139,6 +155,7 @@ def arg(
     metavar: str | None = None,
     action: str | None = None,
     choices: list[Any] | None = None,
+    nargs: NargsType | None = None,
 ) -> ArgumentAnnotation:
     """
     Create an ArgumentAnnotation.
@@ -151,8 +168,11 @@ def arg(
         metavar: The metavar for the argument.
         action: The action for the argument.
         choices: The choices for the argument.
+        nargs: The number of arguments to accept.
     """
-    return ArgumentAnnotation(aliases=aliases, required=required, metavar=metavar, action=action, choices=choices)
+    return ArgumentAnnotation(
+        aliases=aliases, required=required, metavar=metavar, action=action, choices=choices, nargs=nargs
+    )
 
 
 def get_signature(func: F) -> Signature:
@@ -171,7 +191,7 @@ def get_signature(func: F) -> Signature:
         err_msg = f"Function {func.__name__} must have at least one parameter (ctx: Context)"
         raise SignatureError(err_msg)
 
-    first_param_name, first_param = params[0]
+    first_param_name, first_param = params.pop(0)
 
     # Define the error message for the context parameter
     context_err_msg = (
@@ -193,7 +213,7 @@ def get_signature(func: F) -> Signature:
     arguments = []
 
     # Parse remaining parameters (skip the first Context parameter)
-    for param_name, param in params[1:]:
+    for param_name, param in params:
         # Use resolved type hint if available, otherwise fall back to raw annotation
         resolved_annotation = type_hints.get(param_name, param.annotation)
         parameter = _parse_parameter(param_name, param, resolved_annotation, parsed_docstring)
@@ -269,13 +289,18 @@ def _parse_parameter(  # noqa: PLR0915
     aliases: list[str] | None = None
     action: partial[EnumAction] | type[AppendBoolAction] | str | None = None
     choices: list[Any] | None = None
-    klass: type[Arg | KwArg]
-    if positional:
+    nargs: NargsType | None = None
+    klass: type[Arg | VarArg | KwArg]
+    if param.kind == Parameter.VAR_POSITIONAL:
+        klass = VarArg
+    elif positional:
         klass = Arg
     else:
         klass = KwArg
 
-    log.debug("Parsing parameter %s, annotation=%s, default=%s", param_name, annotation, default)
+    log.debug(
+        "Parsing parameter %r, positional=%s, annotation=%s, default=%s", param_name, positional, annotation, default
+    )
 
     # Extract Argument config from Annotated if present
     arg_config = None
@@ -333,6 +358,11 @@ def _parse_parameter(  # noqa: PLR0915
             action = arg_config.action
         if arg_config.choices is not None:
             choices = arg_config.choices
+        if arg_config.nargs is not None:
+            nargs = arg_config.nargs
+
+    if nargs is None and param.kind == Parameter.VAR_POSITIONAL:
+        nargs = "*"
 
     if default is param.empty:
         # Reset default to None if it's empty
@@ -378,27 +408,15 @@ def _parse_parameter(  # noqa: PLR0915
             if isinstance(actual_type, UnionType):
                 err_msg = f"{klass.__name__} {param_name!r} has more than one type: {original_type}"
                 raise SignatureError(err_msg)
+
             if actual_type is bool:
                 action = AppendBoolAction
                 # We need to make argparse handle the boolean values as strings since 'bool("False")' is True
                 actual_type = str
-            else:
+            elif param.kind != Parameter.VAR_POSITIONAL and nargs is None:
                 action = "append"
 
-    if positional is True:
-        if aliases:
-            err_msg = f"{klass.__name__} {param_name} cannot have aliases"
-            raise SignatureError(err_msg)
-        aliases = [param_name]
-    else:
-        default_alias = f"--{param_name.replace('_', '-')}"
-        if aliases is None:
-            aliases = [default_alias]
-        else:
-            if default_alias in aliases and aliases[0] != default_alias:
-                aliases.remove(default_alias)
-            if default_alias not in aliases:
-                aliases.insert(0, default_alias)
+    aliases = _build_aliases(param_name, positional, aliases)
 
     if TYPE_CHECKING:
         assert aliases is not None
@@ -414,6 +432,7 @@ def _parse_parameter(  # noqa: PLR0915
             metavar=metavar,
             action=action,
             choices=choices,
+            nargs=nargs,
         )
 
     return KwArg(
@@ -426,4 +445,21 @@ def _parse_parameter(  # noqa: PLR0915
         metavar=metavar,
         action=action,
         choices=choices,
+        nargs=nargs,
     )
+
+
+def _build_aliases(param_name: str, positional: bool, aliases: list[str] | None) -> list[str]:
+    if positional is True:
+        if aliases:
+            err_msg = f"Positional parameter {param_name!r} cannot have aliases."
+            raise SignatureError(err_msg)
+        return [param_name]
+    default_alias = f"--{param_name.replace('_', '-')}"
+    if aliases is None:
+        return [default_alias]
+    if default_alias in aliases and aliases[0] != default_alias:
+        aliases.remove(default_alias)
+    if default_alias not in aliases:
+        aliases.insert(0, default_alias)
+    return aliases
