@@ -13,6 +13,15 @@ repos:
       - id: check-merge-conflict  # Check for files that contain merge conflict strings.
       - id: check-ast             # Simply check whether files parse as valid python.
 
+  - repo: local
+    hooks:
+      - id: update-doc-stubs
+        name: Update reference documentation stubs
+        language: system
+        entry: python .pre-commit-hooks/ref-doc-stubs.py
+        files: ^(docs/.*\.md|python/toolr/.*\.py)$
+        pass_filenames: false
+
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
     hooks:
@@ -35,7 +44,7 @@ repos:
       - id: ruff
         args:
           - --fix
-        exclude: (.pre-commit-hooks/.*|docs/.*)\.py
+        exclude: .pre-commit-hooks/.*\.py
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.16.1
