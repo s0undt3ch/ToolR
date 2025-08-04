@@ -11,6 +11,7 @@ except ImportError:
 
 from toolr._context import Context
 from toolr._registry import registry
+from toolr.utils._signature import arg
 
 if TYPE_CHECKING:
     from toolr._registry import CommandRegistry
@@ -21,4 +22,4 @@ if TYPE_CHECKING:
 # Create a command group alias
 command_group = registry.command_group
 
-__all__ = ["Context", "command_group", "registry"]
+__all__ = ["Context", "__version__", "arg", "command_group", "registry"]

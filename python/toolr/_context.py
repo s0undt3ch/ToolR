@@ -61,9 +61,9 @@ class Context(Struct, frozen=True):
         """
         Print debug message to stderr.
 
-        This is a wrapper around :func:`rich.console.Console.log`.
+        This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
 
-        See :func:`rich.console.Console.log` for more details.
+        See [rich.console.Console.log][rich.console.Console.log] for more details.
         """
         if self.verbosity >= ConsoleVerbosity.VERBOSE:
             kwargs.update(style="log-debug", _stack_offset=2)
@@ -73,9 +73,9 @@ class Context(Struct, frozen=True):
         """
         Print info message to stderr.
 
-        This is a wrapper around :func:`rich.console.Console.log`.
+        This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
 
-        See :func:`rich.console.Console.log` for more details.
+        See [rich.console.Console.log][rich.console.Console.log] for more details.
         """
         if self.verbosity >= ConsoleVerbosity.NORMAL:
             kwargs.update(style="log-info", _stack_offset=2)
@@ -85,9 +85,9 @@ class Context(Struct, frozen=True):
         """
         Print warning message to stderr.
 
-        This is a wrapper around :func:`rich.console.Console.log`.
+        This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
 
-        See :func:`rich.console.Console.log` for more details.
+        See [rich.console.Console.log][rich.console.Console.log] for more details.
         """
         kwargs.update(style="log-warning", _stack_offset=2)
         self.console.log(*args, **kwargs)
@@ -96,9 +96,9 @@ class Context(Struct, frozen=True):
         """
         Print error message to stderr.
 
-        This is a wrapper around :func:`rich.console.Console.log`.
+        This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
 
-        See :func:`rich.console.Console.log` for more details.
+        See [rich.console.Console.log][rich.console.Console.log] for more details.
         """
         kwargs.update(style="log-error", _stack_offset=2)
         self.console.log(*args, **kwargs)
@@ -126,7 +126,7 @@ class Context(Struct, frozen=True):
     ) -> CommandResult[str] | CommandResult[bytes]:
         """Run a command with the given arguments.
 
-        This is a wrapper around :func:`toolr.utils.command.run_command` that provides
+        This is a wrapper around [toolr.utils.command.run][] that provides
         a simpler interface for command functions.
 
         Args:
@@ -135,7 +135,7 @@ class Context(Struct, frozen=True):
             capture_output: Whether to capture output to return
             timeout_secs: Maximum time to wait for command completion
             no_output_timeout_secs: Maximum time to wait without output
-            kwargs: Additional keyword arguments to pass to :func:`toolr.utils.command.run`
+            kwargs: Additional keyword arguments to pass to [toolr.utils.command.run][]
 
         Returns:
             CommandResult instance.
