@@ -11,7 +11,7 @@ The most basic command is a function with a context parameter:
 
 Run with:
 ```bash
-uv run toolr greeting hello --name Alice
+toolr greeting hello --name Alice
 # Output: Hello, Alice!
 ```
 
@@ -23,7 +23,7 @@ uv run toolr greeting hello --name Alice
 
 Run with:
 ```bash
-uv run toolr math add 5 3
+toolr math add 5 3
 # Output: 5 + 3 = 8
 ```
 
@@ -35,7 +35,7 @@ uv run toolr math add 5 3
 
 Run with:
 ```bash
-uv run toolr example process --verbose --dry-run
+toolr example process --verbose --dry-run
 # Output: Verbose mode enabled
 #         Dry run mode - no changes will be made
 ```
@@ -48,7 +48,7 @@ uv run toolr example process --verbose --dry-run
 
 Run with:
 ```bash
-uv run toolr files process-files file1.txt file2.txt file3.txt
+toolr files process-files file1.txt file2.txt file3.txt
 # Output: Processing file1.txt...
 #         Processing file2.txt...
 #         Processing file3.txt...
@@ -70,5 +70,5 @@ The `ctx` parameter provides access to useful utilities:
 
 Run with:
 ```bash
-uv run toolr system info
+toolr system info
 ```
