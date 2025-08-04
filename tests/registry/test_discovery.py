@@ -131,7 +131,6 @@ def test_build_simple_command_group(registry):
     @group.command("hello")
     def hello_cmd(ctx: Context):
         """Say hello."""
-        return "hello"
 
     # Verify initial state
     assert not registry._built
@@ -164,12 +163,10 @@ def test_build_nested_command_groups(registry):
     @parent.command("parent_cmd")
     def parent_cmd(ctx: Context):
         """Parent command."""
-        return "parent"
 
     @child.command("child_cmd")
     def child_cmd(ctx: Context):
         """Child command."""
-        return "child"
 
     # Verify initial state
     assert not registry._built
@@ -200,7 +197,6 @@ def test_build_parsers_called_once(registry):
     @group.command("cmd")
     def test_cmd(ctx: Context):
         """Test command."""
-        return "test"
 
     # Verify initial state
     assert not registry._built
@@ -261,12 +257,10 @@ def test_discover_and_build_with_manual_groups(registry):
     @group1.command("cmd1")
     def cmd1(ctx: Context):
         """Command 1."""
-        return "cmd1"
 
     @group2.command("cmd2")
     def cmd2(ctx: Context):
         """Command 2."""
-        return "cmd2"
 
     # Verify initial state
     assert not registry._built
