@@ -917,7 +917,7 @@
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">ctx</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Hello&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&quot;!&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Run with:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>toolr<span class="w"> </span>greeting<span class="w"> </span>hello<span class="w"> </span>--name<span class="w"> </span>Alice
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>toolr<span class="w"> </span>greeting<span class="w"> </span>hello<span class="w"> </span>--name<span class="w"> </span>Alice
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># Output: Hello, Alice!</span>
 </span></code></pre></div></p>
 <h2 id="command-with-multiple-arguments">Command with Multiple Arguments<a class="headerlink" href="#command-with-multiple-arguments" title="Permanent link">&para;</a></h2>
@@ -942,7 +942,7 @@
 </span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>    <span class="k">return</span> <span class="n">result</span>
 </span></code></pre></div>
 <p>Run with:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>toolr<span class="w"> </span>math<span class="w"> </span>add<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="m">3</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>toolr<span class="w"> </span>math<span class="w"> </span>add<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="m">3</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># Output: 5 + 3 = 8</span>
 </span></code></pre></div></p>
 <h2 id="boolean-flags">Boolean Flags<a class="headerlink" href="#boolean-flags" title="Permanent link">&para;</a></h2>
@@ -972,7 +972,7 @@
 </span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>    <span class="n">ctx</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Processing...&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Run with:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>uv<span class="w"> </span>run<span class="w"> </span>toolr<span class="w"> </span>example<span class="w"> </span>process<span class="w"> </span>--verbose<span class="w"> </span>--dry-run
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>toolr<span class="w"> </span>example<span class="w"> </span>process<span class="w"> </span>--verbose<span class="w"> </span>--dry-run
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># Output: Verbose mode enabled</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1">#         Dry run mode - no changes will be made</span>
 </span></code></pre></div></p>
@@ -996,7 +996,7 @@
 </span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Run with:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>toolr<span class="w"> </span>files<span class="w"> </span>process-files<span class="w"> </span>file1.txt<span class="w"> </span>file2.txt<span class="w"> </span>file3.txt
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>toolr<span class="w"> </span>files<span class="w"> </span>process-files<span class="w"> </span>file1.txt<span class="w"> </span>file2.txt<span class="w"> </span>file3.txt
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># Output: Processing file1.txt...</span>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1">#         Processing file2.txt...</span>
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1">#         Processing file3.txt...</span>
@@ -1088,7 +1088,7 @@
 </span><span id="__span-9-64"><a id="__codelineno-9-64" name="__codelineno-9-64" href="#__codelineno-9-64"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Network connectivity to </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2"> failed&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Run with:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>uv<span class="w"> </span>run<span class="w"> </span>toolr<span class="w"> </span>system<span class="w"> </span>info
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>toolr<span class="w"> </span>system<span class="w"> </span>info
 </span></code></pre></div></p>
 
 
