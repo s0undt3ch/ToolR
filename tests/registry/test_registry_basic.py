@@ -59,7 +59,6 @@ def test_command_registration(registry):
     @group.command("hello")
     def hello_cmd(ctx: Context):
         """Say hello."""
-        return "hello"
 
     # Check that the command was registered
     assert len(registry._pending_commands) == 1
@@ -76,12 +75,10 @@ def test_multiple_commands_same_group(registry):
     @group.command("cmd1")
     def cmd1(ctx: Context):
         """Command 1."""
-        return "cmd1"
 
     @group.command("cmd2")
     def cmd2(ctx: Context):
         """Command 2."""
-        return "cmd2"
 
     assert len(registry._pending_commands) == 2
     full_name, name, func = registry._pending_commands[0]
@@ -102,12 +99,10 @@ def test_commands_on_nested_groups(registry):
     @parent.command("parent_cmd")
     def parent_cmd(ctx: Context):
         """Parent command."""
-        return "parent"
 
     @child.command("child_cmd")
     def child_cmd(ctx: Context):
         """Child command."""
-        return "child"
 
     assert len(registry._pending_commands) == 2
 

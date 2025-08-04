@@ -97,12 +97,10 @@ def test_real_world_tool_structure(registry):
     @dev_group.command("setup")
     def dev_setup(ctx: Context):
         """Set up development environment."""
-        return "Setting up dev environment"
 
     @dev_group.command("clean")
     def dev_clean(ctx: Context):
         """Clean development artifacts."""
-        return "Cleaning dev artifacts"
 
     # Testing tools
     test_group = dev_group.command_group("test", "Testing", "Test execution and management")
@@ -110,17 +108,14 @@ def test_real_world_tool_structure(registry):
     @test_group.command("unit")
     def test_unit(ctx: Context):
         """Run unit tests."""
-        return "Running unit tests"
 
     @test_group.command("integration")
     def test_integration(ctx: Context):
         """Run integration tests."""
-        return "Running integration tests"
 
     @test_group.command("e2e")
     def test_e2e(ctx: Context):
         """Run end-to-end tests."""
-        return "Running e2e tests"
 
     # Coverage tools under testing
     coverage_group = test_group.command_group("coverage", "Coverage", "Test coverage tools")
@@ -128,19 +123,16 @@ def test_real_world_tool_structure(registry):
     @coverage_group.command("report")
     def coverage_report(ctx: Context):
         """Generate coverage report."""
-        return "Generating coverage report"
 
     @coverage_group.command("html")
     def coverage_html(ctx: Context):
         """Generate HTML coverage report."""
-        return "Generating HTML coverage"
 
     # CI/CD tools
     ci_group = registry.command_group("ci", "CI/CD", "Continuous integration and deployment")
 
     @ci_group.command("validate")
     def ci_validate(ctx: Context):
-        """Validate CI configuration."""
         return "Validating CI config"
 
     # Deployment under CI
@@ -149,12 +141,10 @@ def test_real_world_tool_structure(registry):
     @deploy_group.command("staging")
     def deploy_staging(ctx: Context):
         """Deploy to staging."""
-        return "Deploying to staging"
 
     @deploy_group.command("production")
     def deploy_production(ctx: Context):
         """Deploy to production."""
-        return "Deploying to production"
 
     # Verify the complex structure
     expected_groups = ["tools.dev", "tools.dev.test", "tools.dev.test.coverage", "tools.ci", "tools.ci.deploy"]
@@ -212,12 +202,10 @@ def test_multiple_registries_isolation(tmp_path):
     @group1.command("cmd1")
     def cmd1(ctx: Context):
         """Command 1."""
-        return "cmd1"
 
     @group2.command("cmd2")
     def cmd2(ctx: Context):
         """Command 2."""
-        return "cmd2"
 
     # Verify isolation
     assert len(registry1._command_groups) == 1
