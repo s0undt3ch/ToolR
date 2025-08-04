@@ -65,7 +65,7 @@ class CommandGroup(Struct, frozen=True):
         if isinstance(name, FunctionType):
             # If we were not passed a name in the decorator call, we're being called with a function
             # and we need to use the function name as the command name
-            return self.command(name.__name__)(name)
+            return self.command(name.__name__.replace("_", "-"))(name)
 
         if TYPE_CHECKING:
             assert isinstance(name, str)

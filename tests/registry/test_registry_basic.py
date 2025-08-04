@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from toolr._context import Context
 from toolr._registry import CommandGroup
 
 
@@ -56,7 +57,7 @@ def test_command_registration(registry):
     group = registry.command_group("test", "Test Commands", "Test description")
 
     @group.command("hello")
-    def hello_cmd(args):
+    def hello_cmd(ctx: Context):
         """Say hello."""
         return "hello"
 
@@ -73,12 +74,12 @@ def test_multiple_commands_same_group(registry):
     group = registry.command_group("test", "Test Commands", "Test description")
 
     @group.command("cmd1")
-    def cmd1(args):
+    def cmd1(ctx: Context):
         """Command 1."""
         return "cmd1"
 
     @group.command("cmd2")
-    def cmd2(args):
+    def cmd2(ctx: Context):
         """Command 2."""
         return "cmd2"
 
@@ -99,12 +100,12 @@ def test_commands_on_nested_groups(registry):
     child = parent.command_group("child", "Child", "Child desc")
 
     @parent.command("parent_cmd")
-    def parent_cmd(args):
+    def parent_cmd(ctx: Context):
         """Parent command."""
         return "parent"
 
     @child.command("child_cmd")
-    def child_cmd(args):
+    def child_cmd(ctx: Context):
         """Child command."""
         return "child"
 
@@ -166,9 +167,69 @@ def test_command_decorator_returns_function(registry):
     group = registry.command_group("test", "Test", "Test desc")
 
     @group.command("test_cmd")
-    def original_function(args):
+    def original_function(ctx: Context):
         """Test command."""
         return "test"
 
     # The decorator should return the original function unchanged
     assert original_function(None) == "test"
+
+
+def test_function_name_to_command_name_conversion(registry):
+    """Test that function names are converted to command names using hyphens."""
+    group = registry.command_group("test", "Test", "Test desc")
+
+    @group.command
+    def simple_function(ctx: Context):
+        """Simple function."""
+
+    @group.command
+    def function_with_underscores(ctx: Context):
+        """Function with underscores."""
+
+    @group.command
+    def multiple_underscores_in_name(ctx: Context):
+        """Function with multiple underscores."""
+
+    @group.command
+    def _leading_underscore(ctx: Context):
+        """Function with leading underscore."""
+
+    @group.command
+    def trailing_underscore_(ctx: Context):
+        """Function with trailing underscore."""
+
+    @group.command
+    def _both_underscores_(ctx: Context):
+        """Function with both leading and trailing underscores."""
+
+    @group.command("both-underscores")
+    def _both_underscores_with_name_(ctx: Context):
+        """Function with both leading and trailing underscores."""
+
+    # Check that the commands were registered with the correct names
+    assert len(registry._pending_commands) == 7
+
+    # Find each command and verify the name conversion
+    command_map = {cmd[1]: cmd[2] for cmd in registry._pending_commands if cmd[0] == "tools.test"}
+
+    assert "simple-function" in command_map
+    assert command_map["simple-function"] == simple_function
+
+    assert "function-with-underscores" in command_map
+    assert command_map["function-with-underscores"] == function_with_underscores
+
+    assert "multiple-underscores-in-name" in command_map
+    assert command_map["multiple-underscores-in-name"] == multiple_underscores_in_name
+
+    assert "-leading-underscore" in command_map
+    assert command_map["-leading-underscore"] == _leading_underscore
+
+    assert "trailing-underscore-" in command_map
+    assert command_map["trailing-underscore-"] == trailing_underscore_
+
+    assert "-both-underscores-" in command_map
+    assert command_map["-both-underscores-"] == _both_underscores_
+
+    assert "both-underscores" in command_map
+    assert command_map["both-underscores"] == _both_underscores_with_name_
