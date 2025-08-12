@@ -32,24 +32,31 @@ Organize commands into logical groups and subgroups using dot notation, providin
 
 Built-in support for rich text formatting and automatic help generation from docstrings and type annotations.
 
+### Third-Party Command Support
+
+Extend ToolR's functionality by installing packages that provide additional commands through Python entry points.
+
 ## Quick Start
 
 1. **Install ToolR**:
+
    ```bash
    python -m pip install toolr
    ```
 
 2. **Create a tools package** in your project root:
+
    ```bash
    mkdir tools
    touch tools/__init__.py
    ```
 
 3. **Write your first command** in `tools/example.py`:
+
    ```python
    from toolr import Context, command_group
 
-   group = registry.command_group("example", "Example Commands", "Example command group")
+   group = command_group("example", "Example Commands", "Example command group")
 
    @group.command
    def hello(ctx: Context, name: str = "World"):
@@ -62,6 +69,15 @@ Built-in support for rich text formatting and automatic help generation from doc
    ```
 
 4. **Run your command**:
+
    ```bash
    toolr example hello --name Alice
    ```
+
+## Advanced Usage
+
+### Third-Party Commands
+
+ToolR supports 3rd-party commands from installable Python packages. Create packages that extend ToolR's functionality by defining commands and registering them as entry points.
+
+See the [Advanced Topics section](https://s0undt3ch.github.io/ToolR/usage/#advanced-topics) in the documentation for detailed information about creating 3rd-party command packages.

@@ -22,12 +22,12 @@ from typing import NoReturn
 
 from toolr import Context
 from toolr import arg
-from toolr import registry
+from toolr import command_group
 
-command_group = registry.command_group("example", title="Example", docstring=__doc__)
+group = command_group("example", title="Example", docstring=__doc__)
 
 
-@command_group.command
+@group.command
 def hello(ctx: Context) -> NoReturn:
     """
     Say hello.
@@ -37,7 +37,7 @@ def hello(ctx: Context) -> NoReturn:
     ctx.info("Hello, world!")
 
 
-@command_group.command("goodbye")
+@group.command("goodbye")
 def say_goodbye(ctx: Context, name: str | None = None) -> NoReturn:
     """
     Say goodbye.
@@ -50,7 +50,7 @@ def say_goodbye(ctx: Context, name: str | None = None) -> NoReturn:
     ctx.info(f"Goodbye, {name}!")
 
 
-@command_group.command
+@group.command
 def multiply(ctx: Context, a: int, b: int, verbose: bool = False) -> NoReturn:
     """
     Multiply two numbers.
@@ -74,7 +74,7 @@ class Operation(StrEnum):
     DIVIDE = "divide"
 
 
-@command_group.command
+@group.command
 def math(
     ctx: Context,
     a: int,
@@ -102,6 +102,9 @@ def math(
             value = a * b
             log_msg = f"{a} * {b} = {value}"
         case Operation.DIVIDE:
+            if b == 0:
+                ctx.error("Division by zero!")
+                return
             value = a / b
             log_msg = f"{a} / {b} = {value}"
         case _:
@@ -112,10 +115,12 @@ def math(
         ctx.info(value)
 
 
-@command_group.command
+@group.command
 def py_version(ctx: Context) -> NoReturn:
     """
-    Print the Python version.
+    Show Python version.
+
+    This command demonstrates how to run subprocess commands and capture their output.
     """
     python = shutil.which("python")
     ret = ctx.run(python, "--version", capture_output=True, stream_output=False)

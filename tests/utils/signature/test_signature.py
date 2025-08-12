@@ -8,7 +8,7 @@ from argparse import Namespace
 
 import pytest
 
-from toolr._context import Context
+from toolr import Context
 from toolr.utils._signature import Arg
 from toolr.utils._signature import KwArg
 from toolr.utils._signature import Signature

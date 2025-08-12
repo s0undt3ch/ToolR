@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from toolr import Context
-from toolr import registry
+from toolr import command_group
 
 # Create main deployment group
-deployment_group = registry.command_group("deployment", "Deployment Tools", "Application deployment and management")
+deployment_group = command_group("deployment", "Deployment Tools", "Application deployment and management")
 
 
 # Simple commands directly on the deployment group

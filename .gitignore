@@ -230,9 +230,9 @@ tags
 
 # End of https://www.toptal.com/developers/gitignore/api/python,rust,vim,visualstudiocode
 
-# Ignore Setuptools VCS generated version file
-src/toolr/_version.py
-
 # Ignore the python-tools-scripts virtual environments
 .tools-venvs/
 .python-version
+
+# Ignore our own tools/ folder
+tools/

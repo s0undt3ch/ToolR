@@ -28,8 +28,10 @@ To verify the installation, run:
 ```bash
 toolr --help
 ```
+
 You should see the ToolR help output with available commands.
-```
+
+```console
 Usage: toolr [-h] [--version] [--timestamps | --no-timestamps] [--quiet | --debug] [--timeout SECONDS] [--no-output-timeout-secs SECONDS] {} ...
 
 In-project CLI tooling support
@@ -61,7 +63,6 @@ Commands:
 More information about ToolR can be found at https://github.com/s0undt3ch/toolr
 ```
 
-
 ## Development Installation
 
 For development or to use the latest version:
@@ -74,3 +75,15 @@ cd toolr
 # Install in development mode
 uv sync --dev
 ```
+
+## Third-Party Command Packages
+
+ToolR supports 3rd-party command packages that extend its functionality. These packages are automatically discovered when installed alongside ToolR.
+
+To install a 3rd-party command package:
+
+```bash
+python -m pip install <package-name>
+```
+
+The package's commands will be automatically available in the ToolR CLI. See the [Advanced Topics section](../usage/index.md#advanced-topics) for information about creating your own 3rd-party command packages.

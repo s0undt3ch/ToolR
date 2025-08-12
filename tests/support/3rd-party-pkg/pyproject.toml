@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "3rd-party-pkg"
+version = "1.0.0"
+description = "Test package for entry point discovery"
+authors = [
+    {name = "Test Author", email = "test@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "toolr",
+]
+
+[project.entry-points."toolr.tools"]
+commands = "thirdparty.commands"
+
+[tool.setuptools.packages.find]
+where = ["."]

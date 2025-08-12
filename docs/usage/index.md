@@ -61,6 +61,7 @@ Docstrings are really useful and can greatly improve the CLI UX:
 It can even render some markdown tables!
 
 ### Module Help
+
 ```bash
 toolr example -h
 Usage: toolr example [-h] {hello,goodbye,multiply,math} ...
@@ -87,6 +88,7 @@ Example:
 ```
 
 ### ``math`` command help
+
 ```bash
 toolr example math -h
 Usage: toolr example math [-h] [--operation OPERATION] [--verbose] A B
@@ -103,3 +105,75 @@ Options:
                         Operation to perform. Choices: 'add', 'subtract', 'multiply', 'divide'. (default: add)
   --verbose             Whether to print the result calculation. Defaults to False, print only the result. (default: False)
 ```
+
+## Advanced Topics
+
+### Third-Party Commands
+
+ToolR supports 3rd-party commands from installable Python packages. This allows you to extend ToolR's functionality by installing additional packages that provide their own commands.
+
+#### Creating a 3rd-Party Package
+
+To create a package that contributes commands to ToolR, you need to:
+
+1. **Define your commands** using the standard ToolR API
+2. **Register an entry point** in your package's `pyproject.toml`
+
+Here's an example of a 3rd-party package structure:
+
+```python title="thirdparty/commands.py"
+from __future__ import annotations
+
+from toolr import Context
+from toolr import command_group
+
+third_party_group = command_group("third-party", "Third Party Tools", "Tools from third-party packages")
+
+@third_party_group.command("hello")
+def hello_command(ctx: Context, name: str = "World") -> None:
+    """Say hello to someone.
+
+    Args:
+        ctx: The execution context
+        name: Name to greet (default: World)
+    """
+    ctx.console.print(f"Hello, {name} from 3rd-party package!")
+
+@third_party_group.command("version")
+def version_command(ctx: Context) -> None:
+    """Show the version of the 3rd-party package.
+
+    Args:
+        ctx: The execution context
+    """
+    ctx.console.print("3rd-party package version 1.0.0")
+```
+
+#### Entry Point Configuration
+
+In your package's `pyproject.toml`, define the entry point:
+
+```toml
+[project.entry-points."toolr.tools"]
+<this name is not important> = "<package>.<module calling toolr.command_group()>"
+```
+
+For example:
+
+```toml
+[project.entry-points."toolr.tools"]
+commands = "thirdparty.commands"
+```
+
+#### Installation and Discovery
+
+Once installed alongside ToolR, the package will automatically contribute its commands. You can see a complete working example in the [ToolR repository](https://github.com/s0undt3ch/ToolR/tree/main/tests/support/3rd-party-pkg).
+
+#### Command Resolution
+
+When multiple packages provide commands with the same name:
+
+* **Repository commands** (commands defined in your local `tools/` directory) **override** 3rd-party commands
+* If the parent command group is shared, 3rd-party commands **augment** the existing command group
+
+This allows for flexible command composition while maintaining local control over command behavior.
