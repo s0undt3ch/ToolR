@@ -31,25 +31,15 @@ def dummy_parser():
 
 
 @pytest.fixture
-def dummy_registry():
-    """Create a dummy registry that doesn't have side effects."""
-
-    class DummyRegistry:
-        def discover_and_build(self, parser):
-            pass
-
-    return DummyRegistry()
-
-
-@pytest.fixture
-def registry(dummy_registry):
-    with patch.object(main_module, "registry", dummy_registry):
-        yield dummy_registry
-
-
-@pytest.fixture
-def parser(dummy_parser, registry):
-    with patch.object(main_module, "Parser", dummy_parser):
+def parser(dummy_parser):
+    with (
+        # Make sure our command groups list is empty
+        patch("toolr._registry.get_command_group_list", return_value=[]),
+        # Make sure we don't load any entry points
+        patch("importlib.metadata.entry_points", return_value=[]),
+        # Use our dummy parser
+        patch.object(main_module, "Parser", dummy_parser),
+    ):
         yield parser
 
 

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from toolr import Context
-from toolr import registry
+from toolr import command_group
 
 # Create a simple command group
-docker_group = registry.command_group("docker", "Docker Commands", "Docker-related tools")
+docker_group = command_group("docker", "Docker Commands", "Docker-related tools")
 
 
 @docker_group.command("build")

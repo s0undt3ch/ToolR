@@ -97,25 +97,34 @@ def test_boolean_flag_with_true_default(cli_parser):
     assert isinstance(args.quiet, bool)
 
 
-def test_multiple_boolean_flags(cli_parser):
+def test_multiple_boolean_flags(cli_parser, capfd):
     """Test multiple boolean flags."""
     # Test all flags
     args = cli_parser.parse_args(["test", "multiple-flags", "--verbose", "--quiet", "--debug"])
     assert args.verbose is True
     assert args.quiet is True
     assert args.debug is True
+    out, err = capfd.readouterr()
+    assert not err
+    assert not out
 
     # Test some flags
     args = cli_parser.parse_args(["test", "multiple-flags", "--verbose", "--debug"])
     assert args.verbose is True
     assert args.quiet is False
     assert args.debug is True
+    out, err = capfd.readouterr()
+    assert "CLI parsed options Namespace" in err
+    assert not out
 
     # Test no flags
     args = cli_parser.parse_args(["test", "multiple-flags"])
     assert args.verbose is False
     assert args.quiet is False
     assert args.debug is False
+    out, err = capfd.readouterr()
+    assert "Tools executing" in err
+    assert not out
 
 
 @pytest.mark.parametrize("alias", ["--verbose", "--verb", "-v"])

@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from typing import Annotated
 
-from toolr._context import Context
+from toolr import Context
 from toolr.utils._signature import Arg
 from toolr.utils._signature import KwArg
 from toolr.utils._signature import arg

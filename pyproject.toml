@@ -83,8 +83,8 @@ addopts = [
   "--strict-config",
   "--strict-markers",
 ]
-[tool.uv]
 
+[tool.uv]
 [dependency-groups]
 dev = [
     "attrs>=25.3.0",
@@ -92,6 +92,7 @@ dev = [
     "pytest>=8.3.5",
     "pytest-skip-markers>=1.5.2",
     "pytest-subtests>=0.14.2",
+    "3rd-party-pkg @ file://${PROJECT_ROOT}/tests/support/3rd-party-pkg",
 ]
 docs = [
     "markdown-include>=0.8.1",

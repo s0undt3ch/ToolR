@@ -7,7 +7,7 @@ from typing import Annotated
 
 import pytest
 
-from toolr._context import Context
+from toolr import Context
 from toolr._exc import SignatureError
 from toolr.utils._signature import Arg
 from toolr.utils._signature import KwArg

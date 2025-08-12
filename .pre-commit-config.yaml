@@ -66,8 +66,18 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
+        args:
+          - --ignore-words=.codespell.words.ignore
         additional_dependencies:
           - tomli
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.18.1
+    hooks:
+      - id: markdownlint-cli2
+        args:
+          - --config=.markdownlint.yaml
+          - --fix
 
   - repo: local
     hooks:

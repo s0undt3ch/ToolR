@@ -11,25 +11,27 @@ import pytest
 from toolr._parser import Parser
 from toolr._registry import CommandGroup
 from toolr._registry import CommandRegistry
+from toolr._registry import command_group as _command_group
 
 
 @pytest.fixture
-def _registry(tmp_path: Path) -> Iterator[CommandRegistry]:
+def _patch_get_command_group_list() -> Iterator[list[CommandGroup]]:
     """Patch the registry before each test."""
-    _registry = CommandRegistry()
-    with patch("toolr._registry.registry", _registry):
-        yield _registry
+    collector: list[CommandGroup] = []
+    with patch("toolr._registry.get_command_group_list", return_value=collector):
+        yield collector
 
 
 @pytest.fixture
-def command_group(_registry: CommandRegistry):
+def command_group(_patch_get_command_group_list: list[CommandGroup]):
     """Create a command group."""
-    return _registry.command_group("test", "Test", "Test commands")
+    return _command_group("test", "Test", "Test commands")
 
 
 @pytest.fixture
-def cli_parser(_registry: CommandRegistry, command_group: CommandGroup, tmp_path: Path):
+def cli_parser(command_group: CommandGroup, tmp_path: Path):
     """Create a parser for CLI testing."""
     parser = Parser(repo_root=tmp_path)
-    _registry.discover_and_build(parser)
+    registry = CommandRegistry()
+    registry.discover_and_build(parser)
     return parser
