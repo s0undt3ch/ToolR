@@ -22,8 +22,8 @@ def mock_context():
         repo_root=None,
         parser=None,
         verbosity=None,
-        console_stderr=None,
-        console_stdout=None,
+        _console_stderr=None,
+        _console_stdout=None,
     )
 
 

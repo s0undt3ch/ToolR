@@ -55,8 +55,8 @@ class Parser(Struct, frozen=True):
             parser=self,  # type: ignore[arg-type]
             repo_root=self.repo_root,
             verbosity=verbosity,
-            console_stderr=console_stderr,
-            console_stdout=console_stdout,
+            _console_stderr=console_stderr,
+            _console_stdout=console_stdout,
         )
         structs.force_setattr(self, "context", context)
 
@@ -168,8 +168,8 @@ class Parser(Struct, frozen=True):
         # Reset verbosity and consoles after parsing the CLI
         console_stderr, console_stdout = setup_consoles(verbosity)
         structs.force_setattr(self.context, "verbosity", verbosity)
-        structs.force_setattr(self.context, "console_stderr", console_stderr)
-        structs.force_setattr(self.context, "console_stdout", console_stdout)
+        structs.force_setattr(self.context, "_console_stderr", console_stderr)
+        structs.force_setattr(self.context, "_console_stdout", console_stdout)
         if "func" not in options:
             self.context.exit(1, "No command was passed.")
         structs.force_setattr(self, "options", options)

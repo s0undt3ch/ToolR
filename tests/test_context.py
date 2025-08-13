@@ -48,8 +48,8 @@ def ctx(parser, repo_root):
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        console_stderr=console_stderr,
-        console_stdout=console_stdout,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
     )
 
 
@@ -61,8 +61,8 @@ def verbose_ctx(parser, repo_root):
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        console_stderr=console_stderr,
-        console_stdout=console_stdout,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
     )
 
 
@@ -74,15 +74,15 @@ def quiet_ctx(parser, repo_root):
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        console_stderr=console_stderr,
-        console_stdout=console_stdout,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
     )
 
 
 def test_context_frozen(ctx):
     """Test that Context is frozen."""
     with pytest.raises(AttributeError) as excinfo:
-        ctx.console_stderr = None
+        ctx._console_stderr = None
     assert "immutable type: 'Context'" in str(excinfo.value)
 
 
@@ -193,8 +193,8 @@ def test_debug_output(parser, repo_root):
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        console_stderr=console_stderr,
-        console_stdout=console_stdout,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
     )
 
     with mock.patch.object(console_stderr, "log") as mock_log:
@@ -211,8 +211,8 @@ def test_debug_output(parser, repo_root):
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        console_stderr=console_stderr,
-        console_stdout=console_stdout,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
     )
 
     with mock.patch.object(console_stderr, "log") as mock_log:
@@ -226,8 +226,8 @@ def test_debug_output(parser, repo_root):
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        console_stderr=console_stderr,
-        console_stdout=console_stdout,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
     )
 
     with mock.patch.object(console_stderr, "log") as mock_log:
@@ -237,7 +237,7 @@ def test_debug_output(parser, repo_root):
 
 def test_info_output(ctx):
     """Test info output."""
-    with mock.patch.object(ctx.console_stderr, "log") as mock_log:
+    with mock.patch.object(ctx._console_stderr, "log") as mock_log:
         ctx.info("info message")
         mock_log.assert_called_once()
         call_kwargs = mock_log.call_args[1]
@@ -247,7 +247,7 @@ def test_info_output(ctx):
 
 def test_warn_output(ctx):
     """Test warning output."""
-    with mock.patch.object(ctx.console_stderr, "log") as mock_log:
+    with mock.patch.object(ctx._console_stderr, "log") as mock_log:
         ctx.warn("warning message")
         mock_log.assert_called_once()
         call_kwargs = mock_log.call_args[1]
@@ -257,7 +257,7 @@ def test_warn_output(ctx):
 
 def test_error_output(ctx):
     """Test error output."""
-    with mock.patch.object(ctx.console_stderr, "log") as mock_log:
+    with mock.patch.object(ctx._console_stderr, "log") as mock_log:
         ctx.error("error message")
         mock_log.assert_called_once()
         call_kwargs = mock_log.call_args[1]
@@ -286,7 +286,7 @@ def test_exit_without_message(ctx, capfd):
 
 def test_print_output(ctx):
     """Test print output."""
-    with mock.patch.object(ctx.console_stdout, "print") as mock_print:
+    with mock.patch.object(ctx._console_stdout, "print") as mock_print:
         ctx.print("test message", style="bold")
         mock_print.assert_called_once_with("test message", style="bold")
 
@@ -308,7 +308,7 @@ def test_console_verbosity_comparison():
 
 def test_info_output_quiet_context(quiet_ctx):
     """Test info output with quiet context (should not log due to verbosity check)."""
-    with mock.patch.object(quiet_ctx.console_stderr, "log") as mock_log:
+    with mock.patch.object(quiet_ctx._console_stderr, "log") as mock_log:
         quiet_ctx.info("info message")
         # In quiet context, info should not be logged due to verbosity check
         mock_log.assert_not_called()
@@ -316,7 +316,7 @@ def test_info_output_quiet_context(quiet_ctx):
 
 def test_warn_output_quiet_context(quiet_ctx):
     """Test warning output with quiet context (should still log)."""
-    with mock.patch.object(quiet_ctx.console_stderr, "log") as mock_log:
+    with mock.patch.object(quiet_ctx._console_stderr, "log") as mock_log:
         quiet_ctx.warn("warning message")
         mock_log.assert_called_once()
         call_kwargs = mock_log.call_args[1]
@@ -326,7 +326,7 @@ def test_warn_output_quiet_context(quiet_ctx):
 
 def test_error_output_quiet_context(quiet_ctx):
     """Test error output with quiet context (should still log)."""
-    with mock.patch.object(quiet_ctx.console_stderr, "log") as mock_log:
+    with mock.patch.object(quiet_ctx._console_stderr, "log") as mock_log:
         quiet_ctx.error("error message")
         mock_log.assert_called_once()
         call_kwargs = mock_log.call_args[1]
