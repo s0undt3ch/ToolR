@@ -239,7 +239,8 @@ warn_unused_ignores = true
 mypy_path = "python"
 exclude = [
   "tests/.*/files/.*\\.py",
-  "^tests/([^/]*/)*files/.*"
+  "^tests/([^/]*/)*files/.*",
+  "tests/support/3rd-party-pkg/.*"
 ]
 
 [[tool.mypy.overrides]]
