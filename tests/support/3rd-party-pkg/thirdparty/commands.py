@@ -14,7 +14,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
         ctx: The execution context
         name: Name to greet (default: World)
     """
-    ctx.console.print(f"Hello, {name} from 3rd-party package!")
+    ctx.print(f"Hello, {name} from 3rd-party package!")
 
 
 @third_party_group.command("version")
@@ -24,7 +24,7 @@ def version_command(ctx: Context) -> None:
     Args:
         ctx: The execution context
     """
-    ctx.console.print("3rd-party package version 1.0.0")
+    ctx.print("3rd-party package version 1.0.0")
 
 
 utils_group = command_group("utils", "Utility Commands", "General utility commands")
@@ -40,7 +40,7 @@ def echo_command(ctx: Context, message: str, repeat: int = 1) -> None:
         repeat: Number of times to repeat the message (default: 1)
     """
     for i in range(repeat):
-        ctx.console.print(f"[{i + 1}] {message}")
+        ctx.print(f"[{i + 1}] {message}")
 
 
 @utils_group.command("info")
@@ -50,8 +50,8 @@ def info_command(ctx: Context) -> None:
     Args:
         ctx: The execution context
     """
-    ctx.console.print("3rd-party package information:")
-    ctx.console.print("- Name: 3rd-party-pkg")
-    ctx.console.print("- Version: 1.0.0")
-    ctx.console.print("- Description: Test package for entry point discovery")
-    ctx.console.print("- Author: Test Author")
+    ctx.print("3rd-party package information:")
+    ctx.print("- Name: 3rd-party-pkg")
+    ctx.print("- Version: 1.0.0")
+    ctx.print("- Description: Test package for entry point discovery")
+    ctx.print("- Author: Test Author")

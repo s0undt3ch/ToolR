@@ -44,8 +44,8 @@ class Context(Struct, frozen=True):
     repo_root: pathlib.Path
     parser: ArgumentParser
     verbosity: ConsoleVerbosity
-    console: Console
-    console_stdout: Console
+    _console_stderr: Console
+    _console_stdout: Console
 
     def print(self, *args: Any, **kwargs: Any) -> None:
         """
@@ -55,7 +55,7 @@ class Context(Struct, frozen=True):
 
         See :func:`rich.console.Console.print` for more details.
         """
-        self.console_stdout.print(*args, **kwargs)
+        self._console_stdout.print(*args, **kwargs)
 
     def debug(self, *args: Any, **kwargs: Any) -> None:
         """
@@ -67,7 +67,7 @@ class Context(Struct, frozen=True):
         """
         if self.verbosity >= ConsoleVerbosity.VERBOSE:
             kwargs.update(style="log-debug", _stack_offset=2)
-            self.console.log(*args, **kwargs)
+            self._console_stderr.log(*args, **kwargs)
 
     def info(self, *args: Any, **kwargs: Any) -> None:
         """
@@ -79,7 +79,7 @@ class Context(Struct, frozen=True):
         """
         if self.verbosity >= ConsoleVerbosity.NORMAL:
             kwargs.update(style="log-info", _stack_offset=2)
-            self.console.log(*args, **kwargs)
+            self._console_stderr.log(*args, **kwargs)
 
     def warn(self, *args: Any, **kwargs: Any) -> None:
         """
@@ -90,7 +90,7 @@ class Context(Struct, frozen=True):
         See [rich.console.Console.log][rich.console.Console.log] for more details.
         """
         kwargs.update(style="log-warning", _stack_offset=2)
-        self.console.log(*args, **kwargs)
+        self._console_stderr.log(*args, **kwargs)
 
     def error(self, *args: Any, **kwargs: Any) -> None:
         """
@@ -101,7 +101,7 @@ class Context(Struct, frozen=True):
         See [rich.console.Console.log][rich.console.Console.log] for more details.
         """
         kwargs.update(style="log-error", _stack_offset=2)
-        self.console.log(*args, **kwargs)
+        self._console_stderr.log(*args, **kwargs)
 
     def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
         """
@@ -112,7 +112,7 @@ class Context(Struct, frozen=True):
                 style = "exit-ok"
             else:
                 style = "exit-failure"
-            self.console.print(message, style=style)
+            self._console_stderr.print(message, style=style)
         self.parser.exit(status)
 
     def run(

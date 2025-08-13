@@ -59,10 +59,10 @@ def test_command_registration(commands_tester):
     # Check that the command was registered
     command_groups = commands_tester.collected_command_groups()
     tools_test_group = command_groups["tools.test"]
-    assert len(tools_test_group._commands) == 1
-    name, func = tools_test_group._commands[0]
-    assert name == "hello"
-    assert func == hello_cmd
+    commands = tools_test_group.get_commands()
+    assert len(commands) == 1
+    assert "hello" in commands
+    assert commands["hello"] == hello_cmd
 
 
 def test_multiple_commands_same_group(commands_tester):
@@ -78,14 +78,12 @@ def test_multiple_commands_same_group(commands_tester):
         """Command 2."""
 
     command_groups = commands_tester.collected_command_groups()
-    assert len(command_groups["tools.test"]._commands) == 2
-    tools_test_group = command_groups["tools.test"]
-    name, func = tools_test_group._commands[0]
-    assert name == "cmd1"
-    assert func == cmd1
-    name, func = tools_test_group._commands[1]
-    assert name == "cmd2"
-    assert func == cmd2
+    commands = command_groups["tools.test"].get_commands()
+    assert len(commands) == 2
+    assert "cmd1" in commands
+    assert commands["cmd1"] == cmd1
+    assert "cmd2" in commands
+    assert commands["cmd2"] == cmd2
 
 
 def test_commands_on_nested_groups(commands_tester):
@@ -102,11 +100,15 @@ def test_commands_on_nested_groups(commands_tester):
         """Child command."""
 
     command_groups = commands_tester.collected_command_groups()
-    assert len(command_groups["tools.parent"]._commands) == 1
-    assert len(command_groups["tools.parent.child"]._commands) == 1
+    commands = command_groups["tools.parent"].get_commands()
+    assert len(commands) == 1
+    assert "parent_cmd" in commands
+    assert commands["parent_cmd"] == parent_cmd
 
-    assert command_groups["tools.parent"]._commands[0][0] == "parent_cmd"
-    assert command_groups["tools.parent.child"]._commands[0][0] == "child_cmd"
+    commands = command_groups["tools.parent.child"].get_commands()
+    assert len(commands) == 1
+    assert "child_cmd" in commands
+    assert commands["child_cmd"] == child_cmd
 
 
 def test_command_group_storage(commands_tester):
@@ -200,10 +202,10 @@ def test_function_name_to_command_name_conversion(commands_tester):
 
     # Check that the commands were registered with the correct names
     command_groups = commands_tester.collected_command_groups()
-    assert len(command_groups["tools.test"]._commands) == 7
+    assert len(command_groups["tools.test"].get_commands()) == 7
 
     # Find each command and verify the name conversion
-    command_map = {cmd[0]: cmd[1] for cmd in command_groups["tools.test"]._commands}
+    command_map = command_groups["tools.test"].get_commands()
 
     assert "simple-function" in command_map
     assert command_map["simple-function"] == simple_function

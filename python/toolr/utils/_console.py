@@ -40,6 +40,6 @@ def setup_consoles(verbosity: ConsoleVerbosity) -> tuple[Console, Console]:
     log_path = verbosity >= ConsoleVerbosity.VERBOSE
     log_time = include_timestamps()
     stderr = Console(stderr=True, log_path=log_path, log_time=log_time, **console_kwargs)
-    stdout = Console(log_path=log_path, log_time=log_time, **console_kwargs)
+    stdout = Console(stderr=False, log_path=log_path, log_time=log_time, **console_kwargs)
     rich.reconfigure(stderr=True, **console_kwargs)
     return stderr, stdout
