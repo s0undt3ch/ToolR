@@ -1,0 +1,64 @@
+name: Build Windows
+
+on:
+  workflow_call:
+    inputs:
+      display-name:
+        required: true
+        type: string
+        description: 'Display name for the build job'
+
+jobs:
+  build:
+    name: ${{ inputs.display-name }} (${{ matrix.python-version }}, ${{ matrix.arch }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
+        # Windows only supports AMD64 architecture
+        arch:
+          - "AMD64"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-cargo-${{ matrix.python-version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install `cibuildwheel`
+        run: |
+          pip install cibuildwheel
+
+      - name: Build wheels
+        env:
+          CIBW_PLATFORM: windows
+          CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_BUILD: ${{ matrix.python-version == '3.11' && 'cp311*' || matrix.python-version == '3.12' && 'cp312*' || 'cp313*' }}
+        run: |
+          echo "Building for Python ${{ matrix.python-version }} on ${{ matrix.arch }}"
+          echo "CIBW_BUILD=$CIBW_BUILD"
+          echo "CIBW_ARCHS=$CIBW_ARCHS"
+          cibuildwheel --output-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows-${{ matrix.python-version }}
+          path: dist

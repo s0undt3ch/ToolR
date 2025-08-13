@@ -56,297 +56,56 @@ jobs:
       - run: pre-commit install --install-hooks
       - run: pre-commit run --all-files --show-diff-on-failure --color=always
 
-  test:
+  test-linux:
     name: Test
-    runs-on: ${{ matrix.os }}
     needs:
       - pre-commit
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-        python-version:
-          - "3.11"
-          - "3.12"
-          - "3.13"
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ubuntu-latest
+      display-name: Linux
 
-    steps:
-      - uses: actions/checkout@v4
+  test-windows:
+    name: Test
+    needs:
+      - pre-commit
+    uses: ./.github/workflows/test.yml
+    with:
+      os: windows-latest
+      display-name: Windows
 
-      - uses: astral-sh/setup-uv@v5
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - id: python-version-checksum
-        run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - id: rust-version-checksum
-        run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache virtualenv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: >-
-            venv|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
-
-      - name: Cache `~/.cargo`
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}|cargo|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-
-      - name: Cache Rust `target/release`
-        uses: actions/cache@v4
-        with:
-          path: |
-            target/release
-          key: ${{ runner.os }}|target|release|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-
-      - name: Cache Rust `target/coverage`
-        uses: actions/cache@v4
-        with:
-          path: |
-            target/coverage
-          key: ${{ runner.os }}|target|coverage|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-
-      - name: Build Rust Release
-        run: |
-          cargo build --release --target-dir target/release
-
-      - name: Install Python Dependencies
-        run: |
-          uv sync --all-extras --dev
-
-      - name: Run Python Tests
-        env:
-          PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
-          COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
-        run: |
-          uv run coverage run -m pytest -ra -s -v --color=yes --junitxml=junit-${{ matrix.python-version }}-${{ matrix.os }}.xml
-
-      - name: Report Python Coverage
-        run: |
-          uv run coverage combine || true
-          uv run coverage xml
-          uv run coverage report
-
-      - name: Install Tarpaulin
-        run: |
-          cargo install cargo-tarpaulin --target-dir target/coverage
-
-      - name: Tarpaulin Build
-        run: |
-          cargo tarpaulin --no-run --target-dir target/coverage
-
-      - name: Run Rust Tests
-        run: |
-          cargo tarpaulin --workspace --tests --skip-clean --timeout 120 --out Xml --out Json --output-dir target/coverage
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          # Use OpenID Connect for secure authentication (no token needed)
-          use_oidc: true
-          flags: ${{ matrix.os }},${{ matrix.python-version }}
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
-        with:
-          # Use OpenID Connect for secure authentication (no token needed)
-          use_oidc: true
-          flags: ${{ matrix.os }},${{ matrix.python-version }}
+  test-macos:
+    name: Test
+    needs:
+      - pre-commit
+    uses: ./.github/workflows/test.yml
+    with:
+      os: macos-latest
+      display-name: macOS
 
   build-linux:
-    name: Build Linux
-    runs-on: ubuntu-latest
+    name: Build
     needs:
-      - test
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version:
-          - "3.11"
-          - "3.12"
-          - "3.13"
-        arch:
-          - "x86_64"
-          - "aarch64"
-        # This creates 6 parallel builds: 3 Python versions × 2 architectures
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: linux-cargo-${{ matrix.python-version }}-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install `cibuildwheel`
-        run: |
-          pip install cibuildwheel
-
-      - name: Set up QEMU for ARM emulation
-        uses: docker/setup-qemu-action@v3
-
-      - name: Build wheels
-        env:
-          CIBW_PLATFORM: linux
-          CIBW_ARCHS: ${{ matrix.arch }}
-          CIBW_BUILD: ${{ matrix.python-version == '3.11' && 'cp311*' || matrix.python-version == '3.12' && 'cp312*' || 'cp313*' }}
-        run: |
-          echo "Building for Python ${{ matrix.python-version }} on ${{ matrix.arch }}"
-          echo "CIBW_BUILD=$CIBW_BUILD"
-          echo "CIBW_ARCHS=$CIBW_ARCHS"
-          cibuildwheel --output-dir dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-linux-${{ matrix.python-version }}-${{ matrix.arch }}
-          path: dist
+      - test-linux
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      display-name: Linux
 
   build-windows:
-    name: Build Windows
-    runs-on: windows-latest
+    name: Build
     needs:
-      - test
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version:
-          - "3.11"
-          - "3.12"
-          - "3.13"
-        # Windows only supports AMD64 architecture
-        arch:
-          - "AMD64"
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: windows-cargo-${{ matrix.python-version }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install `cibuildwheel`
-        run: |
-          pip install cibuildwheel
-
-      - name: Build wheels
-        env:
-          CIBW_PLATFORM: windows
-          CIBW_ARCHS: ${{ matrix.arch }}
-          CIBW_BUILD: ${{ matrix.python-version == '3.11' && 'cp311*' || matrix.python-version == '3.12' && 'cp312*' || 'cp313*' }}
-        run: |
-          echo "Building for Python ${{ matrix.python-version }} on ${{ matrix.arch }}"
-          echo "CIBW_BUILD=$CIBW_BUILD"
-          echo "CIBW_ARCHS=$CIBW_ARCHS"
-          cibuildwheel --output-dir dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-windows-${{ matrix.python-version }}
-          path: dist
+      - test-windows
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      display-name: Windows
 
   build-macos:
-    name: Build macOS
-    runs-on: macos-latest
+    name: Build
     needs:
-      - test
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version:
-          - "3.11"
-          - "3.12"
-          - "3.13"
-        arch:
-          - "x86_64"
-          - "aarch64"
-        # This creates 6 parallel builds: 3 Python versions × 2 architectures
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: macos-cargo-${{ matrix.python-version }}-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install `cibuildwheel`
-        run: |
-          pip install cibuildwheel
-
-      - name: Install Rust target for macOS cross-compilation
-        run: |
-          rustup target add x86_64-apple-darwin
-          rustup target add aarch64-apple-darwin
-
-      - name: Build wheels
-        env:
-          CIBW_PLATFORM: macos
-          # Convert aarch64 to arm64 for macOS (cibuildwheel convention)
-          CIBW_ARCHS: ${{ matrix.arch == 'aarch64' && 'arm64' || matrix.arch }}
-          CIBW_BUILD: ${{ matrix.python-version == '3.11' && 'cp311*' || matrix.python-version == '3.12' && 'cp312*' || 'cp313*' }}
-        run: |
-          echo "Building for Python ${{ matrix.python-version }} on ${{ matrix.arch }}"
-          echo "CIBW_BUILD=$CIBW_BUILD"
-          echo "CIBW_ARCHS=$CIBW_ARCHS"
-          cibuildwheel --output-dir dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-macos-${{ matrix.python-version }}-${{ matrix.arch }}
-          path: dist
+      - test-macos
+    uses: ./.github/workflows/build-macos.yml
+    with:
+      display-name: macOS
 
   docs:
     name: Publish Docs
@@ -415,11 +174,9 @@ jobs:
   publish:
     name: Publish to Test PyPI
     needs:
-      - test
       - build-linux
       - build-windows
       - build-macos
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:
@@ -431,8 +188,10 @@ jobs:
         run: |
           mkdir all_dists
           find dist/ -type f -name '*.whl' -exec mv {} all_dists/ \;
+          ls -lah all_dists/
 
       - name: Publish to Test PyPI (Trusted Publisher)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
@@ -448,7 +207,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - pre-commit
-      - test
       - docs
       - build-linux
       - build-windows
