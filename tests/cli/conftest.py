@@ -15,15 +15,15 @@ from toolr._registry import command_group as _command_group
 
 
 @pytest.fixture
-def _patch_get_command_group_list() -> Iterator[list[CommandGroup]]:
+def _patch_get_command_group_storage() -> Iterator[dict[str, CommandGroup]]:
     """Patch the registry before each test."""
-    collector: list[CommandGroup] = []
-    with patch("toolr._registry.get_command_group_list", return_value=collector):
+    collector: dict[str, CommandGroup] = {}
+    with patch("toolr._registry._get_command_group_storage", return_value=collector):
         yield collector
 
 
 @pytest.fixture
-def command_group(_patch_get_command_group_list: list[CommandGroup]):
+def command_group(_patch_get_command_group_storage: dict[str, CommandGroup]):
     """Create a command group."""
     return _command_group("test", "Test", "Test commands")
 

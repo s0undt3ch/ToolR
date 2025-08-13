@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
 from toolr import Context
 from toolr import command_group
+
+
+@pytest.fixture
+def skip_loading_entry_points() -> bool:
+    """Skip loading entry points."""
+    return True
 
 
 def test_complete_workflow_example(commands_tester):
@@ -65,10 +73,10 @@ def test_complete_workflow_example(commands_tester):
     assert "tools.docker.build.advanced" in command_groups
 
     # Verify command registration
-    assert len(command_groups["tools.docker"]._commands) == 2
-    assert len(command_groups["tools.docker.build"]._commands) == 2
-    assert len(command_groups["tools.docker.compose"]._commands) == 2
-    assert len(command_groups["tools.docker.build.advanced"]._commands) == 1
+    assert len(command_groups["tools.docker"].get_commands()) == 2
+    assert len(command_groups["tools.docker.build"].get_commands()) == 2
+    assert len(command_groups["tools.docker.compose"].get_commands()) == 2
+    assert len(command_groups["tools.docker.build.advanced"].get_commands()) == 1
 
     # Verify group relationships
     assert docker_group.full_name == "tools.docker"
@@ -148,13 +156,13 @@ def test_real_world_tool_structure(commands_tester):
         assert group.full_name == group_name
 
     # Verify we have all the expected commands
-    assert len(command_groups["tools.dev.test.coverage"]._commands) == 2
+    commands = command_groups["tools.dev.test.coverage"].get_commands()
+    assert len(commands) == 2
 
     # Test specific command paths
-    coverage_commands_group = command_groups["tools.dev.test.coverage"]
-    assert len(coverage_commands_group._commands) == 2
-    assert any(cmd[0] == "report" for cmd in coverage_commands_group._commands)
-    assert any(cmd[0] == "html" for cmd in coverage_commands_group._commands)
+    assert len(commands) == 2
+    assert "report" in commands
+    assert "html" in commands
 
 
 def test_command_group_hierarchy_storage(commands_tester):

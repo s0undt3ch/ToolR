@@ -57,8 +57,10 @@ def test_command_decorator_with_function():
 
     # Should return the function and register it
     assert decorated is test_command
-    assert len(group._commands) == 1
-    assert group._commands[0][0] == "test-command"  # Function name with underscores replaced
+    commands = group.get_commands()
+    assert len(commands) == 1
+    assert "test-command" in commands
+    assert commands["test-command"] is test_command
 
 
 def test_entry_points_discovery_empty():

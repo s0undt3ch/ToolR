@@ -184,6 +184,7 @@ class Parser(Struct, frozen=True):
             err_msg = "parser.parse_args() was not called."
             raise RuntimeError(err_msg)
         self.options.func(self.context, self.options)
+        self.exit(0)
 
     def __getattr__(self, attr: str) -> Any:
         """

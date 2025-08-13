@@ -137,7 +137,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
         ctx: The execution context
         name: Name to greet (default: World)
     """
-    ctx.console.print(f"Hello, {name} from 3rd-party package!")
+    ctx.print(f"Hello, {name} from 3rd-party package!")
 
 @third_party_group.command("version")
 def version_command(ctx: Context) -> None:
@@ -146,7 +146,7 @@ def version_command(ctx: Context) -> None:
     Args:
         ctx: The execution context
     """
-    ctx.console.print("3rd-party package version 1.0.0")
+    ctx.print("3rd-party package version 1.0.0")
 ```
 
 #### Entry Point Configuration

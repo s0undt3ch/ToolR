@@ -14,8 +14,8 @@ def test_3rd_party_commands(commands_tester: CommandsTester):
     assert "tools.third-party" in command_groups
     assert "tools.utils" in command_groups
 
-    third_party_commands = [cmd[0] for cmd in command_groups["tools.third-party"]._commands]
-    utils_commands = [cmd[0] for cmd in command_groups["tools.utils"]._commands]
+    third_party_commands = command_groups["tools.third-party"].get_commands()
+    utils_commands = command_groups["tools.utils"].get_commands()
     assert "hello" in third_party_commands
     assert "version" in third_party_commands
     assert "echo" in utils_commands

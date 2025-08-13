@@ -37,7 +37,7 @@ class CommandGroup(Struct, frozen=True):
     description: str
     long_description: str | None = None
     parent: str | None = None
-    _commands: list[tuple[str, Callable[..., Any]]] = field(default_factory=list)
+    __commands: dict[str, Callable[..., Any]] = field(default_factory=dict)
 
     @property
     def full_name(self) -> str:
@@ -70,7 +70,9 @@ class CommandGroup(Struct, frozen=True):
             assert isinstance(name, str)
 
         def decorator(func: F) -> F:
-            self._commands.append((name, func))
+            if name in self.__commands:
+                log.debug("Command '%s' already exists in group '%s', overriding", name, self.full_name)
+            self.__commands[name] = func
             return func
 
         return decorator
@@ -100,6 +102,10 @@ class CommandGroup(Struct, frozen=True):
             docstring=docstring,
         )
 
+    def get_commands(self) -> dict[str, Callable[..., Any]]:
+        """Get the commands in this group."""
+        return {name: self.__commands[name] for name in sorted(self.__commands)}
+
 
 class CommandRegistry(Struct, frozen=True):
     """Registry for CLI commands and their subcommands."""
@@ -124,8 +130,8 @@ class CommandRegistry(Struct, frozen=True):
 
     def _discover_commands(self) -> None:
         """Discover both project local as well as 3rd party commands."""
-        self._discover_local_commands()
         self._discover_entry_points_commands()
+        self._discover_local_commands()
 
     def _discover_local_commands(self) -> None:
         """Recursively discover and import command modules from tools/."""
@@ -163,9 +169,9 @@ class CommandRegistry(Struct, frozen=True):
         # Create a hierarchy of subparsers based on the dot notation paths
         parser_hierarchy: dict[str, _SubParsersAction] = {}
 
-        collector = get_command_group_list()
+        collector = _get_command_group_storage()
 
-        for group in sorted(collector, key=attrgetter("full_name")):
+        for group in sorted(collector.values(), key=attrgetter("full_name")):
             if group.parent == "tools":
                 # Top-level command group
                 parent_subparsers = self.parser.subparsers
@@ -207,8 +213,9 @@ class CommandRegistry(Struct, frozen=True):
             parser_hierarchy[group_full_name] = subparsers
 
             # Now add all the pending commands to their respective groups
-            for command_name, func in group._commands:  # noqa: SLF001
-                signature = get_signature(func)
+            commands = group.get_commands()
+            for command_name in commands:
+                signature = get_signature(commands[command_name])
                 cmd_parser = subparsers.add_parser(
                     command_name,
                     help=signature.short_description,
@@ -227,19 +234,19 @@ class CommandRegistry(Struct, frozen=True):
         self._build_parsers()
 
 
-def get_command_group_list() -> list[CommandGroup]:
+def _get_command_group_storage() -> dict[str, CommandGroup]:
     """Get the list of collected command groups.
 
     This function acts as a singleton for the list of collected command groups.
 
     Returns:
-        A list of CommandGroup instances
+        A dictionary of CommandGroup instances by their full name
     """
     try:
-        collector = get_command_group_list.__command_groups__  # type: ignore[attr-defined]
+        collector = _get_command_group_storage.__command_groups__  # type: ignore[attr-defined]
     except AttributeError:
-        command_groups: list[CommandGroup] = []
-        collector = get_command_group_list.__command_groups__ = command_groups  # type: ignore[attr-defined]
+        command_groups: dict[str, CommandGroup] = {}
+        collector = _get_command_group_storage.__command_groups__ = command_groups  # type: ignore[attr-defined]
     return collector
 
 
@@ -272,6 +279,14 @@ def command_group(
     if parent is None:
         parent = "tools"
 
+    collector = _get_command_group_storage()
+
+    group: CommandGroup | None = collector.get(f"{parent}.{name}")
+    if group is not None:
+        # In this case, we return the existing group
+        log.debug("Command group '%s' already exists, returning existing group", f"{parent}.{name}")
+        return group
+
     if docstring is not None:
         if description is not None or long_description is not None:
             err_msg = "You can't pass both docstring and description or long_description"
@@ -287,15 +302,11 @@ def command_group(
         assert description is not None
 
     # Create the command group
-    group = CommandGroup(
+    collector[f"{parent}.{name}"] = group = CommandGroup(
         name=name,
         title=title,
         description=description,
         parent=parent,
         long_description=long_description,
     )
-
-    collector = get_command_group_list()
-    collector.append(group)
-
     return group

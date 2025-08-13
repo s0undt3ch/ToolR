@@ -4,6 +4,7 @@ Utilities for testing ToolR and supported commands.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -26,12 +27,15 @@ class CommandsTester:
     """
 
     search_path: Path
+    skip_loading_entry_points: bool = field(default=False, repr=False)
     parser: Parser = field(init=False, repr=False)
     registry: CommandRegistry = field(init=False, repr=False)
     sys_path: list[str] = field(init=False, repr=False)
     sys_modules: dict[str, ModuleType] = field(init=False, repr=False)
-    command_group_collector: list[CommandGroup] = field(init=False, repr=False, factory=list)
+    command_group_collector: dict[str, CommandGroup] = field(init=False, repr=False, factory=dict)
     command_group_patcher: _patch = field(init=False, repr=False)
+    entry_points_patcher: _patch = field(init=False, repr=False)
+    cwd: Path = field(init=False, repr=False, factory=Path.cwd)
 
     @parser.default
     def _default_parser(self) -> Parser:
@@ -47,23 +51,36 @@ class CommandsTester:
 
     @sys_modules.default
     def _default_sys_modules(self) -> dict[str, ModuleType]:
-        # Copy sys.modules but exclude our testing thirdparty package
-        return {name: sys.modules[name] for name in sys.modules if not name.startswith(("tools.", "thirdparty"))}
+        # Copy sys.modules but exclude our testing thirdparty package and any local tools already imported
+        return {
+            name: sys.modules[name]
+            for name in sys.modules
+            if name not in ("tools", "thirdparty") and not name.startswith(("tools.", "thirdparty."))
+        }
 
     @command_group_patcher.default
     def _default_command_group_patcher(self) -> _patch:
-        return patch("toolr._registry.get_command_group_list", return_value=self.command_group_collector)
+        return patch("toolr._registry._get_command_group_storage", return_value=self.command_group_collector)
+
+    @entry_points_patcher.default
+    def _default_entry_points_patcher(self) -> _patch:
+        return patch("importlib.metadata.entry_points", return_value=[])
 
     def collected_command_groups(self) -> dict[str, CommandGroup]:
         """
         Get the collected command groups.
         """
-        return {group.full_name: group for group in self.command_group_collector}
+        return {**self.command_group_collector}
 
     def __enter__(self) -> Self:
         """
         Enter the context manager.
         """
+        sys.modules.clear()
+        sys.modules.update(self.sys_modules)
+        os.chdir(self.search_path)
+        if self.skip_loading_entry_points:
+            self.entry_points_patcher.start()
         self.command_group_patcher.start()
         sys.path.insert(0, str(self.search_path))
         return self
@@ -72,8 +89,9 @@ class CommandsTester:
         """
         Exit the context manager.
         """
+        os.chdir(self.cwd)
         self.command_group_patcher.stop()
+        if self.skip_loading_entry_points:
+            self.entry_points_patcher.stop()
         self.command_group_collector.clear()
         sys.path[:] = self.sys_path
-        sys.modules.clear()
-        sys.modules.update(self.sys_modules)

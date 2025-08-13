@@ -16,7 +16,7 @@ from toolr._registry import CommandRegistry
 log = logging.getLogger(__name__)
 
 
-def main() -> NoReturn:  # type: ignore[misc]
+def main(argv: list[str] | None = None) -> NoReturn:  # type: ignore[misc]
     """
     Main CLI entry-point for python tools scripts.
     """
@@ -36,7 +36,7 @@ def main() -> NoReturn:  # type: ignore[misc]
     registry = CommandRegistry()
     registry.discover_and_build(parser)
 
-    parser.parse_args()
+    parser.parse_args(argv)
     parser.run()
 
 

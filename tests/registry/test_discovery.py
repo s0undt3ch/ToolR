@@ -37,8 +37,8 @@ def test_discover_simple_case():
         assert "tools.git" in command_groups
 
         # Should have pending commands
-        assert len(command_groups["tools.git"]._commands) == 2
-        assert len(command_groups["tools.docker"]._commands) == 2
+        assert len(command_groups["tools.git"].get_commands()) == 2
+        assert len(command_groups["tools.docker"].get_commands()) == 2
 
         # Check specific command groups
         docker_group = command_groups["tools.docker"]
@@ -94,5 +94,5 @@ def test_discover_mixed_case():
         assert "tools.deployment.aws" in command_groups
 
         # Check that we have both top-level and nested commands
-        assert len(command_groups["tools.deployment"]._commands) == 2  # status, rollback
-        assert len(command_groups["tools.deployment.k8s"]._commands) >= 2  # deploy, scale
+        assert len(command_groups["tools.deployment"].get_commands()) == 2  # status, rollback
+        assert len(command_groups["tools.deployment.k8s"].get_commands()) >= 2  # deploy, scale
