@@ -22,7 +22,7 @@ def mock_context():
         repo_root=None,
         parser=None,
         verbosity=None,
-        console=None,
+        console_stderr=None,
         console_stdout=None,
     )
 
