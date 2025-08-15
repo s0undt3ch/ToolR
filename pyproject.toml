@@ -110,6 +110,7 @@ docs = [
     "mkdocs-awesome-nav>=3.1.2",
     "mkdocs-material>=9.6.16",
     "mkdocstrings[python]>=0.30.0",
+    "ruff>=0.12.9",
 ]
 
 [tool.ruff]

@@ -68,9 +68,9 @@ class Context(Struct, frozen=True):
         """
         Prompt the user for input.
 
-        This is a wrapper around [rich.prompt.Prompt.ask][rich.prompt.Prompt.ask].
+        This is a wrapper around [rich.prompt.Prompt.ask][rich.prompt].
 
-        See [rich.prompt.Prompt.ask][rich.prompt.Prompt.ask] for more details.
+        See [rich.prompt.Prompt.ask][rich.prompt] for more details.
         """
         return self._prompt(
             prompt,
