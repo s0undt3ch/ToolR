@@ -2,7 +2,7 @@
 minimum_pre_commit_version: 3.0.0
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-merge-conflict  # Check for files that contain merge conflict strings.
       - id: trailing-whitespace   # Trims trailing whitespace.
@@ -28,17 +28,17 @@ repos:
       - id: actionlint
 
   - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.10.0
+    rev: v0.11.0
     hooks:
       - id: shellcheck
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.7.20
+    rev: 0.8.11
     hooks:
       - id: uv-lock
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.12.3"
+    rev: "v0.12.9"
     hooks:
       - id: ruff-format
       - id: ruff
@@ -47,7 +47,7 @@ repos:
         exclude: .pre-commit-hooks/.*\.py
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.16.1
+    rev: v1.17.1
     hooks:
       - id: mypy
         name: Run mypy against the code base
