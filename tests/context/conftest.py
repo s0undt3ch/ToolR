@@ -10,7 +10,7 @@ import pytest
 
 from toolr._context import ConsoleVerbosity
 from toolr._context import Context
-from toolr.utils._console import setup_consoles
+from toolr.utils._console import Consoles
 
 
 @pytest.fixture
@@ -40,37 +40,37 @@ def parser():
 @pytest.fixture
 def ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.NORMAL
-    console_stderr, console_stdout = setup_consoles(verbosity)
+    consoles = Consoles.setup(verbosity)
     return Context(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        _console_stderr=console_stderr,
-        _console_stdout=console_stdout,
+        _console_stderr=consoles.stderr,
+        _console_stdout=consoles.stdout,
     )
 
 
 @pytest.fixture
 def verbose_ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.VERBOSE
-    console_stderr, console_stdout = setup_consoles(verbosity)
+    consoles = Consoles.setup(verbosity)
     return Context(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        _console_stderr=console_stderr,
-        _console_stdout=console_stdout,
+        _console_stderr=consoles.stderr,
+        _console_stdout=consoles.stdout,
     )
 
 
 @pytest.fixture
 def quiet_ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.QUIET
-    console_stderr, console_stdout = setup_consoles(verbosity)
+    consoles = Consoles.setup(verbosity)
     return Context(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        _console_stderr=console_stderr,
-        _console_stdout=console_stdout,
+        _console_stderr=consoles.stderr,
+        _console_stdout=consoles.stdout,
     )

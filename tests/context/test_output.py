@@ -6,23 +6,23 @@ from unittest import mock
 
 from toolr._context import ConsoleVerbosity
 from toolr._context import Context
-from toolr.utils._console import setup_consoles
+from toolr.utils._console import Consoles
 
 
 def test_debug_output(parser, repo_root):
     """Test debug output with different verbosity levels."""
     # Test with verbose context
     verbosity = ConsoleVerbosity.VERBOSE
-    console_stderr, console_stdout = setup_consoles(verbosity)
+    consoles = Consoles.setup(verbosity)
     verbose_ctx = Context(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        _console_stderr=console_stderr,
-        _console_stdout=console_stdout,
+        _console_stderr=consoles.stderr,
+        _console_stdout=consoles.stdout,
     )
 
-    with mock.patch.object(console_stderr, "log") as mock_log:
+    with mock.patch.object(consoles.stderr, "log") as mock_log:
         verbose_ctx.debug("debug message")
         mock_log.assert_called_once()
         call_kwargs = mock_log.call_args[1]
@@ -31,31 +31,31 @@ def test_debug_output(parser, repo_root):
 
     # Test with normal context (should not log debug)
     verbosity = ConsoleVerbosity.NORMAL
-    console_stderr, console_stdout = setup_consoles(verbosity)
+    consoles = Consoles.setup(verbosity)
     normal_ctx = Context(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        _console_stderr=console_stderr,
-        _console_stdout=console_stdout,
+        _console_stderr=consoles.stderr,
+        _console_stdout=consoles.stdout,
     )
 
-    with mock.patch.object(console_stderr, "log") as mock_log:
+    with mock.patch.object(consoles.stderr, "log") as mock_log:
         normal_ctx.debug("debug message")
         mock_log.assert_not_called()
 
     # Test with quiet context (should not log debug)
     verbosity = ConsoleVerbosity.QUIET
-    console_stderr, console_stdout = setup_consoles(verbosity)
+    consoles = Consoles.setup(verbosity)
     quiet_ctx = Context(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
-        _console_stderr=console_stderr,
-        _console_stdout=console_stdout,
+        _console_stderr=consoles.stderr,
+        _console_stdout=consoles.stdout,
     )
 
-    with mock.patch.object(console_stderr, "log") as mock_log:
+    with mock.patch.object(consoles.stderr, "log") as mock_log:
         quiet_ctx.debug("debug message")
         mock_log.assert_not_called()
 
