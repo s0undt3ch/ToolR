@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from toolr._context import ConsoleVerbosity
-from toolr.utils._console import setup_consoles
+from toolr.utils._console import Consoles
 
 
 @pytest.fixture(
@@ -16,17 +16,17 @@ def verbosity(request):
 
 @pytest.fixture
 def _consoles(verbosity):
-    return setup_consoles(verbosity)
+    return Consoles.setup(verbosity)
 
 
 @pytest.fixture
 def stdout(_consoles):
-    return _consoles[1]
+    return _consoles.stdout
 
 
 @pytest.fixture
 def stderr(_consoles):
-    return _consoles[0]
+    return _consoles.stderr
 
 
 def test_stdout(stdout, capfd):

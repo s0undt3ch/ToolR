@@ -5,11 +5,14 @@ from pathlib import Path
 from typing import Any
 from typing import Literal
 from typing import NoReturn
+from typing import TextIO
+from typing import overload
 
 from msgspec import Struct
 from rich.console import Console
 from rich.console import ConsoleRenderable
 from rich.console import RichCast
+from rich.text import TextType
 
 from toolr.utils.command import CommandResult
 
@@ -25,6 +28,82 @@ class Context(Struct, frozen=True):
     _console_stderr: Console = ...
     _console_stdout: Console = ...
 
+    # Boolean
+    @overload
+    def prompt(
+        self,
+        prompt: TextType,
+        expected_type: type[bool],
+        *,
+        default: bool | None = None,
+        show_default: bool = True,
+    ) -> bool: ...
+
+    # Password string
+    @overload
+    def prompt(
+        self,
+        prompt: TextType,
+        expected_type: type[str],
+        *,
+        password: bool = True,
+        default: str | None = None,
+        case_sensitive: bool = True,
+    ) -> str: ...
+
+    # Integer
+    @overload
+    def prompt(
+        self,
+        prompt: TextType,
+        expected_type: type[int],
+        *,
+        choices: list[str] | None = None,
+        default: int | None = None,
+        show_default: bool = True,
+        show_choices: bool = True,
+    ) -> int: ...
+
+    # Float
+    @overload
+    def prompt(
+        self,
+        prompt: TextType,
+        expected_type: type[float],
+        *,
+        choices: list[str] | None = None,
+        default: float | None = None,
+        show_default: bool = True,
+        show_choices: bool = True,
+    ) -> float: ...
+
+    # Generic string (default when expected_type is None)
+    @overload
+    def prompt(
+        self,
+        prompt: TextType,
+        expected_type: None = None,
+        *,
+        choices: list[str] | None = None,
+        default: None = None,
+        case_sensitive: bool = True,
+        show_default: bool = True,
+        show_choices: bool = True,
+    ) -> str: ...
+    def _prompt(
+        self,
+        prompt: TextType,
+        expected_type: type[str | int | float | bool] | None = None,
+        *,
+        password: bool = False,
+        case_sensitive: bool = True,
+        choices: list[str] | None = None,
+        default: str | float | bool | None = None,
+        show_default: bool = True,
+        show_choices: bool = True,
+        console: Console | None = None,
+        stream: TextIO | None = None,
+    ) -> str | int | float | bool: ...
     def print(
         self,
         *args: ConsoleRenderable | RichCast | str,

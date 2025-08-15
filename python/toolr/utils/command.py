@@ -173,7 +173,7 @@ def run(  # noqa: PLR0915
             CommandResult(args=command_args, stdout=stdout_file, stderr=stderr_file, returncode=returncode),
         )
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Clean up on error
         if stdout_file and hasattr(stdout_file, "close"):
             stdout_file.close()

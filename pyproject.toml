@@ -110,6 +110,7 @@ docs = [
     "mkdocs-awesome-nav>=3.1.2",
     "mkdocs-material>=9.6.16",
     "mkdocstrings[python]>=0.30.0",
+    "ruff>=0.12.9",
 ]
 
 [tool.ruff]
@@ -167,6 +168,9 @@ ignore = [
 "python/toolr/__main__.py" = [
   "F401",   #  `tools` imported but unused
   "PLC0415" # `import` should be at the top-level of a file
+]
+"python/toolr/_context.py" = [
+  "PYI041", # redundant-numeric-union
 ]
 "python/toolr/utils/_command.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
