@@ -40,7 +40,7 @@ def parser():
 @pytest.fixture
 def ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.NORMAL
-    consoles = Consoles.setup(verbosity)
+    consoles = Consoles.setup_no_colors(verbosity)
     return Context(
         parser=parser,
         repo_root=repo_root,
@@ -53,7 +53,7 @@ def ctx(parser, repo_root):
 @pytest.fixture
 def verbose_ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.VERBOSE
-    consoles = Consoles.setup(verbosity)
+    consoles = Consoles.setup_no_colors(verbosity)
     return Context(
         parser=parser,
         repo_root=repo_root,
@@ -66,7 +66,7 @@ def verbose_ctx(parser, repo_root):
 @pytest.fixture
 def quiet_ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.QUIET
-    consoles = Consoles.setup(verbosity)
+    consoles = Consoles.setup_no_colors(verbosity)
     return Context(
         parser=parser,
         repo_root=repo_root,

@@ -168,6 +168,9 @@ ignore = [
   "F401",   #  `tools` imported but unused
   "PLC0415" # `import` should be at the top-level of a file
 ]
+"python/toolr/_context.py" = [
+  "PYI041", # redundant-numeric-union
+]
 "python/toolr/utils/_command.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
   "N818",   # Exception name `*` should be named with an Error suffix"

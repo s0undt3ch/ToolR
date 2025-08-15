@@ -13,13 +13,19 @@ from enum import IntEnum
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import NoReturn
+from typing import TextIO
 
 from msgspec import Struct
+from rich.prompt import Confirm
+from rich.prompt import FloatPrompt
+from rich.prompt import IntPrompt
+from rich.prompt import Prompt
 
 from toolr.utils import command
 
 if TYPE_CHECKING:
     from rich.console import Console
+    from rich.text import TextType
 
     from toolr.utils.command import CommandResult
 
@@ -46,6 +52,82 @@ class Context(Struct, frozen=True):
     verbosity: ConsoleVerbosity
     _console_stderr: Console
     _console_stdout: Console
+
+    def prompt(
+        self,
+        prompt: TextType,
+        expected_type: type[str | int | float | bool] | None = None,
+        *,
+        password: bool = False,
+        case_sensitive: bool = True,
+        choices: list[str] | None = None,
+        default: str | int | float | bool | None = None,
+        show_default: bool = True,
+        show_choices: bool = True,
+    ) -> str | int | float | bool:
+        """
+        Prompt the user for input.
+
+        This is a wrapper around [rich.prompt.Prompt.ask][rich.prompt.Prompt.ask].
+
+        See [rich.prompt.Prompt.ask][rich.prompt.Prompt.ask] for more details.
+        """
+        return self._prompt(
+            prompt,
+            expected_type,
+            password=password,
+            case_sensitive=case_sensitive,
+            choices=choices,
+            default=default,
+            show_default=show_default,
+            show_choices=show_choices,
+        )
+
+    def _prompt(
+        self,
+        prompt: TextType,
+        expected_type: type[str | int | float | bool] | None = None,
+        *,
+        password: bool = False,
+        case_sensitive: bool = True,
+        choices: list[str] | None = None,
+        default: str | int | float | bool | None = None,
+        show_default: bool = True,
+        show_choices: bool = True,
+        console: Console | None = None,
+        stream: TextIO | None = None,
+    ) -> str | int | float | bool:
+        """
+        This is the actual implementation of the prompt method with two additional arguments to simplify testing.
+        """
+        klass: type[Prompt | IntPrompt | FloatPrompt | Confirm]
+        if expected_type in (str, None):
+            klass = Prompt
+        elif expected_type is int:
+            klass = IntPrompt
+        elif expected_type is float:
+            klass = FloatPrompt
+        elif expected_type is bool:
+            klass = Confirm
+        else:
+            err_msg = f"Unsupported expected_type: {expected_type}"
+            raise ValueError(err_msg)
+
+        if choices is not None and not choices:
+            err_msg = "choices cannot be an empty list"
+            raise ValueError(err_msg)
+
+        return klass.ask(
+            prompt,
+            console=console or self._console_stdout,
+            password=password,
+            choices=choices,
+            default=default,  # type: ignore[arg-type]
+            case_sensitive=case_sensitive,
+            show_default=show_default,
+            show_choices=show_choices,
+            stream=stream,
+        )
 
     def print(self, *args: Any, **kwargs: Any) -> None:
         """
