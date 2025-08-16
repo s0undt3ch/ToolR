@@ -1,0 +1,79 @@
+name: Setup UV
+description: Setup UV for a given Python version
+
+inputs:
+  python-version:
+    required: true
+    description: 'Python version to use'
+
+  cache-prefix:
+    required: true
+    description: "The prefix to use for the cache key"
+
+  uv-version:
+    default: ""
+    description: "The version of uv to install e.g., `0.5.0` Defaults to the version in pyproject.toml or 'latest'."
+
+  uv-sync-args:
+    default: "--all-extras --dev"
+    description: "The arguments to pass to the uv sync command. e.g., `--group docs` or `--dev`"
+
+outputs:
+  uv-version:
+    description: "The version of uv installed"
+    value: ${{ steps.install-uv.outputs.uv-version }}
+
+  python-version-checksum:
+    description: "The checksum of the Python version"
+    value: ${{ steps.python-version-checksum.outputs.version-sha256sum }}
+
+  uv-version-checksum:
+    description: "The checksum of the UV version"
+    value: ${{ steps.uv-version-checksum.outputs.version-sha256sum }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Get Python version checksum
+      id: python-version-checksum
+      shell: bash
+      run: |
+        VERSION_SHA256SUM=$(python --version --version | sha256sum | cut -d ' ' -f 1)
+        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+
+    - name: Install uv
+      id: install-uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        version: ${{ inputs.uv-version }}
+
+    - name: Get UV version checksum
+      id: uv-version-checksum
+      shell: bash
+      run: |
+        VERSION_SHA256SUM=$(uv --version | sha256sum | cut -d ' ' -f 1)
+        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+
+    - name: Set up cache
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: >-
+          venv|
+          ${{ runner.os }}|
+          ${{ inputs.cache-prefix }}|
+          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
+          ${{ steps.uv-version-checksum.outputs.version-sha256sum }}|
+          ${{ hashFiles('**/uv.lock') }}
+
+    - name: Install Python Dependencies
+      shell: bash
+      run: |
+        uv sync ${{ inputs.uv-sync-args }}
