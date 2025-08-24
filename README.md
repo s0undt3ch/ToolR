@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img width="240px" src="docs/imgs/toolr.png" alt="ToolR - AI Generated Logo"/>
+  <img width="240px" src="https://raw.githubusercontent.com/s0undt3ch/Toolr/main/docs/imgs/toolr.png" alt="ToolR - AI Generated Logo">
 </h1>
 
 <h2 align="center">
