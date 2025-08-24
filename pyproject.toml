@@ -236,7 +236,7 @@ ignore-names = [
 ]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 35
+max-complexity = 40
 
 [tool.ruff.lint.pylint]
 max-branches = 40

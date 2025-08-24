@@ -75,6 +75,7 @@ def test_signature_setup_parser():
         choices=None,
         required=False,
         nargs=None,
+        group=None,
     )
 
     signature = Signature(
@@ -122,6 +123,7 @@ def test_signature_call(mock_context):
         choices=None,
         required=False,
         nargs=None,
+        group=None,
     )
 
     signature = Signature(
@@ -220,6 +222,7 @@ def test_signature_call_with_mixed_arguments(mock_context):
         choices=None,
         required=False,
         nargs=None,
+        group=None,
     )
 
     signature = Signature(

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from typing import Annotated
+
+from toolr import arg
 
 from . import docker_group
 
@@ -14,9 +17,25 @@ build_group = docker_group.command_group("build", "Build Commands", "Docker imag
 
 
 @build_group.command("image")
-def build_image(ctx: Context) -> None:
-    """Build a Docker image."""
-    ctx.print("docker build image executed")
+def build_image(
+    ctx: Context,
+    *,
+    verbose: Annotated[bool, arg(group="verbosity")] = False,
+    quiet: Annotated[bool, arg(group="verbosity")] = False,
+) -> None:
+    """Build a Docker image.
+
+    Args:
+        verbose: Enable verbose output.
+        quiet: Suppress all output.
+    """
+    if verbose:
+        ctx.info("Verbose mode enabled")
+    elif quiet:
+        ctx.info("Quiet mode enabled")
+    else:
+        ctx.info("Normal mode")
+    ctx.info("docker build image executed")
 
 
 @build_group.command("context")
