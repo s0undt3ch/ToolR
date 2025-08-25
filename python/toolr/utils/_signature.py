@@ -28,6 +28,7 @@ from typing import get_type_hints
 from msgspec import Struct
 
 from toolr._exc import SignatureError
+from toolr._exc import SignatureParameterError
 from toolr.utils._docstrings import parse_docstring
 
 if TYPE_CHECKING:
@@ -124,10 +125,10 @@ class Signature(Struct, Generic[F], frozen=True):
             argument.setup_parser(parser)
 
         for group_name, group_arguments in mutually_exclusive_groups.items():
-            if not group_arguments:
+            if not group_arguments:  # pragma: no cover
                 # How did this ever happen?!
                 err_msg = f"Group {group_name} has no arguments"
-                raise SignatureError(err_msg)
+                raise SignatureError(err_msg, self.func)
 
             group = parser.add_mutually_exclusive_group()
             for argument in group_arguments:
@@ -208,7 +209,7 @@ def arg(
 def get_signature(func: F) -> Signature:
     if func.__doc__ is None:
         err_msg = f"Function {func.__name__} has no docstring"
-        raise SignatureError(err_msg)
+        raise SignatureError(err_msg, func)
 
     parsed_docstring = parse_docstring(func.__doc__)
     short_description = parsed_docstring.short_description
@@ -219,7 +220,7 @@ def get_signature(func: F) -> Signature:
 
     if not params:
         err_msg = f"Function {func.__name__} must have at least one parameter (ctx: Context)"
-        raise SignatureError(err_msg)
+        raise SignatureError(err_msg, func)
 
     first_param_name, first_param = params.pop(0)
 
@@ -231,14 +232,14 @@ def get_signature(func: F) -> Signature:
 
     # For consistency sake, check if the first parameter is named "ctx"
     if first_param_name != "ctx":
-        raise SignatureError(context_err_msg)
+        raise SignatureError(context_err_msg, func)
 
     # Get resolved type hints (handles string annotations from __future__ import annotations)
     try:
         type_hints = get_type_hints(func, include_extras=True)
     except (NameError, AttributeError, TypeError) as exc:
         err_msg = f"Failed to get type hints for {func.__name__}"
-        raise SignatureError(err_msg) from exc
+        raise SignatureError(err_msg, func) from exc
 
     arguments = []
 
@@ -246,7 +247,10 @@ def get_signature(func: F) -> Signature:
     for param_name, param in params:
         # Use resolved type hint if available, otherwise fall back to raw annotation
         resolved_annotation = type_hints.get(param_name, param.annotation)
-        parameter = _parse_parameter(param_name, param, resolved_annotation, parsed_docstring)
+        try:
+            parameter = _parse_parameter(param_name, param, resolved_annotation, parsed_docstring)
+        except SignatureParameterError as exc:
+            raise SignatureError(exc.message, func) from None
         arguments.append(parameter)
 
     return Signature(
@@ -360,12 +364,12 @@ def _parse_parameter(  # noqa: PLR0915
             err_msg = f"{klass.__name__} {param_name!r} has more than two types: , ".join(
                 arg.__name__ for arg in actual_type.__args__
             )
-            raise SignatureError(err_msg)
+            raise SignatureParameterError(err_msg)
 
         # If it doesn't have more than two types, the second type must be None
         if actual_type.__args__[1] is not type(None):
             err_msg = f"The second type of {klass.__name__} {param_name!r} must be None"
-            raise SignatureError(err_msg)
+            raise SignatureParameterError(err_msg)
 
         # Now, the type that we're really interested in is the first one
         actual_type = actual_type.__args__[0]
@@ -376,7 +380,7 @@ def _parse_parameter(  # noqa: PLR0915
             f"{klass.__name__} {param_name!r} has no description in the docstring which is required "
             "to generate the help message."
         )
-        raise SignatureError(err_msg)
+        raise SignatureParameterError(err_msg)
 
     # If we have an ArgumentSpec config, use it as base
     if arg_config:
@@ -394,7 +398,7 @@ def _parse_parameter(  # noqa: PLR0915
         if arg_config.group is not None:
             if positional:
                 err_msg = f"Positional parameter {param_name!r} cannot be in a mutually exclusive group."
-                raise SignatureError(err_msg)
+                raise SignatureParameterError(err_msg)
             group = arg_config.group
 
     if nargs is None and param.kind == Parameter.VAR_POSITIONAL:
@@ -411,13 +415,13 @@ def _parse_parameter(  # noqa: PLR0915
             for choice in choices:
                 if not isinstance(choice, Enum):
                     err_msg = f"{klass.__name__} {param_name!r} has choices and they are not of an Enum type."
-                    raise SignatureError(err_msg)
+                    raise SignatureParameterError(err_msg)
 
                 if not isinstance(choice, actual_type):
                     err_msg = (
                         f"{klass.__name__} {param_name!r} has choices and they are not of the same type as the enum."
                     )
-                    raise SignatureError(err_msg)
+                    raise SignatureParameterError(err_msg)
         choices_mapping = {choice.name.lower(): choice for choice in choices}
         # Now reset choices to None so that argparse does not handle them, our action does.
         choices = None
@@ -437,13 +441,13 @@ def _parse_parameter(  # noqa: PLR0915
         elif isinstance(actual_type, GenericAlias):
             if len(actual_type.__args__) > 1:
                 err_msg = f"{klass.__name__} {param_name!r} has more than one type: {original_type}"
-                raise SignatureError(err_msg)
+                raise SignatureParameterError(err_msg)
 
             # Now, the type that we're really interested in is the first one
             actual_type = actual_type.__args__[0]
             if isinstance(actual_type, UnionType):
                 err_msg = f"{klass.__name__} {param_name!r} has more than one type: {original_type}"
-                raise SignatureError(err_msg)
+                raise SignatureParameterError(err_msg)
 
             if actual_type is bool:
                 action = AppendBoolAction
@@ -490,7 +494,7 @@ def _build_aliases(param_name: str, positional: bool, aliases: list[str] | None)
     if positional is True:
         if aliases:
             err_msg = f"Positional parameter {param_name!r} cannot have aliases."
-            raise SignatureError(err_msg)
+            raise SignatureParameterError(err_msg)
         return [param_name]
     default_alias = f"--{param_name.replace('_', '-')}"
     if aliases is None:
