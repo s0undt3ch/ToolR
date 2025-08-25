@@ -108,6 +108,66 @@ Options:
 
 ## Advanced Topics
 
+### Mutually Exclusive Arguments
+
+ToolR supports [mutually exclusive argument groups][argparse.ArgumentParser.add_argument_group], which allow you to
+define sets of arguments where only one can be used at a time.
+This is useful for scenarios like verbosity levels, output formats, or alternative processing modes.
+
+#### Basic Usage
+
+Use the `group` parameter in the [`arg()`][toolr.utils._signature.arg] function to specify which mutually exclusive group an argument belongs to:
+
+```python
+--8<-- "docs/usage/files/mutually-exclusive-1.py"
+```
+
+#### Verbose/Debug Example
+
+Here's a more comprehensive example showing different verbosity and debug levels:
+
+```python
+--8<-- "docs/usage/files/mutually-exclusive-2.py"
+```
+
+```python
+```
+
+#### Command Line Usage
+
+When using the above function, you can only specify one argument from each group:
+
+```bash
+# Valid usage - one from each group
+toolr analyze-data input.txt --verbose --json --fast
+
+# Invalid usage - multiple from verbosity group
+toolr analyze-data input.txt --verbose --quiet  # Error!
+
+# Invalid usage - multiple from format group  
+toolr analyze-data input.txt --json --yaml      # Error!
+
+# Valid usage - using defaults for some groups
+toolr analyze-data input.txt --debug --csv
+```
+
+#### Error Example
+
+```python
+# This will raise an error
+def invalid_function(
+    ctx: Context,
+    name: Annotated[str, arg(group="invalid")],  # Positional argument in group - ERROR!
+) -> None:
+    """This function will fail to parse.
+
+    Args:
+        name: The name parameter.
+    """
+```
+
+This would raise: `SignatureError: Positional parameter 'name' cannot be in a mutually exclusive group.`
+
 ### Third-Party Commands
 
 ToolR supports 3rd-party commands from installable Python packages. This allows you to extend ToolR's functionality by installing additional packages that provide their own commands.

@@ -5,7 +5,10 @@ from __future__ import annotations
 import enum
 from typing import Annotated
 
+import pytest
+
 from toolr import Context
+from toolr._exc import SignatureError
 from toolr.utils._signature import Arg
 from toolr.utils._signature import KwArg
 from toolr.utils._signature import arg
@@ -77,3 +80,56 @@ def test_complex_signature_parsing():
     assert signature.arguments[5].name == "files"
     assert signature.arguments[5].action == "append"
     assert isinstance(signature.arguments[5], KwArg)
+
+
+def test_mutually_exclusive_groups_basic():
+    """Test basic mutually exclusive groups functionality."""
+
+    def func(
+        ctx: Context,
+        input_file: str,
+        *,
+        verbose: Annotated[bool, arg(group="verbosity")] = False,
+        quiet: Annotated[bool, arg(group="verbosity")] = False,
+    ) -> None:
+        """Test function with mutually exclusive groups.
+
+        Args:
+            input_file: Input file path.
+            verbose: Enable verbose output.
+            quiet: Enable quiet output.
+        """
+
+    signature = get_signature(func)
+    assert len(signature.arguments) == 3
+
+    # Check that arguments have correct group
+    input_arg = signature.arguments[0]
+    assert input_arg.name == "input_file"
+    assert not hasattr(input_arg, "group")  # Arg doesn't have this
+
+    verbose_arg = signature.arguments[1]
+    assert verbose_arg.name == "verbose"
+    assert verbose_arg.group == "verbosity"
+
+    quiet_arg = signature.arguments[2]
+    assert quiet_arg.name == "quiet"
+    assert quiet_arg.group == "verbosity"
+
+
+def test_mutually_exclusive_groups_error_handling():
+    """Test error handling for mutually exclusive groups."""
+
+    def func(
+        ctx: Context,
+        name: Annotated[str, arg(group="group1")],  # Positional with group - should error
+    ) -> None:
+        """Test function that should raise an error.
+
+        Args:
+            name: The name parameter.
+        """
+
+    # This should raise an error because positional arguments can't be in mutually exclusive groups
+    with pytest.raises(SignatureError, match="Positional parameter 'name' cannot be in a mutually exclusive group"):
+        get_signature(func)

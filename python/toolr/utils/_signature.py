@@ -33,6 +33,7 @@ from toolr.utils._docstrings import parse_docstring
 if TYPE_CHECKING:
     from argparse import ArgumentParser
     from argparse import Namespace
+    from argparse import _MutuallyExclusiveGroup
 
     from toolr._context import Context
     from toolr.utils._docstrings import Docstring
@@ -94,12 +95,17 @@ class VarArg(Arg, Struct, frozen=True):
 
 class KwArg(Arg, Struct, frozen=True):
     required: bool
+    group: str | None
 
     def _build_parser_kwargs(self) -> dict[str, Any]:
         kwargs = super()._build_parser_kwargs()
         kwargs["dest"] = self.name
         kwargs["required"] = self.required
         return kwargs
+
+    def setup_parser(self, parser: ArgumentParser | _MutuallyExclusiveGroup) -> None:
+        args = self.aliases
+        parser.add_argument(*args, **self._build_parser_kwargs())
 
 
 class Signature(Struct, Generic[F], frozen=True):
@@ -110,8 +116,23 @@ class Signature(Struct, Generic[F], frozen=True):
     signature: inspect.Signature
 
     def setup_parser(self, parser: ArgumentParser) -> None:
+        mutually_exclusive_groups: dict[str, list[KwArg]] = {}
         for argument in self.arguments:
+            if isinstance(argument, KwArg) and argument.group is not None:
+                mutually_exclusive_groups.setdefault(argument.group, []).append(argument)
+                continue
             argument.setup_parser(parser)
+
+        for group_name, group_arguments in mutually_exclusive_groups.items():
+            if not group_arguments:
+                # How did this ever happen?!
+                err_msg = f"Group {group_name} has no arguments"
+                raise SignatureError(err_msg)
+
+            group = parser.add_mutually_exclusive_group()
+            for argument in group_arguments:
+                argument.setup_parser(group)
+
         parser.set_defaults(func=self)
 
     def __repr__(self) -> str:
@@ -146,6 +167,7 @@ class ArgumentAnnotation(Struct, frozen=True):
     action: str | None = None
     choices: list[Any] | None = None
     nargs: NargsType | None = None
+    group: str | None = None
 
 
 def arg(
@@ -156,6 +178,7 @@ def arg(
     action: str | None = None,
     choices: list[Any] | None = None,
     nargs: NargsType | None = None,
+    group: str | None = None,
 ) -> ArgumentAnnotation:
     """
     Create an ArgumentAnnotation.
@@ -169,9 +192,16 @@ def arg(
         action: The action for the argument.
         choices: The choices for the argument.
         nargs: The number of arguments to accept.
+        group: The name of the mutually exclusive group for the argument.
     """
     return ArgumentAnnotation(
-        aliases=aliases, required=required, metavar=metavar, action=action, choices=choices, nargs=nargs
+        aliases=aliases,
+        required=required,
+        metavar=metavar,
+        action=action,
+        choices=choices,
+        nargs=nargs,
+        group=group,
     )
 
 
@@ -290,6 +320,7 @@ def _parse_parameter(  # noqa: PLR0915
     action: partial[EnumAction] | type[AppendBoolAction] | str | None = None
     choices: list[Any] | None = None
     nargs: NargsType | None = None
+    group: str | None = None
     klass: type[Arg | VarArg | KwArg]
     if param.kind == Parameter.VAR_POSITIONAL:
         klass = VarArg
@@ -360,6 +391,11 @@ def _parse_parameter(  # noqa: PLR0915
             choices = arg_config.choices
         if arg_config.nargs is not None:
             nargs = arg_config.nargs
+        if arg_config.group is not None:
+            if positional:
+                err_msg = f"Positional parameter {param_name!r} cannot be in a mutually exclusive group."
+                raise SignatureError(err_msg)
+            group = arg_config.group
 
     if nargs is None and param.kind == Parameter.VAR_POSITIONAL:
         nargs = "*"
@@ -446,6 +482,7 @@ def _parse_parameter(  # noqa: PLR0915
         action=action,
         choices=choices,
         nargs=nargs,
+        group=group,
     )
 
 

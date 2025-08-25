@@ -41,7 +41,8 @@ repos:
     rev: "v0.12.9"
     hooks:
       - id: ruff-format
-      - id: ruff
+      - id: ruff-check
+        alias: ruff
         args:
           - --fix
         exclude: .pre-commit-hooks/.*\.py
