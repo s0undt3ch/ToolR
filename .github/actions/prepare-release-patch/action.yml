@@ -43,10 +43,10 @@ runs:
       run: |
         if [ -z "${{ inputs.release-version }}" ]; then
           echo "No release version provided, bumping version based on release type: ${{ inputs.release-type }}"
-          RELEASE_VERSION=$(uv run toolr version bump --${{ inputs.release-type }} --write)
+          RELEASE_VERSION=$(uv run toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
         else
           echo "Using provided release version: ${{ inputs.release-version }}"
-          RELEASE_VERSION=$(uv run toolr version bump ${{ inputs.release-version }} --write)
+          RELEASE_VERSION=$(uv run toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
         fi
 
     - name: Generate changelog for GH release
@@ -62,7 +62,15 @@ runs:
     - name: Prepare GH Release changelog
       shell: bash
       run: |
-        tail -n +3 .release-changes.md > .final-release-notes.md
+        tail -n +3 .release-changes.md > final-release-notes.md
+
+    - name: Upload Release Notes Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: toolr-${{ env.RELEASE_VERSION }}-release-notes.md
+        path: final-release-notes.md
+        retention-days: 7
+        if-no-files-found: error
 
     - name: Update CHANGELOG.md
       uses: orhun/git-cliff-action@v4

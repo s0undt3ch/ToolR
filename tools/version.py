@@ -60,6 +60,7 @@ def bump(
     minor: Annotated[bool, arg(group="version")] = False,
     patch: Annotated[bool, arg(group="version")] = False,
     dev: Annotated[bool, arg(group="version")] = False,
+    check_existing_tag: bool = False,
     write: bool = False,
 ) -> None:
     """
@@ -71,6 +72,7 @@ def bump(
         patch: Whether to bump the patch version.
         dev: Whether to bump the version for a development version.
         new_version: The version to bump to.
+        check_existing_tag: Whether to check if the release tag already exists.
         write: Whether to write the version to the file.
     """
     if new_version is None and not any([major, minor, patch, dev]):
@@ -102,6 +104,12 @@ def bump(
             ctx.exit(1)
 
         version = Version(f"{major_version}.{minor_version}.{patch_version}{dev_version}")
+
+    if check_existing_tag:
+        ret = ctx.run("git", "tag", "-v", str(version), capture_output=True, stream_output=False)
+        if ret.returncode == 0:
+            ctx.error(f"Tag {version} already exists")
+            ctx.exit(1)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:

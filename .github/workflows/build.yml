@@ -1,0 +1,85 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      display-name:
+        required: true
+        type: string
+        description: 'Display name for the build job'
+      release-patch-name:
+        required: true
+        type: string
+        description: 'Release patch to apply'
+      platform-matrix:
+        required: true
+        type: string
+        description: 'Platform matrix as JSON string'
+
+jobs:
+  build:
+    name: ${{ inputs.display-name }} (${{ matrix.python }}, ${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(inputs.platform-matrix) }}
+        python:
+          - "cp311"
+          - "cp312"
+          - "cp313"
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply Release Patch
+        uses: ./.github/actions/apply-release-patch
+        with:
+          release-patch-name: ${{ inputs.release-patch-name }}
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache-key: ${{ runner.os }}|${{ matrix.python }}|${{ matrix.platform.name }}|${{ hashFiles('**/Cargo.lock') }}
+          cache-directories: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        if: ${{ matrix.platform.emulation }}
+        with:
+          platforms: all
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.1.4
+        env:
+          CIBW_ARCHS_LINUX: all
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform.name }}
+
+      - name: Normalize wheel filenames
+        shell: bash
+        run: |
+          # Normalize wheel filenames: convert entire filename to lowercase
+          echo "Normalizing wheel filenames to lowercase..."
+          for wheel in wheelhouse/*.whl; do
+            if [ -f "$wheel" ]; then
+              basename=$(basename "$wheel")
+              normalized=$(echo "$basename" | tr '[:upper:]' '[:lower:]')
+              if [ "$basename" != "$normalized" ]; then
+                echo "Renaming $basename to $normalized"
+                mv "$wheel" "wheelhouse/$normalized"
+              fi
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheel-${{ matrix.python }}-${{ matrix.platform.name }}
+          path: wheelhouse/*.whl
