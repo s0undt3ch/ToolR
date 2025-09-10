@@ -1,0 +1,54 @@
+name: setup-pre-commit
+description: Setup 'pre-commit'
+
+inputs:
+  version:
+    description: Pre-commit version to install
+    required: true
+    default: 3.0.3
+  cache-seed:
+    required: true
+    description: Seed used to invalidate caches
+  python-version:
+    required: true
+    description: Python version to install
+    default: 3.11
+  rust-toolchain:
+    required: true
+    description: Rust toolchain to install
+    default: stable
+
+
+runs:
+  using: composite
+
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: ${{ inputs.rust-toolchain }}
+        components: ${{ inputs.rust-components }}
+
+    - run: pip install pre-commit
+      shell: bash
+
+    - id: python-version-checksum
+      run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - id: pre-commit-version-checksum
+      run: echo "version-sha256sum=$(pre-commit --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - uses: actions/cache@v4
+      with:
+        path: ${{ env.PRE_COMMIT_HOME }}
+        key: >-
+          precommit|${{ inputs.cache-seed }}|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
+      shell: bash
+
+    - run: pre-commit install --install-hooks
+      shell: bash

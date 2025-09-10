@@ -56,6 +56,28 @@ jobs:
       - run: pre-commit install --install-hooks
       - run: pre-commit run --all-files --show-diff-on-failure --color=always
 
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    needs:
+      - pre-commit
+    outputs:
+      release-version: ${{ steps.prepare-release.outputs.release-version }}
+      release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - uses: ./.github/actions/prepare-release-patch
+        id: prepare-release
+        with:
+          release-type: dev
+
   test-linux:
     name: Test
     needs:
@@ -73,7 +95,6 @@ jobs:
     with:
       os: windows-latest
       display-name: Windows
-
   test-macos:
     name: Test
     needs:
@@ -87,32 +108,38 @@ jobs:
     name: Build
     needs:
       - test-linux
+      - prepare-release
     uses: ./.github/workflows/build-linux.yml
     with:
       display-name: Linux
+      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
 
   build-windows:
     name: Build
     needs:
       - test-windows
+      - prepare-release
     uses: ./.github/workflows/build-windows.yml
     with:
       display-name: Windows
+      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
 
   build-macos:
     name: Build
     needs:
       - test-macos
+      - prepare-release
     uses: ./.github/workflows/build-macos.yml
     with:
       display-name: macOS
-
+      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
   docs:
     name: Publish Docs
     runs-on: ubuntu-latest
 
     needs:
       - pre-commit
+      - prepare-release
 
     permissions:
       contents: write
@@ -127,6 +154,11 @@ jobs:
           cache-prefix: docs
           python-version: "3.11"
           uv-sync-args: "--group docs"
+
+      - name: Apply Release Patch
+        uses: ./.github/actions/apply-release-patch
+        with:
+          release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
 
       - name: Build MkDocs site
         run: uv run mkdocs build
@@ -174,10 +206,8 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - pre-commit
+      - prepare-release
       - docs
-      - build-linux
-      - build-windows
-      - build-macos
       - publish
     steps:
       - uses: martialonline/workflow-status@v4

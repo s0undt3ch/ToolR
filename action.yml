@@ -2,6 +2,16 @@ name: "Setup ToolR"
 description: "Install ToolR via uvx and cache it"
 author: "Pedro Algarvio"
 
+inputs:
+  version:
+    description: ToolR version to install
+    default: "${{ github.ref_name }}"
+
+outputs:
+  version:
+    description: ToolR version installed
+    value: ${{ steps.install-toolr.outputs.version }}
+
 runs:
   using: "composite"
   steps:
@@ -9,23 +19,15 @@ runs:
       uses: astral-sh/setup-uv@v3
       with:
         # Cache key suffix — ensures different versions don't clobber each other
-        cache-suffix: toolr-${{ github.ref_name }}
-
-    - name: Determine ToolR version
-      id: version
-      shell: bash
-      run: |
-        if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "TOOLR_VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-        else
-          echo "TOOLR_VERSION=latest" >> $GITHUB_ENV
-        fi
+        cache-suffix: toolr-${{ inputs.version }}
 
     - name: Install ToolR
       shell: bash
+      id: install-toolr
       run: |
-        if [ "$TOOLR_VERSION" = "latest" ]; then
-          uvx toolr --version
+        if [ "${{ inputs.version }}" = "latest" ]; then
+          TOOLR_VERSION=$(uvx toolr --version)
         else
-          uvx toolr==${TOOLR_VERSION} --version
+          TOOLR_VERSION=$(uvx toolr==${{ inputs.version }} --version)
         fi
+        echo "version=$TOOLR_VERSION" >> "$GITHUB_OUTPUT"
