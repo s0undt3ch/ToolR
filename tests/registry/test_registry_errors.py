@@ -28,7 +28,7 @@ def test_registry_set_parser_twice_error():
 
     registry._set_parser(mock_parser1)
 
-    with pytest.raises(RuntimeError, match="A parser has already been set"):
+    with pytest.raises(RuntimeError, match=r"A parser has already been set"):
         registry._set_parser(mock_parser2)
 
 
@@ -40,6 +40,6 @@ def test_build_parsers_missing_parent_group(tmp_path: Path):
 
         # Should raise an error when building parsers
         with pytest.raises(
-            ValueError, match="Parent command group 'nonexistent.parent' for command 'child' does not exist"
+            ValueError, match=r"Parent command group 'nonexistent.parent' for command 'child' does not exist"
         ):
             tester.registry._build_parsers()

@@ -87,5 +87,5 @@ def test_entry_points_discovery_with_error():
 
     with patch("importlib.metadata.entry_points", return_value=[mock_entry_point]):
         # Should raise an error when entry point loading fails
-        with pytest.raises(ImportError, match="Module not found"):
+        with pytest.raises(ImportError, match=r"Module not found"):
             registry._discover_entry_points_commands()

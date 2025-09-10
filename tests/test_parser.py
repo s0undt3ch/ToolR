@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from toolr._context import ConsoleVerbosity
 from toolr._parser import Parser
+from toolr.utils._console import ConsoleVerbosity
 
 
 def _parameters():

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from toolr._context import ConsoleVerbosity
+from toolr.utils._console import ConsoleVerbosity
 
 
 def test_console_verbosity_repr():

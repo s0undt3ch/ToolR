@@ -12,7 +12,7 @@ def test_parser_run_without_parse_args():
     """Test that run() raises error when parse_args() wasn't called."""
     parser = Parser()
 
-    with pytest.raises(RuntimeError, match="parser.parse_args\\(\\) was not called"):
+    with pytest.raises(RuntimeError, match=r"parser.parse_args\(\) was not called"):
         parser.run()
 
 

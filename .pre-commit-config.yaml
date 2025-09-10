@@ -33,12 +33,12 @@ repos:
       - id: shellcheck
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.8.11
+    rev: 0.8.16
     hooks:
       - id: uv-lock
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.12.9"
+    rev: "v0.13.0"
     hooks:
       - id: ruff-format
       - id: ruff-check

@@ -161,7 +161,7 @@ def test_get_signature_no_docstring():
 
     def test_func(ctx: Context, name: str) -> None: ...
 
-    with pytest.raises(SignatureError, match="Function test_func has no docstring"):
+    with pytest.raises(SignatureError, match=r"Function test_func has no docstring"):
         get_signature(test_func)
 
 
@@ -171,7 +171,7 @@ def test_get_signature_no_parameters():
     def test_func() -> None:
         """Test function."""
 
-    with pytest.raises(SignatureError, match="Function test_func must have at least one parameter"):
+    with pytest.raises(SignatureError, match=r"Function test_func must have at least one parameter"):
         get_signature(test_func)
 
 
@@ -185,7 +185,7 @@ def test_get_signature_wrong_first_parameter_name():
             name: The name parameter.
         """
 
-    with pytest.raises(SignatureError, match="Function test_func must have 'ctx: Context' as the first parameter"):
+    with pytest.raises(SignatureError, match=r"Function test_func must have 'ctx: Context' as the first parameter"):
         get_signature(test_func)
 
 
@@ -199,7 +199,7 @@ def test_get_signature_missing_param_description():
             ctx: The context.
         """
 
-    with pytest.raises(SignatureError, match="Arg 'name' has no description in the docstring"):
+    with pytest.raises(SignatureError, match=r"Arg 'name' has no description in the docstring"):
         get_signature(test_func)
 
 
@@ -213,7 +213,7 @@ def test_get_signature_positional_with_aliases():
             name: The name parameter.
         """
 
-    with pytest.raises(SignatureError, match="Positional parameter 'name' cannot have aliases."):
+    with pytest.raises(SignatureError, match=r"Positional parameter 'name' cannot have aliases."):
         get_signature(test_func)
 
 
@@ -227,7 +227,7 @@ def test_get_signature_union_with_more_than_two_types():
             value: The value parameter.
         """
 
-    with pytest.raises(SignatureError, match="Arg 'value' has more than two types"):
+    with pytest.raises(SignatureError, match=r"Arg 'value' has more than two types"):
         get_signature(test_func)
 
 
@@ -241,5 +241,5 @@ def test_get_signature_union_second_type_not_none():
             value: The value parameter.
         """
 
-    with pytest.raises(SignatureError, match="The second type of Arg 'value' must be None"):
+    with pytest.raises(SignatureError, match=r"The second type of Arg 'value' must be None"):
         get_signature(test_func)
