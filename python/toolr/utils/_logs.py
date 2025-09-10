@@ -123,3 +123,27 @@ def include_timestamps() -> bool:
     Return True if any of the configured logging handlers includes timestamps.
     """
     return any(handler.formatter is TIMESTAMP_FORMATTER for handler in logging.root.handlers)
+
+
+def setup_logging(verbosity: int, timestamps: bool = False) -> None:
+    """
+    Setup logging level and logging handler formatter.
+    """
+    # Late import to avoid circular import issues
+    from toolr._context import ConsoleVerbosity  # noqa: PLC0415
+
+    match verbosity:
+        case ConsoleVerbosity.VERBOSE:
+            logging.root.setLevel(logging.DEBUG)
+        case ConsoleVerbosity.QUIET:
+            logging.root.setLevel(logging.CRITICAL + 1)
+        case _:
+            logging.root.setLevel(logging.INFO)
+
+    formatter: logging.Formatter
+    if timestamps:
+        formatter = TIMESTAMP_FORMATTER
+    else:
+        formatter = NO_TIMESTAMP_FORMATTER
+    for handler in logging.root.handlers:
+        handler.setFormatter(formatter)

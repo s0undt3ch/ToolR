@@ -17,7 +17,7 @@ from rich_argparse import ArgumentDefaultsRichHelpFormatter
 from toolr import __version__
 from toolr._context import ConsoleVerbosity
 from toolr._context import Context
-from toolr.utils import _logs
+from toolr.utils._logs import setup_logging
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -45,6 +45,8 @@ class Parser(Struct, frozen=True):
             verbosity = ConsoleVerbosity.QUIET
         else:
             verbosity = ConsoleVerbosity.NORMAL
+
+        setup_logging(verbosity=verbosity)
 
         # Late import to avoid circular import issues
         from toolr.utils._console import Consoles  # noqa: PLC0415
@@ -149,18 +151,9 @@ class Parser(Struct, frozen=True):
         verbosity = ConsoleVerbosity.NORMAL
         if options.quiet:
             verbosity = ConsoleVerbosity.QUIET
-            logging.root.setLevel(logging.CRITICAL + 1)
         elif options.debug:
             verbosity = ConsoleVerbosity.VERBOSE
-            logging.root.setLevel(logging.DEBUG)
-        else:
-            logging.root.setLevel(logging.INFO)
-        if options.timestamps:
-            for handler in logging.root.handlers:
-                handler.setFormatter(_logs.TIMESTAMP_FORMATTER)
-        else:
-            for handler in logging.root.handlers:
-                handler.setFormatter(_logs.NO_TIMESTAMP_FORMATTER)
+        setup_logging(verbosity=verbosity, timestamps=options.timestamps)
 
         # Late import to avoid circular import issues
         from toolr.utils._console import Consoles  # noqa: PLC0415
