@@ -1,0 +1,111 @@
+name: Prepare Release
+description: Prepare a release of ToolR
+
+inputs:
+  release-version:
+    required: false
+    description: 'Release version to prepare'
+
+  release-type:
+    required: false
+    description: 'Release type to prepare'
+    default: 'dev'
+    choices:
+      - 'major'
+      - 'minor'
+      - 'patch'
+      - 'dev'
+
+outputs:
+  release-version:
+    description: 'Prepared release version'
+    value: ${{ steps.bump-version.outputs.release-version }}
+
+  release-patch-name:
+    description: 'Name of the release patch'
+    value: ${{ steps.bump-version.outputs.release-patch-name }}
+
+runs:
+  using: composite
+
+  steps:
+
+    - name: Setup Virtual Environment
+      uses: ./.github/actions/setup-virtualenv
+      with:
+        cache-prefix: prepare-release
+        python-version: "3.11"
+        uv-sync-args: "--group docs"
+
+    - name: Bump Version
+      id: bump-version
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.release-version }}" ]; then
+          echo "No release version provided, bumping version based on release type: ${{ inputs.release-type }}"
+          RELEASE_VERSION=$(uv run toolr version bump --${{ inputs.release-type }} --write)
+        else
+          echo "Using provided release version: ${{ inputs.release-version }}"
+          RELEASE_VERSION=$(uv run toolr version bump ${{ inputs.release-version }} --write)
+        fi
+
+    - name: Generate changelog for GH release
+      id: git-cliff
+      uses: orhun/git-cliff-action@v4
+      with:
+        config: cliff.toml
+        args: --unreleased --strip all
+      env:
+        OUTPUT: .release-changes.md
+        GITHUB_REPO: ${{ github.repository }}
+
+    - name: Prepare GH Release changelog
+      shell: bash
+      run: |
+        tail -n +3 .release-changes.md > .final-release-notes.md
+
+    - name: Update CHANGELOG.md
+      uses: orhun/git-cliff-action@v4
+      with:
+        config: cliff.toml
+        args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
+      env:
+        GITHUB_REPO: ${{ github.repository }}
+
+    - name: Show Changes Diff
+      shell: bash
+      run: |
+        git diff --color
+
+    - name: Commit changelog
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        set +e
+        git add CHANGELOG.md
+
+    - name: Commit changes
+      shell: bash
+      run: |
+        # Run it twice so that pre-commit can fix anything that can be automatically fixed.
+        git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release" || \
+            git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
+
+    - name: Tag the release
+      shell: bash
+      run: |
+        git tag -a "${{ env.RELEASE_VERSION }}" -m "Release ${{ env.RELEASE_VERSION }}"
+
+    - name: Create Release Patch
+      shell: bash
+      run: |
+        git format-patch --keep-subject --binary --stdout HEAD^ > toolr-${{ env.RELEASE_VERSION }}.patch
+
+    - name: Upload Changes Diff Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: toolr-${{ env.RELEASE_VERSION }}.patch
+        path: toolr-${{ env.RELEASE_VERSION }}.patch
+        retention-days: 7
+        if-no-files-found: error
