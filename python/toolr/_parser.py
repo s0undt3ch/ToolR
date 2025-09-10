@@ -15,8 +15,8 @@ from msgspec import structs
 from rich_argparse import ArgumentDefaultsRichHelpFormatter
 
 from toolr import __version__
-from toolr._context import ConsoleVerbosity
 from toolr._context import Context
+from toolr.utils._console import ConsoleVerbosity
 from toolr.utils._logs import setup_logging
 
 if TYPE_CHECKING:

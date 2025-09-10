@@ -6,7 +6,7 @@ import logging
 import os
 from unittest.mock import patch
 
-from toolr._context import ConsoleVerbosity
+from toolr.utils._console import ConsoleVerbosity
 from toolr.utils._logs import NO_TIMESTAMP_FORMATTER
 from toolr.utils._logs import TIMESTAMP_FORMATTER
 from toolr.utils._logs import _get_default_formatter

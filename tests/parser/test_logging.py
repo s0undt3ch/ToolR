@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from unittest.mock import patch
 
-from toolr._context import ConsoleVerbosity
 from toolr._parser import Parser
+from toolr.utils._console import ConsoleVerbosity
 
 
 def test_parser_post_init_calls_setup_logging():

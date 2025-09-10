@@ -5,6 +5,8 @@ import os
 import sys
 from typing import Any
 
+from toolr.utils._console import ConsoleVerbosity
+
 STDOUT = sys.maxsize
 logging.STDOUT = STDOUT  # type: ignore[attr-defined]
 STDERR = sys.maxsize - 1
@@ -125,13 +127,10 @@ def include_timestamps() -> bool:
     return any(handler.formatter is TIMESTAMP_FORMATTER for handler in logging.root.handlers)
 
 
-def setup_logging(verbosity: int, timestamps: bool = False) -> None:
+def setup_logging(verbosity: ConsoleVerbosity, timestamps: bool = False) -> None:
     """
     Setup logging level and logging handler formatter.
     """
-    # Late import to avoid circular import issues
-    from toolr._context import ConsoleVerbosity  # noqa: PLC0415
-
     match verbosity:
         case ConsoleVerbosity.VERBOSE:
             logging.root.setLevel(logging.DEBUG)

@@ -8,9 +8,9 @@ from argparse import ArgumentParser
 
 import pytest
 
-from toolr._context import ConsoleVerbosity
 from toolr._context import Context
 from toolr.utils._console import Consoles
+from toolr.utils._console import ConsoleVerbosity
 
 
 @pytest.fixture

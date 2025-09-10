@@ -9,7 +9,6 @@ import pathlib
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from contextlib import contextmanager
-from enum import IntEnum
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import NoReturn
@@ -29,19 +28,7 @@ if TYPE_CHECKING:
 
     from toolr.utils.command import CommandResult
 
-
-class ConsoleVerbosity(IntEnum):
-    """Console verbosity levels."""
-
-    QUIET = 0
-    NORMAL = 1
-    VERBOSE = 2
-
-    def __repr__(self) -> str:
-        """
-        Return a string representation of the console verbosity.
-        """
-        return self.name.lower()
+from toolr.utils._console import ConsoleVerbosity
 
 
 class Context(Struct, frozen=True):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import IntEnum
 from typing import Any
 
 import rich
@@ -8,10 +8,19 @@ from msgspec import Struct
 from rich.console import Console
 from rich.theme import Theme
 
-from toolr.utils._logs import include_timestamps
 
-if TYPE_CHECKING:
-    from toolr._context import ConsoleVerbosity
+class ConsoleVerbosity(IntEnum):
+    """Console verbosity levels."""
+
+    QUIET = 0
+    NORMAL = 1
+    VERBOSE = 2
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the console verbosity.
+        """
+        return self.name.lower()
 
 
 class Consoles(Struct, frozen=True):
@@ -35,7 +44,7 @@ class Consoles(Struct, frozen=True):
     @classmethod
     def _setup_consoles(cls, verbosity: ConsoleVerbosity, **console_kwargs: Any) -> Consoles:
         # Late import to avoid circular import issues
-        from toolr._context import ConsoleVerbosity  # noqa: PLC0415
+        from toolr.utils._logs import include_timestamps  # noqa: PLC0415
 
         console_kwargs["theme"] = Theme(
             {

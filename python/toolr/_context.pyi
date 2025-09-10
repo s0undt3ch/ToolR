@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
 from collections.abc import Iterator
-from enum import IntEnum
 from pathlib import Path
 from typing import Any
 from typing import Literal
@@ -14,12 +13,8 @@ from rich.console import ConsoleRenderable
 from rich.console import RichCast
 from rich.text import TextType
 
+from toolr.utils._console import ConsoleVerbosity
 from toolr.utils.command import CommandResult
-
-class ConsoleVerbosity(IntEnum):
-    QUIET = 0
-    NORMAL = 1
-    VERBOSE = 2
 
 class Context(Struct, frozen=True):
     repo_root: Path
