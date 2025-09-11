@@ -1,0 +1,185 @@
+
+name: Release
+run-name: "Release (branch: ${{ github.ref_name }}; version: ${{ inputs.release-version }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-version:
+        required: false
+        type: string
+        description: 'Release version to prepare'
+      dry_run:
+        description: "Dry run (build and test but do not publish)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  pre-flight-checks:
+    runs-on: ubuntu-latest
+    environment: release-check
+
+    steps:
+      - name: Check For Admin Permission
+        uses: actions-cool/check-user-permission@v2
+        with:
+          require: admin
+          username: ${{ github.triggering_actor }}
+
+  prepare-ci:
+    name: Prepare CI
+    runs-on: ubuntu-latest
+    environment: release
+    outputs:
+      platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: prepare-release
+          python-version: "3.11"
+
+      - name: Generate Build Matrix
+        id: generate-build-matrix
+        run: |
+          uv run tools ci generate-build-matrix
+
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+      - prepare-ci
+    outputs:
+      release-version: ${{ steps.prepare-release.outputs.release-version }}
+      release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - uses: ./.github/actions/prepare-release-patch
+        id: prepare-release
+        with:
+          release-type: dev
+
+  build-linux:
+    name: Build
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/build.yml
+    with:
+      display-name: Linux
+      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+
+  build-windows:
+    name: Build
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/build.yml
+    with:
+      display-name: Windows
+      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+
+  build-macos:
+    name: Build
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/build.yml
+    with:
+      display-name: macOS
+      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+
+  publish-release:
+    name: Publish Release
+    environment: release
+    needs:
+      - build-linux
+      - build-windows
+      - build-macos
+      - prepare-release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cibw-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: toolr-${{ needs.prepare-release.outputs.release-version }}-release-notes.md
+          path: final-release-notes.md
+
+      - name: Attest final release artifacts
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/*.whl
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.release-version }}
+          name: ${{ needs.prepare-release.outputs.release-version }}
+          body_path: final-release-notes.md
+          files: dist/*
+          draft: false
+          prerelease: false
+          make_latest: true
+
+      - name: Publish to PyPI (Trusted Publisher)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://pypi.org/legacy/
+          packages-dir: dist/
+
+  set-pipeline-exit-status:
+    environment: release
+    permissions:
+      actions: read
+    # This step is just so we can make github require this step, to pass checks
+    # on a pull request instead of requiring all
+    name: Set the ${{ github.workflow }} Pipeline Exit Status
+    if: always()
+    runs-on: ubuntu-latest
+    needs:
+      - prepare-ci
+      - prepare-release
+      - publish-release
+    steps:
+      - uses: martialonline/workflow-status@v4
+        id: check
+      - run: echo "Workflow failed"
+        if: steps.check.outputs.status == 'failure'
+      - run: echo "Workflow was cancelled"
+        if: steps.check.outputs.status == 'cancelled'
+      - run: echo "Workflow was successful"
+        if: steps.check.outputs.status == 'success'

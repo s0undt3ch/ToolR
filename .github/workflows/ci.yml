@@ -3,9 +3,6 @@ name: CI Workflow
 on:
   push:
   pull_request:
-  release:
-    types:
-      - published
 
 concurrency:
   # Concurrency is defined in a way that concurrent builds against branches do
@@ -18,12 +15,32 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  attestations: write
 
 env:
   FORCE_COLOR: "1"
   PRE_COMMIT_HOME: ${{ github.workspace }}/.cache/pre-commit
 
 jobs:
+  prepare-ci:
+    name: Prepare CI
+    runs-on: ubuntu-latest
+    outputs:
+      platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: prepare-ci
+          python-version: "3.11"
+
+      - name: Generate Build Matrix
+        id: generate-build-matrix
+        run: |
+          uv run toolr ci generate-build-matrix
+
   pre-commit:
     name: Pre-commit
     runs-on: ubuntu-latest
@@ -107,32 +124,39 @@ jobs:
   build-linux:
     name: Build
     needs:
+      - prepare-ci
       - test-linux
       - prepare-release
-    uses: ./.github/workflows/build-linux.yml
+    uses: ./.github/workflows/build.yml
     with:
       display-name: Linux
       release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
 
   build-windows:
     name: Build
     needs:
+      - prepare-ci
       - test-windows
       - prepare-release
-    uses: ./.github/workflows/build-windows.yml
+    uses: ./.github/workflows/build.yml
     with:
       display-name: Windows
       release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
 
   build-macos:
     name: Build
     needs:
+      - prepare-ci
       - test-macos
       - prepare-release
-    uses: ./.github/workflows/build-macos.yml
+    uses: ./.github/workflows/build.yml
     with:
       display-name: macOS
       release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+
   docs:
     name: Publish Docs
     runs-on: ubuntu-latest
@@ -181,20 +205,20 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: dist/
+          pattern: cibw-wheel-*
+          path: dist
+          merge-multiple: true
 
       - name: Flatten dist/ directory
         run: |
-          mkdir all_dists
-          find dist/ -type f -name '*.whl' -exec mv {} all_dists/ \;
-          ls -lah all_dists/
+          ls -lah dist/
 
       - name: Publish to Test PyPI (Trusted Publisher)
         if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-          packages-dir: all_dists/
+          packages-dir: dist/
 
   set-pipeline-exit-status:
     permissions:
