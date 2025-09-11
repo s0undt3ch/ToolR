@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - dependencies:github-actions
+    assignees:
+      - s0undt3ch
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - dependencies:rust
+    assignees:
+      - s0undt3ch
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - dependencies:python
+    assignees:
+      - s0undt3ch
