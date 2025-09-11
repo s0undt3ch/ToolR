@@ -27,16 +27,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  pre-flight-checks:
-    runs-on: ubuntu-latest
-    environment: release-check
-
-    steps:
-      - name: Check For Admin Permission
-        uses: actions-cool/check-user-permission@v2
-        with:
-          require: admin
-          username: ${{ github.triggering_actor }}
 
   prepare-ci:
     name: Prepare CI
@@ -45,6 +35,13 @@ jobs:
     outputs:
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
     steps:
+
+      - name: Check For Admin Permission
+        uses: actions-cool/check-user-permission@v2
+        with:
+          require: admin
+          username: ${{ github.triggering_actor }}
+
       - uses: actions/checkout@v5
 
       - name: Setup Virtual Environment
@@ -56,7 +53,7 @@ jobs:
       - name: Generate Build Matrix
         id: generate-build-matrix
         run: |
-          uv run tools ci generate-build-matrix
+          uv run toolr ci generate-build-matrix
 
   prepare-release:
     name: Prepare Release
