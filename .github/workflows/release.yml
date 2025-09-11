@@ -44,7 +44,7 @@ jobs:
     outputs:
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
@@ -67,11 +67,11 @@ jobs:
       release-version: ${{ steps.prepare-release.outputs.release-version }}
       release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: 3.11
 
@@ -128,13 +128,13 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           pattern: cibw-wheel-*
           path: dist
           merge-multiple: true
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: toolr-${{ needs.prepare-release.outputs.release-version }}-release-notes.md
           path: final-release-notes.md
@@ -145,7 +145,7 @@ jobs:
           subject-path: dist/*.whl
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2.2.2
+        uses: softprops/action-gh-release@v2.3.3
         with:
           tag_name: ${{ needs.prepare-release.outputs.release-version }}
           name: ${{ needs.prepare-release.outputs.release-version }}
