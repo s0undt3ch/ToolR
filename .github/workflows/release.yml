@@ -128,13 +128,13 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           pattern: cibw-wheel-*
           path: dist
           merge-multiple: true
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: toolr-${{ needs.prepare-release.outputs.release-version }}-release-notes.md
           path: final-release-notes.md
