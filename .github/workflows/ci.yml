@@ -220,7 +220,7 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
           skip-existing: true
-          verbose: ${{ env.ACTIONS_STEP_DEBUG == 'true' }}
+          verbose: true
 
   set-pipeline-exit-status:
     permissions:

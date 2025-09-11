@@ -160,7 +160,7 @@ jobs:
         with:
           repository-url: https://pypi.org/legacy/
           packages-dir: dist/
-          verbose: ${{ env.ACTIONS_STEP_DEBUG == 'true' }}
+          verbose: true
 
   set-pipeline-exit-status:
     environment: release
