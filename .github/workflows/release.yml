@@ -122,6 +122,10 @@ jobs:
       - build-macos
       - prepare-release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
 
     steps:
       - uses: actions/download-artifact@v4
@@ -134,6 +138,11 @@ jobs:
         with:
           name: toolr-${{ needs.prepare-release.outputs.release-version }}-release-notes.md
           path: final-release-notes.md
+
+      - name: Attest final release artifacts
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/*.whl
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2.2.2
