@@ -31,7 +31,8 @@ def generate_build_matrix(ctx: Context) -> None:
             {"name": "musllinux_x86_64", "os": "ubuntu-latest"},
             {"name": "manylinux_aarch64", "os": "ubuntu-24.04-arm"},
             {"name": "musllinux_aarch64", "os": "ubuntu-24.04-arm"},
-            {"name": "manylinux_s390x", "os": "ubuntu-latest", "emulation": True},
+            # If we ever get a bug report asking to add s390x support, we can add it back.
+            # {"name": "manylinux_s390x", "os": "ubuntu-latest", "emulation": True},
         ],
     }
     github_output = os.environ.get("GITHUB_OUTPUT")
