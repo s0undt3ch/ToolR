@@ -60,8 +60,13 @@ jobs:
       release-version: ${{ steps.prepare-release.outputs.release-version }}
       release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
     steps:
-      - uses: ./github/actions/authenticated-checkout
+      - name: Configure Git
+        id: configure-git
+        uses: ./.github/actions/configure-git-authenticated
+
+      - uses: actions/checkout@v5
         with:
+          token: ${{ steps.configure-git.outputs.token }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v6
@@ -117,9 +122,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Configure Git
+        id: configure-git
+        uses: ./.github/actions/configure-git-authenticated
 
       - name: Checkout code
-        uses: ./github/actions/authenticated-checkout
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.configure-git.outputs.token }}
 
       - name: Apply Release Patch
         uses: ./.github/actions/apply-release-patch
