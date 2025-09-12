@@ -7,10 +7,10 @@ on:
         required: true
         type: string
         description: 'Display name for the build job'
-      release-patch-name:
+      release-tarball-name:
         required: true
         type: string
-        description: 'Release patch to apply'
+        description: 'Release tarball name'
       platform-matrix:
         required: true
         type: string
@@ -38,12 +38,11 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Apply Release Patch
-        uses: ./.github/actions/apply-release-patch
+      - name: Download Source Tarball Artifact
+        uses: actions/download-artifact@v4
         with:
-          release-patch-name: ${{ inputs.release-patch-name }}
+          name: ${{ inputs.release-tarball-name }}
+
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
@@ -64,6 +63,8 @@ jobs:
         env:
           CIBW_ARCHS_LINUX: all
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform.name }}
+        with:
+          package-dir: ${{ inputs.release-tarball-name }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v3
