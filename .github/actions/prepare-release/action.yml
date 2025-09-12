@@ -25,6 +25,10 @@ outputs:
     description: 'Name of the release patch'
     value: ${{ steps.bump-version.outputs.release-patch-name }}
 
+  release-notes-filename:
+    description: 'Name of the release notes file'
+    value: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+
   release-tarball-name:
     description: 'Name of the release tarball'
     value: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
@@ -64,23 +68,25 @@ runs:
         GITHUB_REPO: ${{ github.repository }}
 
     - name: Prepare GH Release changelog
+      id: prepare-release-notes
       shell: bash
       run: |
         tail -n +3 .release-changes.md > final-release-notes.md
+        echo "release-notes-filename=final-release-notes.md" >> "$GITHUB_OUTPUT"
 
     - name: Upload Release Notes Artifact
       id: upload-release-notes
       uses: actions/upload-artifact@v4
       with:
-        name: toolr-${{ env.RELEASE_VERSION }}-release-notes.md
-        path: final-release-notes.md
+        name: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+        path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
         retention-days: 7
         if-no-files-found: error
 
     - name: Attest release notes artifact
       uses: actions/attest-build-provenance@v3
       with:
-        subject-name: toolr-${{ env.RELEASE_VERSION }}-release-notes.md
+        subject-name: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
         subject-digest: sha256:${{ steps.upload-release-notes.outputs.artifact-digest }}
 
     - name: Update CHANGELOG.md
