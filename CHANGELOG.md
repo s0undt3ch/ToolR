@@ -6,13 +6,6 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.1.2 - 2025-09-12
-
-
-### <!-- 7 -->⚙️ Miscellaneous Tasks
-
-- *(release)* Publish GH release fixes
-
 ## 0.1.1 - 2025-09-12
 
 
