@@ -60,13 +60,31 @@ jobs:
       release-version: ${{ steps.prepare-release.outputs.release-version }}
       release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
     steps:
+      # We could stick this in a custom, in-repo action, but this would mean we would have to checkout
+      # the now, and then checkout again with higher privileges, which is why we're doing it here.
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        shell: bash
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
       - name: Configure Git
-        id: configure-git
-        uses: ./.github/actions/configure-git-authenticated
+        shell: bash
+        run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - uses: actions/checkout@v5
         with:
-          token: ${{ steps.configure-git.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v6
@@ -122,14 +140,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # We could stick this in a custom, in-repo action, but this would mean we would have to checkout
+      # the now, and then checkout again with higher privileges, which is why we're doing it here.
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        shell: bash
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
       - name: Configure Git
-        id: configure-git
-        uses: ./.github/actions/configure-git-authenticated
+        shell: bash
+        run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          token: ${{ steps.configure-git.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Apply Release Patch
         uses: ./.github/actions/apply-release-patch
