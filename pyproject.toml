@@ -32,7 +32,7 @@ toolr = "toolr.__main__:main"
 
 [project.urls]
 Repository = "https://github.com/s0undt3ch/ToolR"
-Documentation = "https://s0undt3ch.github.io/ToolR"
+Documentation = "https://toolr.readthedocs.io"
 Issues = "https://github.com/s0undt3ch/ToolR/issues"
 Changelog = "https://github.com/s0undt3ch/ToolR/blob/main/CHANGELOG.md"
 
