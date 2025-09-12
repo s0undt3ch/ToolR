@@ -25,6 +25,10 @@ outputs:
     description: 'Name of the release patch'
     value: ${{ steps.bump-version.outputs.release-patch-name }}
 
+  release-tarball-name:
+    description: 'Name of the release tarball'
+    value: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
+
 runs:
   using: composite
 
@@ -125,3 +129,25 @@ runs:
       with:
         subject-name: toolr-${{ env.RELEASE_VERSION }}.patch
         subject-digest: sha256:${{ steps.upload-release-patch.outputs.artifact-digest }}
+
+    - name: Create Source Tarball
+      id: create-source-tarball
+      shell: bash
+      run: |
+        uv build --sdist
+        echo "release-tarball-name=$(ls dist/ | grep gz)" >> "$GITHUB_OUTPUT"
+
+    - name: Upload Source Tarball Artifact
+      id: upload-source-tarball
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
+        path: dist/${{ steps.create-source-tarball.outputs.release-tarball-name }}
+        retention-days: 7
+        if-no-files-found: error
+
+    - name: Attest source tarball artifact
+      uses: actions/attest-build-provenance@v3
+      with:
+        subject-name: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
+        subject-digest: sha256:${{ steps.upload-source-tarball.outputs.artifact-digest }}

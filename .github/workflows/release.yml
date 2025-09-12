@@ -59,6 +59,7 @@ jobs:
     outputs:
       release-version: ${{ steps.prepare-release.outputs.release-version }}
       release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ steps.prepare-release.outputs.release-tarball-name }}
     steps:
       # We could stick this in a custom, in-repo action, but this would mean we would have to checkout
       # the now, and then checkout again with higher privileges, which is why we're doing it here.
@@ -91,7 +92,7 @@ jobs:
         with:
           python-version: 3.11
 
-      - uses: ./.github/actions/prepare-release-patch
+      - uses: ./.github/actions/prepare-release
         id: prepare-release
         with:
           release-version: ${{ inputs.release-version }}
@@ -104,7 +105,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       display-name: Linux
-      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
 
   build-windows:
@@ -115,7 +116,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       display-name: Windows
-      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
 
   build-macos:
@@ -126,7 +127,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       display-name: macOS
-      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
 
   publish-release:
@@ -189,13 +190,18 @@ jobs:
 
       - uses: actions/download-artifact@v5
         with:
+          name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+          path: dist/
+
+      - uses: actions/download-artifact@v5
+        with:
           name: toolr-${{ needs.prepare-release.outputs.release-version }}-release-notes.md
           path: final-release-notes.md
 
       - name: Attest final release artifacts
         uses: actions/attest-build-provenance@v3
         with:
-          subject-path: dist/*.whl
+          subject-path: dist/*
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2.3.3

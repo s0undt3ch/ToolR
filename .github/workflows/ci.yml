@@ -81,6 +81,7 @@ jobs:
     outputs:
       release-version: ${{ steps.prepare-release.outputs.release-version }}
       release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ steps.prepare-release.outputs.release-tarball-name }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -91,7 +92,7 @@ jobs:
           python-version: 3.11
 
       - uses: ./.github/actions/configure-git
-      - uses: ./.github/actions/prepare-release-patch
+      - uses: ./.github/actions/prepare-release
         id: prepare-release
         with:
           release-type: dev
@@ -131,7 +132,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       display-name: Linux
-      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
 
   build-windows:
@@ -143,7 +144,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       display-name: Windows
-      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
 
   build-macos:
@@ -155,7 +156,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       display-name: macOS
-      release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
 
   docs:
@@ -180,6 +181,7 @@ jobs:
           python-version: "3.11"
           uv-sync-args: "--group docs"
 
+      - uses: ./.github/actions/configure-git
       - name: Apply Release Patch
         uses: ./.github/actions/apply-release-patch
         with:
