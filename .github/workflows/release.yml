@@ -60,7 +60,7 @@ jobs:
       release-version: ${{ steps.prepare-release.outputs.release-version }}
       release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: ./github/actions/authenticated-checkout
         with:
           fetch-depth: 0
 
@@ -117,8 +117,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: ./github/actions/authenticated-checkout
 
       - name: Apply Release Patch
         uses: ./.github/actions/apply-release-patch
@@ -131,8 +132,6 @@ jobs:
 
       - name: Push tag
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "github-actions@users.noreply.github.com"
           git push origin v${{ needs.prepare-release.outputs.release-version }}
           git push
 

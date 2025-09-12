@@ -92,17 +92,11 @@ runs:
       run: |
         git diff --color
 
-    - name: Commit changelog
-      shell: bash
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        set +e
-        git add CHANGELOG.md
-
     - name: Commit changes
       shell: bash
       run: |
+        # Add the CHANGELOG.md file to the commit
+        git add CHANGELOG.md
         # Run it twice so that pre-commit can fix anything that can be automatically fixed.
         git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release" || \
             git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
