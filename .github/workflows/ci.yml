@@ -90,6 +90,7 @@ jobs:
         with:
           python-version: 3.11
 
+      - uses: ./.github/actions/configure-git
       - uses: ./.github/actions/prepare-release-patch
         id: prepare-release
         with:

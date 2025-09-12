@@ -12,12 +12,6 @@ runs:
 
   steps:
 
-    - name: Setup Git
-      shell: bash
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-
     - name: Download Release Patch Artifact
       uses: actions/download-artifact@v4
       with:
