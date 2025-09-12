@@ -71,8 +71,8 @@ runs:
       id: prepare-release-notes
       shell: bash
       run: |
-        tail -n +3 .release-changes.md > final-release-notes.md
-        echo "release-notes-filename=final-release-notes.md" >> "$GITHUB_OUTPUT"
+        tail -n +3 .release-changes.md > release-notes.md
+        echo "release-notes-filename=release-notes.md" >> "$GITHUB_OUTPUT"
 
     - name: Upload Release Notes Artifact
       id: upload-release-notes
