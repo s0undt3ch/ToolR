@@ -60,6 +60,7 @@ jobs:
       release-version: ${{ steps.prepare-release.outputs.release-version }}
       release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
       release-tarball-name: ${{ steps.prepare-release.outputs.release-tarball-name }}
+      release-notes-filename: ${{ steps.prepare-release.outputs.release-notes-filename }}
     steps:
       # We could stick this in a custom, in-repo action, but this would mean we would have to checkout
       # the now, and then checkout again with higher privileges, which is why we're doing it here.
@@ -195,8 +196,7 @@ jobs:
 
       - uses: actions/download-artifact@v5
         with:
-          name: toolr-${{ needs.prepare-release.outputs.release-version }}-release-notes.md
-          path: final-release-notes.md
+          name: ${{ needs.prepare-release.outputs.release-notes-filename }}
 
       - name: Attest final release artifacts
         uses: actions/attest-build-provenance@v3
@@ -206,9 +206,9 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2.3.3
         with:
-          tag_name: ${{ needs.prepare-release.outputs.release-version }}
+          tag_name: v${{ needs.prepare-release.outputs.release-version }}
           name: ${{ needs.prepare-release.outputs.release-version }}
-          body_path: final-release-notes.md
+          body_path: ${{ needs.prepare-release.outputs.release-notes-filename }}
           files: dist/*
           draft: false
           prerelease: false
