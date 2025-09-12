@@ -217,7 +217,6 @@ jobs:
       - name: Publish to PyPI (Trusted Publisher)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://pypi.org/legacy/
           packages-dir: dist/
           verbose: true
 
