@@ -63,6 +63,11 @@ repos:
           - msgspec
           - docstring-parser
 
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.36.2
+    hooks:
+      - id: typos
+
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
