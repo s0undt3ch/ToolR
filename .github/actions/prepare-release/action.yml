@@ -45,6 +45,9 @@ runs:
         python-version: "3.11"
         uv-sync-args: "--group docs"
 
+    - name: Setup Pre-Commit
+      uses: ./.github/actions/setup-pre-commit
+
     - name: Bump Version
       id: bump-version
       shell: bash
@@ -107,9 +110,10 @@ runs:
       run: |
         # Add the CHANGELOG.md file to the commit
         git add CHANGELOG.md
-        # Run it twice so that pre-commit can fix anything that can be automatically fixed.
-        git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release" || \
-            git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
+        # Run pre-commit against the changes
+        pre-commit run --all-files --show-diff-on-failure --color=always || true
+        # Commit the changes
+        git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
 
     - name: Tag the release
       shell: bash

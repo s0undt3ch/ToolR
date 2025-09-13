@@ -19,7 +19,6 @@ permissions:
 
 env:
   FORCE_COLOR: "1"
-  PRE_COMMIT_HOME: ${{ github.workspace }}/.cache/pre-commit
 
 jobs:
   prepare-ci:
@@ -47,31 +46,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
         with:
-          python-version: 3.11
+          cache-prefix: pre-commit
+          python-version: "3.11"
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: clippy,rustfmt
+      - name: Setup Pre-Commit
+        uses: ./.github/actions/setup-pre-commit
 
-      - run: pip install pre-commit
-
-      - id: python-version-checksum
-        run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - id: pre-commit-version-checksum
-        run: echo "version-sha256sum=$(pre-commit --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        with:
-          path: ${{ env.PRE_COMMIT_HOME }}
-          key: >-
-            precommit|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
-
-      - run: pre-commit install --install-hooks
-      - run: pre-commit run --all-files --show-diff-on-failure --color=always
+      - name: Run Pre-Commit
+        run: |
+          pre-commit run --all-files --show-diff-on-failure --color=always
 
   prepare-release:
     name: Prepare Release

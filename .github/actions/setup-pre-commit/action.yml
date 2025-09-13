@@ -4,51 +4,60 @@ description: Setup 'pre-commit'
 inputs:
   version:
     description: Pre-commit version to install
-    required: true
-    default: 3.0.3
-  cache-seed:
-    required: true
-    description: Seed used to invalidate caches
-  python-version:
-    required: true
-    description: Python version to install
-    default: 3.11
+    default: "4.3.0"
   rust-toolchain:
     required: true
     description: Rust toolchain to install
     default: stable
+  rust-components:
+    required: true
+    description: Rust components to install
+    default: clippy,rustfmt
 
 
 runs:
   using: composite
 
   steps:
-    - uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python-version }}
+    - name: Setup pre-commit home
+      shell: bash
+      id: setup-pre-commit-home
+      run: |
+        PRE_COMMIT_HOME=${{ github.workspace }}/.cache/pre-commit
+        echo "pre-commit-home=${PRE_COMMIT_HOME}" >> "$GITHUB_OUTPUT"
+        echo "PRE_COMMIT_HOME=${PRE_COMMIT_HOME}" >> "$GITHUB_ENV"
 
-    - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: Setup Rust Toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
 
-    - run: pip install pre-commit
+    - name: Install pre-commit
       shell: bash
+      run: |
+        pip install pre-commit==${{ inputs.version }}
 
-    - id: python-version-checksum
-      run: echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+    - name: Get Python version checksum
+      id: python-version-checksum
       shell: bash
+      run: |
+        echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
-    - id: pre-commit-version-checksum
-      run: echo "version-sha256sum=$(pre-commit --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+    - name: Get pre-commit version checksum
+      id: pre-commit-version-checksum
       shell: bash
+      run: |
+        echo "version-sha256sum=$(pre-commit --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/cache@v4
+    - name: Set up cache
+      uses: actions/cache@v4
       with:
-        path: ${{ env.PRE_COMMIT_HOME }}
+        path: ${{ steps.setup-pre-commit-home.outputs.pre-commit-home }}
         key: >-
-          precommit|${{ inputs.cache-seed }}|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock') }}
-      shell: bash
+          pre-commit-home|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('.pre-commit-config.yaml') }}
 
-    - run: pre-commit install --install-hooks
+    - name: Install pre-commit hooks
       shell: bash
+      run: |
+        pre-commit install --install-hooks
