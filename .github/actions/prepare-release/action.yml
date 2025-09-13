@@ -45,6 +45,9 @@ runs:
         python-version: "3.11"
         uv-sync-args: "--group docs"
 
+    - name: Setup Pre-Commit
+      uses: ./.github/actions/setup-pre-commit
+
     - name: Bump Version
       id: bump-version
       shell: bash
