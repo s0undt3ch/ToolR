@@ -8,6 +8,7 @@ import os
 from typing import Annotated
 
 from msgspec import Struct
+from packaging.version import InvalidVersion
 from packaging.version import Version
 
 from toolr import Context
@@ -29,16 +30,34 @@ class GitDescribe(Struct, frozen=True):
 
 def _current_version(ctx: Context) -> str:
     ret = ctx.run("uv", "version", "--short", capture_output=True, stream_output=False)
-    return Version(ret.stdout.read().rstrip())
+    try:
+        return Version(ret.stdout.read().rstrip())
+    except InvalidVersion:
+        return Version("0.0.0")
 
 
 def _git_describe(ctx: Context) -> GitDescribe:
-    ret = ctx.run("git", "describe", "--tags", "--long", capture_output=True, stream_output=False)
+    ret = ctx.run(
+        "git",
+        "describe",
+        "--tags",
+        "--long",
+        "--match",
+        "v[0-9].[0-9].[0.9]",
+        capture_output=True,
+        stream_output=False,
+    )
     git_describe_output = ret.stdout.read().rstrip()
     ctx.info(f"The output of git describe is: '{git_describe_output}'")
-    version, distance_to_latest_tag, short_commit_hash = git_describe_output.split("-")
+    version_str, distance_to_latest_tag, short_commit_hash = git_describe_output.split("-")
+    try:
+        version = Version(version_str)
+    except InvalidVersion as exc:
+        ctx.warn(f"Invalid version: {exc}")
+        ctx.warn("Using default version of 0.0.0")
+        version = Version("0.0.0")
     return GitDescribe(
-        version=Version(version),
+        version=version,
         distance_to_latest_tag=int(distance_to_latest_tag),
         short_commit_hash=short_commit_hash,
     )
