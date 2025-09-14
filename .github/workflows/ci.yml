@@ -82,6 +82,7 @@ jobs:
         id: prepare-release
         with:
           release-type: dev
+          update-action-version: ${{ github.event_name == 'pull_request' }}
 
   test-linux:
     name: Test
