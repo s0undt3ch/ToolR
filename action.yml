@@ -5,7 +5,7 @@ author: "Pedro Algarvio"
 inputs:
   version:
     description: ToolR version to install
-    default: "${{ github.ref_name }}"
+    default: "${{ github.action_ref }}"
 
 outputs:
   version:
@@ -20,14 +20,17 @@ runs:
       with:
         # Cache key suffix — ensures different versions don't clobber each other
         cache-suffix: toolr-${{ inputs.version }}
+        activate-environment: true
 
     - name: Install ToolR
       shell: bash
       id: install-toolr
       run: |
-        if [ "${{ inputs.version }}" = "latest" ]; then
+        ACTION_VERSION_TAG=${{ github.action_ref }}
+        VERSION_FROM_TAG=${ACTION_VERSION_TAG#v}
+        if [ "${VERSION_FROM_TAG}" = "latest" ]; then
           TOOLR_VERSION=$(uvx toolr --version)
         else
-          TOOLR_VERSION=$(uvx toolr==${{ inputs.version }} --version)
+          TOOLR_VERSION=$(uvx toolr==${VERSION_FROM_TAG} --version)
         fi
         echo "version=$TOOLR_VERSION" >> "$GITHUB_OUTPUT"
