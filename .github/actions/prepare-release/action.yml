@@ -42,13 +42,8 @@ runs:
   using: composite
 
   steps:
-
-    - name: Setup Virtual Environment
-      uses: ./.github/actions/setup-virtualenv
-      with:
-        cache-prefix: prepare-release
-        python-version: "3.11"
-        uv-sync-args: "--group docs"
+    - name: Setup ToolR
+      uses: s0undt3ch/ToolR@v0
 
     - name: Setup Pre-Commit
       uses: ./.github/actions/setup-pre-commit
@@ -59,10 +54,10 @@ runs:
       run: |
         if [ -z "${{ inputs.release-version }}" ]; then
           echo "No release version provided, bumping version based on release type: ${{ inputs.release-type }}"
-          RELEASE_VERSION=$(uv run toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
+          RELEASE_VERSION=$(toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
         else
           echo "Using provided release version: ${{ inputs.release-version }}"
-          RELEASE_VERSION=$(uv run toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
+          RELEASE_VERSION=$(toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
         fi
 
     - name: Generate changelog for GH release
@@ -109,7 +104,7 @@ runs:
       if: inputs.update-action-version == 'true'
       shell: bash
       run: |
-        sed -i 's/default: "\(.*\)"/default: "${{ env.RELEASE_VERSION }}"/g' action.yml
+        toolr ci update-action-version ${{ env.RELEASE_VERSION }}
 
     - name: Show Changes Diff
       shell: bash
