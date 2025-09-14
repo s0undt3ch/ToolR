@@ -163,6 +163,7 @@ ignore = [
 "python/**/*.py" = [
   "D104",   # Missing docstring in public package
   "D107",   # Missing docstring in `__init__`
+  "PT",     # flake8-pytest-style (PT) - Disabled in production code, only enforced in tests
 ]
 "python/toolr/__main__.py" = [
   "F401",   #  `tools` imported but unused
@@ -191,6 +192,9 @@ ignore = [
 ]
 "tests/cli/**/*.py" = [
   "RUF013",   # PEP 484 prohibits implicit `Optional`
+]
+"tests/utils/**/*.py" = [
+  "PLC0415", # `import` should be at the top-level of a file
 ]
 "tests/support/coverage/*.py" = [
   "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
