@@ -132,7 +132,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - *(prepare-release)* Run `pre-commit` against the prepare release changes
 - *(ci)* Pre-commit needs to be setup and run in a few places
 
-## New Contributors
+### New Contributors
 
 - @s0undt3ch-gh-actions-automations[bot] made their first contribution
 - @dependabot[bot] made their first contribution

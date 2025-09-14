@@ -149,9 +149,13 @@ class CommandRegistry(Struct, frozen=True):
                     else:
                         # Import the module which will trigger command registration
                         importlib.import_module(f"{package}.{item.name}")
-                except ImportError as exc:
+                except ModuleNotFoundError as exc:
+                    # If we're not debugging imports, we don't want to raise an error
                     if os.environ.get("TOOLR_DEBUG_IMPORTS", "0") == "1":
                         raise exc from None
+                except ImportError as exc:
+                    # This is likely something wrong with the environment, raise it to the user
+                    raise exc from None
 
         import_commands(tools_dir, "tools")
 

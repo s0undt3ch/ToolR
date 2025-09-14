@@ -9,6 +9,7 @@ except ImportError:
 
 from toolr._context import Context
 from toolr._registry import command_group
+from toolr.utils._imports import report_on_import_errors
 from toolr.utils._signature import arg
 
-__all__ = ["Context", "__version__", "arg", "command_group"]
+__all__ = ["Context", "__version__", "arg", "command_group", "report_on_import_errors"]
