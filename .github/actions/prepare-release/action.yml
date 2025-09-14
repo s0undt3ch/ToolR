@@ -16,6 +16,11 @@ inputs:
       - 'patch'
       - 'dev'
 
+  update-action-version:
+    required: false
+    description: 'Update the action.yml version'
+    default: 'false'
+
 outputs:
   release-version:
     description: 'Prepared release version'
@@ -100,6 +105,12 @@ runs:
       env:
         GITHUB_REPO: ${{ github.repository }}
 
+    - name: Update `action.yml` version
+      if: inputs.update-action-version == 'true'
+      shell: bash
+      run: |
+        sed -i 's/default: "\(.*\)"/default: "${{ env.RELEASE_VERSION }}"/g' action.yml
+
     - name: Show Changes Diff
       shell: bash
       run: |
@@ -108,8 +119,6 @@ runs:
     - name: Commit changes
       shell: bash
       run: |
-        # Add the CHANGELOG.md file to the commit
-        git add CHANGELOG.md
         # Run pre-commit against the changes
         pre-commit run --all-files --show-diff-on-failure --color=always || true
         # Commit the changes
