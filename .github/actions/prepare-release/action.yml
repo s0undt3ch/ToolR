@@ -51,13 +51,15 @@ runs:
     - name: Bump Version
       id: bump-version
       shell: bash
+      env:
+        TOOLR_DEBUG_IMPORTS: 1
       run: |
         if [ -z "${{ inputs.release-version }}" ]; then
           echo "No release version provided, bumping version based on release type: ${{ inputs.release-type }}"
-          RELEASE_VERSION=$(toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
+          RELEASE_VERSION=$(toolr -d version bump --${{ inputs.release-type }} --write --check-existing-tag)
         else
           echo "Using provided release version: ${{ inputs.release-version }}"
-          RELEASE_VERSION=$(toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
+          RELEASE_VERSION=$(toolr -d version bump ${{ inputs.release-version }} --write --check-existing-tag)
         fi
 
     - name: Generate changelog for GH release
