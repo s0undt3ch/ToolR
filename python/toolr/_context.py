@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import shutil
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -248,3 +249,13 @@ class Context(Struct, frozen=True):
                 self.error(f"Unable to change back to path {cwd}")
             else:
                 os.chdir(cwd)
+
+    def which(self, name: str, mode: int = os.F_OK | os.X_OK, path: str | None = None) -> str | None:
+        """
+        Find the path to an executable in the system PATH.
+
+        This is a wrapper around [shutil.which][shutil.which].
+
+        See [shutil.which][shutil.which] for more details.
+        """
+        return shutil.which(name, mode=mode, path=path)
