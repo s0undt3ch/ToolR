@@ -39,6 +39,19 @@ def generate_build_matrix(ctx: Context) -> None:
     if github_output is None:
         ctx.error("GITHUB_OUTPUT environment variable is not set")
         ctx.exit(1)
+    github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if github_step_summary is None:
+        ctx.error("GITHUB_STEP_SUMMARY environment variable is not set")
+        ctx.exit(1)
+    with open(github_step_summary, "a") as wfh:
+        wfh.write("## Build Matrix\n\n")
+        wfh.write("| Platform | CI Build Wheel Image | GH Runner |\n")
+        wfh.write("|----------|----------------------|-----------|\n")
+        for platform, values in sorted(matrix.items()):
+            for idx, item in enumerate(values):
+                platform_name = platform.title() if idx == 0 else ""
+                wfh.write(f"| {platform_name} | {item['name']} | {item['os']} |\n")
+        wfh.write("\n")
     ctx.info("Writing build matrix to github output file ...")
     ctx.print(matrix)
     with open(github_output, "a") as f:
