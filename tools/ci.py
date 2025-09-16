@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+
+from packaging.version import Version
 
 from toolr import Context
 from toolr import command_group
@@ -139,4 +142,35 @@ def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
         ctx.info("Updating GITHUB_OUTPUT file ...")
         with open(github_output, "a") as wfh:
             wfh.write("should-run-build=false\n")
+    ctx.exit(0)
+
+
+@group.command
+def update_action_version(ctx: Context, version: Version) -> None:
+    """
+    Update the action version in 'action.yml' and on the usage of the action in the .github/ directory.
+
+    Args:
+        version: Version to update to.
+    """
+    ctx.info(f"Updating action.yml version to {version}")
+    with open("action.yml") as rfh:
+        contents = re.sub(r'default: "(.*)"', f'default: "{version}"', rfh.read())
+    with open("action.yml", "w") as wfh:
+        wfh.write(contents)
+
+    ret = ctx.run("git", "grep", "-l", "uses: s0undt3ch/ToolR@", ".github/", capture_output=True, stream_output=False)
+    if ret.returncode != 0:
+        ctx.error("Failed to grep for 'uses: s0undt3ch/ToolR@' in .github/")
+        ctx.exit(1)
+
+    usage_version = f"v{version.major}.{version.minor}"
+    for fpath in ret.stdout.read().rstrip().splitlines():
+        new_uses_string = f"uses: s0undt3ch/ToolR@{usage_version}"
+        ctx.info(f"Updating {fpath} version to '{new_uses_string}'")
+        with open(fpath) as rfh:
+            contents = re.sub(r"uses: s0undt3ch/ToolR@(.*)", new_uses_string, rfh.read())
+        with open(fpath, "w") as wfh:
+            wfh.write(contents)
+
     ctx.exit(0)

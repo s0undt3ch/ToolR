@@ -43,14 +43,23 @@ runs:
 
   steps:
 
-    - name: Setup Virtual Environment
-      uses: ./.github/actions/setup-virtualenv
+    - name: Install uv
+      id: install-uv
+      uses: astral-sh/setup-uv@v6
+
+    - name: Generate additional ToolR requirements file
+      shell: bash
+      run: |
+        uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
+
+    - name: Setup ToolR
+      id: setup-toolr
+      uses: s0undt3ch/ToolR@v0
       with:
-        cache-prefix: prepare-release
-        python-version: "3.11"
-        uv-sync-args: "--group docs"
+        requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
     - name: Setup Pre-Commit
+      id: setup-pre-commit
       uses: ./.github/actions/setup-pre-commit
 
     - name: Bump Version
@@ -59,10 +68,10 @@ runs:
       run: |
         if [ -z "${{ inputs.release-version }}" ]; then
           echo "No release version provided, bumping version based on release type: ${{ inputs.release-type }}"
-          RELEASE_VERSION=$(uv run toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
+          RELEASE_VERSION=$(toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
         else
           echo "Using provided release version: ${{ inputs.release-version }}"
-          RELEASE_VERSION=$(uv run toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
+          RELEASE_VERSION=$(toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
         fi
 
     - name: Generate changelog for GH release
@@ -109,7 +118,7 @@ runs:
       if: inputs.update-action-version == 'true'
       shell: bash
       run: |
-        sed -i 's/default: "\(.*\)"/default: "${{ env.RELEASE_VERSION }}"/g' action.yml
+        toolr ci update-action-version ${{ env.RELEASE_VERSION }}
 
     - name: Show Changes Diff
       shell: bash
@@ -118,6 +127,10 @@ runs:
 
     - name: Commit changes
       shell: bash
+      env:
+        PIPX_HOME: ${{ steps.setup-pre-commit.outputs.pipx-home-dir }}
+        PIPX_BIN_DIR: ${{ steps.setup-pre-commit.outputs.pipx-bin-dir }}
+        PIPX_DEFAULT_PYTHON: ${{ steps.setup-pre-commit.outputs.pipx-python-path }}
       run: |
         # Run pre-commit against the changes
         pre-commit run --all-files --show-diff-on-failure --color=always || true
