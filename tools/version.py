@@ -8,12 +8,15 @@ import os
 from typing import Annotated
 
 from msgspec import Struct
-from packaging.version import InvalidVersion
-from packaging.version import Version
 
 from toolr import Context
 from toolr import arg
 from toolr import command_group
+from toolr import report_on_import_errors
+
+with report_on_import_errors("Please install the 'packaging' package to use the versioning utilities."):
+    from packaging.version import InvalidVersion
+    from packaging.version import Version
 
 group = command_group("version", "Versioning utilities", docstring=__doc__)
 

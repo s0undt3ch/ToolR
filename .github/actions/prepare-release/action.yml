@@ -45,6 +45,11 @@ runs:
     - name: Setup ToolR
       uses: s0undt3ch/ToolR@v0
 
+    - name: Install Tools Dependencies
+      shell: bash
+      run: |
+        uv sync --no-install-workspace --group tools
+
     - name: Setup Pre-Commit
       uses: ./.github/actions/setup-pre-commit
 

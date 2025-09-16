@@ -29,15 +29,34 @@ jobs:
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
     steps:
 
-      - name: Setup ToolR
-        uses: s0undt3ch/ToolR@v0
       - uses: actions/checkout@v5
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        id: install-uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Generate additional ToolR requirements file
+        run: |
+          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup ToolR
+        id: setup-toolr
+        uses: s0undt3ch/ToolR@v0
+        with:
+          version: local
+          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
       - name: Check if the build should run
         id: check-build
         run: |
           toolr ci check-run-build ${{ github.event_name }} ${{ github.ref_name }}
         env:
+          TOOLR_DEBUG_IMPORTS: "1"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Build Matrix
