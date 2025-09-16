@@ -1,0 +1,14 @@
+extend = "../pyproject.toml"
+
+[lint.pylint]
+max-statements = 60
+max-branches = 40
+max-args = 10
+
+
+[lint.per-file-ignores]
+"**/*.py" = [
+  "D104",     # missing docstring in public package
+  "D107",     # missing docstring in `__init__`
+  "D417",     # Missing argument description in the docstring for `ctx`
+]

@@ -914,6 +914,9 @@ docs = [
     { name = "mkdocstrings", extra = ["python"] },
     { name = "ruff" },
 ]
+tools = [
+    { name = "packaging" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -939,6 +942,7 @@ docs = [
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.30.0" },
     { name = "ruff", specifier = ">=0.12.9" },
 ]
+tools = [{ name = "packaging", specifier = ">=25.0" }]
 
 [[package]]
 name = "typing-extensions"

@@ -56,3 +56,87 @@ def generate_build_matrix(ctx: Context) -> None:
     ctx.print(matrix)
     with open(github_output, "a") as f:
         f.write(f"platform-matrix={json.dumps(matrix)}\n")
+
+
+@group.command
+def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
+    """
+    Check if the current build should run.
+
+    Args:
+        event_name: Event name
+        branch: Branch to check for open PR
+    """
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+
+    if event_name == "pull_request":
+        msg = "Builds for PRs should always run"
+        ctx.info(msg)
+        if github_step_summary is not None:
+            with open(github_step_summary, "a") as wfh:
+                wfh.write(f"{msg}\n")
+        if github_output is not None:
+            with open(github_output, "a") as wfh:
+                wfh.write("should-run-build=true\n")
+        ctx.exit(0)
+
+    # This is a push event
+    if branch == "main":
+        msg = "Builds for the main branch should always run"
+        ctx.info(msg)
+        if github_step_summary is not None:
+            with open(github_step_summary, "a") as wfh:
+                wfh.write(f"{msg}\n")
+        if github_output is not None:
+            with open(github_output, "a") as wfh:
+                wfh.write("should-run-build=true\n")
+        ctx.exit(0)
+
+    # This is not a push to the main branch, so, we need to check for open PRs
+    ret = ctx.run(
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--state",
+        "open",
+        "--json",
+        "number",
+        capture_output=True,
+        stream_output=False,
+    )
+    if ret.returncode != 0:
+        ctx.error("Failed to check for open PR")
+        ctx.exit(1)
+
+    prs_list = json.loads(ret.stdout.read().rstrip())
+    if not prs_list:
+        msg = f"Builds for branch {branch} should run since there are no open PRs"
+        ctx.info(msg)
+        if github_step_summary is not None:
+            with open(github_step_summary, "a") as wfh:
+                wfh.write(f"{msg}\n")
+        if github_output is not None:
+            with open(github_output, "a") as wfh:
+                wfh.write("should-run-build=true\n")
+        ctx.exit(0)
+
+    pr_number = prs_list[0]["number"]
+    ctx.info(f"Builds for branch/tag {branch!r} should not run since they will be built on PR #{pr_number}.")
+    if github_step_summary is not None:
+        github_repository = os.environ.get("GITHUB_REPOSITORY")
+        if github_repository is None:
+            ctx.error("GITHUB_REPOSITORY environment variable is not set")
+            ctx.exit(1)
+        with open(github_step_summary, "a") as wfh:
+            wfh.write(
+                f"Builds for branch/tag `{branch}` should not run since they will be built on "
+                f"PR [#{pr_number}](https://github.com/{github_repository}/pull/{pr_number}).\n"
+            )
+    if github_output is not None:
+        ctx.info("Updating GITHUB_OUTPUT file ...")
+        with open(github_output, "a") as wfh:
+            wfh.write("should-run-build=false\n")
+    ctx.exit(0)

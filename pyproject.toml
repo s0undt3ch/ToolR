@@ -112,6 +112,9 @@ docs = [
     "mkdocstrings[python]>=0.30.0",
     "ruff>=0.12.9",
 ]
+tools = [
+    "packaging>=25.0",
+]
 
 [tool.ruff]
 line-length = 120
@@ -198,11 +201,6 @@ ignore = [
 ]
 "tests/support/coverage/*.py" = [
   "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
-]
-"tools/**/*.py" = [
-  "D104",     # missing docstring in public package
-  "D107",     # missing docstring in `__init__`
-  "D417",     # Missing argument description in the docstring for `ctx`
 ]
 "docs/**/files/*.py" = [
   "BLE001",   # Do not catch blind exception: `Exception`
