@@ -7,30 +7,131 @@ inputs:
     description: ToolR version to install
     default: "0.9.0"
 
+  requirements-file:
+    description: Additional requirements file to install
+    default: ""
+
 outputs:
   version:
     description: ToolR version installed
-    value: ${{ steps.install-toolr.outputs.version }}
+    value: ${{ steps.toolr-version.outputs.version }}
+  pipx-home-dir:
+    description: Pipx home directory
+    value: ${{ steps.setup-pipx.outputs.cache-home-dir }}
+  pipx-bin-dir:
+    description: Pipx bin directory
+    value: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+  pipx-python-path:
+    description: Pipx python path
+    value: ${{ steps.python-version-checksum.outputs.python-path }}
+
+# pipx caching work was taken from https://generalreasoning.com/blog/cicd/python/software/2025/02/18/github-actions-caching-pipx.html
 
 runs:
   using: "composite"
   steps:
-    - name: Install uv
-      uses: astral-sh/setup-uv@v6
-      with:
-        # Cache key suffix — ensures different versions don't clobber each other
-        cache-suffix: toolr-${{ inputs.version }}
-        activate-environment: true
-
-    - name: Install ToolR
+    - name: Define ToolR version
       shell: bash
-      id: install-toolr
+      id: parse-version
       run: |
-        ACTION_VERSION_TAG=${{ github.action_ref }}
+        ACTION_VERSION_TAG=${{ inputs.version }}
+        echo "THE ACTION_VERSION_TAG=$ACTION_VERSION_TAG"
         VERSION_FROM_TAG=${ACTION_VERSION_TAG#v}
         if [ "${VERSION_FROM_TAG}" = "latest" ]; then
-          TOOLR_VERSION=$(uvx toolr --version)
-        else
-          TOOLR_VERSION=$(uvx toolr==${VERSION_FROM_TAG} --version)
+          VERSION_FROM_TAG=$(curl -s https://pypi.org/pypi/toolr/json | jq -r '.info.version' 2>/dev/null)
         fi
+        if [ "${VERSION_FROM_TAG}" = "local" ]; then
+          if [ "${{ github.repository }}" != "s0undt3ch/ToolR" ]; then
+            echo "Local version is only supported for the ToolR repository"
+            exit 1
+          fi
+          VERSION_FROM_TAG=$(git describe --tags --match "v[0-9].[0-9].[0-9]" --long || git rev-parse --short HEAD)
+        fi
+        # Generate a requirements file so that the setup-uv action can properly invalidate the cache when necessary
+        if [ -n "${{ inputs.requirements-file }}" ] && [ -f "${{ inputs.requirements-file }}" ]; then
+          REQUIREMENTS_FILE=${{ github.workspace }}/.toolr-action-requirements.txt
+          # Pipx only supports requirements files with one package per line, no even comments are allowed
+          grep -v '^#' "${{ inputs.requirements-file }}" > "$REQUIREMENTS_FILE"
+        fi
+        echo "version=${VERSION_FROM_TAG}" >> "$GITHUB_OUTPUT"
+        echo "requirements-file=${REQUIREMENTS_FILE}" >> "$GITHUB_OUTPUT"
+
+    - name: Get Python version checksum
+      id: python-version-checksum
+      shell: bash
+      run: |
+        VERSION_SHA256SUM=$(python --version --version | sha256sum | cut -d ' ' -f 1)
+        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+        echo "python-path=$(which python)" >> "$GITHUB_OUTPUT"
+
+    - name: Get pipx version checksum
+      id: pipx-version-checksum
+      shell: bash
+      run: |
+        VERSION_SHA256SUM=$(pipx --version | sha256sum | cut -d ' ' -f 1)
+        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+
+    - name: Setup pipx
+      id: setup-pipx
+      shell: bash
+      run: |
+        # Custom cache dir for pipx
+        # custom cached dir
+        cache_home_dir="$HOME/.local/pipx"
+        cache_bin_dir="$HOME/.local/pipx_bin"
+
+        # add cached dir to PATH
+        echo "$cache_bin_dir" >> "$GITHUB_PATH"
+
+        echo "cache-home-dir=$cache_home_dir" >> "$GITHUB_OUTPUT"
+        echo "cache-bin-dir=$cache_bin_dir" >> "$GITHUB_OUTPUT"
+
+    - id: cache-pipx
+      uses: actions/cache@v3
+      if: ${{ inputs.version }} != 'local'
+      with:
+        key: >-
+          pipx|toolr|${{ steps.parse-version.outputs.version}}|
+          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
+          ${{ steps.pipx-version-checksum.outputs.version-sha256sum }}|
+          ${{ hashFiles(inputs.requirements-file, steps.parse-version.outputs.requirements-file) }}|
+        path: |
+          ${{ steps.setup-pipx.outputs.cache-home-dir }}
+          ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+
+    - name: Install ToolR
+      if: ${{ inputs.version }} == 'local' || ${{ steps.cache-pipx.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        # Install in our custom cached dir
+        PIPX_HOME: ${{ steps.setup-pipx.outputs.cache-home-dir }}
+        PIPX_BIN_DIR: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+        # Use correct python
+        PIPX_DEFAULT_PYTHON: ${{ steps.python-version-checksum.outputs.python-path }}
+      run: |
+        if [ "${{ inputs.version }}" = "local" ]; then
+          pipx install .
+        else
+          pipx install toolr==${{ steps.parse-version.outputs.version }}
+        fi
+
+    - name: Install additional requirements
+      if: ${{ inputs.version }} == 'local' || ${{ steps.cache-pipx.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        # Install in our custom cached dir
+        PIPX_HOME: ${{ steps.setup-pipx.outputs.cache-home-dir }}
+        PIPX_BIN_DIR: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+        # Use correct python
+        PIPX_DEFAULT_PYTHON: ${{ steps.python-version-checksum.outputs.python-path }}
+      run: |
+        pipx inject toolr -r ${{ steps.parse-version.outputs.requirements-file }}
+
+    - name: Get ToolR version
+      id: toolr-version
+      shell: bash
+      run: |
+        TOOLR_VERSION=$(toolr --version)
         echo "version=$TOOLR_VERSION" >> "$GITHUB_OUTPUT"
