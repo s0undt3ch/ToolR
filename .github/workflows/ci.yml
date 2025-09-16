@@ -18,6 +18,7 @@ permissions:
   attestations: write
 
 env:
+  COLUMNS: 190
   FORCE_COLOR: "1"
   TOOLR_DEBUG_IMPORTS: "1"
 

@@ -10,6 +10,11 @@ on:
         type: string
         description: 'Release version to prepare'
 
+env:
+  COLUMNS: 190
+  FORCE_COLOR: "1"
+  TOOLR_DEBUG_IMPORTS: "1"
+
 permissions:
   contents: write
   id-token: write
