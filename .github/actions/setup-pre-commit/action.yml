@@ -14,11 +14,71 @@ inputs:
     description: Rust components to install
     default: clippy,rustfmt
 
+outputs:
+  pre-commit-home:
+    description: Pre-commit home directory
+    value: ${{ steps.setup-pre-commit-home.outputs.pre-commit-home }}
+  pipx-home-dir:
+    description: Pipx home directory
+    value: ${{ steps.setup-pipx.outputs.cache-home-dir }}
+  pipx-bin-dir:
+    description: Pipx bin directory
+    value: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+  pipx-python-path:
+    description: Pipx python path
+    value: ${{ steps.python-version-checksum.outputs.python-path }}
 
 runs:
   using: composite
 
   steps:
+
+    - name: Get Python version checksum
+      id: python-version-checksum
+      shell: bash
+      run: |
+        VERSION_SHA256SUM=$(python --version --version | sha256sum | cut -d ' ' -f 1)
+        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+        echo "python-path=$(which python)" >> "$GITHUB_OUTPUT"
+
+    - name: Get pipx version checksum
+      id: pipx-version-checksum
+      shell: bash
+      run: |
+        VERSION_SHA256SUM=$(pipx --version | sha256sum | cut -d ' ' -f 1)
+        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+
+    - name: Setup pipx
+      id: setup-pipx
+      shell: bash
+      run: |
+        # Custom cache dir for pipx
+        # custom cached dir
+        cache_home_dir="$HOME/.local/pipx"
+        cache_bin_dir="$HOME/.local/pipx_bin"
+
+        # add cached dir to PATH
+        echo "$cache_bin_dir" >> "$GITHUB_PATH"
+
+        echo "cache-home-dir=$cache_home_dir" >> "$GITHUB_OUTPUT"
+        echo "cache-bin-dir=$cache_bin_dir" >> "$GITHUB_OUTPUT"
+
+    - id: cache-pipx
+      uses: actions/cache@v3
+      if: ${{ inputs.version }} != 'local'
+      with:
+        key: >-
+          pipx|pre-commit|${{ inputs.version }}|
+          ${{ runner.os }}|
+          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
+          ${{ steps.pipx-version-checksum.outputs.version-sha256sum }}|
+          ${{ hashFiles('.pre-commit-config.yaml') }}|
+        path: |
+          ${{ steps.setup-pipx.outputs.cache-home-dir }}
+          ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+
     - name: Setup pre-commit home
       shell: bash
       id: setup-pre-commit-home
@@ -34,30 +94,29 @@ runs:
         components: ${{ inputs.rust-components }}
 
     - name: Install pre-commit
+      if: ${{ steps.cache-pipx.outputs.cache-hit != 'true' }}
       shell: bash
       run: |
-        pip install pre-commit==${{ inputs.version }}
+        pipx install pre-commit==${{ inputs.version }}
 
-    - name: Get Python version checksum
-      id: python-version-checksum
-      shell: bash
-      run: |
-        echo "version-sha256sum=$(python --version --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-
-    - name: Get pre-commit version checksum
-      id: pre-commit-version-checksum
-      shell: bash
-      run: |
-        echo "version-sha256sum=$(pre-commit --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-
-    - name: Set up cache
+    - name: Set up pre-commit hooks cache
+      id: cache-pre-commit-hooks
       uses: actions/cache@v4
       with:
         path: ${{ steps.setup-pre-commit-home.outputs.pre-commit-home }}
         key: >-
-          pre-commit-home|${{ runner.os }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.pre-commit-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('.pre-commit-config.yaml') }}
+          pre-commit-home|${{ inputs.version }}|
+          ${{ runner.os }}|
+          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
+          ${{ steps.pipx-version-checksum.outputs.version-sha256sum }}|
+          ${{ hashFiles('.pre-commit-config.yaml') }}
 
     - name: Install pre-commit hooks
       shell: bash
+      if: ${{ steps.cache-pre-commit-hooks.outputs.cache-hit != 'true' }}
+      env:
+        PIPX_HOME: ${{ steps.setup-pipx.outputs.cache-home-dir }}
+        PIPX_BIN_DIR: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+        PIPX_DEFAULT_PYTHON: ${{ steps.python-version-checksum.outputs.python-path }}
       run: |
         pre-commit install --install-hooks

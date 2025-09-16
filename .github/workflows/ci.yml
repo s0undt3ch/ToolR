@@ -18,6 +18,7 @@ permissions:
   attestations: write
 
 env:
+  COLUMNS: 190
   FORCE_COLOR: "1"
   TOOLR_DEBUG_IMPORTS: "1"
 
@@ -73,16 +74,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Virtual Environment
-        uses: ./.github/actions/setup-virtualenv
-        with:
-          cache-prefix: pre-commit
-          python-version: "3.11"
-
       - name: Setup Pre-Commit
+        id: setup-pre-commit
         uses: ./.github/actions/setup-pre-commit
 
       - name: Run Pre-Commit
+        env:
+          PIPX_HOME: ${{ steps.setup-pre-commit.outputs.pipx-home-dir }}
+          PIPX_BIN_DIR: ${{ steps.setup-pre-commit.outputs.pipx-bin-dir }}
+          PIPX_DEFAULT_PYTHON: ${{ steps.setup-pre-commit.outputs.pipx-python-path }}
         run: |
           pre-commit run --all-files --show-diff-on-failure --color=always
 
