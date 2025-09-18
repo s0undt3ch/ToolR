@@ -210,7 +210,7 @@ class Context(Struct, frozen=True):
         Returns:
             CommandResult instance.
         """
-        self.debug(f"""Running '{" ".join(cmdline)}'""")
+        self.info(f"""Running '{" ".join(cmdline)}'""")
         return command.run(
             cmdline,
             stream_output=stream_output,
