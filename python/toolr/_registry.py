@@ -280,7 +280,9 @@ def command_group(
         A CommandGroup instance
 
     """
-    if parent is None:
+    if parent is not None and not parent.startswith("tools."):
+        parent = f"tools.{parent}"
+    elif parent is None:
         parent = "tools"
 
     collector = _get_command_group_storage()

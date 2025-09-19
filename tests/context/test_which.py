@@ -1,36 +1,60 @@
 from __future__ import annotations
 
+import stat
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from toolr._context import Context
 
 
-def test_which(ctx: Context):
-    """Test that the which method returns the path to an executable in the system PATH."""
-    cmd = ctx.which("python")
-    assert cmd is not None
-    # Should just match the executable that is running the test suite
-    system_python = sys.executable
+@pytest.fixture
+def foo_binary(tmp_path: Path) -> Iterator[Path]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    binary_name = "foo"
+    # On Windows, executables need .exe extension
     if sys.platform.startswith("win"):
-        # On Windows, the executable is named python.EXE, not python.exe
-        # Let's just normalize the path to python.exe
-        system_python = system_python.lower()
-        # And now, we messed with the executable path directories case, so let's also normalize
-        # the shutil returned command path
-        cmd = cmd.lower()
-    assert cmd == system_python
+        binary_name += ".exe"
+    foo_binary = bin_dir / binary_name
+    with open(foo_binary, "w") as wfh:
+        wfh.write("This would never be a binary, but works for the test")
+    foo_binary.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    with patch("os.environ", {"PATH": str(bin_dir)}):
+        yield foo_binary
 
 
-def test_which_not_found_path_environment(ctx: Context, tmp_path: Path):
+def test_which(ctx: Context, foo_binary: Path):
+    """Test that the which method returns the path to an executable in the system PATH."""
+    # On Windows, we call which("foo") but it finds "foo.exe"
+    cmd = ctx.which(foo_binary.stem)
+    assert cmd is not None
+    try:
+        assert cmd == str(foo_binary)
+    except AssertionError:
+        if not sys.platform.startswith("win"):  # pragma: no cover
+            raise
+        # On Windows, the executable is named <executable>.EXE, not <executable>.exe
+        assert cmd.lower() == str(foo_binary).lower()
+
+
+def test_which_not_found_path_environment(ctx: Context, foo_binary: Path):
     """Test that with the wrong PATH, the which method returns None."""
-    with patch("os.environ", {"PATH": str(tmp_path)}):
-        cmd = ctx.which("python")
+    # Just make sure it's there
+    assert ctx.which(foo_binary.stem) is not None
+    # Now let's change the PATH to something that doesn't contain the foo binary
+    with patch("os.environ", {"PATH": str(foo_binary.parent.parent)}):
+        cmd = ctx.which(foo_binary.stem)
     assert cmd is None
 
 
-def test_which_not_found_path_call_argument(ctx: Context, tmp_path: Path):
+def test_which_not_found_path_call_argument(ctx: Context, foo_binary: Path):
     """Test that with the wrong 'path' passed to the call, the which method returns None."""
-    cmd = ctx.which("python", path=str(tmp_path))
+    # Just make sure it's there
+    assert ctx.which(foo_binary.stem) is not None
+    # Now let's change the PATH to something that doesn't contain the foo binary
+    cmd = ctx.which(foo_binary.stem, path=str(foo_binary.parent.parent))
     assert cmd is None

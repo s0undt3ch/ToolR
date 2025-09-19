@@ -1,0 +1,84 @@
+name: Sync Rolling Tags
+
+on:
+  release:
+    types: [released]  # This workflow is only triggered by a release
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  update-rolling-tags:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        shell: bash
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Install uv
+        id: install-uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Generate additional ToolR requirements file
+        shell: bash
+        run: |
+          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup ToolR
+        id: setup-toolr
+        uses: s0undt3ch/ToolR@v0.10
+        with:
+          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup Pre-Commit
+        id: setup-pre-commit
+        uses: ./.github/actions/setup-pre-commit
+
+      - name: Update rolling tags
+        run: |
+          uv run toolr sync-rolling-tags --version "${GITHUB_REF_NAME}"
+
+      - name: Fix any issues with pre-commit
+        run: |
+          pre-commit run --all-files --show-diff-on-failure --color=always || true
+
+      - name: Show changes
+        run: |
+          git diff --color
+
+      - name: Commit the changes
+        run: |
+          git commit -am "chore(release): Update ToolR action versions in workflows"
+
+      - name: Push the changes
+        run: |
+          # For now, don't push the changes
+          # git push
+          echo "Skipping push of changes"
