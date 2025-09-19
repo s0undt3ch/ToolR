@@ -1,8 +1,15 @@
 name: Sync Rolling Tags
 
 on:
-  release:
-    types: [released]  # This workflow is only triggered by a release
+  workflow_run:
+    workflows:
+      - "Release"
+    types:
+      - completed
+    branches:
+      - main
+      - action
+      - work
 
 defaults:
   run:
@@ -15,6 +22,8 @@ permissions:
 jobs:
   update-rolling-tags:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: release
 
     steps:
       - uses: actions/create-github-app-token@v2
@@ -61,9 +70,21 @@ jobs:
         id: setup-pre-commit
         uses: ./.github/actions/setup-pre-commit
 
+      - name: Get release version from workflow
+        id: get-version
+        run: |
+          # Get the latest release tag
+          LATEST_TAG=$(gh api repos/${{ github.repository }}/releases/latest --jq .tag_name)
+          # Remove 'v' prefix if present
+          VERSION=${LATEST_TAG#v}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Found release version: $VERSION"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
       - name: Update rolling tags
         run: |
-          uv run toolr sync-rolling-tags --version "${GITHUB_REF_NAME}"
+          uv run toolr sync-rolling-tags --version "${{ steps.get-version.outputs.version }}"
 
       - name: Fix any issues with pre-commit
         run: |
