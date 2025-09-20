@@ -220,10 +220,13 @@ class CommandRegistry(Struct, frozen=True):
             commands = group.get_commands()
             for command_name in commands:
                 signature = get_signature(commands[command_name])
+                long_command_description = cast(
+                    "str", Markdown(signature.long_description, style="argparse.text", justify="left")
+                )
                 cmd_parser = subparsers.add_parser(
                     command_name,
                     help=signature.short_description,
-                    description=signature.long_description,
+                    description=long_command_description,
                     formatter_class=self.parser.formatter_class,
                 )
                 signature.setup_parser(cmd_parser)
