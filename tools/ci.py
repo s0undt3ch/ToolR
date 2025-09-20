@@ -174,3 +174,104 @@ def update_action_version(ctx: Context, version: Version) -> None:
             wfh.write(contents)
 
     ctx.exit(0)
+
+
+def _build_rolling_tags_list(tags: list[Version]) -> list[tuple[str, Version]]:
+    """
+    Build the list of rolling tags that should be created/updated.
+
+    Args:
+        tags: List of version tags sorted in descending order (latest first)
+
+    Returns:
+        List of tuples containing (rolling_tag_name, target_version)
+    """
+    if not tags:
+        return []
+
+    rolling_tags = []
+    latest_tag = tags[0]
+
+    # Always create/update the 'latest' tag to point to the latest version
+    rolling_tags.append(("latest", latest_tag))
+
+    # Group tags by major version
+    major_versions = {}
+    for tag in tags:
+        major_ver = tag.major
+        if major_ver not in major_versions:
+            major_versions[major_ver] = []
+        major_versions[major_ver].append(tag)
+
+    # For each major version, create rolling tags
+    for major_ver, major_tags in major_versions.items():
+        latest_major_tag = major_tags[0]  # First (latest) tag in this major version
+
+        # Create major version rolling tag (e.g., v1, v0)
+        rolling_tags.append((f"v{major_ver}", latest_major_tag))
+
+        # Group by minor version within this major version
+        minor_versions = {}
+        for tag in major_tags:
+            minor_ver = tag.minor
+            if minor_ver not in minor_versions:
+                minor_versions[minor_ver] = []
+            minor_versions[minor_ver].append(tag)
+
+        # For each minor version, create rolling tag
+        for minor_ver, minor_tags in minor_versions.items():
+            latest_minor_tag = minor_tags[0]  # First (latest) tag in this minor version
+            # Create minor version rolling tag (e.g., v1.0, v0.10, v0.9)
+            rolling_tags.append((f"v{major_ver}.{minor_ver}", latest_minor_tag))
+
+    return rolling_tags
+
+
+@group.command
+def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
+    """
+    Sync rolling tags from ToolR release.
+
+    Args:
+        dry_run: Whether to dry run the command.
+    """
+    ret = ctx.run("git", "tag", "--list", "--sort=-version:refname", capture_output=True, stream_output=False)
+    if ret.returncode != 0:
+        ctx.error("Failed to get the list of tags")
+        ctx.exit(1)
+
+    tags = []
+    for line in ret.stdout.read().rstrip().splitlines():
+        if not line.startswith("v"):
+            continue
+        if not re.match(r"v[0-9]+\.[0-9]+\.[0-9]+", line):
+            continue
+        tags.append(Version(line))
+
+    ctx.info("Found tags:")
+    for tag in tags:
+        ctx.info(f"  {tag}")
+
+    # Build the list of rolling tags that should be created/updated
+    rolling_tags_list = _build_rolling_tags_list(tags)
+
+    ctx.info("Rolling tags to be created/updated:")
+    for rolling_tag, target_version in rolling_tags_list:
+        ctx.info(f"  {rolling_tag} -> v{target_version}")
+
+    ctx.info("Syncing rolling tags ...")
+    for rolling_tag, target_version in rolling_tags_list:
+        ctx.info(f" - tag {rolling_tag} -> v{target_version}")
+        if dry_run is False:
+            ret = ctx.run("git", "tag", "-f", rolling_tag, f"v{target_version}")
+            if ret.returncode != 0:
+                ctx.error(f"Failed to tag {rolling_tag}")
+                ctx.exit(1)
+        ctx.info(f" - push {rolling_tag}")
+        if dry_run is False:
+            ret = ctx.run("git", "push", "origin", rolling_tag, "--force")
+            if ret.returncode != 0:
+                ctx.error(f"Failed to push {rolling_tag}")
+                ctx.exit(1)
+
+    ctx.info("Rolling tags synced successfully")
