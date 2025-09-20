@@ -22,7 +22,6 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "docstring-parser>=0.16",
     "msgspec>=0.19.0",
     "rich-argparse>=1.7.0",
 ]
@@ -45,7 +44,7 @@ version-scheme = "pep440"
 
 [tool.maturin]
 features = ["python"]
-module-name = "toolr.utils._command"
+module-name = "toolr.utils._rust_utils"
 python-source = "python"
 bindings = "pyo3"
 strip = true
@@ -175,7 +174,7 @@ ignore = [
 "python/toolr/_context.py" = [
   "PYI041", # redundant-numeric-union
 ]
-"python/toolr/utils/_command.pyi" = [
+"python/toolr/utils/_rust_utils.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
   "N818",   # Exception name `*` should be named with an Error suffix"
 ]

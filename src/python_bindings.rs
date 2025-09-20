@@ -7,6 +7,8 @@ use crate::command::{
     CommandConfig, run_command_internal,
     CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError
 };
+use crate::docstrings::*;
+use pyo3::types::{PyDict, PyList};
 
 #[cfg(windows)]
 use std::os::windows::io::RawHandle;
@@ -122,9 +124,154 @@ pub(crate) fn run_command_impl(
     }
 }
 
+/// Python wrapper for the SimpleDocstringParser
+#[pyclass]
+pub struct DocstringParser {
+    parser: SimpleDocstringParser,
+}
+
+#[pymethods]
+impl DocstringParser {
+    #[new]
+    fn new() -> Self {
+        Self {
+            parser: SimpleDocstringParser::new(),
+        }
+    }
+
+    #[staticmethod]
+    fn strict() -> Self {
+        Self {
+            parser: SimpleDocstringParser::strict(),
+        }
+    }
+
+    /// Parse a docstring string into a dictionary representation
+    fn parse(&self, docstring: &str) -> PyResult<Py<PyAny>> {
+        let result = self.parser.parse(docstring)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Parse error: {}", e.message)))?;
+
+        Python::attach(|py| {
+            let dict = PyDict::new(py);
+
+            // Short description
+            dict.set_item("short_description", result.short_description)?;
+
+            // Long description
+            dict.set_item("long_description", result.long_description)?;
+
+            // Parameters
+            let params = PyDict::new(py);
+            for param in result.params {
+                let param_dict = PyDict::new(py);
+                let name = param.name.clone();
+                param_dict.set_item("name", param.name)?;
+                param_dict.set_item("param_type", param.param_type)?;
+                param_dict.set_item("description", param.description)?;
+                param_dict.set_item("is_optional", param.is_optional)?;
+                param_dict.set_item("default_value", param.default_value)?;
+                params.set_item(name, param_dict)?;
+            }
+            dict.set_item("params", params)?;
+
+            // Returns
+            if let Some(returns) = result.returns {
+                let returns_dict = PyDict::new(py);
+                returns_dict.set_item("return_type", returns.return_type)?;
+                returns_dict.set_item("description", returns.description)?;
+                dict.set_item("returns", returns_dict)?;
+            } else {
+                dict.set_item("returns", py.None())?;
+            }
+
+            // Yields
+            if let Some(yields) = result.yields {
+                let yields_dict = PyDict::new(py);
+                yields_dict.set_item("yield_type", yields.yield_type)?;
+                yields_dict.set_item("description", yields.description)?;
+                dict.set_item("yields", yields_dict)?;
+            } else {
+                dict.set_item("yields", py.None())?;
+            }
+
+            // Examples
+            let examples = PyList::empty(py);
+            for example in result.examples.iter() {
+                let example_dict = PyDict::new(py);
+                example_dict.set_item("description", example.description.as_ref())?;
+                example_dict.set_item("snippet", &example.snippet)?;
+                examples.append(example_dict)?;
+            }
+            dict.set_item("examples", examples)?;
+
+            // Notes
+            let notes = result.notes.into_iter().collect::<Vec<_>>();
+            dict.set_item("notes", notes)?;
+
+            // Raises
+            let raises = PyDict::new(py);
+            for raise in result.raises {
+                let raise_dict = PyDict::new(py);
+                let exception_type = raise.exception_type.clone();
+                raise_dict.set_item("exception_type", raise.exception_type)?;
+                raise_dict.set_item("description", raise.description)?;
+                raises.set_item(exception_type, raise_dict)?;
+            }
+            dict.set_item("raises", raises)?;
+
+            // Attributes
+            let attributes = PyDict::new(py);
+            for attr in result.attributes {
+                let attr_dict = PyDict::new(py);
+                let name = attr.name.clone();
+                attr_dict.set_item("name", attr.name)?;
+                attr_dict.set_item("attr_type", attr.attr_type)?;
+                attr_dict.set_item("description", attr.description)?;
+                attributes.set_item(name, attr_dict)?;
+            }
+            dict.set_item("attributes", attributes)?;
+
+            // Warnings
+            let warnings = result.warnings.into_iter().collect::<Vec<_>>();
+            dict.set_item("warnings", warnings)?;
+
+            // See also
+            let see_also = result.see_also.into_iter().collect::<Vec<_>>();
+            dict.set_item("see_also", see_also)?;
+
+            // References
+            let references = result.references.into_iter().collect::<Vec<_>>();
+            dict.set_item("references", references)?;
+
+            // Todo
+            let todo = result.todo.into_iter().collect::<Vec<_>>();
+            dict.set_item("todo", todo)?;
+
+            // Deprecated
+            dict.set_item("deprecated", result.deprecated)?;
+
+            // Version added
+            dict.set_item("version_added", result.version_added)?;
+
+            // Version changed - convert Vec<HashMap<String, String>> to Python list of dicts
+            let version_changed_list = PyList::empty(py);
+            for version_dict in &result.version_changed {
+                let version_dict_py = PyDict::new(py);
+                for (version, description) in version_dict {
+                    version_dict_py.set_item(version, description)?;
+                }
+                version_changed_list.append(version_dict_py)?;
+            }
+            dict.set_item("version_changed", version_changed_list)?;
+
+            Ok(dict.into())
+        })
+    }
+}
+
 // Python module definition
 #[pymodule]
-pub fn _command(m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn _rust_utils(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register our function
     m.add_function(wrap_pyfunction!(run_command_impl, m)?)?;
 
@@ -132,6 +279,9 @@ pub fn _command(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("CommandError", m.py().get_type::<CommandError>())?;
     m.add("CommandTimeoutError", m.py().get_type::<CommandTimeoutError>())?;
     m.add("CommandTimeoutNoOutputError", m.py().get_type::<CommandTimeoutNoOutputError>())?;
+
+    // Register docstring parser
+    m.add_class::<DocstringParser>()?;
 
     Ok(())
 }
