@@ -19,7 +19,7 @@ from msgspec import field
 from msgspec import structs
 from rich.markdown import Markdown
 
-from toolr.utils._docstrings import parse_docstring
+from toolr.utils._docstrings import Docstring
 from toolr.utils._signature import F
 from toolr.utils._signature import get_signature
 
@@ -195,7 +195,7 @@ class CommandRegistry(Struct, frozen=True):
                 assert parent_subparsers is not None
 
             # Cast description to str to satisfy mypy since the formatter_class will know what to do with it
-            group_parser_description = cast("str", Markdown(group.description, style="argparse.text"))
+            group_parser_description = cast("str", Markdown(group.description, style="argparse.text", justify="left"))
             group_parser = parent_subparsers.add_parser(
                 group.name,
                 help=f"{group.title} - {group.description}",
@@ -205,7 +205,7 @@ class CommandRegistry(Struct, frozen=True):
 
             # Create subparsers for this group's commands
             subparsers_description = cast(
-                "str", Markdown(group.long_description or group.description, style="argparse.text")
+                "str", Markdown(group.long_description or group.description, style="argparse.text", justify="left")
             )
             group_full_name = group.full_name
             subparsers = group_parser.add_subparsers(
@@ -297,7 +297,7 @@ def command_group(
         if description is not None or long_description is not None:
             err_msg = "You can't pass both docstring and description or long_description"
             raise ValueError(err_msg)
-        parsed_docstring = parse_docstring(docstring)
+        parsed_docstring = Docstring.parse(docstring)
         description = parsed_docstring.short_description
         long_description = parsed_docstring.long_description
     elif description is None:

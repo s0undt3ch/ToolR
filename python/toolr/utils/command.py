@@ -22,10 +22,10 @@ from typing import cast
 
 from msgspec import Struct
 
-from ._command import CommandError  # noqa: F401
-from ._command import CommandTimeoutError  # noqa: F401
-from ._command import CommandTimeoutNoOutputError  # noqa: F401
-from ._command import run_command_impl
+from ._rust_utils import CommandError  # noqa: F401
+from ._rust_utils import CommandTimeoutError  # noqa: F401
+from ._rust_utils import CommandTimeoutNoOutputError  # noqa: F401
+from ._rust_utils import run_command_impl
 
 # Define our type variables
 T = TypeVar("T", str, bytes)

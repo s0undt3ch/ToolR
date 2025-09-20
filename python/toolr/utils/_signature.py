@@ -29,7 +29,7 @@ from msgspec import Struct
 
 from toolr._exc import SignatureError
 from toolr._exc import SignatureParameterError
-from toolr.utils._docstrings import parse_docstring
+from toolr.utils._docstrings import Docstring
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     from argparse import _MutuallyExclusiveGroup
 
     from toolr._context import Context
-    from toolr.utils._docstrings import Docstring
 
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -211,9 +210,8 @@ def get_signature(func: F) -> Signature:
         err_msg = f"Function {func.__name__} has no docstring"
         raise SignatureError(err_msg, func)
 
-    parsed_docstring = parse_docstring(func.__doc__)
+    parsed_docstring = Docstring.parse(func.__doc__)
     short_description = parsed_docstring.short_description
-    long_description = parsed_docstring.long_description or short_description
 
     signature = inspect.signature(func)
     params = list(signature.parameters.items())
@@ -256,7 +254,7 @@ def get_signature(func: F) -> Signature:
     return Signature(
         func=func,
         short_description=short_description,
-        long_description=long_description,
+        long_description=parsed_docstring.full_description,
         arguments=arguments,
         signature=signature,
     )

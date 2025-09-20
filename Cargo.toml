@@ -1,20 +1,21 @@
 [package]
-name = "toolr-command"
+name = "toolr-rust-utils"
 version = "0.0.0"  # Not published independently, versioned with Python package
 edition = "2021"
 authors = ["Pedro Algarvio <pedro@algarvio.me>"]
 license = "Apache-2.0"
-description = "Rust extension to run commands with advanced features"
+description = "Rust utilities for ToolR including docstring parsing and command execution"
 repository = "https://github.com/s0undt3ch/toolr"
 
 [lib]
-name = "toolr_command"
+name = "_rust_utils"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = ">=0.20", features = ["extension-module"], optional = true }
 tokio = { version = ">=1.45.0", features = ["full"] }
 libc = ">=0.2"
+serde = { version = ">=1.0", features = ["derive"] }
 
 # Platform-specific dependencies
 [target.'cfg(windows)'.dependencies]

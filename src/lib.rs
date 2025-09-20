@@ -1,6 +1,7 @@
 #![allow(non_local_definitions)]
 
 mod command;
+mod docstrings;
 #[cfg(feature = "python")]
 mod python_bindings;
 
@@ -10,6 +11,12 @@ pub use command::{
     CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError
 };
 
-// Re-export Python module
+// Re-export docstring parsing functionality
+pub use docstrings::{
+    Docstring, Example, ParseError,
+    SimpleDocstringParser
+};
+
+// Re-export Python modules
 #[cfg(feature = "python")]
-pub use python_bindings::_command;
+pub use python_bindings::_rust_utils;
