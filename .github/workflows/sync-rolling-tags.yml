@@ -1,8 +1,11 @@
 name: Sync Rolling Tags
 
 on:
-  release:
-    types: [released]  # This workflow is only triggered by a release
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -15,8 +18,16 @@ permissions:
 jobs:
   update-rolling-tags:
     runs-on: ubuntu-latest
+    environment: release
 
     steps:
+
+      - name: Check For Admin Permission
+        uses: actions-cool/check-user-permission@v2
+        with:
+          require: admin
+          username: ${{ github.triggering_actor }}
+
       - uses: actions/create-github-app-token@v2
         id: app-token
         with:
@@ -41,6 +52,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
 
       - name: Install uv
         id: install-uv
@@ -63,7 +75,7 @@ jobs:
 
       - name: Update rolling tags
         run: |
-          uv run toolr sync-rolling-tags --version "${GITHUB_REF_NAME}"
+          toolr sync-rolling-tags
 
       - name: Fix any issues with pre-commit
         run: |
