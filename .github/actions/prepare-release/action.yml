@@ -61,6 +61,8 @@ runs:
     - name: Setup Pre-Commit
       id: setup-pre-commit
       uses: ./.github/actions/setup-pre-commit
+      with:
+        cache-seed: prepare-release
 
     - name: Bump Version
       id: bump-version
