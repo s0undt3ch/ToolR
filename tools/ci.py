@@ -158,12 +158,32 @@ def update_action_version(ctx: Context, version: Version) -> None:
 
 
 def _update_action_version(ctx: Context, version: Version) -> int:
-    ctx.info(f"Updating action.yml version to {version}")
     with open("action.yml") as rfh:
-        # We only want to replace the first occurrence of the default version
-        contents = re.sub(r'default: "(.*)"', f'default: "{version}"', rfh.read(), count=1)
-    with open("action.yml", "w") as wfh:
-        wfh.write(contents)
+        in_contents = rfh.read().splitlines()
+
+    # We only want to replace the first occurrence of the default version
+    in_the_toolr_version_input_section = False
+    out_contents = []
+    for idx, line in enumerate(in_contents):
+        if "description: ToolR version to install" in line:
+            in_the_toolr_version_input_section = True
+            out_contents.append(line)
+            continue
+        if in_the_toolr_version_input_section:
+            out_contents.append(re.sub(r'default: "(.*)"', f'default: "{version}"', line, count=1))
+            out_contents.extend(in_contents[idx + 1 :])
+            # Add a blank line to the final line before the end of the file
+            out_contents.append("")
+            break
+        out_contents.append(line)
+    else:
+        ctx.error("Failed to find the default version in action.yml")
+        return 1
+
+    if out_contents != in_contents:
+        ctx.info(f"Updating action.yml version to {version}")
+        with open("action.yml", "w") as wfh:
+            wfh.write("\n".join(out_contents))
 
     ret = ctx.run("git", "grep", "-l", "uses: s0undt3ch/ToolR@", ".github/", capture_output=True, stream_output=False)
     if ret.returncode != 0:
@@ -275,7 +295,7 @@ def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
         ctx.info(f"  {tag}")
 
     latest_tag = tags[0]
-    ctx.info("latest_tag:", repr(latest_tag))
+    ctx.info("latest_tag:", latest_tag)
     exitcode = _update_action_version(ctx, latest_tag)
     if exitcode != 0:
         ctx.error(f"Failed to update to Toolr@v{latest_tag} action version")

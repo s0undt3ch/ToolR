@@ -9,7 +9,7 @@ inputs:
 
   requirements-file:
     description: Additional requirements file to install
-    default: "0.10.0"
+    default: ""
 
 outputs:
   version:
