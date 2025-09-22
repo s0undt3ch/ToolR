@@ -5,7 +5,7 @@ author: "Pedro Algarvio"
 inputs:
   version:
     description: ToolR version to install
-    default: "0.10.0"
+    default: "0.10.1"
 
   requirements-file:
     description: Additional requirements file to install
