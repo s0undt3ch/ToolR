@@ -77,6 +77,8 @@ jobs:
       - name: Setup Pre-Commit
         id: setup-pre-commit
         uses: ./.github/actions/setup-pre-commit
+        with:
+          cache-seed: ci
 
       - name: Run Pre-Commit
         env:
