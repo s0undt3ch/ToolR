@@ -153,27 +153,35 @@ def update_action_version(ctx: Context, version: Version) -> None:
     Args:
         version: Version to update to.
     """
+    exitcode = _update_action_version(ctx, version)
+    ctx.exit(exitcode)
+
+
+def _update_action_version(ctx: Context, version: Version) -> int:
     ctx.info(f"Updating action.yml version to {version}")
     with open("action.yml") as rfh:
-        contents = re.sub(r'default: "(.*)"', f'default: "{version}"', rfh.read())
+        # We only want to replace the first occurrence of the default version
+        contents = re.sub(r'default: "(.*)"', f'default: "{version}"', rfh.read(), count=1)
     with open("action.yml", "w") as wfh:
         wfh.write(contents)
 
     ret = ctx.run("git", "grep", "-l", "uses: s0undt3ch/ToolR@", ".github/", capture_output=True, stream_output=False)
     if ret.returncode != 0:
         ctx.error("Failed to grep for 'uses: s0undt3ch/ToolR@' in .github/")
-        ctx.exit(1)
+        return 1
 
     usage_version = f"v{version.major}.{version.minor}"
     for fpath in ret.stdout.read().rstrip().splitlines():
         new_uses_string = f"uses: s0undt3ch/ToolR@{usage_version}"
-        ctx.info(f"Updating {fpath} version to '{new_uses_string}'")
         with open(fpath) as rfh:
-            contents = re.sub(r"uses: s0undt3ch/ToolR@(.*)", new_uses_string, rfh.read())
-        with open(fpath, "w") as wfh:
-            wfh.write(contents)
+            in_contents = rfh.read()
+        out_contents = re.sub(r"uses: s0undt3ch/ToolR@(.*)", new_uses_string, in_contents)
+        if out_contents != in_contents:
+            ctx.info(f"Updating {fpath} version to '{new_uses_string}'")
+            with open(fpath, "w") as wfh:
+                wfh.write(out_contents)
 
-    ctx.exit(0)
+    return 0
 
 
 def _build_rolling_tags_list(tags: list[Version]) -> list[tuple[str, Version]]:
@@ -227,6 +235,20 @@ def _build_rolling_tags_list(tags: list[Version]) -> list[tuple[str, Version]]:
     return rolling_tags
 
 
+def _check_for_uncommitted_changes(ctx: Context) -> bool:
+    """
+    Check if there are any uncommitted changes to git.
+    """
+    ret = ctx.run("git", "status", "--porcelain", capture_output=True, stream_output=False)
+    if ret.returncode != 0:
+        ctx.error("Failed to check if there are any uncommitted changes to git")
+        return False
+    for line in ret.stdout.read().rstrip().splitlines():
+        if line.strip().startswith("M"):
+            return True
+    return False
+
+
 @group.command
 def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
     """
@@ -251,6 +273,19 @@ def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
     ctx.info("Found tags:")
     for tag in tags:
         ctx.info(f"  {tag}")
+
+    latest_tag = tags[0]
+    ctx.info("latest_tag:", repr(latest_tag))
+    exitcode = _update_action_version(ctx, latest_tag)
+    if exitcode != 0:
+        ctx.error(f"Failed to update to Toolr@v{latest_tag} action version")
+        ctx.exit(exitcode)
+
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output is not None:
+        uncommitted_changes = _check_for_uncommitted_changes(ctx)
+        with open(github_output, "a") as wfh:
+            wfh.write(f"uncommitted-changes={str(uncommitted_changes).lower()}\n")
 
     # Build the list of rolling tags that should be created/updated
     rolling_tags_list = _build_rolling_tags_list(tags)
