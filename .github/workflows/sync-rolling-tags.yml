@@ -76,23 +76,26 @@ jobs:
         uses: ./.github/actions/setup-pre-commit
 
       - name: Update rolling tags
+        id: update-rolling-tags
         run: |
           toolr ci sync-rolling-tags
 
       - name: Fix any issues with pre-commit
+        if: fromJSON(steps.update-rolling-tags.outputs.uncommitted-changes)
         run: |
           pre-commit run --all-files --show-diff-on-failure --color=always || true
 
       - name: Show changes
+        if: fromJSON(steps.update-rolling-tags.outputs.uncommitted-changes)
         run: |
           git diff --color
 
       - name: Commit the changes
+        if: fromJSON(steps.update-rolling-tags.outputs.uncommitted-changes)
         run: |
           git commit -am "chore(release): Update ToolR action versions in workflows"
 
       - name: Push the changes
+        if: fromJSON(steps.update-rolling-tags.outputs.uncommitted-changes)
         run: |
-          # For now, don't push the changes
-          # git push
-          echo "Skipping push of changes"
+          git push
