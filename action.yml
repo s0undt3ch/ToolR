@@ -89,7 +89,7 @@ runs:
         echo "cache-bin-dir=$cache_bin_dir" >> "$GITHUB_OUTPUT"
 
     - id: cache-pipx
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       if: ${{ inputs.version }} != 'local'
       with:
         key: >-
