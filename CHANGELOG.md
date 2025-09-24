@@ -6,6 +6,23 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.11.0 - 2025-09-24
+
+### <!-- 0 -->🚀 Features
+
+- *(docstrings)* We now use a rust extension to parse the docstrings ([`a2744f0`](https://github.com/s0undt3ch/ToolR/commit/a2744f0ff3c4b5c086f780d9f0433fc29c3af832))
+- *(commands help)* The command's help message is now formatted with Markdown ([`d786915`](https://github.com/s0undt3ch/ToolR/commit/d786915ab9c92726aff05f79c0a079115dd199f9))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(sync-rolling-tags)* Fix `sync-rolling-tags` workflow trigger ([`889e36f`](https://github.com/s0undt3ch/ToolR/commit/889e36fea9025c584ad3d7ea4173ba09aff2beb8))
+- *(ci)* Sync'ing rolling tags is now done on demand ([`773745b`](https://github.com/s0undt3ch/ToolR/commit/773745b4156aecee998f8a2e6e494b1a144704e8))
+- *(ci)* Fix sync-rolling-tags command ([`59c2955`](https://github.com/s0undt3ch/ToolR/commit/59c29551a6be607748ab97d12dc9958bfa2fdbe4))
+- *(ci)* More fixes to the sync-rolling-tags process ([`45ac806`](https://github.com/s0undt3ch/ToolR/commit/45ac80617a69bec0ba2c32b91deec634a98d6eb1))
+- *(release)* Update ToolR action versions in workflows ([`6cc4bde`](https://github.com/s0undt3ch/ToolR/commit/6cc4bdecb59d83d95d52f6a908fb5712a888acd0))
+- *(ci)* Final sync-rolling-tags fix ([`c48fcbe`](https://github.com/s0undt3ch/ToolR/commit/c48fcbe64867018814992c2712f38c3648b23e53))
+- *(ci)* Refresh some caches ([`a91de3d`](https://github.com/s0undt3ch/ToolR/commit/a91de3d2b2ad13887dd6e19a47570b4a2bb80bcf))
+
 ## 0.10.1 - 2025-09-19
 
 ### <!-- 1 -->🐛 Bug Fixes
