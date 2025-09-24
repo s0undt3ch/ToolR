@@ -54,7 +54,7 @@ runs:
 
     - name: Setup ToolR
       id: setup-toolr
-      uses: s0undt3ch/ToolR@v0.10
+      uses: s0undt3ch/ToolR@v0.11
       with:
         requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
