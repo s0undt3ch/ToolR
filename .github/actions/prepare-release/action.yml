@@ -58,7 +58,7 @@ runs:
       with:
         requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
-    - name: Setup Pre-Commit
+    - name: Setup Prek
       id: setup-pre-commit
       uses: ./.github/actions/setup-pre-commit
       with:
@@ -129,13 +129,9 @@ runs:
 
     - name: Commit changes
       shell: bash
-      env:
-        PIPX_HOME: ${{ steps.setup-pre-commit.outputs.pipx-home-dir }}
-        PIPX_BIN_DIR: ${{ steps.setup-pre-commit.outputs.pipx-bin-dir }}
-        PIPX_DEFAULT_PYTHON: ${{ steps.setup-pre-commit.outputs.pipx-python-path }}
       run: |
-        # Run pre-commit against the changes
-        pre-commit run --all-files --show-diff-on-failure --color=always || true
+        # Run prek against the changes
+        prek run --all-files --show-diff-on-failure || true
         # Commit the changes
         git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
 

@@ -3,12 +3,12 @@ description: Setup 'pre-commit'
 
 inputs:
   version:
-    description: Pre-commit version to install
-    default: "4.3.0"
+    description: Prek version to install
+    default: "0.2.3"
   cache-seed:
-    description: Cache seed to use for pre-commit
+    description: Cache seed to use for prek
     required: true
-    default: pre-commit-action
+    default: prek-action
   rust-toolchain:
     required: true
     description: Rust toolchain to install
@@ -19,18 +19,12 @@ inputs:
     default: clippy,rustfmt
 
 outputs:
-  pre-commit-home:
-    description: Pre-commit home directory
-    value: ${{ steps.setup-pre-commit-home.outputs.pre-commit-home }}
-  pipx-home-dir:
-    description: Pipx home directory
-    value: ${{ steps.setup-pipx.outputs.cache-home-dir }}
-  pipx-bin-dir:
-    description: Pipx bin directory
-    value: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
-  pipx-python-path:
-    description: Pipx python path
-    value: ${{ steps.python-version-checksum.outputs.python-path }}
+  prek-version:
+    description: Prek version installed
+    value: ${{ steps.install-prek.outputs.prek-version }}
+  prek-home:
+    description: Prek home directory
+    value: ${{ steps.setup-prek-home.outputs.prek-home }}
 
 runs:
   using: composite
@@ -46,83 +40,56 @@ runs:
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
         echo "python-path=$(which python)" >> "$GITHUB_OUTPUT"
 
-    - name: Get pipx version checksum
-      id: pipx-version-checksum
-      shell: bash
-      run: |
-        VERSION_SHA256SUM=$(pipx --version | sha256sum | cut -d ' ' -f 1)
-        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
-        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
-
-    - name: Setup pipx
-      id: setup-pipx
-      shell: bash
-      run: |
-        # Custom cache dir for pipx
-        # custom cached dir
-        cache_home_dir="$HOME/.local/pipx"
-        cache_bin_dir="$HOME/.local/pipx_bin"
-
-        # add cached dir to PATH
-        echo "$cache_bin_dir" >> "$GITHUB_PATH"
-
-        echo "cache-home-dir=$cache_home_dir" >> "$GITHUB_OUTPUT"
-        echo "cache-bin-dir=$cache_bin_dir" >> "$GITHUB_OUTPUT"
-
-    - id: cache-pipx
-      uses: actions/cache@v3
-      if: ${{ inputs.version }} != 'local'
+    - name: Install prek
+      id: install-prek
+      uses: j178/prek-action@v1
       with:
-        key: >-
-          pipx|pre-commit|${{ inputs.version }}|
-          ${{ inputs.cache-seed }}|
-          ${{ runner.os }}|
-          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
-          ${{ steps.pipx-version-checksum.outputs.version-sha256sum }}|
-          ${{ hashFiles('.pre-commit-config.yaml') }}|
-        path: |
-          ${{ steps.setup-pipx.outputs.cache-home-dir }}
-          ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+        install-only: true
 
-    - name: Setup pre-commit home
+    - name: Setup prek home
       shell: bash
-      id: setup-pre-commit-home
+      id: setup-prek-home
       run: |
-        PRE_COMMIT_HOME=${{ github.workspace }}/.cache/pre-commit
-        echo "pre-commit-home=${PRE_COMMIT_HOME}" >> "$GITHUB_OUTPUT"
-        echo "PRE_COMMIT_HOME=${PRE_COMMIT_HOME}" >> "$GITHUB_ENV"
+        PREK_HOME=${{ github.workspace }}/.cache/prek
+        echo "prek-home=${PREK_HOME}" >> "$GITHUB_OUTPUT"
+        echo "PREK_HOME=${PREK_HOME}" >> "$GITHUB_ENV"
+        echo "PREK_COLOR=always" >> "$GITHUB_ENV"
+
+    - name: Cache MyPy & Ruff Caches
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/.mypy_cache
+          ${{ github.workspace }}/.ruff_cache
+        key: |-
+          mypy-ruff-cache|${{ inputs.cache-seed }}|${{ runner.os }}|${{ runner.arch }}|${{
+            steps.install-prek.outputs.prek-version }}|${{
+            steps.python-version-checksum.outputs.version-sha256sum }}|${{
+            hashFiles('pyproject.toml') }}|${{
+            hashFiles(format('{0}/**/.pre-commit-config.yaml', github.workspace))
+          }}
 
     - name: Setup Rust Toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
-        cache-key: pre-commit|${{ inputs.cache-seed }}
+        cache-key: prek|${{ inputs.cache-seed }}
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
 
-    - name: Install pre-commit
-      if: ${{ steps.cache-pipx.outputs.cache-hit != 'true' }}
-      shell: bash
-      run: |
-        pipx install pre-commit==${{ inputs.version }}
-
-    - name: Set up pre-commit hooks cache
-      id: cache-pre-commit-hooks
+    - name: Set up prek hooks cache
+      id: cache-prek-hooks
       uses: actions/cache@v4
       with:
-        path: ${{ steps.setup-pre-commit-home.outputs.pre-commit-home }}
-        key: >-
-          pre-commit-home|${{ inputs.version }}|
-          ${{ runner.os }}|
-          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
-          ${{ steps.pipx-version-checksum.outputs.version-sha256sum }}|
-          ${{ hashFiles('.pre-commit-config.yaml') }}
+        path: ${{ steps.setup-prek-home.outputs.prek-home }}
+        key: |-
+          prek-home|${{ inputs.cache-seed }}|${{ runner.os }}|${{ runner.arch }}|${{
+            steps.install-prek.outputs.prek-version }}|${{
+            steps.python-version-checksum.outputs.version-sha256sum }}|${{
+            hashFiles(format('{0}/**/.pre-commit-config.yaml', github.workspace))
+          }}
 
-    - name: Install pre-commit hooks
+    - name: Install prek hooks
       shell: bash
-      if: ${{ steps.cache-pre-commit-hooks.outputs.cache-hit != 'true' }}
-      env:
-        PIPX_HOME: ${{ steps.setup-pipx.outputs.cache-home-dir }}
-        PIPX_BIN_DIR: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
-        PIPX_DEFAULT_PYTHON: ${{ steps.python-version-checksum.outputs.python-path }}
+      if: ${{ steps.cache-prek-hooks.outputs.cache-hit != 'true' }}
       run: |
-        pre-commit install --install-hooks
+        prek install --install-hooks
