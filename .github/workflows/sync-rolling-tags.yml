@@ -71,7 +71,7 @@ jobs:
         with:
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
-      - name: Setup Pre-Commit
+      - name: Setup Prek
         id: setup-pre-commit
         uses: ./.github/actions/setup-pre-commit
         with:
@@ -85,7 +85,7 @@ jobs:
       - name: Fix any issues with pre-commit
         if: fromJSON(steps.update-rolling-tags.outputs.uncommitted-changes)
         run: |
-          pre-commit run --all-files --show-diff-on-failure --color=always || true
+          prek run --all-files --show-diff-on-failure || true
 
       - name: Show changes
         if: fromJSON(steps.update-rolling-tags.outputs.uncommitted-changes)
