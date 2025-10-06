@@ -210,7 +210,7 @@ jobs:
           subject-path: dist/*
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2.3.3
+        uses: softprops/action-gh-release@v2.3.4
         with:
           tag_name: v${{ needs.prepare-release.outputs.release-version }}
           name: ${{ needs.prepare-release.outputs.release-version }}
