@@ -189,18 +189,18 @@ jobs:
           git push origin v${{ needs.prepare-release.outputs.release-version }}
           git push
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           pattern: cibw-wheel-*
           path: dist
           merge-multiple: true
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           name: ${{ needs.prepare-release.outputs.release-tarball-name }}
           path: dist/
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           name: ${{ needs.prepare-release.outputs.release-notes-filename }}
 
