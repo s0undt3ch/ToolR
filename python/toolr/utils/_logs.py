@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
+import textwrap
+from functools import cache
 from typing import Any
 
 from toolr.utils._console import ConsoleVerbosity
@@ -16,6 +19,45 @@ logging.addLevelName(STDERR, "STDERR")
 
 # Tone down some logging handlers
 logging.getLogger("markdown_it").setLevel(logging.INFO)
+
+
+@cache
+def _get_log_record_reserved_keywords() -> set[str]:
+    record = logging.LogRecord(
+        name="name",
+        level=logging.INFO,
+        pathname="pathname",
+        lineno=0,
+        msg="msg",
+        args=(),
+        exc_info=None,
+    )
+    try:
+        return (
+            {
+                # All of the LogRecord attributes that are not private and is also not the getMessage method
+                key
+                for key in dir(record)
+                if not key.startswith("_") and key != "getMessage"
+            }
+            | {
+                # Python's LogRecord message attribute
+                "message",
+                # Standard logging formatter attributes
+                "asctime",
+            }
+            | {
+                # Let's also add rich logging specific reserved keywords
+                "markup",
+                "highlighter",
+            }
+            | {
+                # And Django specific reserved keywords
+                "request",
+            }
+        )
+    finally:
+        del record
 
 
 class LevelFilter(logging.Filter):
@@ -35,7 +77,50 @@ class LevelFilter(logging.Filter):
         return True
 
 
-class DuplicateTimesFormatter(logging.Formatter):
+class ExtraFormatter(logging.Formatter):
+    """Custom formatter that appends a JSON with the extra parameters to the output of the default formatter.
+
+    Inspired on JsonFormatter.merge_record_extra
+    https://github.com/nhairs/python-json-logger/blob/v3.3.0/src/pythonjsonlogger/core.py#L100-L124
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        output = super().format(record)
+        extra = self._parse_extra(record)
+        if len(extra) > 0:
+            return output + "\n" + self._format_extra(extra)
+        return output
+
+    def _format_extra(self, extra: dict[str, Any]) -> str:
+        formatted_extra = json.dumps(extra, indent=2, sort_keys=True, default=str)
+        return f"  Extra:\n{textwrap.indent(formatted_extra, '    ')}"
+
+    def _parse_extra(self, record: logging.LogRecord) -> dict[str, Any]:
+        return {
+            key: self._parse_value(value)
+            for (key, value) in list(record.__dict__.items())
+            if isinstance(key, str) and self._is_extra_key(key)
+        }
+
+    def _parse_value(self, value: Any) -> str:
+        try:
+            json.dumps(value)
+        except TypeError:
+            # Convert to strings values that can't be serialized (i.e. UUIDs)
+            return str(value)
+        return value
+
+    def _is_extra_key(self, key: str) -> bool:
+        return not self._is_reserved_key(key) and not self._is_private_key(key)
+
+    def _is_reserved_key(self, key: str) -> bool:
+        return key in _get_log_record_reserved_keywords()
+
+    def _is_private_key(self, key: str) -> bool:
+        return key.startswith("_")
+
+
+class DuplicateTimesFormatter(ExtraFormatter):
     """
     Formatter that adds a timestamp to the message, if it's not a duplicate.
     """
@@ -91,7 +176,7 @@ if logging.getLoggerClass() is not LoggingClass:
 logging.root.handlers.clear()
 logging.root.setLevel(logging.INFO)
 
-NO_TIMESTAMP_FORMATTER = logging.Formatter(fmt="%(message)s")
+NO_TIMESTAMP_FORMATTER = ExtraFormatter(fmt="%(message)s")
 TIMESTAMP_FORMATTER = DuplicateTimesFormatter(fmt="%(asctime)s%(message)s", datefmt="[%H:%M:%S] ")
 
 
