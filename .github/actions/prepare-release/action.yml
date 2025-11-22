@@ -104,6 +104,8 @@ runs:
 
     - name: Attest release notes artifact
       uses: actions/attest-build-provenance@v3
+      # Only run attestations on the main repository, not on forks
+      if: github.event.pull_request.head.repo.full_name == github.repository
       with:
         subject-name: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
         subject-digest: sha256:${{ steps.upload-release-notes.outputs.artifact-digest }}
@@ -156,6 +158,8 @@ runs:
 
     - name: Attest release patch artifact
       uses: actions/attest-build-provenance@v3
+      # Only run attestations on the main repository, not on forks
+      if: github.event.pull_request.head.repo.full_name == github.repository
       with:
         subject-name: toolr-${{ env.RELEASE_VERSION }}.patch
         subject-digest: sha256:${{ steps.upload-release-patch.outputs.artifact-digest }}
@@ -178,6 +182,8 @@ runs:
 
     - name: Attest source tarball artifact
       uses: actions/attest-build-provenance@v3
+      # Only run attestations on the main repository, not on forks
+      if: github.event.pull_request.head.repo.full_name == github.repository
       with:
         subject-name: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
         subject-digest: sha256:${{ steps.upload-source-tarball.outputs.artifact-digest }}
