@@ -51,7 +51,7 @@ def test_parser_performance():
 def test_parser_error_handling():
     """Test parser error handling with malformed docstrings."""
     # Test with None input
-    with pytest.raises(TypeError, match="'NoneType' object cannot be converted to 'PyString'"):
+    with pytest.raises(TypeError, match="argument 'docstring': 'NoneType' object cannot be cast as 'str'"):
         Docstring.parse(None)
 
     # Test with very long input
