@@ -16,6 +16,9 @@ on:
         type: string
         description: 'Platform matrix as JSON string'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: ${{ inputs.display-name }} (${{ matrix.python }}, ${{ matrix.platform.name }})
