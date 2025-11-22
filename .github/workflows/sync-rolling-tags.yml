@@ -24,13 +24,18 @@ jobs:
 
     steps:
 
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        with:
+          egress-policy: audit
+
       - name: Check For Admin Permission
-        uses: actions-cool/check-user-permission@v2
+        uses: actions-cool/check-user-permission@7b90a27f92f3961b368376107661682c441f6103 # v2.3.0
         with:
           require: admin
           username: ${{ github.triggering_actor }}
 
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94 # v2.2.0
         id: app-token
         with:
           app-id: ${{ vars.GH_APP_ID }}
@@ -51,14 +56,14 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
       - name: Install uv
         id: install-uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
 
       - name: Generate additional ToolR requirements file
         shell: bash
@@ -67,7 +72,7 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: s0undt3ch/ToolR@v0.11
+        uses: s0undt3ch/ToolR@05c0d9d5f907b1c108a02af1b9b52aa71926bc06 # v0.11.0
         with:
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
