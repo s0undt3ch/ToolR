@@ -81,3 +81,31 @@ Extend ToolR's functionality by installing packages that provide additional comm
 ToolR supports 3rd-party commands from installable Python packages. Create packages that extend ToolR's functionality by defining commands and registering them as entry points.
 
 See the [Advanced Topics section](https://s0undt3ch.github.io/ToolR/usage/#advanced-topics) in the documentation for detailed information about creating 3rd-party command packages.
+
+## Testing and Security
+
+ToolR includes comprehensive testing with a focus on security and robustness:
+
+### Property-Based Testing (Fuzzing)
+
+ToolR uses [Hypothesis](https://hypothesis.works/) for property-based testing to automatically discover edge cases and potential vulnerabilities.
+Fuzzing tests are integrated into the regular test suite:
+
+```bash
+# Run all tests (including fuzzing tests)
+uv run pytest
+
+# Run only fuzzing tests
+uv run pytest -k "test_fuzz"
+
+# Run with coverage
+uv run coverage run -m pytest -ra -s -v
+```
+
+### Security Testing Features
+
+- **Automated Fuzzing**: Property-based tests that generate thousands of test cases
+- **Unicode Edge Cases**: Comprehensive testing of text processing with various encodings
+- **Malformed Input Handling**: Tests ensure graceful handling of invalid input
+
+The integrated fuzzing tests help ensure ToolR can safely handle malformed input, unusual Unicode sequences, and other edge cases that might cause crashes or security vulnerabilities.

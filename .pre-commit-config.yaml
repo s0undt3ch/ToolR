@@ -57,11 +57,11 @@ repos:
         args: []
         additional_dependencies:
           - attrs
+          - hypothesis
+          - msgspec
           - pytest
           - rich
           - rich-argparse
-          - msgspec
-          - docstring-parser
 
   - repo: https://github.com/crate-ci/typos
     rev: v1.37.2
