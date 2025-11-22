@@ -46,6 +46,8 @@ jobs:
         with:
           egress-policy: audit
 
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
       - name: Download Source Tarball Artifact
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
@@ -57,11 +59,28 @@ jobs:
         with:
           platforms: all
 
+      - name: Cache cibuildwheel
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/cibuildwheel
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', 'pyproject.toml') }}
+          restore-keys: |
+            cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|
+            cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
+
       - name: Build wheels
         uses: pypa/cibuildwheel@9c00cb4f6b517705a3794b22395aedc36257242c # v3.2.1
         env:
           CIBW_ARCHS_LINUX: all
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform.name }}
+          # Enable verbose output to see caching in action
+          CIBW_BUILD_VERBOSITY: 1
+          # Pass Cargo cache to the container
+          CIBW_ENVIRONMENT_LINUX: CARGO_HOME=/host$HOME/.cargo
         with:
           package-dir: ${{ inputs.release-tarball-name }}
 
