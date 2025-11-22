@@ -67,6 +67,8 @@ jobs:
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        # Only run attestations on the main repository, not on forks
+        if: github.event.pull_request.head.repo.full_name == github.repository
         with:
           subject-path: wheelhouse/*.whl
 
