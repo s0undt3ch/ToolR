@@ -23,7 +23,7 @@ def generate_build_matrix(ctx: Context) -> None:
     """
     matrix = {
         "macos": [
-            {"name": "macosx_x86_64", "os": "macos-13"},
+            {"name": "macosx_x86_64", "os": "macos-15-intel"},
             {"name": "macosx_arm64", "os": "macos-14"},
         ],
         "windows": [
