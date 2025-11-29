@@ -162,7 +162,7 @@ def _update_action_version(ctx: Context, version: Version) -> int:
         return 1
     commit_sha = ret.stdout.read().rstrip()
 
-    usage_version = f"{commit_sha} #v{version}"
+    usage_version = f"{commit_sha} # {tag_name}"
     for fpath in files_to_update:
         new_uses_string = f"uses: s0undt3ch/ToolR@{usage_version}"
         with open(fpath) as rfh:
@@ -266,19 +266,6 @@ def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
     for tag in tags:
         ctx.info(f"  {tag}")
 
-    latest_tag = tags[0]
-    ctx.info("latest_tag:", latest_tag)
-    exitcode = _update_action_version(ctx, latest_tag)
-    if exitcode != 0:
-        ctx.error(f"Failed to update to Toolr@v{latest_tag} action version")
-        ctx.exit(exitcode)
-
-    github_output = os.environ.get("GITHUB_OUTPUT")
-    if github_output is not None:
-        uncommitted_changes = _check_for_uncommitted_changes(ctx)
-        with open(github_output, "a") as wfh:
-            wfh.write(f"uncommitted-changes={str(uncommitted_changes).lower()}\n")
-
     # Build the list of rolling tags that should be created/updated
     rolling_tags_list = _build_rolling_tags_list(tags)
 
@@ -302,3 +289,16 @@ def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
                 ctx.exit(1)
 
     ctx.info("Rolling tags synced successfully")
+
+    latest_tag = tags[0]
+    ctx.info("latest_tag:", latest_tag)
+    exitcode = _update_action_version(ctx, latest_tag)
+    if exitcode != 0:
+        ctx.error(f"Failed to update to Toolr@v{latest_tag} action version")
+        ctx.exit(exitcode)
+
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output is not None:
+        uncommitted_changes = _check_for_uncommitted_changes(ctx)
+        with open(github_output, "a") as wfh:
+            wfh.write(f"uncommitted-changes={str(uncommitted_changes).lower()}\n")
