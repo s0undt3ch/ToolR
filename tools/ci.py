@@ -151,8 +151,19 @@ def _update_action_version(ctx: Context, version: Version) -> int:
         ctx.error("Failed to grep for 'uses: s0undt3ch/ToolR@' in .github/")
         return 1
 
-    usage_version = f"v{version.major}.{version.minor}"
-    for fpath in ret.stdout.read().rstrip().splitlines():
+    # Store the list of files before we reuse the ret variable
+    files_to_update = ret.stdout.read().rstrip().splitlines()
+
+    # Get the commit SHA for the version tag
+    tag_name = f"v{version}"
+    ret = ctx.run("git", "rev-parse", tag_name, capture_output=True, stream_output=False)
+    if ret.returncode != 0:
+        ctx.error(f"Failed to get commit SHA for tag {tag_name}")
+        return 1
+    commit_sha = ret.stdout.read().rstrip()
+
+    usage_version = f"{commit_sha} #v{version}"
+    for fpath in files_to_update:
         new_uses_string = f"uses: s0undt3ch/ToolR@{usage_version}"
         with open(fpath) as rfh:
             in_contents = rfh.read()
