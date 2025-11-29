@@ -145,46 +145,7 @@ def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
     ctx.exit(0)
 
 
-@group.command
-def update_action_version(ctx: Context, version: Version) -> None:
-    """
-    Update the action version in 'action.yml' and on the usage of the action in the .github/ directory.
-
-    Args:
-        version: Version to update to.
-    """
-    exitcode = _update_action_version(ctx, version)
-    ctx.exit(exitcode)
-
-
 def _update_action_version(ctx: Context, version: Version) -> int:
-    with open("action.yml") as rfh:
-        in_contents = rfh.read().splitlines()
-
-    # We only want to replace the first occurrence of the default version
-    in_the_toolr_version_input_section = False
-    out_contents = []
-    for idx, line in enumerate(in_contents):
-        if "description: ToolR version to install" in line:
-            in_the_toolr_version_input_section = True
-            out_contents.append(line)
-            continue
-        if in_the_toolr_version_input_section:
-            out_contents.append(re.sub(r'default: "(.*)"', f'default: "{version}"', line, count=1))
-            out_contents.extend(in_contents[idx + 1 :])
-            # Add a blank line to the final line before the end of the file
-            out_contents.append("")
-            break
-        out_contents.append(line)
-    else:
-        ctx.error("Failed to find the default version in action.yml")
-        return 1
-
-    if out_contents != in_contents:
-        ctx.info(f"Updating action.yml version to {version}")
-        with open("action.yml", "w") as wfh:
-            wfh.write("\n".join(out_contents))
-
     ret = ctx.run("git", "grep", "-l", "uses: s0undt3ch/ToolR@", ".github/", capture_output=True, stream_output=False)
     if ret.returncode != 0:
         ctx.error("Failed to grep for 'uses: s0undt3ch/ToolR@' in .github/")

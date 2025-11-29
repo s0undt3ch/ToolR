@@ -16,11 +16,6 @@ inputs:
       - 'patch'
       - 'dev'
 
-  update-action-version:
-    required: false
-    description: 'Update the action.yml version'
-    default: 'false'
-
 outputs:
   release-version:
     description: 'Prepared release version'
@@ -117,12 +112,6 @@ runs:
         args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
       env:
         GITHUB_REPO: ${{ github.repository }}
-
-    - name: Update `action.yml` version
-      if: inputs.update-action-version == 'true'
-      shell: bash
-      run: |
-        toolr ci update-action-version ${{ env.RELEASE_VERSION }}
 
     - name: Show Changes Diff
       shell: bash

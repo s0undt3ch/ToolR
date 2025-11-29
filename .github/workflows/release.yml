@@ -112,7 +112,6 @@ jobs:
         id: prepare-release
         with:
           release-version: ${{ inputs.release-version }}
-          update-action-version: false
 
   build-linux:
     name: Build
