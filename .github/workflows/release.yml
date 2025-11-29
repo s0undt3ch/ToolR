@@ -15,11 +15,7 @@ env:
   FORCE_COLOR: "1"
   TOOLR_DEBUG_IMPORTS: "1"
 
-permissions:
-  contents: write
-  id-token: write
-  packages: write
-  attestations: write
+permissions: {}
 
 
 concurrency:
@@ -32,6 +28,8 @@ jobs:
     name: Prepare CI
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: read
     outputs:
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
     steps:
@@ -64,6 +62,8 @@ jobs:
     name: Prepare Release
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: write
     needs:
       - prepare-ci
     outputs:
@@ -119,6 +119,10 @@ jobs:
       - prepare-ci
       - prepare-release
     uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     with:
       display-name: Linux
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
@@ -130,6 +134,10 @@ jobs:
       - prepare-ci
       - prepare-release
     uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     with:
       display-name: Windows
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
@@ -141,6 +149,10 @@ jobs:
       - prepare-ci
       - prepare-release
     uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     with:
       display-name: macOS
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
@@ -155,6 +167,10 @@ jobs:
       - build-macos
       - prepare-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
 
     steps:
       # We could stick this in a custom, in-repo action, but this would mean we would have to checkout

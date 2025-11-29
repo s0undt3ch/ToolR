@@ -12,10 +12,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: ${{ !contains(github.ref, 'refs/heads/main') }}
 
-permissions:
-  contents: read
-  id-token: write
-  attestations: write
+permissions: {}
 
 env:
   COLUMNS: 190
@@ -26,6 +23,8 @@ jobs:
   prepare-ci:
     name: Prepare CI
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       should-run-build: ${{ steps.check-build.outputs.should-run-build }}
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
@@ -73,6 +72,8 @@ jobs:
   pre-commit:
     name: Pre-commit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs:
       - prepare-ci
     if: fromJSON(needs.prepare-ci.outputs.should-run-build)
@@ -97,6 +98,10 @@ jobs:
   prepare-release:
     name: Prepare Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     needs:
       - pre-commit
     outputs:
@@ -131,6 +136,9 @@ jobs:
     with:
       os: ubuntu-latest
       display-name: Linux
+    permissions:
+      contents: read
+      id-token: write
 
   test-windows:
     name: Test
@@ -140,6 +148,10 @@ jobs:
     with:
       os: windows-latest
       display-name: Windows
+    permissions:
+      contents: read
+      id-token: write
+
   test-macos:
     name: Test
     needs:
@@ -148,6 +160,9 @@ jobs:
     with:
       os: macos-latest
       display-name: macOS
+    permissions:
+      contents: read
+      id-token: write
 
   build-linux:
     name: Build
@@ -160,6 +175,10 @@ jobs:
       display-name: Linux
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
 
   build-windows:
     name: Build
@@ -172,6 +191,10 @@ jobs:
       display-name: Windows
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
 
   build-macos:
     name: Build
@@ -184,6 +207,10 @@ jobs:
       display-name: macOS
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
 
   docs:
     name: Publish Docs
@@ -235,6 +262,9 @@ jobs:
       - build-windows
       - build-macos
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
