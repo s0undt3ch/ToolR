@@ -212,7 +212,7 @@ jobs:
           make_latest: true
 
       - name: Publish to PyPI (Trusted Publisher)
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
           packages-dir: dist/
           verbose: true
@@ -236,7 +236,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: martialonline/workflow-status@fe13c6a4716673e224038aa1b02387352fb35e13 # v4
+      - uses: martialonline/workflow-status@326830cacf79872efe767e15031f58d1ea0508c4 # v4.2
         id: check
       - run: echo "Workflow failed"
         if: steps.check.outputs.status == 'failure'
