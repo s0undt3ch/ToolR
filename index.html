@@ -449,6 +449,48 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#testing-and-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing and Security
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing and Security">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#property-based-testing-fuzzing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Property-Based Testing (Fuzzing)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run-all-tests-including-fuzzing-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Run all tests (including fuzzing tests)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run-only-fuzzing-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Run only fuzzing tests
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1022,6 +1064,48 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#testing-and-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing and Security
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing and Security">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#property-based-testing-fuzzing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Property-Based Testing (Fuzzing)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run-all-tests-including-fuzzing-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Run all tests (including fuzzing tests)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run-only-fuzzing-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Run only fuzzing tests
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1100,6 +1184,16 @@
 <h3 id="third-party-commands">Third-Party Commands<a class="headerlink" href="#third-party-commands" title="Permanent link">&para;</a></h3>
 <p>ToolR supports 3rd-party commands from installable Python packages. Create packages that extend ToolR's functionality by defining commands and registering them as entry points.</p>
 <p>See the <a href="https://s0undt3ch.github.io/ToolR/usage/#advanced-topics">Advanced Topics section</a> in the documentation for detailed information about creating 3rd-party command packages.</p>
+<h2 id="testing-and-security">Testing and Security<a class="headerlink" href="#testing-and-security" title="Permanent link">&para;</a></h2>
+<p>ToolR includes comprehensive testing with a focus on security and robustness:</p>
+<h3 id="property-based-testing-fuzzing">Property-Based Testing (Fuzzing)<a class="headerlink" href="#property-based-testing-fuzzing" title="Permanent link">&para;</a></h3>
+<p>ToolR uses <a href="https://hypothesis.works/">Hypothesis</a> for property-based testing to automatically discover edge cases and potential vulnerabilities.
+Fuzzing tests are integrated into the regular test suite:</p>
+<p>```bash</p>
+<h1 id="run-all-tests-including-fuzzing-tests">Run all tests (including fuzzing tests)<a class="headerlink" href="#run-all-tests-including-fuzzing-tests" title="Permanent link">&para;</a></h1>
+<p>uv run pytest</p>
+<h1 id="run-only-fuzzing-tests">Run only fuzzing tests<a class="headerlink" href="#run-only-fuzzing-tests" title="Permanent link">&para;</a></h1>
+<p>uv run pytest -k "test_fuzz"</p>
 
 
 
