@@ -99,6 +99,7 @@ dev = [
     "3rd-party-pkg",
     "attrs>=25.3.0",
     "coverage>=7.8.0",
+    "hypothesis>=6.0.0",
     "pytest>=8.3.5",
     "pytest-skip-markers>=1.5.2",
     "pytest-subtests>=0.14.2",
