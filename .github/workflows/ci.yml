@@ -104,8 +104,6 @@ jobs:
       contents: read
       id-token: write
       attestations: write
-    with:
-      release-type: dev
 
   test-linux:
     name: Test

@@ -7,11 +7,7 @@ on:
         required: false
         type: string
         description: 'Release version to prepare'
-      release-type:
-        required: false
-        type: string
-        description: 'Release type to prepare'
-        default: 'dev'
+        default: ''
       github-app-id:
         required: false
         type: string
@@ -127,16 +123,7 @@ jobs:
         id: bump-version
         shell: bash
         run: |
-          if [ -z "${{ inputs.release-version }}" ]; then
-            echo "No release version provided, bumping version based on release type: ${{ inputs.release-type }}"
-            RELEASE_VERSION=$(toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
-          else
-            echo "Using provided release version: ${{ inputs.release-version }}"
-            RELEASE_VERSION=$(toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
-          fi
-          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
-          echo "release-version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "release-patch-name=toolr-${RELEASE_VERSION}.patch" >> "$GITHUB_OUTPUT"
+          toolr version bump --write --check-existing-tag ${{ inputs.release-version }}
 
       - name: Generate changelog for GH release
         id: git-cliff

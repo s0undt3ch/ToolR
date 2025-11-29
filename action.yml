@@ -60,7 +60,7 @@ runs:
             echo "Local version is only supported for the ToolR repository"
             exit 1
           fi
-          VERSION_FROM_TAG=$(git describe --tags --match "v[0-9].[0-9].[0-9]" --long || git rev-parse --short HEAD)
+          VERSION_FROM_TAG=$(git describe --tags --match "v[0-9]*.[0-9]*.[0-9]*" --long || git rev-parse --short HEAD)
         fi
         # Generate a requirements file so that the setup-uv action can properly invalidate the cache when necessary
         if [ -n "${{ inputs.requirements-file }}" ] && [ -f "${{ inputs.requirements-file }}" ]; then
