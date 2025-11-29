@@ -22,6 +22,12 @@ repos:
         files: ^(docs/.*\.md|python/toolr/.*\.py)$
         pass_filenames: false
 
+      - id: pin-github-actions
+        name: Pin GitHub Actions to commit SHAs
+        language: python
+        entry: python .pre-commit-hooks/pin-github-actions.py
+        files: ^\.github/workflows/.*\.ya?ml$
+
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
     hooks:
