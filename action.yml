@@ -4,8 +4,8 @@ author: "Pedro Algarvio"
 
 inputs:
   version:
-    description: ToolR version to install
-    default: "0.11.0"
+    description: ToolR version to install (defaults to the action's git ref version, or 'latest' if not a tag)
+    default: ""
 
   requirements-file:
     description: Additional requirements file to install
@@ -34,7 +34,22 @@ runs:
       shell: bash
       id: parse-version
       run: |
-        ACTION_VERSION_TAG=${{ inputs.version }}
+        ACTION_VERSION_TAG="${{ inputs.version }}"
+
+        # If no version specified, auto-detect from git ref
+        if [ -z "$ACTION_VERSION_TAG" ]; then
+          # GITHUB_ACTION_REF is the ref/tag that the action was referenced with
+          # e.g., "v0.11.0" if used as s0undt3ch/ToolR@v0.11.0
+          if [ -n "${{ github.action_ref }}" ]; then
+            ACTION_VERSION_TAG="${{ github.action_ref }}"
+            echo "Auto-detected version from action ref: $ACTION_VERSION_TAG"
+          else
+            # Fallback to latest if we can't detect
+            ACTION_VERSION_TAG="latest"
+            echo "No version specified and no action ref found, using latest"
+          fi
+        fi
+
         echo "THE ACTION_VERSION_TAG=$ACTION_VERSION_TAG"
         VERSION_FROM_TAG=${ACTION_VERSION_TAG#v}
         if [ "${VERSION_FROM_TAG}" = "latest" ]; then
