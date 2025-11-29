@@ -12,10 +12,15 @@ on:
         type: string
         description: 'Display name for the test job'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: ${{ inputs.display-name }} (${{ matrix.python-version }})
     runs-on: ${{ inputs.os }}
+    permissions:
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
