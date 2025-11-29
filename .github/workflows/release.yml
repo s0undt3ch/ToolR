@@ -60,58 +60,19 @@ jobs:
 
   prepare-release:
     name: Prepare Release
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: write
     needs:
       - prepare-ci
-    outputs:
-      release-version: ${{ steps.prepare-release.outputs.release-version }}
-      release-patch-name: ${{ steps.prepare-release.outputs.release-patch-name }}
-      release-tarball-name: ${{ steps.prepare-release.outputs.release-tarball-name }}
-      release-notes-filename: ${{ steps.prepare-release.outputs.release-notes-filename }}
-    steps:
-      # We could stick this in a custom, in-repo action, but this would mean we would have to checkout
-      # the now, and then checkout again with higher privileges, which is why we're doing it here.
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
-        with:
-          egress-policy: audit
-
-      - uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94 # v2.2.0
-        id: app-token
-        with:
-          app-id: ${{ vars.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-
-      - name: Get GitHub App User ID
-        id: get-user-id
-        shell: bash
-        run: |
-          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - name: Configure Git
-        shell: bash
-        run: |
-          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          fetch-depth: 0
-
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
-        with:
-          python-version: 3.11
-
-      - uses: ./.github/actions/prepare-release
-        id: prepare-release
-        with:
-          release-version: ${{ inputs.release-version }}
+    uses: ./.github/workflows/prepare-release.yml
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      release-version: ${{ inputs.release-version }}
+      github-app-id: ${{ vars.GH_APP_ID }}
+      environment: release
+    secrets:
+      github-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
   build-linux:
     name: Build

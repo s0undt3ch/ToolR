@@ -1,0 +1,245 @@
+name: Prepare Release
+
+on:
+  workflow_call:
+    inputs:
+      release-version:
+        required: false
+        type: string
+        description: 'Release version to prepare'
+      release-type:
+        required: false
+        type: string
+        description: 'Release type to prepare'
+        default: 'dev'
+      github-app-id:
+        required: false
+        type: string
+        description: 'GitHub App ID for authentication'
+      environment:
+        required: false
+        type: string
+        description: 'GitHub environment to use'
+        default: ''
+    secrets:
+      github-app-private-key:
+        required: false
+        description: 'GitHub App private key for authentication'
+    outputs:
+      release-version:
+        description: 'Prepared release version'
+        value: ${{ jobs.prepare-release.outputs.release-version }}
+      release-patch-name:
+        description: 'Name of the release patch'
+        value: ${{ jobs.prepare-release.outputs.release-patch-name }}
+      release-notes-filename:
+        description: 'Name of the release notes file'
+        value: ${{ jobs.prepare-release.outputs.release-notes-filename }}
+      release-tarball-name:
+        description: 'Name of the release tarball'
+        value: ${{ jobs.prepare-release.outputs.release-tarball-name }}
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment != '' && inputs.environment || null }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      release-version: ${{ steps.bump-version.outputs.release-version }}
+      release-patch-name: ${{ steps.bump-version.outputs.release-patch-name }}
+      release-notes-filename: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+      release-tarball-name: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        with:
+          egress-policy: audit
+
+      - name: Create GitHub App Token
+        if: inputs.github-app-id != ''
+        id: app-token
+        uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94 # v2.2.0
+        with:
+          app-id: ${{ inputs.github-app-id }}
+          private-key: ${{ secrets.github-app-private-key }}
+
+      - name: Get GitHub App User ID
+        if: inputs.github-app-id != ''
+        id: get-user-id
+        shell: bash
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout code
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        id: install-uv
+        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
+
+      - name: Generate additional ToolR requirements file
+        shell: bash
+        run: |
+          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup ToolR
+        id: setup-toolr
+        uses: s0undt3ch/ToolR@05c0d9d5f907b1c108a02af1b9b52aa71926bc06 # v0.11.0
+        with:
+          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup Prek
+        id: setup-pre-commit
+        uses: ./.github/actions/setup-pre-commit
+        with:
+          cache-seed: prepare-release
+
+      - name: Configure Git (with App)
+        if: inputs.github-app-id != ''
+        shell: bash
+        run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      - name: Configure Git (default)
+        if: inputs.github-app-id == ''
+        uses: ./.github/actions/configure-git
+
+      - name: Bump Version
+        id: bump-version
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.release-version }}" ]; then
+            echo "No release version provided, bumping version based on release type: ${{ inputs.release-type }}"
+            RELEASE_VERSION=$(toolr version bump --${{ inputs.release-type }} --write --check-existing-tag)
+          else
+            echo "Using provided release version: ${{ inputs.release-version }}"
+            RELEASE_VERSION=$(toolr version bump ${{ inputs.release-version }} --write --check-existing-tag)
+          fi
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+          echo "release-version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release-patch-name=toolr-${RELEASE_VERSION}.patch" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog for GH release
+        id: git-cliff
+        uses: orhun/git-cliff-action@d77b37db2e3f7398432d34b72a12aa3e2ba87e51 # v4.6.0
+        with:
+          config: cliff.toml
+          args: --unreleased --strip all
+        env:
+          OUTPUT: .release-changes.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Prepare GH Release changelog
+        id: prepare-release-notes
+        shell: bash
+        run: |
+          tail -n +3 .release-changes.md > release-notes.md
+          echo "release-notes-filename=release-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Release Notes Artifact
+        id: upload-release-notes
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+          path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attest release notes artifact
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        # Only run attestations on the main repository, not on forks
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+        with:
+          subject-path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+
+      - name: Update CHANGELOG.md
+        uses: orhun/git-cliff-action@d77b37db2e3f7398432d34b72a12aa3e2ba87e51 # v4.6.0
+        with:
+          config: cliff.toml
+          args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Show Changes Diff
+        shell: bash
+        run: |
+          git diff --color
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          # Run prek against the changes
+          prek run --all-files --show-diff-on-failure || true
+          # Commit the changes
+          git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
+
+      - name: Tag the release
+        shell: bash
+        run: |
+          git tag -a "${{ env.RELEASE_VERSION }}" -m "Release ${{ env.RELEASE_VERSION }}"
+
+      - name: Create Release Patch
+        shell: bash
+        run: |
+          git format-patch --keep-subject --binary --stdout HEAD^ > toolr-${{ env.RELEASE_VERSION }}.patch
+
+      - name: Upload Changes Diff Artifact
+        id: upload-release-patch
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: toolr-${{ env.RELEASE_VERSION }}.patch
+          path: toolr-${{ env.RELEASE_VERSION }}.patch
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attest release patch artifact
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        # Only run attestations on the main repository, not on forks
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+        with:
+          subject-path: toolr-${{ env.RELEASE_VERSION }}.patch
+
+      - name: Create Source Tarball
+        id: create-source-tarball
+        shell: bash
+        run: |
+          uv build --sdist
+          for file in dist/*.tar.gz; do
+            echo "release-tarball-name=$(basename "$file")" >> "$GITHUB_OUTPUT"
+            break
+          done
+
+      - name: Upload Source Tarball Artifact
+        id: upload-source-tarball
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
+          path: dist/${{ steps.create-source-tarball.outputs.release-tarball-name }}
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attest source tarball artifact
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        # Only run attestations on the main repository, not on forks
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+        with:
+          subject-path: dist/${{ steps.create-source-tarball.outputs.release-tarball-name }}
