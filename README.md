@@ -109,3 +109,25 @@ uv run coverage run -m pytest -ra -s -v
 - **Malformed Input Handling**: Tests ensure graceful handling of invalid input
 
 The integrated fuzzing tests help ensure ToolR can safely handle malformed input, unusual Unicode sequences, and other edge cases that might cause crashes or security vulnerabilities.
+
+## Contributing
+
+We welcome contributions from the community! ToolR is an open-source project and we appreciate:
+
+- 🐛 Bug reports and fixes
+- ✨ Feature requests and implementations
+- 📖 Documentation improvements
+- 🧪 Test coverage enhancements
+- 💡 Ideas and suggestions
+
+Please read our [Contributing Guide](CONTRIBUTING.md) for:
+
+- Setting up your development environment
+- Coding standards and best practices
+- Pull request process
+- Commit message conventions
+- Testing guidelines
+
+## License
+
+ToolR is licensed under the [Apache License 2.0](LICENSE).
