@@ -138,7 +138,10 @@ class ProjectVersion(Struct, frozen=True):
     @property
     def next_dev_version(self) -> Version:
         """The next development version."""
-        return Version(f"{self.version}.dev{self.distance_to_latest_tag}+{self.short_commit_hash}")
+        version_str = f"{self.version}.dev{self.distance_to_latest_tag}"
+        if os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request":
+            version_str += f"+{self.short_commit_hash}"
+        return Version(version_str)
 
 
 def _current_version(ctx: Context) -> Version:
