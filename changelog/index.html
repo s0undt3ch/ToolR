@@ -1,0 +1,1619 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../contributing/">
+      
+      
+      
+      <link rel="icon" href="../imgs/toolr.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
+    
+    
+      
+        <title>CHANGELOG - ToolR Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.7e37652d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="ToolR Documentation" class="md-header__button md-logo" aria-label="ToolR Documentation" data-md-component="logo">
+      
+  <img src="../imgs/toolr.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ToolR Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CHANGELOG
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../usage/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Usage
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../examples/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Examples
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/toolr/_context/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../contributing/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CHANGELOG
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ToolR Documentation" class="md-nav__button md-logo" aria-label="ToolR Documentation" data-md-component="logo">
+      
+  <img src="../imgs/toolr.png" alt="logo">
+
+    </a>
+    ToolR Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Usage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr._context
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/_exc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr._exc
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/_parser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr._parser
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/_registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr._registry
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr.testing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Utils
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            Utils
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/utils/_console/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr.utils._console
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/utils/_docstrings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr.utils._docstrings
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/utils/_imports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr.utils._imports
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/utils/_logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr.utils._logs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/utils/_signature/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr.utils._signature
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/toolr/utils/command/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    toolr.utils.command
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    CHANGELOG
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    CHANGELOG
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0110dev72g5339957-2025-11-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.11.0.dev72+g5339957 - 2025-11-30
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.11.0.dev72+g5339957 - 2025-11-30">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-contributors" class="md-nav__link">
+    <span class="md-ellipsis">
+      New Contributors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0110-2025-09-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.11.0 - 2025-09-24
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.11.0 - 2025-09-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0101-2025-09-19" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.10.1 - 2025-09-19
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.10.1 - 2025-09-19">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0100-2025-09-17" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.10.0 - 2025-09-17
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.10.0 - 2025-09-17">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#090-2025-09-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.9.0 - 2025-09-13
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.9.0 - 2025-09-13">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactor" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚜 Refactor
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-contributors_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      New Contributors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0110dev72g5339957-2025-11-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.11.0.dev72+g5339957 - 2025-11-30
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.11.0.dev72+g5339957 - 2025-11-30">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-contributors" class="md-nav__link">
+    <span class="md-ellipsis">
+      New Contributors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0110-2025-09-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.11.0 - 2025-09-24
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.11.0 - 2025-09-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0101-2025-09-19" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.10.1 - 2025-09-19
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.10.1 - 2025-09-19">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0100-2025-09-17" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.10.0 - 2025-09-17
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.10.0 - 2025-09-17">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#090-2025-09-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.9.0 - 2025-09-13
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.9.0 - 2025-09-13">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚀 Features
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      🐛 Bug Fixes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactor" class="md-nav__link">
+    <span class="md-ellipsis">
+      🚜 Refactor
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-tasks_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Miscellaneous Tasks
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-contributors_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      New Contributors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<p>All notable changes to this project will be documented in this file.</p>
+<p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
+from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
+to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
+<h2 id="0110dev72g5339957-2025-11-30">0.11.0.dev72+g5339957 - 2025-11-30<a class="headerlink" href="#0110dev72g5339957-2025-11-30" title="Permanent link">&para;</a></h2>
+<h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(logs)</em> Include extra keywords in logs output (<a href="https://github.com/s0undt3ch/ToolR/commit/695dc5899d29e7562a3a90850ff458045891c195"><code>695dc58</code></a>)</li>
+<li><em>(tests)</em> Fuzzy testing (<a href="https://github.com/s0undt3ch/ToolR/commit/f34c9cd84307c3c00cc7fa7b82ffde9f4b8cfffe"><code>f34c9cd</code></a>)</li>
+<li><em>(security)</em> Add <code>SECURITY.md</code> file (<a href="https://github.com/s0undt3ch/ToolR/commit/131b75ab2eab6aecbad36a0f865a0f011fe8e11b"><code>131b75a</code></a>)</li>
+</ul>
+<h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(release)</em> Update ToolR action versions in workflows (<a href="https://github.com/s0undt3ch/ToolR/commit/0d110142417767c317a9b2fa79608ab32abd1d30"><code>0d11014</code></a>)</li>
+<li><em>(ci)</em> Switch to prek (<a href="https://github.com/s0undt3ch/ToolR/commit/64c599784b7bc3639d94beea71150bc92743576f"><code>64c5997</code></a>)</li>
+<li><em>(pre-commit)</em> Update pre-commit hook versions (<a href="https://github.com/s0undt3ch/ToolR/commit/64380774c55a509af331809b861c2cdced949832"><code>6438077</code></a>)</li>
+<li><em>(ci)</em> Switch to <code>macos-15-intel</code> to build Intel wheels (<a href="https://github.com/s0undt3ch/ToolR/commit/211b0faa402a5304648180ae0fa48059d2eb035a"><code>211b0fa</code></a>)</li>
+<li><em>(ci)</em> Lock permissions on the build.yml workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/aabe4e59aecf0af7e06bd2c27f10cd1bd96286f3"><code>aabe4e5</code></a>)</li>
+<li><em>(ci)</em> Lock <code>build.yml</code> GitHub Actions to SHA hashes (<a href="https://github.com/s0undt3ch/ToolR/commit/08bdda3f740fef78db3f2b1b549c2bbf425e11a9"><code>08bdda3</code></a>)</li>
+<li><em>(ci)</em> Only run attestations on the main repo (<a href="https://github.com/s0undt3ch/ToolR/commit/0d2b361c20638d696c0554b956fa4fafd662570b"><code>0d2b361</code></a>)</li>
+<li><em>(ci)</em> Improve <code>cibuildwheel`` build performance by adding cache ([</code>60a438f`](<a href="https://github.com/s0undt3ch/ToolR/commit/60a438f5c00b406f170ff7d07e4ac9968984c967">https://github.com/s0undt3ch/ToolR/commit/60a438f5c00b406f170ff7d07e4ac9968984c967</a>))</li>
+<li><em>(ci)</em> Fix the chicken &amp; egg issue with releases. (<a href="https://github.com/s0undt3ch/ToolR/commit/77cc4f636cc60b9f2656932ee3a6a2108e3b8c58"><code>77cc4f6</code></a>)</li>
+<li><em>(ci)</em> Remove no longer required process (<a href="https://github.com/s0undt3ch/ToolR/commit/821592f76fae15ea4ba83525a92fd335c5c59685"><code>821592f</code></a>)</li>
+<li><em>(ci)</em> Update but still lock to the SHA (<a href="https://github.com/s0undt3ch/ToolR/commit/57e37194bf90de7b9228610d3ba5c9677262bbe2"><code>57e3719</code></a>)</li>
+<li><em>(ci)</em> When updating our own usage or toolr in GH Actions, lock it (<a href="https://github.com/s0undt3ch/ToolR/commit/b6660881c6ab62fc7d23fd01799fe5eae679ea3c"><code>b666088</code></a>)</li>
+<li><em>(ci)</em> Restrict GH Actions jobs permissions (<a href="https://github.com/s0undt3ch/ToolR/commit/14bfc6d433b4937d0cb00c07198c0bd7f2e6821b"><code>14bfc6d</code></a>)</li>
+<li><em>(pre-commit)</em> Add pre-commit hook to lock GH Actions steps (<a href="https://github.com/s0undt3ch/ToolR/commit/5d69b7a80743681bc392413f2d4f8175d1c5f14c"><code>5d69b7a</code></a>)</li>
+<li><em>(ci)</em> Switch <code>prepare-release</code> to a reusable workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/9e6c657d8863f829766f588d45092beea0a5ea47"><code>9e6c657</code></a>)</li>
+<li><em>(ci)</em> Update actions versions (<a href="https://github.com/s0undt3ch/ToolR/commit/2faf97c0018d376a3a8bb01910e4ed7e8cecca57"><code>2faf97c</code></a>)</li>
+<li><em>(ci)</em> Fix auto version bump (<a href="https://github.com/s0undt3ch/ToolR/commit/2a85e6c577351f6c0987952a5735aa0f9b6fe364"><code>2a85e6c</code></a>)</li>
+<li><em>(docs)</em> Add CONTRIBUTING document (<a href="https://github.com/s0undt3ch/ToolR/commit/769133820372966454c2e013fbb65035cb3661c1"><code>7691338</code></a>)</li>
+</ul>
+<h3 id="new-contributors">New Contributors<a class="headerlink" href="#new-contributors" title="Permanent link">&para;</a></h3>
+<ul>
+<li>@step-security-bot made their first contribution</li>
+</ul>
+<h2 id="0110-2025-09-24">0.11.0 - 2025-09-24<a class="headerlink" href="#0110-2025-09-24" title="Permanent link">&para;</a></h2>
+<h3 id="features_1"><!-- 0 -->🚀 Features<a class="headerlink" href="#features_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(docstrings)</em> We now use a rust extension to parse the docstrings (<a href="https://github.com/s0undt3ch/ToolR/commit/a2744f0ff3c4b5c086f780d9f0433fc29c3af832"><code>a2744f0</code></a>)</li>
+<li><em>(commands help)</em> The command's help message is now formatted with Markdown (<a href="https://github.com/s0undt3ch/ToolR/commit/d786915ab9c92726aff05f79c0a079115dd199f9"><code>d786915</code></a>)</li>
+</ul>
+<h3 id="miscellaneous-tasks_1"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(sync-rolling-tags)</em> Fix <code>sync-rolling-tags</code> workflow trigger (<a href="https://github.com/s0undt3ch/ToolR/commit/889e36fea9025c584ad3d7ea4173ba09aff2beb8"><code>889e36f</code></a>)</li>
+<li><em>(ci)</em> Sync'ing rolling tags is now done on demand (<a href="https://github.com/s0undt3ch/ToolR/commit/773745b4156aecee998f8a2e6e494b1a144704e8"><code>773745b</code></a>)</li>
+<li><em>(ci)</em> Fix sync-rolling-tags command (<a href="https://github.com/s0undt3ch/ToolR/commit/59c29551a6be607748ab97d12dc9958bfa2fdbe4"><code>59c2955</code></a>)</li>
+<li><em>(ci)</em> More fixes to the sync-rolling-tags process (<a href="https://github.com/s0undt3ch/ToolR/commit/45ac80617a69bec0ba2c32b91deec634a98d6eb1"><code>45ac806</code></a>)</li>
+<li><em>(release)</em> Update ToolR action versions in workflows (<a href="https://github.com/s0undt3ch/ToolR/commit/6cc4bdecb59d83d95d52f6a908fb5712a888acd0"><code>6cc4bde</code></a>)</li>
+<li><em>(ci)</em> Final sync-rolling-tags fix (<a href="https://github.com/s0undt3ch/ToolR/commit/c48fcbe64867018814992c2712f38c3648b23e53"><code>c48fcbe</code></a>)</li>
+<li><em>(ci)</em> Refresh some caches (<a href="https://github.com/s0undt3ch/ToolR/commit/a91de3d2b2ad13887dd6e19a47570b4a2bb80bcf"><code>a91de3d</code></a>)</li>
+</ul>
+<h2 id="0101-2025-09-19">0.10.1 - 2025-09-19<a class="headerlink" href="#0101-2025-09-19" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(parent)</em> Fix command nesting (<a href="https://github.com/s0undt3ch/ToolR/commit/c223dfc88e2981dbd7cd6aed304d219fc3f8f12a"><code>c223dfc</code></a>)</li>
+<li><em>(command)</em> We now log the <code>.run()</code> cmdline at the <code>INFO</code> level (<a href="https://github.com/s0undt3ch/ToolR/commit/1311f8d817fd71b4aa2b061c48d3e067b8076486"><code>1311f8d</code></a>)</li>
+<li><em>(tests)</em> Fix <code>ctx.which</code> tests to make them less brittle. (<a href="https://github.com/s0undt3ch/ToolR/commit/8a55cf32e5e793472b5059a5a433b3e6a90cfc38"><code>8a55cf3</code></a>)</li>
+</ul>
+<h3 id="miscellaneous-tasks_2"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(release)</em> Don't update ToolR action usage in workflows (<a href="https://github.com/s0undt3ch/ToolR/commit/fbe49927887da44cfbba0e8e4892a672d14837df"><code>fbe4992</code></a>)</li>
+<li><em>(release)</em> Add workflow that updates ToolR versions in workflows (<a href="https://github.com/s0undt3ch/ToolR/commit/9782974d40ff2d62a183025c9c48dee0d3e92143"><code>9782974</code></a>)</li>
+</ul>
+<h2 id="0100-2025-09-17">0.10.0 - 2025-09-17<a class="headerlink" href="#0100-2025-09-17" title="Permanent link">&para;</a></h2>
+<h3 id="miscellaneous-tasks_3"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(ci)</em> Improve CI build matrix reporting (<a href="https://github.com/s0undt3ch/ToolR/commit/777595c0ce4c32fe0a88e249e49fb36bc54206f9"><code>777595c</code></a>)</li>
+<li><em>(ci)</em> Prevent unnecessary branch builds on PRs (<a href="https://github.com/s0undt3ch/ToolR/commit/4d7e911fb7448e22fe9f5b961bfe368b3ef50868"><code>4d7e911</code></a>)</li>
+<li><em>(release)</em> Update all self ToolR actions usage on release (<a href="https://github.com/s0undt3ch/ToolR/commit/38e2a8b92b7c95431cf3ff05e8af50d020b4f11d"><code>38e2a8b</code></a>)</li>
+<li><em>(ci)</em> Consistent workflow toolr output width (<a href="https://github.com/s0undt3ch/ToolR/commit/447540685a36ddae3936ee4c3232474c42f59748"><code>4475406</code></a>)</li>
+</ul>
+<h2 id="090-2025-09-13">0.9.0 - 2025-09-13<a class="headerlink" href="#090-2025-09-13" title="Permanent link">&para;</a></h2>
+<h3 id="features_2"><!-- 0 -->🚀 Features<a class="headerlink" href="#features_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(cli)</em> Provide a <code>Context</code> class</li>
+<li><em>(registry)</em> Implemented the registry and it's tests</li>
+<li><em>(logging)</em> Add <code>toolr.utils.logs</code> to improve logging support</li>
+<li><em>(cli)</em> Provide the package CLI entry point</li>
+<li><em>(help)</em> We now use <code>RichHelpFormatter</code> to render the help</li>
+<li><em>(docstrings)</em> Parse docstrings to construct help</li>
+<li><em>(docs)</em> Capture each parameter description from docstrings</li>
+<li><em>(coverage)</em> Upload code coverage to codecov</li>
+<li><em>(ci)</em> Upload test results to codecov</li>
+<li><em>(signatures)</em> Add signature parsing</li>
+<li><em>(signature)</em> Handle append action, including weird boolean append.</li>
+<li><em>(nargs)</em> Support <code>nargs</code> and <code>*variable</code> in function signatures</li>
+<li><em>(docs)</em> Documentation!</li>
+<li><em>(context)</em> Implemented prompt support in <code>Context</code>.</li>
+<li><em>(github-actions)</em> Allow setting ToolR from a github-action</li>
+<li><em>(signature)</em> Add support for mutually exclusive groups</li>
+<li><em>(logging)</em> Add <code>setup_logging</code> function.</li>
+</ul>
+<h3 id="bug-fixes_1"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(imports)</em> Handle import errors when searching for tools</li>
+<li><em>(descriptions)</em> Differentiate descriptions</li>
+<li><em>(docstring)</em> Fix dosctring class reference</li>
+<li><em>(decorator)</em> Fix decorator usage.</li>
+<li><em>(help)</em> Parse each decorated command docstring to provide help</li>
+<li><em>(log)</em> Only log the time on specific occasions.</li>
+<li><em>(tests)</em> Fix tests according to latest code changes</li>
+<li><em>(tests)</em> Fix rust tests on windows</li>
+<li><em>(scope)</em> Let the codecov CLI tool find the coverage files</li>
+<li><em>(coverage)</em> Don't track coverage in <code>if TYPE_CHECKING:</code> code blocks</li>
+<li><em>(signature)</em> <code>dest</code> is always set to the name of the positional parameter</li>
+<li><em>(tests)</em> Small refactor to improve testing</li>
+<li><em>(signature)</em> On positional arguments, the name will always be the first alias</li>
+<li><em>(enums)</em> Handle enums by name instead of by value</li>
+<li><em>(cli)</em> Fix early verbose/debug output CLI parsing logic</li>
+<li><em>(tests)</em> Skip problematic windows test</li>
+<li><em>(docs)</em> Include missing docs examples</li>
+<li><em>(docs)</em> Remove <code>uv run</code> prefix from examples</li>
+<li><em>(command)</em> Command names from functions auto-naming</li>
+<li><em>(SignatureError)</em> <code>SignatureError</code> exceptions now point to command</li>
+<li><em>(pypi)</em> Fix PyPi packaging uploads</li>
+</ul>
+<h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(toolr)</em> Support 3rd-party commands</li>
+<li><em>(consoles)</em> Name context consoles explicitly</li>
+<li><em>(3rd-party)</em> Fix commands and command groups augment/overrides</li>
+<li><em>(consoles)</em> Refactor consoles setup</li>
+</ul>
+<h3 id="miscellaneous-tasks_4"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(dependencies)</em> Add <code>rich=-argparse</code> as a dependency</li>
+<li><em>(command)</em> Rename <code>command.run_command</code> to <code>command.run</code></li>
+<li><em>(context)</em> Make the <code>context</code> module "private".</li>
+<li><em>(ci)</em> Define allowed concurrency</li>
+<li><em>(requiremenst)</em> We no longer need to maintain separate requirements files</li>
+<li><em>(tools)</em> Clean up the pre-existing tools directory</li>
+<li><em>(pre-commit)</em> Update pre-commit hook versions</li>
+<li><em>(lint)</em> Fix lint issues found with latest pre-commit hooks versions</li>
+<li><em>(cibuildweel)</em> Bump <code>MACOSX_DEPLOYMENT_TARGET</code> to <code>11.0</code></li>
+<li><em>(cleanup)</em> Remove <code>changelog.d/</code>, it won't be needed anymore</li>
+<li><em>(typing)</em> Make the typing gods happier</li>
+<li><em>(msgspec)</em> Replaced all usages of <code>dataclass</code> with <code>msgspec.Struct</code></li>
+<li><em>(pre-commit)</em> Upgrade some pre-commit hooks</li>
+<li><em>(pre-commit)</em> Add <code>codespell</code> pre-commit hook</li>
+<li><em>(parser)</em> Use a private method to set the parser instead.</li>
+<li><em>(discovery)</em> Actually start discovering tools when running <code>toolr</code></li>
+<li><em>(typing)</em> Fix typing</li>
+<li><em>(samples)</em> Fix sample cases to respect the required signature</li>
+<li><em>(rust)</em> Address clippy errors</li>
+<li><em>(ci)</em> Define the pre-commit cache to be inside the workspace</li>
+<li><em>(ci)</em> Parallelize package builds</li>
+<li><em>(ci)</em> Use OIDC to authenticate codecov</li>
+<li><em>(tests)</em> Add default pytest flags to config</li>
+<li><em>(dependencies)</em> Add <code>pytest-subtests</code> to dev dependencies</li>
+<li><em>(tests)</em> Add <code>argv</code> tests</li>
+<li><em>(logs)</em> Logging utils module testing</li>
+<li><em>(tests)</em> Add test coverage for the <code>__main__</code> module</li>
+<li><em>(tests)</em> Improve test coverage of the context object</li>
+<li><em>(README.md)</em> Fix logo file path</li>
+<li><em>(mypy)</em> Have mypy ignore <code>tests/support/3rd-party-pkg/.*</code></li>
+<li><em>(tests)</em> Add test coverage to <code>setup_consoles</code></li>
+<li><em>(pyproject.toml)</em> Define the 3rd-party test package as editable</li>
+<li><em>(ci)</em> Improved parallelization</li>
+<li><em>(pre-commit)</em> Update hook versions</li>
+<li><em>(tests)</em> Split <code>tests/test_context.py</code> into several test modules</li>
+<li><em>(docs)</em> Add <code>ruff</code> as a docs dependency</li>
+<li><em>(ci)</em> Add and use <code>.github/actions/setup-virtualenv</code></li>
+<li><em>(ci)</em> Push built packages to test.pypi.org on the default branch</li>
+<li><em>(docs)</em> Fix logo URL in readme</li>
+<li><em>(gitignore)</em> Ignore <code>*.code-workspace</code></li>
+<li><em>(pre-commit)</em> Upgrade pre-commit hook versions</li>
+<li><em>(ConsoleVerbosity)</em> Move <code>ConsoleVerbosity</code> to  <code>toolr.utils._console</code></li>
+<li><em>(action)</em> Simplify action</li>
+<li><em>(release)</em> Update the release process</li>
+<li><em>(release)</em> Separate release workflow</li>
+<li><em>(security)</em> Include build provenance attestations</li>
+<li><em>(debug)</em> Set verbose to true when running in debug mode</li>
+<li><em>(oackages)</em> Stop building for <code>s390x</code>.</li>
+<li><em>(dependabot)</em> Add <code>dependabot</code> configuration</li>
+<li><em>(docs)</em> Add <code>.readthedocs.yaml</code> config file</li>
+<li><em>(release)</em> Fix attestations on release workflow</li>
+<li><em>(release)</em> Fix generate build matrix step</li>
+<li><em>(changelog)</em> Add cliff config file</li>
+<li><em>(release)</em> More release workflow fixes</li>
+<li><em>(release)</em> Use the global permissions</li>
+<li><em>(release)</em> Use GH App to push the tags</li>
+<li><em>(release)</em> The action now just configures git with higher privileges</li>
+<li><em>(release)</em> Just repeat, it's simpler in the end</li>
+<li><em>(release)</em> Use <code>sdist</code> to build wheels</li>
+<li><em>(release)</em> Prepare for 0.1.1 release</li>
+<li><em>(release)</em> Publish GH release fixes</li>
+<li><em>(release)</em> Prepare for 0.1.2 release</li>
+<li><em>(release)</em> Change release notes filename name</li>
+<li><em>(docs)</em> Update the docs URL to  the right one</li>
+<li><em>(release)</em> Remove the PyPi url</li>
+<li><em>(release)</em> Revert debug release changes</li>
+<li><em>(release)</em> Fix package name to be compliant with PyPi</li>
+<li><em>(changelog)</em> Fix white-space issues around changelog generation</li>
+<li><em>(prepare-release)</em> Run <code>pre-commit</code> against the prepare release changes</li>
+<li><em>(ci)</em> Pre-commit needs to be setup and run in a few places</li>
+</ul>
+<h3 id="new-contributors_1">New Contributors<a class="headerlink" href="#new-contributors_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>@s0undt3ch-gh-actions-automations[bot] made their first contribution</li>
+<li>@dependabot[bot] made their first contribution</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../contributing/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Contributing">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Contributing
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["announce.dismiss", "content.code.annotate", "content.code.copy", "content.tabs.link", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.preview", "navigation.instant.progress", "navigation.path", "navigation.sections", "navigation.tabs", "navigation.top", "navigation.tracking", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.50899def.min.js"></script>
+      
+    
+  </body>
+</html>
