@@ -127,7 +127,7 @@ jobs:
 
       - name: Generate changelog for GH release
         id: git-cliff
-        uses: orhun/git-cliff-action@d77b37db2e3f7398432d34b72a12aa3e2ba87e51 # v4.6.0
+        uses: orhun/git-cliff-action@e16f179f0be49ecdfe63753837f20b9531642772 # v4.7.0
         with:
           config: cliff.toml
           args: --unreleased --strip all
@@ -159,7 +159,7 @@ jobs:
           subject-path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
 
       - name: Update CHANGELOG.md
-        uses: orhun/git-cliff-action@d77b37db2e3f7398432d34b72a12aa3e2ba87e51 # v4.6.0
+        uses: orhun/git-cliff-action@e16f179f0be49ecdfe63753837f20b9531642772 # v4.7.0
         with:
           config: cliff.toml
           args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
