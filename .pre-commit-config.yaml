@@ -72,13 +72,16 @@ repos:
         additional_dependencies:
           - tomli
 
-  - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.18.1
+  - repo: https://github.com/rvben/rumdl-pre-commit
+    rev: v0.1.84
     hooks:
-      - id: markdownlint-cli2
-        args:
-          - --config=.markdownlint.yaml
-          - --fix
+      - id: rumdl
+        # Config picked up from .rumdl.toml.
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
 
   - repo: local
     hooks:
