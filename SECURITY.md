@@ -17,8 +17,8 @@ We take security vulnerabilities seriously and appreciate your efforts to respon
 
 If you discover a security vulnerability, please report it by:
 
-1. **GitHub Security Advisory**: Use GitHub's private vulnerability reporting feature that can be
-found [here](https://github.com/s0undt3ch/toolr/security/advisories/new).
+1. **GitHub Security Advisory**: Use GitHub's
+[private vulnerability reporting feature](https://github.com/s0undt3ch/toolr/security/advisories/new).
 
 ### What to Include
 
