@@ -461,7 +461,8 @@ def _parse_parameter(  # noqa: PLR0915
         assert isinstance(aliases, list)
 
     if positional:
-        return Arg(
+        positional_cls: type[Arg] = VarArg if param.kind == Parameter.VAR_POSITIONAL else Arg
+        return positional_cls(
             name=param_name,
             type=actual_type,
             description=description,
