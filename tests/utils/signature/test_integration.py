@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+from argparse import Namespace
 from typing import Annotated
 
 import pytest
@@ -133,3 +134,38 @@ def test_mutually_exclusive_groups_error_handling():
     # This should raise an error because positional arguments can't be in mutually exclusive groups
     with pytest.raises(SignatureError, match="Positional parameter 'name' cannot be in a mutually exclusive group"):
         get_signature(func)
+
+
+def test_signature_call_spreads_var_positional_values():
+    """End-to-end: ``*args`` values are spread into the user function, not nested.
+
+    Regression test for the bug where ``_parse_parameter`` returned a plain ``Arg``
+    for VAR_POSITIONAL parameters. That caused ``Signature.__call__`` to take the
+    ``Arg.append`` branch and the user function received the list as a single
+    positional argument rather than spread varargs.
+    """
+    captured: dict[str, object] = {}
+
+    def test_func(ctx: Context, *items: str) -> None:
+        """Function with varargs.
+
+        Args:
+            items: Items.
+        """
+        captured["items"] = items
+
+    signature = get_signature(test_func)
+
+    options = Namespace()
+    options.items = ["a", "b", "c"]
+
+    mock_ctx = Context(
+        repo_root=None,
+        parser=None,
+        verbosity=None,
+        _console_stderr=None,
+        _console_stdout=None,
+    )
+    signature(mock_ctx, options)
+
+    assert captured["items"] == ("a", "b", "c")
