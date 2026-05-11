@@ -147,12 +147,16 @@ class Signature(Struct, Generic[F], frozen=True):
         kwargs: dict[str, Any] = {}
         for argument in self.arguments:
             argument_value = getattr(options, argument.name)
+            # KwArg and VarArg both subclass Arg, so the more specific subclasses
+            # must be matched first; otherwise KwArg values land in ``args`` and
+            # ``bind_partial`` fails for any function that uses a ``*,`` keyword-only
+            # separator.
             if isinstance(argument, VarArg):
                 args.extend(argument_value)
-            elif isinstance(argument, Arg):
-                args.append(argument_value)
             elif isinstance(argument, KwArg):
                 kwargs[argument.name] = argument_value
+            elif isinstance(argument, Arg):
+                args.append(argument_value)
             else:  # pragma: no cover
                 err_msg = f"Unknown argument type: {argument}"
                 raise TypeError(err_msg)
@@ -461,7 +465,8 @@ def _parse_parameter(  # noqa: PLR0915
         assert isinstance(aliases, list)
 
     if positional:
-        return Arg(
+        positional_cls: type[Arg] = VarArg if param.kind == Parameter.VAR_POSITIONAL else Arg
+        return positional_cls(
             name=param_name,
             type=actual_type,
             description=description,

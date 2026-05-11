@@ -11,6 +11,7 @@ from toolr import Context
 from toolr._exc import SignatureError
 from toolr.utils._signature import Arg
 from toolr.utils._signature import KwArg
+from toolr.utils._signature import VarArg
 from toolr.utils._signature import arg
 from toolr.utils._signature import get_signature
 
@@ -243,3 +244,46 @@ def test_get_signature_union_second_type_not_none():
 
     with pytest.raises(SignatureError, match=r"The second type of Arg 'value' must be None"):
         get_signature(test_func)
+
+
+def test_get_signature_var_positional_returns_vararg():
+    """get_signature must return a VarArg for *args-style (VAR_POSITIONAL) parameters.
+
+    Regression test: previously _parse_parameter set the local ``klass`` to ``VarArg``
+    for VAR_POSITIONAL parameters but the final return statement unconditionally built
+    an ``Arg``. That meant ``Signature.__call__`` never took the VarArg ``.extend``
+    branch, and values arrived in the user function nested inside a single-element
+    list instead of being spread.
+    """
+
+    def test_func(ctx: Context, *items: str) -> None:
+        """Test function with variable positional arguments.
+
+        Args:
+            items: The items.
+        """
+
+    signature = get_signature(test_func)
+    assert len(signature.arguments) == 1
+    assert signature.arguments[0].name == "items"
+    assert signature.arguments[0].nargs == "*"
+    assert isinstance(signature.arguments[0], VarArg)
+
+
+def test_get_signature_var_positional_with_other_args():
+    """VAR_POSITIONAL must remain a VarArg even when preceded by regular positionals."""
+
+    def test_func(ctx: Context, first: str, *rest: str) -> None:
+        """Test function with a positional and trailing varargs.
+
+        Args:
+            first: The first arg.
+            rest: The remaining args.
+        """
+
+    signature = get_signature(test_func)
+    assert len(signature.arguments) == 2
+    assert isinstance(signature.arguments[0], Arg)
+    assert not isinstance(signature.arguments[0], VarArg)
+    assert isinstance(signature.arguments[1], VarArg)
+    assert signature.arguments[1].nargs == "*"
