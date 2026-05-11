@@ -1,7 +1,7 @@
 # ToolR Rust Front-End — Design
 
 - **Date:** 2026-05-11
-- **Status:** Design — see [implementation roadmap](./2026-05-11-toolr-rust-front-end-roadmap.md)
+- **Status:** Design — see [implementation roadmap](./01-roadmap.md)
   for sub-plan decomposition and current state.
 - **Author:** Pedro Algarvio (brainstormed with Claude)
 

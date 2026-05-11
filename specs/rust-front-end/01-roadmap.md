@@ -1,6 +1,6 @@
 # ToolR Rust Front-End — Implementation Roadmap
 
-- **Tracks:** [Rust Front-End Design](./2026-05-11-toolr-rust-front-end-design.md)
+- **Tracks:** [Rust Front-End Design](./00-design.md)
 - **Status:** Spec committed; sub-plans not yet drafted.
 - **Purpose:** Bridge document between the design and the work-in-flight.
   Future sessions read this first to discover the decomposition into
