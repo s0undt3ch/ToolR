@@ -169,3 +169,54 @@ def test_signature_call_spreads_var_positional_values():
     signature(mock_ctx, options)
 
     assert captured["items"] == ("a", "b", "c")
+
+
+def test_signature_call_routes_kwargs_with_keyword_only_separator():
+    """End-to-end: ``KwArg`` values must be routed via ``kwargs`` so a user
+    function with ``*,`` keyword-only parameters can be invoked.
+
+    Regression test: ``KwArg`` subclasses ``Arg``, so the ``isinstance(_, Arg)``
+    branch in ``Signature.__call__`` matched first and ``KwArg`` values were
+    appended to the positional ``args`` list. That worked when every parameter
+    was POSITIONAL_OR_KEYWORD (because the values still lined up positionally
+    after the prepended ``ctx``), but it broke as soon as the user function
+    used a ``*,`` separator: ``inspect.Signature.bind_partial`` raised
+    ``TypeError: too many positional arguments``.
+    """
+    captured: dict[str, object] = {}
+
+    def test_func(
+        ctx: Context,
+        target: str,
+        *,
+        verbose: bool = False,
+        retries: int = 3,
+    ) -> None:
+        """Function with a keyword-only separator and KwArgs after it.
+
+        Args:
+            target: The target to act on.
+            verbose: Whether to be verbose.
+            retries: Number of retries.
+        """
+        captured["target"] = target
+        captured["verbose"] = verbose
+        captured["retries"] = retries
+
+    signature = get_signature(test_func)
+
+    options = Namespace()
+    options.target = "alpha"
+    options.verbose = True
+    options.retries = 7
+
+    mock_ctx = Context(
+        repo_root=None,
+        parser=None,
+        verbosity=None,
+        _console_stderr=None,
+        _console_stdout=None,
+    )
+    signature(mock_ctx, options)
+
+    assert captured == {"target": "alpha", "verbose": True, "retries": 7}
