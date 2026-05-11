@@ -1,7 +1,8 @@
 # ToolR Rust Front-End — Design
 
 - **Date:** 2026-05-11
-- **Status:** Design — pending implementation plan
+- **Status:** Design — see [implementation roadmap](./2026-05-11-toolr-rust-front-end-roadmap.md)
+  for sub-plan decomposition and current state.
 - **Author:** Pedro Algarvio (brainstormed with Claude)
 
 ## Summary
@@ -305,14 +306,14 @@ know which package provides a given import.
 - **Contents:**
     - `schema_version`: integer.
     - `static_hash`: hash over `tools/**/*.py` contents used for fast freshness
-    checks.
+  checks.
     - `dynamic_hash`: hash over the installed package set (versions in the venv)
-    used to detect when the dynamic layer needs regeneration.
+  used to detect when the dynamic layer needs regeneration.
     - `groups`: array of group definitions.
     - `commands`: array of command definitions, each tagged with
-    `origin: "static" | "dynamic"`.
+  `origin: "static" | "dynamic"`.
     - Each command carries its arguments (types, defaults, help text), parsed
-    docstring, source module, and required imports.
+  docstring, source module, and required imports.
 
 A shipped pre-commit hook config:
 
@@ -404,8 +405,7 @@ This is enforced at `toolr project deps sync` time:
 
 - Toolr inspects `tools/pyproject.toml` for a `toolr` dependency entry. If
   missing or specifying an incompatible version, sync fails with:
-  `toolr: tools/pyproject.toml must declare a \`toolr>=X.Y\` dependency. Add it and retry.`
-  (A `toolr project init` scaffold writes this automatically.)
+  `toolr: tools/pyproject.toml must declare a \`toolr>=X.Y\` dependency. Add it and retry.`(A`toolr project init` scaffold writes this automatically.)
 - After `uv sync`, toolr verifies `<tools-venv>/lib/python*/site-packages/toolr/`
   exists. If not, fails fast — the user has likely declared toolr with
   `--no-deps` or some other misconfiguration.
