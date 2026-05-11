@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+from argparse import Namespace
 from typing import Annotated
 
 import pytest
@@ -133,3 +134,89 @@ def test_mutually_exclusive_groups_error_handling():
     # This should raise an error because positional arguments can't be in mutually exclusive groups
     with pytest.raises(SignatureError, match="Positional parameter 'name' cannot be in a mutually exclusive group"):
         get_signature(func)
+
+
+def test_signature_call_spreads_var_positional_values():
+    """End-to-end: ``*args`` values are spread into the user function, not nested.
+
+    Regression test for the bug where ``_parse_parameter`` returned a plain ``Arg``
+    for VAR_POSITIONAL parameters. That caused ``Signature.__call__`` to take the
+    ``Arg.append`` branch and the user function received the list as a single
+    positional argument rather than spread varargs.
+    """
+    captured: dict[str, object] = {}
+
+    def test_func(ctx: Context, *items: str) -> None:
+        """Function with varargs.
+
+        Args:
+            items: Items.
+        """
+        captured["items"] = items
+
+    signature = get_signature(test_func)
+
+    options = Namespace()
+    options.items = ["a", "b", "c"]
+
+    mock_ctx = Context(
+        repo_root=None,
+        parser=None,
+        verbosity=None,
+        _console_stderr=None,
+        _console_stdout=None,
+    )
+    signature(mock_ctx, options)
+
+    assert captured["items"] == ("a", "b", "c")
+
+
+def test_signature_call_routes_kwargs_with_keyword_only_separator():
+    """End-to-end: ``KwArg`` values must be routed via ``kwargs`` so a user
+    function with ``*,`` keyword-only parameters can be invoked.
+
+    Regression test: ``KwArg`` subclasses ``Arg``, so the ``isinstance(_, Arg)``
+    branch in ``Signature.__call__`` matched first and ``KwArg`` values were
+    appended to the positional ``args`` list. That worked when every parameter
+    was POSITIONAL_OR_KEYWORD (because the values still lined up positionally
+    after the prepended ``ctx``), but it broke as soon as the user function
+    used a ``*,`` separator: ``inspect.Signature.bind_partial`` raised
+    ``TypeError: too many positional arguments``.
+    """
+    captured: dict[str, object] = {}
+
+    def test_func(
+        ctx: Context,
+        target: str,
+        *,
+        verbose: bool = False,
+        retries: int = 3,
+    ) -> None:
+        """Function with a keyword-only separator and KwArgs after it.
+
+        Args:
+            target: The target to act on.
+            verbose: Whether to be verbose.
+            retries: Number of retries.
+        """
+        captured["target"] = target
+        captured["verbose"] = verbose
+        captured["retries"] = retries
+
+    signature = get_signature(test_func)
+
+    options = Namespace()
+    options.target = "alpha"
+    options.verbose = True
+    options.retries = 7
+
+    mock_ctx = Context(
+        repo_root=None,
+        parser=None,
+        verbosity=None,
+        _console_stderr=None,
+        _console_stdout=None,
+    )
+    signature(mock_ctx, options)
+
+    assert captured == {"target": "alpha", "verbose": True, "retries": 7}
