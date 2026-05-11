@@ -1,0 +1,34 @@
+# rumdl — markdown lint config for toolr.
+# https://github.com/rvben/rumdl
+
+[global]
+disable = [
+    "MD013",  # line length — prose wraps freely
+    "MD033",  # inline HTML — used in docs (<br>, <details>)
+    "MD041",  # first-line H1 — not all docs lead with H1
+    "MD052",  # mkdocstrings cross-refs look like reference links to rumdl
+]
+
+exclude = [
+    ".git",
+    ".venv",
+    "node_modules",
+    "target",
+    "dist",
+    "site",
+    "CHANGELOG.md",
+    "docs/reference",  # auto-generated reference stubs
+]
+
+respect-gitignore = true
+flavor = "gfm"
+
+[MD007]
+indent = 4
+
+[MD024]
+# Allow duplicate headings as long as they aren't siblings.
+siblings_only = true
+
+[MD029]
+style = "ordered"
