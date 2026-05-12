@@ -11,6 +11,7 @@ use crate::manifest::{Manifest, SCHEMA_VERSION};
 use crate::parser::{
     commands::extract_commands, groups::extract_groups, parse_python_file, symbols::EnumTable,
 };
+use crate::third_party::{ThirdPartyError, discover_and_merge};
 
 /// Build the static portion of a manifest from a tools directory.
 pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
@@ -49,6 +50,25 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
         groups: all_groups,
         commands: all_commands,
     })
+}
+
+/// Like `build_static_manifest`, but also globs `tools_venv` for
+/// third-party manifest fragments and merges them in.
+pub fn build_static_manifest_with_venv(
+    tools_dir: &Path,
+    tools_venv: &Path,
+) -> Result<Manifest, BuildError> {
+    let base = build_static_manifest(tools_dir).map_err(BuildError::Build)?;
+    discover_and_merge(tools_venv, base).map_err(BuildError::ThirdParty)
+}
+
+/// Error type covering both the local build and the third-party merge.
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError {
+    #[error("static build error: {0}")]
+    Build(#[source] anyhow::Error),
+    #[error("third-party merge error: {0}")]
+    ThirdParty(#[from] ThirdPartyError),
 }
 
 fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
@@ -102,6 +122,64 @@ mod tests {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(path, contents).unwrap();
+    }
+
+    use crate::third_party::{
+        FRAGMENT_SCHEMA_VERSION, FragmentCommand, FragmentGroup, ManifestFragment,
+    };
+
+    #[test]
+    fn build_with_venv_merges_local_and_third_party() {
+        let tmp = TempDir::new().unwrap();
+        // Local tools/ side.
+        write(
+            tmp.path(),
+            "tools/ci.py",
+            r#""""CI utilities."""
+group = command_group("ci", "CI utilities", docstring=__doc__)
+
+@group.command
+def hello(ctx):
+    """Say hello."""
+    pass
+"#,
+        );
+        // Fake tools venv with a third-party fragment.
+        let venv = tmp.path().join("venv");
+        let site = venv.join("lib").join("python3.13").join("site-packages");
+        std::fs::create_dir_all(site.join("ext_pkg")).unwrap();
+        let frag = ManifestFragment {
+            toolr_schema_version: FRAGMENT_SCHEMA_VERSION,
+            package: "ext_pkg".into(),
+            groups: vec![FragmentGroup {
+                name: "deploy".into(),
+                title: "Deploy".into(),
+                description: String::new(),
+            }],
+            commands: vec![FragmentCommand {
+                name: "rollout".into(),
+                group: "deploy".into(),
+                module: "ext_pkg.commands".into(),
+                function: "rollout".into(),
+                summary: String::new(),
+                description: String::new(),
+                arguments: vec![],
+                imports: vec![],
+            }],
+        };
+        std::fs::write(
+            site.join("ext_pkg").join("toolr-manifest.json"),
+            serde_json::to_string(&frag).unwrap(),
+        )
+        .unwrap();
+
+        let m = build_static_manifest_with_venv(&tmp.path().join("tools"), &venv).unwrap();
+        let groups: Vec<_> = m.groups.iter().map(|g| g.name.as_str()).collect();
+        assert!(groups.contains(&"ci"));
+        assert!(groups.contains(&"deploy"));
+        let cmds: Vec<_> = m.commands.iter().map(|c| c.name.as_str()).collect();
+        assert!(cmds.contains(&"hello"));
+        assert!(cmds.contains(&"rollout"));
     }
 
     #[test]

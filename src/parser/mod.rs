@@ -19,7 +19,7 @@ pub mod symbols;
 pub use symbols::EnumTable;
 
 pub mod build;
-pub use build::build_static_manifest;
+pub use build::{BuildError, build_static_manifest, build_static_manifest_with_venv};
 
 /// Parse a single Python file and return its module AST.
 pub fn parse_python_file(path: &Path) -> Result<ModModule> {
