@@ -9,7 +9,8 @@ use _rust_utils::complete::{
 };
 use _rust_utils::discovery::discover_project_root;
 use _rust_utils::execute::{
-    build_spec, resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
+    build_spec, resolve_python, spawn_runner_capturing_stderr, wait_with_signals,
+    write_spec_to_tempfile,
 };
 use _rust_utils::manifest::Manifest;
 use _rust_utils::venv::resolve_venv_path;
@@ -94,8 +95,20 @@ pub fn dispatch(
         }
     }
 
-    let mut child = spawn_runner(&python, tempfile.path())?;
+    let (mut child, stderr_capture) = spawn_runner_capturing_stderr(&python, tempfile.path())?;
     let status = wait_with_signals(&mut child)?;
+    let stderr_bytes = stderr_capture.take();
+    let stderr_str = String::from_utf8_lossy(&stderr_bytes);
+    use std::io::Write;
+    if !status.success() {
+        if let Some(report) = _rust_utils::deps_check::intercept_import_error(&stderr_str) {
+            std::io::stderr().write_all(report.render().as_bytes())?;
+        } else {
+            std::io::stderr().write_all(&stderr_bytes)?;
+        }
+    } else {
+        std::io::stderr().write_all(&stderr_bytes)?;
+    }
 
     // Map child status to a process exit code.
     let code = status.code().unwrap_or_else(|| {

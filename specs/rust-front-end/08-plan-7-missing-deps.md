@@ -1045,7 +1045,7 @@ batch instead of as it streams.
 
 - Modify: `src/bin/toolr/dispatch.rs` (or wherever Plan 2 put `spawn_runner`)
 - Modify: `tests/cli_smoke.rs`
-- [ ] **Step 7.1: Locate Plan 2's spawn code**
+- [x] **Step 7.1: Locate Plan 2's spawn code**
 
     Plan 2 ships something like (paraphrased):
 
@@ -1065,7 +1065,7 @@ batch instead of as it streams.
 
     Replace it (or add a sibling) with the capturing variant below.
 
-- [ ] **Step 7.2: Add the capturing spawn helper**
+- [x] **Step 7.2: Add the capturing spawn helper**
 
     In Plan 2's runner module (most likely `src/runner.rs`), add:
 
@@ -1112,7 +1112,7 @@ batch instead of as it streams.
 
     Adjust the `Venv` / `python_bin()` references to the names Plan 3 chose.
 
-- [ ] **Step 7.3: Call the new spawn from `dispatch.rs`**
+- [x] **Step 7.3: Call the new spawn from `dispatch.rs`**
 
     Replace the existing `spawn_runner` call (the one Plan 2 added):
 
@@ -1121,7 +1121,7 @@ batch instead of as it streams.
     return Ok(ExitCode::from(status.code().unwrap_or(1) as u8));
     ```
 
-- [ ] **Step 7.4: Add a unit test against a captured stderr buffer**
+- [x] **Step 7.4: Add a unit test against a captured stderr buffer**
 
     The end-to-end "real Python subprocess emits an ImportError" test
     needs a real venv, which is too heavy for a unit test. Instead, test
@@ -1141,7 +1141,7 @@ batch instead of as it streams.
     }
     ```
 
-- [ ] **Step 7.5: Add a subprocess-level integration test**
+- [x] **Step 7.5: Add a subprocess-level integration test**
 
     The cheapest way to simulate "Python subprocess exits with
     ImportError" without relying on a real venv is to use Rust's
@@ -1250,7 +1250,7 @@ batch instead of as it streams.
     (Strictly, this isn't part of Plan 7's domain — it's a missing test
     hook in Plan 2. Surface to the Plan 2 author or fold into this plan.)
 
-- [ ] **Step 7.6: Run the tests**
+- [x] **Step 7.6: Run the tests**
 
     ```bash
     cargo test --lib deps_check::
@@ -1260,7 +1260,7 @@ batch instead of as it streams.
     Expected: deps_check tests pass (now 20); the post_mortem integration
     test passes if system Python is available.
 
-- [ ] **Step 7.7: Commit**
+- [x] **Step 7.7: Commit**
 
     ```bash
     git add src/deps_check/ src/runner.rs src/bin/toolr/dispatch.rs tests/cli_smoke.rs

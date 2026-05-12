@@ -407,6 +407,62 @@ fn preflight_fails_when_an_import_is_missing_from_venv() {
 
 #[test]
 #[cfg(unix)]
+fn post_mortem_rewrites_import_error_output() {
+    use std::fs;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = preflight_fixture(&[], &[]);
+    // Replace the fake python so its non-introspect path emits a
+    // ModuleNotFoundError traceback (simulating the actual runner
+    // failing at import time on an inline import).
+    let py = tmp.path().join("tools").join(".venv").join("bin").join("python");
+    fs::remove_file(&py).unwrap();
+    let mut f = fs::File::create(&py).unwrap();
+    writeln!(f, "#!/bin/sh").unwrap();
+    writeln!(f, r#"case " $* " in"#).unwrap();
+    writeln!(
+        f,
+        r#"  *toolr._introspect*) echo '{{"payload_schema_version":1,"groups":[],"commands":[],"warnings":[]}}'; exit 0;;"#
+    )
+    .unwrap();
+    writeln!(f, "  *)").unwrap();
+    writeln!(
+        f,
+        r#"    printf 'Traceback (most recent call last):\n  File "<tool>", line 2, in hello\n    import yaml\nModuleNotFoundError: No module named '"'"'yaml'"'"'\n' 1>&2"#
+    )
+    .unwrap();
+    writeln!(f, "    exit 1;;").unwrap();
+    writeln!(f, "esac").unwrap();
+    drop(f);
+    let mut perms = fs::metadata(&py).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&py, perms).unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_ne!(output.status.code(), Some(0), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("ModuleNotFoundError: No module named 'yaml'"),
+        "expected traceback preserved, got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("toolr project deps sync"),
+        "expected sync suggestion, got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`yaml`"),
+        "expected module name in suggestion, got:\n{stderr}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
 fn preflight_can_be_disabled_with_env_var() {
     let tmp = preflight_fixture(&["yaml"], &[]);
     let output = Command::cargo_bin("toolr")
