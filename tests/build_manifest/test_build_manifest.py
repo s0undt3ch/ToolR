@@ -9,6 +9,7 @@ import pytest
 
 from toolr._registry import _get_command_group_storage
 from toolr.build import BuildManifestError
+from toolr.build import _validate_fragment
 from toolr.build import build_manifest
 from toolr.build import main as build_cli
 
@@ -103,3 +104,22 @@ def test_cli_check_exits_0_when_up_to_date(fake_package: str, tmp_path: Path) ->
 def test_cli_exits_1_on_missing_package() -> None:
     rc = build_cli(["this_package_does_not_exist_xyz", "--quiet"])
     assert rc == 1
+
+
+def test_validate_rejects_bad_arg_kind() -> None:
+    bad = {
+        "toolr_schema_version": 1,
+        "package": "p",
+        "groups": [],
+        "commands": [
+            {
+                "name": "n",
+                "group": "g",
+                "module": "m",
+                "function": "f",
+                "arguments": [{"name": "x", "kind": "bogus"}],
+            }
+        ],
+    }
+    with pytest.raises(BuildManifestError):
+        _validate_fragment(bad)

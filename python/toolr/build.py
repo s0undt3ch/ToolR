@@ -41,6 +41,36 @@ class BuildManifestError(Exception):
     """Raised when the manifest cannot be built (no commands, etc.)."""
 
 
+_ALLOWED_ARG_KINDS = {"positional", "optional", "flag"}
+
+
+def _validate_fragment(fragment: dict[str, Any]) -> None:
+    """Defensive schema check. Catches author-side packaging mistakes."""
+    version = fragment.get("toolr_schema_version")
+    if not isinstance(version, int) or version < 1:
+        err_msg = f"`toolr_schema_version` must be a positive int, got {version!r}"
+        raise BuildManifestError(err_msg)
+    if not isinstance(fragment.get("package"), str):
+        err_msg = "`package` must be a string"
+        raise BuildManifestError(err_msg)
+    for group in fragment.get("groups", []):
+        if not isinstance(group.get("name"), str):
+            err_msg = f"group missing `name`: {group!r}"
+            raise BuildManifestError(err_msg)
+    for cmd in fragment.get("commands", []):
+        for key in ("name", "group", "module", "function"):
+            if not isinstance(cmd.get(key), str):
+                err_msg = f"command missing required string field `{key}`: {cmd!r}"
+                raise BuildManifestError(err_msg)
+        for arg_entry in cmd.get("arguments", []):
+            if arg_entry.get("kind") not in _ALLOWED_ARG_KINDS:
+                err_msg = (
+                    f"argument `{arg_entry.get('name')!r}` has invalid kind "
+                    f"`{arg_entry.get('kind')}` - must be one of {_ALLOWED_ARG_KINDS}"
+                )
+                raise BuildManifestError(err_msg)
+
+
 def build_manifest(
     package_name: str,
     *,
@@ -73,6 +103,7 @@ def build_manifest(
     if not fragment["groups"] and not fragment["commands"]:
         err_msg = f"package `{package_name}` declares no toolr commands - nothing to write"
         raise BuildManifestError(err_msg)
+    _validate_fragment(fragment)
 
     serialized = json.dumps(fragment, indent=2, sort_keys=True) + "\n"
 
