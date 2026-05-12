@@ -2,6 +2,7 @@
 
 mod command;
 mod docstrings;
+pub mod manifest;
 #[cfg(feature = "python")]
 mod python_bindings;
 
