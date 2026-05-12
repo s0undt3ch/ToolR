@@ -1058,7 +1058,7 @@ hosts.
 - Create: `dist/install.ps1`
 - Create: `tests/distribution/test_install_sh.py`
 
-- [ ] **Step 6.1: Write `dist/install.sh`**
+- [x] **Step 6.1: Write `dist/install.sh`**
 
     Create the script:
 
@@ -1244,7 +1244,7 @@ hosts.
     main "$@"
     ```
 
-- [ ] **Step 6.2: Write `dist/install.ps1` for Windows**
+- [x] **Step 6.2: Write `dist/install.ps1` for Windows**
 
     Create the PowerShell installer:
 
@@ -1323,7 +1323,7 @@ hosts.
     }
     ```
 
-- [ ] **Step 6.3: Write an offline installer test**
+- [x] **Step 6.3: Write an offline installer test**
 
     Create `tests/distribution/test_install_sh.py`:
 
@@ -1455,7 +1455,7 @@ hosts.
                 server.kill()
     ```
 
-- [ ] **Step 6.4: chmod and lint**
+- [x] **Step 6.4: chmod and lint**
 
     ```bash
     chmod +x dist/install.sh
@@ -1464,7 +1464,7 @@ hosts.
 
     Expected: PASS (or fixes auto-applied).
 
-- [ ] **Step 6.5: Run the installer tests**
+- [x] **Step 6.5: Run the installer tests**
 
     ```bash
     uv run pytest tests/distribution/test_install_sh.py -v
@@ -1472,7 +1472,7 @@ hosts.
 
     Expected: 2 tests pass.
 
-- [ ] **Step 6.6: Acceptance — host-triple detection on the dev box**
+- [x] **Step 6.6: Acceptance — host-triple detection on the dev box**
 
     Manually verify the detection function:
 
@@ -1484,7 +1484,7 @@ hosts.
     Expected: the second command prints a detected triple matching your
     host (e.g. `aarch64-apple-darwin` on Apple Silicon).
 
-- [ ] **Step 6.7: Commit**
+- [x] **Step 6.7: Commit**
 
     ```bash
     git add dist/install.sh dist/install.ps1 tests/distribution/test_install_sh.py
