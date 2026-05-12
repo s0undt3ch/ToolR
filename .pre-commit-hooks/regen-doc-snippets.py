@@ -31,10 +31,18 @@ FIXTURE = REPO_ROOT / "docs" / ".fixtures" / "sample-repo"
 
 @dataclass(frozen=True)
 class Snippet:
-    """One captured-output snippet."""
+    """One captured-output snippet.
+
+    `tools_files`, when set, names additional `.py` files that should be
+    overlaid into the fixture's `tools/` directory before this snippet is
+    captured. Use it when an example needs its own `tools/<name>.py`
+    (typical for the writing-commands chapter, where different examples
+    register colliding group names).
+    """
 
     path: Path
     argv: tuple[str, ...]
+    tools_files: tuple[Path, ...] = ()
 
 
 # Every captured snippet the docs consume. Keep this list in sync with
@@ -42,6 +50,8 @@ class Snippet:
 # 1. Add an entry here.
 # 2. Run this script.
 # 3. Reference the resulting file via `--8<--` in the doc page.
+WC_FILES = REPO_ROOT / "docs" / "writing-commands" / "files"
+
 SNIPPETS: tuple[Snippet, ...] = (
     Snippet(
         REPO_ROOT / "docs" / "quickstart-files" / "toolr-help.txt",
@@ -58,6 +68,29 @@ SNIPPETS: tuple[Snippet, ...] = (
     Snippet(
         REPO_ROOT / "docs" / "quickstart-files" / "example-setlog-help.txt",
         ("example", "setlog", "--help"),
+    ),
+    # Writing-commands chapter — Arguments (captures only the subset of
+    # features that currently render correctly in the rust front-end —
+    # see docs/writing-commands/limitations.md for the rest).
+    Snippet(
+        WC_FILES / "calculator-add-help.txt",
+        ("math", "add", "--help"),
+        tools_files=(WC_FILES / "calculator.py",),
+    ),
+    Snippet(
+        WC_FILES / "hello-help.txt",
+        ("greeting", "hello", "--help"),
+        tools_files=(WC_FILES / "hello.py",),
+    ),
+    Snippet(
+        WC_FILES / "literal-choices-help.txt",
+        ("logs", "set-level", "--help"),
+        tools_files=(WC_FILES / "literal-choices.py",),
+    ),
+    # Writing-commands chapter — Using `ctx`.
+    Snippet(
+        WC_FILES / "context-hello.txt",
+        ("example", "hello", "--name", "Pedro"),
     ),
 )
 
@@ -105,33 +138,89 @@ def find_runner_python() -> Path:
     return candidate
 
 
-def prepare_fixture(toolr: Path, dest: Path) -> None:
-    """Copy the fixture into `dest` and build its static manifest.
+def _materialise_in_tree_venv(fixture: Path, runner_python: Path) -> None:
+    """Build a fake in-tree venv at `fixture/tools/.venv/` that points to
+    `runner_python` (the dev venv).
 
-    Removes `tools/pyproject.toml` afterwards so the dispatcher falls
-    back to `TOOLR_PYTHON` instead of trying to materialise an actual
-    uv-managed venv. Mirrors the approach used by the integration
-    tests in `tests/project_init.rs`.
+    This lets `toolr project manifest rebuild` resolve a real Python
+    interpreter without paying the cost of `uv sync`. The fixture's
+    `tools/pyproject.toml` is rewritten to use `venv-location = "in-tree"`
+    so resolution lands at exactly this directory.
+
+    Implementation: symlink the dev venv's `bin/`, `lib/pythonX.Y/`, and
+    copy its `pyvenv.cfg` so the symlinked Python finds its base
+    interpreter (and therefore the stdlib).
     """
-    shutil.copytree(FIXTURE, dest, dirs_exist_ok=True)
+    dev_venv = runner_python.parent.parent  # .venv/bin/python -> .venv
+    pyvenv_cfg = dev_venv / "pyvenv.cfg"
+    if not pyvenv_cfg.is_file():
+        msg = f"dev venv at {dev_venv} has no pyvenv.cfg"
+        raise SystemExit(msg)
+    py_lib_dir = next(dev_venv.glob("lib/python*"), None)
+    if py_lib_dir is None:
+        msg = f"could not locate lib/pythonX.Y under {dev_venv}"
+        raise SystemExit(msg)
+
+    target_venv = fixture / "tools" / ".venv"
+    target_venv.mkdir(parents=True, exist_ok=True)
+    # Symlink the full bin/ and lib/pythonX.Y/ trees so toolr's
+    # site-packages probe and the runner subprocess both work.
+    (target_venv / "bin").symlink_to(dev_venv / "bin")
+    (target_venv / "lib").mkdir()
+    (target_venv / "lib" / py_lib_dir.name).symlink_to(py_lib_dir)
+    # Copy pyvenv.cfg so Python finds its base interpreter / stdlib.
+    shutil.copy(pyvenv_cfg, target_venv / "pyvenv.cfg")
+
+    # Rewrite pyproject.toml to use in-tree venv-location.
+    pyproject = fixture / "tools" / "pyproject.toml"
+    if pyproject.is_file():
+        body = pyproject.read_text()
+        body = body.replace('venv-location = "cache"', 'venv-location = "in-tree"')
+        pyproject.write_text(body)
+
+
+def prepare_fixture(
+    toolr: Path,
+    dest: Path,
+    runner_python: Path,
+    extra_tools_files: tuple[Path, ...] = (),
+) -> None:
+    """Copy the fixture into `dest` and build a full manifest (static + dynamic).
+
+    When `extra_tools_files` is non-empty the fixture's default
+    `tools/example.py` is removed and the named files are copied into
+    `tools/` instead; this lets a snippet supply its own scenario
+    without polluting the shared sample-repo.
+
+    Materialises a fake in-tree venv that symlinks back to the dev
+    venv, then runs `toolr project manifest rebuild` so the manifest
+    has both static and dynamic layers (nested groups, enum / bool /
+    list inference, etc.).
+    """
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(FIXTURE, dest)
+    if extra_tools_files:
+        default_example = dest / "tools" / "example.py"
+        if default_example.is_file():
+            default_example.unlink()
+        for src in extra_tools_files:
+            shutil.copy(src, dest / "tools" / src.name)
+    _materialise_in_tree_venv(dest, runner_python)
     subprocess.run(  # noqa: S603
-        [str(toolr), "__build-static-manifest"],
+        [str(toolr), "project", "manifest", "rebuild"],
         cwd=dest,
         check=True,
         capture_output=True,
+        env={**os.environ, "TOOLR_NO_CACHE_HINT": "1"},
     )
-    pyproject = dest / "tools" / "pyproject.toml"
-    if pyproject.is_file():
-        pyproject.unlink()
 
 
-def capture(toolr: Path, fixture: Path, python: Path, snippet: Snippet) -> str:
+def capture(toolr: Path, fixture: Path, _python: Path, snippet: Snippet) -> str:
     """Run the toolr binary against the prepared fixture; return stdout+stderr."""
     env = {
         **os.environ,
         "TOOLR_NO_CACHE_HINT": "1",
-        "TOOLR_PYTHON": str(python),
-        "PYTHONPATH": str(fixture),
     }
     result = subprocess.run(  # noqa: S603
         [str(toolr), *snippet.argv],
@@ -198,9 +287,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     python = find_runner_python()
     clean = True
     with tempfile.TemporaryDirectory(prefix="toolr-doc-fixture-") as tmpdir:
-        fixture = Path(tmpdir)
-        prepare_fixture(toolr, fixture)
+        tmproot = Path(tmpdir)
+        default_fixture = tmproot / "default"
+        prepare_fixture(toolr, default_fixture, python)
+        scenario_fixtures: dict[tuple[Path, ...], Path] = {}
         for snippet in SNIPPETS:
+            if snippet.tools_files:
+                key = snippet.tools_files
+                fixture = scenario_fixtures.get(key)
+                if fixture is None:
+                    fixture = tmproot / f"scenario-{len(scenario_fixtures)}"
+                    prepare_fixture(toolr, fixture, python, extra_tools_files=key)
+                    scenario_fixtures[key] = fixture
+            else:
+                fixture = default_fixture
             ok = regen_one(toolr, fixture, python, snippet, args.check)
             if not ok:
                 clean = False

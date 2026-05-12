@@ -46,7 +46,7 @@ Add Plan 11 to the roadmap as `🔧 In Progress`, rewrite `mkdocs.yml`'s nav to 
 - Create: `docs/internals/pre-commit.md`
 - Create: `docs/internals/diagnostics.md`
 
-- [ ] **Step 1.1: Add Plan 11 to the roadmap**
+- [x] **Step 1.1: Add Plan 11 to the roadmap**
 
     Append after the Plan 10 entry:
 
@@ -66,7 +66,7 @@ Add Plan 11 to the roadmap as `🔧 In Progress`, rewrite `mkdocs.yml`'s nav to 
         - Pruned API reference (private `_*` modules removed).
     ```
 
-- [ ] **Step 1.2: Rewrite the nav section of `mkdocs.yml`**
+- [x] **Step 1.2: Rewrite the nav section of `mkdocs.yml`**
 
     Locate the existing `nav:` block in `mkdocs.yml`. Replace it with:
 
@@ -100,7 +100,7 @@ Add Plan 11 to the roadmap as `🔧 In Progress`, rewrite `mkdocs.yml`'s nav to 
 
     The `reference/` entry uses mkdocs-material's directory expansion to auto-list whatever's there; Task 11 prunes the contents.
 
-- [ ] **Step 1.3: Create empty stubs for every new page**
+- [x] **Step 1.3: Create empty stubs for every new page**
 
     For each new file listed in "Files" above, write a single-line placeholder. Example for `docs/quickstart.md`:
 
@@ -112,7 +112,7 @@ Add Plan 11 to the roadmap as `🔧 In Progress`, rewrite `mkdocs.yml`'s nav to 
 
     Do the same for: `concepts.md`, `project-config.md`, `cli.md`, `third-party.md`, every `writing-commands/*.md` file, every `internals/*.md` file. Each stub names the page in `# <Title>` and a one-line HTML comment pointing to the task that fills it in. This is so `mkdocs build --strict` doesn't fail on missing files during the interim commits.
 
-- [ ] **Step 1.4: Build verification**
+- [x] **Step 1.4: Build verification**
 
     ```bash
     uv run mkdocs build --strict
@@ -120,7 +120,7 @@ Add Plan 11 to the roadmap as `🔧 In Progress`, rewrite `mkdocs.yml`'s nav to 
 
     Expected: clean build. Every nav entry resolves to a file (even if just a stub).
 
-- [ ] **Step 1.5: Commit**
+- [x] **Step 1.5: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md mkdocs.yml docs/
@@ -140,7 +140,7 @@ Add the regen script and the fixture project it runs against. Fixture lives unde
 - Create: `docs/.fixtures/sample-repo/tools/example.py`
 - Create: `docs/.fixtures/README.md`
 
-- [ ] **Step 2.1: Create the fixture project**
+- [x] **Step 2.1: Create the fixture project**
 
     The fixture is a self-contained mini-repo that the regen script invokes `toolr` against. Use the same `example.py` shape as Plan 10's scaffold so the docs and the init command stay in lockstep.
 
@@ -179,7 +179,7 @@ Add the regen script and the fixture project it runs against. Fixture lives unde
 
     ```text
 
-- [ ] **Step 2.2: Create `.pre-commit-hooks/regen-doc-snippets.py`**
+- [x] **Step 2.2: Create `.pre-commit-hooks/regen-doc-snippets.py`**
 
     Full script:
 
@@ -345,7 +345,7 @@ Add the regen script and the fixture project it runs against. Fixture lives unde
         raise SystemExit(main())
     ```
 
-- [ ] **Step 2.3: Make the script executable + smoke-run it**
+- [x] **Step 2.3: Make the script executable + smoke-run it**
 
     ```bash
     chmod +x .pre-commit-hooks/regen-doc-snippets.py
@@ -357,7 +357,7 @@ Add the regen script and the fixture project it runs against. Fixture lives unde
 
     Note: the first run will need the toolr binary + a synced tools venv under the fixture. The fixture's `tools/pyproject.toml` is configured with `venv-location = "cache"`, so `uv sync` runs into `$XDG_CACHE_HOME/toolr/<repo-key>/venv/`. The captures invoke commands that hit the venv, so the first regen takes longer (uv sync); subsequent runs are fast.
 
-- [ ] **Step 2.4: Verify `--check` exits cleanly**
+- [x] **Step 2.4: Verify `--check` exits cleanly**
 
     ```bash
     .pre-commit-hooks/regen-doc-snippets.py --check
@@ -365,7 +365,7 @@ Add the regen script and the fixture project it runs against. Fixture lives unde
 
     Expected: exit 0 (everything matches what was just written).
 
-- [ ] **Step 2.5: Commit**
+- [x] **Step 2.5: Commit**
 
     ```bash
     git add .pre-commit-hooks/regen-doc-snippets.py docs/.fixtures/ docs/quickstart-files/
@@ -382,7 +382,7 @@ Write the "first command running in under 2 minutes" page. References real captu
 
 - Modify: `docs/quickstart.md`
 
-- [ ] **Step 3.1: Replace the quickstart stub**
+- [x] **Step 3.1: Replace the quickstart stub**
 
     Full content:
 
@@ -468,7 +468,7 @@ Write the "first command running in under 2 minutes" page. References real captu
       [Third-party packages](third-party.md).
     ````
 
-- [ ] **Step 3.2: Build verification**
+- [x] **Step 3.2: Build verification**
 
     ```bash
     uv run mkdocs build --strict
@@ -477,7 +477,7 @@ Write the "first command running in under 2 minutes" page. References real captu
     Expected: clean build; the `--8<--` includes resolve against the
     captures from Task 2.
 
-- [ ] **Step 3.3: Commit**
+- [x] **Step 3.3: Commit**
 
     ```bash
     git add docs/quickstart.md
@@ -494,7 +494,7 @@ Replace `docs/installation/index.md` with the install matrix, SLSA verification 
 
 - Modify: `docs/installation/index.md`
 
-- [ ] **Step 4.1: Replace the installation page**
+- [x] **Step 4.1: Replace the installation page**
 
     Full content:
 
@@ -601,7 +601,7 @@ Replace `docs/installation/index.md` with the install matrix, SLSA verification 
     it) while iterating.
     ````
 
-- [ ] **Step 4.2: Build verification + commit**
+- [x] **Step 4.2: Build verification + commit**
 
     ```bash
     uv run mkdocs build --strict
@@ -619,7 +619,7 @@ The orientation page. Names the moving pieces and links to each detail page.
 
 - Modify: `docs/concepts.md`
 
-- [ ] **Step 5.1: Replace the concepts stub**
+- [x] **Step 5.1: Replace the concepts stub**
 
     Full content:
 
@@ -683,7 +683,7 @@ The orientation page. Names the moving pieces and links to each detail page.
     `toolr self cache prune`. See [Internals → Cache layout](internals/cache.md).
     ````
 
-- [ ] **Step 5.2: Build verification + commit**
+- [x] **Step 5.2: Build verification + commit**
 
     ```bash
     uv run mkdocs build --strict

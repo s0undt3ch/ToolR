@@ -1,3 +1,23 @@
 # Writing commands
 
-<!-- Populated in Plan 11 Task 6. -->
+The authoring guide for tools-authors. Read in order, or jump to the
+section you need:
+
+1. [Groups & commands](groups.md) — declaring a `command_group` and
+   attaching commands to it.
+2. [Arguments](arguments.md) — turning function parameters into CLI
+   arguments via type hints (positional / optional / flag /
+   `Literal[...]` / `Enum`).
+3. [Docstrings](docstrings.md) — Google-style docstrings drive
+   `--help` output.
+4. [Using `ctx`](context.md) — print, run subprocesses, prompt for
+   input, exit cleanly.
+5. [Annotations](annotations.md) — `arg()` for aliases, choices,
+   mutually exclusive groups.
+6. [Nested groups](nesting.md) — multi-level command hierarchies.
+7. [Known limitations](limitations.md) — features the rust front-end
+   hasn't caught up with yet.
+
+Every example on these pages is a real file under
+[`docs/writing-commands/files/`](https://github.com/s0undt3ch/ToolR/tree/main/docs/writing-commands/files)
+that toolr can actually execute against the documentation fixture.

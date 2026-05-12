@@ -1,0 +1,9 @@
+Say hello.
+
+Usage: toolr greeting hello [OPTIONS]
+
+Options:
+  -d, --debug        Increase verbosity
+      --name <name>  The name of the person to greet. [default: "World"]
+  -q, --quiet        Suppress non-error output
+  -h, --help         Print help
