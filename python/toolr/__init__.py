@@ -1,3 +1,15 @@
+"""ToolR Python package.
+
+Importable surface: :class:`toolr.Context`, :func:`toolr.command_group`,
+:func:`toolr.arg`, :func:`toolr.report_on_import_errors`.
+
+Implementation modules (not part of the user-facing API):
+
+- ``toolr._runner``: invoked by the toolr binary via
+  ``python -m toolr._runner``; reads ``$TOOLR_SPEC_FILE`` and dispatches
+  into user code.
+"""
+
 from __future__ import annotations
 
 try:
