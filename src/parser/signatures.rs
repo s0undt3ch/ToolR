@@ -2,11 +2,12 @@
 
 use ruff_python_ast::{Expr, Parameters, StmtFunctionDef};
 
+use super::symbols::EnumTable;
 use crate::manifest::{Argument, ArgumentKind};
 
 /// Build the argument list for a command from its function definition.
 /// Skips the first parameter (assumed to be `ctx: Context`).
-pub fn extract_arguments(func: &StmtFunctionDef) -> Vec<Argument> {
+pub fn extract_arguments(func: &StmtFunctionDef, enums: &EnumTable) -> Vec<Argument> {
     let Parameters { args, kwonlyargs, .. } = func.parameters.as_ref();
     // Skip ctx (first positional).
     let positional: Vec<_> = args.iter().skip(1).collect();
@@ -17,12 +18,21 @@ pub fn extract_arguments(func: &StmtFunctionDef) -> Vec<Argument> {
         } else {
             ArgumentKind::Positional
         };
-        let allowed_values = p
+        let mut allowed = p
             .parameter
             .annotation
             .as_ref()
             .map(|a| literal_values(a))
             .unwrap_or_default();
+        if allowed.is_empty() {
+            if let Some(ann) = p.parameter.annotation.as_ref() {
+                if let Some(name) = referenced_name(ann) {
+                    if let Some(vals) = enums.lookup(name) {
+                        allowed = vals.to_vec();
+                    }
+                }
+            }
+        }
         out.push(Argument {
             name: p.parameter.name.to_string(),
             kind,
@@ -33,16 +43,25 @@ pub fn extract_arguments(func: &StmtFunctionDef) -> Vec<Argument> {
                 .annotation
                 .as_ref()
                 .map(|a| annotation_to_string(a)),
-            allowed_values,
+            allowed_values: allowed,
         });
     }
     for p in kwonlyargs {
-        let allowed_values = p
+        let mut allowed = p
             .parameter
             .annotation
             .as_ref()
             .map(|a| literal_values(a))
             .unwrap_or_default();
+        if allowed.is_empty() {
+            if let Some(ann) = p.parameter.annotation.as_ref() {
+                if let Some(name) = referenced_name(ann) {
+                    if let Some(vals) = enums.lookup(name) {
+                        allowed = vals.to_vec();
+                    }
+                }
+            }
+        }
         out.push(Argument {
             name: p.parameter.name.to_string(),
             kind: ArgumentKind::Flag,
@@ -53,10 +72,17 @@ pub fn extract_arguments(func: &StmtFunctionDef) -> Vec<Argument> {
                 .annotation
                 .as_ref()
                 .map(|a| annotation_to_string(a)),
-            allowed_values,
+            allowed_values: allowed,
         });
     }
     out
+}
+
+fn referenced_name(expr: &Expr) -> Option<&str> {
+    match expr {
+        Expr::Name(n) => Some(n.id.as_str()),
+        _ => None,
+    }
 }
 
 fn literal_default(expr: &Expr) -> String {
@@ -133,7 +159,7 @@ mod tests {
     #[test]
     fn skips_ctx_first_argument() {
         let func = first_func("def f(ctx, name): pass\n");
-        let args = extract_arguments(&func);
+        let args = extract_arguments(&func, &EnumTable::default());
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
@@ -141,7 +167,7 @@ mod tests {
     #[test]
     fn marks_arguments_with_defaults_as_optional() {
         let func = first_func("def f(ctx, name=\"x\"): pass\n");
-        let args = extract_arguments(&func);
+        let args = extract_arguments(&func, &EnumTable::default());
         assert_eq!(args[0].kind, ArgumentKind::Optional);
         assert_eq!(args[0].default.as_deref(), Some("\"x\""));
     }
@@ -149,7 +175,7 @@ mod tests {
     #[test]
     fn captures_type_annotations_as_strings() {
         let func = first_func("def f(ctx, name: str = \"x\"): pass\n");
-        let args = extract_arguments(&func);
+        let args = extract_arguments(&func, &EnumTable::default());
         assert_eq!(args[0].type_annotation.as_deref(), Some("str"));
     }
 
@@ -161,7 +187,7 @@ from typing import Literal
 def f(ctx, mode: Literal["a", "b"]): pass
 "#,
         );
-        let args = extract_arguments(&func);
+        let args = extract_arguments(&func, &EnumTable::default());
         assert_eq!(
             args[0].allowed_values,
             vec!["a".to_string(), "b".to_string()]
@@ -171,7 +197,42 @@ def f(ctx, mode: Literal["a", "b"]): pass
     #[test]
     fn leaves_allowed_values_empty_for_non_literal_types() {
         let func = first_func("def f(ctx, name: str): pass\n");
-        let args = extract_arguments(&func);
+        let args = extract_arguments(&func, &EnumTable::default());
         assert!(args[0].allowed_values.is_empty());
+    }
+
+    #[test]
+    fn resolves_local_enum_for_allowed_values() {
+        use super::super::symbols::EnumTable;
+
+        let src = r#"
+from enum import StrEnum
+
+class Mode(StrEnum):
+    FAST = "fast"
+    SLOW = "slow"
+
+def f(ctx, mode: Mode): pass
+"#;
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        use std::io::Write;
+        tmp.write_all(src.as_bytes()).unwrap();
+        let m = crate::parser::parse_python_file(tmp.path()).unwrap();
+        let mut enums = EnumTable::default();
+        enums.merge(EnumTable::from_module(&m));
+        // Pull out the function manually (skip the enum class above).
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                ruff_python_ast::Stmt::FunctionDef(f) => Some(f.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &enums);
+        assert_eq!(
+            args[0].allowed_values,
+            vec!["fast".to_string(), "slow".to_string()]
+        );
     }
 }

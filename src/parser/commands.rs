@@ -6,6 +6,7 @@ use ruff_python_ast::{Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
 use super::signatures::extract_arguments;
+use super::symbols::EnumTable;
 use crate::SimpleDocstringParser;
 use crate::manifest::{Command, Origin};
 
@@ -15,6 +16,7 @@ pub fn extract_commands(
     module: &ModModule,
     module_path: &str,
     bindings: &[GroupBinding],
+    enums: &EnumTable,
 ) -> Vec<Command> {
     let by_var: HashMap<&str, &str> = bindings
         .iter()
@@ -31,7 +33,7 @@ pub fn extract_commands(
         let Some(&group_name) = by_var.get(group_var.as_str()) else {
             continue;
         };
-        out.push(build_command(func, group_name, module_path));
+        out.push(build_command(func, group_name, module_path, enums));
     }
     out
 }
@@ -64,7 +66,12 @@ fn function_docstring(func: &StmtFunctionDef) -> String {
     s.value.to_str().to_string()
 }
 
-fn build_command(func: &StmtFunctionDef, group: &str, module_path: &str) -> Command {
+fn build_command(
+    func: &StmtFunctionDef,
+    group: &str,
+    module_path: &str,
+    enums: &EnumTable,
+) -> Command {
     let raw_doc = function_docstring(func);
     let parsed = SimpleDocstringParser::new().parse(&raw_doc).ok();
     let summary = parsed
@@ -75,7 +82,7 @@ fn build_command(func: &StmtFunctionDef, group: &str, module_path: &str) -> Comm
         .as_ref()
         .and_then(|d| d.long_description.clone())
         .unwrap_or_default();
-    let mut arguments = extract_arguments(func);
+    let mut arguments = extract_arguments(func, enums);
     if let Some(d) = parsed.as_ref() {
         for arg in &mut arguments {
             if let Some(Some(help)) = d.params.get(&arg.name) {
@@ -120,7 +127,7 @@ def generate_build_matrix(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings);
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "generate-build-matrix");
         assert_eq!(commands[0].group, "ci");
@@ -137,7 +144,7 @@ def x(ctx):
 "#;
         let m = parse_src(src);
         let bindings = vec![];
-        let commands = extract_commands(&m, "tools.x", &bindings);
+        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default());
         assert!(commands.is_empty());
     }
 
@@ -150,7 +157,7 @@ def bare_function(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings);
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
         assert!(commands.is_empty());
     }
 
@@ -165,7 +172,7 @@ def hello(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings);
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
         assert_eq!(commands[0].summary, "Say hello.");
     }
 
@@ -184,7 +191,7 @@ def hello(ctx, name="world"):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings);
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
         let name_arg = commands[0]
             .arguments
             .iter()
