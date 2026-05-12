@@ -7,6 +7,9 @@ use thiserror::Error;
 pub mod discover;
 pub use discover::{find_managed_uv, find_uv_on_path, parse_uv_version, probe, which_uv};
 
+pub mod install;
+pub use install::{ConsentMode, InstallDecision, decide_install, decide_install_auto};
+
 /// Minimum supported uv version. Bumped when toolr starts to rely on a
 /// uv feature only available in a newer release.
 pub const MIN_UV_VERSION: (u32, u32, u32) = (0, 4, 0);
