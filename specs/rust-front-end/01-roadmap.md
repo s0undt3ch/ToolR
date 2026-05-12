@@ -99,7 +99,7 @@
 
 ### Plan 4: Shell completion
 
-- **Status:** 📝 Drafted
+- **Status:** ✅ Done
 - **Plan doc:** [05-plan-4-completion.md](./05-plan-4-completion.md)
 - **Depends on:** Plan 1
 - **Unblocks:** —
