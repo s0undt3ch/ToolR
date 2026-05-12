@@ -1995,7 +1995,7 @@ proves it end-to-end.
 
 - Create: `tests/distribution/test_compat_existing_tools.py`
 
-- [ ] **Step 10.1: Write the compatibility test**
+- [x] **Step 10.1: Write the compatibility test**
 
     Create `tests/distribution/test_compat_existing_tools.py`:
 
@@ -2122,7 +2122,7 @@ proves it end-to-end.
         assert "hello, plan9" in run_result.stdout, run_result.stdout
     ```
 
-- [ ] **Step 10.2: Run the test**
+- [x] **Step 10.2: Run the test**
 
     ```bash
     uv run pytest tests/distribution/test_compat_existing_tools.py -v
@@ -2132,7 +2132,7 @@ proves it end-to-end.
     smoke test that the full stack still respects the
     `command_group` + `@group.command` API).
 
-- [ ] **Step 10.3: Commit**
+- [x] **Step 10.3: Commit**
 
     ```bash
     git add tests/distribution/test_compat_existing_tools.py
