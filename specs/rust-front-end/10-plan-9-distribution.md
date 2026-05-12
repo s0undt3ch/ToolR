@@ -637,7 +637,7 @@ those archives to the GitHub release.
 - Create: `.github/workflows/build-binary-archive.yml`
 - Modify: `.github/workflows/release.yml`
 
-- [ ] **Step 4.1: Create the reusable archive-building workflow**
+- [x] **Step 4.1: Create the reusable archive-building workflow**
 
     Create `.github/workflows/build-binary-archive.yml`:
 
@@ -806,7 +806,7 @@ those archives to the GitHub release.
               if-no-files-found: error
     ```
 
-- [ ] **Step 4.2: Wire the archive workflow into release.yml**
+- [x] **Step 4.2: Wire the archive workflow into release.yml**
 
     Modify `.github/workflows/release.yml` to (a) call the archive workflow
     after `prepare-release`, and (b) include the resulting artifacts in the
@@ -879,7 +879,7 @@ those archives to the GitHub release.
           - publish-release
     ```
 
-- [ ] **Step 4.3: Lint the workflow locally**
+- [x] **Step 4.3: Lint the workflow locally**
 
     ```bash
     uv run pre-commit run --files .github/workflows/build-binary-archive.yml .github/workflows/release.yml
@@ -887,7 +887,7 @@ those archives to the GitHub release.
 
     Expected: PASS.
 
-- [ ] **Step 4.4: Commit**
+- [x] **Step 4.4: Commit**
 
     ```bash
     git add .github/workflows/build-binary-archive.yml .github/workflows/release.yml

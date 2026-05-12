@@ -1,0 +1,162 @@
+name: Build Binary Archive
+
+on:
+  workflow_call:
+    inputs:
+      release-version:
+        required: true
+        type: string
+        description: 'Release version (e.g. 1.0.0)'
+      release-tarball-name:
+        required: true
+        type: string
+        description: 'Name of the source tarball artifact to download'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target.triple }}
+    runs-on: ${{ matrix.target.runner }}
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - triple: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            cross: false
+            archive: tar.gz
+          - triple: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            cross: true
+            archive: tar.gz
+          - triple: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+            cross: true
+            archive: tar.gz
+          - triple: aarch64-unknown-linux-musl
+            runner: ubuntu-latest
+            cross: true
+            archive: tar.gz
+          - triple: x86_64-apple-darwin
+            runner: macos-13
+            cross: false
+            archive: tar.gz
+          - triple: aarch64-apple-darwin
+            runner: macos-14
+            cross: false
+            archive: tar.gz
+          - triple: x86_64-pc-windows-msvc
+            runner: windows-latest
+            cross: false
+            archive: zip
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Download Source Tarball Artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ inputs.release-tarball-name }}
+          path: src-tarball
+
+      - name: Unpack source tarball
+        run: |
+          mkdir -p workdir
+          tar -xzf src-tarball/*.tar.gz -C workdir --strip-components=1
+          ls workdir
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target.triple }}
+
+      - name: Install cross
+        if: matrix.target.cross
+        run: cargo install cross --locked --version "^0.2"
+
+      - name: Build binary (native)
+        if: ${{ !matrix.target.cross }}
+        working-directory: workdir
+        run: cargo build --release --locked --bin toolr --target ${{ matrix.target.triple }}
+
+      - name: Build binary (cross)
+        if: matrix.target.cross
+        working-directory: workdir
+        run: cross build --release --locked --bin toolr --target ${{ matrix.target.triple }}
+
+      - name: Stage archive contents
+        working-directory: workdir
+        env:
+          TRIPLE: ${{ matrix.target.triple }}
+          VERSION: ${{ inputs.release-version }}
+        run: |
+          set -euo pipefail
+          stage="stage/toolr-${VERSION}-${TRIPLE}"
+          mkdir -p "${stage}"
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            cp "target/${TRIPLE}/release/toolr.exe" "${stage}/"
+          else
+            cp "target/${TRIPLE}/release/toolr" "${stage}/"
+          fi
+          cp LICENSE "${stage}/LICENSE"
+          cp README.md "${stage}/README.md"
+          if [ -f CHANGELOG.md ]; then
+            cp CHANGELOG.md "${stage}/CHANGELOG.md"
+          fi
+
+      - name: Create archive (tar.gz)
+        if: matrix.target.archive == 'tar.gz'
+        working-directory: workdir
+        env:
+          TRIPLE: ${{ matrix.target.triple }}
+          VERSION: ${{ inputs.release-version }}
+        run: |
+          set -euo pipefail
+          base="toolr-${VERSION}-${TRIPLE}"
+          mkdir -p dist
+          tar -czvf "dist/${base}.tar.gz" -C stage "${base}"
+          ( cd dist && sha256sum "${base}.tar.gz" > "${base}.tar.gz.sha256" )
+
+      - name: Create archive (zip)
+        if: matrix.target.archive == 'zip'
+        working-directory: workdir
+        shell: pwsh
+        env:
+          TRIPLE: ${{ matrix.target.triple }}
+          VERSION: ${{ inputs.release-version }}
+        run: |
+          $base = "toolr-$env:VERSION-$env:TRIPLE"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "stage/$base" -DestinationPath "dist/$base.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 "dist/$base.zip").Hash.ToLower()
+          Set-Content -Path "dist/$base.zip.sha256" -Value "$hash  $base.zip"
+
+      - name: Attest archive provenance
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        with:
+          subject-path: workdir/dist/toolr-*.${{ matrix.target.archive }}
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: toolr-archive-${{ matrix.target.triple }}
+          path: |
+            workdir/dist/toolr-*.${{ matrix.target.archive }}
+            workdir/dist/toolr-*.${{ matrix.target.archive }}.sha256
+          if-no-files-found: error
