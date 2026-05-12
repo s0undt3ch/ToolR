@@ -7,6 +7,7 @@ use clap::ArgMatches;
 
 pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
     match matches.subcommand() {
+        Some(("init", init_m)) => project_init(init_m),
         Some(("deps", deps_m)) => match deps_m.subcommand() {
             Some(("sync", _)) => deps_sync(),
             _ => unreachable!("clap enforces subcommand_required"),
@@ -22,6 +23,10 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
         },
         _ => unreachable!("clap enforces subcommand_required"),
     }
+}
+
+fn project_init(_matches: &ArgMatches) -> Result<ExitCode> {
+    anyhow::bail!("toolr project init is implemented in a later task")
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {

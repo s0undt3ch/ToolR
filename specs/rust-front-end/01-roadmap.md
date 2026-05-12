@@ -216,6 +216,20 @@
       deprecation note to stderr.
     - Smoke tests in CI for each install channel.
 
+### Plan 10: `toolr project init` bootstrap command
+
+- **Status:** 🔧 In Progress
+- **Plan doc:** [12-plan-10-project-init.md](./12-plan-10-project-init.md)
+- **Depends on:** Plans 1-9 (uses `ensure_venv_ready` from Plan 3 + meta sidecar from Plan 8)
+- **Unblocks:** Plan 11 (docs restructure references real `init` output)
+- **Produces:**
+    - New `toolr project init` subcommand under the existing `project` namespace.
+    - PEP 420 namespace-package scaffold (no `tools/__init__.py`):
+      `tools/pyproject.toml`, `tools/.gitignore`, `tools/example.py` with four
+      `ctx`-feature-exercising commands (`hello`, `commit`, `confirm`, `setlog`).
+    - Auto-`uv sync` via `ensure_venv_ready` (skippable with `--no-sync`).
+    - Integration tests in `tests/project_init.rs`.
+
 ## Dependency graph
 
 ```text

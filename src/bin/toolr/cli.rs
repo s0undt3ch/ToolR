@@ -57,6 +57,52 @@ pub fn build_command(manifest: &Manifest) -> Command {
             .about("Operations on the current repo's tools/ directory")
             .subcommand_required(true)
             .subcommand(
+                Command::new("init")
+                    .about("Scaffold tools/ in the current directory")
+                    .arg(
+                        Arg::new("force")
+                            .long("force")
+                            .action(ArgAction::SetTrue)
+                            .help("Overwrite an existing tools/ directory"),
+                    )
+                    .arg(
+                        Arg::new("no-sync")
+                            .long("no-sync")
+                            .action(ArgAction::SetTrue)
+                            .help("Skip the automatic `uv sync` after scaffolding"),
+                    )
+                    .arg(
+                        Arg::new("venv-location")
+                            .long("venv-location")
+                            .value_name("LOCATION")
+                            .value_parser(["cache", "in-tree"])
+                            .default_value("cache")
+                            .help("Where the tools venv should live"),
+                    )
+                    .arg(
+                        Arg::new("no-example")
+                            .long("no-example")
+                            .action(ArgAction::SetTrue)
+                            .help("Skip generating tools/example.py"),
+                    )
+                    .arg(
+                        Arg::new("python")
+                            .long("python")
+                            .value_name("VERSION")
+                            .help(
+                                "`requires-python` value for tools/pyproject.toml \
+                                 (defaults to the running Python's >=major.minor)",
+                            ),
+                    )
+                    .arg(
+                        Arg::new("quiet")
+                            .long("quiet")
+                            .short('q')
+                            .action(ArgAction::SetTrue)
+                            .help("Suppress informational output"),
+                    ),
+            )
+            .subcommand(
                 Command::new("deps")
                     .about("Tools-venv dependency management")
                     .subcommand_required(true)
