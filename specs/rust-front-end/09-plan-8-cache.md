@@ -50,7 +50,7 @@ Create the `_rust_utils::cache::Meta` struct that maps onto the on-disk
 - Create: `src/cache/mod.rs`
 - Create: `src/cache/meta.rs`
 - Create: `src/cache/tests.rs`
-- [ ] **Step 1.1: Add `chrono` to `[dependencies]` in `Cargo.toml`**
+- [x] **Step 1.1: Add `chrono` to `[dependencies]` in `Cargo.toml`**
 
     ```toml
     chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
@@ -61,7 +61,7 @@ Create the `_rust_utils::cache::Meta` struct that maps onto the on-disk
     `std` is needed for our targets, and disabling defaults keeps the
     Windows time-crate transitive tree predictable.
 
-- [ ] **Step 1.2: Expose a `cache` module from `src/lib.rs`**
+- [x] **Step 1.2: Expose a `cache` module from `src/lib.rs`**
 
     Add alongside the other `pub mod` lines:
 
@@ -69,7 +69,7 @@ Create the `_rust_utils::cache::Meta` struct that maps onto the on-disk
     pub mod cache;
     ```
 
-- [ ] **Step 1.3: Create `src/cache/mod.rs`**
+- [x] **Step 1.3: Create `src/cache/mod.rs`**
 
     ```rust
     //! Toolr venv cache: per-venv metadata sidecar, enumeration, pruning,
@@ -83,7 +83,7 @@ Create the `_rust_utils::cache::Meta` struct that maps onto the on-disk
     mod tests;
     ```
 
-- [ ] **Step 1.4: Create `src/cache/meta.rs`**
+- [x] **Step 1.4: Create `src/cache/meta.rs`**
 
     ```rust
     //! Per-cache-entry `meta.json` sidecar.
@@ -208,7 +208,7 @@ Create the `_rust_utils::cache::Meta` struct that maps onto the on-disk
     }
     ```
 
-- [ ] **Step 1.5: Add round-trip tests in `src/cache/tests.rs`**
+- [x] **Step 1.5: Add round-trip tests in `src/cache/tests.rs`**
 
     ```rust
     use super::meta::{Meta, MetaError, SCHEMA_VERSION};
@@ -278,7 +278,7 @@ Create the `_rust_utils::cache::Meta` struct that maps onto the on-disk
     }
     ```
 
-- [ ] **Step 1.6: Run tests, expect PASS**
+- [x] **Step 1.6: Run tests, expect PASS**
 
     ```bash
     cargo test --lib cache::
@@ -286,7 +286,7 @@ Create the `_rust_utils::cache::Meta` struct that maps onto the on-disk
 
     Expected: 5 tests passing.
 
-- [ ] **Step 1.7: Commit**
+- [x] **Step 1.7: Commit**
 
     ```bash
     git add Cargo.toml src/lib.rs src/cache/

@@ -1,5 +1,6 @@
 #![allow(non_local_definitions)]
 
+pub mod cache;
 mod command;
 pub mod complete;
 pub mod deps_check;
