@@ -18,7 +18,10 @@ documents:
 
 - The obsolete `python -m pip install toolr` lead.
 - Argparse-era help output with `--timestamps` / `--timeout` /
-  `--no-output-timeout-secs` flags that no longer exist.
+  `--no-output-timeout-secs` flags that no longer exist. (Whether
+  any of those should come back is tracked in
+  [issue #191](https://github.com/s0undt3ch/ToolR/issues/191) and
+  is out of scope for this design.)
 - A `tools/__init__.py` scaffold step that is unnecessary (PEP 420
   namespace packages work — validated in design).
 - Third-party packages only via the legacy entry-point mechanism.
@@ -256,8 +259,10 @@ toolr:   toolr self completion install <bash|zsh|fish>   # optional, for tab com
 
 ### Captured terminal output (`.txt` snippets)
 
-`scripts/regen-doc-snippets.py` regenerates `.txt` captures by running
-the real `toolr` binary against the doc fixture project. Each `.py`
+`.pre-commit-hooks/regen-doc-snippets.py` regenerates `.txt` captures by
+running the real `toolr` binary against the doc fixture project. Lives
+alongside the existing local hook scripts (`pin-github-actions.py`,
+`ref-doc-stubs.py`). Each `.py`
 example file gets matching `.txt` files in the same directory, e.g.:
 
 ```text
@@ -271,7 +276,7 @@ The doc page includes both the source and the captured output via
 
 Drift detection:
 
-- **In CI**: `python scripts/regen-doc-snippets.py --check` runs in
+- **In CI**: `python .pre-commit-hooks/regen-doc-snippets.py --check` runs in
   the existing CI workflow; fails if regenerating any snippet would
   change its on-disk contents.
 - **Pre-commit hook**: same `--check` invocation, scoped via
@@ -298,7 +303,7 @@ Drift detection:
      the `running_a_user_command_invokes_python_runner` pattern from
      `tests/cli_smoke.rs`.
 3. **Snippet drift check** — pre-commit hook + CI both run
-   `scripts/regen-doc-snippets.py --check`. Any drift fails the build.
+   `.pre-commit-hooks/regen-doc-snippets.py --check`. Any drift fails the build.
 
 ## Decomposition
 
@@ -328,7 +333,7 @@ Larger but mechanical. Depends on Plan 10 being merged.
 
 1. `mkdocs.yml` nav update + empty new-page skeletons so internal
    links resolve as content lands.
-2. `scripts/regen-doc-snippets.py` + the fixture project it runs
+2. `.pre-commit-hooks/regen-doc-snippets.py` + the fixture project it runs
    against.
 3. Quickstart page (uses real `toolr project init` output via
    captured `.txt`).
@@ -373,7 +378,7 @@ The combined work is complete when:
   snippets.
 - The new IA pages all exist and link to one another correctly.
 - The pruned `docs/reference/` exposes only the public API surface.
-- `scripts/regen-doc-snippets.py --check` runs cleanly in CI and as
+- `.pre-commit-hooks/regen-doc-snippets.py --check` runs cleanly in CI and as
   a pre-commit hook.
 - The roadmap shows Plan 10 and Plan 11 as ✅ Done.
 
