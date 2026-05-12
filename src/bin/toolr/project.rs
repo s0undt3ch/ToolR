@@ -35,8 +35,11 @@ fn deps_sync() -> Result<ExitCode> {
 }
 
 fn venv_path() -> Result<ExitCode> {
-    // Implemented in Task 14.
-    Ok(ExitCode::from(2))
+    let cwd = std::env::current_dir()?;
+    let repo_root = _rust_utils::discovery::discover_project_root(&cwd)?;
+    let resolved = _rust_utils::venv::resolve_venv_path(&repo_root)?;
+    println!("{}", resolved.venv_dir.display());
+    Ok(ExitCode::SUCCESS)
 }
 
 fn venv_shell() -> Result<ExitCode> {
