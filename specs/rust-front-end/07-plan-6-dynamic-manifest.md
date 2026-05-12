@@ -624,7 +624,7 @@ of a static `toolr-manifest.json` (Plan 5).
 - Modify: `python/toolr/_introspect.py`
 - Create: `tests/test_introspect_entry_points.py`
 
-- [ ] **Step 4.1: Add the entry-point pass to `_introspect.py`**
+- [x] **Step 4.1: Add the entry-point pass to `_introspect.py`**
 
     Above `build_payload`, add:
 
@@ -674,7 +674,7 @@ of a static `toolr-manifest.json` (Plan 5).
         }
     ```
 
-- [ ] **Step 4.2: Write an entry-point test using a stub module**
+- [x] **Step 4.2: Write an entry-point test using a stub module**
 
     Create `tests/test_introspect_entry_points.py`:
 
@@ -737,7 +737,7 @@ of a static `toolr-manifest.json` (Plan 5).
         assert ("legacy", "widget") in cmd_names, payload
     ```
 
-- [ ] **Step 4.3: Run the test**
+- [x] **Step 4.3: Run the test**
 
     ```bash
     uv run pytest tests/test_introspect_entry_points.py -q
@@ -745,7 +745,7 @@ of a static `toolr-manifest.json` (Plan 5).
 
     Expected: 1 test passing.
 
-- [ ] **Step 4.4: Commit**
+- [x] **Step 4.4: Commit**
 
     ```bash
     git add python/toolr/_introspect.py tests/test_introspect_entry_points.py
