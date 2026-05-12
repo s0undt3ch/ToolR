@@ -35,8 +35,8 @@
 
 ### Plan 1: Rust binary skeleton + static manifest layer
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [02-plan-1-rust-skeleton.md](./02-plan-1-rust-skeleton.md)
 - **Depends on:** —
 - **Unblocks:** Plans 2, 4, 5
 - **Produces:**
