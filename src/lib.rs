@@ -3,6 +3,7 @@
 mod command;
 pub mod discovery;
 mod docstrings;
+pub mod hash;
 pub mod manifest;
 #[cfg(feature = "python")]
 mod python_bindings;
