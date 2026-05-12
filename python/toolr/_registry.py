@@ -29,6 +29,14 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+MANIFEST_SCHEMA_VERSION: int = 1
+"""Current toolr manifest fragment schema version.
+
+Mirrors `FRAGMENT_SCHEMA_VERSION` on the Rust side. Bump in lockstep
+when introducing a breaking change to the fragment format.
+"""
+
+
 class CommandGroup(Struct, frozen=True):
     """A group of commands under a common namespace."""
 

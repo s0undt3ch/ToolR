@@ -20,8 +20,22 @@ except ImportError:
     __version__ = "0.0.0.not-installed"
 
 from toolr._context import Context
+from toolr._registry import MANIFEST_SCHEMA_VERSION
 from toolr._registry import command_group
+from toolr.build import BuildManifestError
+from toolr.build import BuildResult
+from toolr.build import build_manifest
 from toolr.utils._imports import report_on_import_errors
 from toolr.utils._signature import arg
 
-__all__ = ["Context", "__version__", "arg", "command_group", "report_on_import_errors"]
+__all__ = [
+    "MANIFEST_SCHEMA_VERSION",
+    "BuildManifestError",
+    "BuildResult",
+    "Context",
+    "__version__",
+    "arg",
+    "build_manifest",
+    "command_group",
+    "report_on_import_errors",
+]
