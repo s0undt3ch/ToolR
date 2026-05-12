@@ -27,6 +27,92 @@ Python imports involved in the hot path.
   entry carries an `origin` field (`"static"` or `"dynamic"`)
   recording which layer produced it.
 
+## Group schema
+
+```json
+{
+  "name": "image",
+  "title": "Image",
+  "description": "Image subcommands",
+  "parent": "docker",
+  "origin": "static"
+}
+```
+
+- **`name`** — the leaf name (not the full path). For nested groups
+  this is just the segment (`"image"`); the full hierarchy is the
+  parent path joined to the name.
+- **`parent`** — `null` for top-level groups, otherwise the dotted
+  `full_path` of the parent group (`"docker"` for `docker image`,
+  `"docker.image"` for `docker image build`). The clap CLI builder
+  walks this tree recursively when materialising subcommands.
+
+## Command schema
+
+```json
+{
+  "name": "build",
+  "group": "docker.image",
+  "module": "tools.docker",
+  "function": "build",
+  "summary": "Build a docker image.",
+  "description": "",
+  "arguments": [...],
+  "imports": [],
+  "origin": "static"
+}
+```
+
+- **`group`** — the **full path** of the owning group. Top-level
+  commands have a single segment (`"ci"`); nested commands have the
+  dotted parent path (`"docker.image"`).
+
+## Argument schema
+
+```json
+{
+  "name": "tag",
+  "kind": "positional",
+  "help": "Tag to assign.",
+  "default": null,
+  "type_annotation": "str",
+  "resolved_type": { "kind": "str" },
+  "path_constraints": null,
+  "allowed_values": []
+}
+```
+
+- **`kind`** — one of `"positional"`, `"optional"`, `"flag"`,
+  `"repeated"` (list[T] keyword), or `"var_positional"` (`*args`).
+- **`default`** — string-encoded default value (or `null`). Numeric
+  defaults render as e.g. `"5"`; enum-attribute defaults like
+  `Operation.ADD` are resolved to the serialised member value
+  (`"add"`).
+- **`type_annotation`** — textual rendering of the annotation as
+  written in source (`"int"`, `"list[str]"`, `"pathlib.Path"`). Used
+  for `--help` and diagnostics.
+- **`resolved_type`** — structured form of the annotation, drives
+  the clap value_parser layer. Shape:
+
+  ```json
+  { "kind": "int" }
+  { "kind": "list", "value": { "kind": "int" } }
+  { "kind": "tuple", "value": [{ "kind": "str" }, { "kind": "int" }] }
+  { "kind": "literal", "value": ["a", "b"] }
+  { "kind": "enum", "value": { "name": "Operation", "values": ["add", "subtract"] } }
+  { "kind": "optional", "value": { "kind": "path" } }
+  ```
+
+  See `src/parser/types.rs` for the full enum. `null` means the type
+  layer couldn't resolve a supported type — third-party fragments
+  built against the legacy schema fall through to string semantics.
+- **`path_constraints`** — for path-typed parameters annotated with
+  `arg(must_exist=True, ...)`. Object with optional `must_exist`,
+  `must_be_file`, `must_be_dir` booleans. `null` when no constraints
+  were declared.
+- **`allowed_values`** — for `Literal[...]` / `Enum` types, the
+  values clap validates against. Also used by tab completion.
+
 ## Static layer
 
 Built from `tools/**/*.py` via the `ruff_python_parser` Rust crate.
