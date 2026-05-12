@@ -97,11 +97,13 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             .venv/Scripts/python.exe -m pip install --upgrade pip
             .venv/Scripts/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
-            .venv/Scripts/python.exe -m toolr --version || true
+            # `python -m toolr` was removed in this release; verify the
+            # wheel imports cleanly instead.
+            .venv/Scripts/python.exe -c "import toolr; print(toolr.__version__)"
           else
             .venv/bin/python -m pip install --upgrade pip
             .venv/bin/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
-            .venv/bin/python -m toolr --version || true
+            .venv/bin/python -c "import toolr; print(toolr.__version__)"
           fi
 
   smoke-mise-plugin:

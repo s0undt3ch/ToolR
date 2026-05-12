@@ -73,10 +73,11 @@ The plugin source lives in `toolr-mise/` (development) and
 pip install toolr
 ```
 
-The wheel installs the Python package and the toolr `_rust_utils`
-extension module. (`python -m toolr` is a deprecation shim that
-exec's the `toolr` binary with the original argv; install the binary
-via one of the methods above and the shim will find it.)
+The wheel installs the Python runtime support — the `toolr` package and
+the `_rust_utils` extension module — needed by `tools/*.py` commands at
+execute time. The `toolr` **binary** is not bundled in the wheel; install
+it via one of the methods above (install.sh, mise, or release archive).
+The package no longer exposes a `python -m toolr` entry point.
 
 ### GitHub release archives
 

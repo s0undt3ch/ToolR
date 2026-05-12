@@ -27,9 +27,6 @@ dependencies = [
     "rich-argparse>=1.7.0",
 ]
 
-[project.scripts]
-toolr = "toolr.__main__:main"
-
 [project.urls]
 Repository = "https://github.com/s0undt3ch/ToolR"
 Documentation = "https://toolr.readthedocs.io"
@@ -175,10 +172,6 @@ ignore = [
   "D107",   # Missing docstring in `__init__`
   "PT",     # flake8-pytest-style (PT) - Disabled in production code, only enforced in tests
 ]
-"python/toolr/__main__.py" = [
-  "T201",   # `print` used — diagnostics to stderr are intentional in the shim
-  "S606",   # `os.execv` is intentional — the shim must replace the python process
-]
 "python/toolr/_context.py" = [
   "PYI041", # redundant-numeric-union
 ]
@@ -277,14 +270,6 @@ disallow_untyped_calls = false
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = [
-  "toolr.__main__"
-]
-disable_error_code = [
-  "unused-ignore"
-]
 
 [[tool.mypy.overrides]]
 module = [
