@@ -154,6 +154,59 @@ fn prune_all_with_yes_nukes_everything() {
 }
 
 #[test]
+fn passive_hint_appears_when_orphan_count_is_high() {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr");
+    fs::create_dir_all(&cache_root).unwrap();
+    for i in 0..15 {
+        write_entry(
+            &cache_root,
+            &format!("orphan-{i}"),
+            Path::new("/definitely/missing/repo"),
+            Utc::now(),
+        );
+    }
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env("XDG_CACHE_HOME", tmp.path())
+        .env_remove("HOME")
+        .env_remove("TOOLR_NO_CACHE_HINT")
+        .args(["--version"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("toolr self cache prune"), "stderr:\n{stderr}");
+}
+
+#[test]
+fn passive_hint_is_suppressed_by_env_var() {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr");
+    fs::create_dir_all(&cache_root).unwrap();
+    for i in 0..15 {
+        write_entry(
+            &cache_root,
+            &format!("orphan-{i}"),
+            Path::new("/definitely/missing/repo"),
+            Utc::now(),
+        );
+    }
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env("XDG_CACHE_HOME", tmp.path())
+        .env_remove("HOME")
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .args(["--version"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("toolr self cache prune"), "stderr:\n{stderr}");
+}
+
+#[test]
 fn prune_all_refuses_without_yes_when_non_interactive() {
     let tmp = TempDir::new().unwrap();
     let cache_root = tmp.path().join("toolr");

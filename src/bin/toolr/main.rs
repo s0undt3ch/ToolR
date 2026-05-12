@@ -21,10 +21,40 @@ fn main() -> ExitCode {
 
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
+    // Emit the passive cache hint before clap touches argv, so `--version`
+    // and `--help` (which would otherwise exit inside clap) still see it.
+    maybe_emit_cache_hint_from_argv();
     let manifest = load_or_empty(&cwd);
     let mut command = cli::build_command(&manifest);
     let matches = command.clone().get_matches();
     dispatch::dispatch(&matches, &manifest, &mut command)
+}
+
+fn maybe_emit_cache_hint_from_argv() {
+    if std::env::var_os("TOOLR_NO_CACHE_HINT").is_some() {
+        return;
+    }
+    // Suppress for tab-completion and `self cache ...` invocations.
+    let argv: Vec<String> = std::env::args().collect();
+    let positional: Vec<&str> = argv
+        .iter()
+        .skip(1)
+        .filter(|a| !a.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    if positional.first().copied() == Some("__complete") {
+        return;
+    }
+    if positional.first().copied() == Some("self") && positional.get(1).copied() == Some("cache") {
+        return;
+    }
+    let Ok(cache_root) = self_cache::resolve_cache_root() else {
+        return;
+    };
+    let cfg = _rust_utils::cache::HintConfig::default();
+    if let Ok(Some(msg)) = _rust_utils::cache::compute_hint(&cache_root, &cfg, chrono::Utc::now()) {
+        eprintln!("{msg}");
+    }
 }
 
 fn load_or_empty(cwd: &std::path::Path) -> Manifest {

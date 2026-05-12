@@ -266,3 +266,67 @@ fn classify_prefers_orphan_over_stale_when_both_apply() {
     assert_eq!(result.orphan.len(), 1);
     assert!(result.stale.is_empty());
 }
+
+use super::hint::{HintConfig, compute_hint};
+
+#[test]
+fn hint_is_none_when_cache_is_small_and_clean() {
+    let tmp = TempDir::new().unwrap();
+    let live_repo = tmp.path().join("live");
+    std::fs::create_dir_all(&live_repo).unwrap();
+    let cache_root = tmp.path().join("toolr-cache");
+    std::fs::create_dir_all(&cache_root).unwrap();
+    make_entry(&cache_root, "a", live_repo.to_str().unwrap(), now_fixture(), 1024);
+
+    let hint = compute_hint(&cache_root, &HintConfig::default(), now_fixture()).unwrap();
+    assert!(hint.is_none(), "expected no hint, got {hint:?}");
+}
+
+#[test]
+fn hint_fires_when_total_size_exceeds_threshold() {
+    let tmp = TempDir::new().unwrap();
+    let live_repo = tmp.path().join("live");
+    std::fs::create_dir_all(&live_repo).unwrap();
+    let cache_root = tmp.path().join("toolr-cache");
+    std::fs::create_dir_all(&cache_root).unwrap();
+    make_entry(&cache_root, "a", live_repo.to_str().unwrap(), now_fixture(), 4096);
+
+    let cfg = HintConfig {
+        size_threshold_bytes: 1024,
+        orphan_threshold: 10,
+    };
+    let hint = compute_hint(&cache_root, &cfg, now_fixture()).unwrap();
+    assert!(hint.is_some());
+    let s = hint.unwrap();
+    assert!(s.contains("Run `toolr self cache prune`"), "got: {s}");
+}
+
+#[test]
+fn hint_fires_when_orphan_count_exceeds_threshold() {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr-cache");
+    std::fs::create_dir_all(&cache_root).unwrap();
+    for key in &["a", "b", "c"] {
+        make_entry(&cache_root, key, "/missing", now_fixture(), 32);
+    }
+
+    let cfg = HintConfig {
+        size_threshold_bytes: 100 * 1024 * 1024 * 1024,
+        orphan_threshold: 2,
+    };
+    let hint = compute_hint(&cache_root, &cfg, now_fixture()).unwrap();
+    assert!(hint.is_some());
+    assert!(hint.as_ref().unwrap().contains("orphan"));
+}
+
+#[test]
+fn hint_is_none_when_cache_root_is_missing() {
+    let tmp = TempDir::new().unwrap();
+    let hint = compute_hint(
+        &tmp.path().join("no-such-dir"),
+        &HintConfig::default(),
+        now_fixture(),
+    )
+    .unwrap();
+    assert!(hint.is_none());
+}

@@ -1709,7 +1709,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
 - Modify: `src/cache/mod.rs`
 - Modify: `src/bin/toolr/main.rs`
 - Modify: `src/cache/tests.rs`
-- [ ] **Step 8.1: Write the failing tests**
+- [x] **Step 8.1: Write the failing tests**
 
     Append to `src/cache/tests.rs`:
 
@@ -1780,7 +1780,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
     }
     ```
 
-- [ ] **Step 8.2: Run and verify the tests FAIL**
+- [x] **Step 8.2: Run and verify the tests FAIL**
 
     ```bash
     cargo test --lib cache::tests::hint
@@ -1788,7 +1788,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
 
     Expected: compile error.
 
-- [ ] **Step 8.3: Create `src/cache/hint.rs`**
+- [x] **Step 8.3: Create `src/cache/hint.rs`**
 
     ```rust
     //! Compute the passive "your cache is big, consider pruning" message.
@@ -1878,7 +1878,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
     }
     ```
 
-- [ ] **Step 8.4: Re-export and run the unit tests**
+- [x] **Step 8.4: Re-export and run the unit tests**
 
     Update `src/cache/mod.rs`:
 
@@ -1909,7 +1909,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
 
     Expected: 20 tests passing.
 
-- [ ] **Step 8.5: Wire emission into the binary entry point**
+- [x] **Step 8.5: Wire emission into the binary entry point**
 
     In `src/bin/toolr/main.rs`, after CLI parsing but before subcommand
     dispatch, compute and emit the hint. Suppress when the running command
@@ -1957,7 +1957,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
     binary's existing dispatch wrapper) so every invocation passes through
     it.
 
-- [ ] **Step 8.6: Integration test for emission**
+- [x] **Step 8.6: Integration test for emission**
 
     Add to `tests/self_cache_prune.rs` (same fixture style):
 
@@ -2013,7 +2013,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
     }
     ```
 
-- [ ] **Step 8.7: Run the integration tests**
+- [x] **Step 8.7: Run the integration tests**
 
     ```bash
     cargo test --test self_cache_prune
@@ -2021,7 +2021,7 @@ env-var `TOOLR_NO_CACHE_HINT=1` is set.
 
     Expected: all tests pass.
 
-- [ ] **Step 8.8: Commit**
+- [x] **Step 8.8: Commit**
 
     ```bash
     git add src/bin/toolr/ src/cache/ tests/self_cache_prune.rs
