@@ -4,7 +4,8 @@ use std::process::ExitCode;
 use clap::ArgMatches;
 
 use _rust_utils::complete::{
-    Shell as CompletionShell, completion_script, resolve_manifest_at_tab, serve_completions,
+    InstallOptions, InstallOutcome, Shell as CompletionShell, completion_script, install_script,
+    resolve_manifest_at_tab, serve_completions,
 };
 use _rust_utils::discovery::discover_project_root;
 use _rust_utils::execute::{
@@ -101,9 +102,69 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     };
     match action {
         "print" => run_completion_print(action_matches),
-        // "install" is added by Task 8
+        "install" => run_completion_install(action_matches),
         other => anyhow::bail!("unsupported self completion subcommand: {other}"),
     }
+}
+
+fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    let shell_str = matches
+        .get_one::<String>("shell")
+        .ok_or_else(|| anyhow::anyhow!("missing <shell>"))?;
+    let shell: CompletionShell = shell_str.parse()?;
+    let force = matches.get_flag("force");
+
+    let home = dirs_home()?;
+    let xdg_data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+    let xdg_config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let opts = InstallOptions {
+        shell,
+        xdg_data_home,
+        xdg_config_home,
+        home,
+        force,
+        interactive: std::io::IsTerminal::is_terminal(&std::io::stdin()),
+    };
+
+    let outcome = install_script(&opts)?;
+    match outcome {
+        InstallOutcome::Wrote { path } => {
+            println!(
+                "toolr: wrote {} completion script to {}",
+                shell,
+                path.display()
+            );
+            if matches!(shell, CompletionShell::Zsh) {
+                println!(
+                    "toolr: ensure your ~/.zshrc includes `fpath=(~/.zfunc $fpath)` and \
+                     `autoload -Uz compinit && compinit`."
+                );
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        InstallOutcome::AlreadyInstalled { path } => {
+            println!(
+                "toolr: {} completion already installed at {}",
+                shell,
+                path.display()
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        InstallOutcome::SkippedNeedsForce { path } => {
+            eprintln!(
+                "toolr: refusing to overwrite {} (use --force to replace)",
+                path.display()
+            );
+            Ok(ExitCode::from(1))
+        }
+    }
+}
+
+fn dirs_home() -> anyhow::Result<PathBuf> {
+    // Avoid taking on a new crate dep — read $HOME directly.
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| anyhow::anyhow!("$HOME is not set; cannot pick install path"))?;
+    Ok(PathBuf::from(home))
 }
 
 fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {

@@ -295,3 +295,104 @@ fn fish_script_invokes_toolr_complete() {
     assert!(script.contains("toolr __complete"));
     assert!(script.contains("complete -c toolr"));
 }
+
+use crate::complete::install::{
+    InstallOptions, InstallOutcome, install_path_for, install_script,
+};
+
+#[test]
+fn install_path_for_bash_uses_xdg_data_home() {
+    let tmp = TempDir::new().unwrap();
+    let xdg_data = tmp.path().join("share");
+    let path = install_path_for(Shell::Bash, Some(&xdg_data), tmp.path()).unwrap();
+    assert_eq!(path, xdg_data.join("bash-completion/completions/toolr"));
+}
+
+#[test]
+fn install_path_for_zsh_uses_home_zfunc() {
+    let tmp = TempDir::new().unwrap();
+    let path = install_path_for(Shell::Zsh, None, tmp.path()).unwrap();
+    assert_eq!(path, tmp.path().join(".zfunc/_toolr"));
+}
+
+#[test]
+fn install_path_for_fish_uses_xdg_config_home() {
+    let tmp = TempDir::new().unwrap();
+    let xdg_config = tmp.path().join("config");
+    let path = install_path_for(Shell::Fish, Some(&xdg_config), tmp.path()).unwrap();
+    assert_eq!(path, xdg_config.join("fish/completions/toolr.fish"));
+}
+
+#[test]
+fn install_creates_file_when_absent() {
+    let tmp = TempDir::new().unwrap();
+    let opts = InstallOptions {
+        shell: Shell::Bash,
+        xdg_data_home: Some(tmp.path().join("data")),
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        force: false,
+        interactive: false,
+    };
+    let outcome = install_script(&opts).unwrap();
+    assert!(matches!(outcome, InstallOutcome::Wrote { .. }));
+    let target = tmp.path().join("data/bash-completion/completions/toolr");
+    assert!(target.exists());
+}
+
+#[test]
+fn install_refuses_to_overwrite_differing_file_without_force() {
+    let tmp = TempDir::new().unwrap();
+    let target = tmp.path().join("data/bash-completion/completions/toolr");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, "# someone else's script\n").unwrap();
+    let opts = InstallOptions {
+        shell: Shell::Bash,
+        xdg_data_home: Some(tmp.path().join("data")),
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        force: false,
+        interactive: false,
+    };
+    let outcome = install_script(&opts).unwrap();
+    assert!(matches!(outcome, InstallOutcome::SkippedNeedsForce { .. }));
+    let contents = std::fs::read_to_string(&target).unwrap();
+    assert_eq!(contents, "# someone else's script\n");
+}
+
+#[test]
+fn install_is_idempotent_when_content_matches() {
+    let tmp = TempDir::new().unwrap();
+    let opts = InstallOptions {
+        shell: Shell::Bash,
+        xdg_data_home: Some(tmp.path().join("data")),
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        force: false,
+        interactive: false,
+    };
+    let first = install_script(&opts).unwrap();
+    let second = install_script(&opts).unwrap();
+    assert!(matches!(first, InstallOutcome::Wrote { .. }));
+    assert!(matches!(second, InstallOutcome::AlreadyInstalled { .. }));
+}
+
+#[test]
+fn install_with_force_overwrites_existing() {
+    let tmp = TempDir::new().unwrap();
+    let target = tmp.path().join("data/bash-completion/completions/toolr");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, "# stale\n").unwrap();
+    let opts = InstallOptions {
+        shell: Shell::Bash,
+        xdg_data_home: Some(tmp.path().join("data")),
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        force: true,
+        interactive: false,
+    };
+    let outcome = install_script(&opts).unwrap();
+    assert!(matches!(outcome, InstallOutcome::Wrote { .. }));
+    let contents = std::fs::read_to_string(&target).unwrap();
+    assert!(contents.contains("toolr __complete"));
+}

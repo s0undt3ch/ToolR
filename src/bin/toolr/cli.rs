@@ -95,6 +95,28 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .value_parser(["bash", "zsh", "fish"])
                                     .help("Shell to emit a completion script for"),
                             ),
+                    )
+                    .subcommand(
+                        Command::new("install")
+                            .about(
+                                "Install the completion script for a shell into its \
+                                 standard location",
+                            )
+                            .arg(
+                                Arg::new("shell")
+                                    .required(true)
+                                    .value_parser(["bash", "zsh", "fish"])
+                                    .help("Shell to install the completion script for"),
+                            )
+                            .arg(
+                                Arg::new("force")
+                                    .long("force")
+                                    .action(ArgAction::SetTrue)
+                                    .help(
+                                        "Overwrite an existing differing file \
+                                         without prompting",
+                                    ),
+                            ),
                     ),
             ),
     );
