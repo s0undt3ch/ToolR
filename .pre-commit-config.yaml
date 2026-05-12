@@ -15,13 +15,6 @@ repos:
 
   - repo: local
     hooks:
-      - id: update-doc-stubs
-        name: Update reference documentation stubs
-        language: system
-        entry: python .pre-commit-hooks/ref-doc-stubs.py
-        files: ^(docs/.*\.md|python/toolr/.*\.py)$
-        pass_filenames: false
-
       - id: pin-github-actions
         name: Pin GitHub Actions to commit SHAs
         language: python

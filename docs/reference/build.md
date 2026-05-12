@@ -1,3 +1,3 @@
-# toolr.build
+# build
 
 ::: toolr.build

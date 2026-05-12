@@ -1,3 +1,3 @@
-# toolr.testing
+# testing
 
 ::: toolr.testing
