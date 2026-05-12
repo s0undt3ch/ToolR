@@ -36,13 +36,58 @@ Built-in support for rich text formatting and automatic help generation from doc
 
 Extend ToolR's functionality by installing packages that provide additional commands through Python entry points.
 
+## Installation
+
+`toolr` ships as a single self-contained binary. Choose the install
+method that matches your environment:
+
+### `curl ... | sh` (Linux + macOS)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.sh | sh
+```
+
+Pass `--version X.Y.Z` after `sh -s --` to pin a specific release, or
+`--prefix /custom/bin` to choose an install directory. Default prefix
+is `$XDG_BIN_HOME` (or `~/.local/bin`).
+
+### PowerShell (Windows)
+
+```powershell
+irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.ps1 | iex
+```
+
+### mise
+
+```sh
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git --branch main
+mise use --global toolr@latest
+```
+
+The plugin source lives in `toolr-mise/` (development) and
+`dist/mise-plugin/` (release-tracked).
+
+### pip
+
+```sh
+pip install toolr
+```
+
+The wheel installs the Python package and the toolr `_rust_utils`
+extension module. (`python -m toolr` is a deprecation shim that
+exec's the `toolr` binary with the original argv; install the binary
+via one of the methods above and the shim will find it.)
+
+### GitHub release archives
+
+Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for
+Windows) from <https://github.com/s0undt3ch/ToolR/releases> and
+extract it onto `$PATH` manually. Each archive ships with a `.sha256`
+sibling for verification.
+
 ## Quick Start
 
-1. **Install ToolR**:
-
-   ```bash
-   python -m pip install toolr
-   ```
+1. **Install ToolR** (see [Installation](#installation) above).
 
 2. **Create a tools package** in your project root:
 

@@ -2150,7 +2150,7 @@ binary the headline install path, demote pip to one of several options.
 
 - Modify: `README.md`
 
-- [ ] **Step 11.1: Replace the install section**
+- [x] **Step 11.1: Replace the install section**
 
     Locate the `## Installation` section in `README.md` (or
     `## Getting Started` / equivalent — match the existing heading). If
@@ -2210,7 +2210,7 @@ binary the headline install path, demote pip to one of several options.
     sibling for verification.
     ```
 
-- [ ] **Step 11.2: Run the markdown linter**
+- [x] **Step 11.2: Run the markdown linter**
 
     ```bash
     uv run pre-commit run --files README.md
@@ -2218,7 +2218,7 @@ binary the headline install path, demote pip to one of several options.
 
     Expected: PASS (or fixes auto-applied).
 
-- [ ] **Step 11.3: Commit**
+- [x] **Step 11.3: Commit**
 
     ```bash
     git add README.md
