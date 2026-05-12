@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use ruff_python_ast::{Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
+use super::signatures::extract_arguments;
 use crate::manifest::{Command, Origin};
 
 /// Walk module body for functions decorated with `@<var>.command` where
@@ -48,7 +49,6 @@ fn command_decorator_target(decorators: &[Decorator]) -> Option<String> {
 }
 
 fn build_command(func: &StmtFunctionDef, group: &str, module_path: &str) -> Command {
-    // Argument / docstring extraction lands in Tasks 10–11.
     Command {
         name: func.name.as_str().replace('_', "-"),
         group: group.to_string(),
@@ -56,7 +56,7 @@ fn build_command(func: &StmtFunctionDef, group: &str, module_path: &str) -> Comm
         function: func.name.as_str().to_string(),
         summary: String::new(),
         description: String::new(),
-        arguments: Vec::new(),
+        arguments: extract_arguments(func),
         imports: Vec::new(),
         origin: Origin::Static,
     }

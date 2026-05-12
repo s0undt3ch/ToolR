@@ -12,6 +12,9 @@ pub use groups::{GroupBinding, extract_groups};
 pub mod commands;
 pub use commands::extract_commands;
 
+pub mod signatures;
+pub use signatures::extract_arguments;
+
 /// Parse a single Python file and return its module AST.
 pub fn parse_python_file(path: &Path) -> Result<ModModule> {
     let source = std::fs::read_to_string(path)
