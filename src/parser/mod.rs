@@ -6,6 +6,9 @@ use anyhow::{Context, Result};
 use ruff_python_ast::ModModule;
 use ruff_python_parser::parse_module;
 
+pub mod groups;
+pub use groups::{GroupBinding, extract_groups};
+
 /// Parse a single Python file and return its module AST.
 pub fn parse_python_file(path: &Path) -> Result<ModModule> {
     let source = std::fs::read_to_string(path)
