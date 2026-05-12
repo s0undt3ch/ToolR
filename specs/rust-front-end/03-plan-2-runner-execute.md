@@ -220,7 +220,7 @@ versions, and surface clear errors.
     from __future__ import annotations
 
     import json
-    import os
+    from collections.abc import Callable
     from pathlib import Path
 
     import pytest
@@ -230,37 +230,46 @@ versions, and surface clear errors.
     from toolr._runner import load_spec
 
 
-    def _write_spec(tmp_path: Path, **overrides: object) -> Path:
-        payload: dict[str, object] = {
-            "schema_version": SCHEMA_VERSION,
-            "group": "ci",
-            "command": "hello",
-            "module": "tools.ci",
-            "function": "hello",
-            "args": {},
-            "context": {
-                "repo_root": str(tmp_path),
-                "verbosity": "normal",
-                "timestamps": False,
-                "log_level": "INFO",
-            },
-        }
-        payload.update(overrides)
-        spec_path = tmp_path / "spec.json"
-        spec_path.write_text(json.dumps(payload))
-        return spec_path
+    @pytest.fixture
+    def spec_file(tmp_path: Path) -> Callable[..., Path]:
+        """Factory: write a runner spec JSON to ``tmp_path/spec.json``. Returns its path."""
+
+        def _make(**overrides: object) -> Path:
+            payload: dict[str, object] = {
+                "schema_version": SCHEMA_VERSION,
+                "group": "ci",
+                "command": "hello",
+                "module": "tools.ci",
+                "function": "hello",
+                "args": {},
+                "context": {
+                    "repo_root": str(tmp_path),
+                    "verbosity": "normal",
+                    "timestamps": False,
+                    "log_level": "INFO",
+                },
+            }
+            payload.update(overrides)
+            spec_path = tmp_path / "spec.json"
+            spec_path.write_text(json.dumps(payload))
+            return spec_path
+
+        return _make
 
 
-    def test_load_spec_reads_file_and_decodes(tmp_path: Path) -> None:
-        spec_path = _write_spec(tmp_path)
+    def test_load_spec_reads_file_and_decodes(
+        spec_file: Callable[..., Path],
+        tmp_path: Path,
+    ) -> None:
+        spec_path = spec_file()
         spec = load_spec(spec_path)
         assert spec.group == "ci"
         assert spec.command == "hello"
         assert spec.context.repo_root == str(tmp_path)
 
 
-    def test_load_spec_rejects_unknown_schema_version(tmp_path: Path) -> None:
-        spec_path = _write_spec(tmp_path, schema_version=999)
+    def test_load_spec_rejects_unknown_schema_version(spec_file: Callable[..., Path]) -> None:
+        spec_path = spec_file(schema_version=999)
         with pytest.raises(SpecError) as exc_info:
             load_spec(spec_path)
         assert "schema_version" in str(exc_info.value)
@@ -280,10 +289,13 @@ versions, and surface clear errors.
             load_spec(spec_path)
 
 
-    def test_load_spec_from_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_load_spec_from_env(
+        spec_file: Callable[..., Path],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         from toolr._runner import load_spec_from_env
 
-        spec_path = _write_spec(tmp_path)
+        spec_path = spec_file()
         monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
         spec = load_spec_from_env()
         assert spec.group == "ci"
@@ -440,6 +452,7 @@ toolr._runner` works.
     import subprocess
     import sys
     import textwrap
+    from collections.abc import Callable
     from pathlib import Path
 
     import pytest
@@ -447,46 +460,78 @@ toolr._runner` works.
     from toolr._runner import SCHEMA_VERSION
 
 
-    def _write_tools_module(tools_dir: Path, body: str) -> None:
-        tools_dir.mkdir(parents=True, exist_ok=True)
-        (tools_dir / "__init__.py").write_text("")
-        (tools_dir / "demo.py").write_text(textwrap.dedent(body))
+    @pytest.fixture
+    def tools_module(tmp_path: Path) -> Callable[[str], Path]:
+        """Factory: write a ``tools/demo.py`` with the given body. Returns the repo root."""
+
+        def _make(body: str) -> Path:
+            tools_dir = tmp_path / "tools"
+            tools_dir.mkdir(parents=True, exist_ok=True)
+            (tools_dir / "__init__.py").write_text("")
+            (tools_dir / "demo.py").write_text(textwrap.dedent(body))
+            return tmp_path
+
+        return _make
 
 
-    def _write_spec(spec_path: Path, repo_root: Path, *, command: str, function: str, args: dict[str, object]) -> None:
-        payload = {
-            "schema_version": SCHEMA_VERSION,
-            "group": "demo",
-            "command": command,
-            "module": "tools.demo",
-            "function": function,
-            "args": args,
-            "context": {
-                "repo_root": str(repo_root),
-                "verbosity": "normal",
-                "timestamps": False,
-                "log_level": "INFO",
-            },
-        }
-        spec_path.write_text(json.dumps(payload))
+    @pytest.fixture
+    def spec_file(tmp_path: Path) -> Callable[..., Path]:
+        """Factory: write a runner spec JSON to ``tmp_path/spec.json``. Returns its path."""
+
+        def _make(
+            *,
+            command: str,
+            function: str,
+            args: dict[str, object] | None = None,
+            repo_root: Path | None = None,
+        ) -> Path:
+            payload = {
+                "schema_version": SCHEMA_VERSION,
+                "group": "demo",
+                "command": command,
+                "module": "tools.demo",
+                "function": function,
+                "args": args or {},
+                "context": {
+                    "repo_root": str(repo_root or tmp_path),
+                    "verbosity": "normal",
+                    "timestamps": False,
+                    "log_level": "INFO",
+                },
+            }
+            spec_path = tmp_path / "spec.json"
+            spec_path.write_text(json.dumps(payload))
+            return spec_path
+
+        return _make
 
 
-    def _run_runner(spec_path: Path, repo_root: Path) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        env["TOOLR_SPEC_FILE"] = str(spec_path)
-        env["PYTHONPATH"] = str(repo_root) + os.pathsep + env.get("PYTHONPATH", "")
-        return subprocess.run(
-            [sys.executable, "-m", "toolr._runner"],
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+    @pytest.fixture
+    def run_runner(tmp_path: Path) -> Callable[[Path], subprocess.CompletedProcess[str]]:
+        """Factory: spawn ``python -m toolr._runner`` with ``TOOLR_SPEC_FILE`` set."""
+
+        def _run(spec_path: Path) -> subprocess.CompletedProcess[str]:
+            env = os.environ.copy()
+            env["TOOLR_SPEC_FILE"] = str(spec_path)
+            env["PYTHONPATH"] = str(tmp_path) + os.pathsep + env.get("PYTHONPATH", "")
+            return subprocess.run(
+                [sys.executable, "-m", "toolr._runner"],
+                env=env,
+                cwd=str(tmp_path),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        return _run
 
 
-    def test_runner_invokes_target_function(tmp_path: Path) -> None:
-        _write_tools_module(
-            tmp_path / "tools",
+    def test_runner_invokes_target_function(
+        tools_module: Callable[[str], Path],
+        spec_file: Callable[..., Path],
+        run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+    ) -> None:
+        tools_module(
             """
             from toolr import command_group
 
@@ -495,19 +540,20 @@ toolr._runner` works.
             @group.command
             def hello(ctx, name: str = "world") -> None:
                 ctx.print(f"hi {name}")
-            """,
+            """
         )
-        spec_path = tmp_path / "spec.json"
-        _write_spec(spec_path, tmp_path, command="hello", function="hello", args={"name": "Alice"})
-
-        result = _run_runner(spec_path, tmp_path)
+        spec_path = spec_file(command="hello", function="hello", args={"name": "Alice"})
+        result = run_runner(spec_path)
         assert result.returncode == 0, f"stderr:\n{result.stderr}\nstdout:\n{result.stdout}"
         assert "hi Alice" in result.stdout
 
 
-    def test_runner_propagates_nonzero_exit_via_ctx_exit(tmp_path: Path) -> None:
-        _write_tools_module(
-            tmp_path / "tools",
+    def test_runner_propagates_nonzero_exit_via_ctx_exit(
+        tools_module: Callable[[str], Path],
+        spec_file: Callable[..., Path],
+        run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+    ) -> None:
+        tools_module(
             """
             from toolr import command_group
 
@@ -516,18 +562,19 @@ toolr._runner` works.
             @group.command
             def boom(ctx) -> None:
                 ctx.exit(7, "failing on purpose")
-            """,
+            """
         )
-        spec_path = tmp_path / "spec.json"
-        _write_spec(spec_path, tmp_path, command="boom", function="boom", args={})
-
-        result = _run_runner(spec_path, tmp_path)
+        spec_path = spec_file(command="boom", function="boom")
+        result = run_runner(spec_path)
         assert result.returncode == 7
 
 
-    def test_runner_propagates_exception_as_exit_1(tmp_path: Path) -> None:
-        _write_tools_module(
-            tmp_path / "tools",
+    def test_runner_propagates_exception_as_exit_1(
+        tools_module: Callable[[str], Path],
+        spec_file: Callable[..., Path],
+        run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+    ) -> None:
+        tools_module(
             """
             from toolr import command_group
 
@@ -536,12 +583,10 @@ toolr._runner` works.
             @group.command
             def crash(ctx) -> None:
                 raise RuntimeError("crashed")
-            """,
+            """
         )
-        spec_path = tmp_path / "spec.json"
-        _write_spec(spec_path, tmp_path, command="crash", function="crash", args={})
-
-        result = _run_runner(spec_path, tmp_path)
+        spec_path = spec_file(command="crash", function="crash")
+        result = run_runner(spec_path)
         assert result.returncode == 1
         assert "RuntimeError" in result.stderr
         assert "crashed" in result.stderr
@@ -553,6 +598,7 @@ toolr._runner` works.
         result = subprocess.run(
             [sys.executable, "-m", "toolr._runner"],
             env=env,
+            cwd=str(tmp_path),
             capture_output=True,
             text=True,
             check=False,

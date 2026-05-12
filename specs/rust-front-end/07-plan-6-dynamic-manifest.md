@@ -522,34 +522,49 @@ warnings, not hard errors.
     import subprocess
     import sys
     import textwrap
+    from collections.abc import Callable
     from pathlib import Path
 
-
-    def _make_fixture(tmp_path: Path) -> Path:
-        tools = tmp_path / "tools"
-        tools.mkdir()
-        (tools / "__init__.py").write_text("")
-        (tools / "demo.py").write_text(
-            textwrap.dedent(
-                '''
-                """Demo dynamic-layer module."""
-                from toolr import command_group
-
-                group = command_group("demo", "Demo group", description="A demo.")
-
-                @group.command
-                def shout(ctx):
-                    """Shout loudly."""
-                    return 0
-                '''
-            ).strip()
-            + "\n"
-        )
-        return tools
+    import pytest
 
 
-    def test_tools_walk_finds_decorated_command(tmp_path: Path) -> None:
-        tools_root = _make_fixture(tmp_path)
+    @pytest.fixture
+    def tools_fixture(tmp_path: Path) -> Callable[[], Path]:
+        """Factory: scaffold a ``tools/demo.py`` fixture under ``tmp_path``.
+
+        Returns the ``tools/`` directory path.
+        """
+
+        def _make() -> Path:
+            tools = tmp_path / "tools"
+            tools.mkdir()
+            (tools / "__init__.py").write_text("")
+            (tools / "demo.py").write_text(
+                textwrap.dedent(
+                    '''
+                    """Demo dynamic-layer module."""
+                    from toolr import command_group
+
+                    group = command_group("demo", "Demo group", description="A demo.")
+
+                    @group.command
+                    def shout(ctx):
+                        """Shout loudly."""
+                        return 0
+                    '''
+                ).strip()
+                + "\n"
+            )
+            return tools
+
+        return _make
+
+
+    def test_tools_walk_finds_decorated_command(
+        tools_fixture: Callable[[], Path],
+        tmp_path: Path,
+    ) -> None:
+        tools_root = tools_fixture()
         proc = subprocess.run(
             [sys.executable, "-m", "toolr._introspect", "--tools-root", str(tools_root)],
             capture_output=True,

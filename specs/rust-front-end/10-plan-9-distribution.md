@@ -116,6 +116,7 @@ and locks it down so future config edits cannot regress it.
     import subprocess
     import sys
     import zipfile
+    from collections.abc import Callable
     from pathlib import Path
 
     import pytest
@@ -128,34 +129,39 @@ and locks it down so future config edits cannot regress it.
     REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-    def _build_wheel(tmp_path: Path) -> Path:
-        """Build a wheel into `tmp_path` and return its path."""
-        out_dir = tmp_path / "wheelhouse"
-        out_dir.mkdir()
-        subprocess.run(
-            [
-                "maturin",
-                "build",
-                "--release",
-                "--out",
-                str(out_dir),
-                "--interpreter",
-                sys.executable,
-            ],
-            cwd=REPO_ROOT,
-            check=True,
-        )
-        wheels = list(out_dir.glob("toolr-*.whl"))
-        assert len(wheels) == 1, f"expected one wheel, got {wheels}"
-        return wheels[0]
+    @pytest.fixture
+    def built_wheel(tmp_path: Path) -> Callable[[], Path]:
+        """Factory: build a wheel into ``tmp_path/wheelhouse`` and return its path."""
+
+        def _build() -> Path:
+            out_dir = tmp_path / "wheelhouse"
+            out_dir.mkdir()
+            subprocess.run(
+                [
+                    "maturin",
+                    "build",
+                    "--release",
+                    "--out",
+                    str(out_dir),
+                    "--interpreter",
+                    sys.executable,
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+            )
+            wheels = list(out_dir.glob("toolr-*.whl"))
+            assert len(wheels) == 1, f"expected one wheel, got {wheels}"
+            return wheels[0]
+
+        return _build
 
 
     def _expected_bin_name() -> str:
         return "toolr.exe" if sys.platform == "win32" else "toolr"
 
 
-    def test_wheel_includes_rust_binary(tmp_path: Path) -> None:
-        wheel = _build_wheel(tmp_path)
+    def test_wheel_includes_rust_binary(built_wheel: Callable[[], Path]) -> None:
+        wheel = built_wheel()
         with zipfile.ZipFile(wheel) as zf:
             names = zf.namelist()
         binary_name = _expected_bin_name()
@@ -168,8 +174,8 @@ and locks it down so future config edits cannot regress it.
         )
 
 
-    def test_wheel_includes_python_package(tmp_path: Path) -> None:
-        wheel = _build_wheel(tmp_path)
+    def test_wheel_includes_python_package(built_wheel: Callable[[], Path]) -> None:
+        wheel = built_wheel()
         with zipfile.ZipFile(wheel) as zf:
             names = zf.namelist()
         # The wheel must still contain the Python package (existing behaviour
@@ -323,6 +329,7 @@ shim itself.
     import subprocess
     import sys
     import textwrap
+    from collections.abc import Callable
     from pathlib import Path
 
     import pytest
@@ -331,33 +338,41 @@ shim itself.
     PY_SRC = REPO_ROOT / "python"
 
 
-    def _make_fake_binary(tmp_path: Path, exit_code: int = 0) -> Path:
-        bin_dir = tmp_path / "bin"
-        bin_dir.mkdir()
-        binary = bin_dir / ("toolr.exe" if os.name == "nt" else "toolr")
-        if os.name == "nt":
-            binary.write_text(
-                'import sys\nprint("FAKE-TOOLR", " ".join(sys.argv[1:]))\n'
-                f"sys.exit({exit_code})\n"
-            )
-        else:
-            binary.write_text(
-                textwrap.dedent(
-                    f"""\
-                    #!{sys.executable}
-                    import sys
-                    print("FAKE-TOOLR", " ".join(sys.argv[1:]))
-                    sys.exit({exit_code})
-                    """
+    @pytest.fixture
+    def fake_binary(tmp_path: Path) -> Callable[..., Path]:
+        """Factory: write a fake ``toolr`` binary under ``tmp_path/bin``. Returns its path."""
+
+        def _make(exit_code: int = 0) -> Path:
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            binary = bin_dir / ("toolr.exe" if os.name == "nt" else "toolr")
+            if os.name == "nt":
+                binary.write_text(
+                    'import sys\nprint("FAKE-TOOLR", " ".join(sys.argv[1:]))\n'
+                    f"sys.exit({exit_code})\n"
                 )
-            )
-            binary.chmod(binary.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-        return binary
+            else:
+                binary.write_text(
+                    textwrap.dedent(
+                        f"""\
+                        #!{sys.executable}
+                        import sys
+                        print("FAKE-TOOLR", " ".join(sys.argv[1:]))
+                        sys.exit({exit_code})
+                        """
+                    )
+                )
+                binary.chmod(
+                    binary.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+                )
+            return binary
+
+        return _make
 
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX exec semantics required")
-    def test_shim_execs_real_toolr_with_argv(tmp_path: Path) -> None:
-        fake = _make_fake_binary(tmp_path)
+    def test_shim_execs_real_toolr_with_argv(fake_binary: Callable[..., Path]) -> None:
+        fake = fake_binary()
         env = {
             **os.environ,
             "PATH": str(fake.parent) + os.pathsep + os.environ.get("PATH", ""),
@@ -375,8 +390,8 @@ shim itself.
 
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX exec semantics required")
-    def test_shim_prints_deprecation_notice(tmp_path: Path) -> None:
-        fake = _make_fake_binary(tmp_path)
+    def test_shim_prints_deprecation_notice(fake_binary: Callable[..., Path]) -> None:
+        fake = fake_binary()
         env = {
             **os.environ,
             "PATH": str(fake.parent) + os.pathsep + os.environ.get("PATH", ""),
@@ -394,8 +409,8 @@ shim itself.
 
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX exec semantics required")
-    def test_shim_suppresses_notice_when_env_set(tmp_path: Path) -> None:
-        fake = _make_fake_binary(tmp_path)
+    def test_shim_suppresses_notice_when_env_set(fake_binary: Callable[..., Path]) -> None:
+        fake = fake_binary()
         env = {
             **os.environ,
             "PATH": str(fake.parent) + os.pathsep + os.environ.get("PATH", ""),
@@ -1336,20 +1351,24 @@ hosts.
     INSTALL_SH = REPO_ROOT / "dist" / "install.sh"
 
 
-    def _build_fake_archive(tmp_path: Path, version: str, triple: str) -> tuple[Path, str]:
-        """Build a tar.gz containing a stub `toolr` binary; return (path, sha256)."""
-        stage = tmp_path / f"toolr-{version}-{triple}"
+    def _build_fake_archive(dest_dir: Path, version: str, triple: str) -> tuple[Path, str]:
+        """Build a tar.gz containing a stub `toolr` binary; return (path, sha256).
+
+        ``dest_dir`` is supplied by the caller, so this helper takes its inputs
+        explicitly (no implicit ``tmp_path`` coupling).
+        """
+        stage = dest_dir / f"toolr-{version}-{triple}"
         stage.mkdir()
         (stage / "toolr").write_text(
             f"#!/bin/sh\necho 'fake-toolr {version} {triple}'\n"
         )
         (stage / "toolr").chmod(0o755)
         (stage / "LICENSE").write_text("Apache-2.0")
-        archive = tmp_path / f"toolr-{version}-{triple}.tar.gz"
+        archive = dest_dir / f"toolr-{version}-{triple}.tar.gz"
         with tarfile.open(archive, "w:gz") as tf:
             tf.add(stage, arcname=stage.name)
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-        (tmp_path / f"{archive.name}.sha256").write_text(f"{digest}  {archive.name}\n")
+        (dest_dir / f"{archive.name}.sha256").write_text(f"{digest}  {archive.name}\n")
         return archive, digest
 
 
@@ -1990,6 +2009,7 @@ proves it end-to-end.
     import subprocess
     import sys
     import textwrap
+    from collections.abc import Callable
     from pathlib import Path
 
     import pytest
@@ -2002,53 +2022,64 @@ proves it end-to-end.
     REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-    def _setup_project(tmp_path: Path) -> Path:
-        """Create a minimal project with a tools/ dir and a command_group."""
-        proj = tmp_path / "proj"
-        proj.mkdir()
-        tools = proj / "tools"
-        tools.mkdir()
-        (tools / "__init__.py").write_text("")
-        (tools / "demo.py").write_text(
-            textwrap.dedent(
-                """\
-                from __future__ import annotations
+    @pytest.fixture
+    def project_dir(tmp_path: Path) -> Callable[[], Path]:
+        """Factory: scaffold a minimal project with a ``tools/`` dir and a ``command_group``.
 
-                from toolr import command_group
+        Returns the project root directory.
+        """
 
-                group = command_group("demo", "Demo commands", docstring=__doc__)
+        def _make() -> Path:
+            proj = tmp_path / "proj"
+            proj.mkdir()
+            tools = proj / "tools"
+            tools.mkdir()
+            (tools / "__init__.py").write_text("")
+            (tools / "demo.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from __future__ import annotations
+
+                    from toolr import command_group
+
+                    group = command_group("demo", "Demo commands", docstring=__doc__)
 
 
-                @group.command
-                def hello(name: str = "world") -> None:
-                    \"\"\"Print a greeting.
+                    @group.command
+                    def hello(name: str = "world") -> None:
+                        \"\"\"Print a greeting.
 
-                    Args:
-                        name: Who to greet.
-                    \"\"\"
-                    print(f"hello, {name}")
-                """
+                        Args:
+                            name: Who to greet.
+                        \"\"\"
+                        print(f"hello, {name}")
+                    """
+                )
             )
-        )
-        (tools / "pyproject.toml").write_text(
-            textwrap.dedent(
-                f"""\
-                [project]
-                name = "demo-tools"
-                version = "0"
-                requires-python = ">=3.11"
-                dependencies = ["toolr"]
+            (tools / "pyproject.toml").write_text(
+                textwrap.dedent(
+                    f"""\
+                    [project]
+                    name = "demo-tools"
+                    version = "0"
+                    requires-python = ">=3.11"
+                    dependencies = ["toolr"]
 
-                [tool.uv.sources]
-                toolr = {{ path = "{REPO_ROOT.as_posix()}", editable = true }}
-                """
+                    [tool.uv.sources]
+                    toolr = {{ path = "{REPO_ROOT.as_posix()}", editable = true }}
+                    """
+                )
             )
-        )
-        return proj
+            return proj
+
+        return _make
 
 
-    def test_existing_command_group_authoring_still_runs(tmp_path: Path) -> None:
-        proj = _setup_project(tmp_path)
+    def test_existing_command_group_authoring_still_runs(
+        project_dir: Callable[[], Path],
+        tmp_path: Path,
+    ) -> None:
+        proj = project_dir()
         # Build the binary into a local venv and run the demo command.
         venv = tmp_path / "venv"
         subprocess.run(
