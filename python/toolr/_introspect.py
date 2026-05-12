@@ -13,30 +13,107 @@ Bump ``PAYLOAD_SCHEMA_VERSION`` on every breaking change.
 from __future__ import annotations
 
 import argparse
+import importlib
+import inspect
 import json
+import os
+import pkgutil
 import sys
 from typing import Any
 
 PAYLOAD_SCHEMA_VERSION = 1
 
 
-def build_payload(tools_root: str | None) -> dict[str, Any]:
-    """Construct the dynamic-layer payload for the current Python env.
+def _ensure_tools_on_syspath(tools_root: str | None) -> None:
+    """Insert the parent of ``tools_root`` on ``sys.path`` so ``import tools.<sub>`` works."""
+    if not tools_root:
+        return
+    parent = os.path.dirname(os.path.abspath(tools_root))
+    if parent and parent not in sys.path:
+        sys.path.insert(0, parent)
 
-    Args:
-        tools_root: Absolute path to the project's ``tools/`` directory,
-            or ``None`` if the caller could not resolve one. When given,
-            the helper inserts the parent of ``tools_root`` on
-            ``sys.path`` so ``import tools.<sub>`` works.
+
+def _import_tools_modules(warnings: list[str]) -> None:
+    """Import every module under the top-level ``tools`` package.
+
+    Failures importing a single module are converted to a warning string and
+    the walk continues - one bad file must not poison the whole rebuild.
     """
-    warnings: list[str] = []
+    try:
+        tools_pkg = importlib.import_module("tools")
+    except ModuleNotFoundError:
+        # No `tools/` package on sys.path; nothing to walk.
+        return
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover - defensive
+        warnings.append(f"failed to import top-level `tools` package: {exc!r}")
+        return
+
+    search_paths = getattr(tools_pkg, "__path__", None)
+    if not search_paths:
+        return
+
+    for module_info in pkgutil.walk_packages(search_paths, prefix="tools."):
+        try:
+            importlib.import_module(module_info.name)
+        except Exception as exc:  # noqa: BLE001  # we want every error
+            warnings.append(f"failed to import `{module_info.name}`: {type(exc).__name__}: {exc}")
+
+
+def _walk_registry() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Read groups and commands from the toolr registry singleton."""
+    from toolr._registry import _get_command_group_storage  # noqa: PLC0415
+
+    storage = _get_command_group_storage()
     groups: list[dict[str, Any]] = []
     commands: list[dict[str, Any]] = []
 
-    # Tasks 3 and 4 fill these in; for now we emit an empty payload so
-    # the wiring works end-to-end.
-    _ = tools_root
+    for full_name, group in storage.items():
+        # CommandGroup.full_name is "tools.<name>" or "tools.<parent>.<name>";
+        # strip the leading "tools." for the manifest's `group` field.
+        display_name = full_name.removeprefix("tools.")
+        groups.append(
+            {
+                "name": display_name,
+                "title": group.title,
+                "description": group.description or "",
+                "origin": "dynamic",
+            }
+        )
+        for cmd_name, func in group.get_commands().items():
+            commands.append(_command_entry(display_name, cmd_name, func))
 
+    return groups, commands
+
+
+def _command_entry(group_name: str, cmd_name: str, func: Any) -> dict[str, Any]:
+    """Serialize a single registered command function."""
+    module = getattr(func, "__module__", "") or ""
+    function = getattr(func, "__name__", cmd_name)
+    doc = inspect.getdoc(func) or ""
+    summary, _, description = doc.partition("\n\n")
+    return {
+        "name": cmd_name,
+        "group": group_name,
+        "module": module,
+        "function": function,
+        "summary": summary.strip(),
+        "description": description.strip(),
+        # Argument extraction is intentionally omitted here. The static
+        # parser already emits these for `tools/*.py` files; the dynamic
+        # layer only adds *missing* commands. Arguments for dynamic-only
+        # commands are filled in by Task 4's entry-point pass for legacy
+        # third-party packages.
+        "arguments": [],
+        "imports": [],
+        "origin": "dynamic",
+    }
+
+
+def build_payload(tools_root: str | None) -> dict[str, Any]:
+    warnings: list[str] = []
+    _ensure_tools_on_syspath(tools_root)
+    _import_tools_modules(warnings)
+    groups, commands = _walk_registry()
     return {
         "payload_schema_version": PAYLOAD_SCHEMA_VERSION,
         "groups": groups,

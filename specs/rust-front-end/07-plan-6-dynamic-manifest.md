@@ -383,7 +383,7 @@ warnings, not hard errors.
 - Modify: `python/toolr/_introspect.py`
 - Create: `tests/test_introspect_tools_walk.py`
 
-- [ ] **Step 3.1: Add the tools walk to `_introspect.py`**
+- [x] **Step 3.1: Add the tools walk to `_introspect.py`**
 
     Replace the body of `build_payload` and add helpers:
 
@@ -509,7 +509,7 @@ warnings, not hard errors.
         }
     ```
 
-- [ ] **Step 3.2: Write tests for the tools walk**
+- [x] **Step 3.2: Write tests for the tools walk**
 
     Create `tests/test_introspect_tools_walk.py`:
 
@@ -595,7 +595,7 @@ warnings, not hard errors.
         assert any("broken" in w for w in payload["warnings"]), payload
     ```
 
-- [ ] **Step 3.3: Run the new tests**
+- [x] **Step 3.3: Run the new tests**
 
     ```bash
     uv run pytest tests/test_introspect_tools_walk.py -q
@@ -603,7 +603,7 @@ warnings, not hard errors.
 
     Expected: 2 tests passing.
 
-- [ ] **Step 3.4: Commit**
+- [x] **Step 3.4: Commit**
 
     ```bash
     git add python/toolr/_introspect.py tests/test_introspect_tools_walk.py
