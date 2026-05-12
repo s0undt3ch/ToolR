@@ -1426,7 +1426,7 @@ Mark Plan 7 as Done once Tasks 1–8 are merged.
 **Files:**
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
-- [ ] **Step 9.1: Update the Plan 7 entry**
+- [x] **Step 9.1: Update the Plan 7 entry**
 
     Change the Plan 7 block from:
 
@@ -1448,7 +1448,7 @@ Mark Plan 7 as Done once Tasks 1–8 are merged.
 
     Leave the rest of the entry (Depends on / Unblocks / Produces) intact.
 
-- [ ] **Step 9.2: Commit**
+- [x] **Step 9.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md

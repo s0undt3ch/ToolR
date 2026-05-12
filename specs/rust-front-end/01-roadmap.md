@@ -162,7 +162,7 @@
 
 ### Plan 7: Missing-dependency diagnostics
 
-- **Status:** 📝 Drafted
+- **Status:** ✅ Done
 - **Plan doc:** [08-plan-7-missing-deps.md](./08-plan-7-missing-deps.md)
 - **Depends on:** Plan 2, Plan 3
 - **Unblocks:** —
