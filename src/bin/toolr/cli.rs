@@ -360,6 +360,12 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
         // `allowed_values` list for third-party manifest fragments that
         // haven't been rebuilt against the new schema yet.
         if let Some(ty) = arg.resolved_type.as_ref() {
+            // Heterogeneous tuples need clap to consume a fixed slot
+            // count; per-slot coercion happens on the python side via
+            // msgspec against the function's `tuple[T1, T2]` hint.
+            if let Some(arity) = crate::value_parsers::tuple_arity(ty) {
+                a = a.num_args(arity);
+            }
             a = crate::value_parsers::apply_value_parser(a, ty);
         } else if !arg.allowed_values.is_empty() {
             a = a.value_parser(arg.allowed_values.clone());

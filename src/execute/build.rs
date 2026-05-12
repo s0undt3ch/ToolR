@@ -50,6 +50,17 @@ pub fn build_spec(
 }
 
 fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
+    // Heterogeneous tuples are configured with `num_args(N)` and need
+    // multi-value retrieval even when the manifest `kind` says
+    // `Positional` or `Optional`. Route them through `extract_many`
+    // before the kind-based switch.
+    let is_tuple = matches!(
+        arg.resolved_type.as_ref().map(unwrap_optional),
+        Some(SupportedType::Tuple(_))
+    );
+    if is_tuple {
+        return Some(Value::Array(extract_many(arg, matches)));
+    }
     match arg.kind {
         ArgumentKind::Flag => {
             // clap stored as bool via ArgAction::SetTrue.
@@ -62,6 +73,13 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
         ArgumentKind::Repeated | ArgumentKind::VarPositional => {
             Some(Value::Array(extract_many(arg, matches)))
         }
+    }
+}
+
+fn unwrap_optional(ty: &SupportedType) -> &SupportedType {
+    match ty {
+        SupportedType::Optional(inner) => inner.as_ref(),
+        other => other,
     }
 }
 

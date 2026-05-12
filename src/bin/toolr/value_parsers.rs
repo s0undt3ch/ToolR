@@ -50,11 +50,22 @@ pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
         // For collection kinds we configure the *element* parser; clap's
         // `num_args` / `Append` semantics are set by the caller.
         SupportedType::List(elem) => apply_value_parser(arg, elem),
-        // Tuple is heterogeneous; clap doesn't easily express per-slot
-        // parsers, so we leave it as the default string parser and let
-        // msgspec do final coercion on the runner side.
+        // Heterogeneous tuples: clap can't apply a per-slot value_parser
+        // for the same Arg, so we constrain the *arity* and let msgspec
+        // coerce each slot to the right type against the function's
+        // `tuple[T1, T2, ...]` hint. Slot count comes from the resolved
+        // type — see `arity_for` in the cli builder.
         SupportedType::Tuple(_) => arg,
         SupportedType::Optional(_) => unreachable!("unwrap_optional handled this"),
+    }
+}
+
+/// If `ty` (after unwrapping `Optional`) is a heterogeneous `Tuple`,
+/// return its slot count; otherwise `None`.
+pub fn tuple_arity(ty: &SupportedType) -> Option<usize> {
+    match unwrap_optional(ty) {
+        SupportedType::Tuple(elts) => Some(elts.len()),
+        _ => None,
     }
 }
 
