@@ -28,7 +28,8 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+# Anchored: only ignore the Python setuptools MANIFEST at repo root, not src/manifest/.
+/MANIFEST
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
