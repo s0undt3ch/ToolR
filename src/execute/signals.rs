@@ -12,8 +12,11 @@
 
 use std::io;
 use std::process::{Child, ExitStatus};
+#[cfg(unix)]
 use std::sync::Arc;
+#[cfg(unix)]
 use std::sync::atomic::{AtomicI32, Ordering};
+#[cfg(unix)]
 use std::time::Duration;
 
 /// Wait for `child` to exit, forwarding SIGINT/SIGTERM received by the
@@ -26,7 +29,6 @@ pub fn wait_with_signals(child: &mut Child) -> io::Result<ExitStatus> {
     #[cfg(not(unix))]
     {
         // No portable signal forwarding outside Unix. Just wait.
-        let _ = (Arc::new(AtomicI32::new(0)), Duration::from_millis(0));
         child.wait()
     }
 }
