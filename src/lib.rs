@@ -7,6 +7,7 @@ pub mod execute;
 pub mod hash;
 pub mod manifest;
 pub mod parser;
+pub mod uv;
 #[cfg(feature = "python")]
 mod python_bindings;
 
