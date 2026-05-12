@@ -235,3 +235,72 @@ fn argument_kind_propagates_through_merge() {
     assert_eq!(merged.commands[0].arguments.len(), 1);
     assert_eq!(merged.commands[0].arguments[0].kind, ArgumentKind::Flag);
 }
+
+use super::discover_and_merge;
+
+#[test]
+fn discover_and_merge_picks_up_all_valid_fragments() {
+    let tmp = setup_fake_venv(&[
+        (
+            "pkg_a",
+            r#"{
+                "toolr_schema_version": 1,
+                "package": "pkg_a",
+                "groups": [{"name": "deploy", "title": "Deploy", "description": ""}],
+                "commands": [{
+                    "name": "rollout", "group": "deploy",
+                    "module": "pkg_a.commands", "function": "rollout",
+                    "summary": "", "description": "",
+                    "arguments": [], "imports": []
+                }]
+            }"#,
+        ),
+        (
+            "pkg_b",
+            r#"{
+                "toolr_schema_version": 1,
+                "package": "pkg_b",
+                "groups": [{"name": "lint", "title": "Lint", "description": ""}],
+                "commands": [{
+                    "name": "check", "group": "lint",
+                    "module": "pkg_b.commands", "function": "check",
+                    "summary": "", "description": "",
+                    "arguments": [], "imports": []
+                }]
+            }"#,
+        ),
+    ]);
+    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    let group_names: Vec<_> = merged.groups.iter().map(|g| g.name.clone()).collect();
+    let command_names: Vec<_> = merged.commands.iter().map(|c| c.name.clone()).collect();
+    assert!(group_names.contains(&"deploy".to_string()));
+    assert!(group_names.contains(&"lint".to_string()));
+    assert!(command_names.contains(&"rollout".to_string()));
+    assert!(command_names.contains(&"check".to_string()));
+}
+
+#[test]
+fn discover_and_merge_aborts_on_malformed_fragment() {
+    let tmp = setup_fake_venv(&[
+        ("pkg_ok", r#"{"toolr_schema_version": 1, "package": "pkg_ok"}"#),
+        ("pkg_bad", "not valid json at all"),
+    ]);
+    let err = discover_and_merge(tmp.path(), empty_base()).expect_err("should abort");
+    assert!(matches!(err, ThirdPartyError::Json { .. }));
+}
+
+#[test]
+fn discover_and_merge_no_op_when_venv_has_no_fragments() {
+    let tmp = TempDir::new().unwrap();
+    // Create site-packages but no fragments.
+    std::fs::create_dir_all(
+        tmp.path()
+            .join("lib")
+            .join("python3.13")
+            .join("site-packages"),
+    )
+    .unwrap();
+    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    assert!(merged.groups.is_empty());
+    assert!(merged.commands.is_empty());
+}
