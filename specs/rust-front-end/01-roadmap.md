@@ -58,8 +58,8 @@
 
 ### Plan 2: Python runner + execute model (S1)
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [03-plan-2-runner-execute.md](./03-plan-2-runner-execute.md)
 - **Depends on:** Plan 1
 - **Unblocks:** Plans 3, 7
 - **Produces:**
@@ -78,8 +78,8 @@
 
 ### Plan 3: Tools venv + uv integration
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [04-plan-3-venv-uv.md](./04-plan-3-venv-uv.md)
 - **Depends on:** Plan 2
 - **Unblocks:** Plans 6, 7, 8
 - **Produces:**
@@ -99,8 +99,8 @@
 
 ### Plan 4: Shell completion
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [05-plan-4-completion.md](./05-plan-4-completion.md)
 - **Depends on:** Plan 1
 - **Unblocks:** —
 - **Produces:**
@@ -119,8 +119,8 @@
 
 ### Plan 5: Third-party static manifest convention + `toolr.build`
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [06-plan-5-static-third-party.md](./06-plan-5-static-third-party.md)
 - **Depends on:** Plan 1
 - **Unblocks:** —
 - **Produces:**
@@ -142,8 +142,8 @@
 
 ### Plan 6: Dynamic manifest layer
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [07-plan-6-dynamic-manifest.md](./07-plan-6-dynamic-manifest.md)
 - **Depends on:** Plan 3
 - **Unblocks:** —
 - **Produces:**
@@ -162,8 +162,8 @@
 
 ### Plan 7: Missing-dependency diagnostics
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [08-plan-7-missing-deps.md](./08-plan-7-missing-deps.md)
 - **Depends on:** Plan 2, Plan 3
 - **Unblocks:** —
 - **Produces:**
@@ -179,8 +179,8 @@
 
 ### Plan 8: Cache management
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [09-plan-8-cache.md](./09-plan-8-cache.md)
 - **Depends on:** Plan 3
 - **Unblocks:** —
 - **Produces:**
@@ -198,8 +198,8 @@
 
 ### Plan 9: Distribution + backwards compatibility
 
-- **Status:** ⬜ Not Started
-- **Plan doc:** _(not written yet)_
+- **Status:** 📝 Drafted
+- **Plan doc:** [10-plan-9-distribution.md](./10-plan-9-distribution.md)
 - **Depends on:** Plans 1–8 substantially complete
 - **Unblocks:** —
 - **Produces:**
