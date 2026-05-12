@@ -6,6 +6,7 @@ use ruff_python_ast::{Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
 use super::signatures::extract_arguments;
+use crate::SimpleDocstringParser;
 use crate::manifest::{Command, Origin};
 
 /// Walk module body for functions decorated with `@<var>.command` where
@@ -48,15 +49,48 @@ fn command_decorator_target(decorators: &[Decorator]) -> Option<String> {
     None
 }
 
+/// Extract the raw docstring of a function (the leading string-literal
+/// statement in its body), or an empty string if it has none.
+fn function_docstring(func: &StmtFunctionDef) -> String {
+    let Some(first) = func.body.first() else {
+        return String::new();
+    };
+    let Stmt::Expr(e) = first else {
+        return String::new();
+    };
+    let Expr::StringLiteral(s) = e.value.as_ref() else {
+        return String::new();
+    };
+    s.value.to_str().to_string()
+}
+
 fn build_command(func: &StmtFunctionDef, group: &str, module_path: &str) -> Command {
+    let raw_doc = function_docstring(func);
+    let parsed = SimpleDocstringParser::new().parse(&raw_doc).ok();
+    let summary = parsed
+        .as_ref()
+        .map(|d| d.short_description.clone())
+        .unwrap_or_default();
+    let description = parsed
+        .as_ref()
+        .and_then(|d| d.long_description.clone())
+        .unwrap_or_default();
+    let mut arguments = extract_arguments(func);
+    if let Some(d) = parsed.as_ref() {
+        for arg in &mut arguments {
+            if let Some(Some(help)) = d.params.get(&arg.name) {
+                arg.help = help.clone();
+            }
+        }
+    }
     Command {
         name: func.name.as_str().replace('_', "-"),
         group: group.to_string(),
         module: module_path.to_string(),
         function: func.name.as_str().to_string(),
-        summary: String::new(),
-        description: String::new(),
-        arguments: extract_arguments(func),
+        summary,
+        description,
+        arguments,
         imports: Vec::new(),
         origin: Origin::Static,
     }
@@ -118,5 +152,44 @@ def bare_function(ctx):
         let bindings = extract_groups(&m, "");
         let commands = extract_commands(&m, "tools.ci", &bindings);
         assert!(commands.is_empty());
+    }
+
+    #[test]
+    fn populates_summary_from_first_docstring_line() {
+        let src = r#"group = command_group("ci", "CI utilities")
+
+@group.command
+def hello(ctx):
+    """Say hello."""
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "");
+        let commands = extract_commands(&m, "tools.ci", &bindings);
+        assert_eq!(commands[0].summary, "Say hello.");
+    }
+
+    #[test]
+    fn populates_arg_help_from_args_section() {
+        let src = r#"group = command_group("ci", "CI utilities")
+
+@group.command
+def hello(ctx, name="world"):
+    """Say hello.
+
+    Args:
+        name: Who to greet.
+    """
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "");
+        let commands = extract_commands(&m, "tools.ci", &bindings);
+        let name_arg = commands[0]
+            .arguments
+            .iter()
+            .find(|a| a.name == "name")
+            .unwrap();
+        assert_eq!(name_arg.help, "Who to greet.");
     }
 }
