@@ -3,7 +3,9 @@ use std::process::ExitCode;
 
 use clap::ArgMatches;
 
-use _rust_utils::complete::{resolve_manifest_at_tab, serve_completions};
+use _rust_utils::complete::{
+    Shell as CompletionShell, completion_script, resolve_manifest_at_tab, serve_completions,
+};
 use _rust_utils::discovery::discover_project_root;
 use _rust_utils::execute::{
     build_spec, resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
@@ -18,6 +20,9 @@ pub fn dispatch(
 ) -> anyhow::Result<ExitCode> {
     if let Some(("__complete", sub)) = matches.subcommand() {
         return run_complete(sub);
+    }
+    if let Some(("self", self_matches)) = matches.subcommand() {
+        return run_self(self_matches);
     }
     if let Some(("__build-static-manifest", _)) = matches.subcommand() {
         return run_build_static_manifest();
@@ -85,6 +90,29 @@ pub fn dispatch(
     // ExitCode only carries u8 — clamp anything outside 0..=255.
     let clamped: u8 = code.clamp(0, 255).try_into().unwrap_or(1);
     Ok(ExitCode::from(clamped))
+}
+
+fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    let Some(("completion", completion_matches)) = matches.subcommand() else {
+        anyhow::bail!("expected a `self` subcommand");
+    };
+    let Some((action, action_matches)) = completion_matches.subcommand() else {
+        anyhow::bail!("expected a `self completion` subcommand");
+    };
+    match action {
+        "print" => run_completion_print(action_matches),
+        // "install" is added by Task 8
+        other => anyhow::bail!("unsupported self completion subcommand: {other}"),
+    }
+}
+
+fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    let shell_str = matches
+        .get_one::<String>("shell")
+        .ok_or_else(|| anyhow::anyhow!("missing <shell>"))?;
+    let shell: CompletionShell = shell_str.parse()?;
+    print!("{}", completion_script(shell));
+    Ok(ExitCode::SUCCESS)
 }
 
 fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {

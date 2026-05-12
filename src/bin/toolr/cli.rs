@@ -77,6 +77,29 @@ pub fn build_command(manifest: &Manifest) -> Command {
     );
 
     root = root.subcommand(
+        Command::new("self")
+            .about("Operations on toolr itself")
+            .subcommand_required(true)
+            .arg_required_else_help(true)
+            .subcommand(
+                Command::new("completion")
+                    .about("Manage shell completion scripts")
+                    .subcommand_required(true)
+                    .arg_required_else_help(true)
+                    .subcommand(
+                        Command::new("print")
+                            .about("Print the completion script for a shell to stdout")
+                            .arg(
+                                Arg::new("shell")
+                                    .required(true)
+                                    .value_parser(["bash", "zsh", "fish"])
+                                    .help("Shell to emit a completion script for"),
+                            ),
+                    ),
+            ),
+    );
+
+    root = root.subcommand(
         Command::new("__build-static-manifest")
             .hide(true)
             .about("(internal) Regenerate the static manifest in place"),

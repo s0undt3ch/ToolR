@@ -271,3 +271,12 @@ fn errors_when_no_tools_dir_exists() {
     let msg = err.to_string();
     assert!(msg.contains("tools"), "expected hint about tools/, got: {msg}");
 }
+
+use crate::complete::{Shell, completion_script};
+
+#[test]
+fn bash_script_invokes_toolr_complete() {
+    let script = completion_script(Shell::Bash);
+    assert!(script.contains("toolr __complete"));
+    assert!(script.contains("complete -F _toolr_complete toolr"));
+}
