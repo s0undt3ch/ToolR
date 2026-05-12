@@ -1,6 +1,7 @@
 #![allow(non_local_definitions)]
 
 mod command;
+pub mod complete;
 pub mod discovery;
 mod docstrings;
 pub mod execute;
