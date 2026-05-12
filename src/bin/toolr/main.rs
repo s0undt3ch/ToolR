@@ -1,5 +1,6 @@
 mod cli;
 mod dispatch;
+mod project;
 
 use std::process::ExitCode;
 

@@ -19,6 +19,9 @@ pub fn dispatch(
     if let Some(("__install-uv-now", _)) = matches.subcommand() {
         return run_install_uv_now();
     }
+    if let Some(("project", project_m)) = matches.subcommand() {
+        return crate::project::dispatch_project(project_m);
+    }
     let Some((group_name, group_matches)) = matches.subcommand() else {
         root.print_help()?;
         return Ok(ExitCode::SUCCESS);

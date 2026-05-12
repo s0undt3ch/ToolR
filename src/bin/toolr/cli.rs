@@ -2,6 +2,12 @@ use clap::{Arg, ArgAction, Command};
 
 use _rust_utils::manifest::{ArgumentKind, Manifest};
 
+const RESERVED_GROUPS: &[&str] = &["self", "project"];
+
+fn user_group_collides(name: &str) -> bool {
+    RESERVED_GROUPS.contains(&name)
+}
+
 /// Construct the full clap Command tree, given a loaded manifest.
 /// User-defined groups appear as top-level subcommands.
 pub fn build_command(manifest: &Manifest) -> Command {
@@ -28,6 +34,14 @@ pub fn build_command(manifest: &Manifest) -> Command {
         );
 
     for group in &manifest.groups {
+        if user_group_collides(&group.name) {
+            eprintln!(
+                "toolr: warning: ignoring user-defined group `{}` — \
+                 this name is reserved by toolr itself.",
+                group.name
+            );
+            continue;
+        }
         let mut g = Command::new(group.name.clone()).about(group.title.clone());
         if !group.description.is_empty() {
             g = g.long_about(group.description.clone());
@@ -37,6 +51,30 @@ pub fn build_command(manifest: &Manifest) -> Command {
         }
         root = root.subcommand(g);
     }
+
+    root = root.subcommand(
+        Command::new("project")
+            .about("Operations on the current repo's tools/ directory")
+            .subcommand_required(true)
+            .subcommand(
+                Command::new("deps")
+                    .about("Tools-venv dependency management")
+                    .subcommand_required(true)
+                    .subcommand(Command::new("sync").about("Run `uv sync` against tools/")),
+            )
+            .subcommand(
+                Command::new("venv")
+                    .about("Inspect or activate the tools venv")
+                    .subcommand_required(true)
+                    .subcommand(
+                        Command::new("path").about("Print the absolute path to the tools venv"),
+                    )
+                    .subcommand(
+                        Command::new("shell")
+                            .about("Spawn a subshell with the tools venv activated"),
+                    ),
+            ),
+    );
 
     root = root.subcommand(
         Command::new("__build-static-manifest")
