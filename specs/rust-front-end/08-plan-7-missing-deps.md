@@ -290,7 +290,7 @@ consistent message.
 - Create: `src/deps_check/preflight.rs`
 - Modify: `src/deps_check/mod.rs`
 - Modify: `src/deps_check/tests.rs`
-- [ ] **Step 2.1: Append the failing tests to `src/deps_check/tests.rs`**
+- [x] **Step 2.1: Append the failing tests to `src/deps_check/tests.rs`**
 
     ```rust
     use super::preflight::{MissingDeps, check_imports};
@@ -359,7 +359,7 @@ consistent message.
     }
     ```
 
-- [ ] **Step 2.2: Run the tests, expect compile failure**
+- [x] **Step 2.2: Run the tests, expect compile failure**
 
     ```bash
     cargo test --lib deps_check::tests::check_imports_passes_when_all_present
@@ -368,7 +368,7 @@ consistent message.
     Expected: unresolved import `super::preflight`. Good — we're TDD-ing
     the module shape.
 
-- [ ] **Step 2.3: Create `src/deps_check/preflight.rs`**
+- [x] **Step 2.3: Create `src/deps_check/preflight.rs`**
 
     ```rust
     //! Pre-flight: check that all of a command's top-level imports exist
@@ -433,7 +433,7 @@ consistent message.
     }
     ```
 
-- [ ] **Step 2.4: Re-export from `src/deps_check/mod.rs`**
+- [x] **Step 2.4: Re-export from `src/deps_check/mod.rs`**
 
     Append:
 
@@ -443,7 +443,7 @@ consistent message.
     pub use preflight::{MissingDeps, check_imports};
     ```
 
-- [ ] **Step 2.5: Run the tests, expect PASS**
+- [x] **Step 2.5: Run the tests, expect PASS**
 
     ```bash
     cargo test --lib deps_check::
@@ -451,7 +451,7 @@ consistent message.
 
     Expected: all 13 tests passing (7 probe + 6 preflight).
 
-- [ ] **Step 2.6: Commit**
+- [x] **Step 2.6: Commit**
 
     ```bash
     git add src/deps_check/
@@ -469,7 +469,7 @@ spell out `_rust_utils::deps_check::preflight::check_imports`.
 **Files:**
 
 - Modify: `src/deps_check/mod.rs`
-- [ ] **Step 3.1: Confirm the re-exports**
+- [x] **Step 3.1: Confirm the re-exports**
 
     `src/deps_check/mod.rs` should now read:
 
@@ -493,7 +493,7 @@ spell out `_rust_utils::deps_check::preflight::check_imports`.
     `post_mortem` `pub mod` and `pub use` lines for now and re-add them in
     Task 6.
 
-- [ ] **Step 3.2: Final shape for this task**
+- [x] **Step 3.2: Final shape for this task**
 
     ```rust
     //! Missing-dependency diagnostics.
@@ -508,7 +508,7 @@ spell out `_rust_utils::deps_check::preflight::check_imports`.
     mod tests;
     ```
 
-- [ ] **Step 3.3: Build and test**
+- [x] **Step 3.3: Build and test**
 
     ```bash
     cargo build
@@ -517,7 +517,7 @@ spell out `_rust_utils::deps_check::preflight::check_imports`.
 
     Expected: clean build, 13 tests still passing.
 
-- [ ] **Step 3.4: Commit**
+- [x] **Step 3.4: Commit**
 
     ```bash
     git add src/deps_check/mod.rs

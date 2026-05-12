@@ -7,8 +7,10 @@
 //! - [`post_mortem`] (Task 6) — parse Python `ImportError` tracebacks
 //!   off subprocess stderr and append the standard suggestion.
 
+pub mod preflight;
 pub mod probe;
 
+pub use preflight::{MissingDeps, check_imports};
 pub use probe::{ProbeOutcome, probe_module, site_packages_dir};
 
 #[cfg(test)]

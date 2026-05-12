@@ -83,3 +83,64 @@ fn probe_module_treats_empty_name_as_missing() {
     let sp = site_packages_dir(venv.path()).unwrap();
     assert_eq!(probe_module(&sp, ""), ProbeOutcome::Missing);
 }
+
+use super::preflight::{MissingDeps, check_imports};
+
+#[test]
+fn check_imports_passes_when_all_present() {
+    let venv = fake_venv(&[("packaging", "package"), ("six", "single")]);
+    let sp = site_packages_dir(venv.path()).unwrap();
+    let imports = vec!["packaging".to_string(), "six".to_string()];
+    assert!(check_imports(&sp, &imports).is_ok());
+}
+
+#[test]
+fn check_imports_reports_missing_module() {
+    let venv = fake_venv(&[("packaging", "package")]);
+    let sp = site_packages_dir(venv.path()).unwrap();
+    let imports = vec!["packaging".to_string(), "yaml".to_string()];
+    let err = check_imports(&sp, &imports).expect_err("should be missing");
+    assert_eq!(err.missing, vec!["yaml".to_string()]);
+}
+
+#[test]
+fn check_imports_reports_all_missing_in_input_order() {
+    let venv = fake_venv(&[]);
+    let sp = site_packages_dir(venv.path()).unwrap();
+    let imports = vec![
+        "yaml".to_string(),
+        "cv2".to_string(),
+        "sklearn".to_string(),
+    ];
+    let err = check_imports(&sp, &imports).expect_err("should be missing");
+    assert_eq!(err.missing, imports);
+}
+
+#[test]
+fn check_imports_skips_stdlib_like_names() {
+    let venv = fake_venv(&[]);
+    let sp = site_packages_dir(venv.path()).unwrap();
+    assert!(check_imports(&sp, &[]).is_ok());
+}
+
+#[test]
+fn missing_deps_message_quotes_module_and_suggests_sync() {
+    let err = MissingDeps {
+        missing: vec!["yaml".to_string()],
+    };
+    let rendered = err.to_string();
+    assert!(rendered.contains("`yaml`"));
+    assert!(rendered.contains("toolr project deps sync"));
+    assert!(rendered.contains("tools/pyproject.toml"));
+}
+
+#[test]
+fn missing_deps_message_pluralizes_when_multiple() {
+    let err = MissingDeps {
+        missing: vec!["yaml".to_string(), "cv2".to_string()],
+    };
+    let rendered = err.to_string();
+    let yaml_idx = rendered.find("yaml").unwrap();
+    let cv2_idx = rendered.find("cv2").unwrap();
+    assert!(yaml_idx < cv2_idx);
+}
