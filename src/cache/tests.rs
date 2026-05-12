@@ -102,3 +102,38 @@ fn write_meta_for_new_venv_overwrites_existing() {
     let loaded = Meta::load(&cache_dir).expect("load");
     assert_eq!(loaded.python_version, "3.13.0");
 }
+
+use super::touch::touch_last_used;
+
+#[test]
+fn touch_last_used_updates_only_last_used_at() {
+    let tmp = TempDir::new().unwrap();
+    let cache_dir = tmp.path().join("repo-key");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+
+    let original = write_meta_for_new_venv(
+        &cache_dir,
+        "/abs/repo".as_ref(),
+        "1.0.0",
+        "3.13.1",
+    )
+    .unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    touch_last_used(&cache_dir).expect("touch");
+    let after = Meta::load(&cache_dir).expect("load");
+
+    assert_eq!(after.created_at, original.created_at);
+    assert_eq!(after.repo_path, original.repo_path);
+    assert_eq!(after.toolr_version, original.toolr_version);
+    assert_eq!(after.python_version, original.python_version);
+    assert!(after.last_used_at > original.last_used_at);
+}
+
+#[test]
+fn touch_last_used_is_a_noop_when_sidecar_is_missing() {
+    let tmp = TempDir::new().unwrap();
+    let result = touch_last_used(tmp.path());
+    assert!(result.is_ok());
+}

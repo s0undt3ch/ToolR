@@ -474,7 +474,7 @@ JSON, and the JSON value is what `list`/`prune` read.
 - Create: `src/cache/touch.rs`
 - Modify: `src/cache/mod.rs`
 - Modify: `src/cache/tests.rs`
-- [ ] **Step 3.1: Write the failing test**
+- [x] **Step 3.1: Write the failing test**
 
     Append to `src/cache/tests.rs`:
 
@@ -518,7 +518,7 @@ JSON, and the JSON value is what `list`/`prune` read.
     }
     ```
 
-- [ ] **Step 3.2: Run and verify the tests FAIL**
+- [x] **Step 3.2: Run and verify the tests FAIL**
 
     ```bash
     cargo test --lib cache::tests::touch_last_used
@@ -526,7 +526,7 @@ JSON, and the JSON value is what `list`/`prune` read.
 
     Expected: compile error (unresolved import `super::touch`).
 
-- [ ] **Step 3.3: Create `src/cache/touch.rs`**
+- [x] **Step 3.3: Create `src/cache/touch.rs`**
 
     ```rust
     //! Update `last_used_at` on every toolr invocation.
@@ -554,7 +554,7 @@ JSON, and the JSON value is what `list`/`prune` read.
     }
     ```
 
-- [ ] **Step 3.4: Re-export and run tests**
+- [x] **Step 3.4: Re-export and run tests**
 
     Update `src/cache/mod.rs`:
 
@@ -579,7 +579,7 @@ JSON, and the JSON value is what `list`/`prune` read.
 
     Expected: 9 tests passing.
 
-- [ ] **Step 3.5: Wire the touch into the per-invocation hot path**
+- [x] **Step 3.5: Wire the touch into the per-invocation hot path**
 
     In the binary's dispatch path (the entry point that runs after CLI
     parsing but before subprocess spawn — typically `src/bin/toolr/dispatch.rs`
@@ -604,7 +604,7 @@ JSON, and the JSON value is what `list`/`prune` read.
 
     Keep this off the hot path of cold-fast `--help` / completion.
 
-- [ ] **Step 3.6: Commit**
+- [x] **Step 3.6: Commit**
 
     ```bash
     git add src/cache/

@@ -79,6 +79,15 @@ pub fn dispatch(
         (resolve_python()?, None)
     };
 
+    // Plan 8: touch last_used_at on every invocation against a cached venv.
+    if let Some(venv) = &venv_dir {
+        if let Some(cache_dir) = venv.parent() {
+            if let Err(e) = _rust_utils::cache::touch_last_used(cache_dir) {
+                eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
+            }
+        }
+    }
+
     // Pre-flight missing-dependency check (Plan 7). Skip when the user
     // sets `TOOLR_NO_PREFLIGHT_DEPS` to a non-empty, non-`0` value —
     // post-mortem interception still catches inline imports.
