@@ -1,0 +1,10 @@
+[project]
+name = "tools"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "toolr",
+]
+
+[tool.toolr]
+venv-location = "cache"

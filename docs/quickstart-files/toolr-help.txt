@@ -1,0 +1,14 @@
+In-project CLI tooling support
+
+Usage: toolr [OPTIONS] [COMMAND]
+
+Commands:
+  example  Example commands
+  project  Operations on the current repo's tools/ directory
+  self     Operations on toolr itself
+
+Options:
+  -d, --debug    Increase verbosity
+  -q, --quiet    Suppress non-error output
+  -h, --help     Print help
+  -V, --version  Print version

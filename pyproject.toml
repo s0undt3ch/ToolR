@@ -133,7 +133,8 @@ src = [
 ]
 extend-exclude = [
   ".nox/**",
-  "tests/**/files/*.py"
+  "tests/**/files/*.py",
+  "docs/.fixtures/**/*.py",
 ]
 extend-include = [
 ]
