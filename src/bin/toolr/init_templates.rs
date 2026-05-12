@@ -133,4 +133,13 @@ mod tests {
     fn parse_venv_location_rejects_unknown_values() {
         assert!(parse_venv_location("system").is_err());
     }
+
+    #[test]
+    fn example_template_is_non_empty_and_mentions_each_command() {
+        assert!(EXAMPLE_PY.contains("def hello("));
+        assert!(EXAMPLE_PY.contains("def commit("));
+        assert!(EXAMPLE_PY.contains("def confirm("));
+        assert!(EXAMPLE_PY.contains("def setlog("));
+        assert!(EXAMPLE_PY.contains("Literal["));
+    }
 }
