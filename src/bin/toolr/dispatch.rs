@@ -16,6 +16,9 @@ pub fn dispatch(
     if let Some(("__build-static-manifest", _)) = matches.subcommand() {
         return run_build_static_manifest();
     }
+    if let Some(("__install-uv-now", _)) = matches.subcommand() {
+        return run_install_uv_now();
+    }
     let Some((group_name, group_matches)) = matches.subcommand() else {
         root.print_help()?;
         return Ok(ExitCode::SUCCESS);
@@ -82,4 +85,40 @@ fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
         path.display()
     );
     Ok(ExitCode::SUCCESS)
+}
+
+fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
+    let consent = _rust_utils::uv::install::ConsentMode {
+        yes_flag: true,
+        auto_install_env: true,
+    };
+    let uv = _rust_utils::uv::ensure_uv(consent)?;
+    println!(
+        "toolr: uv {}.{}.{} ready at {} (source: {:?})",
+        uv.version.0,
+        uv.version.1,
+        uv.version.2,
+        uv.path.display(),
+        uv.source,
+    );
+    Ok(std::process::ExitCode::SUCCESS)
+}
+
+#[allow(dead_code)]
+pub(crate) fn report_uv_error(err: &_rust_utils::uv::UvError) -> String {
+    use _rust_utils::uv::UvError;
+    match err {
+        UvError::UserRefusedInstall => {
+            "toolr: uv is required for this command. Install from \
+             https://docs.astral.sh/uv/getting-started/installation/ \
+             and rerun, or set TOOLR_AUTO_INSTALL_UV=1."
+                .into()
+        }
+        UvError::VersionTooOld { found, required } => format!(
+            "toolr: uv on PATH is {}.{}.{}, but toolr requires \
+             >= {}.{}.{}. Upgrade uv and try again.",
+            found.0, found.1, found.2, required.0, required.1, required.2,
+        ),
+        other => format!("toolr: {other}"),
+    }
 }

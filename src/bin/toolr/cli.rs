@@ -44,6 +44,12 @@ pub fn build_command(manifest: &Manifest) -> Command {
             .about("(internal) Regenerate the static manifest in place"),
     );
 
+    root = root.subcommand(
+        Command::new("__install-uv-now")
+            .hide(true)
+            .about("(internal) Force-install toolr-managed uv now"),
+    );
+
     root
 }
 

@@ -87,6 +87,30 @@ pub fn _placeholder(_path: &Path) -> Option<UvBinary> {
     None
 }
 
+use install::perform_install;
+
+/// Find or install a working uv binary. The single entrypoint other
+/// modules call when they need uv.
+pub fn ensure_uv(consent: ConsentMode) -> Result<UvBinary, UvError> {
+    if let Some(uv) = find_uv_on_path()? {
+        return Ok(uv);
+    }
+    if let Some(uv) = find_managed_uv()? {
+        return Ok(uv);
+    }
+    match decide_install_auto(false, false, consent) {
+        InstallDecision::AlreadyAvailable => {
+            // Shouldn't happen given the checks above, but if it does,
+            // try one more time.
+            find_uv_on_path()?
+                .or(find_managed_uv()?)
+                .ok_or(UvError::NotAvailable)
+        }
+        InstallDecision::Install => perform_install(),
+        InstallDecision::Refuse => Err(UvError::UserRefusedInstall),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
