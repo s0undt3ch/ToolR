@@ -83,7 +83,7 @@ payload deserializes directly into the existing `Group` and `Command` types.
 - Create: `src/dynamic/tests.rs`
 - Modify: `src/lib.rs`
 
-- [ ] **Step 1.1: Expose a `dynamic` module from `src/lib.rs`**
+- [x] **Step 1.1: Expose a `dynamic` module from `src/lib.rs`**
 
     Add to `src/lib.rs`:
 
@@ -91,7 +91,7 @@ payload deserializes directly into the existing `Group` and `Command` types.
     pub mod dynamic;
     ```
 
-- [ ] **Step 1.2: Create `src/dynamic/mod.rs`**
+- [x] **Step 1.2: Create `src/dynamic/mod.rs`**
 
     ```rust
     //! Dynamic manifest layer: spawn a Python introspection helper inside
@@ -105,7 +105,7 @@ payload deserializes directly into the existing `Group` and `Command` types.
     mod tests;
     ```
 
-- [ ] **Step 1.3: Create `src/dynamic/payload.rs`**
+- [x] **Step 1.3: Create `src/dynamic/payload.rs`**
 
     ```rust
     //! Wire format for the dynamic-layer introspection payload.
@@ -154,7 +154,7 @@ payload deserializes directly into the existing `Group` and `Command` types.
     fn _argument_is_used(_a: Argument) {}
     ```
 
-- [ ] **Step 1.4: Add round-trip tests in `src/dynamic/tests.rs`**
+- [x] **Step 1.4: Add round-trip tests in `src/dynamic/tests.rs`**
 
     ```rust
     use super::payload::{DynamicPayload, PAYLOAD_SCHEMA_VERSION};
@@ -214,7 +214,7 @@ payload deserializes directly into the existing `Group` and `Command` types.
     }
     ```
 
-- [ ] **Step 1.5: Run tests**
+- [x] **Step 1.5: Run tests**
 
     ```bash
     cargo test --lib dynamic::
@@ -222,7 +222,7 @@ payload deserializes directly into the existing `Group` and `Command` types.
 
     Expected: 3 tests passing.
 
-- [ ] **Step 1.6: Commit**
+- [x] **Step 1.6: Commit**
 
     ```bash
     git add src/lib.rs src/dynamic/

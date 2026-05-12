@@ -3,6 +3,7 @@
 mod command;
 pub mod complete;
 pub mod discovery;
+pub mod dynamic;
 mod docstrings;
 pub mod execute;
 pub mod hash;
