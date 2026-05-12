@@ -17,6 +17,12 @@ pub fn extract_arguments(func: &StmtFunctionDef) -> Vec<Argument> {
         } else {
             ArgumentKind::Positional
         };
+        let allowed_values = p
+            .parameter
+            .annotation
+            .as_ref()
+            .map(|a| literal_values(a))
+            .unwrap_or_default();
         out.push(Argument {
             name: p.parameter.name.to_string(),
             kind,
@@ -27,10 +33,16 @@ pub fn extract_arguments(func: &StmtFunctionDef) -> Vec<Argument> {
                 .annotation
                 .as_ref()
                 .map(|a| annotation_to_string(a)),
-            allowed_values: Vec::new(),
+            allowed_values,
         });
     }
     for p in kwonlyargs {
+        let allowed_values = p
+            .parameter
+            .annotation
+            .as_ref()
+            .map(|a| literal_values(a))
+            .unwrap_or_default();
         out.push(Argument {
             name: p.parameter.name.to_string(),
             kind: ArgumentKind::Flag,
@@ -41,7 +53,7 @@ pub fn extract_arguments(func: &StmtFunctionDef) -> Vec<Argument> {
                 .annotation
                 .as_ref()
                 .map(|a| annotation_to_string(a)),
-            allowed_values: Vec::new(),
+            allowed_values,
         });
     }
     out
@@ -69,6 +81,32 @@ fn annotation_to_string(expr: &Expr) -> String {
             annotation_to_string(&s.slice)
         ),
         _ => "<expr>".to_string(),
+    }
+}
+
+fn literal_values(annotation: &Expr) -> Vec<String> {
+    let Expr::Subscript(sub) = annotation else {
+        return Vec::new();
+    };
+    // The subscripted expression must be named "Literal".
+    let is_literal = match sub.value.as_ref() {
+        Expr::Name(n) => n.id.as_str() == "Literal",
+        Expr::Attribute(a) => a.attr.as_str() == "Literal",
+        _ => false,
+    };
+    if !is_literal {
+        return Vec::new();
+    }
+    match sub.slice.as_ref() {
+        Expr::Tuple(t) => t.elts.iter().filter_map(literal_str_value).collect(),
+        other => literal_str_value(other).into_iter().collect(),
+    }
+}
+
+fn literal_str_value(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
+        _ => None,
     }
 }
 
@@ -113,5 +151,27 @@ mod tests {
         let func = first_func("def f(ctx, name: str = \"x\"): pass\n");
         let args = extract_arguments(&func);
         assert_eq!(args[0].type_annotation.as_deref(), Some("str"));
+    }
+
+    #[test]
+    fn extracts_literal_values() {
+        let func = first_func(
+            r#"
+from typing import Literal
+def f(ctx, mode: Literal["a", "b"]): pass
+"#,
+        );
+        let args = extract_arguments(&func);
+        assert_eq!(
+            args[0].allowed_values,
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    #[test]
+    fn leaves_allowed_values_empty_for_non_literal_types() {
+        let func = first_func("def f(ctx, name: str): pass\n");
+        let args = extract_arguments(&func);
+        assert!(args[0].allowed_values.is_empty());
     }
 }
