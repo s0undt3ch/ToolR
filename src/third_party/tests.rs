@@ -129,3 +129,109 @@ fn parse_rejects_malformed_json() {
     let err = parse_fragment(&path).expect_err("should reject");
     assert!(matches!(err, ThirdPartyError::Json { .. }));
 }
+
+use super::merge::merge_into_manifest;
+use crate::manifest::{ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
+
+fn empty_base() -> Manifest {
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: String::new(),
+        dynamic_hash: String::new(),
+        groups: vec![],
+        commands: vec![],
+    }
+}
+
+fn sample_fragment(pkg: &str, group: &str, name: &str) -> ManifestFragment {
+    ManifestFragment {
+        toolr_schema_version: FRAGMENT_SCHEMA_VERSION,
+        package: pkg.into(),
+        groups: vec![FragmentGroup {
+            name: group.into(),
+            title: group.to_uppercase(),
+            description: String::new(),
+        }],
+        commands: vec![FragmentCommand {
+            name: name.into(),
+            group: group.into(),
+            module: format!("{pkg}.commands"),
+            function: name.replace('-', "_"),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+        }],
+    }
+}
+
+#[test]
+fn merge_adds_groups_and_commands_from_fragments() {
+    let merged = merge_into_manifest(
+        empty_base(),
+        vec![sample_fragment("pkg_a", "deploy", "rollout")],
+    )
+    .unwrap();
+    assert_eq!(merged.groups.len(), 1);
+    assert_eq!(merged.groups[0].name, "deploy");
+    assert_eq!(merged.commands.len(), 1);
+    assert_eq!(merged.commands[0].name, "rollout");
+    assert_eq!(merged.commands[0].origin, Origin::Static);
+}
+
+#[test]
+fn merge_skips_third_party_command_when_local_already_defines_it() {
+    let mut base = empty_base();
+    base.groups.push(Group {
+        name: "deploy".into(),
+        title: "Deploy".into(),
+        description: String::new(),
+        origin: Origin::Static,
+    });
+    base.commands.push(Command {
+        name: "rollout".into(),
+        group: "deploy".into(),
+        module: "tools.deploy".into(),
+        function: "rollout".into(),
+        summary: "local".into(),
+        description: String::new(),
+        arguments: vec![],
+        imports: vec![],
+        origin: Origin::Static,
+    });
+    let merged =
+        merge_into_manifest(base, vec![sample_fragment("pkg_a", "deploy", "rollout")]).unwrap();
+    assert_eq!(merged.commands.len(), 1);
+    assert_eq!(merged.commands[0].summary, "local");
+}
+
+#[test]
+fn merge_errors_on_third_party_to_third_party_collision() {
+    let err = merge_into_manifest(
+        empty_base(),
+        vec![
+            sample_fragment("pkg_a", "deploy", "rollout"),
+            sample_fragment("pkg_b", "deploy", "rollout"),
+        ],
+    )
+    .expect_err("should collide");
+    let msg = err.to_string();
+    assert!(msg.contains("pkg_a"), "got: {msg}");
+    assert!(msg.contains("pkg_b"), "got: {msg}");
+}
+
+#[test]
+fn argument_kind_propagates_through_merge() {
+    let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
+    frag.commands[0].arguments.push(FragmentArgument {
+        name: "force".into(),
+        kind: ArgumentKind::Flag,
+        help: String::new(),
+        default: None,
+        type_annotation: None,
+        allowed_values: vec![],
+    });
+    let merged = merge_into_manifest(empty_base(), vec![frag]).unwrap();
+    assert_eq!(merged.commands[0].arguments.len(), 1);
+    assert_eq!(merged.commands[0].arguments[0].kind, ArgumentKind::Flag);
+}

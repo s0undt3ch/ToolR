@@ -6,11 +6,13 @@
 //! the resulting fragments into the project's static manifest.
 
 pub mod glob;
+pub mod merge;
 pub mod migrate;
 pub mod model;
 pub mod parse;
 
 pub use glob::glob_manifests;
+pub use merge::merge_into_manifest;
 pub use migrate::migrate_to_current;
 pub use model::{
     FRAGMENT_SCHEMA_VERSION, FragmentArgument, FragmentCommand, FragmentGroup, ManifestFragment,

@@ -48,6 +48,16 @@ pub enum ThirdPartyError {
         version: u32,
         reason: String,
     },
+    #[error(
+        "duplicate command `{group}/{name}` declared by both `{first_package}` \
+         and `{second_package}`"
+    )]
+    DuplicateCommand {
+        group: String,
+        name: String,
+        first_package: String,
+        second_package: String,
+    },
 }
 
 /// Parse one fragment file, validating `toolr_schema_version` and
