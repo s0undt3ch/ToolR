@@ -152,6 +152,38 @@ fn running_a_user_command_invokes_python_runner() {
 }
 
 #[test]
+fn self_build_manifest_help_works() {
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["self", "build-manifest", "--help"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Generate a third-party manifest fragment"),
+        "unexpected help text: {stdout}"
+    );
+}
+
+#[test]
+fn self_build_manifest_errors_when_no_python_available() {
+    // Force resolution failure by stripping PATH and unsetting VIRTUAL_ENV.
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env_clear()
+        .env("PATH", "")
+        .args(["self", "build-manifest", "any_package"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no Python interpreter found") || stderr.contains("Pass --python"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
 fn user_command_propagates_nonzero_exit() {
     let Some(python) = detect_test_python() else {
         eprintln!("skipping: no test python (see above)");

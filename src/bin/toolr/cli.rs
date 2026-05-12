@@ -82,6 +82,39 @@ pub fn build_command(manifest: &Manifest) -> Command {
             .subcommand_required(true)
             .arg_required_else_help(true)
             .subcommand(
+                Command::new("build-manifest")
+                    .about("Generate a third-party manifest fragment for a package")
+                    .arg(
+                        Arg::new("package")
+                            .required(true)
+                            .help("Dotted Python package name to introspect"),
+                    )
+                    .arg(
+                        Arg::new("output")
+                            .long("output")
+                            .value_name("PATH")
+                            .help("Override the output path"),
+                    )
+                    .arg(
+                        Arg::new("python")
+                            .long("python")
+                            .value_name("PATH")
+                            .help("Path to a Python interpreter to use"),
+                    )
+                    .arg(
+                        Arg::new("schema-version")
+                            .long("schema-version")
+                            .value_name("N")
+                            .help("Pin the emitted schema version"),
+                    )
+                    .arg(
+                        Arg::new("check")
+                            .long("check")
+                            .action(ArgAction::SetTrue)
+                            .help("Verify the on-disk manifest matches regeneration"),
+                    ),
+            )
+            .subcommand(
                 Command::new("completion")
                     .about("Manage shell completion scripts")
                     .subcommand_required(true)

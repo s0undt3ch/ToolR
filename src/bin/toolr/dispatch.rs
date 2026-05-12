@@ -94,17 +94,71 @@ pub fn dispatch(
 }
 
 fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
-    let Some(("completion", completion_matches)) = matches.subcommand() else {
-        anyhow::bail!("expected a `self` subcommand");
-    };
-    let Some((action, action_matches)) = completion_matches.subcommand() else {
-        anyhow::bail!("expected a `self completion` subcommand");
-    };
-    match action {
-        "print" => run_completion_print(action_matches),
-        "install" => run_completion_install(action_matches),
-        other => anyhow::bail!("unsupported self completion subcommand: {other}"),
+    match matches.subcommand() {
+        Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches),
+        Some(("completion", completion_matches)) => {
+            let Some((action, action_matches)) = completion_matches.subcommand() else {
+                anyhow::bail!("expected a `self completion` subcommand");
+            };
+            match action {
+                "print" => run_completion_print(action_matches),
+                "install" => run_completion_install(action_matches),
+                other => anyhow::bail!("unsupported self completion subcommand: {other}"),
+            }
+        }
+        _ => anyhow::bail!("expected a `self` subcommand"),
     }
+}
+
+fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    use std::process::Command;
+
+    let package: &String = matches
+        .get_one("package")
+        .ok_or_else(|| anyhow::anyhow!("missing required argument: package"))?;
+    let python = resolve_python_for_build(matches.get_one::<String>("python").map(String::as_str))?;
+    let mut cmd = Command::new(&python);
+    cmd.args(["-m", "toolr.build", package]);
+    if let Some(out) = matches.get_one::<String>("output") {
+        cmd.args(["--output", out]);
+    }
+    if let Some(ver) = matches.get_one::<String>("schema-version") {
+        cmd.args(["--schema-version", ver]);
+    }
+    if matches.get_flag("check") {
+        cmd.arg("--check");
+    }
+    let status = cmd
+        .status()
+        .map_err(|e| anyhow::anyhow!("failed to spawn `{}`: {e}", python.display()))?;
+    let code = status.code().unwrap_or(1);
+    let clamped: u8 = code.clamp(0, 255).try_into().unwrap_or(1);
+    Ok(ExitCode::from(clamped))
+}
+
+fn resolve_python_for_build(override_path: Option<&str>) -> anyhow::Result<PathBuf> {
+    if let Some(path) = override_path {
+        let p = PathBuf::from(path);
+        if !p.is_file() {
+            anyhow::bail!("--python `{}`: not a file", p.display());
+        }
+        return Ok(p);
+    }
+    if let Ok(venv) = std::env::var("VIRTUAL_ENV") {
+        let candidate = PathBuf::from(venv).join("bin").join("python");
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    for name in ["python3", "python"] {
+        if let Ok(path) = which::which(name) {
+            return Ok(path);
+        }
+    }
+    anyhow::bail!(
+        "no Python interpreter found. Pass --python <path>, activate a venv, or \
+         ensure `python3` is on PATH."
+    )
 }
 
 fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
