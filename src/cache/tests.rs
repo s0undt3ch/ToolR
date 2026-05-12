@@ -137,3 +137,60 @@ fn touch_last_used_is_a_noop_when_sidecar_is_missing() {
     let result = touch_last_used(tmp.path());
     assert!(result.is_ok());
 }
+
+use super::enumerate::{CachedVenv, enumerate_caches};
+
+fn make_entry(
+    root: &std::path::Path,
+    key: &str,
+    repo_path: &str,
+    last_used: chrono::DateTime<Utc>,
+    venv_byte_count: usize,
+) {
+    let cache_dir = root.join(key);
+    std::fs::create_dir_all(cache_dir.join("venv")).unwrap();
+    std::fs::write(cache_dir.join("venv/blob.bin"), vec![0u8; venv_byte_count]).unwrap();
+    let m = Meta {
+        schema_version: SCHEMA_VERSION,
+        repo_path: PathBuf::from(repo_path),
+        toolr_version: "1.0.0".into(),
+        python_version: "3.13.1".into(),
+        created_at: last_used,
+        last_used_at: last_used,
+    };
+    m.write(&cache_dir).unwrap();
+}
+
+#[test]
+fn enumerate_caches_returns_empty_when_root_missing() {
+    let tmp = TempDir::new().unwrap();
+    let caches = enumerate_caches(&tmp.path().join("no-such-dir")).expect("ok");
+    assert!(caches.is_empty());
+}
+
+#[test]
+fn enumerate_caches_finds_all_meta_sidecars() {
+    let tmp = TempDir::new().unwrap();
+    let when = Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap();
+    make_entry(tmp.path(), "key-a", "/repo/a", when, 1024);
+    make_entry(tmp.path(), "key-b", "/repo/b", when, 2048);
+
+    let mut caches = enumerate_caches(tmp.path()).expect("ok");
+    caches.sort_by(|a, b| a.repo_key.cmp(&b.repo_key));
+    assert_eq!(caches.len(), 2);
+    assert_eq!(caches[0].repo_key, "key-a");
+    assert_eq!(caches[1].repo_key, "key-b");
+    assert!(caches[0].size_bytes >= 1024);
+    assert!(caches[1].size_bytes >= 2048);
+    assert!(!caches[0].is_orphan);
+    assert!(!caches[1].is_orphan);
+    let _: CachedVenv = caches.into_iter().next().unwrap();
+}
+
+#[test]
+fn enumerate_caches_skips_directories_without_meta() {
+    let tmp = TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("partial/venv")).unwrap();
+    let caches = enumerate_caches(tmp.path()).expect("ok");
+    assert!(caches.is_empty());
+}

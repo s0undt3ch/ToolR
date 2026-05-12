@@ -625,7 +625,7 @@ derived facts (size, orphan status). The enumeration is the foundation for
 - Create: `src/cache/enumerate.rs`
 - Modify: `src/cache/mod.rs`
 - Modify: `src/cache/tests.rs`
-- [ ] **Step 4.1: Add `humansize` to `[dependencies]` in `Cargo.toml`**
+- [x] **Step 4.1: Add `humansize` to `[dependencies]` in `Cargo.toml`**
 
     ```toml
     humansize = "2"
@@ -635,7 +635,7 @@ derived facts (size, orphan status). The enumeration is the foundation for
     Pulling it in here keeps the dependency change adjacent to the
     enumeration code that produces the raw byte counts.
 
-- [ ] **Step 4.2: Write the failing tests**
+- [x] **Step 4.2: Write the failing tests**
 
     Append to `src/cache/tests.rs`:
 
@@ -702,7 +702,7 @@ derived facts (size, orphan status). The enumeration is the foundation for
     }
     ```
 
-- [ ] **Step 4.3: Run tests, expect FAIL**
+- [x] **Step 4.3: Run tests, expect FAIL**
 
     ```bash
     cargo test --lib cache::tests::enumerate
@@ -710,7 +710,7 @@ derived facts (size, orphan status). The enumeration is the foundation for
 
     Expected: compile error (unresolved import `super::enumerate`).
 
-- [ ] **Step 4.4: Create `src/cache/enumerate.rs`**
+- [x] **Step 4.4: Create `src/cache/enumerate.rs`**
 
     ```rust
     //! Walk the cache root and collect one record per entry.
@@ -806,7 +806,7 @@ derived facts (size, orphan status). The enumeration is the foundation for
     }
     ```
 
-- [ ] **Step 4.5: Re-export the new types**
+- [x] **Step 4.5: Re-export the new types**
 
     Update `src/cache/mod.rs`:
 
@@ -825,7 +825,7 @@ derived facts (size, orphan status). The enumeration is the foundation for
     mod tests;
     ```
 
-- [ ] **Step 4.6: Run tests, expect PASS**
+- [x] **Step 4.6: Run tests, expect PASS**
 
     ```bash
     cargo test --lib cache::
@@ -833,7 +833,7 @@ derived facts (size, orphan status). The enumeration is the foundation for
 
     Expected: 12 tests passing.
 
-- [ ] **Step 4.7: Commit**
+- [x] **Step 4.7: Commit**
 
     ```bash
     git add Cargo.toml src/cache/
