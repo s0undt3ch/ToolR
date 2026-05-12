@@ -58,7 +58,7 @@
 
 ### Plan 2: Python runner + execute model (S1)
 
-- **Status:** 🔧 In Progress
+- **Status:** ✅ Done
 - **Plan doc:** [03-plan-2-runner-execute.md](./03-plan-2-runner-execute.md)
 - **Depends on:** Plan 1
 - **Unblocks:** Plans 3, 7
