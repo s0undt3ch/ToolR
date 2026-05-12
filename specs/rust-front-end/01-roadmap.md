@@ -78,7 +78,7 @@
 
 ### Plan 3: Tools venv + uv integration
 
-- **Status:** 📝 Drafted
+- **Status:** 🔧 In Progress
 - **Plan doc:** [04-plan-3-venv-uv.md](./04-plan-3-venv-uv.md)
 - **Depends on:** Plan 2
 - **Unblocks:** Plans 6, 7, 8
