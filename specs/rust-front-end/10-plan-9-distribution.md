@@ -65,7 +65,7 @@ and locks it down so future config edits cannot regress it.
 - Create: `tests/distribution/__init__.py`
 - Create: `tests/distribution/test_wheel_contents.py`
 
-- [ ] **Step 1.1: Pin maturin to a version that supports both lib and bin targets**
+- [x] **Step 1.1: Pin maturin to a version that supports both lib and bin targets**
 
     The current constraint `maturin>=1.0,<2.0` is broad. Bin-shipping for
     pyo3 wheels has been stable since 1.4. Tighten the lower bound to
@@ -101,7 +101,7 @@ and locks it down so future config edits cannot regress it.
     ]
     ```
 
-- [ ] **Step 1.2: Write the failing test asserting the binary is in the wheel**
+- [x] **Step 1.2: Write the failing test asserting the binary is in the wheel**
 
     Create `tests/distribution/__init__.py` as an empty file.
 
@@ -189,7 +189,7 @@ and locks it down so future config edits cannot regress it.
         ), "expected python package modules in wheel"
     ```
 
-- [ ] **Step 1.3: Run the test, expect PASS (or skip if maturin missing)**
+- [x] **Step 1.3: Run the test, expect PASS (or skip if maturin missing)**
 
     ```bash
     uv run pytest tests/distribution/test_wheel_contents.py -v
@@ -199,7 +199,7 @@ and locks it down so future config edits cannot regress it.
     environment the tests skip; that is acceptable for local runs because
     CI will install maturin and run the same tests.
 
-- [ ] **Step 1.4: Commit**
+- [x] **Step 1.4: Commit**
 
     ```bash
     git add pyproject.toml tests/distribution/
