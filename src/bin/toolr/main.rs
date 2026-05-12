@@ -1,5 +1,6 @@
 mod cli;
 mod dispatch;
+mod init_templates;
 mod project;
 mod self_cache;
 mod self_cache_prune;
