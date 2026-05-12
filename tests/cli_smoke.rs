@@ -290,6 +290,141 @@ def hello(ctx):
     );
 }
 
+/// Build a fixture project with:
+/// - `tools/pyproject.toml` opting into the in-tree venv layout so
+///   `resolve_venv_path` lands at `tools/.venv/`.
+/// - `tools/.venv/lib/python3.13/site-packages/` containing the modules
+///   listed in `present_in_venv` (each materialised as a package with an
+///   `__init__.py`).
+/// - `tools/.venv/bin/python` as a fake interpreter that just exits 1
+///   when the runner is spawned (so we exercise stdout/stderr handling).
+/// - A `tools/.toolr-manifest.json` with one `ci hello` command whose
+///   `imports` list is whatever the test passes.
+#[cfg(unix)]
+fn preflight_fixture(
+    imports: &[&str],
+    present_in_venv: &[&str],
+) -> tempfile::TempDir {
+    use std::fs;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n\
+         [tool.toolr]\nvenv-location = \"in-tree\"\n",
+    )
+    .unwrap();
+    fs::write(tools.join("__init__.py"), "").unwrap();
+    fs::write(tools.join("ci.py"), "def hello(ctx): pass\n").unwrap();
+
+    let imports_json: String = imports
+        .iter()
+        .map(|i| format!("\"{i}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    let manifest = format!(
+        r#"{{
+            "schema_version": 1,
+            "static_hash": "h", "dynamic_hash": "",
+            "groups": [{{
+                "name": "ci", "title": "CI", "description": "",
+                "origin": "static"
+            }}],
+            "commands": [{{
+                "name": "hello", "group": "ci", "module": "tools.ci",
+                "function": "hello", "summary": "", "description": "",
+                "arguments": [], "imports": [{imports_json}],
+                "origin": "static"
+            }}]
+        }}"#
+    );
+    fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
+
+    let sp = tools
+        .join(".venv")
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages");
+    fs::create_dir_all(&sp).unwrap();
+    for name in present_in_venv {
+        let pkg = sp.join(name);
+        fs::create_dir(&pkg).unwrap();
+        fs::write(pkg.join("__init__.py"), "").unwrap();
+    }
+    // `toolr` itself must appear installed so Plan 3's validate guard
+    // (if any) doesn't trip the dispatcher before pre-flight runs.
+    let toolr_pkg = sp.join("toolr");
+    fs::create_dir_all(&toolr_pkg).unwrap();
+    fs::write(toolr_pkg.join("__init__.py"), "").unwrap();
+
+    let bin_dir = tools.join(".venv").join("bin");
+    fs::create_dir_all(&bin_dir).unwrap();
+    let py = bin_dir.join("python");
+    let mut f = fs::File::create(&py).unwrap();
+    writeln!(f, "#!/bin/sh").unwrap();
+    // The dispatcher invokes `python -m toolr._introspect ...` during
+    // auto-rebuild (Plan 6) and `python -m toolr._runner` during the
+    // actual command execution. Branch on the argv so both work without
+    // a real Python.
+    writeln!(f, r#"case " $* " in"#).unwrap();
+    writeln!(
+        f,
+        r#"  *toolr._introspect*) echo '{{"payload_schema_version":1,"groups":[],"commands":[],"warnings":[]}}'; exit 0;;"#
+    )
+    .unwrap();
+    writeln!(f, "  *) exit 1;;").unwrap();
+    writeln!(f, "esac").unwrap();
+    drop(f);
+    let mut perms = fs::metadata(&py).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&py, perms).unwrap();
+
+    tmp
+}
+
+#[test]
+#[cfg(unix)]
+fn preflight_fails_when_an_import_is_missing_from_venv() {
+    let tmp = preflight_fixture(&["yaml"], &[]);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(78), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("import `yaml` not found"),
+        "stderr:\n{stderr}"
+    );
+    assert!(stderr.contains("toolr project deps sync"));
+}
+
+#[test]
+#[cfg(unix)]
+fn preflight_passes_when_all_imports_present() {
+    let tmp = preflight_fixture(&["packaging"], &["packaging"]);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // Pre-flight passes → fake python runner runs and exits 1 (no
+    // pre-flight diagnostic in stderr).
+    assert!(
+        !stderr.contains("not found in tools venv"),
+        "stderr:\n{stderr}"
+    );
+    assert_ne!(output.status.code(), Some(78));
+}
+
 #[test]
 fn user_command_propagates_nonzero_exit() {
     let Some(python) = detect_test_python() else {

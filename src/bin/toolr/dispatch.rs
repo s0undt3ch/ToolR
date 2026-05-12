@@ -71,11 +71,23 @@ pub fn dispatch(
     // Prefer the resolved tools-venv python (Plan 3). Fall back to the
     // PATH/TOOLR_PYTHON lookup only when there is no `tools/pyproject.toml`
     // — i.e. legacy projects that never opted into the venv layer.
-    let python = if repo_root.join("tools").join("pyproject.toml").is_file() {
-        resolve_venv_path(&repo_root)?.python
+    let (python, venv_dir) = if repo_root.join("tools").join("pyproject.toml").is_file() {
+        let resolved = resolve_venv_path(&repo_root)?;
+        (resolved.python, Some(resolved.venv_dir))
     } else {
-        resolve_python()?
+        (resolve_python()?, None)
     };
+
+    // Pre-flight missing-dependency check (Plan 7).
+    if let Some(venv) = &venv_dir {
+        if let Some(sp) = _rust_utils::deps_check::site_packages_dir(venv) {
+            if let Err(err) = _rust_utils::deps_check::check_imports(&sp, &cmd.imports) {
+                eprintln!("toolr: {err}");
+                return Ok(ExitCode::from(78));
+            }
+        }
+    }
+
     let mut child = spawn_runner(&python, tempfile.path())?;
     let status = wait_with_signals(&mut child)?;
 

@@ -540,7 +540,7 @@ landed, skip to Task 5 and come back here when they are.
 
 - Modify: `src/bin/toolr/dispatch.rs`
 - Modify: `tests/cli_smoke.rs`
-- [ ] **Step 4.1: Locate the spawn site introduced by Plan 2**
+- [x] **Step 4.1: Locate the spawn site introduced by Plan 2**
 
     Plan 2 added something resembling:
 
@@ -552,7 +552,7 @@ landed, skip to Task 5 and come back here when they are.
 
     The pre-flight inserts itself between `resolve` and `spawn_runner`.
 
-- [ ] **Step 4.2: Add the pre-flight call**
+- [x] **Step 4.2: Add the pre-flight call**
 
     In `src/bin/toolr/dispatch.rs`, immediately after the venv is resolved
     and before the runner is spawned:
@@ -573,7 +573,7 @@ landed, skip to Task 5 and come back here when they are.
     Plan 3. Adapt the field/path name if Plan 3 named things differently;
     the contract is "resolved venv root → `site_packages_dir(&root)`".
 
-- [ ] **Step 4.3: Add the integration test fixture helper**
+- [x] **Step 4.3: Add the integration test fixture helper**
 
     Append to `tests/cli_smoke.rs` (created by Plan 1):
 
@@ -644,7 +644,7 @@ landed, skip to Task 5 and come back here when they are.
     }
     ```
 
-- [ ] **Step 4.4: Add the integration test**
+- [x] **Step 4.4: Add the integration test**
 
     Append:
 
@@ -698,7 +698,7 @@ landed, skip to Task 5 and come back here when they are.
     location. If Plan 3 uses a different name, update both the dispatch
     call and the test in lockstep.
 
-- [ ] **Step 4.5: Run the tests**
+- [x] **Step 4.5: Run the tests**
 
     ```bash
     cargo test --test cli_smoke preflight_
@@ -706,7 +706,7 @@ landed, skip to Task 5 and come back here when they are.
 
     Expected: 2 tests passing.
 
-- [ ] **Step 4.6: Commit**
+- [x] **Step 4.6: Commit**
 
     ```bash
     git add src/bin/toolr/dispatch.rs tests/cli_smoke.rs
