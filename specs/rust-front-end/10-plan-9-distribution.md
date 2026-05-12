@@ -1941,7 +1941,7 @@ maturin's `bin` target.
 
 - Modify: `CHANGELOG.md`
 
-- [ ] **Step 9.1: Add an unreleased section**
+- [x] **Step 9.1: Add an unreleased section**
 
     Insert immediately under the `# Changelog` header, before
     `## 0.11.0 - 2025-09-24`:
@@ -1975,7 +1975,7 @@ maturin's `bin` target.
       `toolr._registry` directly if you depended on those names.
     ```
 
-- [ ] **Step 9.2: Commit**
+- [x] **Step 9.2: Commit**
 
     ```bash
     git add CHANGELOG.md
