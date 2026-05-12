@@ -5,6 +5,7 @@ pub mod discovery;
 mod docstrings;
 pub mod hash;
 pub mod manifest;
+pub mod parser;
 #[cfg(feature = "python")]
 mod python_bindings;
 
