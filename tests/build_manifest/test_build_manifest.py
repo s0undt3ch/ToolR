@@ -10,6 +10,7 @@ import pytest
 from toolr._registry import _get_command_group_storage
 from toolr.build import BuildManifestError
 from toolr.build import build_manifest
+from toolr.build import main as build_cli
 
 
 @pytest.fixture
@@ -76,3 +77,29 @@ def test_build_raises_when_package_declares_no_commands(tmp_path: Path, monkeypa
     sys.modules.pop("empty_pkg", None)
     with pytest.raises(BuildManifestError):
         build_manifest("empty_pkg")
+
+
+def test_cli_writes_manifest(fake_package: str, tmp_path: Path) -> None:
+    out = tmp_path / "manifest.json"
+    rc = build_cli([fake_package, "--output", str(out), "--quiet"])
+    assert rc == 0
+    assert out.is_file()
+
+
+def test_cli_check_exits_2_on_drift(fake_package: str, tmp_path: Path) -> None:
+    out = tmp_path / "manifest.json"
+    out.write_text("stale")
+    rc = build_cli([fake_package, "--output", str(out), "--check", "--quiet"])
+    assert rc == 2
+
+
+def test_cli_check_exits_0_when_up_to_date(fake_package: str, tmp_path: Path) -> None:
+    out = tmp_path / "manifest.json"
+    build_cli([fake_package, "--output", str(out), "--quiet"])
+    rc = build_cli([fake_package, "--output", str(out), "--check", "--quiet"])
+    assert rc == 0
+
+
+def test_cli_exits_1_on_missing_package() -> None:
+    rc = build_cli(["this_package_does_not_exist_xyz", "--quiet"])
+    assert rc == 1
