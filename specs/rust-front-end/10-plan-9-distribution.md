@@ -219,7 +219,7 @@ asserts `toolr --version` runs and exits 0.
 
 - Create: `tests/distribution/test_editable_install.py`
 
-- [ ] **Step 2.1: Write the failing test**
+- [x] **Step 2.1: Write the failing test**
 
     Create `tests/distribution/test_editable_install.py`:
 
@@ -281,7 +281,7 @@ asserts `toolr --version` runs and exits 0.
         assert "toolr" in result.stdout.lower(), result.stdout
     ```
 
-- [ ] **Step 2.2: Run the test**
+- [x] **Step 2.2: Run the test**
 
     ```bash
     uv run pytest tests/distribution/test_editable_install.py -v
@@ -290,7 +290,7 @@ asserts `toolr --version` runs and exits 0.
     Expected: PASS. The test will be slow (one full release build); that is
     acceptable for a distribution smoke test.
 
-- [ ] **Step 2.3: Commit**
+- [x] **Step 2.3: Commit**
 
     ```bash
     git add tests/distribution/test_editable_install.py
