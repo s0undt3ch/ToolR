@@ -3,7 +3,9 @@
 pub mod config;
 pub mod repo_key;
 pub mod resolve;
+pub mod sync;
 
 pub use config::{ToolrConfig, VenvLocation, load_toolr_config};
 pub use repo_key::{TOOLR_MAJOR, compute_repo_key};
 pub use resolve::{ResolvedVenv, resolve_venv_path};
+pub use sync::{Freshness, check_freshness, run_uv_sync, sync_if_needed};
