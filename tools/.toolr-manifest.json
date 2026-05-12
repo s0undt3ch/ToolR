@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "static_hash": "9b811bc7736cb872cab925755caff7b7c5cf8d6f599b87938769621a77349674",
+  "dynamic_hash": "",
+  "groups": [
+    {
+      "name": "ci",
+      "title": "CI utilities",
+      "description": "\nCI related utilities.\n",
+      "origin": "static"
+    },
+    {
+      "name": "version",
+      "title": "Versioning utilities",
+      "description": "Versioning utilities.",
+      "origin": "static"
+    }
+  ],
+  "commands": [
+    {
+      "name": "generate-build-matrix",
+      "group": "ci",
+      "module": "tools.ci",
+      "function": "generate_build_matrix",
+      "summary": "Generate a build matrix.",
+      "description": "",
+      "arguments": [],
+      "imports": [],
+      "origin": "static"
+    },
+    {
+      "name": "check-run-build",
+      "group": "ci",
+      "module": "tools.ci",
+      "function": "check_run_build",
+      "summary": "Check if the current build should run.",
+      "description": "",
+      "arguments": [
+        {
+          "name": "event_name",
+          "kind": "positional",
+          "help": "Event name",
+          "default": null,
+          "type_annotation": "str",
+          "allowed_values": []
+        },
+        {
+          "name": "branch",
+          "kind": "positional",
+          "help": "Branch to check for open PR",
+          "default": null,
+          "type_annotation": "str",
+          "allowed_values": []
+        }
+      ],
+      "imports": [],
+      "origin": "static"
+    },
+    {
+      "name": "sync-rolling-tags",
+      "group": "ci",
+      "module": "tools.ci",
+      "function": "sync_rolling_tags",
+      "summary": "Sync rolling tags from ToolR release.",
+      "description": "",
+      "arguments": [
+        {
+          "name": "dry_run",
+          "kind": "optional",
+          "help": "Whether to dry run the command.",
+          "default": "false",
+          "type_annotation": "bool",
+          "allowed_values": []
+        }
+      ],
+      "imports": [],
+      "origin": "static"
+    },
+    {
+      "name": "current",
+      "group": "version",
+      "module": "tools.version",
+      "function": "current",
+      "summary": "Get the current version.",
+      "description": "",
+      "arguments": [],
+      "imports": [],
+      "origin": "static"
+    },
+    {
+      "name": "bump",
+      "group": "version",
+      "module": "tools.version",
+      "function": "bump",
+      "summary": "Bump the version.",
+      "description": "",
+      "arguments": [
+        {
+          "name": "new_version",
+          "kind": "positional",
+          "help": "The version to bump to.",
+          "default": null,
+          "type_annotation": "Annotated[<expr>]",
+          "allowed_values": []
+        },
+        {
+          "name": "check_existing_tag",
+          "kind": "optional",
+          "help": "Whether to check if the release tag already exists.",
+          "default": "false",
+          "type_annotation": "bool",
+          "allowed_values": []
+        },
+        {
+          "name": "write",
+          "kind": "optional",
+          "help": "Whether to write the version to the file.",
+          "default": "false",
+          "type_annotation": "bool",
+          "allowed_values": []
+        }
+      ],
+      "imports": [],
+      "origin": "static"
+    }
+  ]
+}

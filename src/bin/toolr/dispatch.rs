@@ -8,6 +8,9 @@ pub fn dispatch(
     manifest: &Manifest,
     root: &mut clap::Command,
 ) -> anyhow::Result<ExitCode> {
+    if let Some(("__build-static-manifest", _)) = matches.subcommand() {
+        return run_build_static_manifest();
+    }
     let Some((group_name, group_matches)) = matches.subcommand() else {
         root.print_help()?;
         return Ok(ExitCode::SUCCESS);
@@ -29,4 +32,20 @@ pub fn dispatch(
         cmd.group, cmd.name
     );
     Ok(ExitCode::from(64))
+}
+
+fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
+    let cwd = std::env::current_dir()?;
+    let root = _rust_utils::discovery::discover_project_root(&cwd)?;
+    let tools = root.join("tools");
+    let manifest = _rust_utils::parser::build_static_manifest(&tools)?;
+    let path = tools.join(".toolr-manifest.json");
+    _rust_utils::manifest::write_manifest(&path, &manifest)?;
+    println!(
+        "toolr: wrote {} groups / {} commands to {}",
+        manifest.groups.len(),
+        manifest.commands.len(),
+        path.display()
+    );
+    Ok(ExitCode::SUCCESS)
 }

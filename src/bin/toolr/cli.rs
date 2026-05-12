@@ -38,6 +38,12 @@ pub fn build_command(manifest: &Manifest) -> Command {
         root = root.subcommand(g);
     }
 
+    root = root.subcommand(
+        Command::new("__build-static-manifest")
+            .hide(true)
+            .about("(internal) Regenerate the static manifest in place"),
+    );
+
     root
 }
 
