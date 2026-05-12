@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::parser::SupportedType;
+use crate::parser::{PathConstraints, SupportedType};
 
 /// Current manifest schema version. Bump on breaking format changes.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -101,6 +101,12 @@ pub struct Argument {
     /// For Literal[...] / Enum-backed args, the allowed value strings.
     #[serde(default)]
     pub allowed_values: Vec<String>,
+    /// Path-constraint metadata harvested from
+    /// `Annotated[Path, arg(must_exist=True, ...)]`. Applied by the
+    /// path value-parsers in `src/bin/toolr/value_parsers.rs`. `None`
+    /// when no constraint flags were set; ignored for non-path types.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_constraints: Option<PathConstraints>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

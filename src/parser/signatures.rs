@@ -76,6 +76,7 @@ fn build_argument(
         default: default.map(|d| literal_default(d, enums)),
         type_annotation: annotation.map(annotation_to_string),
         resolved_type: None,
+        path_constraints: None,
         allowed_values,
     }
 }

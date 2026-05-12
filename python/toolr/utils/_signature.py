@@ -172,6 +172,13 @@ class ArgumentAnnotation(Struct, frozen=True):
     choices: list[Any] | None = None
     nargs: NargsType | None = None
     group: str | None = None
+    # Path constraints. Apply to any `pathlib.Path` / `toolr.types.*Path`
+    # parameter; ignored on other types. The rust static parser reads
+    # these from the `arg(...)` call inside `Annotated[Path, arg(...)]`
+    # and configures clap to enforce them at CLI parse time.
+    must_exist: bool = False
+    must_be_file: bool = False
+    must_be_dir: bool = False
 
 
 def arg(
@@ -183,6 +190,9 @@ def arg(
     choices: list[Any] | None = None,
     nargs: NargsType | None = None,
     group: str | None = None,
+    must_exist: bool = False,
+    must_be_file: bool = False,
+    must_be_dir: bool = False,
 ) -> ArgumentAnnotation:
     """
     Create an ArgumentAnnotation.
@@ -197,6 +207,12 @@ def arg(
         choices: The choices for the argument.
         nargs: The number of arguments to accept.
         group: The name of the mutually exclusive group for the argument.
+        must_exist: For path-typed params: reject paths that don't exist
+            on disk. Useful for "input file" style arguments.
+        must_be_file: For path-typed params: also require the path is a
+            regular file. Implies ``must_exist=True``.
+        must_be_dir: For path-typed params: also require the path is a
+            directory. Implies ``must_exist=True``.
     """
     return ArgumentAnnotation(
         aliases=aliases,
@@ -206,6 +222,9 @@ def arg(
         choices=choices,
         nargs=nargs,
         group=group,
+        must_exist=must_exist,
+        must_be_file=must_be_file,
+        must_be_dir=must_be_dir,
     )
 
 

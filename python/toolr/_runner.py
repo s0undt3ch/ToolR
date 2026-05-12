@@ -162,6 +162,38 @@ def _unwrap_annotated(hint: Any) -> Any:
     return hint
 
 
+def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
+    """Coerce values msgspec doesn't know about natively.
+
+    The rust binary serialises everything that needs validation as a
+    string (Path, DateTime, UUID, IPv*, Email …) — pre-validated by the
+    clap value-parser. This hook turns that string into the matching
+    Python type so the command function receives the expected type.
+    """
+    import datetime as _dt  # noqa: PLC0415
+    import ipaddress as _ip  # noqa: PLC0415
+    import pathlib as _path  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+
+    if isinstance(obj, str):
+        if isinstance(target_type, type) and issubclass(target_type, _path.PurePath):
+            return target_type(obj)
+        if target_type is _dt.datetime:
+            return _dt.datetime.fromisoformat(obj)
+        if target_type is _dt.date:
+            return _dt.date.fromisoformat(obj)
+        if target_type is _dt.time:
+            return _dt.time.fromisoformat(obj)
+        if target_type is _uuid.UUID:
+            return _uuid.UUID(obj)
+        if target_type is _ip.IPv4Address:
+            return _ip.IPv4Address(obj)
+        if target_type is _ip.IPv6Address:
+            return _ip.IPv6Address(obj)
+    msg = f"toolr runner: don't know how to coerce {type(obj).__name__} → {target_type!r}"
+    raise TypeError(msg)
+
+
 def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[Any], dict[str, Any]]:
     """Coerce `raw` against `target`'s actual type hints.
 
@@ -208,7 +240,7 @@ def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[
             keyword[name] = value
             continue
         try:
-            keyword[name] = msgspec.convert(value, type=hint, strict=False)
+            keyword[name] = msgspec.convert(value, type=hint, strict=False, dec_hook=_dec_hook)
         except msgspec.ValidationError as exc:
             msg = f"toolr runner: invalid value for `--{name.replace('_', '-')}`: {exc}"
             raise SpecError(msg) from exc

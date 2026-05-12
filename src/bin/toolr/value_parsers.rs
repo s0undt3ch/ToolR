@@ -15,11 +15,13 @@ use clap::builder::ValueParser;
 use email_address::EmailAddress;
 use uuid::Uuid;
 
-use _rust_utils::parser::SupportedType;
+use _rust_utils::parser::{PathConstraints, SupportedType};
 
 /// Attach the right `value_parser` to a clap `Arg` for the given
 /// supported type. `Optional(T)` is unwrapped automatically — the
 /// optionality is expressed via `required=false` on the caller side.
+/// `path_constraints` layers on top of any path-flavoured type to add
+/// `must_exist` / `must_be_file` / `must_be_dir` checks.
 ///
 /// **Wire format contract:** all the "validated complex" types
 /// (DateTime, UUID, IP, Email, ...) return their value as a **String**
@@ -28,16 +30,21 @@ use _rust_utils::parser::SupportedType;
 /// types get clap-stored as `PathBuf` because the parser also does
 /// resolution (absolutize / canonicalize) before handing the value
 /// off. `extract_value` mirrors this split when reading.
-pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
+pub fn apply_value_parser(
+    arg: Arg,
+    ty: &SupportedType,
+    path_constraints: Option<&PathConstraints>,
+) -> Arg {
     let inner = unwrap_optional(ty);
+    let pc = path_constraints.copied().unwrap_or_default();
     match inner {
         SupportedType::Int => arg.value_parser(clap::value_parser!(i64)),
         SupportedType::Float => arg.value_parser(clap::value_parser!(f64)),
         SupportedType::Bool => arg.value_parser(clap::value_parser!(bool)),
         SupportedType::Str => arg,
-        SupportedType::Path => arg.value_parser(clap::value_parser!(PathBuf)),
-        SupportedType::AbsolutePath => arg.value_parser(absolute_path_parser()),
-        SupportedType::ResolvedPath => arg.value_parser(resolved_path_parser()),
+        SupportedType::Path => arg.value_parser(path_parser(false, false, pc)),
+        SupportedType::AbsolutePath => arg.value_parser(path_parser(true, false, pc)),
+        SupportedType::ResolvedPath => arg.value_parser(path_parser(true, true, pc)),
         SupportedType::DateTime => arg.value_parser(datetime_parser()),
         SupportedType::Date => arg.value_parser(date_parser()),
         SupportedType::Time => arg.value_parser(time_parser()),
@@ -49,7 +56,7 @@ pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
         SupportedType::Enum { values, .. } => arg.value_parser(values.clone()),
         // For collection kinds we configure the *element* parser; clap's
         // `num_args` / `Append` semantics are set by the caller.
-        SupportedType::List(elem) => apply_value_parser(arg, elem),
+        SupportedType::List(elem) => apply_value_parser(arg, elem, path_constraints),
         // Heterogeneous tuples: clap can't apply a per-slot value_parser
         // for the same Arg, so we constrain the *arity* and let msgspec
         // coerce each slot to the right type against the function's
@@ -76,24 +83,39 @@ fn unwrap_optional(ty: &SupportedType) -> &SupportedType {
     }
 }
 
-fn absolute_path_parser() -> ValueParser {
-    ValueParser::new(|s: &str| -> Result<PathBuf, String> {
-        let p = PathBuf::from(s);
-        if p.is_absolute() {
-            Ok(p)
-        } else {
-            std::env::current_dir()
-                .map(|cwd| cwd.join(&p))
-                .map_err(|e| format!("could not resolve cwd: {e}"))
+/// Build a path value-parser with three orthogonal knobs:
+/// - `absolutise`: join relative paths to cwd (no fs check).
+/// - `canonical`: full `canonicalize()` — symlinks resolved, must exist.
+/// - `constraints`: optional `must_exist`/`must_be_file`/`must_be_dir`
+///   layered on top. `must_be_file`/`must_be_dir` imply `must_exist`.
+///
+/// `canonical=true` already enforces existence; the constraint checks
+/// then run against the resolved path. With `canonical=false` the
+/// checks run against the (possibly absolutised) input as the user
+/// passed it.
+fn path_parser(absolutise: bool, canonical: bool, constraints: PathConstraints) -> ValueParser {
+    ValueParser::new(move |s: &str| -> Result<PathBuf, String> {
+        let mut path = PathBuf::from(s);
+        if canonical {
+            path = std::path::Path::new(s)
+                .canonicalize()
+                .map_err(|e| format!("invalid path `{s}`: {e}"))?;
+        } else if absolutise && !path.is_absolute() {
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("could not resolve cwd: {e}"))?;
+            path = cwd.join(&path);
         }
-    })
-}
-
-fn resolved_path_parser() -> ValueParser {
-    ValueParser::new(|s: &str| -> Result<PathBuf, String> {
-        std::path::Path::new(s)
-            .canonicalize()
-            .map_err(|e| format!("invalid path `{s}`: {e}"))
+        // Constraint checks. Skip when already enforced by canonical.
+        if constraints.requires_existence() && !path.exists() {
+            return Err(format!("path does not exist: {}", path.display()));
+        }
+        if constraints.must_be_file && !path.is_file() {
+            return Err(format!("path is not a regular file: {}", path.display()));
+        }
+        if constraints.must_be_dir && !path.is_dir() {
+            return Err(format!("path is not a directory: {}", path.display()));
+        }
+        Ok(path)
     })
 }
 
@@ -160,7 +182,11 @@ mod tests {
     use clap::Command;
 
     fn build_command_with(ty: &SupportedType) -> Command {
-        Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty))
+        Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty, None))
+    }
+
+    fn build_command_with_constraints(ty: &SupportedType, pc: PathConstraints) -> Command {
+        Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty, Some(&pc)))
     }
 
     #[test]
@@ -280,6 +306,54 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn path_with_must_exist_rejects_missing() {
+        let pc = PathConstraints {
+            must_exist: true,
+            ..Default::default()
+        };
+        let cmd = build_command_with_constraints(&SupportedType::Path, pc);
+        let err = cmd
+            .try_get_matches_from(["test", "--v", "/does/not/exist/xyz123"])
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("does not exist"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn path_with_must_be_file_rejects_directory() {
+        let pc = PathConstraints {
+            must_be_file: true,
+            ..Default::default()
+        };
+        let cmd = build_command_with_constraints(&SupportedType::Path, pc);
+        let tmp = std::env::temp_dir();
+        let err = cmd
+            .try_get_matches_from(["test", "--v", tmp.to_str().unwrap()])
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("not a regular file"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn path_with_must_be_dir_accepts_directory() {
+        let pc = PathConstraints {
+            must_be_dir: true,
+            ..Default::default()
+        };
+        let cmd = build_command_with_constraints(&SupportedType::Path, pc);
+        let tmp = std::env::temp_dir();
+        let m = cmd
+            .try_get_matches_from(["test", "--v", tmp.to_str().unwrap()])
+            .unwrap();
+        let got = m.get_one::<PathBuf>("v").unwrap();
+        assert!(got.is_dir());
     }
 
     #[test]
