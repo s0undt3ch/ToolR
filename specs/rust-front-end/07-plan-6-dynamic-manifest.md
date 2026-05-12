@@ -243,7 +243,7 @@ in the registry walk and entry-point enumeration.
 - Create: `python/toolr/_introspect.py`
 - Create: `tests/test_introspect_empty.py`
 
-- [ ] **Step 2.1: Create `python/toolr/_introspect.py` with the bare main**
+- [x] **Step 2.1: Create `python/toolr/_introspect.py` with the bare main**
 
     ```python
     """Dynamic manifest introspection helper.
@@ -314,7 +314,7 @@ in the registry walk and entry-point enumeration.
         raise SystemExit(main())
     ```
 
-- [ ] **Step 2.2: Write a smoke test for the empty payload**
+- [x] **Step 2.2: Write a smoke test for the empty payload**
 
     Create `tests/test_introspect_empty.py`:
 
@@ -354,7 +354,7 @@ in the registry walk and entry-point enumeration.
         assert "Dump toolr dynamic-layer manifest" in proc.stdout
     ```
 
-- [ ] **Step 2.3: Run the Python tests**
+- [x] **Step 2.3: Run the Python tests**
 
     ```bash
     uv run pytest tests/test_introspect_empty.py -q
@@ -362,7 +362,7 @@ in the registry walk and entry-point enumeration.
 
     Expected: 2 tests passing.
 
-- [ ] **Step 2.4: Commit**
+- [x] **Step 2.4: Commit**
 
     ```bash
     git add python/toolr/_introspect.py tests/test_introspect_empty.py
