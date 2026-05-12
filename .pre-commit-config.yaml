@@ -21,6 +21,13 @@ repos:
         entry: python .pre-commit-hooks/pin-github-actions.py
         files: ^\.github/workflows/.*\.ya?ml$
 
+      - id: regen-doc-snippets
+        name: Verify doc snippets are in sync
+        entry: .pre-commit-hooks/regen-doc-snippets.py --check
+        language: system
+        pass_filenames: false
+        files: ^(docs/|\.pre-commit-hooks/regen-doc-snippets\.py$|src/bin/toolr/|src/bin/toolr/init_templates/)
+
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
     hooks:
