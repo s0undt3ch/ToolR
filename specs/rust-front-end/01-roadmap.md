@@ -198,7 +198,7 @@
 
 ### Plan 9: Distribution + backwards compatibility
 
-- **Status:** 📝 Drafted
+- **Status:** ✅ Done
 - **Plan doc:** [10-plan-9-distribution.md](./10-plan-9-distribution.md)
 - **Depends on:** Plans 1–8 substantially complete
 - **Unblocks:** —

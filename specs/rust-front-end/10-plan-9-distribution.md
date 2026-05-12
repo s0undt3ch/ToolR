@@ -2236,7 +2236,7 @@ Plan 9 entry from `⬜ Not Started` to `✅ Done` and link the plan doc.
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
 
-- [ ] **Step 12.1: Flip the status**
+- [x] **Step 12.1: Flip the status**
 
     In `specs/rust-front-end/01-roadmap.md`, locate `### Plan 9:
     Distribution + backwards compatibility` and replace its first two
@@ -2251,7 +2251,7 @@ Plan 9 entry from `⬜ Not Started` to `✅ Done` and link the plan doc.
 
     Leave the rest of the entry (depends/unblocks/produces) untouched.
 
-- [ ] **Step 12.2: Commit**
+- [x] **Step 12.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md
