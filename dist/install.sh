@@ -13,18 +13,21 @@ TRIPLE=""
 PREFIX=""
 DRY_RUN=0
 NO_VERIFY=0
+VERIFY_ATTESTATION="auto"
 
 print_help() {
   cat <<EOF
 Install the toolr binary from a GitHub release.
 
 Options:
-  --version VERSION   Install a specific version (defaults to latest)
-  --triple TRIPLE     Override host target triple (auto-detected)
-  --prefix PREFIX     Install location (defaults to \$XDG_BIN_HOME or ~/.local/bin)
-  --dry-run           Print actions without making changes
-  --no-verify         Skip SHA-256 verification (not recommended)
-  -h, --help          Show this help
+  --version VERSION         Install a specific version (defaults to latest)
+  --triple TRIPLE           Override host target triple (auto-detected)
+  --prefix PREFIX           Install location (defaults to \$XDG_BIN_HOME or ~/.local/bin)
+  --dry-run                 Print actions without making changes
+  --no-verify               Skip SHA-256 verification (not recommended)
+  --verify-attestation MODE Attestation verification mode: auto|require|skip
+                            (default: auto - verify when 'gh' is available)
+  -h, --help                Show this help
 EOF
 }
 
@@ -38,6 +41,8 @@ while [ $# -gt 0 ]; do
     --prefix=*) PREFIX="${1#*=}"; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-verify) NO_VERIFY=1; shift ;;
+    --verify-attestation) VERIFY_ATTESTATION="$2"; shift 2 ;;
+    --verify-attestation=*) VERIFY_ATTESTATION="${1#*=}"; shift ;;
     -h|--help) print_help; exit 0 ;;
     *) printf "install.sh: unknown argument: %s\n" "$1" >&2; exit 2 ;;
   esac
@@ -101,6 +106,34 @@ verify_sha256() {
   [ "$actual" = "$expected" ] || err "checksum mismatch: expected $expected got $actual"
 }
 
+# Verify the SLSA build-provenance attestation attached to a release
+# archive via the GitHub CLI. Modes:
+#   auto    - verify if `gh` is on PATH; skip silently otherwise
+#   require - fail hard if `gh` is missing or verification fails
+#   skip    - never verify (e.g. when running offline)
+verify_attestation() {
+  file="$1"
+  case "$VERIFY_ATTESTATION" in
+    skip)
+      info "skipping attestation verification (--verify-attestation=skip)"
+      return 0
+      ;;
+    auto|require) ;;
+    *) err "invalid --verify-attestation value: $VERIFY_ATTESTATION (use auto|require|skip)" ;;
+  esac
+  if ! command -v gh >/dev/null 2>&1; then
+    if [ "$VERIFY_ATTESTATION" = "require" ]; then
+      err "gh CLI required for --verify-attestation=require but not on PATH"
+    fi
+    info "skipping attestation verification ('gh' CLI not installed)"
+    return 0
+  fi
+  info "verifying SLSA build provenance via 'gh attestation verify'"
+  if ! gh attestation verify "$file" --repo "$REPO" >&2; then
+    err "attestation verification failed for $file"
+  fi
+}
+
 resolve_version() {
   need_cmd sed
   if [ -n "$VERSION" ]; then return; fi
@@ -156,6 +189,7 @@ main() {
     expected=$(awk '{print $1}' "${tmpdir}/${filename}.sha256")
     verify_sha256 "${tmpdir}/${filename}" "$expected"
   fi
+  verify_attestation "${tmpdir}/${filename}"
 
   ( cd "$tmpdir" && tar -xzf "$filename" )
   extracted_dir="${tmpdir}/toolr-${VERSION}-${TRIPLE}"

@@ -27,20 +27,23 @@ jobs:
       fail-fast: false
       matrix:
         target:
+          # Native runners cover x86_64/arm64 on Linux + macOS + Windows.
+          # `cross` is reserved for the musl targets where GitHub does not
+          # provide a matching native runner.
           - triple: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
             cross: false
             archive: tar.gz
           - triple: aarch64-unknown-linux-gnu
-            runner: ubuntu-latest
-            cross: true
+            runner: ubuntu-24.04-arm
+            cross: false
             archive: tar.gz
           - triple: x86_64-unknown-linux-musl
             runner: ubuntu-latest
             cross: true
             archive: tar.gz
           - triple: aarch64-unknown-linux-musl
-            runner: ubuntu-latest
+            runner: ubuntu-24.04-arm
             cross: true
             archive: tar.gz
           - triple: x86_64-apple-darwin
@@ -147,9 +150,12 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 "dist/$base.zip").Hash.ToLower()
           Set-Content -Path "dist/$base.zip.sha256" -Value "$hash  $base.zip"
 
+      # SLSA build provenance — always attested for archives that ship
+      # to users. `gh attestation verify` (and any client speaking the
+      # sigstore bundle format) can cryptographically prove the archive
+      # was produced by this workflow against this exact commit.
       - name: Attest archive provenance
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
-        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
         with:
           subject-path: workdir/dist/toolr-*.${{ matrix.target.archive }}
 

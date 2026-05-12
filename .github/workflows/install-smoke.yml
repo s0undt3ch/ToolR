@@ -39,12 +39,23 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-      - name: Install via install.sh
+      - name: Install via install.sh (requires attestation verification)
+        env:
+          # `gh attestation verify` reads $GH_TOKEN to authenticate
+          # against the GitHub API for attestation lookup.
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # The runner image ships the `gh` CLI; --verify-attestation=require
+          # fails the job if the SLSA attestation does not validate.
           if [ -n "${{ inputs.version }}" ]; then
-            sh ./dist/install.sh --version "${{ inputs.version }}" --prefix "$RUNNER_TEMP/toolr-bin"
+            sh ./dist/install.sh \
+              --version "${{ inputs.version }}" \
+              --prefix "$RUNNER_TEMP/toolr-bin" \
+              --verify-attestation=require
           else
-            sh ./dist/install.sh --prefix "$RUNNER_TEMP/toolr-bin"
+            sh ./dist/install.sh \
+              --prefix "$RUNNER_TEMP/toolr-bin" \
+              --verify-attestation=require
           fi
       - name: Verify
         run: |
@@ -60,14 +71,16 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-      - name: Install via install.ps1
+      - name: Install via install.ps1 (requires attestation verification)
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $prefix = Join-Path $env:RUNNER_TEMP "toolr-bin"
           if ("${{ inputs.version }}" -ne "") {
-            ./dist/install.ps1 -Version "${{ inputs.version }}" -Prefix $prefix
+            ./dist/install.ps1 -Version "${{ inputs.version }}" -Prefix $prefix -VerifyAttestation require
           } else {
-            ./dist/install.ps1 -Prefix $prefix
+            ./dist/install.ps1 -Prefix $prefix -VerifyAttestation require
           }
           & (Join-Path $prefix "toolr.exe") --version
 

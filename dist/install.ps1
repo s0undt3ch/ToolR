@@ -12,7 +12,9 @@ param(
   [string]$Prefix,
   [string]$Repo = "s0undt3ch/ToolR",
   [switch]$DryRun,
-  [switch]$NoVerify
+  [switch]$NoVerify,
+  [ValidateSet("auto", "require", "skip")]
+  [string]$VerifyAttestation = "auto"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +27,27 @@ function Resolve-LatestVersion {
   $tag = ($loc -split "/tag/")[-1].TrimEnd('/')
   if ($tag -notmatch '^v(.+)$') { throw "Unexpected tag format: $tag" }
   return $matches[1]
+}
+
+function Test-AttestationVerified {
+  param([string]$Path)
+  if ($VerifyAttestation -eq "skip") {
+    Write-Host "skipping attestation verification (-VerifyAttestation skip)"
+    return
+  }
+  $gh = Get-Command gh -ErrorAction SilentlyContinue
+  if (-not $gh) {
+    if ($VerifyAttestation -eq "require") {
+      throw "gh CLI required for -VerifyAttestation require but not on PATH"
+    }
+    Write-Host "skipping attestation verification ('gh' CLI not installed)"
+    return
+  }
+  Write-Host "verifying SLSA build provenance via 'gh attestation verify'"
+  & gh attestation verify $Path --repo $Repo
+  if ($LASTEXITCODE -ne 0) {
+    throw "attestation verification failed for $Path"
+  }
 }
 
 if (-not $Version) { $Version = Resolve-LatestVersion }
@@ -58,6 +81,7 @@ try {
       throw "Checksum mismatch: expected $expected got $actual"
     }
   }
+  Test-AttestationVerified -Path $zipPath
   Expand-Archive -Path $zipPath -DestinationPath $tmp
   $extracted = Join-Path $tmp "toolr-$Version-$Triple"
   if (-not (Test-Path $extracted)) { throw "Unexpected archive layout" }
