@@ -9,6 +9,7 @@ pub mod hash;
 pub mod manifest;
 pub mod parser;
 pub mod project;
+pub mod third_party;
 pub mod uv;
 pub mod venv;
 #[cfg(feature = "python")]
