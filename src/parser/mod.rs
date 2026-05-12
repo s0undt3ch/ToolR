@@ -18,6 +18,9 @@ pub use signatures::extract_arguments;
 pub mod symbols;
 pub use symbols::EnumTable;
 
+pub mod build;
+pub use build::build_static_manifest;
+
 /// Parse a single Python file and return its module AST.
 pub fn parse_python_file(path: &Path) -> Result<ModModule> {
     let source = std::fs::read_to_string(path)
