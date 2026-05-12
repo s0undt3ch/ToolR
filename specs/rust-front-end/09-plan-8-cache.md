@@ -2157,7 +2157,7 @@ Mark Plan 8 as Done once everything above is merged.
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
 
-- [ ] **Step 10.1: Update the Plan 8 entry**
+- [x] **Step 10.1: Update the Plan 8 entry**
 
     Change `### Plan 8: Cache management` block:
 
@@ -2172,7 +2172,7 @@ Mark Plan 8 as Done once everything above is merged.
         - …(unchanged)…
     ```
 
-- [ ] **Step 10.2: Commit**
+- [x] **Step 10.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md

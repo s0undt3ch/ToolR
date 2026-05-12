@@ -179,7 +179,7 @@
 
 ### Plan 8: Cache management
 
-- **Status:** 📝 Drafted
+- **Status:** ✅ Done
 - **Plan doc:** [09-plan-8-cache.md](./09-plan-8-cache.md)
 - **Depends on:** Plan 3
 - **Unblocks:** —
