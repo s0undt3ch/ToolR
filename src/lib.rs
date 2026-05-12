@@ -8,6 +8,7 @@ pub mod hash;
 pub mod manifest;
 pub mod parser;
 pub mod uv;
+pub mod venv;
 #[cfg(feature = "python")]
 mod python_bindings;
 
