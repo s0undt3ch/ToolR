@@ -1280,7 +1280,7 @@ that the design's user contract holds.
 **Files:**
 
 - Modify: `tests/cli_smoke.rs`
-- [ ] **Step 8.1: Build the dual-command fixture**
+- [x] **Step 8.1: Build the dual-command fixture**
 
     ```rust
     fn fixture_with_two_commands(
@@ -1401,7 +1401,7 @@ that the design's user contract holds.
     }
     ```
 
-- [ ] **Step 8.2: Run the test**
+- [x] **Step 8.2: Run the test**
 
     ```bash
     cargo test --test cli_smoke pre_flight_and_post_mortem_split
@@ -1410,7 +1410,7 @@ that the design's user contract holds.
     Expected: 1 test passing (or `skip: no system python available`
     when running on a host without Python).
 
-- [ ] **Step 8.3: Commit**
+- [x] **Step 8.3: Commit**
 
     ```bash
     git add tests/cli_smoke.rs

@@ -405,6 +405,148 @@ fn preflight_fails_when_an_import_is_missing_from_venv() {
     assert!(stderr.contains("toolr project deps sync"));
 }
 
+/// A two-command fixture exercising pre-flight (top-level import that
+/// the static parser recorded) and post-mortem (inline import the
+/// parser missed) against the same project.
+#[cfg(unix)]
+fn two_command_fixture(
+    top_level_import: &str,
+    inline_import: &str,
+) -> tempfile::TempDir {
+    use std::fs;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n\
+         [tool.toolr]\nvenv-location = \"in-tree\"\n",
+    )
+    .unwrap();
+    fs::write(tools.join("__init__.py"), "").unwrap();
+    let src = format!(
+        "import {top_level_import}\n\
+         \n\
+         def with_top_level(ctx): pass\n\
+         \n\
+         def with_inline(ctx):\n    import {inline_import}\n",
+    );
+    fs::write(tools.join("ci.py"), src).unwrap();
+
+    let manifest = format!(
+        r#"{{
+            "schema_version": 1,
+            "static_hash": "h", "dynamic_hash": "",
+            "groups": [{{
+                "name": "ci", "title": "CI", "description": "",
+                "origin": "static"
+            }}],
+            "commands": [
+                {{
+                    "name": "with-top-level", "group": "ci",
+                    "module": "tools.ci", "function": "with_top_level",
+                    "summary": "", "description": "",
+                    "arguments": [], "imports": ["{top_level_import}"],
+                    "origin": "static"
+                }},
+                {{
+                    "name": "with-inline", "group": "ci",
+                    "module": "tools.ci", "function": "with_inline",
+                    "summary": "", "description": "",
+                    "arguments": [], "imports": [],
+                    "origin": "static"
+                }}
+            ]
+        }}"#
+    );
+    fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
+
+    // Empty venv: top-level import missing → pre-flight catches.
+    // Inline import also missing → runner-side ImportError caught by
+    // post-mortem.
+    let sp = tools
+        .join(".venv")
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages");
+    fs::create_dir_all(&sp).unwrap();
+    let toolr_pkg = sp.join("toolr");
+    fs::create_dir_all(&toolr_pkg).unwrap();
+    fs::write(toolr_pkg.join("__init__.py"), "").unwrap();
+
+    let bin_dir = tools.join(".venv").join("bin");
+    fs::create_dir_all(&bin_dir).unwrap();
+    let py = bin_dir.join("python");
+    let mut f = fs::File::create(&py).unwrap();
+    writeln!(f, "#!/bin/sh").unwrap();
+    writeln!(f, r#"case " $* " in"#).unwrap();
+    writeln!(
+        f,
+        r#"  *toolr._introspect*) echo '{{"payload_schema_version":1,"groups":[],"commands":[],"warnings":[]}}'; exit 0;;"#
+    )
+    .unwrap();
+    writeln!(f, "  *)").unwrap();
+    writeln!(
+        f,
+        r#"    printf 'Traceback (most recent call last):\n  File "<tool>", line 2, in with_inline\n    import {inline_import}\nModuleNotFoundError: No module named '"'"'{inline_import}'"'"'\n' 1>&2"#
+    )
+    .unwrap();
+    writeln!(f, "    exit 1;;").unwrap();
+    writeln!(f, "esac").unwrap();
+    drop(f);
+    let mut perms = fs::metadata(&py).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&py, perms).unwrap();
+
+    tmp
+}
+
+#[test]
+#[cfg(unix)]
+fn pre_flight_and_post_mortem_split_against_one_project() {
+    let tmp = two_command_fixture("yaml", "cv2");
+
+    // 1. Top-level import case → pre-flight catches it.
+    let top = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["ci", "with-top-level"])
+        .output()
+        .unwrap();
+    let top_err = String::from_utf8_lossy(&top.stderr);
+    assert_eq!(top.status.code(), Some(78), "pre-flight stderr:\n{top_err}");
+    assert!(top_err.contains("import `yaml` not found"));
+    assert!(top_err.contains("toolr project deps sync"));
+    assert!(
+        !top_err.contains("Traceback"),
+        "pre-flight should not have a python traceback"
+    );
+
+    // 2. Inline import case → pre-flight passes, runner emits the
+    // ImportError, post-mortem rewrites the output.
+    let inline = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["ci", "with-inline"])
+        .output()
+        .unwrap();
+    let inline_err = String::from_utf8_lossy(&inline.stderr);
+    assert_ne!(inline.status.code(), Some(0), "stderr:\n{inline_err}");
+    assert!(
+        inline_err.contains("Traceback (most recent call last)"),
+        "stderr:\n{inline_err}"
+    );
+    assert!(
+        inline_err.contains("ModuleNotFoundError: No module named 'cv2'"),
+        "stderr:\n{inline_err}"
+    );
+    assert!(inline_err.contains("toolr project deps sync"));
+    assert!(inline_err.contains("cv2"));
+}
+
 #[test]
 #[cfg(unix)]
 fn post_mortem_rewrites_import_error_output() {
