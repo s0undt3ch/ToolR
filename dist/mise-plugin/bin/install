@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# mise contract: install from $ASDF_DOWNLOAD_PATH into $ASDF_INSTALL_PATH.
+set -euo pipefail
+
+VERSION="${ASDF_INSTALL_VERSION:?ASDF_INSTALL_VERSION required}"
+INSTALL_PATH="${ASDF_INSTALL_PATH:?ASDF_INSTALL_PATH required}"
+DOWNLOAD_PATH="${ASDF_DOWNLOAD_PATH:?ASDF_DOWNLOAD_PATH required}"
+
+detect_triple() {
+  uname_s="$(uname -s)"
+  uname_m="$(uname -m)"
+  case "$uname_s" in
+    Linux)
+      libc="gnu"; [ -f /etc/alpine-release ] && libc="musl"
+      case "$uname_m" in
+        x86_64|amd64) printf 'x86_64-unknown-linux-%s' "$libc" ;;
+        aarch64|arm64) printf 'aarch64-unknown-linux-%s' "$libc" ;;
+      esac ;;
+    Darwin)
+      case "$uname_m" in
+        x86_64) printf 'x86_64-apple-darwin' ;;
+        arm64|aarch64) printf 'aarch64-apple-darwin' ;;
+      esac ;;
+    MINGW*|MSYS*|CYGWIN*) printf 'x86_64-pc-windows-msvc' ;;
+  esac
+}
+
+triple="$(detect_triple)"
+[ -n "$triple" ] || { echo "install: unsupported host" >&2; exit 1; }
+case "$triple" in
+  *-windows-*) ext=zip; bin_name=toolr.exe ;;
+  *) ext=tar.gz; bin_name=toolr ;;
+esac
+
+filename="toolr-${VERSION}-${triple}.${ext}"
+archive="${DOWNLOAD_PATH}/${filename}"
+sha_file="${archive}.sha256"
+
+if [ -f "$sha_file" ]; then
+  expected=$(awk '{print $1}' "$sha_file")
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "$archive" | awk '{print $1}')
+  else
+    actual=$(shasum -a 256 "$archive" | awk '{print $1}')
+  fi
+  [ "$actual" = "$expected" ] || {
+    echo "install: checksum mismatch for $archive" >&2
+    exit 1
+  }
+fi
+
+bin_dir="${INSTALL_PATH}/bin"
+mkdir -p "$bin_dir"
+tmp_extract="$(mktemp -d)"
+trap 'rm -rf "$tmp_extract"' EXIT INT TERM
+
+case "$ext" in
+  tar.gz) tar -xzf "$archive" -C "$tmp_extract" ;;
+  zip) unzip -q "$archive" -d "$tmp_extract" ;;
+esac
+
+src_dir="${tmp_extract}/toolr-${VERSION}-${triple}"
+[ -d "$src_dir" ] || { echo "install: unexpected layout: $src_dir missing" >&2; exit 1; }
+cp "${src_dir}/${bin_name}" "${bin_dir}/${bin_name}"
+chmod +x "${bin_dir}/${bin_name}"
+echo "Installed toolr ${VERSION} to ${bin_dir}/${bin_name}"

@@ -2,4 +2,5 @@
 !.gitignore
 !install.sh
 !install.ps1
-!mise-plugin/
+!mise-plugin
+!mise-plugin/**

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# mise asdf-plugin contract: print whitespace-separated versions to stdout.
+set -euo pipefail
+
+REPO="${TOOLR_REPO:-s0undt3ch/ToolR}"
+
+if command -v curl >/dev/null 2>&1; then
+  fetch() { curl -fsSL "$1"; }
+elif command -v wget >/dev/null 2>&1; then
+  fetch() { wget -qO- "$1"; }
+else
+  echo "list-all: neither curl nor wget available" >&2
+  exit 1
+fi
+
+fetch "https://api.github.com/repos/${REPO}/releases?per_page=100" \
+  | grep -E '"tag_name":' \
+  | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/' \
+  | tac

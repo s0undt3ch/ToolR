@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# mise contract: download the artifact into $ASDF_DOWNLOAD_PATH.
+set -euo pipefail
+
+REPO="${TOOLR_REPO:-s0undt3ch/ToolR}"
+VERSION="${ASDF_INSTALL_VERSION:?ASDF_INSTALL_VERSION required}"
+DOWNLOAD_PATH="${ASDF_DOWNLOAD_PATH:?ASDF_DOWNLOAD_PATH required}"
+
+detect_triple() {
+  uname_s="$(uname -s)"
+  uname_m="$(uname -m)"
+  case "$uname_s" in
+    Linux)
+      libc="gnu"
+      [ -f /etc/alpine-release ] && libc="musl"
+      case "$uname_m" in
+        x86_64|amd64) printf 'x86_64-unknown-linux-%s' "$libc" ;;
+        aarch64|arm64) printf 'aarch64-unknown-linux-%s' "$libc" ;;
+        *) echo "unsupported Linux arch: $uname_m" >&2; exit 1 ;;
+      esac
+      ;;
+    Darwin)
+      case "$uname_m" in
+        x86_64) printf 'x86_64-apple-darwin' ;;
+        arm64|aarch64) printf 'aarch64-apple-darwin' ;;
+        *) echo "unsupported macOS arch: $uname_m" >&2; exit 1 ;;
+      esac
+      ;;
+    MINGW*|MSYS*|CYGWIN*) printf 'x86_64-pc-windows-msvc' ;;
+    *) echo "unsupported OS: $uname_s" >&2; exit 1 ;;
+  esac
+}
+
+triple="$(detect_triple)"
+case "$triple" in
+  *-windows-*) ext=zip ;;
+  *) ext=tar.gz ;;
+esac
+
+filename="toolr-${VERSION}-${triple}.${ext}"
+url="https://github.com/${REPO}/releases/download/v${VERSION}/${filename}"
+sha_url="${url}.sha256"
+
+echo "Downloading ${url}" >&2
+mkdir -p "$DOWNLOAD_PATH"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL "$url" -o "${DOWNLOAD_PATH}/${filename}"
+  curl -fsSL "$sha_url" -o "${DOWNLOAD_PATH}/${filename}.sha256"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "${DOWNLOAD_PATH}/${filename}" "$url"
+  wget -qO "${DOWNLOAD_PATH}/${filename}.sha256" "$sha_url"
+else
+  echo "download: neither curl nor wget available" >&2
+  exit 1
+fi
