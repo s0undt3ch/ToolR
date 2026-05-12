@@ -18,6 +18,9 @@ pub use signatures::extract_arguments;
 pub mod symbols;
 pub use symbols::EnumTable;
 
+pub mod types;
+pub use types::{SupportedType, TypeImports, UnsupportedType, resolve as resolve_type};
+
 pub mod build;
 pub use build::{BuildError, build_static_manifest, build_static_manifest_with_venv};
 
