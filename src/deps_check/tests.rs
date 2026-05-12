@@ -144,3 +144,83 @@ fn missing_deps_message_pluralizes_when_multiple() {
     let cv2_idx = rendered.find("cv2").unwrap();
     assert!(yaml_idx < cv2_idx);
 }
+
+use super::post_mortem::{ImportErrorReport, intercept_import_error};
+
+const PY_IMPORT_ERROR: &str = "\
+Traceback (most recent call last):
+  File \"/x/tools/ci.py\", line 1, in <module>
+    import yaml
+ModuleNotFoundError: No module named 'yaml'
+";
+
+const PY_NESTED_IMPORT_ERROR: &str = "\
+Traceback (most recent call last):
+  File \"/x/tools/ci.py\", line 5, in hello
+    from pkg.sub import thing
+ImportError: cannot import name 'thing' from 'pkg.sub'
+";
+
+const PY_GENERIC_RUNTIME_ERROR: &str = "\
+Traceback (most recent call last):
+  File \"/x/tools/ci.py\", line 7, in hello
+    raise ValueError(\"nope\")
+ValueError: nope
+";
+
+#[test]
+fn intercepts_module_not_found_error() {
+    let report = intercept_import_error(PY_IMPORT_ERROR).expect("should classify");
+    assert_eq!(report.error_class, "ModuleNotFoundError");
+    assert_eq!(report.missing_hint.as_deref(), Some("yaml"));
+    assert!(report.traceback.contains("ModuleNotFoundError"));
+}
+
+#[test]
+fn intercepts_plain_import_error() {
+    let report = intercept_import_error(PY_NESTED_IMPORT_ERROR).expect("should classify");
+    assert_eq!(report.error_class, "ImportError");
+    assert!(report.traceback.contains("ImportError"));
+}
+
+#[test]
+fn returns_none_for_non_import_error() {
+    assert!(intercept_import_error(PY_GENERIC_RUNTIME_ERROR).is_none());
+}
+
+#[test]
+fn returns_none_for_empty_input() {
+    assert!(intercept_import_error("").is_none());
+}
+
+#[test]
+fn rendered_report_includes_traceback_and_suggestion() {
+    let report = intercept_import_error(PY_IMPORT_ERROR).unwrap();
+    let rendered = report.render();
+    assert!(rendered.contains(PY_IMPORT_ERROR.trim_end()));
+    assert!(rendered.contains("toolr project deps sync"));
+    assert!(rendered.contains("yaml"));
+}
+
+#[test]
+fn rendered_report_for_import_error_without_hint_still_suggests_sync() {
+    let report = intercept_import_error(PY_NESTED_IMPORT_ERROR).unwrap();
+    let rendered = report.render();
+    assert!(rendered.contains(PY_NESTED_IMPORT_ERROR.trim_end()));
+    assert!(rendered.contains("toolr project deps sync"));
+}
+
+#[test]
+fn render_preserves_traceback_byte_for_byte() {
+    let stderr = PY_IMPORT_ERROR;
+    let report = intercept_import_error(stderr).unwrap();
+    let rendered = report.render();
+    let stripped_orig = stderr.trim_end();
+    assert!(rendered.starts_with(stripped_orig));
+    // _suppress dead-code on the unused struct constructor in tests.
+    let _ = ImportErrorReport {
+        traceback: String::new(),
+        error_class: String::new(),
+        missing_hint: None,
+    };
+}

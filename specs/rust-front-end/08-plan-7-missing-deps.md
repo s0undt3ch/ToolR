@@ -801,7 +801,7 @@ subprocess flow.
 - Create: `src/deps_check/post_mortem.rs`
 - Modify: `src/deps_check/mod.rs`
 - Modify: `src/deps_check/tests.rs`
-- [ ] **Step 6.1: Append the failing tests**
+- [x] **Step 6.1: Append the failing tests**
 
     In `src/deps_check/tests.rs`:
 
@@ -881,7 +881,7 @@ ValueError: nope
     }
     ```
 
-- [ ] **Step 6.2: Run the tests, expect compile failure**
+- [x] **Step 6.2: Run the tests, expect compile failure**
 
     ```bash
     cargo test --lib deps_check::tests::intercepts_module_not_found_error
@@ -889,7 +889,7 @@ ValueError: nope
 
     Expected: unresolved import `super::post_mortem`. Good.
 
-- [ ] **Step 6.3: Create `src/deps_check/post_mortem.rs`**
+- [x] **Step 6.3: Create `src/deps_check/post_mortem.rs`**
 
     ```rust
     //! Parse Python tracebacks on subprocess stderr looking for
@@ -990,7 +990,7 @@ ValueError: nope
     }
     ```
 
-- [ ] **Step 6.4: Re-export from `src/deps_check/mod.rs`**
+- [x] **Step 6.4: Re-export from `src/deps_check/mod.rs`**
 
     Final shape:
 
@@ -1009,7 +1009,7 @@ ValueError: nope
     mod tests;
     ```
 
-- [ ] **Step 6.5: Run the tests, expect PASS**
+- [x] **Step 6.5: Run the tests, expect PASS**
 
     ```bash
     cargo test --lib deps_check::
@@ -1017,7 +1017,7 @@ ValueError: nope
 
     Expected: 19 tests passing (13 prior + 6 new).
 
-- [ ] **Step 6.6: Commit**
+- [x] **Step 6.6: Commit**
 
     ```bash
     git add src/deps_check/
