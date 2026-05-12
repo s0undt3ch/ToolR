@@ -1512,7 +1512,7 @@ binary into the mise-managed prefix.
 - Create: `dist/mise-plugin/bin/install`
 - Create: `dist/mise-plugin/README.md`
 
-- [ ] **Step 7.1: Write `bin/list-all`**
+- [x] **Step 7.1: Write `bin/list-all`**
 
     Create `dist/mise-plugin/bin/list-all`:
 
@@ -1539,7 +1539,7 @@ binary into the mise-managed prefix.
       | tac
     ```
 
-- [ ] **Step 7.2: Write `bin/download`**
+- [x] **Step 7.2: Write `bin/download`**
 
     Create `dist/mise-plugin/bin/download`:
 
@@ -1601,7 +1601,7 @@ binary into the mise-managed prefix.
     fi
     ```
 
-- [ ] **Step 7.3: Write `bin/install`**
+- [x] **Step 7.3: Write `bin/install`**
 
     Create `dist/mise-plugin/bin/install`:
 
@@ -1674,7 +1674,7 @@ binary into the mise-managed prefix.
     echo "Installed toolr ${VERSION} to ${bin_dir}/${bin_name}"
     ```
 
-- [ ] **Step 7.4: Document the staging layout**
+- [x] **Step 7.4: Document the staging layout**
 
     Create `dist/mise-plugin/README.md`:
 
@@ -1698,7 +1698,7 @@ binary into the mise-managed prefix.
 
     ```text
 
-- [ ] **Step 7.5: chmod and lint**
+- [x] **Step 7.5: chmod and lint**
 
     ```bash
     chmod +x dist/mise-plugin/bin/list-all dist/mise-plugin/bin/download dist/mise-plugin/bin/install
@@ -1711,7 +1711,7 @@ binary into the mise-managed prefix.
 
     Expected: PASS.
 
-- [ ] **Step 7.6: Commit**
+- [x] **Step 7.6: Commit**
 
     ```bash
     git add dist/mise-plugin/
