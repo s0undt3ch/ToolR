@@ -1707,7 +1707,7 @@ on any change under `tools/`.
   pre-commit usage — otherwise skip; do not create new docs files in this
   plan).
 
-- [ ] **Step 11.1: Create `.pre-commit-hooks.yaml`**
+- [x] **Step 11.1: Create `.pre-commit-hooks.yaml`**
 
     Write the file exactly as specified in `00-design.md` §Manifest file:
 
@@ -1720,7 +1720,7 @@ on any change under `tools/`.
       files: ^tools/.*\.py$
     ```
 
-- [ ] **Step 11.2: Smoke-check the YAML parses**
+- [x] **Step 11.2: Smoke-check the YAML parses**
 
     ```bash
     python -c "import yaml,sys; print(yaml.safe_load(open('.pre-commit-hooks.yaml')))"
@@ -1729,7 +1729,7 @@ on any change under `tools/`.
     Expected: a list with one dict, `id` == `"toolr-manifest"`, `entry`
     matches the design.
 
-- [ ] **Step 11.3: Commit**
+- [x] **Step 11.3: Commit**
 
     ```bash
     git add .pre-commit-hooks.yaml
