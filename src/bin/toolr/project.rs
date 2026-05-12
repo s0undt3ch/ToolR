@@ -5,6 +5,9 @@ use std::process::ExitCode;
 use anyhow::Result;
 use clap::ArgMatches;
 
+use crate::init_scaffold::scaffold;
+use crate::init_templates::{ScaffoldOptions, parse_venv_location};
+
 pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
     match matches.subcommand() {
         Some(("init", init_m)) => project_init(init_m),
@@ -25,8 +28,65 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
     }
 }
 
-fn project_init(_matches: &ArgMatches) -> Result<ExitCode> {
-    anyhow::bail!("toolr project init is implemented in a later task")
+fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
+    let force = matches.get_flag("force");
+    let no_sync = matches.get_flag("no-sync");
+    let no_example = matches.get_flag("no-example");
+    let quiet = matches.get_flag("quiet");
+    let venv_location_str = matches
+        .get_one::<String>("venv-location")
+        .map(String::as_str)
+        .unwrap_or("cache");
+    let venv_location = parse_venv_location(venv_location_str)?;
+    let requires_python = matches
+        .get_one::<String>("python")
+        .cloned()
+        .unwrap_or_else(detect_requires_python);
+
+    let cwd = std::env::current_dir()?;
+    let opts = ScaffoldOptions {
+        requires_python,
+        venv_location,
+        include_example: !no_example,
+    };
+    let outcome = scaffold(&cwd, &opts, force)?;
+
+    if !quiet {
+        println!("toolr: scaffolded tools/ at {}", outcome.tools_dir.display());
+        for path in &outcome.files_written {
+            let rel = path.strip_prefix(&cwd).unwrap_or(path).display();
+            println!("toolr:   wrote {rel}");
+        }
+    }
+
+    if no_sync {
+        if !quiet {
+            println!("toolr: skipping `uv sync` (--no-sync)");
+            println!("toolr: run `toolr project deps sync` when you are ready");
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    // Task 5 wires up the auto-sync; for now, just stop here so the
+    // scaffold-only path is testable independently.
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Default `requires-python` value for new projects.
+fn detect_requires_python() -> String {
+    if let Ok(output) = std::process::Command::new("python3")
+        .arg("-c")
+        .arg("import sys; print(f'>={sys.version_info.major}.{sys.version_info.minor}')")
+        .output()
+    {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !s.is_empty() {
+                return s;
+            }
+        }
+    }
+    ">=3.11".to_string()
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {
