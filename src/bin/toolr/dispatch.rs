@@ -1,7 +1,9 @@
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::ArgMatches;
 
+use _rust_utils::complete::{resolve_manifest_at_tab, serve_completions};
 use _rust_utils::discovery::discover_project_root;
 use _rust_utils::execute::{
     build_spec, resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
@@ -14,6 +16,9 @@ pub fn dispatch(
     manifest: &Manifest,
     root: &mut clap::Command,
 ) -> anyhow::Result<ExitCode> {
+    if let Some(("__complete", sub)) = matches.subcommand() {
+        return run_complete(sub);
+    }
     if let Some(("__build-static-manifest", _)) = matches.subcommand() {
         return run_build_static_manifest();
     }
@@ -80,6 +85,26 @@ pub fn dispatch(
     // ExitCode only carries u8 — clamp anything outside 0..=255.
     let clamped: u8 = code.clamp(0, 255).try_into().unwrap_or(1);
     Ok(ExitCode::from(clamped))
+}
+
+fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    // Tab completion must be quiet: any error produces a silent exit
+    // code 1 so the shell falls back to its default completion. We do
+    // not write to stderr here — that would clobber the user's prompt.
+    let Some(cwd) = matches.get_one::<String>("cwd").map(PathBuf::from) else {
+        return Ok(ExitCode::from(1));
+    };
+    let tokens: Vec<String> = matches
+        .get_many::<String>("args")
+        .map(|v| v.cloned().collect())
+        .unwrap_or_default();
+    let Ok(resolved) = resolve_manifest_at_tab(&cwd) else {
+        return Ok(ExitCode::from(1));
+    };
+    for candidate in serve_completions(&resolved.manifest, &tokens) {
+        println!("{candidate}");
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn run_build_static_manifest() -> anyhow::Result<ExitCode> {

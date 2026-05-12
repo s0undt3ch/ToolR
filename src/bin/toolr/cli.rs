@@ -83,6 +83,24 @@ pub fn build_command(manifest: &Manifest) -> Command {
     );
 
     root = root.subcommand(
+        Command::new("__complete")
+            .hide(true)
+            .about("(internal) Emit completion candidates for the shell scripts")
+            .arg(
+                Arg::new("cwd")
+                    .required(true)
+                    .help("Absolute path of the shell's working directory at Tab time"),
+            )
+            .arg(
+                Arg::new("args")
+                    .num_args(0..)
+                    .trailing_var_arg(true)
+                    .allow_hyphen_values(true)
+                    .help("The user's argv minus the leading `toolr`"),
+            ),
+    );
+
+    root = root.subcommand(
         Command::new("__install-uv-now")
             .hide(true)
             .about("(internal) Force-install toolr-managed uv now"),
