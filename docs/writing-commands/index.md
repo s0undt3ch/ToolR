@@ -15,8 +15,8 @@ section you need:
 5. [Annotations](annotations.md) — `arg()` for aliases, choices,
    mutually exclusive groups.
 6. [Nested groups](nesting.md) — multi-level command hierarchies.
-7. [Known limitations](limitations.md) — features the rust front-end
-   hasn't caught up with yet.
+7. [Known bugs](known-bugs.md) — GA-blocking gaps in the current
+   rust-front-end build.
 
 Every example on these pages is a real file under
 [`docs/writing-commands/files/`](https://github.com/s0undt3ch/ToolR/tree/main/docs/writing-commands/files)

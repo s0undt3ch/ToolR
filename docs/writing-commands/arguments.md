@@ -95,10 +95,11 @@ annotation on the parameter is the element type.
 --8<-- "docs/writing-commands/files/files-star-args.py"
 ```
 
-!!! note "Current rust-front-end coverage"
+!!! warning "Current rust-front-end bugs"
     The Python registry resolves every form described here, but the
-    rust binary's runner is still catching up with a few of them — see
-    [Known limitations](limitations.md) for the exact list and the
-    issues that track them.
+    rust binary still has a handful of GA-blocking bugs around
+    positional `int` coercion, bool flag rendering, and arg-name
+    normalisation — see [Known bugs](known-bugs.md) for the exact
+    list and the tracking issues.
 
 Next: [Docstrings →](docstrings.md)

@@ -45,7 +45,7 @@ nav:
     - Using `ctx`: writing-commands/context.md
     - Annotations: writing-commands/annotations.md
     - Nested groups: writing-commands/nesting.md
-    - Known limitations: writing-commands/limitations.md
+    - Known bugs: writing-commands/known-bugs.md
   - Project configuration: project-config.md
   - CLI reference: cli.md
   - Third-party packages: third-party.md

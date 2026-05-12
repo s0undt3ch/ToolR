@@ -72,7 +72,7 @@ SNIPPETS: tuple[Snippet, ...] = (
     ),
     # Writing-commands chapter — Arguments (captures only the subset of
     # features that currently render correctly in the rust front-end —
-    # see docs/writing-commands/limitations.md for the rest).
+    # see docs/writing-commands/known-bugs.md for the rest).
     Snippet(
         WC_FILES / "calculator-add-help.txt",
         ("math", "add", "--help"),
