@@ -1748,7 +1748,7 @@ entries from both, with the expected origin tags.
 
 - Create: `tests/dynamic_e2e.rs`
 
-- [ ] **Step 12.1: Write the integration test**
+- [x] **Step 12.1: Write the integration test**
 
     ```rust
     //! End-to-end: static + dynamic layers merged into a single manifest.
@@ -1839,7 +1839,7 @@ entries from both, with the expected origin tags.
     }
     ```
 
-- [ ] **Step 12.2: Run the integration test**
+- [x] **Step 12.2: Run the integration test**
 
     ```bash
     cargo test --test dynamic_e2e
@@ -1847,7 +1847,7 @@ entries from both, with the expected origin tags.
 
     Expected: 1 test passing on Unix.
 
-- [ ] **Step 12.3: Commit**
+- [x] **Step 12.3: Commit**
 
     ```bash
     git add tests/dynamic_e2e.rs
