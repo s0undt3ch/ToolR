@@ -2040,7 +2040,7 @@ nukes the rest.
 **Files:**
 
 - Create: `tests/cache_fixtures.rs`
-- [ ] **Step 9.1: Write the fixture-driven test**
+- [x] **Step 9.1: Write the fixture-driven test**
 
     ```rust
     //! End-to-end exercise of the toolr self cache surface against a
@@ -2132,7 +2132,7 @@ nukes the rest.
     }
     ```
 
-- [ ] **Step 9.2: Run the test**
+- [x] **Step 9.2: Run the test**
 
     ```bash
     cargo test --test cache_fixtures
@@ -2140,7 +2140,7 @@ nukes the rest.
 
     Expected: pass.
 
-- [ ] **Step 9.3: Commit**
+- [x] **Step 9.3: Commit**
 
     ```bash
     git add tests/cache_fixtures.rs
