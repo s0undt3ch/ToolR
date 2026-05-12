@@ -4,7 +4,7 @@ use clap::ArgMatches;
 
 use _rust_utils::discovery::discover_project_root;
 use _rust_utils::execute::{
-    build_spec, resolve_python, spawn_runner, write_spec_to_tempfile,
+    build_spec, resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
 };
 use _rust_utils::manifest::Manifest;
 
@@ -49,7 +49,7 @@ pub fn dispatch(
     let tempfile = write_spec_to_tempfile(&spec)?;
     let python = resolve_python()?;
     let mut child = spawn_runner(&python, tempfile.path())?;
-    let status = child.wait()?;
+    let status = wait_with_signals(&mut child)?;
 
     // Map child status to a process exit code.
     let code = status.code().unwrap_or_else(|| {
