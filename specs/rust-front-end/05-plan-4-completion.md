@@ -58,7 +58,7 @@ so subsequent commits land small.
 
 - Modify: `src/lib.rs`
 
-- [ ] **Step 1.1: Expose the new module from `src/lib.rs`**
+- [x] **Step 1.1: Expose the new module from `src/lib.rs`**
 
     Append to `src/lib.rs` (preserving alphabetical order with the existing
     `manifest`, `discovery`, `hash`, `parser` declarations):
@@ -67,7 +67,7 @@ so subsequent commits land small.
     pub mod complete;
     ```
 
-- [ ] **Step 1.2: Create `src/complete/mod.rs`**
+- [x] **Step 1.2: Create `src/complete/mod.rs`**
 
     ```rust
     //! Shell-completion engine.
@@ -96,7 +96,7 @@ so subsequent commits land small.
     mod tests;
     ```
 
-- [ ] **Step 1.3: Create placeholder `engine`, `freshness`, `scripts` files**
+- [x] **Step 1.3: Create placeholder `engine`, `freshness`, `scripts` files**
 
     Create `src/complete/engine.rs`:
 
@@ -171,14 +171,14 @@ so subsequent commits land small.
     }
     ```
 
-- [ ] **Step 1.4: Create `src/complete/tests.rs` as a placeholder**
+- [x] **Step 1.4: Create `src/complete/tests.rs` as a placeholder**
 
     ```rust
     //! Cross-module tests for the completion engine land here as later
     //! tasks fill in real behaviour. Initially empty.
     ```
 
-- [ ] **Step 1.5: Verify the crate still builds**
+- [x] **Step 1.5: Verify the crate still builds**
 
     ```bash
     cargo build --lib
@@ -187,7 +187,7 @@ so subsequent commits land small.
     Expected: success with warnings for unused functions (these go away in
     Task 2).
 
-- [ ] **Step 1.6: Commit**
+- [x] **Step 1.6: Commit**
 
     ```bash
     git add src/lib.rs src/complete/
@@ -225,7 +225,7 @@ completion endpoint.
 
 - Modify: `src/complete/tests.rs`
 
-- [ ] **Step 2.1: Write the failing tests in `src/complete/tests.rs`**
+- [x] **Step 2.1: Write the failing tests in `src/complete/tests.rs`**
 
     Replace the placeholder with:
 
@@ -379,7 +379,7 @@ completion endpoint.
     }
     ```
 
-- [ ] **Step 2.2: Run the tests and confirm they fail**
+- [x] **Step 2.2: Run the tests and confirm they fail**
 
     ```bash
     cargo test --lib complete::tests::
@@ -387,7 +387,7 @@ completion endpoint.
 
     Expected: every test fails because `serve_completions` returns `vec![]`.
 
-- [ ] **Step 2.3: Implement the engine in `src/complete/engine.rs`**
+- [x] **Step 2.3: Implement the engine in `src/complete/engine.rs`**
 
     ```rust
     //! Pure prefix-matching completion engine. No I/O.
@@ -589,7 +589,7 @@ completion endpoint.
     }
     ```
 
-- [ ] **Step 2.4: Run the tests, expect all PASS**
+- [x] **Step 2.4: Run the tests, expect all PASS**
 
     ```bash
     cargo test --lib complete::
@@ -597,7 +597,7 @@ completion endpoint.
 
     Expected: 10 tests passing.
 
-- [ ] **Step 2.5: Commit**
+- [x] **Step 2.5: Commit**
 
     ```bash
     git add src/complete/engine.rs src/complete/tests.rs
@@ -621,7 +621,7 @@ cache".
 
 - Modify: `src/complete/tests.rs`
 
-- [ ] **Step 3.1: Write the failing tests**
+- [x] **Step 3.1: Write the failing tests**
 
     Append to `src/complete/tests.rs`:
 
@@ -750,7 +750,7 @@ cache".
     in the `use` block so later ad-hoc test additions don't have to edit
     the imports. Drop it if `cargo check` warns and you don't need it.
 
-- [ ] **Step 3.2: Implement `resolve_manifest_at_tab` in `src/complete/freshness.rs`**
+- [x] **Step 3.2: Implement `resolve_manifest_at_tab` in `src/complete/freshness.rs`**
 
     ```rust
     //! Tab-time manifest freshness logic.
@@ -828,7 +828,7 @@ cache".
     }
     ```
 
-- [ ] **Step 3.3: Run tests, expect PASS**
+- [x] **Step 3.3: Run tests, expect PASS**
 
     ```bash
     cargo test --lib complete::
@@ -836,7 +836,7 @@ cache".
 
     Expected: 5 new freshness tests + 10 engine tests = 15 passing.
 
-- [ ] **Step 3.4: Commit**
+- [x] **Step 3.4: Commit**
 
     ```bash
     git add src/complete/freshness.rs src/complete/tests.rs
@@ -859,7 +859,7 @@ Tab completion must never spew error messages into the user's prompt.
 
 - Modify: `src/bin/toolr/dispatch.rs`
 
-- [ ] **Step 4.1: Register the hidden subcommand in `src/bin/toolr/cli.rs`**
+- [x] **Step 4.1: Register the hidden subcommand in `src/bin/toolr/cli.rs`**
 
     In `build_command`, alongside the existing
     `__build-static-manifest` registration, add:
@@ -886,7 +886,7 @@ Tab completion must never spew error messages into the user's prompt.
     );
     ```
 
-- [ ] **Step 4.2: Add dispatch in `src/bin/toolr/dispatch.rs`**
+- [x] **Step 4.2: Add dispatch in `src/bin/toolr/dispatch.rs`**
 
     Before the existing `__build-static-manifest` check, add:
 
@@ -924,7 +924,7 @@ Tab completion must never spew error messages into the user's prompt.
     }
     ```
 
-- [ ] **Step 4.3: Smoke-check the wiring**
+- [x] **Step 4.3: Smoke-check the wiring**
 
     ```bash
     cargo build --bin toolr
@@ -935,7 +935,7 @@ Tab completion must never spew error messages into the user's prompt.
     Expected: lines of candidates on stdout, exit code 0 (or 1 with no
     output if no `tools/` is reachable from `$PWD`).
 
-- [ ] **Step 4.4: Commit**
+- [x] **Step 4.4: Commit**
 
     ```bash
     git add src/bin/toolr/cli.rs src/bin/toolr/dispatch.rs
@@ -960,7 +960,7 @@ in Task 8.
 
 - Modify: `src/bin/toolr/dispatch.rs`
 
-- [ ] **Step 5.1: Create `src/complete/scripts/bash.sh`**
+- [x] **Step 5.1: Create `src/complete/scripts/bash.sh`**
 
     ```bash
     # toolr bash completion — delegates to `toolr __complete`.
@@ -996,7 +996,7 @@ in Task 8.
       side already filters, but `_init_completion` may have munged `cur`
       after we read `words`, so re-filtering is defensive.
 
-- [ ] **Step 5.2: Embed the script and return it from `completion_script`**
+- [x] **Step 5.2: Embed the script and return it from `completion_script`**
 
     Replace `src/complete/scripts.rs`:
 
@@ -1050,7 +1050,7 @@ in Task 8.
     }
     ```
 
-- [ ] **Step 5.3: Wire `toolr self completion print [shell]` into clap**
+- [x] **Step 5.3: Wire `toolr self completion print [shell]` into clap**
 
     In `src/bin/toolr/cli.rs`, alongside the other root subcommands, add:
 
@@ -1085,7 +1085,7 @@ in Task 8.
     `toolr self <Tab>` see the available children instead of a no-op
     success.
 
-- [ ] **Step 5.4: Dispatch `toolr self completion print <shell>`**
+- [x] **Step 5.4: Dispatch `toolr self completion print <shell>`**
 
     In `src/bin/toolr/dispatch.rs`, before the user-command lookup, add:
 
@@ -1120,7 +1120,7 @@ in Task 8.
     }
     ```
 
-- [ ] **Step 5.5: Add a unit test for the bash script content**
+- [x] **Step 5.5: Add a unit test for the bash script content**
 
     Append to `src/complete/tests.rs`:
 
@@ -1135,7 +1135,7 @@ in Task 8.
     }
     ```
 
-- [ ] **Step 5.6: Run tests**
+- [x] **Step 5.6: Run tests**
 
     ```bash
     cargo test --lib complete::
@@ -1146,7 +1146,7 @@ in Task 8.
     `cli_smoke.rs` tests should still pass because `self completion print`
     is an additive subcommand.
 
-- [ ] **Step 5.7: Commit**
+- [x] **Step 5.7: Commit**
 
     ```bash
     git add src/complete/scripts/ src/complete/scripts.rs src/complete/tests.rs src/bin/toolr/cli.rs src/bin/toolr/dispatch.rs
@@ -1168,7 +1168,7 @@ the same `completion_script(Shell::Zsh)` path.
 
 - Modify: `src/complete/tests.rs`
 
-- [ ] **Step 6.1: Create `src/complete/scripts/zsh.zsh`**
+- [x] **Step 6.1: Create `src/complete/scripts/zsh.zsh`**
 
     ```zsh
     #compdef toolr
@@ -1202,7 +1202,7 @@ the same `completion_script(Shell::Zsh)` path.
     compdef _toolr toolr
     ```
 
-- [ ] **Step 6.2: Embed and wire into `completion_script`**
+- [x] **Step 6.2: Embed and wire into `completion_script`**
 
     In `src/complete/scripts.rs`, add:
 
@@ -1216,7 +1216,7 @@ the same `completion_script(Shell::Zsh)` path.
     Shell::Zsh => ZSH_SCRIPT,
     ```
 
-- [ ] **Step 6.3: Add a unit test**
+- [x] **Step 6.3: Add a unit test**
 
     Append to `src/complete/tests.rs`:
 
@@ -1230,7 +1230,7 @@ the same `completion_script(Shell::Zsh)` path.
     }
     ```
 
-- [ ] **Step 6.4: Run tests**
+- [x] **Step 6.4: Run tests**
 
     ```bash
     cargo test --lib complete::
@@ -1238,7 +1238,7 @@ the same `completion_script(Shell::Zsh)` path.
 
     Expected: previous tests + 1 new test pass.
 
-- [ ] **Step 6.5: Commit**
+- [x] **Step 6.5: Commit**
 
     ```bash
     git add src/complete/scripts/zsh.zsh src/complete/scripts.rs src/complete/tests.rs
@@ -1259,7 +1259,7 @@ Add the fish equivalent.
 
 - Modify: `src/complete/tests.rs`
 
-- [ ] **Step 7.1: Create `src/complete/scripts/fish.fish`**
+- [x] **Step 7.1: Create `src/complete/scripts/fish.fish`**
 
     ```fish
     # toolr fish completion — delegates to `toolr __complete`.
@@ -1291,7 +1291,7 @@ Add the fish equivalent.
       `$current` is empty, which keeps the engine's "last token is prefix"
       contract honest.
 
-- [ ] **Step 7.2: Embed and wire into `completion_script`**
+- [x] **Step 7.2: Embed and wire into `completion_script`**
 
     In `src/complete/scripts.rs`, add:
 
@@ -1305,7 +1305,7 @@ Add the fish equivalent.
     Shell::Fish => FISH_SCRIPT,
     ```
 
-- [ ] **Step 7.3: Add a unit test**
+- [x] **Step 7.3: Add a unit test**
 
     Append to `src/complete/tests.rs`:
 
@@ -1318,7 +1318,7 @@ Add the fish equivalent.
     }
     ```
 
-- [ ] **Step 7.4: Run tests**
+- [x] **Step 7.4: Run tests**
 
     ```bash
     cargo test --lib complete::
@@ -1326,7 +1326,7 @@ Add the fish equivalent.
 
     Expected: previous tests + 1 new test pass.
 
-- [ ] **Step 7.5: Commit**
+- [x] **Step 7.5: Commit**
 
     ```bash
     git add src/complete/scripts/fish.fish src/complete/scripts.rs src/complete/tests.rs
@@ -1367,7 +1367,7 @@ non-interactive sessions (no TTY) `--force` is required to overwrite.
 
 - Modify: `src/complete/tests.rs`
 
-- [ ] **Step 8.1: Add the failing tests**
+- [x] **Step 8.1: Add the failing tests**
 
     Append to `src/complete/tests.rs`:
 
@@ -1474,7 +1474,7 @@ non-interactive sessions (no TTY) `--force` is required to overwrite.
     }
     ```
 
-- [ ] **Step 8.2: Implement `src/complete/install.rs`**
+- [x] **Step 8.2: Implement `src/complete/install.rs`**
 
     ```rust
     //! Install the embedded shell-completion script into the standard
@@ -1572,7 +1572,7 @@ non-interactive sessions (no TTY) `--force` is required to overwrite.
     }
     ```
 
-- [ ] **Step 8.3: Re-export from `src/complete/mod.rs`**
+- [x] **Step 8.3: Re-export from `src/complete/mod.rs`**
 
     Add:
 
@@ -1582,7 +1582,7 @@ non-interactive sessions (no TTY) `--force` is required to overwrite.
     pub use install::{install_path_for, install_script, InstallOptions, InstallOutcome};
     ```
 
-- [ ] **Step 8.4: Add the `install` subcommand to clap**
+- [x] **Step 8.4: Add the `install` subcommand to clap**
 
     In `src/bin/toolr/cli.rs`, alongside the `print` subcommand under
     `self completion`, add:
@@ -1607,7 +1607,7 @@ non-interactive sessions (no TTY) `--force` is required to overwrite.
     Make sure to chain `.subcommand(...)` so this lives under
     `self completion`, peer to `print`.
 
-- [ ] **Step 8.5: Dispatch the install command**
+- [x] **Step 8.5: Dispatch the install command**
 
     In `src/bin/toolr/dispatch.rs`, extend `run_self`:
 
@@ -1684,7 +1684,7 @@ non-interactive sessions (no TTY) `--force` is required to overwrite.
     `std::io::IsTerminal` is stable since Rust 1.70 and requires no new
     dependency.
 
-- [ ] **Step 8.6: Run tests**
+- [x] **Step 8.6: Run tests**
 
     ```bash
     cargo test --lib complete::
@@ -1693,7 +1693,7 @@ non-interactive sessions (no TTY) `--force` is required to overwrite.
 
     Expected: 7 new install tests pass; existing tests still pass.
 
-- [ ] **Step 8.7: Commit**
+- [x] **Step 8.7: Commit**
 
     ```bash
     git add src/complete/install.rs src/complete/mod.rs src/complete/tests.rs src/bin/toolr/cli.rs src/bin/toolr/dispatch.rs
@@ -1713,7 +1713,7 @@ shape.
 
 - Create: `tests/complete_smoke.rs`
 
-- [ ] **Step 9.1: Create `tests/complete_smoke.rs`**
+- [x] **Step 9.1: Create `tests/complete_smoke.rs`**
 
     ```rust
     use assert_cmd::Command;
@@ -1876,7 +1876,7 @@ def shiny(ctx):
     }
     ```
 
-- [ ] **Step 9.2: Run the smoke tests**
+- [x] **Step 9.2: Run the smoke tests**
 
     ```bash
     cargo test --test complete_smoke
@@ -1884,7 +1884,7 @@ def shiny(ctx):
 
     Expected: 8 tests passing.
 
-- [ ] **Step 9.3: Commit**
+- [x] **Step 9.3: Commit**
 
     ```bash
     git add tests/complete_smoke.rs
@@ -1899,14 +1899,14 @@ Sanity-check the wiring against the actual `tools/` in this repo, in each
 supported shell. This is not automated — manual confirmation that the
 scripts work in a real terminal session.
 
-- [ ] **Step 10.1: Rebuild and regenerate the manifest**
+- [x] **Step 10.1: Rebuild and regenerate the manifest**
 
     ```bash
     cargo build --bin toolr --release
     ./target/release/toolr __build-static-manifest
     ```
 
-- [ ] **Step 10.2: Bash sanity check**
+- [x] **Step 10.2: Bash sanity check**
 
     ```bash
     bash --noprofile --norc -c '
@@ -1920,7 +1920,7 @@ scripts work in a real terminal session.
 
     Expected: groups listed, then `ci` commands listed.
 
-- [ ] **Step 10.3: Zsh sanity check (skip if zsh not installed)**
+- [x] **Step 10.3: Zsh sanity check (skip if zsh not installed)**
 
     ```bash
     zsh -f -c '
@@ -1932,7 +1932,7 @@ scripts work in a real terminal session.
 
     Expected: `_toolr: function`.
 
-- [ ] **Step 10.4: Fish sanity check (skip if fish not installed)**
+- [x] **Step 10.4: Fish sanity check (skip if fish not installed)**
 
     ```bash
     fish -c '
@@ -1944,7 +1944,7 @@ scripts work in a real terminal session.
 
     Expected: completion listed; no errors.
 
-- [ ] **Step 10.5: Latency budget check**
+- [x] **Step 10.5: Latency budget check**
 
     ```bash
     hyperfine --warmup 3 './target/release/toolr __complete "$PWD" ""'
@@ -1958,7 +1958,7 @@ scripts work in a real terminal session.
     an issue — do not block the plan landing on it, but record the number
     in the PR description.
 
-- [ ] **Step 10.6: No commit needed**
+- [x] **Step 10.6: No commit needed**
 
     This task is a verification gate, not a code change.
 
@@ -1972,7 +1972,7 @@ Mark Plan 4 as Done in the roadmap once everything above is merged.
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
 
-- [ ] **Step 11.1: Update the Plan 4 entry**
+- [x] **Step 11.1: Update the Plan 4 entry**
 
     Change `### Plan 4: Shell completion`:
 
@@ -1987,7 +1987,7 @@ Mark Plan 4 as Done in the roadmap once everything above is merged.
         - …(unchanged)…
     ```
 
-- [ ] **Step 11.2: Commit**
+- [x] **Step 11.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md

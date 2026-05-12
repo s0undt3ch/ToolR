@@ -95,7 +95,7 @@ with the model and a pure glob function — no I/O parsing yet.
 - Modify: `src/lib.rs`
 - Modify: `Cargo.toml`
 
-- [ ] **Step 1.1: Add `glob` to `Cargo.toml`**
+- [x] **Step 1.1: Add `glob` to `Cargo.toml`**
 
     Append to `[dependencies]`:
 
@@ -103,7 +103,7 @@ with the model and a pure glob function — no I/O parsing yet.
     glob = "0.3"
     ```
 
-- [ ] **Step 1.2: Expose the module from `src/lib.rs`**
+- [x] **Step 1.2: Expose the module from `src/lib.rs`**
 
     Add alongside the existing module exports:
 
@@ -111,7 +111,7 @@ with the model and a pure glob function — no I/O parsing yet.
     pub mod third_party;
     ```
 
-- [ ] **Step 1.3: Create `src/third_party/mod.rs`**
+- [x] **Step 1.3: Create `src/third_party/mod.rs`**
 
     ```rust
     //! Third-party static manifest fragment discovery, parsing, and merging.
@@ -143,7 +143,7 @@ with the model and a pure glob function — no I/O parsing yet.
     until those tasks. The plan assumes the placeholder approach: create the
     files as empty stubs in this task so subsequent tasks only edit.
 
-- [ ] **Step 1.4: Create stub `src/third_party/migrate.rs` and `src/third_party/parse.rs`**
+- [x] **Step 1.4: Create stub `src/third_party/migrate.rs` and `src/third_party/parse.rs`**
 
     Empty for now — both arrive in later tasks. Stub content for each:
 
@@ -151,7 +151,7 @@ with the model and a pure glob function — no I/O parsing yet.
     //! Placeholder — populated in a later task.
     ```
 
-- [ ] **Step 1.5: Create `src/third_party/model.rs`**
+- [x] **Step 1.5: Create `src/third_party/model.rs`**
 
     ```rust
     //! Serde model for a third-party manifest fragment.
@@ -218,7 +218,7 @@ with the model and a pure glob function — no I/O parsing yet.
     }
     ```
 
-- [ ] **Step 1.6: Create `src/third_party/glob.rs`**
+- [x] **Step 1.6: Create `src/third_party/glob.rs`**
 
     ```rust
     //! Glob `<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`.
@@ -264,7 +264,7 @@ with the model and a pure glob function — no I/O parsing yet.
     }
     ```
 
-- [ ] **Step 1.7: Write failing tests in `src/third_party/tests.rs`**
+- [x] **Step 1.7: Write failing tests in `src/third_party/tests.rs`**
 
     ```rust
     use super::model::*;
@@ -324,7 +324,7 @@ with the model and a pure glob function — no I/O parsing yet.
     }
     ```
 
-- [ ] **Step 1.8: Run tests, expect compile failures**
+- [x] **Step 1.8: Run tests, expect compile failures**
 
     `parse.rs` still defines `ThirdPartyError` lazily — we have a forward
     reference. Add a minimal `ThirdPartyError` stub to `src/third_party/parse.rs`
@@ -348,7 +348,7 @@ with the model and a pure glob function — no I/O parsing yet.
     }
     ```
 
-- [ ] **Step 1.9: Run the tests**
+- [x] **Step 1.9: Run the tests**
 
     ```bash
     cargo test --lib third_party::
@@ -356,7 +356,7 @@ with the model and a pure glob function — no I/O parsing yet.
 
     Expected: 3 tests passing.
 
-- [ ] **Step 1.10: Commit**
+- [x] **Step 1.10: Commit**
 
     ```bash
     git add Cargo.toml src/lib.rs src/third_party/
@@ -380,7 +380,7 @@ Extend `ThirdPartyError` with version + JSON cases. Implement
 - Modify: `src/third_party/parse.rs`
 - Modify: `src/third_party/tests.rs`
 
-- [ ] **Step 2.1: Replace the stub `src/third_party/parse.rs`**
+- [x] **Step 2.1: Replace the stub `src/third_party/parse.rs`**
 
     ```rust
     //! Parse and validate a single third-party manifest fragment file.
@@ -482,7 +482,7 @@ Extend `ThirdPartyError` with version + JSON cases. Implement
     }
     ```
 
-- [ ] **Step 2.2: Replace the stub `src/third_party/migrate.rs`**
+- [x] **Step 2.2: Replace the stub `src/third_party/migrate.rs`**
 
     Placeholder migration framework — populated in detail in Task 3, but the
     `migrate_to_current` symbol must exist for `parse.rs` to compile:
@@ -518,7 +518,7 @@ Extend `ThirdPartyError` with version + JSON cases. Implement
     }
     ```
 
-- [ ] **Step 2.3: Add parse tests to `src/third_party/tests.rs`**
+- [x] **Step 2.3: Add parse tests to `src/third_party/tests.rs`**
 
     Append:
 
@@ -585,7 +585,7 @@ Extend `ThirdPartyError` with version + JSON cases. Implement
     }
     ```
 
-- [ ] **Step 2.4: Run tests**
+- [x] **Step 2.4: Run tests**
 
     ```bash
     cargo test --lib third_party::
@@ -593,7 +593,7 @@ Extend `ThirdPartyError` with version + JSON cases. Implement
 
     Expected: 7 tests passing (3 from Task 1 + 4 new).
 
-- [ ] **Step 2.5: Commit**
+- [x] **Step 2.5: Commit**
 
     ```bash
     git add src/third_party/
@@ -614,7 +614,7 @@ Tighten the migration framework so we can:
 - Modify: `src/third_party/migrate.rs`
 - Modify: `src/third_party/tests.rs`
 
-- [ ] **Step 3.1: Replace `src/third_party/migrate.rs`**
+- [x] **Step 3.1: Replace `src/third_party/migrate.rs`**
 
     ```rust
     //! Schema-version migration framework for third-party manifest fragments.
@@ -687,7 +687,7 @@ Tighten the migration framework so we can:
     }
     ```
 
-- [ ] **Step 3.2: Run tests**
+- [x] **Step 3.2: Run tests**
 
     ```bash
     cargo test --lib third_party::
@@ -696,7 +696,7 @@ Tighten the migration framework so we can:
     Expected: 9 tests passing (7 previous + 2 new). All `parse_fragment`
     tests still pass because no migration is needed for v1.
 
-- [ ] **Step 3.3: Commit**
+- [x] **Step 3.3: Commit**
 
     ```bash
     git add src/third_party/migrate.rs
@@ -721,7 +721,7 @@ on collision); third-party-to-third-party collisions are reported as
 - Modify: `src/third_party/parse.rs` (add `DuplicateCommand` variant)
 - Modify: `src/third_party/tests.rs`
 
-- [ ] **Step 4.1: Extend `ThirdPartyError`**
+- [x] **Step 4.1: Extend `ThirdPartyError`**
 
     In `src/third_party/parse.rs`, add inside the `enum ThirdPartyError`:
 
@@ -738,7 +738,7 @@ on collision); third-party-to-third-party collisions are reported as
     },
     ```
 
-- [ ] **Step 4.2: Create `src/third_party/merge.rs`**
+- [x] **Step 4.2: Create `src/third_party/merge.rs`**
 
     ```rust
     //! Merge parsed third-party fragments into a project `Manifest`.
@@ -847,7 +847,7 @@ on collision); third-party-to-third-party collisions are reported as
     `Cargo.toml`. If it is not already present, add it under
     `[dependencies]`.
 
-- [ ] **Step 4.3: Update `Cargo.toml`**
+- [x] **Step 4.3: Update `Cargo.toml`**
 
     Ensure under `[dependencies]`:
 
@@ -855,7 +855,7 @@ on collision); third-party-to-third-party collisions are reported as
     log = "0.4"
     ```
 
-- [ ] **Step 4.4: Re-export from `src/third_party/mod.rs`**
+- [x] **Step 4.4: Re-export from `src/third_party/mod.rs`**
 
     Add:
 
@@ -864,7 +864,7 @@ on collision); third-party-to-third-party collisions are reported as
     pub use merge::merge_into_manifest;
     ```
 
-- [ ] **Step 4.5: Add merge tests in `src/third_party/tests.rs`**
+- [x] **Step 4.5: Add merge tests in `src/third_party/tests.rs`**
 
     Append:
 
@@ -976,7 +976,7 @@ on collision); third-party-to-third-party collisions are reported as
     }
     ```
 
-- [ ] **Step 4.6: Run tests**
+- [x] **Step 4.6: Run tests**
 
     ```bash
     cargo test --lib third_party::
@@ -984,7 +984,7 @@ on collision); third-party-to-third-party collisions are reported as
 
     Expected: 13 tests passing (9 prior + 4 new).
 
-- [ ] **Step 4.7: Commit**
+- [x] **Step 4.7: Commit**
 
     ```bash
     git add Cargo.toml src/third_party/
@@ -1005,7 +1005,7 @@ fragment that should fail loudly rather than silently skip.
 - Modify: `src/third_party/mod.rs`
 - Modify: `src/third_party/tests.rs`
 
-- [ ] **Step 5.1: Add the orchestrator to `src/third_party/mod.rs`**
+- [x] **Step 5.1: Add the orchestrator to `src/third_party/mod.rs`**
 
     Append:
 
@@ -1037,7 +1037,7 @@ fragment that should fail loudly rather than silently skip.
     }
     ```
 
-- [ ] **Step 5.2: Add end-to-end tests in `src/third_party/tests.rs`**
+- [x] **Step 5.2: Add end-to-end tests in `src/third_party/tests.rs`**
 
     Append:
 
@@ -1109,7 +1109,7 @@ fragment that should fail loudly rather than silently skip.
     }
     ```
 
-- [ ] **Step 5.3: Run tests**
+- [x] **Step 5.3: Run tests**
 
     ```bash
     cargo test --lib third_party::
@@ -1117,7 +1117,7 @@ fragment that should fail loudly rather than silently skip.
 
     Expected: 16 tests passing (13 prior + 3 new).
 
-- [ ] **Step 5.4: Commit**
+- [x] **Step 5.4: Commit**
 
     ```bash
     git add src/third_party/
@@ -1140,7 +1140,7 @@ augmented case.
 - Modify: `src/parser/build.rs`
 - Modify: `src/parser/mod.rs`
 
-- [ ] **Step 6.1: Add the new builder**
+- [x] **Step 6.1: Add the new builder**
 
     In `src/parser/build.rs`, append:
 
@@ -1172,7 +1172,7 @@ augmented case.
     The point is that callers receive a typed error distinguishing local
     failures from third-party-fragment failures.
 
-- [ ] **Step 6.2: Re-export from `src/parser/mod.rs`**
+- [x] **Step 6.2: Re-export from `src/parser/mod.rs`**
 
     Append:
 
@@ -1180,7 +1180,7 @@ augmented case.
     pub use build::{build_static_manifest_with_venv, BuildError};
     ```
 
-- [ ] **Step 6.3: Add an integration test in `src/parser/build.rs::tests`**
+- [x] **Step 6.3: Add an integration test in `src/parser/build.rs::tests`**
 
     Append:
 
@@ -1243,7 +1243,7 @@ def hello(ctx):
     }
     ```
 
-- [ ] **Step 6.4: Run tests**
+- [x] **Step 6.4: Run tests**
 
     ```bash
     cargo test --lib parser::build::
@@ -1251,7 +1251,7 @@ def hello(ctx):
 
     Expected: all previous parser::build tests pass + 1 new.
 
-- [ ] **Step 6.5: Commit**
+- [x] **Step 6.5: Commit**
 
     ```bash
     git add src/parser/
@@ -1283,7 +1283,7 @@ Add `python/toolr/build.py` exposing `build_manifest(...)`. The function:
 - Create: `tests/python/test_build_manifest.py` (or extend an existing test
   module if one matches naming conventions in this repo)
 
-- [ ] **Step 7.1: Add the schema-version constant**
+- [x] **Step 7.1: Add the schema-version constant**
 
     In `python/toolr/_registry.py` (or a new `python/toolr/_schema.py` if
     the repo prefers separation), define:
@@ -1303,7 +1303,7 @@ Add `python/toolr/build.py` exposing `build_manifest(...)`. The function:
     from toolr._registry import MANIFEST_SCHEMA_VERSION
     ```
 
-- [ ] **Step 7.2: Create `python/toolr/build.py`**
+- [x] **Step 7.2: Create `python/toolr/build.py`**
 
     ```python
     """Build a toolr manifest fragment for a third-party package.
@@ -1473,7 +1473,7 @@ Add `python/toolr/build.py` exposing `build_manifest(...)`. The function:
     JSON keys** exactly as written here so the Rust `FragmentArgument`
     deserializer matches.
 
-- [ ] **Step 7.3: Re-export from `python/toolr/__init__.py`**
+- [x] **Step 7.3: Re-export from `python/toolr/__init__.py`**
 
     Add:
 
@@ -1484,7 +1484,7 @@ Add `python/toolr/build.py` exposing `build_manifest(...)`. The function:
     Append `"build_manifest"`, `"BuildManifestError"`, `"BuildResult"`, and
     `"MANIFEST_SCHEMA_VERSION"` to `__all__`.
 
-- [ ] **Step 7.4: Add unit tests**
+- [x] **Step 7.4: Add unit tests**
 
     Create `tests/python/test_build_manifest.py`:
 
@@ -1561,7 +1561,7 @@ Add `python/toolr/build.py` exposing `build_manifest(...)`. The function:
             build_manifest("empty_pkg")
     ```
 
-- [ ] **Step 7.5: Run tests**
+- [x] **Step 7.5: Run tests**
 
     ```bash
     uv run pytest tests/python/test_build_manifest.py -v
@@ -1571,7 +1571,7 @@ Add `python/toolr/build.py` exposing `build_manifest(...)`. The function:
     object shape, adapt `_serialize_command` until the tests pass without
     changing the JSON keys.
 
-- [ ] **Step 7.6: Commit**
+- [x] **Step 7.6: Commit**
 
     ```bash
     git add python/toolr/ tests/python/test_build_manifest.py
@@ -1600,7 +1600,7 @@ Exit codes:
 - Modify: `python/toolr/build.py` (add `main()` + `if __name__ == "__main__":`)
 - Modify: `tests/python/test_build_manifest.py`
 
-- [ ] **Step 8.1: Append a CLI to `python/toolr/build.py`**
+- [x] **Step 8.1: Append a CLI to `python/toolr/build.py`**
 
     ```python
     def main(argv: list[str] | None = None) -> int:
@@ -1677,7 +1677,7 @@ Exit codes:
         raise SystemExit(main())
     ```
 
-- [ ] **Step 8.2: Add CLI tests**
+- [x] **Step 8.2: Add CLI tests**
 
     Append to `tests/python/test_build_manifest.py`:
 
@@ -1715,7 +1715,7 @@ Exit codes:
         assert rc == 1
     ```
 
-- [ ] **Step 8.3: Run tests**
+- [x] **Step 8.3: Run tests**
 
     ```bash
     uv run pytest tests/python/test_build_manifest.py -v
@@ -1723,7 +1723,7 @@ Exit codes:
 
     Expected: 8 tests passing.
 
-- [ ] **Step 8.4: Manual smoke test**
+- [x] **Step 8.4: Manual smoke test**
 
     ```bash
     uv run python -m toolr.build --help
@@ -1731,7 +1731,7 @@ Exit codes:
 
     Expected: argparse-rendered help text listing the arguments above.
 
-- [ ] **Step 8.5: Commit**
+- [x] **Step 8.5: Commit**
 
     ```bash
     git add python/toolr/build.py tests/python/test_build_manifest.py
@@ -1753,7 +1753,7 @@ consumer's.
 - Modify: `python/toolr/build.py`
 - Modify: `tests/python/test_build_manifest.py`
 
-- [ ] **Step 9.1: Add a schema validator**
+- [x] **Step 9.1: Add a schema validator**
 
     In `python/toolr/build.py`, before `build_manifest`:
 
@@ -1787,7 +1787,7 @@ consumer's.
                     )
     ```
 
-- [ ] **Step 9.2: Call the validator from `build_manifest`**
+- [x] **Step 9.2: Call the validator from `build_manifest`**
 
     Add right after `fragment = _collect_fragment(...)`:
 
@@ -1795,7 +1795,7 @@ consumer's.
     _validate_fragment(fragment)
     ```
 
-- [ ] **Step 9.3: Add a test**
+- [x] **Step 9.3: Add a test**
 
     Append:
 
@@ -1821,7 +1821,7 @@ consumer's.
             _validate_fragment(bad)
     ```
 
-- [ ] **Step 9.4: Run tests**
+- [x] **Step 9.4: Run tests**
 
     ```bash
     uv run pytest tests/python/test_build_manifest.py -v
@@ -1829,7 +1829,7 @@ consumer's.
 
     Expected: 9 tests passing.
 
-- [ ] **Step 9.5: Commit**
+- [x] **Step 9.5: Commit**
 
     ```bash
     git add python/toolr/build.py tests/python/test_build_manifest.py
@@ -1860,7 +1860,7 @@ If none found → exit code 3 with a clear diagnostic.
 - Modify: `src/bin/toolr/dispatch.rs`
 - Possibly modify: `src/bin/toolr/main.rs` (module declaration)
 
-- [ ] **Step 10.1: Add the subcommand to `cli.rs`**
+- [x] **Step 10.1: Add the subcommand to `cli.rs`**
 
     In the section of `cli.rs` that constructs built-in `self` subcommands
     (or, if Plan 1 hasn't carved out the `self` namespace yet, create it
@@ -1916,7 +1916,7 @@ If none found → exit code 3 with a clear diagnostic.
     root = root.subcommand(build_self_subcommand());
     ```
 
-- [ ] **Step 10.2: Create `src/bin/toolr/commands/self_build_manifest.rs`**
+- [x] **Step 10.2: Create `src/bin/toolr/commands/self_build_manifest.rs`**
 
     ```rust
     //! `toolr self build-manifest <package>` implementation.
@@ -1979,7 +1979,7 @@ If none found → exit code 3 with a clear diagnostic.
     **Note:** `which` is a small cross-platform crate for PATH lookups. If
     not already in `Cargo.toml`, add `which = "6"` under `[dependencies]`.
 
-- [ ] **Step 10.3: Wire dispatch in `src/bin/toolr/dispatch.rs`**
+- [x] **Step 10.3: Wire dispatch in `src/bin/toolr/dispatch.rs`**
 
     Add to the existing dispatcher, before the user-command lookup:
 
@@ -2000,7 +2000,7 @@ If none found → exit code 3 with a clear diagnostic.
     }
     ```
 
-- [ ] **Step 10.4: Add an integration test in `tests/cli_smoke.rs`**
+- [x] **Step 10.4: Add an integration test in `tests/cli_smoke.rs`**
 
     Append:
 
@@ -2039,7 +2039,7 @@ If none found → exit code 3 with a clear diagnostic.
     }
     ```
 
-- [ ] **Step 10.5: Update `Cargo.toml`**
+- [x] **Step 10.5: Update `Cargo.toml`**
 
     Under `[dependencies]`:
 
@@ -2047,7 +2047,7 @@ If none found → exit code 3 with a clear diagnostic.
     which = "6"
     ```
 
-- [ ] **Step 10.6: Run tests**
+- [x] **Step 10.6: Run tests**
 
     ```bash
     cargo test --test cli_smoke
@@ -2055,7 +2055,7 @@ If none found → exit code 3 with a clear diagnostic.
 
     Expected: all prior smoke tests + 2 new pass.
 
-- [ ] **Step 10.7: Commit**
+- [x] **Step 10.7: Commit**
 
     ```bash
     git add Cargo.toml src/bin/toolr/ tests/cli_smoke.rs
@@ -2075,7 +2075,7 @@ picks it up and exposes the commands.
 
 - Create: `tests/python/test_round_trip_with_rust.py`
 
-- [ ] **Step 11.1: Write the round-trip test**
+- [x] **Step 11.1: Write the round-trip test**
 
     Create `tests/python/test_round_trip_with_rust.py`:
 
@@ -2162,7 +2162,7 @@ picks it up and exposes the commands.
     here. The existing Plan 1 dev-command shape favours a quick
     extension over restructuring; either approach satisfies the plan.
 
-- [ ] **Step 11.2: Run the test**
+- [x] **Step 11.2: Run the test**
 
     ```bash
     uv run pytest tests/python/test_round_trip_with_rust.py -v
@@ -2170,7 +2170,7 @@ picks it up and exposes the commands.
 
     Expected: 1 test passing.
 
-- [ ] **Step 11.3: Commit**
+- [x] **Step 11.3: Commit**
 
     ```bash
     git add tests/python/test_round_trip_with_rust.py
@@ -2187,7 +2187,7 @@ Mark Plan 5 as Done once everything above is merged.
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
 
-- [ ] **Step 12.1: Update the Plan 5 entry**
+- [x] **Step 12.1: Update the Plan 5 entry**
 
     Change the Plan 5 block from `⬜ Not Started` to:
 
@@ -2202,7 +2202,7 @@ Mark Plan 5 as Done once everything above is merged.
         - …(unchanged)…
     ```
 
-- [ ] **Step 12.2: Commit**
+- [x] **Step 12.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md
