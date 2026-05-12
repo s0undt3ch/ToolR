@@ -1,0 +1,11 @@
+Print the completion script for a shell to stdout
+
+Usage: toolr self completion print [OPTIONS] <shell>
+
+Arguments:
+  <shell>  Shell to emit a completion script for [possible values: bash, zsh, fish]
+
+Options:
+  -d, --debug  Increase verbosity
+  -q, --quiet  Suppress non-error output
+  -h, --help   Print help

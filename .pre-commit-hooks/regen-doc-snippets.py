@@ -51,6 +51,7 @@ class Snippet:
 # 2. Run this script.
 # 3. Reference the resulting file via `--8<--` in the doc page.
 WC_FILES = REPO_ROOT / "docs" / "writing-commands" / "files"
+CLI_FILES = REPO_ROOT / "docs" / "cli-files"
 
 SNIPPETS: tuple[Snippet, ...] = (
     Snippet(
@@ -91,6 +92,30 @@ SNIPPETS: tuple[Snippet, ...] = (
     Snippet(
         WC_FILES / "context-hello.txt",
         ("example", "hello", "--name", "Pedro"),
+    ),
+    # CLI reference page — every public subcommand's --help output.
+    Snippet(CLI_FILES / "toolr-help.txt", ("--help",)),
+    Snippet(CLI_FILES / "project-init-help.txt", ("project", "init", "--help")),
+    Snippet(CLI_FILES / "project-deps-sync-help.txt", ("project", "deps", "sync", "--help")),
+    Snippet(CLI_FILES / "project-venv-path-help.txt", ("project", "venv", "path", "--help")),
+    Snippet(CLI_FILES / "project-venv-shell-help.txt", ("project", "venv", "shell", "--help")),
+    Snippet(
+        CLI_FILES / "project-manifest-rebuild-help.txt",
+        ("project", "manifest", "rebuild", "--help"),
+    ),
+    Snippet(
+        CLI_FILES / "self-completion-print-help.txt",
+        ("self", "completion", "print", "--help"),
+    ),
+    Snippet(
+        CLI_FILES / "self-completion-install-help.txt",
+        ("self", "completion", "install", "--help"),
+    ),
+    Snippet(CLI_FILES / "self-cache-list-help.txt", ("self", "cache", "list", "--help")),
+    Snippet(CLI_FILES / "self-cache-prune-help.txt", ("self", "cache", "prune", "--help")),
+    Snippet(
+        CLI_FILES / "self-build-manifest-help.txt",
+        ("self", "build-manifest", "--help"),
     ),
 )
 

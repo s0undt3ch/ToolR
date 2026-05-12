@@ -1,0 +1,8 @@
+Run `uv sync` against tools/
+
+Usage: toolr project deps sync [OPTIONS]
+
+Options:
+  -d, --debug  Increase verbosity
+  -q, --quiet  Suppress non-error output
+  -h, --help   Print help
