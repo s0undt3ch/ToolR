@@ -407,6 +407,26 @@ fn preflight_fails_when_an_import_is_missing_from_venv() {
 
 #[test]
 #[cfg(unix)]
+fn preflight_can_be_disabled_with_env_var() {
+    let tmp = preflight_fixture(&["yaml"], &[]);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .env("TOOLR_NO_PREFLIGHT_DEPS", "1")
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("not found in tools venv"),
+        "stderr:\n{stderr}"
+    );
+    // Pre-flight skipped → runner spawn proceeds (fake python exits 1).
+    assert_ne!(output.status.code(), Some(78));
+}
+
+#[test]
+#[cfg(unix)]
 fn preflight_passes_when_all_imports_present() {
     let tmp = preflight_fixture(&["packaging"], &["packaging"]);
     let output = Command::cargo_bin("toolr")

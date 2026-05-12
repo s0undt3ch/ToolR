@@ -726,7 +726,7 @@ skip the pre-flight entirely. The post-mortem check still runs.
 
 - Modify: `src/bin/toolr/dispatch.rs`
 - Modify: `tests/cli_smoke.rs`
-- [ ] **Step 5.1: Honor `TOOLR_NO_PREFLIGHT_DEPS` in dispatch**
+- [x] **Step 5.1: Honor `TOOLR_NO_PREFLIGHT_DEPS` in dispatch**
 
     Replace the Task 4 pre-flight block with:
 
@@ -743,7 +743,7 @@ skip the pre-flight entirely. The post-mortem check still runs.
     }
     ```
 
-- [ ] **Step 5.2: Add the integration test**
+- [x] **Step 5.2: Add the integration test**
 
     Append to `tests/cli_smoke.rs`:
 
@@ -771,7 +771,7 @@ skip the pre-flight entirely. The post-mortem check still runs.
     }
     ```
 
-- [ ] **Step 5.3: Run the test**
+- [x] **Step 5.3: Run the test**
 
     ```bash
     cargo test --test cli_smoke preflight_can_be_disabled
@@ -779,7 +779,7 @@ skip the pre-flight entirely. The post-mortem check still runs.
 
     Expected: 1 test passing.
 
-- [ ] **Step 5.4: Commit**
+- [x] **Step 5.4: Commit**
 
     ```bash
     git add src/bin/toolr/dispatch.rs tests/cli_smoke.rs

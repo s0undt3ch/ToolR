@@ -78,12 +78,18 @@ pub fn dispatch(
         (resolve_python()?, None)
     };
 
-    // Pre-flight missing-dependency check (Plan 7).
-    if let Some(venv) = &venv_dir {
-        if let Some(sp) = _rust_utils::deps_check::site_packages_dir(venv) {
-            if let Err(err) = _rust_utils::deps_check::check_imports(&sp, &cmd.imports) {
-                eprintln!("toolr: {err}");
-                return Ok(ExitCode::from(78));
+    // Pre-flight missing-dependency check (Plan 7). Skip when the user
+    // sets `TOOLR_NO_PREFLIGHT_DEPS` to a non-empty, non-`0` value —
+    // post-mortem interception still catches inline imports.
+    let skip_preflight = std::env::var_os("TOOLR_NO_PREFLIGHT_DEPS")
+        .is_some_and(|v| !v.is_empty() && v != "0");
+    if !skip_preflight {
+        if let Some(venv) = &venv_dir {
+            if let Some(sp) = _rust_utils::deps_check::site_packages_dir(venv) {
+                if let Err(err) = _rust_utils::deps_check::check_imports(&sp, &cmd.imports) {
+                    eprintln!("toolr: {err}");
+                    return Ok(ExitCode::from(78));
+                }
             }
         }
     }
