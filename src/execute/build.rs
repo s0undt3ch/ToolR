@@ -58,6 +58,16 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
         ArgumentKind::Positional | ArgumentKind::Optional => matches
             .get_one::<String>(arg.name.as_str())
             .map(|s| Value::String(s.clone())),
+        ArgumentKind::Repeated | ArgumentKind::VarPositional => {
+            // Both kinds may capture zero, one, or many values via clap's
+            // `get_many`; we always emit a JSON array so the Python runner
+            // can hand it to msgspec for element-wise coercion.
+            let values: Vec<Value> = matches
+                .get_many::<String>(arg.name.as_str())
+                .map(|iter| iter.map(|s| Value::String(s.clone())).collect())
+                .unwrap_or_default();
+            Some(Value::Array(values))
+        }
     }
 }
 

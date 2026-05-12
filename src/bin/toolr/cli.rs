@@ -290,19 +290,36 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
         c = c.long_about(cmd.description.clone());
     }
     for arg in &cmd.arguments {
+        let long_flag = arg.name.replace('_', "-");
         let mut a = Arg::new(arg.name.clone()).help(arg.help.clone());
         match arg.kind {
             ArgumentKind::Positional => {
                 a = a.required(true);
             }
             ArgumentKind::Optional => {
-                a = a.long(arg.name.clone()).required(false);
+                a = a.long(long_flag).required(false);
                 if let Some(def) = &arg.default {
                     a = a.default_value(def.clone());
                 }
             }
             ArgumentKind::Flag => {
-                a = a.long(arg.name.clone()).action(ArgAction::SetTrue);
+                a = a.long(long_flag).action(ArgAction::SetTrue);
+            }
+            ArgumentKind::Repeated => {
+                // --name VALUE that may repeat; each occurrence appends.
+                a = a
+                    .long(long_flag)
+                    .required(false)
+                    .action(ArgAction::Append)
+                    .num_args(1);
+            }
+            ArgumentKind::VarPositional => {
+                // Trailing variadic positional. Required=false because
+                // zero values is a valid invocation.
+                a = a
+                    .required(false)
+                    .num_args(0..)
+                    .trailing_var_arg(true);
             }
         }
         if !arg.allowed_values.is_empty() {

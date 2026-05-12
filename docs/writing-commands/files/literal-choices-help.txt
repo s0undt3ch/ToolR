@@ -4,7 +4,7 @@ Usage: toolr logs set-level [OPTIONS]
 
 Options:
   -d, --debug          Increase verbosity
-      --level <level>  Which level to use. [default: "info"] [possible values: debug, info, warning,
+      --level <level>  Which level to use. [default: info] [possible values: debug, info, warning,
                        error]
   -q, --quiet          Suppress non-error output
   -h, --help           Print help

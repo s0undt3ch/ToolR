@@ -10,7 +10,7 @@ Options:
       --level <level>
           Which log level to use.
 
-          [default: "info"]
+          [default: info]
           [possible values: debug, info, warning]
 
   -q, --quiet

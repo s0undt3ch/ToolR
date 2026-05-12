@@ -77,9 +77,17 @@ pub struct Argument {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArgumentKind {
+    /// Single required positional value (`def f(ctx, name: str)`).
     Positional,
+    /// Single optional keyword (`--name VALUE`, with a default).
     Optional,
+    /// No-value boolean keyword (`--verbose`, `bool = False`).
     Flag,
+    /// Repeatable keyword that appends each occurrence
+    /// (`def f(ctx, items: list[str] = [])` → `--items a --items b`).
+    Repeated,
+    /// Variadic trailing positional (`def f(ctx, *files: str)` → `toolr ... a.py b.py`).
+    VarPositional,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

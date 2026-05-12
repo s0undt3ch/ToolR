@@ -118,13 +118,28 @@ fn classify<'a>(manifest: &'a Manifest, tokens: &[String]) -> Slot<'a> {
     let positional_args: Vec<&Argument> = command
         .arguments
         .iter()
-        .filter(|a| matches!(a.kind, ArgumentKind::Positional))
+        .filter(|a| {
+            matches!(
+                a.kind,
+                ArgumentKind::Positional | ArgumentKind::VarPositional
+            )
+        })
         .collect();
     if let Some(&arg) = positional_args.get(positional_index) {
         return Slot::Positional {
             argument: arg,
             prefix,
         };
+    }
+    // If the user is past the last fixed positional but there's a
+    // trailing variadic, keep completing against that.
+    if let Some(&arg) = positional_args.last() {
+        if matches!(arg.kind, ArgumentKind::VarPositional) {
+            return Slot::Positional {
+                argument: arg,
+                prefix,
+            };
+        }
     }
 
     Slot::None
@@ -178,8 +193,13 @@ fn flags(command: &Command, prefix: &str) -> Vec<String> {
     command
         .arguments
         .iter()
-        .filter(|a| !matches!(a.kind, ArgumentKind::Positional))
-        .map(|a| format!("--{}", a.name))
+        .filter(|a| {
+            !matches!(
+                a.kind,
+                ArgumentKind::Positional | ArgumentKind::VarPositional
+            )
+        })
+        .map(|a| format!("--{}", a.name.replace('_', "-")))
         .filter(|flag| flag.starts_with(prefix))
         .collect()
 }

@@ -4,18 +4,32 @@ Reads the spec JSON path from ``$TOOLR_SPEC_FILE``, decodes it with
 ``msgspec.json``, imports the target module, builds a ``Context``, and
 calls the target function. Exit code propagates to the parent toolr
 process and on to the shell.
+
+The Rust side serialises CLI argument values as strings (or arrays of
+strings for collection-typed args, or bools for `Flag` kinds). The
+runner then uses :func:`msgspec.convert` against the target function's
+actual type hints to coerce each value into its declared type — int,
+float, list[T], tuple[T1, T2], Enum, Literal, Path, datetime, and so
+on are all supported "for free" via msgspec's coercion rules.
 """
 
 from __future__ import annotations
 
+import inspect
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Annotated
 from typing import Any
+from typing import get_args
+from typing import get_origin
+from typing import get_type_hints
 
 import msgspec
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from toolr._context import Context
 
 SCHEMA_VERSION: int = 1
@@ -141,6 +155,66 @@ def _import_target(spec: RunnerSpec) -> Any:
         raise SpecError(msg) from exc
 
 
+def _unwrap_annotated(hint: Any) -> Any:
+    """Strip a `typing.Annotated[T, ...]` wrapper down to its underlying T."""
+    if get_origin(hint) is Annotated:
+        return get_args(hint)[0]
+    return hint
+
+
+def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[Any], dict[str, Any]]:
+    """Coerce `raw` against `target`'s actual type hints.
+
+    Returns a ``(positional_args, keyword_args)`` pair. Positional args come
+    from any parameter declared as ``*args`` in the target's signature — the
+    rust side emitted them under that parameter's name as a list of strings,
+    which we coerce element-wise and then splat positionally.
+
+    Every keyword goes through :func:`msgspec.convert` with ``strict=False``
+    so str→int, str→float, str→Enum, str→Path, etc. all do the right thing.
+    Unknown keys (i.e. parameters that aren't on the function — shouldn't
+    happen with a well-formed manifest, but defensive) pass through
+    untouched so the function can raise a clear ``TypeError`` itself.
+    """
+    try:
+        hints = get_type_hints(target, include_extras=False)
+    except Exception:  # noqa: BLE001 — best-effort; fall back to raw values.
+        hints = {}
+    sig = inspect.signature(target)
+    var_positional_name = next(
+        (name for name, p in sig.parameters.items() if p.kind == p.VAR_POSITIONAL),
+        None,
+    )
+
+    positional: list[Any] = []
+    keyword: dict[str, Any] = {}
+    for name, value in raw.items():
+        hint = _unwrap_annotated(hints.get(name)) if name in hints else None
+        if name == var_positional_name:
+            # `*args: T` — `hint` is the *element* type, value is a list.
+            if not isinstance(value, list):
+                msg = f"toolr runner: expected a list for variadic positional `*{name}`, got {type(value).__name__}"
+                raise SpecError(msg)
+            if hint is not None:
+                try:
+                    positional = [msgspec.convert(elem, type=hint, strict=False) for elem in value]
+                except msgspec.ValidationError as exc:
+                    msg = f"toolr runner: invalid value for `{name}`: {exc}"
+                    raise SpecError(msg) from exc
+            else:
+                positional = list(value)
+            continue
+        if hint is None:
+            keyword[name] = value
+            continue
+        try:
+            keyword[name] = msgspec.convert(value, type=hint, strict=False)
+        except msgspec.ValidationError as exc:
+            msg = f"toolr runner: invalid value for `--{name.replace('_', '-')}`: {exc}"
+            raise SpecError(msg) from exc
+    return positional, keyword
+
+
 def run(spec: RunnerSpec) -> int:
     """Execute the command described by ``spec``. Returns a process exit code.
 
@@ -150,7 +224,8 @@ def run(spec: RunnerSpec) -> int:
     try:
         ctx = _build_context(spec)
         target = _import_target(spec)
-        target(ctx, **spec.args)
+        var_args, kw_args = _coerce_args(target, spec.args)
+        target(ctx, *var_args, **kw_args)
     except SystemExit as exc:
         code = exc.code
         if code is None:

@@ -1,6 +1,6 @@
 //! Extract function arguments from a `def` AST node.
 
-use ruff_python_ast::{Expr, Parameters, StmtFunctionDef};
+use ruff_python_ast::{Expr, Number, StmtFunctionDef};
 
 use super::symbols::EnumTable;
 use crate::manifest::{Argument, ArgumentKind};
@@ -8,74 +8,121 @@ use crate::manifest::{Argument, ArgumentKind};
 /// Build the argument list for a command from its function definition.
 /// Skips the first parameter (assumed to be `ctx: Context`).
 pub fn extract_arguments(func: &StmtFunctionDef, enums: &EnumTable) -> Vec<Argument> {
-    let Parameters { args, kwonlyargs, .. } = func.parameters.as_ref();
-    // Skip ctx (first positional).
-    let positional: Vec<_> = args.iter().skip(1).collect();
+    let params = func.parameters.as_ref();
     let mut out = Vec::new();
-    for p in positional {
-        let kind = if p.default.is_some() {
-            ArgumentKind::Optional
+
+    // Skip ctx (first positional-or-keyword param).
+    for p in params.args.iter().skip(1) {
+        let annotation = p.parameter.annotation.as_deref();
+        let has_default = p.default.is_some();
+        let kind = if has_default {
+            classify_keyword_kind(annotation)
         } else {
             ArgumentKind::Positional
         };
-        let mut allowed = p
-            .parameter
-            .annotation
-            .as_ref()
-            .map(|a| literal_values(a))
-            .unwrap_or_default();
-        if allowed.is_empty() {
-            if let Some(ann) = p.parameter.annotation.as_ref() {
-                if let Some(name) = referenced_name(ann) {
-                    if let Some(vals) = enums.lookup(name) {
-                        allowed = vals.to_vec();
-                    }
-                }
-            }
-        }
-        out.push(Argument {
-            name: p.parameter.name.to_string(),
+        out.push(build_argument(
+            p.parameter.name.to_string(),
             kind,
-            help: String::new(),
-            default: p.default.as_ref().map(|d| literal_default(d)),
-            type_annotation: p
-                .parameter
-                .annotation
-                .as_ref()
-                .map(|a| annotation_to_string(a)),
-            allowed_values: allowed,
-        });
+            annotation,
+            p.default.as_deref(),
+            enums,
+        ));
     }
-    for p in kwonlyargs {
-        let mut allowed = p
-            .parameter
-            .annotation
-            .as_ref()
-            .map(|a| literal_values(a))
-            .unwrap_or_default();
-        if allowed.is_empty() {
-            if let Some(ann) = p.parameter.annotation.as_ref() {
-                if let Some(name) = referenced_name(ann) {
-                    if let Some(vals) = enums.lookup(name) {
-                        allowed = vals.to_vec();
-                    }
-                }
-            }
-        }
-        out.push(Argument {
-            name: p.parameter.name.to_string(),
-            kind: ArgumentKind::Flag,
-            help: String::new(),
-            default: p.default.as_ref().map(|d| literal_default(d)),
-            type_annotation: p
-                .parameter
-                .annotation
-                .as_ref()
-                .map(|a| annotation_to_string(a)),
-            allowed_values: allowed,
-        });
+
+    // Variadic positional (`*args: T`). ruff exposes this as `params.vararg`.
+    if let Some(vararg) = params.vararg.as_deref() {
+        let annotation = vararg.annotation.as_deref();
+        out.push(build_argument(
+            vararg.name.to_string(),
+            ArgumentKind::VarPositional,
+            annotation,
+            None,
+            enums,
+        ));
     }
+
+    // Keyword-only parameters (after the `*` separator). With or without a
+    // default, they're always exposed as a keyword on the CLI; the kind
+    // depends on the annotation shape (bool / list / other).
+    for p in &params.kwonlyargs {
+        let annotation = p.parameter.annotation.as_deref();
+        let kind = classify_keyword_kind(annotation);
+        out.push(build_argument(
+            p.parameter.name.to_string(),
+            kind,
+            annotation,
+            p.default.as_deref(),
+            enums,
+        ));
+    }
+
     out
+}
+
+fn build_argument(
+    name: String,
+    kind: ArgumentKind,
+    annotation: Option<&Expr>,
+    default: Option<&Expr>,
+    enums: &EnumTable,
+) -> Argument {
+    let allowed_values = annotation
+        .map(|a| collect_allowed_values(a, enums))
+        .unwrap_or_default();
+    Argument {
+        name,
+        kind,
+        help: String::new(),
+        default: default.map(literal_default),
+        type_annotation: annotation.map(annotation_to_string),
+        allowed_values,
+    }
+}
+
+/// Pick the right `ArgumentKind` for a parameter exposed as a CLI keyword
+/// (anything not bare-positional). The annotation drives whether we
+/// produce a no-value `Flag`, a repeating `Repeated`, or a plain `Optional`.
+fn classify_keyword_kind(annotation: Option<&Expr>) -> ArgumentKind {
+    let Some(ann) = annotation else {
+        return ArgumentKind::Optional;
+    };
+    if is_bool_annotation(ann) {
+        return ArgumentKind::Flag;
+    }
+    if is_list_like_annotation(ann) {
+        return ArgumentKind::Repeated;
+    }
+    ArgumentKind::Optional
+}
+
+fn is_bool_annotation(expr: &Expr) -> bool {
+    matches!(expr, Expr::Name(n) if n.id.as_str() == "bool")
+}
+
+/// Detects `list[...]`, `List[...]`, `tuple[..., ...]`, `Tuple[..., ...]`.
+fn is_list_like_annotation(expr: &Expr) -> bool {
+    let Expr::Subscript(sub) = expr else {
+        return false;
+    };
+    let head = match sub.value.as_ref() {
+        Expr::Name(n) => n.id.as_str(),
+        Expr::Attribute(a) => a.attr.as_str(),
+        _ => return false,
+    };
+    matches!(head, "list" | "List" | "tuple" | "Tuple")
+}
+
+fn collect_allowed_values(annotation: &Expr, enums: &EnumTable) -> Vec<String> {
+    let mut allowed = literal_values(annotation);
+    if !allowed.is_empty() {
+        return allowed;
+    }
+    if let Some(name) = referenced_name(annotation) {
+        if let Some(vals) = enums.lookup(name) {
+            allowed = vals.to_vec();
+        }
+    }
+    allowed
 }
 
 fn referenced_name(expr: &Expr) -> Option<&str> {
@@ -85,12 +132,27 @@ fn referenced_name(expr: &Expr) -> Option<&str> {
     }
 }
 
+/// Render a default-value expression as a wire-format string.
+///
+/// The contract is that the value is what `--help` prints **and** what
+/// the toolr binary feeds back through msgspec when the user omits the
+/// flag. So strings are rendered unquoted (msgspec.convert "world" →
+/// `"world"`), numbers as their literal form, bools lowercased, and
+/// "give the function its own default" gets encoded as `None`-as-no-
+/// default (we return `<expr>` for shapes we can't faithfully serialise
+/// yet — enum-attribute defaults like `Op.ADD` land here until the
+/// enum-default-resolution work in #197).
 fn literal_default(expr: &Expr) -> String {
     match expr {
-        Expr::StringLiteral(s) => format!("\"{}\"", s.value.to_str()),
-        Expr::NumberLiteral(n) => format!("{:?}", n.value),
-        Expr::BooleanLiteral(b) => b.value.to_string(),
+        Expr::StringLiteral(s) => s.value.to_str().to_string(),
+        Expr::NumberLiteral(n) => match &n.value {
+            Number::Int(i) => i.to_string(),
+            Number::Float(f) => f.to_string(),
+            Number::Complex { real, imag } => format!("({real}+{imag}j)"),
+        },
+        Expr::BooleanLiteral(b) => if b.value { "true" } else { "false" }.to_string(),
         Expr::NoneLiteral(_) => "None".to_string(),
+        Expr::List(l) if l.elts.is_empty() => String::new(),
         _ => "<expr>".to_string(),
     }
 }
@@ -169,7 +231,46 @@ mod tests {
         let func = first_func("def f(ctx, name=\"x\"): pass\n");
         let args = extract_arguments(&func, &EnumTable::default());
         assert_eq!(args[0].kind, ArgumentKind::Optional);
-        assert_eq!(args[0].default.as_deref(), Some("\"x\""));
+        assert_eq!(args[0].default.as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn bool_with_false_default_classified_as_flag() {
+        let func = first_func("def f(ctx, verbose: bool = False): pass\n");
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args[0].kind, ArgumentKind::Flag);
+        assert_eq!(args[0].default.as_deref(), Some("false"));
+    }
+
+    #[test]
+    fn list_keyword_classified_as_repeated() {
+        let func = first_func("def f(ctx, files: list[str] = []): pass\n");
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args[0].kind, ArgumentKind::Repeated);
+    }
+
+    #[test]
+    fn star_args_emits_var_positional() {
+        let func = first_func("def f(ctx, *files: str): pass\n");
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0].name, "files");
+        assert_eq!(args[0].kind, ArgumentKind::VarPositional);
+        assert_eq!(args[0].type_annotation.as_deref(), Some("str"));
+    }
+
+    #[test]
+    fn integer_default_serialized_without_format_noise() {
+        let func = first_func("def f(ctx, n: int = 5): pass\n");
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args[0].default.as_deref(), Some("5"));
+    }
+
+    #[test]
+    fn string_default_has_no_embedded_quotes() {
+        let func = first_func("def f(ctx, name: str = \"world\"): pass\n");
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args[0].default.as_deref(), Some("world"));
     }
 
     #[test]
