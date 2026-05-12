@@ -119,7 +119,7 @@
 
 ### Plan 5: Third-party static manifest convention + `toolr.build`
 
-- **Status:** 📝 Drafted
+- **Status:** ✅ Done
 - **Plan doc:** [06-plan-5-static-third-party.md](./06-plan-5-static-third-party.md)
 - **Depends on:** Plan 1
 - **Unblocks:** —
