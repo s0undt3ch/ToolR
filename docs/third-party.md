@@ -83,9 +83,8 @@ result = build_manifest("my_pkg")
 print(f"Wrote {result.output_path}")
 ```
 
-See [`toolr.build`](reference/toolr/build.md) in the API reference
-for the full signature (will move to `reference/build.md` once the
-private modules are pruned).
+See [`toolr.build`](reference/build.md) in the API reference for the
+full signature.
 
 Or via the bundled CLI:
 

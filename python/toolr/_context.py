@@ -196,8 +196,8 @@ class Context(Struct, frozen=True):
     ) -> CommandResult[str] | CommandResult[bytes]:
         """Run a command with the given arguments.
 
-        This is a wrapper around [toolr.utils.command.run][] that provides
-        a simpler interface for command functions.
+        Thin wrapper around the internal command-runner that provides a
+        simpler interface for command functions.
 
         Args:
             cmdline: Command line to run
@@ -205,7 +205,7 @@ class Context(Struct, frozen=True):
             capture_output: Whether to capture output to return
             timeout_secs: Maximum time to wait for command completion
             no_output_timeout_secs: Maximum time to wait without output
-            kwargs: Additional keyword arguments to pass to [toolr.utils.command.run][]
+            kwargs: Additional keyword arguments passed to the internal runner.
 
         Returns:
             CommandResult instance.

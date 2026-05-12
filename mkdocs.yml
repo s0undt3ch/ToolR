@@ -56,20 +56,12 @@ nav:
     - Pre-commit integration: internals/pre-commit.md
     - Diagnostics: internals/diagnostics.md
   - API reference:
-    - reference/toolr/_context.md
-    - reference/toolr/_exc.md
-    - reference/toolr/_introspect.md
-    - reference/toolr/_parser.md
-    - reference/toolr/_registry.md
-    - reference/toolr/_runner.md
-    - reference/toolr/build.md
-    - reference/toolr/testing.md
-    - reference/toolr/utils/_console.md
-    - reference/toolr/utils/_docstrings.md
-    - reference/toolr/utils/_imports.md
-    - reference/toolr/utils/_logs.md
-    - reference/toolr/utils/_signature.md
-    - reference/toolr/utils/command.md
+    - Overview: reference/index.md
+    - Context: reference/context.md
+    - command_group: reference/command_group.md
+    - arg: reference/arg.md
+    - testing: reference/testing.md
+    - build: reference/build.md
   - Contributing: contributing.md
   - Changelog: changelog.md
 
