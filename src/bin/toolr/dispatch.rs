@@ -7,6 +7,7 @@ use _rust_utils::execute::{
     build_spec, resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
 };
 use _rust_utils::manifest::Manifest;
+use _rust_utils::venv::resolve_venv_path;
 
 pub fn dispatch(
     matches: &ArgMatches,
@@ -53,7 +54,14 @@ pub fn dispatch(
     let spec = build_spec(cmd, cmd_matches, &repo_root, verbosity, false, log_level);
 
     let tempfile = write_spec_to_tempfile(&spec)?;
-    let python = resolve_python()?;
+    // Prefer the resolved tools-venv python (Plan 3). Fall back to the
+    // PATH/TOOLR_PYTHON lookup only when there is no `tools/pyproject.toml`
+    // — i.e. legacy projects that never opted into the venv layer.
+    let python = if repo_root.join("tools").join("pyproject.toml").is_file() {
+        resolve_venv_path(&repo_root)?.python
+    } else {
+        resolve_python()?
+    };
     let mut child = spawn_runner(&python, tempfile.path())?;
     let status = wait_with_signals(&mut child)?;
 

@@ -53,8 +53,13 @@ fn help_lists_groups_from_manifest() {
 
 /// Returns `Some(path-to-python)` if a Python with msgspec + the local
 /// `toolr` package installed is available, otherwise `None`. We accept
-/// the project's own dev venv (created by `uv sync`) as the runner — full
-/// tools-venv resolution is Plan 3's job.
+/// the project's own dev venv (created by `uv sync`) as the runner.
+///
+/// These smoke tests deliberately exercise the *legacy* fallback path in
+/// `dispatch.rs`: they write a `tools/.toolr-manifest.json` but no
+/// `tools/pyproject.toml`, so the dispatcher resolves Python via
+/// `TOOLR_PYTHON` rather than the tools venv. The full venv-driven path
+/// is covered by the network-dependent `end_to_end_sync` test (Task 17).
 fn detect_test_python() -> Option<PathBuf> {
     let candidate = std::env::var_os("TOOLR_TEST_PYTHON").map(PathBuf::from);
     let candidate = candidate.or_else(|| {
@@ -122,8 +127,7 @@ fn running_a_user_command_invokes_python_runner() {
         eprintln!(
             "skipping: no .venv/bin/python with toolr installed. \
              Run `uv sync` first, or set TOOLR_TEST_PYTHON to a python \
-             that can `import toolr._runner`. Plan 3 will remove this \
-             skip by managing the tools venv automatically."
+             that can `import toolr._runner`."
         );
         return;
     };
