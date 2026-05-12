@@ -1864,7 +1864,7 @@ Mark Plan 6 as Done once everything above is merged.
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
 
-- [ ] **Step 13.1: Update the Plan 6 entry**
+- [x] **Step 13.1: Update the Plan 6 entry**
 
     Change `### Plan 6: Dynamic manifest layer` block:
 
@@ -1879,7 +1879,7 @@ Mark Plan 6 as Done once everything above is merged.
         - …(unchanged)…
     ```
 
-- [ ] **Step 13.2: Commit**
+- [x] **Step 13.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md

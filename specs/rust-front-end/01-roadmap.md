@@ -142,7 +142,7 @@
 
 ### Plan 6: Dynamic manifest layer
 
-- **Status:** 📝 Drafted
+- **Status:** ✅ Done
 - **Plan doc:** [07-plan-6-dynamic-manifest.md](./07-plan-6-dynamic-manifest.md)
 - **Depends on:** Plan 3
 - **Unblocks:** —
