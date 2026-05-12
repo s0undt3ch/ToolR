@@ -32,7 +32,7 @@ pub fn dispatch(matches: &ArgMatches) -> Result<ExitCode> {
 
 pub fn run_list(cache_root: &Path, out: &mut dyn Write) -> Result<()> {
     let mut caches = enumerate_caches(cache_root)?;
-    caches.sort_by(|a, b| b.meta.last_used_at.cmp(&a.meta.last_used_at));
+    caches.sort_by_key(|c| std::cmp::Reverse(c.meta.last_used_at));
 
     if caches.is_empty() {
         writeln!(
