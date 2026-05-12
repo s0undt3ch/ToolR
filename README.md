@@ -86,6 +86,25 @@ Windows) from <https://github.com/s0undt3ch/ToolR/releases> and
 extract it onto `$PATH` manually. Each archive ships with a `.sha256`
 sibling for verification.
 
+### Supply-chain verification (SLSA attestations)
+
+Every release archive is signed with a SLSA build-provenance
+attestation produced by the GitHub-hosted release workflow. The
+`install.sh` and `install.ps1` scripts will verify the attestation
+automatically when the `gh` CLI is on PATH. To require verification:
+
+```sh
+sh dist/install.sh --verify-attestation=require   # POSIX
+./dist/install.ps1 -VerifyAttestation require     # Windows
+```
+
+You can also verify a downloaded archive manually:
+
+```sh
+gh attestation verify toolr-1.2.3-aarch64-apple-darwin.tar.gz \
+  --repo s0undt3ch/ToolR
+```
+
 ## Quick Start
 
 1. **Install ToolR** (see [Installation](#installation) above).
