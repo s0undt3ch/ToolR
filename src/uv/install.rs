@@ -1,8 +1,10 @@
 //! Decision logic + executor for installing a toolr-managed uv.
 
+use std::fs;
 use std::io::{IsTerminal, Write};
+use std::path::Path;
 
-use super::UvError;
+use super::{UvBinary, UvError, UvSource, managed_uv_path, probe};
 
 /// What the discovery + consent flow tells the caller to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +96,134 @@ pub fn decide_install_auto(
         consent,
         std::io::stdin().is_terminal(),
     )
+}
+
+/// Host triple selection. Returns an Astral release asset name without the
+/// extension, plus the extension itself.
+///
+/// Reference: <https://github.com/astral-sh/uv/releases>
+pub fn host_asset() -> Option<(&'static str, &'static str)> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => Some(("uv-x86_64-unknown-linux-gnu", "tar.gz")),
+        ("linux", "aarch64") => Some(("uv-aarch64-unknown-linux-gnu", "tar.gz")),
+        ("macos", "x86_64") => Some(("uv-x86_64-apple-darwin", "tar.gz")),
+        ("macos", "aarch64") => Some(("uv-aarch64-apple-darwin", "tar.gz")),
+        ("windows", "x86_64") => Some(("uv-x86_64-pc-windows-msvc", "zip")),
+        _ => None,
+    }
+}
+
+/// Where to download from. Parametrised so tests can override.
+pub fn asset_url(asset: &str, ext: &str) -> String {
+    format!("https://github.com/astral-sh/uv/releases/latest/download/{asset}.{ext}")
+}
+
+/// Download + extract uv into the managed location.
+pub fn perform_install() -> Result<UvBinary, UvError> {
+    let dest = managed_uv_path().ok_or_else(|| {
+        UvError::Http("could not resolve $XDG_DATA_HOME/toolr/bin".into())
+    })?;
+    let (asset, ext) = host_asset().ok_or_else(|| {
+        UvError::Http(format!(
+            "no prebuilt uv asset for {}-{}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ))
+    })?;
+    let url = asset_url(asset, ext);
+    download_and_extract(&url, asset, ext, &dest)?;
+    probe(&dest, UvSource::FreshlyInstalled)
+}
+
+fn download_and_extract(
+    url: &str,
+    asset: &str,
+    ext: &str,
+    dest: &Path,
+) -> Result<(), UvError> {
+    let parent = dest.parent().ok_or_else(|| {
+        UvError::Http("managed uv path has no parent directory".into())
+    })?;
+    fs::create_dir_all(parent)?;
+
+    let response = reqwest::blocking::get(url)
+        .map_err(|e| UvError::Http(e.to_string()))?
+        .error_for_status()
+        .map_err(|e| UvError::Http(e.to_string()))?;
+    let bytes = response
+        .bytes()
+        .map_err(|e| UvError::Http(e.to_string()))?;
+
+    let archive_name = format!("{asset}.{ext}");
+    let tmp = tempfile::tempdir()?;
+    let archive_path = tmp.path().join(&archive_name);
+    fs::write(&archive_path, &bytes)?;
+
+    match ext {
+        "tar.gz" => extract_tar_gz(&archive_path, tmp.path())?,
+        "zip" => extract_zip(&archive_path, tmp.path())?,
+        other => {
+            return Err(UvError::Http(format!("unknown archive extension: {other}")));
+        }
+    }
+
+    // The archive contains a single `uv` binary at the top of a
+    // directory matching the asset name.
+    let binary_name = if cfg!(windows) { "uv.exe" } else { "uv" };
+    let candidates = [
+        tmp.path().join(asset).join(binary_name),
+        tmp.path().join(binary_name),
+    ];
+    let src = candidates.iter().find(|p| p.is_file()).ok_or_else(|| {
+        UvError::Http(format!(
+            "extracted archive did not contain a {binary_name} binary"
+        ))
+    })?;
+
+    fs::copy(src, dest)?;
+    set_executable(dest)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_executable(path: &Path) -> Result<(), UvError> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = fs::metadata(path)?.permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(path, perms)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_executable(_path: &Path) -> Result<(), UvError> {
+    Ok(())
+}
+
+fn extract_tar_gz(archive: &Path, into: &Path) -> Result<(), UvError> {
+    let status = std::process::Command::new("tar")
+        .arg("-xzf")
+        .arg(archive)
+        .current_dir(into)
+        .status()?;
+    if !status.success() {
+        return Err(UvError::Http(format!("tar exited with status {status:?}")));
+    }
+    Ok(())
+}
+
+fn extract_zip(archive: &Path, into: &Path) -> Result<(), UvError> {
+    let status = std::process::Command::new("unzip")
+        .arg("-q")
+        .arg(archive)
+        .arg("-d")
+        .arg(into)
+        .status()?;
+    if !status.success() {
+        return Err(UvError::Http(format!(
+            "unzip exited with status {status:?}"
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
