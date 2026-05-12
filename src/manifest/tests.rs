@@ -9,6 +9,7 @@ fn sample_manifest() -> Manifest {
             name: "ci".into(),
             title: "CI utilities".into(),
             description: "CI related utilities.".into(),
+            parent: None,
             origin: Origin::Static,
         }],
         commands: vec![Command {

@@ -20,14 +20,19 @@ In the Python model this declares:
 - A `build` command on `docker image` and a `start` command on
   `docker container`.
 
-The intended CLI hierarchy is `toolr docker image build my-image:latest`
-and `toolr docker container start my-container`.
+…produces the CLI hierarchy:
 
-!!! warning "Currently rust-front-end-limited"
-    The rust binary's manifest model treats every group as top-level;
-    it doesn't yet carry the parent relationship forward into the CLI
-    surface. Nested groups appear as flat sibling groups instead of
-    a true hierarchy. The python registry behaviour is unchanged —
-    only the rust binary's `--help` and dispatch are affected.
+- `toolr docker --help` lists the two subgroups (`image`, `container`)
+  as commands.
+- `toolr docker image build my-image:latest` reaches the `build` command.
+- `toolr docker container start my-container` reaches the `start` command.
 
-    Tracked in [GitHub issue #193](https://github.com/s0undt3ch/ToolR/issues/193).
+There's no fixed depth limit — `outer.command_group("middle").command_group("inner")`
+works just as well.
+
+!!! note "Shell tab completion"
+    Top-level groups and their direct commands tab-complete out of the
+    box. Completion descends into nested groups when the corresponding
+    completion script is updated; if you're using an older shell-completion
+    script and notice subgroups don't complete, run
+    `toolr self completion install <shell> --force` to refresh it.

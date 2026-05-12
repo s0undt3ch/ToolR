@@ -69,20 +69,35 @@ def _walk_registry() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     for full_name, group in storage.items():
         # CommandGroup.full_name is "tools.<name>" or "tools.<parent>.<name>";
-        # strip the leading "tools." for the manifest's `group` field.
-        display_name = full_name.removeprefix("tools.")
+        # strip the leading "tools." then split on the final '.' to
+        # separate the leaf group name from its (possibly multi-level)
+        # parent path.
+        display_path = full_name.removeprefix("tools.")
+        leaf, parent_path = _split_leaf(display_path)
         groups.append(
             {
-                "name": display_name,
+                "name": leaf,
                 "title": group.title,
                 "description": group.description or "",
+                "parent": parent_path,
                 "origin": "dynamic",
             }
         )
         for cmd_name, func in group.get_commands().items():
-            commands.append(_command_entry(display_name, cmd_name, func))
+            commands.append(_command_entry(display_path, cmd_name, func))
 
     return groups, commands
+
+
+def _split_leaf(path: str) -> tuple[str, str | None]:
+    """Split a dotted ``parent.child`` path into ``(leaf, parent_path)``.
+
+    Top-level groups have no `.`, so `parent_path` is ``None``.
+    """
+    if "." not in path:
+        return path, None
+    parent, _, leaf = path.rpartition(".")
+    return leaf, parent
 
 
 def _command_entry(group_name: str, cmd_name: str, func: Any) -> dict[str, Any]:

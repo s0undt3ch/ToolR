@@ -13,12 +13,14 @@ fn fixture() -> Manifest {
                 name: "ci".into(),
                 title: "CI utilities".into(),
                 description: String::new(),
+                parent: None,
                 origin: Origin::Static,
             },
             Group {
                 name: "data".into(),
                 title: "Data utilities".into(),
                 description: String::new(),
+                parent: None,
                 origin: Origin::Static,
             },
         ],
@@ -241,6 +243,7 @@ fn preserves_dynamic_entries_from_cache_when_reparsing() {
         name: "dyn-group".into(),
         title: "Dynamic group".into(),
         description: String::new(),
+        parent: None,
         origin: Origin::Dynamic,
     });
     let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");

@@ -23,15 +23,35 @@ pub struct Manifest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {
-    /// Lowercase group name (e.g. "ci").
+    /// Lowercase group name (e.g. "ci"). Local-only; for nested groups
+    /// this is the leaf name (`image`), not the full path
+    /// (`docker.image`). Use `full_path()` to reconstruct the
+    /// hierarchy.
     pub name: String,
     /// Short title shown in `--help`.
     pub title: String,
     /// Optional longer description.
     #[serde(default)]
     pub description: String,
+    /// Parent group name (the parent's `full_path`). `None` for top-level
+    /// groups. `Some("docker")` for `docker image`,
+    /// `Some("docker.image")` for `docker image build`, etc.
+    #[serde(default)]
+    pub parent: Option<String>,
     /// Where this group entry came from.
     pub origin: Origin,
+}
+
+impl Group {
+    /// Dotted full path including ancestor groups
+    /// (e.g. `docker.image` for a group named `image` whose parent is
+    /// `docker`). For top-level groups this equals `self.name`.
+    pub fn full_path(&self) -> String {
+        match &self.parent {
+            Some(parent) => format!("{parent}.{}", self.name),
+            None => self.name.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -186,6 +186,7 @@ fn merge_skips_third_party_command_when_local_already_defines_it() {
         name: "deploy".into(),
         title: "Deploy".into(),
         description: String::new(),
+        parent: None,
         origin: Origin::Static,
     });
     base.commands.push(Command {

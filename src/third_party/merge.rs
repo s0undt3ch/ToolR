@@ -72,6 +72,7 @@ fn group_from_fragment(fg: FragmentGroup) -> Group {
         name: fg.name,
         title: fg.title,
         description: fg.description,
+        parent: None,
         origin: Origin::Static,
     }
 }

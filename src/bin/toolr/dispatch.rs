@@ -35,19 +35,34 @@ pub fn dispatch(
     if let Some(("project", project_m)) = matches.subcommand() {
         return crate::project::dispatch_project(project_m);
     }
-    let Some((group_name, group_matches)) = matches.subcommand() else {
+    let Some((first_name, first_matches)) = matches.subcommand() else {
         root.print_help()?;
         return Ok(ExitCode::SUCCESS);
     };
-    let Some((cmd_name, cmd_matches)) = group_matches.subcommand() else {
+    // Walk down the subcommand chain so nested groups (`docker image
+    // build`) reach their leaf command. `path` collects every
+    // intermediate name; the last entry is the leaf, the prefix is
+    // the dotted full_path of the owning group.
+    let mut path: Vec<String> = vec![first_name.to_string()];
+    let mut current = first_matches;
+    while let Some((next_name, next_matches)) = current.subcommand() {
+        path.push(next_name.to_string());
+        current = next_matches;
+    }
+    let cmd_matches = current;
+    let leaf_name = path.last().cloned().expect("path non-empty");
+    let group_full_path = path[..path.len() - 1].join(".");
+    if group_full_path.is_empty() {
         // toolr <group> with no command → print group help
         return Ok(ExitCode::SUCCESS);
-    };
+    }
     let cmd = manifest
         .commands
         .iter()
-        .find(|c| c.group == group_name && c.name == cmd_name)
-        .ok_or_else(|| anyhow::anyhow!("unknown command: {group_name} {cmd_name}"))?;
+        .find(|c| c.group == group_full_path && c.name == leaf_name)
+        .ok_or_else(|| {
+            anyhow::anyhow!("unknown command: {} {leaf_name}", path[..path.len() - 1].join(" "))
+        })?;
 
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;

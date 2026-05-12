@@ -1,11 +1,46 @@
+use std::collections::HashMap;
+
 use clap::{Arg, ArgAction, Command};
 
-use _rust_utils::manifest::{ArgumentKind, Manifest};
+use _rust_utils::manifest::{ArgumentKind, Group, Manifest};
 
 const RESERVED_GROUPS: &[&str] = &["self", "project"];
 
 fn user_group_collides(name: &str) -> bool {
     RESERVED_GROUPS.contains(&name)
+}
+
+/// Index the manifest's groups by their parent's `full_path()`. Top-level
+/// groups (no parent) live under the `None` key.
+fn children_by_parent(manifest: &Manifest) -> HashMap<Option<String>, Vec<&Group>> {
+    let mut map: HashMap<Option<String>, Vec<&Group>> = HashMap::new();
+    for g in &manifest.groups {
+        map.entry(g.parent.clone()).or_default().push(g);
+    }
+    map
+}
+
+/// Recursively build a clap `Command` subtree for `group`, attaching
+/// direct commands and child groups discovered via `children`.
+fn build_group_subtree(
+    group: &Group,
+    manifest: &Manifest,
+    children: &HashMap<Option<String>, Vec<&Group>>,
+) -> Command {
+    let full_path = group.full_path();
+    let mut g = Command::new(group.name.clone()).about(group.title.clone());
+    if !group.description.is_empty() {
+        g = g.long_about(group.description.clone());
+    }
+    for cmd in manifest.commands.iter().filter(|c| c.group == full_path) {
+        g = g.subcommand(build_user_command(cmd));
+    }
+    if let Some(child_groups) = children.get(&Some(full_path)) {
+        for child in child_groups {
+            g = g.subcommand(build_group_subtree(child, manifest, children));
+        }
+    }
+    g
 }
 
 /// Construct the full clap Command tree, given a loaded manifest.
@@ -33,7 +68,8 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .help("Suppress non-error output"),
         );
 
-    for group in &manifest.groups {
+    let children = children_by_parent(manifest);
+    for group in children.get(&None).cloned().unwrap_or_default() {
         if user_group_collides(&group.name) {
             eprintln!(
                 "toolr: warning: ignoring user-defined group `{}` — \
@@ -42,14 +78,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
             );
             continue;
         }
-        let mut g = Command::new(group.name.clone()).about(group.title.clone());
-        if !group.description.is_empty() {
-            g = g.long_about(group.description.clone());
-        }
-        for cmd in manifest.commands.iter().filter(|c| c.group == group.name) {
-            g = g.subcommand(build_user_command(cmd));
-        }
-        root = root.subcommand(g);
+        root = root.subcommand(build_group_subtree(group, manifest, &children));
     }
 
     root = root.subcommand(

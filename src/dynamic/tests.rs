@@ -8,6 +8,7 @@ fn sample_payload() -> DynamicPayload {
             name: "legacy".into(),
             title: "Legacy entry-point group".into(),
             description: "".into(),
+            parent: None,
             origin: Origin::Dynamic,
         }],
         commands: vec![Command {

@@ -62,6 +62,7 @@ mod tests {
             name: name.into(),
             title: name.into(),
             description: "".into(),
+            parent: None,
             origin,
         }
     }
@@ -101,6 +102,7 @@ mod tests {
                 name: "ci".into(),
                 title: "FROM DYNAMIC".into(),
                 description: "".into(),
+                parent: None,
                 origin: Origin::Dynamic,
             }],
             commands: vec![],

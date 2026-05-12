@@ -13,13 +13,19 @@ pub struct GroupBinding {
 }
 
 /// Walk the module's top-level statements and collect group bindings.
+///
+/// Nested groups (`child = parent.command_group("name", ...)`) get their
+/// `parent` field set to the parent binding's `full_path()`, so the
+/// CLI builder can reconstruct the hierarchy. Source order matters:
+/// parents must be assigned before children (which Python already
+/// requires).
 pub fn extract_groups(module: &ModModule, module_docstring: &str) -> Vec<GroupBinding> {
-    let mut out = Vec::new();
+    let mut out: Vec<GroupBinding> = Vec::new();
     for stmt in &module.body {
         let Stmt::Assign(StmtAssign { targets, value, .. }) = stmt else {
             continue;
         };
-        // Only handle `single_var = command_group(...)`.
+        // Only handle `single_var = (...).command_group(...)`.
         let Some(var_name) = single_name_target(targets) else {
             continue;
         };
@@ -29,12 +35,28 @@ pub fn extract_groups(module: &ModModule, module_docstring: &str) -> Vec<GroupBi
         if !is_command_group_call(call) {
             continue;
         }
-        let Some(binding) = parse_group_call(call, &var_name, module_docstring) else {
+        let parent_path = parent_var_name(call)
+            .and_then(|pv| out.iter().find(|b| b.var == pv))
+            .map(|b| b.group.full_path());
+        let Some(binding) = parse_group_call(call, &var_name, module_docstring, parent_path) else {
             continue;
         };
         out.push(binding);
     }
     out
+}
+
+/// If the call is a method invocation like `docker.command_group(...)`,
+/// return the head variable name (`"docker"`). For free-function
+/// `command_group(...)` returns `None`.
+fn parent_var_name(call: &ExprCall) -> Option<String> {
+    let Expr::Attribute(attr) = call.func.as_ref() else {
+        return None;
+    };
+    match attr.value.as_ref() {
+        Expr::Name(n) => Some(n.id.as_str().to_string()),
+        _ => None,
+    }
 }
 
 fn single_name_target(targets: &[Expr]) -> Option<String> {
@@ -55,7 +77,12 @@ fn is_command_group_call(call: &ExprCall) -> bool {
     }
 }
 
-fn parse_group_call(call: &ExprCall, var: &str, module_docstring: &str) -> Option<GroupBinding> {
+fn parse_group_call(
+    call: &ExprCall,
+    var: &str,
+    module_docstring: &str,
+    parent: Option<String>,
+) -> Option<GroupBinding> {
     // Positional args: name, title. Keyword `docstring` may be __doc__.
     let name = call.arguments.args.first().and_then(literal_str)?;
     let title = call
@@ -80,6 +107,7 @@ fn parse_group_call(call: &ExprCall, var: &str, module_docstring: &str) -> Optio
             name,
             title,
             description,
+            parent,
             origin: Origin::Static,
         },
     })
@@ -129,5 +157,34 @@ mod tests {
         let src = "x = 1\ny = some_other_func(\"ci\")\n";
         let m = parse_src(src);
         assert!(extract_groups(&m, "").is_empty());
+    }
+
+    #[test]
+    fn nested_group_records_parent_full_path() {
+        let src = r#"docker = command_group("docker", "Docker")
+image = docker.command_group("image", "Image")
+"#;
+        let m = parse_src(src);
+        let groups = extract_groups(&m, "");
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].group.name, "docker");
+        assert_eq!(groups[0].group.parent, None);
+        assert_eq!(groups[0].group.full_path(), "docker");
+        assert_eq!(groups[1].group.name, "image");
+        assert_eq!(groups[1].group.parent.as_deref(), Some("docker"));
+        assert_eq!(groups[1].group.full_path(), "docker.image");
+    }
+
+    #[test]
+    fn two_level_nesting_concatenates_full_path() {
+        let src = r#"a = command_group("a", "A")
+b = a.command_group("b", "B")
+c = b.command_group("c", "C")
+"#;
+        let m = parse_src(src);
+        let groups = extract_groups(&m, "");
+        assert_eq!(groups.len(), 3);
+        assert_eq!(groups[2].group.full_path(), "a.b.c");
+        assert_eq!(groups[2].group.parent.as_deref(), Some("a.b"));
     }
 }

@@ -21,9 +21,13 @@ pub fn extract_commands(
     type_imports: &TypeImports,
     errors: &mut Vec<TypeResolutionError>,
 ) -> Vec<Command> {
-    let by_var: HashMap<&str, &str> = bindings
+    // Map `binding_var → group_full_path` so commands record the full
+    // dotted path of their owning group (e.g. `docker.image` for a
+    // subgroup), letting the CLI builder and dispatch find the right
+    // node when reconstructing the hierarchy.
+    let by_var: HashMap<&str, String> = bindings
         .iter()
-        .map(|b| (b.var.as_str(), b.group.name.as_str()))
+        .map(|b| (b.var.as_str(), b.group.full_path()))
         .collect();
     let mut out = Vec::new();
     for stmt in &module.body {
@@ -33,7 +37,7 @@ pub fn extract_commands(
         let Some(group_var) = command_decorator_target(&func.decorator_list) else {
             continue;
         };
-        let Some(&group_name) = by_var.get(group_var.as_str()) else {
+        let Some(group_name) = by_var.get(group_var.as_str()) else {
             continue;
         };
         out.push(build_command(
