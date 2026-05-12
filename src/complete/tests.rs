@@ -288,3 +288,10 @@ fn zsh_script_invokes_toolr_complete() {
     assert!(script.contains("toolr __complete"));
     assert!(script.contains("compdef _toolr toolr"));
 }
+
+#[test]
+fn fish_script_invokes_toolr_complete() {
+    let script = completion_script(Shell::Fish);
+    assert!(script.contains("toolr __complete"));
+    assert!(script.contains("complete -c toolr"));
+}
