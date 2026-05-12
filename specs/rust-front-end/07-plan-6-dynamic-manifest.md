@@ -1284,7 +1284,7 @@ manifest's static layer is fresh; useful for auto-rebuild at execute time).
 - Create: `src/dynamic/rebuild.rs`
 - Modify: `src/dynamic/mod.rs`
 
-- [ ] **Step 8.1: Re-export**
+- [x] **Step 8.1: Re-export**
 
     Update `src/dynamic/mod.rs`:
 
@@ -1305,7 +1305,7 @@ manifest's static layer is fresh; useful for auto-rebuild at execute time).
     mod tests;
     ```
 
-- [ ] **Step 8.2: Create `src/dynamic/rebuild.rs`**
+- [x] **Step 8.2: Create `src/dynamic/rebuild.rs`**
 
     ```rust
     //! High-level rebuild orchestration for both static-plus-dynamic and
@@ -1393,7 +1393,7 @@ manifest's static layer is fresh; useful for auto-rebuild at execute time).
     }
     ```
 
-- [ ] **Step 8.3: Add an integration test using a fake-python shell script**
+- [x] **Step 8.3: Add an integration test using a fake-python shell script**
 
     Append to `src/dynamic/runner.rs`'s test module (or create a new one in
     `src/dynamic/rebuild.rs`):
@@ -1448,7 +1448,7 @@ manifest's static layer is fresh; useful for auto-rebuild at execute time).
     }
     ```
 
-- [ ] **Step 8.4: Run tests**
+- [x] **Step 8.4: Run tests**
 
     ```bash
     cargo test --lib dynamic::
@@ -1456,7 +1456,7 @@ manifest's static layer is fresh; useful for auto-rebuild at execute time).
 
     Expected: previous dynamic tests + the new rebuild integration test, all passing on Unix.
 
-- [ ] **Step 8.5: Commit**
+- [x] **Step 8.5: Commit**
 
     ```bash
     git add src/dynamic/
