@@ -1376,7 +1376,7 @@ deleted without touching disk.
 - Modify: `src/bin/toolr/cli.rs`
 - Modify: `src/bin/toolr/self_cmd/cache.rs`
 - Create: `tests/self_cache_prune.rs`
-- [ ] **Step 7.1: Extend `PruneArgs` with `--yes`**
+- [x] **Step 7.1: Extend `PruneArgs` with `--yes`**
 
     In `src/bin/toolr/cli.rs`, add to `PruneArgs`:
 
@@ -1386,7 +1386,7 @@ deleted without touching disk.
     pub yes: bool,
     ```
 
-- [ ] **Step 7.2: Replace the stub `run_prune` in `src/bin/toolr/self_cmd/cache.rs`**
+- [x] **Step 7.2: Replace the stub `run_prune` in `src/bin/toolr/self_cmd/cache.rs`**
 
     ```rust
     use std::io::IsTerminal;
@@ -1521,7 +1521,7 @@ deleted without touching disk.
     }
     ```
 
-- [ ] **Step 7.3: Add integration tests**
+- [x] **Step 7.3: Add integration tests**
 
     Create `tests/self_cache_prune.rs`:
 
@@ -1677,7 +1677,7 @@ deleted without touching disk.
     }
     ```
 
-- [ ] **Step 7.4: Run the new tests**
+- [x] **Step 7.4: Run the new tests**
 
     ```bash
     cargo test --test self_cache_prune
@@ -1685,7 +1685,7 @@ deleted without touching disk.
 
     Expected: all five tests pass.
 
-- [ ] **Step 7.5: Commit**
+- [x] **Step 7.5: Commit**
 
     ```bash
     git add src/bin/toolr/cli.rs src/bin/toolr/self_cmd/ tests/self_cache_prune.rs
