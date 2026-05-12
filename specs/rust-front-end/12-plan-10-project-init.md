@@ -26,7 +26,7 @@ Add Plan 10 to the roadmap as `🔧 In Progress` and register the `init` subcomm
 - Modify: `src/bin/toolr/cli.rs`
 - Modify: `src/bin/toolr/project.rs`
 
-- [ ] **Step 1.1: Add Plan 10 to the roadmap**
+- [x] **Step 1.1: Add Plan 10 to the roadmap**
 
     In `specs/rust-front-end/01-roadmap.md`, append a new sub-plan entry after Plan 9 (keep the existing sub-plans intact):
 
@@ -46,7 +46,7 @@ Add Plan 10 to the roadmap as `🔧 In Progress` and register the `init` subcomm
         - Integration tests in `tests/project_init.rs`.
     ```
 
-- [ ] **Step 1.2: Register the `init` subcommand in `src/bin/toolr/cli.rs`**
+- [x] **Step 1.2: Register the `init` subcommand in `src/bin/toolr/cli.rs`**
 
     Locate the existing `project` subcommand registration (currently has `deps`, `venv`, `manifest` arms). Add `init` as a fourth arm, alphabetically first inside the block. Insert the following inside the `Command::new("project")` builder, immediately before the existing `.subcommand(Command::new("deps")...)`:
 
@@ -97,7 +97,7 @@ Add Plan 10 to the roadmap as `🔧 In Progress` and register the `init` subcomm
     )
     ```
 
-- [ ] **Step 1.3: Add the dispatcher arm in `src/bin/toolr/project.rs`**
+- [x] **Step 1.3: Add the dispatcher arm in `src/bin/toolr/project.rs`**
 
     Locate the `dispatch_project` function. Inside the `match matches.subcommand()` block, add `init` as a new arm before the existing `("deps", _)` arm:
 
@@ -113,7 +113,7 @@ Add Plan 10 to the roadmap as `🔧 In Progress` and register the `init` subcomm
     }
     ```
 
-- [ ] **Step 1.4: Verify the wiring compiles + appears in help**
+- [x] **Step 1.4: Verify the wiring compiles + appears in help**
 
     ```bash
     cargo build --bin toolr
@@ -122,7 +122,7 @@ Add Plan 10 to the roadmap as `🔧 In Progress` and register the `init` subcomm
 
     Expected: help text lists all six flags (`--force`, `--no-sync`, `--venv-location`, `--no-example`, `--python`, `--quiet`). The actual command exits with the "not implemented" message — that's fine; later tasks fill it in.
 
-- [ ] **Step 1.5: Commit**
+- [x] **Step 1.5: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md src/bin/toolr/cli.rs src/bin/toolr/project.rs
@@ -143,7 +143,7 @@ Add the three template files under `src/bin/toolr/init_templates/` and a small m
 - Create: `src/bin/toolr/init_templates.rs`
 - Modify: `src/bin/toolr/main.rs`
 
-- [ ] **Step 2.1: Create `src/bin/toolr/init_templates/pyproject.toml.tmpl`**
+- [x] **Step 2.1: Create `src/bin/toolr/init_templates/pyproject.toml.tmpl`**
 
     Exact content (note the `{REQUIRES_PYTHON}` and `{VENV_LOCATION}` placeholders):
 
@@ -160,7 +160,7 @@ Add the three template files under `src/bin/toolr/init_templates/` and a small m
     venv-location = "{VENV_LOCATION}"
     ```
 
-- [ ] **Step 2.2: Create `src/bin/toolr/init_templates/gitignore.tmpl`**
+- [x] **Step 2.2: Create `src/bin/toolr/init_templates/gitignore.tmpl`**
 
     Exact content (single line; in-tree venv layout drops `.venv/` inside `tools/`):
 
@@ -168,7 +168,7 @@ Add the three template files under `src/bin/toolr/init_templates/` and a small m
     .venv/
     ```
 
-- [ ] **Step 2.3: Create `src/bin/toolr/init_templates/example.py.tmpl` (placeholder)**
+- [x] **Step 2.3: Create `src/bin/toolr/init_templates/example.py.tmpl` (placeholder)**
 
     Single-line placeholder — Task 3 replaces this with the full four-function example:
 
@@ -176,7 +176,7 @@ Add the three template files under `src/bin/toolr/init_templates/` and a small m
     # Placeholder — replaced in Task 3.
     ```
 
-- [ ] **Step 2.4: Create `src/bin/toolr/init_templates.rs`**
+- [x] **Step 2.4: Create `src/bin/toolr/init_templates.rs`**
 
     Full module content:
 
@@ -315,7 +315,7 @@ Add the three template files under `src/bin/toolr/init_templates/` and a small m
     }
     ```
 
-- [ ] **Step 2.5: Declare the module in `src/bin/toolr/main.rs`**
+- [x] **Step 2.5: Declare the module in `src/bin/toolr/main.rs`**
 
     Add to the top of `main.rs`, alphabetically with the other `mod` declarations:
 
@@ -323,7 +323,7 @@ Add the three template files under `src/bin/toolr/init_templates/` and a small m
     mod init_templates;
     ```
 
-- [ ] **Step 2.6: Run the unit tests**
+- [x] **Step 2.6: Run the unit tests**
 
     ```bash
     cargo test --bin toolr init_templates::
@@ -331,7 +331,7 @@ Add the three template files under `src/bin/toolr/init_templates/` and a small m
 
     Expected: 5 tests pass.
 
-- [ ] **Step 2.7: Commit**
+- [x] **Step 2.7: Commit**
 
     ```bash
     git add src/bin/toolr/init_templates.rs src/bin/toolr/init_templates/ src/bin/toolr/main.rs
@@ -348,7 +348,7 @@ Replace the `example.py.tmpl` placeholder with the full four-command example. Ke
 
 - Modify: `src/bin/toolr/init_templates/example.py.tmpl`
 
-- [ ] **Step 3.1: Replace `src/bin/toolr/init_templates/example.py.tmpl` with the full template**
+- [x] **Step 3.1: Replace `src/bin/toolr/init_templates/example.py.tmpl` with the full template**
 
     Exact content (this is the file users will see after running `toolr project init`):
 
@@ -429,7 +429,7 @@ Replace the `example.py.tmpl` placeholder with the full four-command example. Ke
         ctx.print(f"log level set to {level}")
     ```
 
-- [ ] **Step 3.2: Sanity-check the rendered example.py parses as Python**
+- [x] **Step 3.2: Sanity-check the rendered example.py parses as Python**
 
     The example is rendered as a static string; the easiest way to validate it before committing is to write it to a tmp file and `python -c "import ast; ast.parse(open('/tmp/example.py').read())"`. Or use the `cargo test` from Task 2 — it doesn't parse the example yet, so add a fourth test under `init_templates::tests`:
 
@@ -449,7 +449,7 @@ Replace the `example.py.tmpl` placeholder with the full four-command example. Ke
         }
     ```
 
-- [ ] **Step 3.3: Run the tests**
+- [x] **Step 3.3: Run the tests**
 
     ```bash
     cargo test --bin toolr init_templates::
@@ -457,7 +457,7 @@ Replace the `example.py.tmpl` placeholder with the full four-command example. Ke
 
     Expected: 6 tests pass (5 from Task 2 + 1 new).
 
-- [ ] **Step 3.4: Commit**
+- [x] **Step 3.4: Commit**
 
     ```bash
     git add src/bin/toolr/init_templates/example.py.tmpl src/bin/toolr/init_templates.rs
@@ -476,7 +476,7 @@ Implement the real `project_init` function: read CLI args into `ScaffoldOptions`
 - Modify: `src/bin/toolr/main.rs`
 - Modify: `src/bin/toolr/project.rs`
 
-- [ ] **Step 4.1: Create `src/bin/toolr/init_scaffold.rs`**
+- [x] **Step 4.1: Create `src/bin/toolr/init_scaffold.rs`**
 
     Full module — file-writing logic with rollback on failure:
 
@@ -633,7 +633,7 @@ Implement the real `project_init` function: read CLI args into `ScaffoldOptions`
     }
     ```
 
-- [ ] **Step 4.2: Declare the module in `src/bin/toolr/main.rs`**
+- [x] **Step 4.2: Declare the module in `src/bin/toolr/main.rs`**
 
     Add alongside `mod init_templates;`:
 
@@ -641,7 +641,7 @@ Implement the real `project_init` function: read CLI args into `ScaffoldOptions`
     mod init_scaffold;
     ```
 
-- [ ] **Step 4.3: Replace the `project_init` stub in `src/bin/toolr/project.rs`**
+- [x] **Step 4.3: Replace the `project_init` stub in `src/bin/toolr/project.rs`**
 
     Imports at the top of the file:
 
@@ -726,7 +726,7 @@ Implement the real `project_init` function: read CLI args into `ScaffoldOptions`
     }
     ```
 
-- [ ] **Step 4.4: Run the scaffold tests**
+- [x] **Step 4.4: Run the scaffold tests**
 
     ```bash
     cargo test --bin toolr init_scaffold::
@@ -734,7 +734,7 @@ Implement the real `project_init` function: read CLI args into `ScaffoldOptions`
 
     Expected: 5 tests pass.
 
-- [ ] **Step 4.5: Smoke-check the binary**
+- [x] **Step 4.5: Smoke-check the binary**
 
     Build and run against a tmpdir to verify the end-to-end happy path:
 
@@ -745,7 +745,7 @@ Implement the real `project_init` function: read CLI args into `ScaffoldOptions`
 
     Expected output: `pyproject.toml`, `.gitignore`, `example.py`.
 
-- [ ] **Step 4.6: Commit**
+- [x] **Step 4.6: Commit**
 
     ```bash
     git add src/bin/toolr/init_scaffold.rs src/bin/toolr/main.rs src/bin/toolr/project.rs
@@ -762,7 +762,7 @@ Hook the post-scaffold step into the existing `_rust_utils::project::ensure_venv
 
 - Modify: `src/bin/toolr/project.rs`
 
-- [ ] **Step 5.1: Extend `project_init` with the sync step**
+- [x] **Step 5.1: Extend `project_init` with the sync step**
 
     Replace the `if no_sync { ... } return Ok(ExitCode::SUCCESS); }` block + the trailing `Ok(ExitCode::SUCCESS)` line from Task 4 with:
 
@@ -796,7 +796,7 @@ Hook the post-scaffold step into the existing `_rust_utils::project::ensure_venv
     Ok(ExitCode::SUCCESS)
     ```
 
-- [ ] **Step 5.2: Build + smoke**
+- [x] **Step 5.2: Build + smoke**
 
     ```bash
     cargo build --bin toolr
@@ -805,7 +805,7 @@ Hook the post-scaffold step into the existing `_rust_utils::project::ensure_venv
 
     Expected: same as Task 4.5 (still works with `--no-sync`). The full sync path is exercised by the integration tests in Task 6 (it requires `uv` to be installed).
 
-- [ ] **Step 5.3: Commit**
+- [x] **Step 5.3: Commit**
 
     ```bash
     git add src/bin/toolr/project.rs
@@ -822,7 +822,7 @@ End-to-end test the new subcommand via `assert_cmd`. Cover refuse / force / no-s
 
 - Create: `tests/project_init.rs`
 
-- [ ] **Step 6.1: Create `tests/project_init.rs`**
+- [x] **Step 6.1: Create `tests/project_init.rs`**
 
     Full content:
 
@@ -1007,7 +1007,7 @@ End-to-end test the new subcommand via `assert_cmd`. Cover refuse / force / no-s
 
     Insert this line immediately after the `cargo_bin().current_dir(...).args(["project", "init", ...]).assert().success();` call but before the second `cargo_bin()` invocation. The scaffolded pyproject removal makes dispatch take the legacy `TOOLR_PYTHON` path. Add a comment explaining why.
 
-- [ ] **Step 6.2: Run the tests**
+- [x] **Step 6.2: Run the tests**
 
     ```bash
     cargo test --test project_init
@@ -1015,7 +1015,7 @@ End-to-end test the new subcommand via `assert_cmd`. Cover refuse / force / no-s
 
     Expected: 7 tests; the `init_then_run_example_hello` test passes if `.venv/bin/python` is set up (post `uv sync`), or self-skips otherwise. The other 6 tests always pass.
 
-- [ ] **Step 6.3: Commit**
+- [x] **Step 6.3: Commit**
 
     ```bash
     git add tests/project_init.rs
@@ -1032,11 +1032,11 @@ Mark Plan 10 as Done once Tasks 1–6 are merged.
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
 
-- [ ] **Step 7.1: Flip the Plan 10 status**
+- [x] **Step 7.1: Flip the Plan 10 status**
 
     Change Plan 10's `**Status:**` line from `🔧 In Progress` to `✅ Done`. Leave the rest of the entry intact.
 
-- [ ] **Step 7.2: Commit**
+- [x] **Step 7.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md
