@@ -229,7 +229,7 @@ def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[
                 raise SpecError(msg)
             if hint is not None:
                 try:
-                    positional = [msgspec.convert(elem, type=hint, strict=False) for elem in value]
+                    positional = [msgspec.convert(elem, type=hint, strict=False, dec_hook=_dec_hook) for elem in value]
                 except msgspec.ValidationError as exc:
                     msg = f"toolr runner: invalid value for `{name}`: {exc}"
                     raise SpecError(msg) from exc

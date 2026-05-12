@@ -1,8 +1,22 @@
+<!-- rumdl-disable MD046 -->
+
 # Annotations
 
 When you need more than the defaults — short flags, aliases, mutual
-exclusion, value choices — wrap the parameter's type with
-`typing.Annotated[...]` and a call to [`arg(...)`][toolr.arg].
+exclusion, value choices, filesystem constraints — wrap the parameter's
+type with `typing.Annotated[...]` and a call to [`arg(...)`][toolr.arg].
+
+!!! warning "Wiring status on the rust front-end"
+    The only `arg(...)` kwargs the rust front-end currently honours
+    end-to-end are the **path constraints** (`must_exist`,
+    `must_be_file`, `must_be_dir`) — see
+    [Arguments → Path constraints](arguments.md#path-constraints).
+
+    `aliases`, `group`, `choices`, `metavar`, `action`, and `nargs` are
+    accepted by the Python `arg()` constructor but are not yet plumbed
+    into clap by the rust binary — the examples below describe the
+    *intended* behaviour. Tracked in
+    [issue #198](https://github.com/s0undt3ch/ToolR/issues/198).
 
 ## Aliases (short flags + alternate long flags)
 
