@@ -2,6 +2,7 @@
 
 mod command;
 pub mod complete;
+pub mod deps_check;
 pub mod discovery;
 pub mod dynamic;
 mod docstrings;

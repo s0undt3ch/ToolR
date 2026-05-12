@@ -66,7 +66,7 @@ either a package directory (`<module>/__init__.py`) or a single-file module
 - Create: `src/deps_check/mod.rs`
 - Create: `src/deps_check/probe.rs`
 - Modify: `src/lib.rs`
-- [ ] **Step 1.1: Expose the new module from `src/lib.rs`**
+- [x] **Step 1.1: Expose the new module from `src/lib.rs`**
 
     Add to `src/lib.rs`:
 
@@ -74,7 +74,7 @@ either a package directory (`<module>/__init__.py`) or a single-file module
     pub mod deps_check;
     ```
 
-- [ ] **Step 1.2: Create `src/deps_check/mod.rs`**
+- [x] **Step 1.2: Create `src/deps_check/mod.rs`**
 
     ```rust
     //! Missing-dependency diagnostics.
@@ -94,7 +94,7 @@ either a package directory (`<module>/__init__.py`) or a single-file module
     mod tests;
     ```
 
-- [ ] **Step 1.3: Create `src/deps_check/probe.rs`**
+- [x] **Step 1.3: Create `src/deps_check/probe.rs`**
 
     ```rust
     //! Filesystem-only module probe.
@@ -174,7 +174,7 @@ either a package directory (`<module>/__init__.py`) or a single-file module
     }
     ```
 
-- [ ] **Step 1.4: Create `src/deps_check/tests.rs` with probe tests**
+- [x] **Step 1.4: Create `src/deps_check/tests.rs` with probe tests**
 
     ```rust
     use std::fs;
@@ -261,7 +261,7 @@ either a package directory (`<module>/__init__.py`) or a single-file module
     }
     ```
 
-- [ ] **Step 1.5: Run the tests**
+- [x] **Step 1.5: Run the tests**
 
     ```bash
     cargo test --lib deps_check::tests::
@@ -269,7 +269,7 @@ either a package directory (`<module>/__init__.py`) or a single-file module
 
     Expected: 7 tests passing.
 
-- [ ] **Step 1.6: Commit**
+- [x] **Step 1.6: Commit**
 
     ```bash
     git add src/lib.rs src/deps_check/
