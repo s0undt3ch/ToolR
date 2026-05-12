@@ -1171,7 +1171,7 @@ this into actual `prune` deletion.
 - Create: `src/cache/classify.rs`
 - Modify: `src/cache/mod.rs`
 - Modify: `src/cache/tests.rs`
-- [ ] **Step 6.1: Write the failing tests**
+- [x] **Step 6.1: Write the failing tests**
 
     Append to `src/cache/tests.rs`:
 
@@ -1251,7 +1251,7 @@ this into actual `prune` deletion.
     }
     ```
 
-- [ ] **Step 6.2: Run and verify the tests FAIL**
+- [x] **Step 6.2: Run and verify the tests FAIL**
 
     ```bash
     cargo test --lib cache::tests::classify
@@ -1259,7 +1259,7 @@ this into actual `prune` deletion.
 
     Expected: compile error.
 
-- [ ] **Step 6.3: Create `src/cache/classify.rs`**
+- [x] **Step 6.3: Create `src/cache/classify.rs`**
 
     ```rust
     //! Sort enumerated cache entries into keep / orphan / stale.
@@ -1326,7 +1326,7 @@ this into actual `prune` deletion.
     }
     ```
 
-- [ ] **Step 6.4: Re-export and run tests**
+- [x] **Step 6.4: Re-export and run tests**
 
     Update `src/cache/mod.rs`:
 
@@ -1355,7 +1355,7 @@ this into actual `prune` deletion.
 
     Expected: 16 tests passing.
 
-- [ ] **Step 6.5: Commit**
+- [x] **Step 6.5: Commit**
 
     ```bash
     git add src/cache/

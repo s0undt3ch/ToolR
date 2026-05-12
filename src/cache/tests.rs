@@ -194,3 +194,75 @@ fn enumerate_caches_skips_directories_without_meta() {
     let caches = enumerate_caches(tmp.path()).expect("ok");
     assert!(caches.is_empty());
 }
+
+use super::classify::{PruneReason, classify_entries};
+use chrono::Duration as ChronoDuration;
+
+fn now_fixture() -> chrono::DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap()
+}
+
+fn entry_at(repo: &str, last_used: chrono::DateTime<Utc>) -> CachedVenv {
+    CachedVenv {
+        repo_key: "k".into(),
+        cache_dir: PathBuf::from(format!("/cache/{repo}")),
+        meta: Meta {
+            schema_version: SCHEMA_VERSION,
+            repo_path: PathBuf::from(repo),
+            toolr_version: "1.0.0".into(),
+            python_version: "3.13.1".into(),
+            created_at: last_used,
+            last_used_at: last_used,
+        },
+        size_bytes: 1024,
+        is_orphan: false,
+    }
+}
+
+#[test]
+fn classify_marks_missing_repo_path_as_orphan() {
+    let tmp = TempDir::new().unwrap();
+    let missing = tmp.path().join("does-not-exist");
+    let mut entry = entry_at("/x", now_fixture());
+    entry.meta.repo_path = missing;
+    let result = classify_entries(vec![entry], now_fixture(), 30);
+    assert_eq!(result.orphan.len(), 1);
+    assert_eq!(result.orphan[0].reason, PruneReason::Orphan);
+    assert!(result.stale.is_empty());
+    assert!(result.keep.is_empty());
+}
+
+#[test]
+fn classify_marks_old_last_used_as_stale() {
+    let tmp = TempDir::new().unwrap();
+    let repo = tmp.path().join("real-repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let mut entry = entry_at("ignored", now_fixture() - ChronoDuration::days(45));
+    entry.meta.repo_path = repo;
+    let result = classify_entries(vec![entry], now_fixture(), 30);
+    assert_eq!(result.stale.len(), 1);
+    assert_eq!(result.stale[0].reason, PruneReason::Stale);
+    assert!(result.orphan.is_empty());
+}
+
+#[test]
+fn classify_keeps_recently_used_existing_repos() {
+    let tmp = TempDir::new().unwrap();
+    let repo = tmp.path().join("real-repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let mut entry = entry_at("ignored", now_fixture() - ChronoDuration::days(3));
+    entry.meta.repo_path = repo;
+    let result = classify_entries(vec![entry], now_fixture(), 30);
+    assert_eq!(result.keep.len(), 1);
+    assert!(result.orphan.is_empty());
+    assert!(result.stale.is_empty());
+}
+
+#[test]
+fn classify_prefers_orphan_over_stale_when_both_apply() {
+    let mut entry = entry_at("/no/such/repo", now_fixture() - ChronoDuration::days(90));
+    entry.meta.repo_path = PathBuf::from("/no/such/repo");
+    let result = classify_entries(vec![entry], now_fixture(), 30);
+    assert_eq!(result.orphan.len(), 1);
+    assert!(result.stale.is_empty());
+}
