@@ -21,8 +21,17 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
 }
 
 fn deps_sync() -> Result<ExitCode> {
-    // Implemented in Task 13.
-    Ok(ExitCode::from(2))
+    let cwd = std::env::current_dir()?;
+    let consent = _rust_utils::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = _rust_utils::project::ensure_venv_ready(
+        &cwd, consent, /*force_sync=*/ true,
+    )?;
+    println!(
+        "toolr: synced venv at {} using uv {}.{}.{}",
+        resolved.venv_dir.display(),
+        uv.version.0, uv.version.1, uv.version.2,
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 fn venv_path() -> Result<ExitCode> {
