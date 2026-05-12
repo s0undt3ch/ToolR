@@ -46,3 +46,36 @@ fn missing_optional_fields_default_to_empty() {
     assert_eq!(m.schema_version, 1);
     assert!(m.dynamic_hash.is_empty());
 }
+
+use super::io::{ManifestError, load_manifest, write_manifest};
+use tempfile::TempDir;
+
+#[test]
+fn write_then_load_round_trips() {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().join(".toolr-manifest.json");
+    let m = sample_manifest();
+    write_manifest(&path, &m).expect("write");
+    let loaded = load_manifest(&path).expect("load");
+    assert_eq!(m, loaded);
+}
+
+#[test]
+fn load_rejects_unknown_schema_version() {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().join(".toolr-manifest.json");
+    std::fs::write(
+        &path,
+        r#"{"schema_version": 999, "static_hash": "h", "groups": [], "commands": []}"#,
+    )
+    .unwrap();
+    let err = load_manifest(&path).expect_err("should reject");
+    assert!(matches!(err, ManifestError::UnknownSchemaVersion(999)));
+}
+
+#[test]
+fn load_returns_io_error_when_missing() {
+    let tmp = TempDir::new().unwrap();
+    let err = load_manifest(&tmp.path().join("absent.json")).expect_err("should be missing");
+    assert!(matches!(err, ManifestError::Io(_)));
+}
