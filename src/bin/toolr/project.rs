@@ -67,8 +67,26 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
-    // Task 5 wires up the auto-sync; for now, just stop here so the
-    // scaffold-only path is testable independently.
+    // Auto-sync — same path as `toolr project deps sync`.
+    let consent = _rust_utils::uv::install::ConsentMode::from_env();
+    let (resolved, uv) =
+        _rust_utils::project::ensure_venv_ready(&cwd, consent, /*force_sync=*/ true)?;
+    if !quiet {
+        println!(
+            "toolr: synced venv at {} using uv {}.{}.{}",
+            resolved.venv_dir.display(),
+            uv.version.0,
+            uv.version.1,
+            uv.version.2,
+        );
+        println!("toolr:");
+        println!("toolr: next steps:");
+        println!("toolr:   toolr example hello");
+        println!("toolr:   toolr example commit");
+        println!(
+            "toolr:   toolr self completion install <bash|zsh|fish>   # optional, for tab completion"
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
