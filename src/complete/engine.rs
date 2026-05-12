@@ -58,37 +58,65 @@ fn classify<'a>(manifest: &'a Manifest, tokens: &[String]) -> Slot<'a> {
     let prefix = tokens.last().cloned().unwrap_or_default();
     let committed = &tokens[..tokens.len() - 1];
 
-    // No committed tokens → completing the group name.
+    // No committed tokens → completing the top-level group name.
     if committed.is_empty() {
         return Slot::Group { prefix };
     }
 
-    // First committed token is the group.
-    let group_name = &committed[0];
-    let Some(_group) = manifest.groups.iter().find(|g| &g.name == group_name) else {
-        return Slot::None;
-    };
+    // Walk down the group tree as far as the committed tokens match
+    // groups. The cursor lands at one of three places:
+    //   - inside a (possibly nested) group — next token is either a
+    //     subgroup or a command at this level;
+    //   - on a specific command — next tokens are its args;
+    //   - somewhere unrecognised — no completions.
+    let mut group_path: Vec<&str> = Vec::new();
+    let mut cursor = 0usize;
+    while cursor < committed.len() {
+        let candidate_path_with_next = if group_path.is_empty() {
+            committed[cursor].clone()
+        } else {
+            format!("{}.{}", group_path.join("."), committed[cursor])
+        };
+        if manifest
+            .groups
+            .iter()
+            .any(|g| g.full_path() == candidate_path_with_next)
+        {
+            group_path.push(committed[cursor].as_str());
+            cursor += 1;
+            continue;
+        }
+        break;
+    }
 
-    // One committed token (the group) → completing the command name.
-    if committed.len() == 1 {
+    // No committed token matched a group → not a recognised invocation.
+    if group_path.is_empty() {
+        return Slot::None;
+    }
+
+    let group_full_path = group_path.join(".");
+
+    // If the user has only committed group tokens, we're completing
+    // either a subgroup or a command at this level.
+    if cursor == committed.len() {
         return Slot::Command {
-            group: group_name.clone(),
+            group: group_full_path,
             prefix,
         };
     }
 
-    // Two+ committed tokens → group, command, then args.
-    let command_name = &committed[1];
+    // Next committed token is the command name on the resolved group.
+    let command_name = &committed[cursor];
     let Some(command) = manifest
         .commands
         .iter()
-        .find(|c| &c.group == group_name && &c.name == command_name)
+        .find(|c| c.group == group_full_path && &c.name == command_name)
     else {
         return Slot::None;
     };
 
-    // From committed[2..], figure out what argument we're inside.
-    let arg_tokens = &committed[2..];
+    // Everything after the command name is the argument zone.
+    let arg_tokens = &committed[cursor + 1..];
 
     // If the previous committed token was a `--flag`, we're completing
     // that flag's value.
@@ -170,23 +198,36 @@ fn count_positionals_consumed(command: &Command, arg_tokens: &[String]) -> usize
     idx
 }
 
+/// Top-level group names matching `prefix`.
 fn groups(manifest: &Manifest, prefix: &str) -> Vec<String> {
     manifest
         .groups
         .iter()
+        .filter(|g| g.parent.is_none())
         .map(|g| g.name.clone())
         .filter(|name| name.starts_with(prefix))
         .collect()
 }
 
+/// At the resolved group level, candidates are both *child groups*
+/// (their leaf name) and *direct commands*. Lets `toolr docker <Tab>`
+/// complete to `image`, `container`, plus any commands attached to
+/// `docker` itself.
 fn commands(manifest: &Manifest, group: &str, prefix: &str) -> Vec<String> {
-    manifest
+    let mut out: Vec<String> = manifest
         .commands
         .iter()
         .filter(|c| c.group == group)
         .map(|c| c.name.clone())
-        .filter(|name| name.starts_with(prefix))
-        .collect()
+        .collect();
+    out.extend(
+        manifest
+            .groups
+            .iter()
+            .filter(|g| g.parent.as_deref() == Some(group))
+            .map(|g| g.name.clone()),
+    );
+    out.into_iter().filter(|name| name.starts_with(prefix)).collect()
 }
 
 fn flags(command: &Command, prefix: &str) -> Vec<String> {

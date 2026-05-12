@@ -151,6 +151,89 @@ fn flag_without_allowed_values_returns_empty() {
     assert!(out.is_empty());
 }
 
+fn nested_fixture() -> Manifest {
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: "h".into(),
+        dynamic_hash: String::new(),
+        groups: vec![
+            Group {
+                name: "docker".into(),
+                title: "Docker".into(),
+                description: String::new(),
+                parent: None,
+                origin: Origin::Static,
+            },
+            Group {
+                name: "image".into(),
+                title: "Image".into(),
+                description: String::new(),
+                parent: Some("docker".into()),
+                origin: Origin::Static,
+            },
+            Group {
+                name: "container".into(),
+                title: "Container".into(),
+                description: String::new(),
+                parent: Some("docker".into()),
+                origin: Origin::Static,
+            },
+        ],
+        commands: vec![
+            Command {
+                name: "build".into(),
+                group: "docker.image".into(),
+                module: "tools.docker".into(),
+                function: "build".into(),
+                summary: "Build an image.".into(),
+                description: String::new(),
+                arguments: vec![],
+                imports: vec![],
+                origin: Origin::Static,
+            },
+            Command {
+                name: "start".into(),
+                group: "docker.container".into(),
+                module: "tools.docker".into(),
+                function: "start".into(),
+                summary: "Start a container.".into(),
+                description: String::new(),
+                arguments: vec![],
+                imports: vec![],
+                origin: Origin::Static,
+            },
+        ],
+    }
+}
+
+#[test]
+fn top_level_completion_lists_only_top_level_groups() {
+    // `docker.image` is nested under `docker` — it must not appear at
+    // the top level, otherwise the shell would offer it as a sibling
+    // of `docker`.
+    let out = serve_completions(&nested_fixture(), &tokens(&[""]));
+    assert_eq!(out, vec!["docker".to_string()]);
+}
+
+#[test]
+fn nested_group_completion_lists_child_groups() {
+    let out = serve_completions(&nested_fixture(), &tokens(&["docker", ""]));
+    assert_eq!(out, vec!["container".to_string(), "image".to_string()]);
+}
+
+#[test]
+fn nested_command_completion_traverses_full_path() {
+    let out = serve_completions(&nested_fixture(), &tokens(&["docker", "image", ""]));
+    assert_eq!(out, vec!["build".to_string()]);
+}
+
+#[test]
+fn nested_command_completion_filters_by_prefix() {
+    let out =
+        serve_completions(&nested_fixture(), &tokens(&["docker", "container", "st"]));
+    assert_eq!(out, vec!["start".to_string()]);
+}
+
 use crate::complete::{ResolvedManifest, resolve_manifest_at_tab};
 use crate::manifest::{write_manifest};
 use tempfile::TempDir;
