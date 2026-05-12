@@ -37,13 +37,14 @@ impl FromStr for Shell {
 }
 
 const BASH_SCRIPT: &str = include_str!("scripts/bash.sh");
-// The zsh and fish constants are added by Tasks 6 and 7.
+const ZSH_SCRIPT: &str = include_str!("scripts/zsh.zsh");
+// The fish constant is added by Task 7.
 
 /// Return the static completion script for the given shell.
 pub fn completion_script(shell: Shell) -> &'static str {
     match shell {
         Shell::Bash => BASH_SCRIPT,
-        Shell::Zsh => "",  // Task 6
+        Shell::Zsh => ZSH_SCRIPT,
         Shell::Fish => "", // Task 7
     }
 }

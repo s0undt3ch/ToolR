@@ -37,6 +37,10 @@ repos:
     rev: v0.11.0
     hooks:
       - id: shellcheck
+        # shellcheck only understands sh/bash. The zsh and fish
+        # completion scripts under src/complete/scripts/ use shell-specific
+        # syntax that shellcheck cannot parse.
+        exclude: '\.(zsh|fish)$'
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.8.23

@@ -280,3 +280,11 @@ fn bash_script_invokes_toolr_complete() {
     assert!(script.contains("toolr __complete"));
     assert!(script.contains("complete -F _toolr_complete toolr"));
 }
+
+#[test]
+fn zsh_script_invokes_toolr_complete() {
+    let script = completion_script(Shell::Zsh);
+    assert!(script.starts_with("#compdef toolr"));
+    assert!(script.contains("toolr __complete"));
+    assert!(script.contains("compdef _toolr toolr"));
+}
