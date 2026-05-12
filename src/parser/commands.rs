@@ -7,6 +7,7 @@ use ruff_python_ast::{Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 use super::groups::GroupBinding;
 use super::signatures::extract_arguments;
 use super::symbols::EnumTable;
+use super::types::{TypeImports, TypeResolutionError, resolve_arguments};
 use crate::SimpleDocstringParser;
 use crate::manifest::{Command, Origin};
 
@@ -17,6 +18,8 @@ pub fn extract_commands(
     module_path: &str,
     bindings: &[GroupBinding],
     enums: &EnumTable,
+    type_imports: &TypeImports,
+    errors: &mut Vec<TypeResolutionError>,
 ) -> Vec<Command> {
     let by_var: HashMap<&str, &str> = bindings
         .iter()
@@ -33,7 +36,14 @@ pub fn extract_commands(
         let Some(&group_name) = by_var.get(group_var.as_str()) else {
             continue;
         };
-        out.push(build_command(func, group_name, module_path, enums));
+        out.push(build_command(
+            func,
+            group_name,
+            module_path,
+            enums,
+            type_imports,
+            errors,
+        ));
     }
     out
 }
@@ -71,6 +81,8 @@ fn build_command(
     group: &str,
     module_path: &str,
     enums: &EnumTable,
+    type_imports: &TypeImports,
+    errors: &mut Vec<TypeResolutionError>,
 ) -> Command {
     let raw_doc = function_docstring(func);
     let parsed = SimpleDocstringParser::new().parse(&raw_doc).ok();
@@ -90,6 +102,7 @@ fn build_command(
             }
         }
     }
+    resolve_arguments(func, &mut arguments, enums, type_imports, module_path, errors);
     Command {
         name: func.name.as_str().replace('_', "-"),
         group: group.to_string(),
@@ -127,7 +140,7 @@ def generate_build_matrix(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &mut Vec::new());
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "generate-build-matrix");
         assert_eq!(commands[0].group, "ci");
@@ -144,7 +157,7 @@ def x(ctx):
 "#;
         let m = parse_src(src);
         let bindings = vec![];
-        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default());
+        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &TypeImports::default(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -157,7 +170,7 @@ def bare_function(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -172,7 +185,7 @@ def hello(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &mut Vec::new());
         assert_eq!(commands[0].summary, "Say hello.");
     }
 
@@ -191,7 +204,7 @@ def hello(ctx, name="world"):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &mut Vec::new());
         let name_arg = commands[0]
             .arguments
             .iter()

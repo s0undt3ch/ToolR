@@ -8,19 +8,32 @@ use walkdir::WalkDir;
 
 use crate::hash::hash_tools_dir;
 use crate::manifest::{Manifest, SCHEMA_VERSION};
+use crate::parser::types::{TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::extract_commands, groups::extract_groups, parse_python_file, symbols::EnumTable,
 };
 use crate::third_party::{ThirdPartyError, discover_and_merge};
 
 /// Build the static portion of a manifest from a tools directory.
+///
+/// Surfaces every unsupported-type rejection in a single batch via
+/// [`BuildError::UnsupportedTypes`] so users see all the offending
+/// annotations at once rather than one-at-a-time on each rebuild.
 pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
+    match build_static_manifest_inner(tools_dir) {
+        Ok(m) => Ok(m),
+        Err(BuildError::Build(e)) => Err(e),
+        Err(other) => Err(anyhow::anyhow!("{other}")),
+    }
+}
+
+fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
     let py_files = list_python_files(tools_dir);
 
     // Pass 1: build cross-file enum table from every module.
     let mut enums = EnumTable::default();
     for path in &py_files {
-        let module = parse_python_file(path)?;
+        let module = parse_python_file(path).map_err(BuildError::Build)?;
         enums.merge(EnumTable::from_module(&module));
     }
 
@@ -28,12 +41,21 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
     let mut all_groups = Vec::new();
     let mut all_commands = Vec::new();
     let mut seen_groups = HashSet::new();
+    let mut type_errors: Vec<TypeResolutionError> = Vec::new();
     for path in &py_files {
-        let module = parse_python_file(path)?;
+        let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for(tools_dir, path);
         let module_doc = module_docstring(&module);
         let bindings = extract_groups(&module, &module_doc);
-        let commands = extract_commands(&module, &module_path, &bindings, &enums);
+        let type_imports = TypeImports::from_module(&module);
+        let commands = extract_commands(
+            &module,
+            &module_path,
+            &bindings,
+            &enums,
+            &type_imports,
+            &mut type_errors,
+        );
         for binding in bindings {
             if seen_groups.insert(binding.group.name.clone()) {
                 all_groups.push(binding.group);
@@ -42,7 +64,11 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
         all_commands.extend(commands);
     }
 
-    let static_hash = hash_tools_dir(tools_dir)?;
+    if !type_errors.is_empty() {
+        return Err(BuildError::UnsupportedTypes(type_errors));
+    }
+
+    let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
     Ok(Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash,
@@ -58,7 +84,7 @@ pub fn build_static_manifest_with_venv(
     tools_dir: &Path,
     tools_venv: &Path,
 ) -> Result<Manifest, BuildError> {
-    let base = build_static_manifest(tools_dir).map_err(BuildError::Build)?;
+    let base = build_static_manifest_inner(tools_dir)?;
     discover_and_merge(tools_venv, base).map_err(BuildError::ThirdParty)
 }
 
@@ -69,6 +95,20 @@ pub enum BuildError {
     Build(#[source] anyhow::Error),
     #[error("third-party merge error: {0}")]
     ThirdParty(#[from] ThirdPartyError),
+    #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
+    UnsupportedTypes(Vec<TypeResolutionError>),
+}
+
+fn format_type_errors(errors: &[TypeResolutionError]) -> String {
+    let mut s = String::new();
+    for (i, err) in errors.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        use std::fmt::Write as _;
+        let _ = write!(&mut s, "  - {err}");
+    }
+    s
 }
 
 fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {

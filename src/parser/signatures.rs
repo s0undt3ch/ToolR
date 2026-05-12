@@ -75,6 +75,7 @@ fn build_argument(
         help: String::new(),
         default: default.map(literal_default),
         type_annotation: annotation.map(annotation_to_string),
+        resolved_type: None,
         allowed_values,
     }
 }

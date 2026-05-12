@@ -101,6 +101,12 @@ fn argument_from_fragment(fa: FragmentArgument) -> Argument {
         help: fa.help,
         default: fa.default,
         type_annotation: fa.type_annotation,
+        // Third-party fragments don't carry structured type info yet —
+        // they ship pre-validated string defaults and rely on whatever
+        // the manifest builder can re-derive at execute time. A future
+        // schema extension will let fragments record their own
+        // SupportedType.
+        resolved_type: None,
         allowed_values: fa.allowed_values,
     }
 }

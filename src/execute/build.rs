@@ -7,6 +7,7 @@ use clap::ArgMatches;
 use serde_json::Value;
 
 use crate::manifest::{Argument, ArgumentKind, Command};
+use crate::parser::SupportedType;
 
 use super::spec::{ContextSpec, ExecutionSpec, RUNNER_SCHEMA_VERSION};
 
@@ -55,19 +56,85 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
             let v = matches.get_flag(arg.name.as_str());
             Some(Value::Bool(v))
         }
-        ArgumentKind::Positional | ArgumentKind::Optional => matches
-            .get_one::<String>(arg.name.as_str())
-            .map(|s| Value::String(s.clone())),
-        ArgumentKind::Repeated | ArgumentKind::VarPositional => {
-            // Both kinds may capture zero, one, or many values via clap's
-            // `get_many`; we always emit a JSON array so the Python runner
-            // can hand it to msgspec for element-wise coercion.
-            let values: Vec<Value> = matches
-                .get_many::<String>(arg.name.as_str())
-                .map(|iter| iter.map(|s| Value::String(s.clone())).collect())
-                .unwrap_or_default();
-            Some(Value::Array(values))
+        ArgumentKind::Positional | ArgumentKind::Optional => {
+            extract_scalar(arg, matches)
         }
+        ArgumentKind::Repeated | ArgumentKind::VarPositional => {
+            Some(Value::Array(extract_many(arg, matches)))
+        }
+    }
+}
+
+fn scalar_element_type(arg: &Argument) -> Option<&SupportedType> {
+    let ty = arg.resolved_type.as_ref()?;
+    let unwrapped = match ty {
+        SupportedType::Optional(inner) => inner.as_ref(),
+        other => other,
+    };
+    Some(match unwrapped {
+        SupportedType::List(elem) => elem.as_ref(),
+        other => other,
+    })
+}
+
+fn extract_scalar(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
+    let name = arg.name.as_str();
+    match scalar_element_type(arg) {
+        Some(SupportedType::Int) => matches
+            .get_one::<i64>(name)
+            .map(|n| Value::Number((*n).into())),
+        Some(SupportedType::Float) => matches.get_one::<f64>(name).and_then(|f| {
+            serde_json::Number::from_f64(*f).map(Value::Number)
+        }),
+        Some(SupportedType::Bool) => matches.get_one::<bool>(name).map(|b| Value::Bool(*b)),
+        Some(
+            SupportedType::Path
+            | SupportedType::AbsolutePath
+            | SupportedType::ResolvedPath,
+        ) => matches
+            .get_one::<std::path::PathBuf>(name)
+            .map(|p| Value::String(p.to_string_lossy().into_owned())),
+        // Everything else — strings (incl. enum / literal / email /
+        // datetime / uuid / ip / unannotated) flows through as-is.
+        _ => matches
+            .get_one::<String>(name)
+            .map(|s| Value::String(s.clone())),
+    }
+}
+
+fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
+    let name = arg.name.as_str();
+    match scalar_element_type(arg) {
+        Some(SupportedType::Int) => matches
+            .get_many::<i64>(name)
+            .map(|iter| iter.map(|n| Value::Number((*n).into())).collect())
+            .unwrap_or_default(),
+        Some(SupportedType::Float) => matches
+            .get_many::<f64>(name)
+            .map(|iter| {
+                iter.filter_map(|f| serde_json::Number::from_f64(*f).map(Value::Number))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        Some(SupportedType::Bool) => matches
+            .get_many::<bool>(name)
+            .map(|iter| iter.map(|b| Value::Bool(*b)).collect())
+            .unwrap_or_default(),
+        Some(
+            SupportedType::Path
+            | SupportedType::AbsolutePath
+            | SupportedType::ResolvedPath,
+        ) => matches
+            .get_many::<std::path::PathBuf>(name)
+            .map(|iter| {
+                iter.map(|p| Value::String(p.to_string_lossy().into_owned()))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => matches
+            .get_many::<String>(name)
+            .map(|iter| iter.map(|s| Value::String(s.clone())).collect())
+            .unwrap_or_default(),
     }
 }
 
@@ -91,6 +158,7 @@ mod tests {
                 help: "".into(),
                 default: Some("world".into()),
                 type_annotation: None,
+                resolved_type: None,
                 allowed_values: vec![],
             }],
             imports: vec![],
@@ -157,6 +225,7 @@ mod tests {
                 help: "".into(),
                 default: None,
                 type_annotation: None,
+                resolved_type: None,
                 allowed_values: vec![],
             }],
             imports: vec![],

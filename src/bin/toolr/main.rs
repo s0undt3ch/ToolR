@@ -5,6 +5,7 @@ mod init_templates;
 mod project;
 mod self_cache;
 mod self_cache_prune;
+mod value_parsers;
 
 use std::process::ExitCode;
 

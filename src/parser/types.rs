@@ -11,12 +11,15 @@
 //! ResolvedPath as RP` style aliases without doing a full symbol-table
 //! pass over the file.
 
-use ruff_python_ast::{Expr, ModModule, Stmt};
+use ruff_python_ast::{Expr, ModModule, Stmt, StmtFunctionDef};
+use serde::{Deserialize, Serialize};
 
 use super::symbols::EnumTable;
+use crate::manifest::Argument;
 
 /// Every annotation shape toolr recognises end-to-end.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum SupportedType {
     Str,
     Int,
@@ -53,6 +56,18 @@ pub enum SupportedType {
     Optional(Box<SupportedType>),
 }
 
+impl SupportedType {
+    /// Strip an `Optional(T)` wrapper to `T`, returning whether the
+    /// original was wrapped. Helps the CLI-build path treat
+    /// `T | None` as "T with required=false".
+    pub fn unwrap_optional(self) -> (Self, bool) {
+        match self {
+            SupportedType::Optional(inner) => (*inner, true),
+            other => (other, false),
+        }
+    }
+}
+
 /// Reasons annotation resolution can fail.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnsupportedType {
@@ -67,6 +82,36 @@ pub enum UnsupportedType {
     UnsupportedUnion(String),
     /// A subscript shape we don't handle (e.g. `dict[K, V]`).
     UnsupportedShape(String),
+}
+
+/// A typed-annotation rejection with full context for diagnostic output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeResolutionError {
+    /// Dotted module path the offending command lives in (`tools.foo.bar`).
+    pub module: String,
+    /// Python function name of the command.
+    pub function: String,
+    /// Parameter name on that function.
+    pub argument: String,
+    /// Textual rendering of the unsupported annotation as it appeared
+    /// in source — for the user-facing message.
+    pub annotation: String,
+    /// The underlying [`UnsupportedType`] reason.
+    pub reason: UnsupportedType,
+}
+
+impl std::fmt::Display for TypeResolutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{module}::{function} argument `{arg}` (annotated `{annotation}`): {reason}",
+            module = self.module,
+            function = self.function,
+            arg = self.argument,
+            annotation = self.annotation,
+            reason = self.reason,
+        )
+    }
 }
 
 impl std::fmt::Display for UnsupportedType {
@@ -172,6 +217,87 @@ impl TypeImports {
             return Some(attr.attr.as_str());
         }
         None
+    }
+}
+
+/// Walk a function's parameters and populate `resolved_type` on each
+/// matching [`Argument`]. Unsupported annotations are pushed to `errors`
+/// with `module` / function-name context, and the corresponding
+/// `Argument.resolved_type` stays `None`.
+pub fn resolve_arguments(
+    func: &StmtFunctionDef,
+    arguments: &mut [Argument],
+    enums: &EnumTable,
+    type_imports: &TypeImports,
+    module: &str,
+    errors: &mut Vec<TypeResolutionError>,
+) {
+    let params = func.parameters.as_ref();
+    let function = func.name.as_str().to_string();
+    let mut i = 0usize;
+    // First positional in the signature is `ctx`; skip it.
+    for p in params.args.iter().skip(1) {
+        resolve_one(
+            p.parameter.annotation.as_deref(),
+            &mut arguments[i],
+            enums,
+            type_imports,
+            module,
+            &function,
+            errors,
+        );
+        i += 1;
+    }
+    if let Some(vararg) = params.vararg.as_deref() {
+        resolve_one(
+            vararg.annotation.as_deref(),
+            &mut arguments[i],
+            enums,
+            type_imports,
+            module,
+            &function,
+            errors,
+        );
+        i += 1;
+    }
+    for p in &params.kwonlyargs {
+        resolve_one(
+            p.parameter.annotation.as_deref(),
+            &mut arguments[i],
+            enums,
+            type_imports,
+            module,
+            &function,
+            errors,
+        );
+        i += 1;
+    }
+}
+
+fn resolve_one(
+    annotation: Option<&Expr>,
+    arg: &mut Argument,
+    enums: &EnumTable,
+    type_imports: &TypeImports,
+    module: &str,
+    function: &str,
+    errors: &mut Vec<TypeResolutionError>,
+) {
+    let Some(expr) = annotation else {
+        // Bare-typed argument with no annotation — leave resolved_type
+        // empty so the CLI builder falls back to string semantics. The
+        // python registry still imposes its own runtime checks.
+        return;
+    };
+    match resolve(expr, enums, type_imports) {
+        Ok(ty) => arg.resolved_type = Some(ty),
+        Err(reason) => errors.push(TypeResolutionError {
+            module: module.to_string(),
+            function: function.to_string(),
+            argument: arg.name.clone(),
+            annotation: arg.type_annotation.clone().unwrap_or_default(),
+            reason,
+        }),
     }
 }
 

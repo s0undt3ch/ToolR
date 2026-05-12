@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::parser::SupportedType;
+
 /// Current manifest schema version. Bump on breaking format changes.
 pub const SCHEMA_VERSION: u32 = 1;
 
@@ -67,8 +69,15 @@ pub struct Argument {
     #[serde(default)]
     pub default: Option<String>,
     /// Argument's type annotation as written in source (best-effort).
+    /// Kept for `--help` rendering and diagnostics; the structured
+    /// equivalent the CLI builder consumes lives on `resolved_type`.
     #[serde(default)]
     pub type_annotation: Option<String>,
+    /// Resolved supported type — drives the per-type clap value_parser
+    /// and how `extract_value` shapes the wire payload. `None` means
+    /// "no type info available" (legacy / third-party fragments).
+    #[serde(default)]
+    pub resolved_type: Option<SupportedType>,
     /// For Literal[...] / Enum-backed args, the allowed value strings.
     #[serde(default)]
     pub allowed_values: Vec<String>,
