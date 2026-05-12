@@ -43,6 +43,43 @@ fn venv_path() -> Result<ExitCode> {
 }
 
 fn venv_shell() -> Result<ExitCode> {
-    // Implemented in Task 15.
-    Ok(ExitCode::from(2))
+    use std::process::Command;
+
+    let cwd = std::env::current_dir()?;
+    let consent = _rust_utils::uv::install::ConsentMode::from_env();
+    let (resolved, _) = _rust_utils::project::ensure_venv_ready(
+        &cwd, consent, /*force_sync=*/ false,
+    )?;
+
+    let shell = std::env::var_os("SHELL")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            if cfg!(windows) {
+                std::path::PathBuf::from("cmd.exe")
+            } else {
+                std::path::PathBuf::from("/bin/sh")
+            }
+        });
+
+    let bin_dir = if cfg!(windows) {
+        resolved.venv_dir.join("Scripts")
+    } else {
+        resolved.venv_dir.join("bin")
+    };
+    let prepended_path = match std::env::var_os("PATH") {
+        Some(existing) => {
+            let mut paths: Vec<_> = std::env::split_paths(&existing).collect();
+            paths.insert(0, bin_dir.clone());
+            std::env::join_paths(paths)?
+        }
+        None => bin_dir.clone().into_os_string(),
+    };
+
+    let status = Command::new(&shell)
+        .env("VIRTUAL_ENV", &resolved.venv_dir)
+        .env("PATH", &prepended_path)
+        // Help shell prompts notice the activation.
+        .env("TOOLR_VENV", &resolved.venv_dir)
+        .status()?;
+    Ok(ExitCode::from(status.code().unwrap_or(1) as u8))
 }
