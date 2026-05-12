@@ -1082,7 +1082,7 @@ manifest. Conflict policy: **static wins**. Groups are deduplicated by
 - Modify: `src/dynamic/mod.rs`
 - Create: `src/dynamic/merge.rs`
 
-- [ ] **Step 7.1: Re-export the merge module**
+- [x] **Step 7.1: Re-export the merge module**
 
     Update `src/dynamic/mod.rs`:
 
@@ -1101,7 +1101,7 @@ manifest. Conflict policy: **static wins**. Groups are deduplicated by
     mod tests;
     ```
 
-- [ ] **Step 7.2: Create `src/dynamic/merge.rs`**
+- [x] **Step 7.2: Create `src/dynamic/merge.rs`**
 
     ```rust
     //! Merge a dynamic-layer payload into a base (static) manifest.
@@ -1254,7 +1254,7 @@ manifest. Conflict policy: **static wins**. Groups are deduplicated by
     }
     ```
 
-- [ ] **Step 7.3: Run tests**
+- [x] **Step 7.3: Run tests**
 
     ```bash
     cargo test --lib dynamic::merge::
@@ -1262,7 +1262,7 @@ manifest. Conflict policy: **static wins**. Groups are deduplicated by
 
     Expected: 4 tests passing.
 
-- [ ] **Step 7.4: Commit**
+- [x] **Step 7.4: Commit**
 
     ```bash
     git add src/dynamic/
