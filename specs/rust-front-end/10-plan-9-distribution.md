@@ -908,7 +908,7 @@ release.
 - Modify: `.github/workflows/release.yml`
 - Create: `scripts/build-release-manifest.py`
 
-- [ ] **Step 5.1: Write the manifest builder script**
+- [x] **Step 5.1: Write the manifest builder script**
 
     Create `scripts/build-release-manifest.py`:
 
@@ -993,7 +993,7 @@ release.
         raise SystemExit(main())
     ```
 
-- [ ] **Step 5.2: Add a build step to `publish-release`**
+- [x] **Step 5.2: Add a build step to `publish-release`**
 
     Modify `.github/workflows/release.yml`. Immediately before the
     `softprops/action-gh-release@...` step in `publish-release`, insert:
@@ -1017,7 +1017,7 @@ release.
     The existing `files: dist/*` in the `softprops/action-gh-release@...`
     step will then upload `release-manifest.json` alongside everything else.
 
-- [ ] **Step 5.3: Acceptance — local dry run**
+- [x] **Step 5.3: Acceptance — local dry run**
 
     Verify the script works offline:
 
@@ -1034,7 +1034,7 @@ release.
 
     Expected: a JSON document with one `archives[]` entry.
 
-- [ ] **Step 5.4: Commit**
+- [x] **Step 5.4: Commit**
 
     ```bash
     git add scripts/build-release-manifest.py .github/workflows/release.yml

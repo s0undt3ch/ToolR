@@ -209,6 +209,9 @@ ignore = [
 "tests/support/coverage/*.py" = [
   "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
 ]
+"scripts/*.py" = [
+  "INP001",   # Standalone scripts, no package needed
+]
 "docs/**/files/*.py" = [
   "BLE001",   # Do not catch blind exception: `Exception`
   "D100",     # missing docstring in public module
