@@ -218,7 +218,7 @@
 
 ### Plan 10: `toolr project init` bootstrap command
 
-- **Status:** 🔧 In Progress
+- **Status:** ✅ Done
 - **Plan doc:** [12-plan-10-project-init.md](./12-plan-10-project-init.md)
 - **Depends on:** Plans 1-9 (uses `ensure_venv_ready` from Plan 3 + meta sidecar from Plan 8)
 - **Unblocks:** Plan 11 (docs restructure references real `init` output)
@@ -229,6 +229,20 @@
       `ctx`-feature-exercising commands (`hello`, `commit`, `confirm`, `setlog`).
     - Auto-`uv sync` via `ensure_venv_ready` (skippable with `--no-sync`).
     - Integration tests in `tests/project_init.rs`.
+
+### Plan 11: Documentation site overhaul
+
+- **Status:** 🔧 In Progress
+- **Plan doc:** [13-plan-11-docs-overhaul.md](./13-plan-11-docs-overhaul.md)
+- **Depends on:** Plan 10 (Quickstart references real `toolr project init` output)
+- **Unblocks:** —
+- **Produces:**
+    - New IA: Quickstart → Installation → How toolr is laid out →
+      Writing commands chapter → Project configuration → CLI reference →
+      Third-party packages → Internals → API reference (public surface only).
+    - `.txt` snippet convention with `.pre-commit-hooks/regen-doc-snippets.py`
+      enforcing drift-free captured terminal output.
+    - Pruned API reference (private `_*` modules removed).
 
 ## Dependency graph
 

@@ -32,6 +32,51 @@ theme:
 docs_dir: docs
 site_dir: site
 
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Installation: installation/index.md
+  - How toolr is laid out: concepts.md
+  - Writing commands:
+    - Overview: writing-commands/index.md
+    - Groups & commands: writing-commands/groups.md
+    - Arguments: writing-commands/arguments.md
+    - Docstrings: writing-commands/docstrings.md
+    - Using `ctx`: writing-commands/context.md
+    - Annotations: writing-commands/annotations.md
+    - Nested groups: writing-commands/nesting.md
+  - Project configuration: project-config.md
+  - CLI reference: cli.md
+  - Third-party packages: third-party.md
+  - Internals:
+    - Overview: internals/index.md
+    - Manifest layers: internals/manifest.md
+    - Cache layout: internals/cache.md
+    - Pre-commit integration: internals/pre-commit.md
+    - Diagnostics: internals/diagnostics.md
+  - API reference:
+    - reference/toolr/_context.md
+    - reference/toolr/_exc.md
+    - reference/toolr/_introspect.md
+    - reference/toolr/_parser.md
+    - reference/toolr/_registry.md
+    - reference/toolr/_runner.md
+    - reference/toolr/build.md
+    - reference/toolr/testing.md
+    - reference/toolr/utils/_console.md
+    - reference/toolr/utils/_docstrings.md
+    - reference/toolr/utils/_imports.md
+    - reference/toolr/utils/_logs.md
+    - reference/toolr/utils/_signature.md
+    - reference/toolr/utils/command.md
+  # The pages below are deprecated and superseded by the new IA above.
+  # They remain in nav so `mkdocs build --strict` stays clean while the
+  # overhaul is in flight; Plan 11 Task 6 deletes them.
+  - Legacy (deprecated):
+    - Usage: usage/index.md
+    - Examples: examples/index.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
 
 # https://www.mkdocs.org/user-guide/configuration/#validation
 validation:
@@ -43,7 +88,6 @@ plugins:
   - autorefs:
       resolve_closest: true
   - search
-  - awesome-nav
   - mkdocstrings:
       default_handler: python
       enable_inventory: true
