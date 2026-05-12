@@ -176,8 +176,8 @@ ignore = [
   "PT",     # flake8-pytest-style (PT) - Disabled in production code, only enforced in tests
 ]
 "python/toolr/__main__.py" = [
-  "F401",   #  `tools` imported but unused
-  "PLC0415" # `import` should be at the top-level of a file
+  "T201",   # `print` used — diagnostics to stderr are intentional in the shim
+  "S606",   # `os.execv` is intentional — the shim must replace the python process
 ]
 "python/toolr/_context.py" = [
   "PYI041", # redundant-numeric-union

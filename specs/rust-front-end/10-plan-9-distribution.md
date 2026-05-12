@@ -314,7 +314,7 @@ shim itself.
 - Modify: `python/toolr/__main__.py`
 - Create: `tests/cli/test_main_shim.py`
 
-- [ ] **Step 3.1: Write the failing tests**
+- [x] **Step 3.1: Write the failing tests**
 
     Create `tests/cli/test_main_shim.py`:
 
@@ -449,7 +449,7 @@ shim itself.
         assert "toolr binary not found" in result.stderr.lower(), result.stderr
     ```
 
-- [ ] **Step 3.2: Run the tests, expect FAIL**
+- [x] **Step 3.2: Run the tests, expect FAIL**
 
     ```bash
     uv run pytest tests/cli/test_main_shim.py -v
@@ -458,7 +458,7 @@ shim itself.
     Expected: tests fail because `__main__.py` still runs the old argparse
     path and does not exec a binary.
 
-- [ ] **Step 3.3: Replace `python/toolr/__main__.py` with the shim**
+- [x] **Step 3.3: Replace `python/toolr/__main__.py` with the shim**
 
     Write the file:
 
@@ -572,7 +572,7 @@ shim itself.
         main()
     ```
 
-- [ ] **Step 3.4: Update per-file ruff/mypy ignores so the shim still passes**
+- [x] **Step 3.4: Update per-file ruff/mypy ignores so the shim still passes**
 
     The existing `[tool.ruff.lint.per-file-ignores]` block in `pyproject.toml`
     contains:
@@ -595,7 +595,7 @@ shim itself.
 
     The existing mypy override block for `toolr.__main__` (`disable_error_code = ["unused-ignore"]`) is harmless and stays unchanged.
 
-- [ ] **Step 3.5: Run the tests, expect PASS**
+- [x] **Step 3.5: Run the tests, expect PASS**
 
     ```bash
     uv run pytest tests/cli/test_main_shim.py -v
@@ -604,7 +604,7 @@ shim itself.
     Expected: 4 tests pass on POSIX; 1 passes on Windows (the
     binary-missing test).
 
-- [ ] **Step 3.6: Run the full test suite to confirm nothing else broke**
+- [x] **Step 3.6: Run the full test suite to confirm nothing else broke**
 
     ```bash
     uv run pytest -x --ignore=tests/distribution
@@ -615,7 +615,7 @@ shim itself.
     so, point them at the new homes (`toolr._parser`, `toolr._registry`).
     The shim no longer reexports those names.
 
-- [ ] **Step 3.7: Commit**
+- [x] **Step 3.7: Commit**
 
     ```bash
     git add python/toolr/__main__.py pyproject.toml tests/cli/test_main_shim.py
