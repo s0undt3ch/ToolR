@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from toolr._runner import SCHEMA_VERSION
+from toolr._runner import SpecError
+from toolr._runner import load_spec
+from toolr._runner import load_spec_from_env
+
+
+def _write_spec(tmp_path: Path, **overrides: object) -> Path:
+    payload: dict[str, object] = {
+        "schema_version": SCHEMA_VERSION,
+        "group": "ci",
+        "command": "hello",
+        "module": "tools.ci",
+        "function": "hello",
+        "args": {},
+        "context": {
+            "repo_root": str(tmp_path),
+            "verbosity": "normal",
+            "timestamps": False,
+            "log_level": "INFO",
+        },
+    }
+    payload.update(overrides)
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(json.dumps(payload))
+    return spec_path
+
+
+def test_load_spec_reads_file_and_decodes(tmp_path: Path) -> None:
+    spec_path = _write_spec(tmp_path)
+    spec = load_spec(spec_path)
+    assert spec.group == "ci"
+    assert spec.command == "hello"
+    assert spec.context.repo_root == str(tmp_path)
+
+
+def test_load_spec_rejects_unknown_schema_version(tmp_path: Path) -> None:
+    spec_path = _write_spec(tmp_path, schema_version=999)
+    with pytest.raises(SpecError) as exc_info:
+        load_spec(spec_path)
+    assert "schema_version" in str(exc_info.value)
+    assert "999" in str(exc_info.value)
+
+
+def test_load_spec_raises_when_file_missing(tmp_path: Path) -> None:
+    with pytest.raises(SpecError) as exc_info:
+        load_spec(tmp_path / "absent.json")
+    assert "not found" in str(exc_info.value).lower() or "no such" in str(exc_info.value).lower()
+
+
+def test_load_spec_raises_on_malformed_json(tmp_path: Path) -> None:
+    spec_path = tmp_path / "bad.json"
+    spec_path.write_text("{not json")
+    with pytest.raises(SpecError):
+        load_spec(spec_path)
+
+
+def test_load_spec_from_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spec_path = _write_spec(tmp_path)
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
+    spec = load_spec_from_env()
+    assert spec.group == "ci"
+
+
+def test_load_spec_from_env_raises_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TOOLR_SPEC_FILE", raising=False)
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "TOOLR_SPEC_FILE" in str(exc_info.value)
