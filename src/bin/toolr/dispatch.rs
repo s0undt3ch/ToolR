@@ -139,6 +139,7 @@ pub fn dispatch(
 fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     match matches.subcommand() {
         Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches),
+        Some(("cache", cache_matches)) => crate::self_cache::dispatch(cache_matches),
         Some(("completion", completion_matches)) => {
             let Some((action, action_matches)) = completion_matches.subcommand() else {
                 anyhow::bail!("expected a `self completion` subcommand");

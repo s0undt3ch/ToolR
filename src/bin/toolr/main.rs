@@ -1,6 +1,8 @@
 mod cli;
 mod dispatch;
 mod project;
+mod self_cache;
+mod self_cache_prune;
 
 use std::process::ExitCode;
 

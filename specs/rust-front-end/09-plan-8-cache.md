@@ -859,7 +859,7 @@ parent group is introduced here.
 - Create: `src/bin/toolr/self_cmd/cache.rs`
 - Modify: `src/bin/toolr/cli.rs`
 - Modify: `src/bin/toolr/main.rs`
-- [ ] **Step 5.1: Introduce or extend the `self` subcommand tree in `src/bin/toolr/cli.rs`**
+- [x] **Step 5.1: Introduce or extend the `self` subcommand tree in `src/bin/toolr/cli.rs`**
 
     If the `Self` arm does not yet exist, add it. If it exists (Plan 4 added
     `toolr self completion`), add `Cache` to its sibling enum. The pattern:
@@ -918,7 +918,7 @@ parent group is introduced here.
     }
     ```
 
-- [ ] **Step 5.2: Create the cache-command dispatch module skeleton**
+- [x] **Step 5.2: Create the cache-command dispatch module skeleton**
 
     `src/bin/toolr/self_cmd/mod.rs`:
 
@@ -1052,7 +1052,7 @@ parent group is introduced here.
     }
     ```
 
-- [ ] **Step 5.3: Wire dispatch into `src/bin/toolr/main.rs`**
+- [x] **Step 5.3: Wire dispatch into `src/bin/toolr/main.rs`**
 
     Add to the `match` arm:
 
@@ -1072,7 +1072,7 @@ parent group is introduced here.
     fit `self_cmd::cache::run(...)` into whatever the standard pattern is at
     integration time.
 
-- [ ] **Step 5.4: Add an integration test**
+- [x] **Step 5.4: Add an integration test**
 
     Create `tests/self_cache_list.rs`:
 
@@ -1142,7 +1142,7 @@ parent group is introduced here.
     already present (it's a transitive of `assert_cmd` but the explicit pin
     insulates these tests from a version change there).
 
-- [ ] **Step 5.5: Run the tests**
+- [x] **Step 5.5: Run the tests**
 
     ```bash
     cargo test --lib cache::
@@ -1151,7 +1151,7 @@ parent group is introduced here.
 
     Expected: all green.
 
-- [ ] **Step 5.6: Commit**
+- [x] **Step 5.6: Commit**
 
     ```bash
     git add Cargo.toml src/bin/toolr/ tests/self_cache_list.rs

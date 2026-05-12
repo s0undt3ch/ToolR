@@ -124,6 +124,48 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     ),
             )
             .subcommand(
+                Command::new("cache")
+                    .about("Manage the cache of per-repo virtualenvs")
+                    .subcommand_required(true)
+                    .arg_required_else_help(true)
+                    .subcommand(
+                        Command::new("list").about(
+                            "List every cached virtualenv with size and last-use timestamp",
+                        ),
+                    )
+                    .subcommand(
+                        Command::new("prune")
+                            .about("Remove orphan and stale cache entries")
+                            .arg(
+                                Arg::new("all")
+                                    .long("all")
+                                    .action(ArgAction::SetTrue)
+                                    .help("Remove every cache entry"),
+                            )
+                            .arg(
+                                Arg::new("stale-after-days")
+                                    .long("stale-after-days")
+                                    .value_name("DAYS")
+                                    .default_value("30")
+                                    .value_parser(clap::value_parser!(u32))
+                                    .help("Override the staleness threshold"),
+                            )
+                            .arg(
+                                Arg::new("dry-run")
+                                    .long("dry-run")
+                                    .action(ArgAction::SetTrue)
+                                    .help("Show what would be deleted without deleting"),
+                            )
+                            .arg(
+                                Arg::new("yes")
+                                    .long("yes")
+                                    .short('y')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Skip confirmation when used with --all"),
+                            ),
+                    ),
+            )
+            .subcommand(
                 Command::new("completion")
                     .about("Manage shell completion scripts")
                     .subcommand_required(true)
