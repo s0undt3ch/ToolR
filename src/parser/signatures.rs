@@ -73,7 +73,7 @@ fn build_argument(
         name,
         kind,
         help: String::new(),
-        default: default.map(literal_default),
+        default: default.map(|d| literal_default(d, enums)),
         type_annotation: annotation.map(annotation_to_string),
         resolved_type: None,
         allowed_values,
@@ -139,11 +139,10 @@ fn referenced_name(expr: &Expr) -> Option<&str> {
 /// the toolr binary feeds back through msgspec when the user omits the
 /// flag. So strings are rendered unquoted (msgspec.convert "world" →
 /// `"world"`), numbers as their literal form, bools lowercased, and
-/// "give the function its own default" gets encoded as `None`-as-no-
-/// default (we return `<expr>` for shapes we can't faithfully serialise
-/// yet — enum-attribute defaults like `Op.ADD` land here until the
-/// enum-default-resolution work in #197).
-fn literal_default(expr: &Expr) -> String {
+/// `Class.MEMBER` attribute defaults are resolved via `enums` to their
+/// serialised value (so `Operation.ADD` becomes `"add"` for a
+/// `StrEnum`).
+fn literal_default(expr: &Expr, enums: &EnumTable) -> String {
     match expr {
         Expr::StringLiteral(s) => s.value.to_str().to_string(),
         Expr::NumberLiteral(n) => match &n.value {
@@ -154,8 +153,26 @@ fn literal_default(expr: &Expr) -> String {
         Expr::BooleanLiteral(b) => if b.value { "true" } else { "false" }.to_string(),
         Expr::NoneLiteral(_) => "None".to_string(),
         Expr::List(l) if l.elts.is_empty() => String::new(),
+        Expr::Attribute(attr) => resolve_enum_attribute_default(attr, enums)
+            .unwrap_or_else(|| "<expr>".to_string()),
         _ => "<expr>".to_string(),
     }
+}
+
+/// Resolve `Class.MEMBER` attribute expressions against the enum
+/// table. Returns the serialised value (e.g. `"add"`) when both
+/// `Class` and `MEMBER` are known; `None` otherwise.
+fn resolve_enum_attribute_default(
+    attr: &ruff_python_ast::ExprAttribute,
+    enums: &EnumTable,
+) -> Option<String> {
+    let class = match attr.value.as_ref() {
+        Expr::Name(n) => n.id.as_str(),
+        _ => return None,
+    };
+    enums
+        .lookup_member(class, attr.attr.as_str())
+        .map(str::to_string)
 }
 
 fn annotation_to_string(expr: &Expr) -> String {
@@ -272,6 +289,45 @@ mod tests {
         let func = first_func("def f(ctx, name: str = \"world\"): pass\n");
         let args = extract_arguments(&func, &EnumTable::default());
         assert_eq!(args[0].default.as_deref(), Some("world"));
+    }
+
+    #[test]
+    fn enum_attribute_default_resolves_to_serialised_value() {
+        let src = r#"
+from enum import StrEnum
+
+class Operation(StrEnum):
+    ADD = "add"
+    SUBTRACT = "subtract"
+
+def f(ctx, op: Operation = Operation.ADD): pass
+"#;
+        let m = module(src);
+        let mut enums = EnumTable::default();
+        enums.merge(EnumTable::from_module(&m));
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                ruff_python_ast::Stmt::FunctionDef(f) => Some(f.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &enums);
+        assert_eq!(args[0].default.as_deref(), Some("add"));
+    }
+
+    #[test]
+    fn unknown_enum_attribute_falls_back_to_expr_placeholder() {
+        let func = first_func("def f(ctx, x = Unknown.MEMBER): pass\n");
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args[0].default.as_deref(), Some("<expr>"));
+    }
+
+    fn module(src: &str) -> ruff_python_ast::ModModule {
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(src.as_bytes()).unwrap();
+        crate::parser::parse_python_file(f.path()).unwrap()
     }
 
     #[test]
