@@ -63,3 +63,42 @@ fn meta_new_sets_created_and_last_used_equal() {
     assert_eq!(m.created_at, m.last_used_at);
     assert_eq!(m.schema_version, SCHEMA_VERSION);
 }
+
+use super::init::write_meta_for_new_venv;
+
+#[test]
+fn write_meta_for_new_venv_creates_sidecar() {
+    let tmp = TempDir::new().unwrap();
+    let cache_dir = tmp.path().join("repo-key");
+    std::fs::create_dir_all(cache_dir.join("venv")).unwrap();
+
+    let meta = write_meta_for_new_venv(
+        &cache_dir,
+        "/abs/repo".as_ref(),
+        "1.2.3",
+        "3.13.1",
+    )
+    .expect("write meta");
+
+    let loaded = Meta::load(&cache_dir).expect("load meta");
+    assert_eq!(meta, loaded);
+    assert_eq!(loaded.repo_path, PathBuf::from("/abs/repo"));
+    assert_eq!(loaded.toolr_version, "1.2.3");
+    assert_eq!(loaded.python_version, "3.13.1");
+    assert_eq!(loaded.created_at, loaded.last_used_at);
+}
+
+#[test]
+fn write_meta_for_new_venv_overwrites_existing() {
+    let tmp = TempDir::new().unwrap();
+    let cache_dir = tmp.path().join("repo-key");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+
+    let first =
+        write_meta_for_new_venv(&cache_dir, "/abs/repo".as_ref(), "1.0.0", "3.12.0").unwrap();
+    let second =
+        write_meta_for_new_venv(&cache_dir, "/abs/repo".as_ref(), "1.0.0", "3.13.0").unwrap();
+    assert_ne!(first.python_version, second.python_version);
+    let loaded = Meta::load(&cache_dir).expect("load");
+    assert_eq!(loaded.python_version, "3.13.0");
+}

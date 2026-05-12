@@ -32,6 +32,18 @@ pub fn ensure_venv_ready(
         .with_context(|| format!("uv sync against {}", tools.display()))?;
     validate_venv(&resolved.venv_dir, &resolved.python)
         .context("validating the synced venv")?;
+    // Drop a meta.json sidecar next to the venv (cache-located venvs only).
+    // Non-fatal: meta writes never block the user's command.
+    if let Some(cache_dir) = resolved.venv_dir.parent() {
+        if let Err(e) = crate::cache::write_meta_for_new_venv(
+            cache_dir,
+            &repo_root,
+            env!("CARGO_PKG_VERSION"),
+            &resolved.python_version,
+        ) {
+            eprintln!("toolr: warning: failed to write cache meta.json: {e}");
+        }
+    }
     let outcomes = perform_editable_installs(
         &uv,
         &resolved.config,

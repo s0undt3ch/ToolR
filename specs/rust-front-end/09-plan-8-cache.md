@@ -311,7 +311,7 @@ the call site only; the public API in this plan stays the same.
 - Modify: `src/cache/mod.rs`
 - Create: `src/cache/init.rs`
 - Modify: `src/cache/tests.rs`
-- [ ] **Step 2.1: Write the failing test in `src/cache/tests.rs`**
+- [x] **Step 2.1: Write the failing test in `src/cache/tests.rs`**
 
     Append:
 
@@ -366,7 +366,7 @@ the call site only; the public API in this plan stays the same.
     }
     ```
 
-- [ ] **Step 2.2: Run and verify the tests FAIL**
+- [x] **Step 2.2: Run and verify the tests FAIL**
 
     ```bash
     cargo test --lib cache::tests::write_meta_for_new_venv
@@ -374,7 +374,7 @@ the call site only; the public API in this plan stays the same.
 
     Expected: compile error (unresolved import `super::init`).
 
-- [ ] **Step 2.3: Create `src/cache/init.rs`**
+- [x] **Step 2.3: Create `src/cache/init.rs`**
 
     ```rust
     //! Hook called by the venv-creation path (Plan 3) to drop a `meta.json`
@@ -400,7 +400,7 @@ the call site only; the public API in this plan stays the same.
     }
     ```
 
-- [ ] **Step 2.4: Re-export the new entry point**
+- [x] **Step 2.4: Re-export the new entry point**
 
     Update `src/cache/mod.rs`:
 
@@ -415,7 +415,7 @@ the call site only; the public API in this plan stays the same.
     mod tests;
     ```
 
-- [ ] **Step 2.5: Run tests, expect PASS**
+- [x] **Step 2.5: Run tests, expect PASS**
 
     ```bash
     cargo test --lib cache::
@@ -423,7 +423,7 @@ the call site only; the public API in this plan stays the same.
 
     Expected: 7 tests passing.
 
-- [ ] **Step 2.6: Wire the hook into Plan 3's venv creation path**
+- [x] **Step 2.6: Wire the hook into Plan 3's venv creation path**
 
     In whichever Plan 3 module calls `uv venv` / `uv sync` to materialise a
     new venv (likely `src/venv/ensure.rs` or similar), immediately after the
@@ -449,7 +449,7 @@ the call site only; the public API in this plan stays the same.
     has not yet introduced the relevant function, leave this step
     documentation-only and surface the integration as an Open Question.
 
-- [ ] **Step 2.7: Commit**
+- [x] **Step 2.7: Commit**
 
     ```bash
     git add src/cache/
