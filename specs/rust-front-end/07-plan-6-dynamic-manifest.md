@@ -769,7 +769,7 @@ and version (`foo-1.2.3.dist-info`), so we never need to parse `METADATA`.
 - Modify: `src/dynamic/mod.rs`
 - Create: `src/dynamic/hash.rs`
 
-- [ ] **Step 5.1: Re-export the hash module**
+- [x] **Step 5.1: Re-export the hash module**
 
     Update `src/dynamic/mod.rs`:
 
@@ -784,7 +784,7 @@ and version (`foo-1.2.3.dist-info`), so we never need to parse `METADATA`.
     mod tests;
     ```
 
-- [ ] **Step 5.2: Create `src/dynamic/hash.rs`**
+- [x] **Step 5.2: Create `src/dynamic/hash.rs`**
 
     ```rust
     //! Hash the set of packages installed in the tools venv.
@@ -898,7 +898,7 @@ and version (`foo-1.2.3.dist-info`), so we never need to parse `METADATA`.
     }
     ```
 
-- [ ] **Step 5.3: Run tests**
+- [x] **Step 5.3: Run tests**
 
     ```bash
     cargo test --lib dynamic::hash::
@@ -906,7 +906,7 @@ and version (`foo-1.2.3.dist-info`), so we never need to parse `METADATA`.
 
     Expected: 4 tests passing.
 
-- [ ] **Step 5.4: Commit**
+- [x] **Step 5.4: Commit**
 
     ```bash
     git add src/dynamic/
