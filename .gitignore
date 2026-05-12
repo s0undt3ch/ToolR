@@ -128,7 +128,8 @@ celerybeat.pid
 .env
 .venv
 env/
-venv/
+# Anchored: only ignore a `venv/` at the repo root, not src/venv/.
+/venv/
 ENV/
 env.bak/
 venv.bak/
