@@ -10,9 +10,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any
 
 import msgspec
+
+if TYPE_CHECKING:
+    from toolr._context import Context
 
 SCHEMA_VERSION: int = 1
 
@@ -84,3 +88,107 @@ def load_spec_from_env() -> RunnerSpec:
         msg = f"{_SPEC_ENV_VAR} is not set. The toolr runner must be invoked by the toolr binary, not directly."
         raise SpecError(msg)
     return load_spec(spec_path)
+
+
+def _build_context(spec: RunnerSpec) -> Context:
+    """Construct a minimal :class:`toolr.Context` from a :class:`RunnerSpec`."""
+    # Late imports — keep module-load fast and avoid pulling rich into pure
+    # spec-decoding code paths.
+    import pathlib  # noqa: PLC0415
+    from argparse import ArgumentParser  # noqa: PLC0415
+
+    from toolr._context import Context  # noqa: PLC0415
+    from toolr.utils._console import Consoles  # noqa: PLC0415
+    from toolr.utils._console import ConsoleVerbosity  # noqa: PLC0415
+
+    verbosity_map = {
+        "quiet": ConsoleVerbosity.QUIET,
+        "normal": ConsoleVerbosity.NORMAL,
+        "verbose": ConsoleVerbosity.VERBOSE,
+    }
+    try:
+        verbosity = verbosity_map[spec.context.verbosity]
+    except KeyError as exc:
+        msg = f"unknown verbosity {spec.context.verbosity!r} in spec; expected one of {sorted(verbosity_map)}"
+        raise SpecError(msg) from exc
+
+    consoles = Consoles.setup(verbosity)
+    # ArgumentParser is required by Context for ctx.exit() — it calls
+    # parser.exit(status). A bare parser is sufficient.
+    parser = ArgumentParser(prog=f"toolr {spec.group} {spec.command}", add_help=False)
+    return Context(
+        repo_root=pathlib.Path(spec.context.repo_root),
+        parser=parser,
+        verbosity=verbosity,
+        _console_stderr=consoles.stderr,
+        _console_stdout=consoles.stdout,
+    )
+
+
+def _import_target(spec: RunnerSpec) -> Any:
+    """Import ``spec.module`` and return the attribute named ``spec.function``."""
+    import importlib  # noqa: PLC0415
+
+    try:
+        module = importlib.import_module(spec.module)
+    except ImportError as exc:
+        msg = f"failed to import {spec.module}: {exc}"
+        raise SpecError(msg) from exc
+    try:
+        return getattr(module, spec.function)
+    except AttributeError as exc:
+        msg = f"module {spec.module!r} has no attribute {spec.function!r}"
+        raise SpecError(msg) from exc
+
+
+def run(spec: RunnerSpec) -> int:
+    """Execute the command described by ``spec``. Returns a process exit code.
+
+    ``ctx.exit(status, ...)`` raises :class:`SystemExit`; we honor its code.
+    Any other uncaught exception is logged to stderr and returns 1.
+    """
+    try:
+        ctx = _build_context(spec)
+        target = _import_target(spec)
+        target(ctx, **spec.args)
+    except SystemExit as exc:
+        code = exc.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        # str / other: print and return 1
+        import sys  # noqa: PLC0415
+
+        print(code, file=sys.stderr)  # noqa: T201
+        return 1
+    except SpecError as exc:
+        import sys  # noqa: PLC0415
+
+        print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
+        return 2
+    except Exception:  # noqa: BLE001
+        import sys  # noqa: PLC0415
+        import traceback  # noqa: PLC0415
+
+        traceback.print_exc(file=sys.stderr)
+        return 1
+    return 0
+
+
+def main() -> int:
+    """Module entry point — invoked by ``python -m toolr._runner``."""
+    try:
+        spec = load_spec_from_env()
+    except SpecError as exc:
+        import sys  # noqa: PLC0415
+
+        print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
+        return 2
+    return run(spec)
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())
