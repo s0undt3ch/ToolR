@@ -926,7 +926,7 @@ stdout, and deserializes a `DynamicPayload`. Errors carry context.
 - Modify: `src/dynamic/mod.rs`
 - Create: `src/dynamic/runner.rs`
 
-- [ ] **Step 6.1: Re-export the runner module**
+- [x] **Step 6.1: Re-export the runner module**
 
     Update `src/dynamic/mod.rs`:
 
@@ -943,7 +943,7 @@ stdout, and deserializes a `DynamicPayload`. Errors carry context.
     mod tests;
     ```
 
-- [ ] **Step 6.2: Create `src/dynamic/runner.rs`**
+- [x] **Step 6.2: Create `src/dynamic/runner.rs`**
 
     ```rust
     //! Spawn `python -m toolr._introspect` in the tools venv and capture its
@@ -1053,7 +1053,7 @@ stdout, and deserializes a `DynamicPayload`. Errors carry context.
     }
     ```
 
-- [ ] **Step 6.3: Run the tests**
+- [x] **Step 6.3: Run the tests**
 
     ```bash
     cargo test --lib dynamic::runner::
@@ -1061,7 +1061,7 @@ stdout, and deserializes a `DynamicPayload`. Errors carry context.
 
     Expected: 2 tests passing on Unix (the happy-path test is gated to Unix to keep CI portable).
 
-- [ ] **Step 6.4: Commit**
+- [x] **Step 6.4: Commit**
 
     ```bash
     git add src/dynamic/
