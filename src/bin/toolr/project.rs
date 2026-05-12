@@ -16,8 +16,31 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
             Some(("shell", _)) => venv_shell(),
             _ => unreachable!("clap enforces subcommand_required"),
         },
+        Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
+            Some(("rebuild", _)) => manifest_rebuild(),
+            _ => unreachable!("clap enforces subcommand_required"),
+        },
         _ => unreachable!("clap enforces subcommand_required"),
     }
+}
+
+fn manifest_rebuild() -> Result<ExitCode> {
+    use _rust_utils::dynamic::rebuild_manifest_full;
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = _rust_utils::discovery::discover_project_root(&cwd)?;
+    let resolved = _rust_utils::venv::resolve_venv_path(&repo_root)?;
+    let outcome = rebuild_manifest_full(&repo_root, &resolved.python, &resolved.venv_dir)?;
+    for w in &outcome.warnings {
+        eprintln!("toolr: warning: {w}");
+    }
+    println!(
+        "toolr: wrote {} groups / {} commands to {}",
+        outcome.group_count,
+        outcome.command_count,
+        outcome.manifest_path.display(),
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 fn deps_sync() -> Result<ExitCode> {

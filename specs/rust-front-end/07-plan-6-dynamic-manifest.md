@@ -1476,7 +1476,7 @@ namespace (per the design's `toolr project <...>` rule). The subcommand calls
 - Modify: `src/bin/toolr/cli.rs`
 - Modify: `src/bin/toolr/dispatch.rs`
 
-- [ ] **Step 9.1: Attach the `project` subcommand tree in `cli.rs`**
+- [x] **Step 9.1: Attach the `project` subcommand tree in `cli.rs`**
 
     After the user-defined group loop in `build_command`, add:
 
@@ -1496,7 +1496,7 @@ namespace (per the design's `toolr project <...>` rule). The subcommand calls
     root = root.subcommand(project);
     ```
 
-- [ ] **Step 9.2: Route the subcommand in `dispatch.rs`**
+- [x] **Step 9.2: Route the subcommand in `dispatch.rs`**
 
     Near the top of `dispatch`, before the user-command lookup:
 
@@ -1546,7 +1546,7 @@ namespace (per the design's `toolr project <...>` rule). The subcommand calls
     If the exact API differs in Plan 3 by the time this task lands, adapt
     the call site; the rest of the dispatch code is independent.
 
-- [ ] **Step 9.3: Smoke test in `tests/cli_smoke.rs`**
+- [x] **Step 9.3: Smoke test in `tests/cli_smoke.rs`**
 
     Append:
 
@@ -1567,7 +1567,7 @@ namespace (per the design's `toolr project <...>` rule). The subcommand calls
     }
     ```
 
-- [ ] **Step 9.4: Run tests**
+- [x] **Step 9.4: Run tests**
 
     ```bash
     cargo test --test cli_smoke
@@ -1575,7 +1575,7 @@ namespace (per the design's `toolr project <...>` rule). The subcommand calls
 
     Expected: the new test plus all prior smoke tests pass.
 
-- [ ] **Step 9.5: Commit**
+- [x] **Step 9.5: Commit**
 
     ```bash
     git add src/bin/toolr/ tests/cli_smoke.rs

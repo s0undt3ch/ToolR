@@ -73,6 +73,15 @@ pub fn build_command(manifest: &Manifest) -> Command {
                         Command::new("shell")
                             .about("Spawn a subshell with the tools venv activated"),
                     ),
+            )
+            .subcommand(
+                Command::new("manifest")
+                    .about("Manage the project's toolr manifest")
+                    .subcommand_required(true)
+                    .subcommand(
+                        Command::new("rebuild")
+                            .about("Regenerate the static + dynamic manifest in place"),
+                    ),
             ),
     );
 

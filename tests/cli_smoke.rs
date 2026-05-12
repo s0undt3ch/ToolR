@@ -152,6 +152,24 @@ fn running_a_user_command_invokes_python_runner() {
 }
 
 #[test]
+fn project_manifest_rebuild_help_lists_command() {
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    std::fs::create_dir(&tools).unwrap();
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["project", "manifest", "--help"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("rebuild"),
+        "expected rebuild listed, got:\n{stdout}"
+    );
+}
+
+#[test]
 fn self_build_manifest_help_works() {
     let output = Command::cargo_bin("toolr")
         .unwrap()
