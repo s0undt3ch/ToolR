@@ -711,7 +711,7 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
 - Delete: `docs/usage/` (folder + everything inside, including `index.md`)
 - Delete: `docs/examples/` (folder + everything inside)
 
-- [ ] **Step 6.1: Move the example files**
+- [x] **Step 6.1: Move the example files**
 
     ```bash
     mkdir -p docs/writing-commands/files
@@ -719,7 +719,7 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
     git mv docs/examples/files/*.py docs/writing-commands/files/
     ```
 
-- [ ] **Step 6.2: Write `docs/writing-commands/index.md` (chapter overview)**
+- [x] **Step 6.2: Write `docs/writing-commands/index.md` (chapter overview)**
 
     ````markdown
     # Writing commands
@@ -745,7 +745,7 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
     that toolr can actually execute against the documentation fixture.
     ````
 
-- [ ] **Step 6.3: Write `docs/writing-commands/groups.md`**
+- [x] **Step 6.3: Write `docs/writing-commands/groups.md`**
 
     Port the lead section of the existing `docs/usage/index.md` (everything before "Docstrings"). Adapt:
 
@@ -801,7 +801,7 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
 
     For every `.txt` snippet referenced (`example1-help.txt`, `example1-echo.txt`, etc.), add a corresponding entry to `SNIPPETS` in `.pre-commit-hooks/regen-doc-snippets.py` and rerun the script.
 
-- [ ] **Step 6.4: Write `docs/writing-commands/arguments.md`**
+- [x] **Step 6.4: Write `docs/writing-commands/arguments.md`**
 
     Port the "Docstrings" + arguments material from the old `docs/usage/index.md` and the corresponding examples from `docs/examples/index.md`. Cover:
 
@@ -813,7 +813,7 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
 
     Each subsection: a `.py` example file + a captured `--help` `.txt`. Move existing examples (`calculator.py`, `example.py`, `files.py`, `function_name_conversion.py`) into the appropriate subsections; add a new `literal_choices.py` example demonstrating `Literal[...]`.
 
-- [ ] **Step 6.5: Write `docs/writing-commands/docstrings.md`**
+- [x] **Step 6.5: Write `docs/writing-commands/docstrings.md`**
 
     Port the "Docstrings" section content from old `docs/usage/index.md`. Cover:
 
@@ -824,17 +824,17 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
 
     Source examples: `docs/writing-commands/files/example2.py` (renamed from `docs/usage/files/example2.py`).
 
-- [ ] **Step 6.6: Write `docs/writing-commands/context.md`**
+- [x] **Step 6.6: Write `docs/writing-commands/context.md`**
 
     Cover the `ctx: Context` argument: what fields/methods it exposes (`print`, `run`, `prompt`, `exit`, `chdir`, verbosity helpers). Use commands from the scaffold's `example.py` (which the docs fixture has) as the example surface — `hello` for `ctx.print`, `commit` for `ctx.run(..., capture_output=True)`, `confirm` for `ctx.prompt` + `ctx.exit`.
 
     Add `Snippet` entries to the regen script for each command's help + execution. Use those `.txt` captures via `--8<--`.
 
-- [ ] **Step 6.7: Write `docs/writing-commands/annotations.md`**
+- [x] **Step 6.7: Write `docs/writing-commands/annotations.md`**
 
     Port the "Mutually Exclusive Arguments" section from the old usage page. Use the existing `mutually-exclusive-1.py` and `mutually-exclusive-2.py` examples. Add a separate subsection on `arg(aliases=[...])` and `arg(choices=[...])`.
 
-- [ ] **Step 6.8: Write `docs/writing-commands/nesting.md`**
+- [x] **Step 6.8: Write `docs/writing-commands/nesting.md`**
 
     Document nested groups via `CommandGroup.command_group(...)`. Source material lives in `python/toolr/_registry.py:CommandGroup.command_group` (registry method that creates a child group with `parent=` set). Show a two-level example:
 
@@ -849,13 +849,13 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
 
     Add a captured `.txt` for the nested `--help`.
 
-- [ ] **Step 6.9: Delete the old folders**
+- [x] **Step 6.9: Delete the old folders**
 
     ```bash
     git rm -r docs/usage docs/examples
     ```
 
-- [ ] **Step 6.10: Regen snippets**
+- [x] **Step 6.10: Regen snippets**
 
     ```bash
     .pre-commit-hooks/regen-doc-snippets.py
@@ -863,7 +863,7 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
 
     Inspect the new `.txt` captures; commit them with the doc pages.
 
-- [ ] **Step 6.11: Build verification + commit**
+- [x] **Step 6.11: Build verification + commit**
 
     ```bash
     uv run mkdocs build --strict
@@ -881,7 +881,7 @@ Document every key in `tools/pyproject.toml` + the venv model.
 
 - Modify: `docs/project-config.md`
 
-- [ ] **Step 7.1: Replace the project-config stub**
+- [x] **Step 7.1: Replace the project-config stub**
 
     Sections to cover:
 
@@ -896,7 +896,7 @@ Document every key in `tools/pyproject.toml` + the venv model.
 
     Each option gets: one-line description, default value, allowed values, example block. Single page; section anchors for each option.
 
-- [ ] **Step 7.2: Build verification + commit**
+- [x] **Step 7.2: Build verification + commit**
 
     ```bash
     uv run mkdocs build --strict
@@ -914,7 +914,7 @@ One page, one section per `toolr` subcommand, anchored for grepping.
 
 - Modify: `docs/cli.md`
 
-- [ ] **Step 8.1: Replace the cli stub**
+- [x] **Step 8.1: Replace the cli stub**
 
     Structure:
 
@@ -1006,7 +1006,7 @@ One page, one section per `toolr` subcommand, anchored for grepping.
 
     Add a captured `.txt` for **at least the `--help` output** of every documented subcommand. Add `Snippet` entries to `.pre-commit-hooks/regen-doc-snippets.py` for each (`docs/cli-files/<subcmd>-help.txt`).
 
-- [ ] **Step 8.2: Regen snippets + build + commit**
+- [x] **Step 8.2: Regen snippets + build + commit**
 
     ```bash
     .pre-commit-hooks/regen-doc-snippets.py
@@ -1025,7 +1025,7 @@ Document the `toolr-manifest.json` static convention + `toolr.build` API + legac
 
 - Modify: `docs/third-party.md`
 
-- [ ] **Step 9.1: Replace the third-party stub**
+- [x] **Step 9.1: Replace the third-party stub**
 
     Source material: `specs/rust-front-end/06-plan-5-static-third-party.md` (the original plan).
 
@@ -1040,7 +1040,7 @@ Document the `toolr-manifest.json` static convention + `toolr.build` API + legac
 
     Include a complete worked example: a tiny `my_pkg/commands.py` + `my_pkg/__init__.py` + `pyproject.toml` + generated `my_pkg/toolr-manifest.json`. Each can live as a real file under `docs/third-party-files/`.
 
-- [ ] **Step 9.2: Build verification + commit**
+- [x] **Step 9.2: Build verification + commit**
 
     ```bash
     uv run mkdocs build --strict
@@ -1062,7 +1062,7 @@ Distill the four internal topics into focused pages.
 - Modify: `docs/internals/pre-commit.md`
 - Modify: `docs/internals/diagnostics.md`
 
-- [ ] **Step 10.1: Write `docs/internals/index.md`**
+- [x] **Step 10.1: Write `docs/internals/index.md`**
 
     ```markdown
     # Internals
@@ -1085,7 +1085,7 @@ Distill the four internal topics into focused pages.
     in the repo.
     ```
 
-- [ ] **Step 10.2: Write `docs/internals/manifest.md`**
+- [x] **Step 10.2: Write `docs/internals/manifest.md`**
 
     Distill from `specs/rust-front-end/02-plan-1-rust-skeleton.md` (static) and `specs/rust-front-end/07-plan-6-dynamic-manifest.md` (dynamic). Cover:
 
@@ -1095,7 +1095,7 @@ Distill the four internal topics into focused pages.
     - Hashing details: blake3 over sorted file paths + contents.
     - Manual rebuild: `toolr project manifest rebuild`.
 
-- [ ] **Step 10.3: Write `docs/internals/cache.md`**
+- [x] **Step 10.3: Write `docs/internals/cache.md`**
 
     Distill from `specs/rust-front-end/09-plan-8-cache.md`. Cover:
 
@@ -1108,7 +1108,7 @@ Distill the four internal topics into focused pages.
     - Pruning: `toolr self cache prune`, `--all`, `--dry-run`, `--yes`, `--stale-after-days N`.
     - Passive size hint: when it appears, `TOOLR_NO_CACHE_HINT=1` to suppress.
 
-- [ ] **Step 10.4: Write `docs/internals/pre-commit.md`**
+- [x] **Step 10.4: Write `docs/internals/pre-commit.md`**
 
     Cover the shipped `.pre-commit-hooks.yaml` and the hooks it provides:
 
@@ -1116,7 +1116,7 @@ Distill the four internal topics into focused pages.
 
     Show how downstream consumers add it to their `.pre-commit-config.yaml`.
 
-- [ ] **Step 10.5: Write `docs/internals/diagnostics.md`**
+- [x] **Step 10.5: Write `docs/internals/diagnostics.md`**
 
     Distill from `specs/rust-front-end/08-plan-7-missing-deps.md`. Cover:
 
@@ -1131,7 +1131,7 @@ Distill the four internal topics into focused pages.
     - **Exit code 78** — pre-flight failure (configuration error, per
       `sysexits.h`); distinguishable from runtime errors.
 
-- [ ] **Step 10.6: Build verification + commit**
+- [x] **Step 10.6: Build verification + commit**
 
     ```bash
     uv run mkdocs build --strict
@@ -1163,7 +1163,7 @@ Drop the private-module pages; keep only the public surface.
 - Move: `docs/reference/toolr/build.md` → `docs/reference/build.md`
 - Create: `docs/reference/index.md`
 
-- [ ] **Step 11.1: Delete private-module reference pages**
+- [x] **Step 11.1: Delete private-module reference pages**
 
     ```bash
     git rm \
@@ -1181,7 +1181,7 @@ Drop the private-module pages; keep only the public surface.
     rmdir docs/reference/toolr/utils 2>/dev/null || true
     ```
 
-- [ ] **Step 11.2: Move + rename public-module pages**
+- [x] **Step 11.2: Move + rename public-module pages**
 
     ```bash
     git mv docs/reference/toolr/_context.md docs/reference/context.md
@@ -1192,7 +1192,7 @@ Drop the private-module pages; keep only the public surface.
 
     Inside each moved file, update the mkdocstrings module reference if needed (e.g. `_context.md` was generating from `toolr._context` — the public `Context` is also re-exported at `toolr.Context`; change the page's `::: toolr._context.Context` to `::: toolr.Context` for the user-facing entry point).
 
-- [ ] **Step 11.3: Create the reference index**
+- [x] **Step 11.3: Create the reference index**
 
     `docs/reference/index.md`:
 
@@ -1216,7 +1216,7 @@ Drop the private-module pages; keep only the public surface.
   `docs/reference/arg.md` files that just contain `::: toolr.command_group`
   and `::: toolr.arg` directives respectively, and link to them.)
 
-- [ ] **Step 11.4: Build verification + commit**
+- [x] **Step 11.4: Build verification + commit**
 
     Confirm `mkdocs build --strict` passes — if mkdocstrings can't find a
     module from one of the surviving pages, fix the directive (the public
@@ -1241,7 +1241,7 @@ Wire `.pre-commit-hooks/regen-doc-snippets.py --check` into CI + the local pre-c
 - Modify: `.pre-commit-config.yaml`
 - Modify: `.github/workflows/ci.yml` (or wherever the existing doc/lint jobs live)
 
-- [ ] **Step 12.1: Add the local pre-commit hook**
+- [x] **Step 12.1: Add the local pre-commit hook**
 
     In `.pre-commit-config.yaml`, append a new `- repo: local` entry (after the existing local hooks if any, else at the end of the `repos:` list):
 
@@ -1258,7 +1258,7 @@ Wire `.pre-commit-hooks/regen-doc-snippets.py --check` into CI + the local pre-c
 
     The `files:` regex scopes the hook to commits that touch docs, the regen script itself, or the toolr binary source. Code-only commits don't pay the cost.
 
-- [ ] **Step 12.2: Add a CI job**
+- [x] **Step 12.2: Add a CI job**
 
     In `.github/workflows/ci.yml`, locate the existing pre-commit / lint job (probably named `pre-commit` or `lint`). Add a `Verify doc snippets are in sync` step after the rust build step (so `target/release/toolr` is available — or let the regen script build a debug binary on demand). Example step:
 
@@ -1269,7 +1269,7 @@ Wire `.pre-commit-hooks/regen-doc-snippets.py --check` into CI + the local pre-c
 
     Adjust placement based on the existing workflow structure. Make sure `uv` and `cargo` are available before this step runs.
 
-- [ ] **Step 12.3: Verify locally**
+- [x] **Step 12.3: Verify locally**
 
     ```bash
     .pre-commit-hooks/regen-doc-snippets.py --check
@@ -1278,7 +1278,7 @@ Wire `.pre-commit-hooks/regen-doc-snippets.py --check` into CI + the local pre-c
 
     Both should exit cleanly. To convince yourself the drift detection works, temporarily edit one of the captured `.txt` files, rerun `--check`, observe the diff + exit 1, revert.
 
-- [ ] **Step 12.4: Commit**
+- [x] **Step 12.4: Commit**
 
     ```bash
     git add .pre-commit-config.yaml .github/workflows/ci.yml
@@ -1295,7 +1295,7 @@ Slim `docs/index.md` to a landing page that points to Quickstart and the chapter
 
 - Modify: `docs/index.md`
 
-- [ ] **Step 13.1: Replace the home page**
+- [x] **Step 13.1: Replace the home page**
 
     Existing `docs/index.md` includes `{!README.md!lines=5-100}`. Narrow that range to just the top-of-README (one-line description + the headline install path) and link out to the rest:
 
@@ -1320,7 +1320,7 @@ Slim `docs/index.md` to a landing page that points to Quickstart and the chapter
     File an issue on [GitHub](https://github.com/s0undt3ch/ToolR/issues).
     ```
 
-- [ ] **Step 13.2: Build verification + commit**
+- [x] **Step 13.2: Build verification + commit**
 
     ```bash
     uv run mkdocs build --strict
@@ -1334,7 +1334,7 @@ Slim `docs/index.md` to a landing page that points to Quickstart and the chapter
 
 A pass over the entire site for cross-link consistency, terminology, and remaining stubs.
 
-- [ ] **Step 14.1: Search for leftover stubs**
+- [x] **Step 14.1: Search for leftover stubs**
 
     ```bash
     grep -rn "Populated in Plan 11" docs/
@@ -1342,7 +1342,7 @@ A pass over the entire site for cross-link consistency, terminology, and remaini
 
     Expected: empty. If any stubs remain, either fill them in or remove the page from the nav.
 
-- [ ] **Step 14.2: Search for obsolete terminology**
+- [x] **Step 14.2: Search for obsolete terminology**
 
     ```bash
     grep -rn "python -m toolr\|--timestamps\|--no-output-timeout" docs/
@@ -1350,7 +1350,7 @@ A pass over the entire site for cross-link consistency, terminology, and remaini
 
     Expected: empty (or references in the Changelog only, which is auto-generated and not under our control).
 
-- [ ] **Step 14.3: Verify external links**
+- [x] **Step 14.3: Verify external links**
 
     Search for any remaining `pip install toolr` recommendations outside of the installation page's pip section, and `pre-rewrite` references:
 
@@ -1360,7 +1360,7 @@ A pass over the entire site for cross-link consistency, terminology, and remaini
 
     Expected: ideally empty; fix any stragglers.
 
-- [ ] **Step 14.4: Full build + serve**
+- [x] **Step 14.4: Full build + serve**
 
     ```bash
     uv run mkdocs build --strict
@@ -1369,7 +1369,7 @@ A pass over the entire site for cross-link consistency, terminology, and remaini
 
     Click through the nav from top to bottom. Spot-check that every page renders, every code block has its expected output, and every internal link resolves. Note any rough edges and fix them.
 
-- [ ] **Step 14.5: Commit any polish**
+- [x] **Step 14.5: Commit any polish**
 
     ```bash
     git add docs/
@@ -1386,11 +1386,11 @@ Flip the roadmap status.
 
 - Modify: `specs/rust-front-end/01-roadmap.md`
 
-- [ ] **Step 15.1: Update the Plan 11 entry**
+- [x] **Step 15.1: Update the Plan 11 entry**
 
     Change `**Status:**` from `🔧 In Progress` to `✅ Done`.
 
-- [ ] **Step 15.2: Commit**
+- [x] **Step 15.2: Commit**
 
     ```bash
     git add specs/rust-front-end/01-roadmap.md

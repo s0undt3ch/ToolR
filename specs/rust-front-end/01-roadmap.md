@@ -232,7 +232,7 @@
 
 ### Plan 11: Documentation site overhaul
 
-- **Status:** 🔧 In Progress
+- **Status:** ✅ Done
 - **Plan doc:** [13-plan-11-docs-overhaul.md](./13-plan-11-docs-overhaul.md)
 - **Depends on:** Plan 10 (Quickstart references real `toolr project init` output)
 - **Unblocks:** —
