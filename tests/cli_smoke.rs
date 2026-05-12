@@ -202,6 +202,95 @@ fn self_build_manifest_errors_when_no_python_available() {
 }
 
 #[test]
+#[cfg(unix)]
+fn execute_time_auto_rebuild_kicks_in_when_dynamic_hash_is_empty() {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path();
+    let tools = project.join("tools");
+    std::fs::create_dir(&tools).unwrap();
+    // Marker that makes resolve_venv_path engage (it requires tools/pyproject.toml).
+    std::fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(tools.join("__init__.py"), "").unwrap();
+    // A trivial demo command so dispatch finds something to run.
+    std::fs::write(
+        tools.join("demo.py"),
+        r#"from toolr import command_group
+group = command_group("demo", "Demo")
+
+@group.command
+def hello(ctx):
+    """Say hi."""
+    pass
+"#,
+    )
+    .unwrap();
+    // Pre-existing manifest with empty dynamic_hash — triggers auto-rebuild.
+    let manifest = r#"{
+        "schema_version": 1, "static_hash": "h", "dynamic_hash": "",
+        "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
+        "commands": [{
+            "name": "hello", "group": "demo", "module": "tools.demo",
+            "function": "hello", "summary": "", "description": "",
+            "arguments": [], "imports": [], "origin": "static"
+        }]
+    }"#;
+    std::fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
+
+    // Place an in-tree fake venv with a fake python that emits an
+    // empty dynamic payload. resolve_venv_path defaults to in-tree
+    // when [tool.toolr] is absent and tools/.venv/ exists.
+    let venv_bin = tools.join(".venv").join("bin");
+    std::fs::create_dir_all(&venv_bin).unwrap();
+    let fake_python = venv_bin.join("python");
+    let mut f = std::fs::File::create(&fake_python).unwrap();
+    writeln!(f, "#!/bin/sh").unwrap();
+    writeln!(
+        f,
+        "echo '{{\"payload_schema_version\":1,\"groups\":[],\"commands\":[],\"warnings\":[]}}'"
+    )
+    .unwrap();
+    drop(f);
+    let mut perms = std::fs::metadata(&fake_python).unwrap().permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&fake_python, perms).unwrap();
+    // Mark venv with a dist-info so compute_dynamic_hash produces a real hash.
+    std::fs::create_dir_all(
+        tools
+            .join(".venv")
+            .join("lib")
+            .join("python3.13")
+            .join("site-packages")
+            .join("foo-1.0.0.dist-info"),
+    )
+    .unwrap();
+    // pyproject.toml needs an opt-in for in-tree venv layout.
+    std::fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(project)
+        .args(["demo", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("dynamic manifest layer stale"),
+        "expected regeneration notice, got stderr:\n{stderr}"
+    );
+}
+
+#[test]
 fn user_command_propagates_nonzero_exit() {
     let Some(python) = detect_test_python() else {
         eprintln!("skipping: no test python (see above)");

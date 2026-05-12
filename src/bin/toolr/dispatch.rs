@@ -50,6 +50,9 @@ pub fn dispatch(
 
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;
+    // Auto-rebuild dynamic layer when the venv has changed since the
+    // manifest was last written. Tab completion never takes this path.
+    ensure_dynamic_layer_fresh(&repo_root, manifest)?;
     let verbosity = if matches.get_flag("quiet") {
         "quiet"
     } else if matches.get_flag("debug") {
@@ -228,6 +231,34 @@ fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> 
     let shell: CompletionShell = shell_str.parse()?;
     print!("{}", completion_script(shell));
     Ok(ExitCode::SUCCESS)
+}
+
+fn ensure_dynamic_layer_fresh(
+    project_root: &std::path::Path,
+    manifest: &Manifest,
+) -> anyhow::Result<()> {
+    use _rust_utils::dynamic::{compute_dynamic_hash, rebuild_dynamic_only};
+
+    // Skip projects that don't have a tools venv configured.
+    if !project_root.join("tools").join("pyproject.toml").is_file() {
+        return Ok(());
+    }
+    let resolved = match resolve_venv_path(project_root) {
+        Ok(r) => r,
+        // Venv not yet set up — let the normal execute path surface the
+        // diagnostic. We don't try to auto-rebuild against a missing venv.
+        Err(_) => return Ok(()),
+    };
+    if !resolved.python.is_file() {
+        return Ok(());
+    }
+    let current = compute_dynamic_hash(&resolved.venv_dir)?;
+    if manifest.dynamic_hash == current && !current.is_empty() {
+        return Ok(());
+    }
+    eprintln!("toolr: dynamic manifest layer stale; regenerating...");
+    rebuild_dynamic_only(project_root, &resolved.python, &resolved.venv_dir)?;
+    Ok(())
 }
 
 fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {

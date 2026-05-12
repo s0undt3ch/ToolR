@@ -1596,7 +1596,7 @@ takes it.
 
 - Modify: `src/bin/toolr/dispatch.rs`
 
-- [ ] **Step 10.1: Add a freshness check helper**
+- [x] **Step 10.1: Add a freshness check helper**
 
     In `src/bin/toolr/dispatch.rs`, add:
 
@@ -1619,7 +1619,7 @@ takes it.
     }
     ```
 
-- [ ] **Step 10.2: Call it before user-command execution**
+- [x] **Step 10.2: Call it before user-command execution**
 
     Modify `dispatch` so that the user-command branch (where Plan 2 spawns
     the Python runner) calls `ensure_dynamic_layer_fresh` first. The
@@ -1641,7 +1641,7 @@ takes it.
     user command itself exits with the Plan-2 stub. That is correct — the
     auto-rebuild path is decoupled from execution wiring.
 
-- [ ] **Step 10.3: Test the auto-rebuild trigger**
+- [x] **Step 10.3: Test the auto-rebuild trigger**
 
     Append to `tests/cli_smoke.rs`:
 
@@ -1677,7 +1677,7 @@ takes it.
     trait. Don't merge Task 10 without **some** test covering the staleness
     branch.
 
-- [ ] **Step 10.4: Run smoke tests**
+- [x] **Step 10.4: Run smoke tests**
 
     ```bash
     cargo test --test cli_smoke
@@ -1685,7 +1685,7 @@ takes it.
 
     Expected: all smoke tests pass; the new test either runs or self-skips.
 
-- [ ] **Step 10.5: Commit**
+- [x] **Step 10.5: Commit**
 
     ```bash
     git add src/bin/toolr/dispatch.rs tests/cli_smoke.rs
