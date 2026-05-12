@@ -1,0 +1,156 @@
+name: Install Smoke Tests
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to smoke-test (defaults to latest release)'
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - 'dist/install.sh'
+      - 'dist/install.ps1'
+      - 'dist/mise-plugin/**'
+      - '.github/workflows/install-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+
+  smoke-install-sh:
+    name: install.sh (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-13
+          - macos-14
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Install via install.sh
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            sh ./dist/install.sh --version "${{ inputs.version }}" --prefix "$RUNNER_TEMP/toolr-bin"
+          else
+            sh ./dist/install.sh --prefix "$RUNNER_TEMP/toolr-bin"
+          fi
+      - name: Verify
+        run: |
+          "$RUNNER_TEMP/toolr-bin/toolr" --version
+          "$RUNNER_TEMP/toolr-bin/toolr" --help
+
+  smoke-install-ps1:
+    name: install.ps1 (windows)
+    runs-on: windows-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Install via install.ps1
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP "toolr-bin"
+          if ("${{ inputs.version }}" -ne "") {
+            ./dist/install.ps1 -Version "${{ inputs.version }}" -Prefix $prefix
+          } else {
+            ./dist/install.ps1 -Prefix $prefix
+          }
+          & (Join-Path $prefix "toolr.exe") --version
+
+  smoke-pip-wheel:
+    name: pip install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-13
+          - macos-14
+          - windows-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: pip install toolr (latest from PyPI)
+        shell: bash
+        run: |
+          python -m venv .venv
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            .venv/Scripts/python.exe -m pip install --upgrade pip
+            .venv/Scripts/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv/Scripts/python.exe -m toolr --version || true
+          else
+            .venv/bin/python -m pip install --upgrade pip
+            .venv/bin/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv/bin/python -m toolr --version || true
+          fi
+
+  smoke-mise-plugin:
+    name: mise plugin (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-14
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: jdx/mise-action@13abe502c30c1559a5c37dff303831bab82c9402 # v3.5.1
+        with:
+          install: false
+      - name: Install plugin from local staging dir
+        run: |
+          mise plugin add toolr "$PWD/dist/mise-plugin"
+          if [ -n "${{ inputs.version }}" ]; then
+            mise install "toolr@${{ inputs.version }}"
+            mise exec "toolr@${{ inputs.version }}" -- toolr --version
+          else
+            latest=$(mise ls-remote toolr | tail -1)
+            mise install "toolr@${latest}"
+            mise exec "toolr@${latest}" -- toolr --version
+          fi
+
+  report:
+    name: Report
+    if: always()
+    runs-on: ubuntu-latest
+    needs:
+      - smoke-install-sh
+      - smoke-install-ps1
+      - smoke-pip-wheel
+      - smoke-mise-plugin
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+      - uses: martialonline/workflow-status@326830cacf79872efe767e15031f58d1ea0508c4 # v4.2
+        id: check
+      - run: echo "Install channels failed"
+        if: steps.check.outputs.status == 'failure'
+      - run: echo "Install channels OK"
+        if: steps.check.outputs.status == 'success'

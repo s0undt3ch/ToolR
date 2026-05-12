@@ -1731,7 +1731,7 @@ scripts or release manifest surface quickly even between releases.
 
 - Create: `.github/workflows/install-smoke.yml`
 
-- [ ] **Step 8.1: Write the smoke-test workflow**
+- [x] **Step 8.1: Write the smoke-test workflow**
 
     Create `.github/workflows/install-smoke.yml`:
 
@@ -1897,7 +1897,7 @@ scripts or release manifest surface quickly even between releases.
             if: steps.check.outputs.status == 'success'
     ```
 
-- [ ] **Step 8.2: Acceptance criteria for the smoke job**
+- [x] **Step 8.2: Acceptance criteria for the smoke job**
 
     - All four matrix jobs (`smoke-install-sh`, `smoke-install-ps1`,
       `smoke-pip-wheel`, `smoke-mise-plugin`) must succeed against the
@@ -1913,7 +1913,7 @@ scripts or release manifest surface quickly even between releases.
     once, set the smoke workflow's `schedule:` to active and treat any
     failure as a release-blocker for the next version.
 
-- [ ] **Step 8.3: Lint the workflow**
+- [x] **Step 8.3: Lint the workflow**
 
     ```bash
     uv run pre-commit run --files .github/workflows/install-smoke.yml
@@ -1921,7 +1921,7 @@ scripts or release manifest surface quickly even between releases.
 
     Expected: PASS.
 
-- [ ] **Step 8.4: Commit**
+- [x] **Step 8.4: Commit**
 
     ```bash
     git add .github/workflows/install-smoke.yml
