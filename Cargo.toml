@@ -11,6 +11,10 @@ repository = "https://github.com/s0undt3ch/toolr"
 name = "_rust_utils"
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "toolr"
+path = "src/bin/toolr/main.rs"
+
 [dependencies]
 pyo3 = { version = ">=0.20", features = ["extension-module"], optional = true }
 tokio = { version = ">=1.45.0", features = ["full"] }
