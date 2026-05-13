@@ -246,6 +246,14 @@ def capture(toolr: Path, fixture: Path, _python: Path, snippet: Snippet) -> str:
     env = {
         **os.environ,
         "TOOLR_NO_CACHE_HINT": "1",
+        # Pin terminal width so clap's adaptive `--help` layout is
+        # deterministic across machines. Without this, local captures
+        # (typically ~80 cols) drift from CI captures (CI sets
+        # `COLUMNS=190`), and `--check` perpetually fails on the
+        # diff. 100 is wide enough to fit most flag/description pairs
+        # on a single line while still wrapping the longer ones —
+        # what we'd want a reader to see in the docs.
+        "COLUMNS": "100",
     }
     result = subprocess.run(  # noqa: S603
         [str(toolr), *snippet.argv],

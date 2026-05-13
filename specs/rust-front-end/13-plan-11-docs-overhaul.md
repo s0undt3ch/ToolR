@@ -753,7 +753,8 @@ Migrate the existing `docs/usage/` content + `docs/examples/` examples into the 
     - Open with: "Every command starts with a [`command_group`][toolr._registry.CommandGroup.command_group] declaration."
     - Show `docs/writing-commands/files/example1.py` (already moved).
     - Show real captured help.
-    - Close with a one-sentence pointer to [Arguments](arguments.md).
+    - Close with a one-sentence pointer to
+      [Arguments](../../docs/writing-commands/arguments.md).
 
     Concrete page skeleton (fill in the prose around the snippets):
 
@@ -1000,7 +1001,8 @@ One page, one section per `toolr` subcommand, anchored for grepping.
     --8<-- "docs/cli-files/project-init.txt"
     ```
 
-    See also: [Quickstart](quickstart.md), [Project configuration](project-config.md).
+    See also: [Quickstart](../../docs/quickstart.md),
+    [Project configuration](../../docs/project-config.md).
 
     ```text
 
