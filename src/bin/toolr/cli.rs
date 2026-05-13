@@ -320,19 +320,22 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
     // before handing it to clap. On a non-TTY (piped / captured help
     // text) the renderer returns plain text, so doc-snippet captures
     // remain stable.
-    let about = crate::markdown::render(&cmd.summary);
+    //
+    // We deliberately put the *full* summary+description on `about`
+    // instead of splitting between `about` (short) and `long_about`
+    // (long). clap's `-h` vs `--help` distinction trims helpful
+    // context that legacy argparse-era toolr users expect on either
+    // flag, and our docstrings are usually short enough that the
+    // "long form" is fine on `-h` too.
+    let full = if cmd.summary.is_empty() {
+        cmd.description.clone()
+    } else if cmd.description.is_empty() {
+        cmd.summary.clone()
+    } else {
+        format!("{}\n\n{}", cmd.summary, cmd.description)
+    };
+    let about = crate::markdown::render(&full);
     let mut c = Command::new(cmd.name.clone()).about(about);
-    // clap shows `long_about` exclusively when set, dropping `about`,
-    // so glue the summary back in front of the description for
-    // `--help` to see both paragraphs.
-    if !cmd.description.is_empty() {
-        let full = if cmd.summary.is_empty() {
-            cmd.description.clone()
-        } else {
-            format!("{}\n\n{}", cmd.summary, cmd.description)
-        };
-        c = c.long_about(crate::markdown::render(&full));
-    }
     for arg in &cmd.arguments {
         let long_flag = arg.name.replace('_', "-");
         let mut a = Arg::new(arg.name.clone()).help(crate::markdown::render(&arg.help));
