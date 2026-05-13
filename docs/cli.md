@@ -15,10 +15,14 @@ toolr --help
 ```
 
 - `toolr --version` — print the binary's version.
-- `toolr --help` — print top-level help.
-- `-d` / `--debug` — increase verbosity globally (also accepted as a
-  pre-subcommand flag, e.g. `toolr -d example hello`).
-- `-q` / `--quiet` — suppress non-error output.
+- `toolr --help` — print top-level help. On a leaf command the
+  long form prints the full docstring (rendered via termimad);
+  `-h` prints the same content as a one-line summary.
+- `-d` / `--debug` — increase verbosity. **Root-only**: place it
+  before the subcommand (`toolr -d example hello`, not
+  `toolr example -d hello`). Mutually exclusive with `--quiet`.
+- `-q` / `--quiet` — suppress non-error output. Root-only, same
+  placement rule as `--debug`.
 
 ## `toolr project ...`
 

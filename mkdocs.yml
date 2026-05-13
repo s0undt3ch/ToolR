@@ -59,6 +59,7 @@ nav:
     - Overview: reference/index.md
     - Context: reference/context.md
     - command_group: reference/command_group.md
+    - command: reference/command.md
     - arg: reference/arg.md
     - testing: reference/testing.md
     - build: reference/build.md

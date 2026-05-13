@@ -185,4 +185,52 @@ error: invalid value '/tmp/missing.txt' for '<config>':
 path does not exist: /tmp/missing.txt
 ```
 
+## Module-level type aliases
+
+Repeating the same `Annotated[…]` blob across several command
+signatures gets noisy. Define it once at module scope; toolr's
+static parser follows the alias to its underlying type:
+
+```python
+from typing import Annotated, TypeAlias
+
+from toolr import Context, arg, command, command_group
+
+CommitHash: TypeAlias = Annotated[
+    str | None,
+    arg(help="A 40-char git SHA, or None for HEAD."),
+]
+
+command_group("git", title="Git helpers")
+
+
+@command(group="git")
+def show(ctx: Context, sha: CommitHash = None) -> None: ...
+
+
+@command(group="git")
+def diff(ctx: Context, base: CommitHash = None) -> None: ...
+```
+
+Both `show` and `diff` end up with the same `--sha` / `--base`
+treatment, with the alias's `arg(...)` metadata applied to each.
+Aliases compose with any of the types in the matrix above
+(`list[…]`, `Literal[…]`, `T | None`, `toolr.types.*`).
+
+## Heterogeneous tuples
+
+A `tuple[T1, T2, …]` parameter declares a fixed-arity positional
+group; toolr enforces the count at clap-parse time and msgspec
+validates each slot against its declared type:
+
+```python
+def link(ctx: Context, mapping: tuple[str, int]) -> None: ...
+```
+
+```sh
+toolr graph link foo 7      # OK
+toolr graph link foo bar    # error: invalid value 'bar' for slot 1: invalid digit
+toolr graph link foo        # error: missing slot 1
+```
+
 Next: [Docstrings →](docstrings.md)
