@@ -19,19 +19,19 @@ fn write_entry(
     fs::create_dir_all(cache_dir.join("venv")).unwrap();
     fs::write(cache_dir.join("venv/blob.bin"), vec![0u8; bytes]).unwrap();
     let stamp = last_used_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let json = format!(
-        r#"{{
-          "schema_version": 1,
-          "repo_path": "{repo}",
-          "toolr_version": "1.0.0",
-          "python_version": "3.13.1",
-          "created_at": "{stamp}",
-          "last_used_at": "{stamp}"
-        }}"#,
-        repo = repo_path.display(),
-        stamp = stamp,
-    );
-    fs::write(cache_dir.join("meta.json"), json).unwrap();
+    // Build the JSON via serde_json so paths with backslashes (Windows)
+    // get properly escaped. Hand-rolled `format!` produced invalid JSON
+    // on Windows — `"C:\Users\..."` has illegal escape sequences and the
+    // cache-list code silently skipped those entries.
+    let meta = serde_json::json!({
+        "schema_version": 1,
+        "repo_path": repo_path.to_string_lossy(),
+        "toolr_version": "1.0.0",
+        "python_version": "3.13.1",
+        "created_at": stamp,
+        "last_used_at": stamp,
+    });
+    fs::write(cache_dir.join("meta.json"), meta.to_string()).unwrap();
 }
 
 fn cmd_in(tmp: &Path, args: &[&str]) -> Command {
