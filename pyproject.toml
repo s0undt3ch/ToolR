@@ -49,11 +49,12 @@ bindings = "pyo3"
 strip = true
 # Require Cargo.lock is up to date
 locked = true
+manifest-path = "crates/toolr-core/Cargo.toml"
 # Ship the Rust `toolr` binary inside the wheel. Maturin discovers it
 # from the `[[bin]]` entry in Cargo.toml; this line is documentation +
 # an extra safety net so future config edits don't silently drop it.
 include = [
-    { path = "src/bin/toolr/**/*.rs", format = "sdist" },
+    { path = "crates/toolr-core/src/bin/toolr/**/*.rs", format = "sdist" },
 ]
 
 [tool.cibuildwheel]
