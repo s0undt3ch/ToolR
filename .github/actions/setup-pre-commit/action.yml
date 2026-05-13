@@ -93,3 +93,16 @@ runs:
       if: ${{ steps.cache-prek-hooks.outputs.cache-hit != 'true' }}
       run: |
         prek install --install-hooks
+
+    # The `regen-doc-snippets` local hook materialises a fake in-tree
+    # venv that points at `.venv/bin/python`, so the pre-commit job
+    # needs the dev venv synced. Without this, the hook aborts with
+    # `no .venv/bin/python found`.
+    - name: Install uv
+      uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
+      with:
+        enable-cache: true
+
+    - name: Sync dev venv (for regen-doc-snippets hook)
+      shell: bash
+      run: uv sync --dev
