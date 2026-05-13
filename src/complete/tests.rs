@@ -362,6 +362,27 @@ fn preserves_dynamic_entries_from_cache_when_reparsing() {
 #[test]
 fn errors_when_no_tools_dir_exists() {
     let tmp = TempDir::new().unwrap();
+    // GHA Windows runners ship with `C:\tools\` populated, which makes
+    // the discovery walk succeed when it crawls past the drive root.
+    // Same hazard on any host with `/tools`. Skip when the host
+    // violates the test precondition.
+    let mut walker = tmp.path().canonicalize().unwrap_or_else(|_| tmp.path().to_path_buf());
+    let ancestor_has_tools = loop {
+        if walker.join("tools").is_dir() {
+            break true;
+        }
+        if !walker.pop() {
+            break false;
+        }
+    };
+    if ancestor_has_tools {
+        eprintln!(
+            "skipping: an ancestor of {} has a tools/ dir; \
+             this host violates the test precondition.",
+            tmp.path().display(),
+        );
+        return;
+    }
     let err = resolve_manifest_at_tab(tmp.path()).expect_err("no tools/");
     let msg = err.to_string();
     assert!(msg.contains("tools"), "expected hint about tools/, got: {msg}");

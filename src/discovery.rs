@@ -60,12 +60,40 @@ mod tests {
     #[test]
     fn returns_not_found_when_no_tools_dir_exists() {
         let tmp = TempDir::new().unwrap();
+        // GHA Windows runners ship with `C:\tools\` populated, so the
+        // walk-up-and-find-tools/ algorithm rightfully succeeds when
+        // it crawls past the drive root. Same hazard on any Unix host
+        // that happens to have `/tools`. Skip the assertion in that
+        // case — the test only makes sense on a clean filesystem.
+        if any_ancestor_has_tools(tmp.path()) {
+            eprintln!(
+                "skipping: an ancestor of {} has a tools/ dir; \
+                 this host violates the test precondition.",
+                tmp.path().display(),
+            );
+            return;
+        }
         let start = tmp.path().to_path_buf();
         let err = discover_project_root(&start).expect_err("should not find");
         assert!(
             matches!(&err, DiscoveryError::NotFound(p) if p == &start),
             "unexpected error: {err:?}"
         );
+    }
+
+    fn any_ancestor_has_tools(start: &Path) -> bool {
+        let mut current = match start.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        loop {
+            if current.join("tools").is_dir() {
+                return true;
+            }
+            if !current.pop() {
+                return false;
+            }
+        }
     }
 
     #[test]
