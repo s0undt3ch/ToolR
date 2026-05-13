@@ -12,7 +12,11 @@ use serde::{Deserialize, Serialize};
 pub const RUNNER_SCHEMA_VERSION: u32 = 1;
 
 /// Reduced view of `toolr.Context` reconstructable from JSON.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Eq` is intentionally not derived: the `default_*_timeout_secs`
+/// fields are `Option<f64>`, and floats are only `PartialEq`. Tests
+/// compare with `assert_eq!` via `PartialEq`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContextSpec {
     pub repo_root: String,
     /// One of "quiet", "normal", "verbose".
@@ -20,10 +24,21 @@ pub struct ContextSpec {
     pub timestamps: bool,
     /// Python `logging` level name, e.g. "INFO".
     pub log_level: String,
+    /// Default for `ctx.run(timeout_secs=...)` when the per-call value
+    /// is `None`. `None` means no default — `ctx.run` doesn't time out
+    /// unless the caller asks for it. Plumbed from
+    /// `toolr --timeout-secs N` / `--timeout N`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_timeout_secs: Option<f64>,
+    /// Default for `ctx.run(no_output_timeout_secs=...)` when the
+    /// per-call value is `None`. Plumbed from
+    /// `toolr --no-output-timeout-secs N` / `--nots N`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_no_output_timeout_secs: Option<f64>,
 }
 
 /// Top-level execution spec written to `$TOOLR_SPEC_FILE`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExecutionSpec {
     pub schema_version: u32,
     pub group: String,
@@ -62,6 +77,8 @@ impl ExecutionSpec {
                 verbosity: "normal".into(),
                 timestamps: false,
                 log_level: "INFO".into(),
+                default_timeout_secs: None,
+                default_no_output_timeout_secs: None,
             },
         }
     }

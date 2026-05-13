@@ -18,11 +18,38 @@ toolr --help
 - `toolr --help` — print top-level help. On a leaf command the
   long form prints the full docstring (rendered via termimad);
   `-h` prints the same content as a one-line summary.
-- `-d` / `--debug` — increase verbosity. **Root-only**: place it
-  before the subcommand (`toolr -d example hello`, not
-  `toolr example -d hello`). Mutually exclusive with `--quiet`.
-- `-q` / `--quiet` — suppress non-error output. Root-only, same
-  placement rule as `--debug`.
+
+### Output Options {#output-options}
+
+Five root-level flags that tweak how toolr's own output renders **and**
+the defaults for any `ctx.run(...)` subprocess your command starts.
+They're root-only — place them before the subcommand
+(`toolr -d --timeout-secs 30 ci hello`, not
+`toolr ci hello -d --timeout-secs 30`).
+
+| Flag | What it does |
+|---|---|
+| `-d` / `--debug` | Increase verbosity. Also enables Python `DEBUG` logging in the runner. Mutually exclusive with `--quiet`. |
+| `-q` / `--quiet` | Suppress non-error output. |
+| `--timestamps` / `--ts` | Prepend ISO-8601 timestamps to log lines. |
+| `--no-timestamps` / `--nts` | Suppress log-line timestamps (default; wins over `--timestamps`). |
+| `--timeout-secs SECONDS` / `--timeout` | Default timeout passed to every `ctx.run(...)` call. Per-call `timeout_secs=` still wins. |
+| `--no-output-timeout-secs SECONDS` / `--nots` | Default "no output for N seconds" watchdog applied to every `ctx.run(...)`. Per-call `no_output_timeout_secs=` still wins. |
+
+**How the timeouts interact with `ctx.run`:**
+
+```python
+@command(group="example")
+def slow(ctx):
+    """Tools-author writes this, oblivious to root flags."""
+    ctx.run("sleep", "30")                       # uses --timeout-secs default if set
+    ctx.run("sleep", "30", timeout_secs=60)      # per-call wins; ignores root flag
+```
+
+The defaults flow through the runner spec as `ContextSpec.default_timeout_secs`
+/ `default_no_output_timeout_secs`. They're plain numbers in seconds;
+`None` (the default-default) means "no watchdog unless the caller
+opts in."
 
 ## `toolr project ...`
 

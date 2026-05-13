@@ -17,15 +17,14 @@ use super::spec::{ContextSpec, ExecutionSpec, RUNNER_SCHEMA_VERSION};
 /// - `matches`: clap's parsed matches *for this command* (not the root).
 /// - `repo_root`: the project root previously resolved by
 ///   `discover_project_root`.
-/// - `verbosity` / `timestamps` / `log_level`: pulled from the global CLI
-///   args by the caller.
+/// - `output_opts`: the values of toolr's root-level "Output Options"
+///   flags (`--debug` / `--quiet` / `--timestamps` /
+///   `--timeout-secs` / `--no-output-timeout-secs`).
 pub fn build_spec(
     cmd: &Command,
     matches: &ArgMatches,
     repo_root: &Path,
-    verbosity: &str,
-    timestamps: bool,
-    log_level: &str,
+    output_opts: &OutputOptions,
 ) -> ExecutionSpec {
     let mut args = BTreeMap::new();
     for arg in &cmd.arguments {
@@ -42,10 +41,38 @@ pub fn build_spec(
         args,
         context: ContextSpec {
             repo_root: repo_root.to_string_lossy().into_owned(),
-            verbosity: verbosity.to_string(),
-            timestamps,
-            log_level: log_level.to_string(),
+            verbosity: output_opts.verbosity.clone(),
+            timestamps: output_opts.timestamps,
+            log_level: output_opts.log_level.clone(),
+            default_timeout_secs: output_opts.default_timeout_secs,
+            default_no_output_timeout_secs: output_opts.default_no_output_timeout_secs,
         },
+    }
+}
+
+/// Plumbing struct bundling the root-level "Output Options" flag
+/// values for `build_spec`. Adding a new flag is a one-field change
+/// instead of growing the `build_spec` argument list again.
+#[derive(Debug, Clone)]
+pub struct OutputOptions {
+    /// One of `"quiet"` / `"normal"` / `"verbose"`.
+    pub verbosity: String,
+    pub timestamps: bool,
+    /// Python `logging` level name.
+    pub log_level: String,
+    pub default_timeout_secs: Option<f64>,
+    pub default_no_output_timeout_secs: Option<f64>,
+}
+
+impl Default for OutputOptions {
+    fn default() -> Self {
+        Self {
+            verbosity: "normal".to_string(),
+            timestamps: false,
+            log_level: "INFO".to_string(),
+            default_timeout_secs: None,
+            default_no_output_timeout_secs: None,
+        }
     }
 }
 
@@ -211,9 +238,7 @@ mod tests {
             &cmd,
             &matches,
             Path::new("/repo"),
-            "normal",
-            false,
-            "INFO",
+            &OutputOptions::default(),
         );
         assert_eq!(spec.group, "ci");
         assert_eq!(spec.command, "hello");
@@ -230,9 +255,7 @@ mod tests {
             &cmd,
             &matches,
             Path::new("/repo"),
-            "normal",
-            false,
-            "INFO",
+            &OutputOptions::default(),
         );
         assert_eq!(spec.args.get("name"), Some(&Value::String("Alice".into())));
     }
@@ -267,9 +290,7 @@ mod tests {
             &cmd,
             &matches,
             Path::new("/repo"),
-            "normal",
-            false,
-            "INFO",
+            &OutputOptions::default(),
         );
         assert_eq!(spec.args.get("force"), Some(&Value::Bool(true)));
     }

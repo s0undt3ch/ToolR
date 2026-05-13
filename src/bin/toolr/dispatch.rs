@@ -9,7 +9,7 @@ use _rust_utils::complete::{
 };
 use _rust_utils::discovery::discover_project_root;
 use _rust_utils::execute::{
-    build_spec, resolve_python, spawn_runner_capturing_stderr, wait_with_signals,
+    OutputOptions, build_spec, resolve_python, spawn_runner_capturing_stderr, wait_with_signals,
     write_spec_to_tempfile,
 };
 use _rust_utils::manifest::Manifest;
@@ -69,19 +69,8 @@ pub fn dispatch(
     // Auto-rebuild dynamic layer when the venv has changed since the
     // manifest was last written. Tab completion never takes this path.
     ensure_dynamic_layer_fresh(&repo_root, manifest)?;
-    let verbosity = if matches.get_flag("quiet") {
-        "quiet"
-    } else if matches.get_flag("debug") {
-        "verbose"
-    } else {
-        "normal"
-    };
-    let log_level = if matches.get_flag("debug") {
-        "DEBUG"
-    } else {
-        "INFO"
-    };
-    let spec = build_spec(cmd, cmd_matches, &repo_root, verbosity, false, log_level);
+    let output_opts = output_options_from_matches(matches);
+    let spec = build_spec(cmd, cmd_matches, &repo_root, &output_opts);
 
     let tempfile = write_spec_to_tempfile(&spec)?;
     // Prefer the resolved tools-venv python (Plan 3). Fall back to the
@@ -368,6 +357,35 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
         uv.source,
     );
     Ok(std::process::ExitCode::SUCCESS)
+}
+
+/// Read the root-level "Output Options" flags from the parsed matches
+/// into an `OutputOptions`. Centralised so every command path produces
+/// the same shape; missing flags fall back to `Default`.
+fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {
+    let mut opts = OutputOptions::default();
+    if matches.get_flag("quiet") {
+        opts.verbosity = "quiet".into();
+        opts.log_level = "INFO".into();
+    } else if matches.get_flag("debug") {
+        opts.verbosity = "verbose".into();
+        opts.log_level = "DEBUG".into();
+    }
+    // `--no-timestamps` wins over `--timestamps`; clap enforces the
+    // mutex via `conflicts_with`, so at most one is set here.
+    if matches.get_flag("timestamps") && !matches.get_flag("no-timestamps") {
+        opts.timestamps = true;
+    }
+    if let Some(secs) = matches.get_one::<f64>("timeout-secs").copied() {
+        opts.default_timeout_secs = Some(secs);
+    }
+    if let Some(secs) = matches
+        .get_one::<f64>("no-output-timeout-secs")
+        .copied()
+    {
+        opts.default_no_output_timeout_secs = Some(secs);
+    }
+    opts
 }
 
 #[allow(dead_code)]

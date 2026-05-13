@@ -40,6 +40,13 @@ class Context(Struct, frozen=True):
     verbosity: ConsoleVerbosity
     _console_stderr: Console
     _console_stdout: Console
+    # Defaults sourced from the rust front-end's "Output Options" flags
+    # (`toolr --timeout-secs N` / `--no-output-timeout-secs N`). When
+    # set, `ctx.run(...)` uses them as fallbacks if the caller doesn't
+    # pass per-call `timeout_secs=` / `no_output_timeout_secs=`. `None`
+    # means "no default — don't apply a watchdog."
+    default_timeout_secs: float | None = None
+    default_no_output_timeout_secs: float | None = None
 
     def prompt(
         self,
@@ -211,6 +218,13 @@ class Context(Struct, frozen=True):
             CommandResult instance.
         """
         self.info(f"""Running '{" ".join(cmdline)}'""")
+        # Per-call values win over the Context defaults set by
+        # `toolr --timeout-secs` / `--no-output-timeout-secs`. The
+        # defaults only fill in when the caller passes nothing.
+        if timeout_secs is None:
+            timeout_secs = self.default_timeout_secs
+        if no_output_timeout_secs is None:
+            no_output_timeout_secs = self.default_no_output_timeout_secs
         return command.run(
             cmdline,
             stream_output=stream_output,

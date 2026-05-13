@@ -59,6 +59,11 @@ class ContextSpec(msgspec.Struct, frozen=True):
     verbosity: str
     timestamps: bool
     log_level: str
+    # `None` means "no default — `ctx.run` doesn't time out unless the
+    # caller asks for it." Plumbed from `toolr --timeout-secs N` /
+    # `toolr --no-output-timeout-secs N` on the Rust side.
+    default_timeout_secs: float | None = None
+    default_no_output_timeout_secs: float | None = None
 
 
 class RunnerSpec(msgspec.Struct, frozen=True):
@@ -147,6 +152,8 @@ def _build_context(spec: RunnerSpec) -> Context:
         verbosity=verbosity,
         _console_stderr=consoles.stderr,
         _console_stdout=consoles.stdout,
+        default_timeout_secs=spec.context.default_timeout_secs,
+        default_no_output_timeout_secs=spec.context.default_no_output_timeout_secs,
     )
 
 

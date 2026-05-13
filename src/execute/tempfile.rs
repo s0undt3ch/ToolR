@@ -42,6 +42,8 @@ mod tests {
                 verbosity: "normal".into(),
                 timestamps: false,
                 log_level: "INFO".into(),
+                default_timeout_secs: None,
+                default_no_output_timeout_secs: None,
             },
         }
     }

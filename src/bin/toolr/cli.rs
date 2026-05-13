@@ -61,21 +61,29 @@ fn build_group_subtree(
 /// Construct the full clap Command tree, given a loaded manifest.
 /// User-defined groups appear as top-level subcommands.
 pub fn build_command(manifest: &Manifest) -> Command {
+    // All root-level "output" flags live under a single `--help` heading
+    // so users see them as a coherent block. They tweak how toolr's own
+    // output renders *and* how `ctx.run(...)` subprocesses behave by
+    // default (timeouts, output watchdog). Per-call `ctx.run(timeout_secs=)`
+    // / `no_output_timeout_secs=` arguments still override these.
+    const OUTPUT_HEADING: &str = "Output Options";
     let mut root = Command::new("toolr")
         .version(env!("CARGO_PKG_VERSION"))
         .about("In-project CLI tooling support")
         .styles(help_styles())
         .disable_help_subcommand(true)
-        // `--debug` / `--quiet` are root-level options — they go
-        // before the subcommand (`toolr --debug ci hello`). They're
-        // intentionally *not* `global(true)` so they don't clutter
-        // every subcommand's --help output.
+        // `--debug` / `--quiet` and the new timing flags are root-level
+        // options — they go before the subcommand (`toolr --debug ci
+        // hello`). They're intentionally *not* `global(true)` so they
+        // don't clutter every subcommand's --help output.
+        .next_help_heading(OUTPUT_HEADING)
         .arg(
             Arg::new("debug")
                 .short('d')
                 .long("debug")
                 .action(ArgAction::SetTrue)
-                .help("Increase verbosity"),
+                .help_heading(OUTPUT_HEADING)
+                .help("Increase verbosity (also enables DEBUG logging)"),
         )
         .arg(
             Arg::new("quiet")
@@ -83,7 +91,50 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .long("quiet")
                 .action(ArgAction::SetTrue)
                 .conflicts_with("debug")
+                .help_heading(OUTPUT_HEADING)
                 .help("Suppress non-error output"),
+        )
+        .arg(
+            Arg::new("timestamps")
+                .long("timestamps")
+                .alias("ts")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("no-timestamps")
+                .help_heading(OUTPUT_HEADING)
+                .help("Prepend ISO-8601 timestamps to log lines"),
+        )
+        .arg(
+            Arg::new("no-timestamps")
+                .long("no-timestamps")
+                .alias("nts")
+                .action(ArgAction::SetTrue)
+                .help_heading(OUTPUT_HEADING)
+                .help("Suppress log-line timestamps (default; overrides --timestamps)"),
+        )
+        .arg(
+            Arg::new("timeout-secs")
+                .long("timeout-secs")
+                .alias("timeout")
+                .value_name("SECONDS")
+                .value_parser(clap::value_parser!(f64))
+                .help_heading(OUTPUT_HEADING)
+                .help(
+                    "Default timeout applied to every `ctx.run(...)` subprocess \
+                     (per-call `timeout_secs=` wins when set).",
+                ),
+        )
+        .arg(
+            Arg::new("no-output-timeout-secs")
+                .long("no-output-timeout-secs")
+                .alias("nots")
+                .value_name("SECONDS")
+                .value_parser(clap::value_parser!(f64))
+                .help_heading(OUTPUT_HEADING)
+                .help(
+                    "Default no-output watchdog applied to every `ctx.run(...)` \
+                     subprocess — abort if no stdout/stderr for this many \
+                     seconds. Per-call `no_output_timeout_secs=` wins when set.",
+                ),
         );
 
     let children = children_by_parent(manifest);
