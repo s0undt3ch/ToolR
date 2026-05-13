@@ -64,6 +64,10 @@ pub enum SupportedType {
     /// `toolr.types.Email` — RFC-5321-ish address (single `local@domain`
     /// pair, no comments / display name). Runtime value is `str`.
     Email,
+    /// `toolr.types.Version` — PEP 440 version string. Validated by
+    /// the `pep440_rs` crate (the same parser uv uses). Runtime value
+    /// is `packaging.version.Version`.
+    Version,
     /// `Literal["a", "b"]` — string validated against the allowed set.
     Literal(Vec<String>),
     /// Enum subclass resolved via [`EnumTable`].
@@ -451,6 +455,7 @@ fn resolve_toolr_types_name(name: &str) -> Result<SupportedType, UnsupportedType
         "AbsolutePath" => Ok(SupportedType::AbsolutePath),
         "ResolvedPath" => Ok(SupportedType::ResolvedPath),
         "Email" => Ok(SupportedType::Email),
+        "Version" => Ok(SupportedType::Version),
         other => Err(UnsupportedType::UnknownName(format!("toolr.types.{other}"))),
     }
 }
@@ -754,6 +759,7 @@ mod tests {
             "ResolvedPath",
             "Time",
             "UUID",
+            "Version",
         ];
         for name in names {
             assert!(

@@ -15,6 +15,8 @@ import ipaddress
 import pathlib
 import uuid
 
+from packaging.version import Version as _Version
+
 import toolr.types
 
 # The authoritative public surface. Every entry must:
@@ -31,6 +33,7 @@ EXPECTED_TOOLR_TYPES_NAMES = {
     "ResolvedPath",
     "Time",
     "UUID",
+    "Version",
 }
 
 
@@ -65,3 +68,7 @@ def test_ip_aliases_resolve_to_stdlib() -> None:
 
 def test_email_is_a_str_alias() -> None:
     assert toolr.types.Email is str
+
+
+def test_version_alias_resolves_to_packaging_version() -> None:
+    assert toolr.types.Version is _Version

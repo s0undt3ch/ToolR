@@ -23,6 +23,10 @@ Supported entries:
 - :data:`Email` — single ``local@domain`` address validated at CLI
   parse time. Runtime value is :class:`str`. Display names and
   comments are not accepted; one address per parameter.
+- :data:`Version` — alias for :class:`packaging.version.Version`. The
+  rust side validates PEP 440 grammar (epoch, pre / post / dev
+  releases, local segment) via the ``pep440_rs`` crate; the
+  runtime value is the matching :class:`packaging.version.Version`.
 - :data:`AbsolutePath` — alias for :class:`pathlib.Path`. The rust
   side resolves the value against the working directory; no
   filesystem check, so the path may not yet exist (useful for
@@ -44,6 +48,8 @@ import ipaddress as _ip
 import pathlib as _pathlib
 import uuid as _uuid
 
+from packaging.version import Version as _Version
+
 DateTime = _dt.datetime
 Date = _dt.date
 Time = _dt.time
@@ -57,6 +63,7 @@ ResolvedPath = _pathlib.Path
 # value reaching the command function is guaranteed to be a syntactically
 # valid `local@domain` address.
 Email = str
+Version = _Version
 
 __all__ = [
     "UUID",
@@ -68,4 +75,5 @@ __all__ = [
     "IPv6",
     "ResolvedPath",
     "Time",
+    "Version",
 ]

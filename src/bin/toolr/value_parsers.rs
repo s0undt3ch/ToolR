@@ -13,6 +13,7 @@ use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use clap::Arg;
 use clap::builder::ValueParser;
 use email_address::EmailAddress;
+use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
 use _rust_utils::parser::{PathConstraints, SupportedType};
@@ -52,6 +53,7 @@ pub fn apply_value_parser(
         SupportedType::Ipv4 => arg.value_parser(ipv4_parser()),
         SupportedType::Ipv6 => arg.value_parser(ipv6_parser()),
         SupportedType::Email => arg.value_parser(email_parser()),
+        SupportedType::Version => arg.value_parser(version_parser()),
         SupportedType::Literal(values) => arg.value_parser(values.clone()),
         SupportedType::Enum { values, .. } => arg.value_parser(values.clone()),
         // For collection kinds we configure the *element* parser; clap's
@@ -176,6 +178,14 @@ fn email_parser() -> ValueParser {
     })
 }
 
+fn version_parser() -> ValueParser {
+    ValueParser::new(|s: &str| -> Result<String, String> {
+        s.parse::<Pep440Version>()
+            .map(|v| v.to_string())
+            .map_err(|e| format!("invalid PEP 440 version `{s}`: {e}"))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,6 +276,33 @@ mod tests {
                 .is_ok()
         );
         assert!(cmd.try_get_matches_from(["test", "--v", "not-an-email"]).is_err());
+    }
+
+    #[test]
+    fn version_parser_accepts_pep440_flavours() {
+        let cmd = build_command_with(&SupportedType::Version);
+        // Plain semver-shaped.
+        assert!(
+            cmd.clone()
+                .try_get_matches_from(["test", "--v", "1.2.3"])
+                .is_ok()
+        );
+        // PEP 440 dev/post/pre + local segment.
+        assert!(
+            cmd.clone()
+                .try_get_matches_from(["test", "--v", "1.0.dev2+local.foo"])
+                .is_ok()
+        );
+        assert!(
+            cmd.clone()
+                .try_get_matches_from(["test", "--v", "1.2.0a3.post1"])
+                .is_ok()
+        );
+        // Garbage rejected with a pointed error.
+        let err = cmd
+            .try_get_matches_from(["test", "--v", "not-a-version"])
+            .unwrap_err();
+        assert!(err.to_string().contains("PEP 440"), "got: {err}");
     }
 
     #[test]

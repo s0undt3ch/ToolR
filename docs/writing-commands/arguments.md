@@ -30,6 +30,7 @@ table is rejected at manifest-build time with an error pointing at
 | `toolr.types.IPv4` | clap (`std::net::Ipv4Addr`) | string | `ipaddress.IPv4Address` |
 | `toolr.types.IPv6` | clap (`std::net::Ipv6Addr`) | string | `ipaddress.IPv6Address` |
 | `toolr.types.Email` | clap (`email_address` crate) | string | `str` (pre-validated) |
+| `toolr.types.Version` | clap (`pep440_rs` crate) | string | `packaging.version.Version` |
 | `Literal["a", "b"]` | clap (allowed-values) | string | `Literal` value |
 | `Enum` subclass | clap (member values) | string | enum member |
 | `list[T]` (T above) | clap per-element | JSON array | `list[T]` |

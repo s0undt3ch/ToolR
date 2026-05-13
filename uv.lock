@@ -1076,6 +1076,7 @@ version = "0.11.1"
 source = { editable = "." }
 dependencies = [
     { name = "msgspec" },
+    { name = "packaging" },
     { name = "rich-argparse" },
 ]
 
@@ -1104,6 +1105,7 @@ tools = [
 [package.metadata]
 requires-dist = [
     { name = "msgspec", specifier = ">=0.19.0" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "rich-argparse", specifier = ">=1.7.0" },
 ]
 
