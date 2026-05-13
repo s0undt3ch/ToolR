@@ -244,6 +244,37 @@
       enforcing drift-free captured terminal output.
     - Pruned API reference (private `_*` modules removed).
 
+### Plan 12: Cargo workspace split + Python frontend retirement
+
+- **Status:** 📝 Plan Drafted
+- **Design doc:** [14-workspace-split-design.md](./14-workspace-split-design.md)
+- **Plan doc:** [15-plan-12-workspace-split.md](./15-plan-12-workspace-split.md)
+- **Depends on:** Plan 9 (supersedes its Task 1 — the "maturin auto-ships
+  `[[bin]]` in pyo3 wheels" claim is empirically false against maturin 1.8.4).
+- **Unblocks:** —
+- **Produces:**
+    - Three-crate Cargo workspace: `toolr-core` (private library, no pyo3),
+      `toolr` (binary), `toolr-py` (pyo3 dynlib + Python source).
+    - Two PyPI wheels at the same workspace version: `toolr`
+      (`bindings = "bin"` — Rust binary at `<wheel>.data/scripts/toolr`)
+      and `toolr-py` (`bindings = "pyo3"` — `import toolr` + `_rust_utils`
+      dynlib). GH Releases archive of the binary continues unchanged.
+    - Python frontend fully retired: `__main__.py`, `_parser.py`,
+      `_registry.py` deleted; `[project.scripts] toolr` dropped; tests
+      three-way pruned (migrate to Rust assert_cmd, migrate to subprocess
+      against the binary, or delete implementation-coupled).
+    - `python/toolr/` moves into `crates/toolr-py/python/toolr/`;
+      `crates/toolr-py/` is self-contained.
+    - Root `pyproject.toml` becomes dev-tooling-only (ruff, mypy, pytest,
+      uv workspace, dependency groups); per-crate `pyproject.toml` files
+      own build config.
+    - `_build.yml` parameterised on `pyproject-path` via `CIBW_CONFIG_FILE`;
+      `ci.yml` and `release.yml` fan out to two wheel-build jobs each.
+    - `tests/distribution/` lock-tests for wheel shape and cross-wheel
+      install path.
+    - Release notes for `0.20.0` documenting the `pip install toolr` →
+      `pip install toolr-py` import-name migration.
+
 ## Dependency graph
 
 ```text

@@ -2,7 +2,7 @@
 
 - **Date:** 2026-05-13
 - **Branch:** `design/rust-front-end`
-- **Status:** Spec — awaiting implementation plan via `superpowers:writing-plans`
+- **Status:** Spec — companion plan: [15-plan-12-workspace-split.md](./15-plan-12-workspace-split.md)
 - **Supersedes (in part):** `specs/rust-front-end/10-plan-9-distribution.md`
   Task 1 (the "maturin auto-ships `[[bin]]` in pyo3 wheels" claim is empirically false against maturin 1.8.4).
 
@@ -701,10 +701,10 @@ handled by mixing `inputs.pyproject-path` into the workflow's internal
 ### One-time maintainer actions (outside code)
 
 1. Reserve PyPI project `toolr-py` (first publish or pre-reserve the
-   name). Maintainer task on PyPI; outside the scope of this repo.
+   name). Maintainer task on PyPI; outside the scope of this repo and already completed.
 2. Configure trusted publisher on `pypi.org/p/toolr-py` pointing at
-   this repo's `release.yml`. Maintainer task on PyPI.
-3. Same on `test.pypi.org/p/toolr-py` for `ci.yml`'s TestPyPI publish.
+   this repo's `release.yml`. Maintainer task on PyPI and already completed.
+3. Same on `test.pypi.org/p/toolr-py` for `ci.yml`'s TestPyPI publish. Maintainer task on PyPI and already completed.
 4. Release notes for `0.20.0`: "`pip install toolr` no longer provides
    `import toolr`; use `pip install toolr-py`."
 
