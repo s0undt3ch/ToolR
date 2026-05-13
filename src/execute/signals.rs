@@ -77,19 +77,18 @@ mod unix {
 }
 
 #[cfg(test)]
+#[cfg(unix)]
 mod tests {
     use super::*;
     use std::process::Command;
 
+    /// `true` exits immediately with status 0. Unix-only — the whole
+    /// test module is gated so Windows builds don't drag in the
+    /// otherwise-unused imports.
     #[test]
     fn wait_returns_for_quick_child() {
-        // `true` exits immediately with status 0. On Windows this won't
-        // exist; the test is Unix-only.
-        #[cfg(unix)]
-        {
-            let mut child = Command::new("true").spawn().expect("spawn true");
-            let status = wait_with_signals(&mut child).expect("wait");
-            assert!(status.success());
-        }
+        let mut child = Command::new("true").spawn().expect("spawn true");
+        let status = wait_with_signals(&mut child).expect("wait");
+        assert!(status.success());
     }
 }
