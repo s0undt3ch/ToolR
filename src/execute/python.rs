@@ -51,13 +51,22 @@ fn which_on_path(exe: &str) -> Option<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Both tests in this module mutate `TOOLR_PYTHON`. Cargo runs
+    /// `#[test]` functions in parallel by default, so without
+    /// serialisation a race window of "Test A set the var → Test B
+    /// removed it → Test A read it back as unset" trivially flakes
+    /// (observed on Linux 3.11 in CI). Take this Mutex around the
+    /// env-touching region of every test that depends on the var.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn toolr_python_env_var_wins() {
-        // SAFETY: tests run in-process; we restore after.
-        // SAFETY: std::env::set_var is single-threaded-safe inside a #[test]
-        // when no other thread touches the environment. This crate's tests
-        // don't spawn threads that touch env.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: ENV_LOCK serialises every test in this module that
+        // touches `TOOLR_PYTHON`, and no other thread in the crate
+        // mutates that env var.
         unsafe {
             env::set_var("TOOLR_PYTHON", "/custom/python");
         }
@@ -70,6 +79,8 @@ mod tests {
 
     #[test]
     fn falls_back_to_path_when_env_unset() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: as above — serialised against the sibling test.
         unsafe {
             env::remove_var("TOOLR_PYTHON");
         }
