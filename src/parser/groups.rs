@@ -35,9 +35,17 @@ pub fn extract_groups(module: &ModModule, module_docstring: &str) -> Vec<GroupBi
         if !is_command_group_call(call) {
             continue;
         }
+        // Parent path can come from two source patterns:
+        //   1. Method-call style: `child = parent.command_group(...)` —
+        //      look up `parent` in the already-extracted bindings.
+        //   2. Keyword-arg style: `child = command_group(..., parent="ci")`
+        //      — use the literal string as the dotted full_path
+        //      directly (it points at the parent's name in another
+        //      file, or at a multi-level nesting like "ci.docker").
         let parent_path = parent_var_name(call)
             .and_then(|pv| out.iter().find(|b| b.var == pv))
-            .map(|b| b.group.full_path());
+            .map(|b| b.group.full_path())
+            .or_else(|| parent_kwarg(call));
         let Some(binding) = parse_group_call(call, &var_name, module_docstring, parent_path) else {
             continue;
         };
@@ -57,6 +65,18 @@ fn parent_var_name(call: &ExprCall) -> Option<String> {
         Expr::Name(n) => Some(n.id.as_str().to_string()),
         _ => None,
     }
+}
+
+/// If the call passes `parent="..."` (literal string) as a keyword
+/// argument, return that string. Used to recognise the explicit-parent
+/// form `command_group("child", parent="ci")` as a nesting hint —
+/// matches the supported signature of `toolr._registry.command_group`.
+fn parent_kwarg(call: &ExprCall) -> Option<String> {
+    call.arguments
+        .keywords
+        .iter()
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("parent"))
+        .and_then(|k| literal_str(&k.value))
 }
 
 fn single_name_target(targets: &[Expr]) -> Option<String> {
@@ -173,6 +193,23 @@ image = docker.command_group("image", "Image")
         assert_eq!(groups[1].group.name, "image");
         assert_eq!(groups[1].group.parent.as_deref(), Some("docker"));
         assert_eq!(groups[1].group.full_path(), "docker.image");
+    }
+
+    #[test]
+    fn explicit_parent_kwarg_nests_under_named_group() {
+        // Matches the `command_group("...", parent="ci")` signature
+        // exposed by `toolr._registry.command_group`. The parent
+        // doesn't have to be declared in the same file — we trust the
+        // string as the dotted full_path.
+        let src = r#"
+helm_diff = command_group("helm-diff-pr-comment", "Helm diff", parent="ci")
+"#;
+        let m = parse_src(src);
+        let groups = extract_groups(&m, "");
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].group.name, "helm-diff-pr-comment");
+        assert_eq!(groups[0].group.parent.as_deref(), Some("ci"));
+        assert_eq!(groups[0].group.full_path(), "ci.helm-diff-pr-comment");
     }
 
     #[test]

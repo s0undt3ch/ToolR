@@ -1,6 +1,21 @@
 use std::collections::HashMap;
 
+use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Arg, ArgAction, Command};
+
+/// Palette for `--help` output. Yellow + bold for section headers and
+/// `Usage:`, green for arg names and choice values — closer to the
+/// argparse / rich-argparse look the legacy toolr shipped.
+fn help_styles() -> Styles {
+    Styles::styled()
+        .header(AnsiColor::Yellow.on_default() | Effects::BOLD)
+        .usage(AnsiColor::Yellow.on_default() | Effects::BOLD)
+        .literal(AnsiColor::Green.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Green.on_default())
+        .valid(AnsiColor::Green.on_default())
+        .invalid(AnsiColor::Red.on_default())
+        .error(AnsiColor::Red.on_default() | Effects::BOLD)
+}
 
 use _rust_utils::manifest::{ArgumentKind, Group, Manifest};
 
@@ -49,6 +64,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
     let mut root = Command::new("toolr")
         .version(env!("CARGO_PKG_VERSION"))
         .about("In-project CLI tooling support")
+        .styles(help_styles())
         .disable_help_subcommand(true)
         // `--debug` / `--quiet` are root-level options — they go
         // before the subcommand (`toolr --debug ci hello`). They're
