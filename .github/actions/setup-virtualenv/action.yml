@@ -1,18 +1,22 @@
 name: Setup UV
-description: Setup UV for a given Python version
+description: Install all repo tooling via mise (Python, uv, rust, prek, ...) and sync the project venv.
 
 inputs:
   python-version:
     required: true
-    description: 'Python version to use'
+    description: 'Python version to use. Overrides the version pinned in mise.toml via MISE_PYTHON_VERSION.'
 
   cache-prefix:
     required: true
-    description: "The prefix to use for the cache key"
+    description: "The prefix to use for the .venv cache key"
+
+  cache-seed:
+    default: "1"
+    description: "Bumpable seed mixed into every cache key. Bump to invalidate all caches for this composite."
 
   uv-version:
     default: ""
-    description: "The version of uv to install e.g., `0.5.0` Defaults to the version in pyproject.toml or 'latest'."
+    description: "Deprecated. uv is pinned by mise.toml; this input is ignored and retained for backward compatibility."
 
   uv-sync-args:
     default: "--all-extras --dev"
@@ -21,7 +25,7 @@ inputs:
 outputs:
   uv-version:
     description: "The version of uv installed"
-    value: ${{ steps.install-uv.outputs.uv-version }}
+    value: ${{ steps.uv-version-checksum.outputs.uv-version }}
 
   python-version-checksum:
     description: "The checksum of the Python version"
@@ -34,10 +38,15 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install Python
-      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+    - name: Set up mise
+      uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+      env:
+        # Overrides `python = ...` in mise.toml so this composite can drive
+        # the matrix Python version in test.yml without editing the toml.
+        MISE_PYTHON_VERSION: ${{ inputs.python-version }}
       with:
-        python-version: ${{ inputs.python-version }}
+        cache: true
+        cache_key_prefix: mise|${{ inputs.cache-seed }}|${{ runner.os }}|${{ runner.arch }}|${{ inputs.cache-prefix }}
 
     - name: Get Python version checksum
       id: python-version-checksum
@@ -47,18 +56,15 @@ runs:
         echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
 
-    - name: Install uv
-      id: install-uv
-      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-      with:
-        version: ${{ inputs.uv-version }}
-
     - name: Get UV version checksum
       id: uv-version-checksum
       shell: bash
       run: |
+        UV_VERSION=$(uv --version | awk '{print $2}')
         VERSION_SHA256SUM=$(uv --version | sha256sum | cut -d ' ' -f 1)
+        echo "UV_VERSION=$UV_VERSION"
         echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "uv-version=$UV_VERSION" >> "$GITHUB_OUTPUT"
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
 
     - name: Set up cache
@@ -67,6 +73,7 @@ runs:
         path: .venv
         key: >-
           venv|
+          ${{ inputs.cache-seed }}|
           ${{ runner.os }}|
           ${{ inputs.cache-prefix }}|
           ${{ steps.python-version-checksum.outputs.version-sha256sum }}|

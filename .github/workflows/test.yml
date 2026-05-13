@@ -28,6 +28,7 @@ jobs:
           - "3.11"
           - "3.12"
           - "3.13"
+          - "3.14"
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -37,6 +38,8 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # setup-virtualenv runs jdx/mise-action under the hood, which installs
+      # the Rust toolchain pinned in mise.toml alongside Python and uv.
       - uses: ./.github/actions/setup-virtualenv
         id: setup-virtualenv
         with:
@@ -44,12 +47,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
           uv-sync-args: "--all-extras --dev"
 
-      - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
-        with:
-          toolchain: stable
-          cache-key: test-${{ runner.os }}-${{ matrix.python-version }}
-
       - id: rust-version-checksum
+        shell: bash
         run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache `~/.cargo`

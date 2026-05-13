@@ -63,9 +63,11 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
-      - name: Install uv
-        id: install-uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          cache: true
+          cache_key_prefix: mise|sync-rolling-tags|${{ runner.os }}|${{ runner.arch }}
 
       - name: Generate additional ToolR requirements file
         shell: bash

@@ -83,11 +83,17 @@ jobs:
           tar -xzf src-tarball/*.tar.gz -C workdir --strip-components=1
           ls workdir
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+      - name: Set up mise (installs Rust toolchain pinned in mise.toml)
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          toolchain: stable
-          targets: ${{ matrix.target.triple }}
+          cache: true
+          cache_key_prefix: mise|build-binary|${{ runner.os }}|${{ runner.arch }}|${{ matrix.target.triple }}
+
+      # `cross` runs in a container with its own toolchain, so we only need
+      # to add the matrix target for native builds.
+      - name: Add Rust target
+        if: ${{ !matrix.target.cross }}
+        run: rustup target add ${{ matrix.target.triple }}
 
       - name: Install cross
         if: matrix.target.cross

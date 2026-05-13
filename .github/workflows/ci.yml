@@ -37,14 +37,11 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          python-version: "3.11"
-
-      - name: Install uv
-        id: install-uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+          cache: true
+          cache_key_prefix: mise|prepare-ci|${{ runner.os }}|${{ runner.arch }}
 
       - name: Generate additional ToolR requirements file
         run: |
@@ -213,7 +210,8 @@ jobs:
         uses: ./.github/actions/setup-virtualenv
         with:
           cache-prefix: docs
-          python-version: "3.11"
+          # Empty string keeps the version pinned in mise.toml.
+          python-version: ""
           uv-sync-args: "--group docs"
 
       - uses: ./.github/actions/configure-git
