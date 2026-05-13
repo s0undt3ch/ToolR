@@ -133,6 +133,28 @@ def shiny(ctx):
 fn silent_failure_when_no_tools_dir_anywhere() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().to_path_buf();
+    // GHA Windows runners ship with `C:\tools\` populated, so the
+    // ancestor walk succeeds when it crawls past the drive root.
+    // Same hazard on Unix hosts with `/tools`. Skip when the host
+    // violates the test precondition (no tools/ anywhere up the
+    // chain from the tempdir).
+    let mut walker = cwd.canonicalize().unwrap_or_else(|_| cwd.clone());
+    let ancestor_has_tools = loop {
+        if walker.join("tools").is_dir() {
+            break true;
+        }
+        if !walker.pop() {
+            break false;
+        }
+    };
+    if ancestor_has_tools {
+        eprintln!(
+            "skipping: an ancestor of {} has a tools/ dir; \
+             this host violates the test precondition.",
+            cwd.display(),
+        );
+        return;
+    }
     let output = Command::cargo_bin("toolr")
         .unwrap()
         .current_dir(&cwd)
