@@ -1,5 +1,7 @@
 //! Extract `group = command_group(...)` assignments from a module AST.
 
+use std::collections::HashMap;
+
 use ruff_python_ast::{Expr, ExprCall, ModModule, Stmt, StmtAssign};
 
 use crate::manifest::{Group, Origin};
@@ -19,7 +21,11 @@ pub struct GroupBinding {
 /// CLI builder can reconstruct the hierarchy. Source order matters:
 /// parents must be assigned before children (which Python already
 /// requires).
-pub fn extract_groups(module: &ModModule, module_docstring: &str) -> Vec<GroupBinding> {
+pub fn extract_groups(
+    module: &ModModule,
+    module_docstring: &str,
+    global_vars: &HashMap<String, String>,
+) -> Vec<GroupBinding> {
     let mut out: Vec<GroupBinding> = Vec::new();
     for stmt in &module.body {
         let Stmt::Assign(StmtAssign { targets, value, .. }) = stmt else {
@@ -35,23 +41,42 @@ pub fn extract_groups(module: &ModModule, module_docstring: &str) -> Vec<GroupBi
         if !is_command_group_call(call) {
             continue;
         }
-        // Parent path can come from two source patterns:
+        // Parent path can come from three source patterns:
         //   1. Method-call style: `child = parent.command_group(...)` —
-        //      look up `parent` in the already-extracted bindings.
-        //   2. Keyword-arg style: `child = command_group(..., parent="ci")`
-        //      — use the literal string as the dotted full_path
-        //      directly (it points at the parent's name in another
-        //      file, or at a multi-level nesting like "ci.docker").
+        //      look up `parent` locally first, then in the global
+        //      cross-file binding map (covers
+        //      `from ._common import group; diff = group.command_group(...)`).
+        //   2. Keyword-arg with variable reference:
+        //      `child = command_group(..., parent=parent_var)` —
+        //      same resolution as (1).
+        //   3. Keyword-arg with literal string:
+        //      `child = command_group(..., parent="ci")` — use the
+        //      literal as the dotted full_path verbatim.
         let parent_path = parent_var_name(call)
-            .and_then(|pv| out.iter().find(|b| b.var == pv))
-            .map(|b| b.group.full_path())
-            .or_else(|| parent_kwarg(call));
+            .or_else(|| parent_kwarg_var(call))
+            .and_then(|pv| resolve_var(&pv, &out, global_vars))
+            .or_else(|| parent_kwarg_literal(call));
         let Some(binding) = parse_group_call(call, &var_name, module_docstring, parent_path) else {
             continue;
         };
         out.push(binding);
     }
     out
+}
+
+/// Resolve a variable name to its group's full_path. Checks
+/// already-extracted local bindings first, then the cumulative global
+/// map of bindings seen across previously-processed files.
+fn resolve_var(
+    var: &str,
+    local: &[GroupBinding],
+    global_vars: &HashMap<String, String>,
+) -> Option<String> {
+    local
+        .iter()
+        .find(|b| b.var == var)
+        .map(|b| b.group.full_path())
+        .or_else(|| global_vars.get(var).cloned())
 }
 
 /// If the call is a method invocation like `docker.command_group(...)`,
@@ -68,15 +93,28 @@ fn parent_var_name(call: &ExprCall) -> Option<String> {
 }
 
 /// If the call passes `parent="..."` (literal string) as a keyword
-/// argument, return that string. Used to recognise the explicit-parent
-/// form `command_group("child", parent="ci")` as a nesting hint —
-/// matches the supported signature of `toolr._registry.command_group`.
-fn parent_kwarg(call: &ExprCall) -> Option<String> {
+/// argument, return that string.
+fn parent_kwarg_literal(call: &ExprCall) -> Option<String> {
     call.arguments
         .keywords
         .iter()
         .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("parent"))
         .and_then(|k| literal_str(&k.value))
+}
+
+/// If the call passes `parent=<var>` (variable reference) as a keyword
+/// argument, return the variable name so the caller can resolve it
+/// against the local + global binding tables.
+fn parent_kwarg_var(call: &ExprCall) -> Option<String> {
+    let kw = call
+        .arguments
+        .keywords
+        .iter()
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("parent"))?;
+    match &kw.value {
+        Expr::Name(n) => Some(n.id.as_str().to_string()),
+        _ => None,
+    }
 }
 
 fn single_name_target(targets: &[Expr]) -> Option<String> {
@@ -157,7 +195,7 @@ mod tests {
     fn extracts_command_group_with_literal_args() {
         let src = r#"group = command_group("ci", "CI utilities")"#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, "");
+        let groups = extract_groups(&m, "", &HashMap::new());
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].var, "group");
         assert_eq!(groups[0].group.name, "ci");
@@ -168,7 +206,7 @@ mod tests {
     fn resolves_docstring_keyword_to_module_doc() {
         let src = r#"group = command_group("ci", "CI utilities", docstring=__doc__)"#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, "module-level doc");
+        let groups = extract_groups(&m, "module-level doc", &HashMap::new());
         assert_eq!(groups[0].group.description, "module-level doc");
     }
 
@@ -176,7 +214,7 @@ mod tests {
     fn ignores_non_command_group_assignments() {
         let src = "x = 1\ny = some_other_func(\"ci\")\n";
         let m = parse_src(src);
-        assert!(extract_groups(&m, "").is_empty());
+        assert!(extract_groups(&m, "", &HashMap::new()).is_empty());
     }
 
     #[test]
@@ -185,7 +223,7 @@ mod tests {
 image = docker.command_group("image", "Image")
 "#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, "");
+        let groups = extract_groups(&m, "", &HashMap::new());
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].group.name, "docker");
         assert_eq!(groups[0].group.parent, None);
@@ -205,7 +243,7 @@ image = docker.command_group("image", "Image")
 helm_diff = command_group("helm-diff-pr-comment", "Helm diff", parent="ci")
 "#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, "");
+        let groups = extract_groups(&m, "", &HashMap::new());
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].group.name, "helm-diff-pr-comment");
         assert_eq!(groups[0].group.parent.as_deref(), Some("ci"));
@@ -219,7 +257,7 @@ b = a.command_group("b", "B")
 c = b.command_group("c", "C")
 "#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, "");
+        let groups = extract_groups(&m, "", &HashMap::new());
         assert_eq!(groups.len(), 3);
         assert_eq!(groups[2].group.full_path(), "a.b.c");
         assert_eq!(groups[2].group.parent.as_deref(), Some("a.b"));

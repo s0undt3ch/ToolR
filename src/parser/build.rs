@@ -43,15 +43,27 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     }
 
     // Pass 2: extract groups + commands per file using the merged tables.
+    //
+    // We also keep a cumulative `var_name → group_full_path` map across
+    // files so cross-file imports work: `tools/ci/_common.py` declares
+    // `group = command_group("ci")`, then `tools/ci/gh_actions.py` does
+    // `from ._common import group; @group.command` — the static parser
+    // doesn't follow the import, but the global map lets the second
+    // file's decorators find `group`. Files are walked in sorted order
+    // (alphabetical) which matches the conventional `_common.py` →
+    // `gh_actions.py` etc. layout where the parent group lives in an
+    // underscore-prefixed module.
     let mut all_groups = Vec::new();
     let mut all_commands = Vec::new();
-    let mut seen_groups = HashSet::new();
+    let mut seen_groups: HashSet<String> = HashSet::new();
+    let mut global_vars: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
     for path in &py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for(tools_dir, path);
         let module_doc = module_docstring(&module);
-        let bindings = extract_groups(&module, &module_doc);
+        let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
         let commands = extract_commands(
             &module,
@@ -60,10 +72,18 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
             &enums,
             &type_imports,
             &aliases,
+            &global_vars,
             &mut type_errors,
         );
+        // Make this file's bindings visible to subsequent files.
+        for binding in &bindings {
+            global_vars.insert(binding.var.clone(), binding.group.full_path());
+        }
+        // Dedup groups by *full_path* (not just leaf name), so nested
+        // groups in different branches with the same leaf name (e.g.
+        // `ci.image` + `docker.image`) both survive.
         for binding in bindings {
-            if seen_groups.insert(binding.group.name.clone()) {
+            if seen_groups.insert(binding.group.full_path()) {
                 all_groups.push(binding.group);
             }
         }

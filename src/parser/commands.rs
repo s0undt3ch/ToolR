@@ -12,8 +12,11 @@ use super::types::{TypeImports, TypeResolutionError, resolve_arguments};
 use crate::SimpleDocstringParser;
 use crate::manifest::{Command, Origin};
 
+type GlobalVars = HashMap<String, String>;
+
 /// Walk module body for functions decorated with `@<var>.command` where
 /// `<var>` matches a known group binding. Emit one Command per match.
+#[allow(clippy::too_many_arguments)] // each context parameter is distinct; bundling would obscure call sites.
 pub fn extract_commands(
     module: &ModModule,
     module_path: &str,
@@ -21,16 +24,17 @@ pub fn extract_commands(
     enums: &EnumTable,
     type_imports: &TypeImports,
     aliases: &TypeAliasTable,
+    global_vars: &GlobalVars,
     errors: &mut Vec<TypeResolutionError>,
 ) -> Vec<Command> {
-    // Map `binding_var → group_full_path` so commands record the full
-    // dotted path of their owning group (e.g. `docker.image` for a
-    // subgroup), letting the CLI builder and dispatch find the right
-    // node when reconstructing the hierarchy.
-    let by_var: HashMap<&str, String> = bindings
-        .iter()
-        .map(|b| (b.var.as_str(), b.group.full_path()))
-        .collect();
+    // Map `binding_var → group_full_path`. Local bindings shadow the
+    // global map so a same-named variable defined in this file wins
+    // over an inherited one; otherwise the global cross-file map
+    // covers `from ._common import group; @group.command` style.
+    let mut by_var: HashMap<String, String> = global_vars.clone();
+    for b in bindings {
+        by_var.insert(b.var.clone(), b.group.full_path());
+    }
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
@@ -147,8 +151,8 @@ def generate_build_matrix(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &mut Vec::new());
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "generate-build-matrix");
         assert_eq!(commands[0].group, "ci");
@@ -165,7 +169,7 @@ def x(ctx):
 "#;
         let m = parse_src(src);
         let bindings = vec![];
-        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -177,8 +181,8 @@ def bare_function(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &mut Vec::new());
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -192,8 +196,8 @@ def hello(ctx):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &mut Vec::new());
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
         assert_eq!(commands[0].summary, "Say hello.");
     }
 
@@ -211,8 +215,8 @@ def hello(ctx, name="world"):
     pass
 "#;
         let m = parse_src(src);
-        let bindings = extract_groups(&m, "");
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &mut Vec::new());
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
         let name_arg = commands[0]
             .arguments
             .iter()
