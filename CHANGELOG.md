@@ -6,6 +6,47 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.11.1 - 2026-05-13
+
+### <!-- 0 -->🚀 Features
+
+- *(logs)* Include extra keywords in logs output ([`695dc58`](https://github.com/s0undt3ch/ToolR/commit/695dc5899d29e7562a3a90850ff458045891c195))
+- *(tests)* Fuzzy testing ([`f34c9cd`](https://github.com/s0undt3ch/ToolR/commit/f34c9cd84307c3c00cc7fa7b82ffde9f4b8cfffe))
+- *(security)* Add ``SECURITY.md`` file ([`131b75a`](https://github.com/s0undt3ch/ToolR/commit/131b75ab2eab6aecbad36a0f865a0f011fe8e11b))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(pypi)* We can't have local version parts in PyPi ([`fa3c515`](https://github.com/s0undt3ch/ToolR/commit/fa3c515c5690f611b6485bdf108236ed4c7b119d))
+- *(signature)* Return `VarArg` for `*args` (VAR_POSITIONAL) parameters ([`f8a967d`](https://github.com/s0undt3ch/ToolR/commit/f8a967d15a80e53f14329468a5382502165facd9))
+- *(signature)* Match `KwArg` before `Arg` in `Signature.__call__` ([`1228344`](https://github.com/s0undt3ch/ToolR/commit/1228344b15b3e33296dfaf7bce7ff0f9afe1d212))
+- *(docs)* Bump pymdown-extensions to 10.21.2 for pygments 2.20.0 compat ([`7422193`](https://github.com/s0undt3ch/ToolR/commit/7422193e201fd88cb333db33f3425ffab9d4d527))
+- *(docs)* Use descriptive link text in SECURITY.md ([`212454a`](https://github.com/s0undt3ch/ToolR/commit/212454a5b4bd02f2ce609e7d2a2344248351181a))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(release)* Update ToolR action versions in workflows ([`0d11014`](https://github.com/s0undt3ch/ToolR/commit/0d110142417767c317a9b2fa79608ab32abd1d30))
+- *(ci)* Switch to prek ([`64c5997`](https://github.com/s0undt3ch/ToolR/commit/64c599784b7bc3639d94beea71150bc92743576f))
+- *(pre-commit)* Update pre-commit hook versions ([`6438077`](https://github.com/s0undt3ch/ToolR/commit/64380774c55a509af331809b861c2cdced949832))
+- *(ci)* Switch to `macos-15-intel` to build Intel wheels ([`211b0fa`](https://github.com/s0undt3ch/ToolR/commit/211b0faa402a5304648180ae0fa48059d2eb035a))
+- *(ci)* Lock permissions on the build.yml workflow ([`aabe4e5`](https://github.com/s0undt3ch/ToolR/commit/aabe4e59aecf0af7e06bd2c27f10cd1bd96286f3))
+- *(ci)* Lock `build.yml` GitHub Actions to SHA hashes ([`08bdda3`](https://github.com/s0undt3ch/ToolR/commit/08bdda3f740fef78db3f2b1b549c2bbf425e11a9))
+- *(ci)* Only run attestations on the main repo ([`0d2b361`](https://github.com/s0undt3ch/ToolR/commit/0d2b361c20638d696c0554b956fa4fafd662570b))
+- *(ci)* Improve `cibuildwheel`` build performance by adding cache ([`60a438f`](https://github.com/s0undt3ch/ToolR/commit/60a438f5c00b406f170ff7d07e4ac9968984c967))
+- *(ci)* Fix the chicken & egg issue with releases. ([`77cc4f6`](https://github.com/s0undt3ch/ToolR/commit/77cc4f636cc60b9f2656932ee3a6a2108e3b8c58))
+- *(ci)* Remove no longer required process ([`821592f`](https://github.com/s0undt3ch/ToolR/commit/821592f76fae15ea4ba83525a92fd335c5c59685))
+- *(ci)* Update but still lock to the SHA ([`57e3719`](https://github.com/s0undt3ch/ToolR/commit/57e37194bf90de7b9228610d3ba5c9677262bbe2))
+- *(ci)* When updating our own usage or toolr in GH Actions, lock it ([`b666088`](https://github.com/s0undt3ch/ToolR/commit/b6660881c6ab62fc7d23fd01799fe5eae679ea3c))
+- *(ci)* Restrict GH Actions jobs permissions ([`14bfc6d`](https://github.com/s0undt3ch/ToolR/commit/14bfc6d433b4937d0cb00c07198c0bd7f2e6821b))
+- *(pre-commit)* Add pre-commit hook to lock GH Actions steps ([`5d69b7a`](https://github.com/s0undt3ch/ToolR/commit/5d69b7a80743681bc392413f2d4f8175d1c5f14c))
+- *(ci)* Switch `prepare-release` to a reusable workflow ([`9e6c657`](https://github.com/s0undt3ch/ToolR/commit/9e6c657d8863f829766f588d45092beea0a5ea47))
+- *(ci)* Update actions versions ([`2faf97c`](https://github.com/s0undt3ch/ToolR/commit/2faf97c0018d376a3a8bb01910e4ed7e8cecca57))
+- *(ci)* Fix auto version bump ([`2a85e6c`](https://github.com/s0undt3ch/ToolR/commit/2a85e6c577351f6c0987952a5735aa0f9b6fe364))
+- *(docs)* Add CONTRIBUTING document ([`7691338`](https://github.com/s0undt3ch/ToolR/commit/769133820372966454c2e013fbb65035cb3661c1))
+- *(pre-commit)* Swap markdownlint-cli2 for rumdl, add gitleaks ([`a4f6bc5`](https://github.com/s0undt3ch/ToolR/commit/a4f6bc5e58f12b36dc727c49b53565b81d2b3ce3))
+
+### New Contributors
+
+* @step-security-bot made their first contribution
 ## 0.11.0 - 2025-09-24
 
 ### <!-- 0 -->🚀 Features
