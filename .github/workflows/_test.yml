@@ -11,6 +11,10 @@ on:
         required: true
         type: string
         description: 'Display name for the test job'
+      cache-seed:
+        required: true
+        type: string
+        description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
 
 permissions:
   contents: read
@@ -44,6 +48,7 @@ jobs:
         id: setup-virtualenv
         with:
           cache-prefix: test
+          cache-seed: ${{ inputs.cache-seed }}
           python-version: ${{ matrix.python-version }}
           uv-sync-args: "--all-extras --dev"
 
@@ -57,21 +62,21 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}|cargo|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          key: ${{ inputs.cache-seed }}|${{ runner.os }}|cargo|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Cache Rust `target/release`
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             target/release
-          key: ${{ runner.os }}|target|release|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|release|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Cache Rust `target/coverage`
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             target/coverage
-          key: ${{ runner.os }}|target|coverage|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|coverage|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Build Rust Release
         run: |

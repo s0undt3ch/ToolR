@@ -17,6 +17,10 @@ on:
         type: string
         description: 'GitHub environment to use'
         default: ''
+      cache-seed:
+        required: true
+        type: string
+        description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
     secrets:
       github-app-private-key:
         required: false
@@ -86,7 +90,7 @@ jobs:
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           cache: true
-          cache_key_prefix: mise|prepare-release|${{ runner.os }}|${{ runner.arch }}
+          cache_key_prefix: ${{ inputs.cache-seed }}|mise|prepare-release|${{ runner.os }}|${{ runner.arch }}
 
       - name: Generate additional ToolR requirements file
         shell: bash
@@ -103,7 +107,7 @@ jobs:
         id: setup-pre-commit
         uses: ./.github/actions/setup-pre-commit
         with:
-          cache-seed: prepare-release
+          cache-seed: ${{ inputs.cache-seed }}|prepare-release
 
       - name: Configure Git (with App)
         if: inputs.github-app-id != ''

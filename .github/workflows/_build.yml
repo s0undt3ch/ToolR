@@ -15,6 +15,10 @@ on:
         required: true
         type: string
         description: 'Platform matrix as JSON string'
+      cache-seed:
+        required: true
+        type: string
+        description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
 
 permissions:
   contents: read
@@ -67,10 +71,10 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', 'pyproject.toml') }}
+          key: ${{ inputs.cache-seed }}|cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', 'pyproject.toml') }}
           restore-keys: |
-            cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|
-            cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
+            ${{ inputs.cache-seed }}|cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|
+            ${{ inputs.cache-seed }}|cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
 
       - name: Build wheels
         uses: pypa/cibuildwheel@8d2b08b68458a16aeb24b64e68a09ab1c8e82084 # v3.4.1

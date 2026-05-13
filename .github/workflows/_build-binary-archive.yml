@@ -11,6 +11,10 @@ on:
         required: true
         type: string
         description: 'Name of the source tarball artifact to download'
+      cache-seed:
+        required: true
+        type: string
+        description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
 
 permissions:
   contents: read
@@ -87,7 +91,7 @@ jobs:
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           cache: true
-          cache_key_prefix: mise|build-binary|${{ runner.os }}|${{ runner.arch }}|${{ matrix.target.triple }}
+          cache_key_prefix: ${{ inputs.cache-seed }}|mise|build-binary|${{ runner.os }}|${{ runner.arch }}|${{ matrix.target.triple }}
 
       # `cross` runs in a container with its own toolchain, so we only need
       # to add the matrix target for native builds.

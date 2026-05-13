@@ -14,6 +14,8 @@ env:
   COLUMNS: 190
   FORCE_COLOR: "1"
   TOOLR_DEBUG_IMPORTS: "1"
+  # Bump to invalidate every cache used by this workflow.
+  CACHE_SEED: "1"
 
 permissions: {}
 
@@ -32,6 +34,9 @@ jobs:
       contents: read
     outputs:
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
+      # Mirrors env.CACHE_SEED. Reusable workflows can't read `env` from a
+      # caller's `with:` block, so they read this output instead.
+      cache-seed: ${{ steps.cache-seed.outputs.cache-seed }}
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
@@ -47,10 +52,15 @@ jobs:
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
+      - name: Expose cache seed
+        id: cache-seed
+        run: echo "cache-seed=${{ env.CACHE_SEED }}" >> "$GITHUB_OUTPUT"
+
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
         with:
           cache-prefix: prepare-release
+          cache-seed: ${{ env.CACHE_SEED }}
           python-version: "3.11"
 
       - name: Generate Build Matrix
@@ -71,6 +81,7 @@ jobs:
       release-version: ${{ inputs.release-version }}
       github-app-id: ${{ vars.GH_APP_ID }}
       environment: release
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
     secrets:
       github-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
@@ -88,6 +99,7 @@ jobs:
       display-name: Linux
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
 
   build-windows:
     name: Build
@@ -103,6 +115,7 @@ jobs:
       display-name: Windows
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
 
   build-macos:
     name: Build
@@ -118,6 +131,7 @@ jobs:
       display-name: macOS
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
 
   publish-release:
     name: Publish Release
