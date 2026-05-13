@@ -59,9 +59,12 @@ pub fn validate_venv(venv_dir: &Path, python: &Path) -> Result<PathBuf, Validati
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
+    #[cfg(unix)]
     use tempfile::TempDir;
 
+    #[cfg(unix)]
     fn fake_unix_venv(root: &Path, with_toolr: bool, with_python: bool) {
         let py_dir = root.join("lib").join("python3.13").join("site-packages");
         std::fs::create_dir_all(&py_dir).unwrap();

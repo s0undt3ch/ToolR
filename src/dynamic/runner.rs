@@ -58,13 +58,13 @@ pub fn run_introspect(python: &Path, tools_dir: &Path) -> Result<DynamicPayload,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::TempDir;
 
     /// Build a fake "python" shell script that prints a fixed JSON payload
     /// and exits 0. Lets us test the runner without a real venv.
     #[cfg(unix)]
     fn fake_python(tmp: &TempDir, body: &str) -> PathBuf {
+        use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
         let path = tmp.path().join("python");
         let mut f = std::fs::File::create(&path).unwrap();
