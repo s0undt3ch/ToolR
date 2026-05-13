@@ -3,5 +3,10 @@ Say hello.
 Usage: toolr greeting hello [OPTIONS]
 
 Options:
-      --name <name>  The name of the person to greet. [default: World]
-  -h, --help         Print help
+  -h, --help
+          Print help
+
+      --name <name>
+          The name of the person to greet.
+
+          [default: World]
