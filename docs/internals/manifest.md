@@ -5,6 +5,14 @@ and command the toolr binary knows about. Tab completion, `--help`,
 and clap's subcommand-tree build all read from this single file — no
 Python imports involved in the hot path.
 
+!!! note "It's a cache — don't commit it"
+    The manifest is regenerated automatically when the static or
+    dynamic hashes drift, and the static layer alone rebuilds in
+    ~10 ms on typical projects. `toolr project init` adds the file
+    to `tools/.gitignore` for you. Committing it just produces noisy
+    merge conflicts on every `tools/` edit without buying anything
+    the auto-rebuild doesn't already cover.
+
 ## File shape
 
 ```json

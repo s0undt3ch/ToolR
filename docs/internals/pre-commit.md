@@ -1,43 +1,38 @@
 # Pre-commit integration
 
-The toolr repo ships a `.pre-commit-hooks.yaml` so downstream
-consumers can wire toolr-managed hooks into their own
-`.pre-commit-config.yaml` without copy-paste.
+Toolr no longer ships a `.pre-commit-hooks.yaml`. The only hook it
+used to provide — `toolr-manifest`, which rebuilt the manifest on
+`tools/*.py` changes — only made sense when the manifest was tracked
+in git. It isn't, anymore: `tools/.toolr-manifest.json` is a pure
+cache that the binary auto-regenerates on hash drift, and toolr's
+`project init` adds it to `tools/.gitignore` by default.
 
-## Available hooks
-
-### `toolr-manifest`
-
-Runs `toolr project manifest rebuild` whenever a file under `tools/`
-changes. Ensures the committed manifest stays in sync with the
-source code; without it, you'd ship stale tab-completion data and
-risk `--help` output that no longer matches the implementation.
-
-## Consumer configuration
-
-Add the toolr repo to your `.pre-commit-config.yaml`:
+If your project chooses to commit the manifest anyway, wire your own
+local hook:
 
 ```yaml
-- repo: https://github.com/s0undt3ch/ToolR
-  rev: v0.11.0  # use the latest released tag
+# .pre-commit-config.yaml
+- repo: local
   hooks:
     - id: toolr-manifest
+      name: Regenerate toolr manifest
+      entry: toolr project manifest rebuild
+      language: system
+      pass_filenames: false
+      files: ^tools/.*\.py$
 ```
 
-The hook only fires on commits that touch `tools/*.py` files. Other
-commits are unaffected — the cost is zero when you're not editing
-tools.
+That's the same definition toolr used to ship; it works identically
+when invoked locally.
 
-## When the hook fails
+## Why the change
 
-`toolr-manifest` exits non-zero (and updates the manifest in place)
-if the on-disk file was out of date. Stage the updated manifest and
-re-commit; the second pass passes.
+- The static manifest builds in ~10 ms on most projects; tab
+  completion stays sub-50 ms regardless of staleness.
+- The committed file caused merge conflicts on every PR that touched
+  `tools/`, and the diffs weren't human-meaningful.
+- The binary's hash-drift detector already keeps the on-disk file
+  current when it is present.
 
-## Why pre-commit and not git hooks directly
-
-Pre-commit handles the install, virtualenv resolution, and per-hook
-isolation. It also makes the hook portable: contributors who clone
-your repo get the same behaviour without manual setup. Toolr the
-project uses pre-commit for the same reasons — see `.pre-commit-
-config.yaml` at the repo root for the canonical example.
+See [Internals → Manifest layers](manifest.md) for the regeneration
+flow.

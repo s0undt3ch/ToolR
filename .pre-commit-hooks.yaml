@@ -1,6 +1,0 @@
-- id: toolr-manifest
-  name: Regenerate toolr manifest
-  entry: toolr project manifest rebuild
-  language: system
-  pass_filenames: false
-  files: ^tools/.*\.py$
