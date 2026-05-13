@@ -74,7 +74,7 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: s0undt3ch/ToolR@05c0d9d5f907b1c108a02af1b9b52aa71926bc06 # v0.11.0
+        uses: s0undt3ch/ToolR@8cd163aa75e825c20207500024cad82f14ff6a87 # v0.11.1
         with:
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
