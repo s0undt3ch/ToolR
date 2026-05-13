@@ -1,8 +1,6 @@
 Spawn a subshell with the tools venv activated
 
-Usage: toolr project venv shell [OPTIONS]
+Usage: toolr project venv shell
 
 Options:
-  -d, --debug  Increase verbosity
-  -q, --quiet  Suppress non-error output
-  -h, --help   Print help
+  -h, --help  Print help

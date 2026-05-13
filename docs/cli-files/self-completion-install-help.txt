@@ -6,7 +6,5 @@ Arguments:
   <shell>  Shell to install the completion script for [possible values: bash, zsh, fish]
 
 Options:
-  -d, --debug  Increase verbosity
       --force  Overwrite an existing differing file without prompting
-  -q, --quiet  Suppress non-error output
   -h, --help   Print help

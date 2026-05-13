@@ -1,6 +1,6 @@
 Example commands
 
-Usage: toolr example [OPTIONS] [COMMAND]
+Usage: toolr example [COMMAND]
 
 Commands:
   hello    Greet someone.
@@ -9,6 +9,4 @@ Commands:
   setlog   Set a log level (for demonstration only — does nothing).
 
 Options:
-  -d, --debug  Increase verbosity
-  -q, --quiet  Suppress non-error output
-  -h, --help   Print help
+  -h, --help  Print help

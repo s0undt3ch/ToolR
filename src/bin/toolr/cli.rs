@@ -50,12 +50,15 @@ pub fn build_command(manifest: &Manifest) -> Command {
         .version(env!("CARGO_PKG_VERSION"))
         .about("In-project CLI tooling support")
         .disable_help_subcommand(true)
+        // `--debug` / `--quiet` are root-level options — they go
+        // before the subcommand (`toolr --debug ci hello`). They're
+        // intentionally *not* `global(true)` so they don't clutter
+        // every subcommand's --help output.
         .arg(
             Arg::new("debug")
                 .short('d')
                 .long("debug")
                 .action(ArgAction::SetTrue)
-                .global(true)
                 .help("Increase verbosity"),
         )
         .arg(
@@ -63,7 +66,6 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .short('q')
                 .long("quiet")
                 .action(ArgAction::SetTrue)
-                .global(true)
                 .conflicts_with("debug")
                 .help("Suppress non-error output"),
         );
@@ -315,8 +317,16 @@ pub fn build_command(manifest: &Manifest) -> Command {
 
 fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
     let mut c = Command::new(cmd.name.clone()).about(cmd.summary.clone());
+    // clap shows `long_about` exclusively when set, dropping `about`,
+    // so glue the summary back in front of the description for
+    // `--help` to see both paragraphs.
     if !cmd.description.is_empty() {
-        c = c.long_about(cmd.description.clone());
+        let full = if cmd.summary.is_empty() {
+            cmd.description.clone()
+        } else {
+            format!("{}\n\n{}", cmd.summary, cmd.description)
+        };
+        c = c.long_about(full);
     }
     for arg in &cmd.arguments {
         let long_flag = arg.name.replace('_', "-");

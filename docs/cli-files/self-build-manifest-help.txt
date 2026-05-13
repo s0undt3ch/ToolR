@@ -6,10 +6,8 @@ Arguments:
   <package>  Dotted Python package name to introspect
 
 Options:
-  -d, --debug               Increase verbosity
       --output <PATH>       Override the output path
       --python <PATH>       Path to a Python interpreter to use
-  -q, --quiet               Suppress non-error output
       --schema-version <N>  Pin the emitted schema version
       --check               Verify the on-disk manifest matches regeneration
   -h, --help                Print help

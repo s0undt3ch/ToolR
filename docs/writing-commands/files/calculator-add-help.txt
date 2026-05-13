@@ -1,12 +1,10 @@
 Add two numbers together.
 
-Usage: toolr math add [OPTIONS] <a> <b>
+Usage: toolr math add <a> <b>
 
 Arguments:
   <a>  First number.
   <b>  Second number.
 
 Options:
-  -d, --debug  Increase verbosity
-  -q, --quiet  Suppress non-error output
-  -h, --help   Print help
+  -h, --help  Print help
