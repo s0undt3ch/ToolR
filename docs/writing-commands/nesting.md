@@ -2,71 +2,55 @@
 
 # Nested groups
 
-Subgroups organise related commands under a common parent. There are
-four equivalent ways to express the parent-child relationship; pick
-the one that reads best for your file layout.
+Subgroups organise related commands under a common parent. Express
+the relationship in one of two equivalent ways.
 
-## Method-call style
+## Dotted path inside `command_group(...)`
 
-Each `CommandGroup` exposes a `.command_group(...)` method that
-returns a child group bound to it. The most common pattern, used when
-every subgroup lives alongside its parent:
+The shortest spelling. Everything before the final dot is the parent's
+full path; the leaf becomes the child group's name.
 
 ```python
 --8<-- "docs/writing-commands/files/nesting-example.py"
 ```
 
-In the Python model this declares:
+That file declares:
 
 - A top-level `docker` group.
 - Two subgroups: `docker image` and `docker container`.
 - A `build` command on `docker image` and a `start` command on
   `docker container`.
 
-…produces the CLI hierarchy:
+…and produces the CLI hierarchy:
 
-- `toolr docker --help` lists the two subgroups (`image`, `container`)
-  as commands.
+- `toolr docker --help` lists the two subgroups (`image`, `container`).
 - `toolr docker image build my-image:latest` reaches the `build` command.
 - `toolr docker container start my-container` reaches the `start` command.
 
-There's no fixed depth limit — `outer.command_group("middle").command_group("inner")`
-works just as well.
+No fixed depth limit — `command_group("a.b.c.d")` works just as well.
 
-## Dotted-path style
+## `parent="..."` keyword
 
-The new string-path API supports parent paths inline:
-
-```python
---8<-- "docs/writing-commands/files/nesting-dotted-example.py"
-```
-
-`command_group("docker.image", …)` declares a child of the `docker`
-group. The leaf name (`image`) and the parent path (`docker`) are
-split inside the registry; nothing else has to change. Multi-level
-paths (`docker.image.layer`) work identically.
-
-## `parent=` keyword
-
-When the dotted name reads awkwardly, you can spell the parent out:
+When the dotted name reads awkwardly, spell the parent out explicitly:
 
 ```python
-# Both forms are equivalent to command_group("docker.image", ...).
-command_group("image", parent="docker")
+command_group("docker", title="Docker")
+command_group("image", parent="docker", description="Image subcommands")
 
-# Or pass a CommandGroup reference (works across imports, see below).
-parent_group = command_group("docker", ...)
-command_group("image", parent=parent_group)
+
+@command(group="docker.image")
+def build(ctx, tag: str) -> None: ...
 ```
 
-Mixing `parent=` with a dotted name is allowed but the dotted form
-wins (toolr logs a warning at registration time so the mismatch is
-visible).
+The two styles are exchangeable; mixing them inside one project is
+fine. (Combining a dotted name *and* a `parent=` kwarg is allowed but
+the dotted form wins — toolr logs a warning at registration time so
+the conflict is visible.)
 
 ## Cross-file parents
 
-A subgroup doesn't have to live in the same file as its parent. The
-toolr parser collects every `command_group(...)` declaration across
+A subgroup doesn't have to live in the same file as its parent.
+Toolr's parser collects every `command_group(...)` declaration across
 `tools/**/*.py` before resolving any parent references, so this works
 in either file order:
 
@@ -84,21 +68,7 @@ command_group("ci.helm-diff", description="Helm diff helpers")
 def backend(ctx, env: str) -> None: ...
 ```
 
-For the binding style, importing the parent's `CommandGroup` directly
-also works:
-
-```python
-# tools/helm.py
-from ._common import group as ci
-
-helm_diff = ci.command_group("helm-diff", description="…")
-
-
-@helm_diff.command
-def backend(ctx, env: str) -> None: ...
-```
-
-Either path produces the same CLI: `toolr ci helm-diff backend`.
+Either way the resulting CLI is `toolr ci helm-diff backend`.
 
 !!! note "Shell tab completion"
     Top-level groups, their subgroups, and the commands attached to
@@ -106,3 +76,10 @@ Either path produces the same CLI: `toolr ci helm-diff backend`.
     shell-completion script and notice nested subgroups don't
     complete, run `toolr self completion install <shell> --force`
     to refresh it.
+
+!!! warning "Legacy method form deprecated"
+    `parent.command_group("child", ...)` — the method call on a
+    captured binding — still works but emits a
+    `ToolrDeprecationWarning` and will be removed in toolr 1.0.
+    Replace each call with a dotted `command_group(...)` declaration.
+    See the [migration guide](../migration.md).

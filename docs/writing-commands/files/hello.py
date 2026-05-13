@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from toolr import Context
+from toolr import command
 from toolr import command_group
 
-group = command_group("greeting", "Greeting Commands", "Commands for greeting users")
+command_group("greeting", "Greeting Commands", "Commands for greeting users")
 
 
-@group.command
+@command(group="greeting")
 def hello(ctx: Context, name: str = "World"):
     """Say hello.
 

@@ -46,6 +46,7 @@ nav:
     - Annotations: writing-commands/annotations.md
     - Nested groups: writing-commands/nesting.md
     - Known bugs: writing-commands/known-bugs.md
+  - Migration (legacy → string-path): migration.md
   - Project configuration: project-config.md
   - CLI reference: cli.md
   - Third-party packages: third-party.md

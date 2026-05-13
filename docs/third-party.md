@@ -73,7 +73,7 @@ The file lives at `<package_dir>/toolr-manifest.json` — i.e. next to
 ## The Python build helper
 
 Most packages won't write the JSON by hand — they declare commands
-with the usual `command_group` / `@group.command` API and let
+with the usual `command_group` / `@command` API and let
 `toolr.build` introspect.
 
 ```python
@@ -92,7 +92,7 @@ Or via the bundled CLI:
 python -m toolr.build my_pkg
 ```
 
-Re-run whenever your `command_group` / `@group.command` registrations
+Re-run whenever your `command_group` / `@command` registrations
 change.
 
 ### `--check` for CI
@@ -131,8 +131,8 @@ commands = "my_pkg.commands"
 
 When toolr's binary doesn't find a `toolr-manifest.json` next to
 the package, it spawns Python and imports `my_pkg.commands`. The
-module's import-time `command_group` / `@group.command` calls
-register the commands into the global registry.
+module's import-time `command_group` / `@command` calls register
+the commands into the global registry.
 
 This works but is **slower at completion time** — every tab press
 pays the import cost. Once a package has any users, ship a static

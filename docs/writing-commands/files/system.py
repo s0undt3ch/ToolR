@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from toolr import Context
+from toolr import command
 from toolr import command_group
 
-group = command_group("system", "System Commands", "System operations")
+command_group("system", "System Commands", "System operations")
 
 
-@group.command
+@command(group="system")
 def info(ctx: Context) -> None:
     """Show system information.
 
@@ -23,7 +24,7 @@ def info(ctx: Context) -> None:
     ctx.print("[bold green]System info retrieved successfully![/bold green]")
 
 
-@group.command
+@command(group="system")
 def check_disk(ctx: Context, path: str = ".") -> None:
     """Check disk usage for a path.
 
@@ -41,7 +42,7 @@ def check_disk(ctx: Context, path: str = ".") -> None:
         ctx.error(f"Error checking disk usage: {e}")
 
 
-@group.command
+@command(group="system")
 def network_test(ctx: Context, host: str = "8.8.8.8", count: int = 3) -> None:
     """Test network connectivity to a host.
 

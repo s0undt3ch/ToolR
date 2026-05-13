@@ -119,8 +119,10 @@ Built from `tools/**/*.py` via the `ruff_python_parser` Rust crate.
 Pure AST traversal — never imports user code, so it's safe to run
 without a working venv. Captures:
 
-- `command_group(...)` declarations.
-- `@group.command` / `@group.command("name")` decorations.
+- `command_group(...)` declarations (including the deprecated
+  binding-style `var = command_group(...)`).
+- `@command(group="…")` decorations (and the deprecated
+  `@<binding>.command` decorator).
 - Function signatures (positional vs keyword, defaults, annotations).
 - Google-style docstrings (summary, description, `Args:` block).
 - Local `Literal[...]` and `enum.Enum` definitions (resolved across
@@ -136,7 +138,7 @@ inside the resolved tools venv. The helper:
 
 1. Inserts `<tools>/..` on `sys.path` so `import tools` works.
 2. Imports every `tools.*` module — registering every
-   `command_group` / `@group.command` call.
+   `command_group` / `@command` call.
 3. Walks `importlib.metadata.entry_points(group="toolr.tools")` for
    third-party packages without a static manifest fragment.
 4. Dumps a JSON payload to stdout describing the merged registry.

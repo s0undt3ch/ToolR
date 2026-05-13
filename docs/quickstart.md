@@ -62,10 +62,10 @@ toolr example --help
 
 ## 4. Edit `tools/example.py` (or replace it)
 
-Open the generated file. Each function decorated with `@group.command`
-becomes a CLI subcommand. The first argument is a [`Context`][toolr.Context]
-object; the rest become CLI arguments inferred from your type hints
-and docstring.
+Open the generated file. Each function decorated with
+`@command(group="example")` becomes a CLI subcommand. The first
+argument is a [`Context`][toolr.Context] object; the rest become CLI
+arguments inferred from your type hints and docstring.
 
 For the full authoring guide, head to [Writing commands](writing-commands/index.md).
 
