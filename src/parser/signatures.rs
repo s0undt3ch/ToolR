@@ -89,10 +89,15 @@ fn classify_keyword_kind(annotation: Option<&Expr>) -> ArgumentKind {
     let Some(ann) = annotation else {
         return ArgumentKind::Optional;
     };
-    if is_bool_annotation(ann) {
+    // `Annotated[T, arg(...)]` wraps the real type — peel it off
+    // before pattern-matching, otherwise `Annotated[bool, arg(env=...)]`
+    // falls through to `Optional` and renders as a value-taking flag
+    // instead of a no-value one.
+    let inner = peel_annotated(ann).unwrap_or(ann);
+    if is_bool_annotation(inner) {
         return ArgumentKind::Flag;
     }
-    if is_list_like_annotation(ann) {
+    if is_list_like_annotation(inner) {
         return ArgumentKind::Repeated;
     }
     ArgumentKind::Optional
@@ -100,6 +105,27 @@ fn classify_keyword_kind(annotation: Option<&Expr>) -> ArgumentKind {
 
 fn is_bool_annotation(expr: &Expr) -> bool {
     matches!(expr, Expr::Name(n) if n.id.as_str() == "bool")
+}
+
+/// If `expr` is `Annotated[T, ...]`, return `T`; otherwise `None`.
+/// Handles both `typing.Annotated[...]` and bare `Annotated[...]` (the
+/// caller doesn't have to know which import shape is in use).
+fn peel_annotated(expr: &Expr) -> Option<&Expr> {
+    let Expr::Subscript(sub) = expr else {
+        return None;
+    };
+    let head = match sub.value.as_ref() {
+        Expr::Name(n) => n.id.as_str(),
+        Expr::Attribute(a) => a.attr.as_str(),
+        _ => return None,
+    };
+    if head != "Annotated" {
+        return None;
+    }
+    match sub.slice.as_ref() {
+        Expr::Tuple(t) => t.elts.first(),
+        single => Some(single),
+    }
 }
 
 /// Detects `list[...]`, `List[...]`, `tuple[..., ...]`, `Tuple[..., ...]`.
@@ -267,6 +293,33 @@ mod tests {
         let args = extract_arguments(&func, &EnumTable::default());
         assert_eq!(args[0].kind, ArgumentKind::Flag);
         assert_eq!(args[0].default.as_deref(), Some("false"));
+    }
+
+    /// `Annotated[bool, arg(...)]` should classify as `Flag` too.
+    /// Regression: the classifier used to match `Expr::Name == "bool"`
+    /// only, so wrapping a `bool` in `Annotated[...]` (e.g. to set
+    /// `env="…"` on the flag) silently downgraded to `Optional`, which
+    /// rendered as a value-taking `--verbose VALUE` flag at the CLI.
+    #[test]
+    fn annotated_bool_classified_as_flag() {
+        let func = first_func(
+            "from typing import Annotated\n\
+             from toolr import arg\n\
+             def f(ctx, verbose: Annotated[bool, arg(env=\"VERBOSE\")] = False): pass\n",
+        );
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args[0].kind, ArgumentKind::Flag);
+    }
+
+    #[test]
+    fn annotated_list_classified_as_repeated() {
+        let func = first_func(
+            "from typing import Annotated\n\
+             from toolr import arg\n\
+             def f(ctx, items: Annotated[list[str], arg(aliases=[\"-i\"])] = []): pass\n",
+        );
+        let args = extract_arguments(&func, &EnumTable::default());
+        assert_eq!(args[0].kind, ArgumentKind::Repeated);
     }
 
     #[test]
