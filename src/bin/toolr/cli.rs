@@ -316,7 +316,12 @@ pub fn build_command(manifest: &Manifest) -> Command {
 }
 
 fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
-    let mut c = Command::new(cmd.name.clone()).about(cmd.summary.clone());
+    // Run the docstring prose through the markdown→ANSI renderer
+    // before handing it to clap. On a non-TTY (piped / captured help
+    // text) the renderer returns plain text, so doc-snippet captures
+    // remain stable.
+    let about = crate::markdown::render(&cmd.summary);
+    let mut c = Command::new(cmd.name.clone()).about(about);
     // clap shows `long_about` exclusively when set, dropping `about`,
     // so glue the summary back in front of the description for
     // `--help` to see both paragraphs.
@@ -326,11 +331,11 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
         } else {
             format!("{}\n\n{}", cmd.summary, cmd.description)
         };
-        c = c.long_about(full);
+        c = c.long_about(crate::markdown::render(&full));
     }
     for arg in &cmd.arguments {
         let long_flag = arg.name.replace('_', "-");
-        let mut a = Arg::new(arg.name.clone()).help(arg.help.clone());
+        let mut a = Arg::new(arg.name.clone()).help(crate::markdown::render(&arg.help));
         let is_optional_wrapper = matches!(
             arg.resolved_type,
             Some(_rust_utils::parser::SupportedType::Optional(_))

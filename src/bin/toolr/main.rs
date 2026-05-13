@@ -2,6 +2,7 @@ mod cli;
 mod dispatch;
 mod init_scaffold;
 mod init_templates;
+mod markdown;
 mod project;
 mod self_cache;
 mod self_cache_prune;

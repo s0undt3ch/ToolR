@@ -1,7 +1,7 @@
 Set a log level (for demonstration only — does nothing).
 
-Demonstrates ``Literal[...]`` rendering as a ``--level
-{debug,info,warning}`` choice in the generated ``--help`` output.
+Demonstrates `Literal[...]` rendering as a `--level
+{debug,info,warning}` choice in the generated `--help` output.
 
 Usage: toolr example setlog [OPTIONS]
 
