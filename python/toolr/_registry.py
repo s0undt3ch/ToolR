@@ -4,6 +4,7 @@ import importlib
 import logging
 import os
 import pkgutil
+import warnings
 from argparse import _SubParsersAction
 from collections.abc import Callable
 from operator import attrgetter
@@ -19,6 +20,7 @@ from msgspec import field
 from msgspec import structs
 from rich.markdown import Markdown
 
+from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._docstrings import Docstring
 from toolr.utils._signature import F
 from toolr.utils._signature import get_signature
@@ -27,6 +29,43 @@ if TYPE_CHECKING:
     from toolr._parser import Parser
 
 log = logging.getLogger(__name__)
+
+
+def _emit_legacy_command_warning(group_full_name: str) -> None:
+    """Surface a deprecation warning for ``@<binding>.command`` usage.
+
+    Fires on every legacy decorator invocation; the runner installs a
+    ``"default"`` filter so each call site warns once per process,
+    keeping output noise bounded.
+    """
+    leaf = group_full_name.removeprefix("tools.")
+    warnings.warn(
+        "@<binding>.command is deprecated and will be removed in toolr 1.0. "
+        f"Migrate to `@command(group={leaf!r})`:\n"
+        "  from toolr import command, command_group\n"
+        f"  command_group({leaf!r}, ...)\n"
+        f"  @command(group={leaf!r})\n"
+        "  def my_command(ctx, ...): ...\n"
+        "See https://s0undt3ch.github.io/ToolR/migration/ for the full guide.",
+        ToolrDeprecationWarning,
+        stacklevel=3,
+    )
+
+
+def _emit_legacy_command_group_method_warning(parent_full_name: str, child: str) -> None:
+    """Surface a deprecation warning for ``parent.command_group(...)`` usage."""
+    parent_leaf = parent_full_name.removeprefix("tools.")
+    dotted = f"{parent_leaf}.{child}"
+    warnings.warn(
+        "CommandGroup.command_group(...) is deprecated and will be removed in toolr 1.0. "
+        f"Migrate to `command_group({dotted!r}, ...)`:\n"
+        "  from toolr import command_group\n"
+        f"  command_group({dotted!r}, ...)\n"
+        "Or pass `parent=...` explicitly. "
+        "See https://s0undt3ch.github.io/ToolR/migration/ for the full guide.",
+        ToolrDeprecationWarning,
+        stacklevel=3,
+    )
 
 
 MANIFEST_SCHEMA_VERSION: int = 1
@@ -61,7 +100,11 @@ class CommandGroup(Struct, frozen=True):
     def command(self, name: str) -> Callable[[F], F]: ...
 
     def command(self, name: str | F) -> Callable[[F], F] | F:
-        """Register a new command.
+        """Register a new command (deprecated binding-style decorator).
+
+        .. deprecated:: 0.x
+            Use :func:`toolr.command` with ``group="..."`` instead.
+            Removed in toolr 1.0.
 
         Args:
             name: Name of the command. If not passed, the function name will be used.
@@ -69,38 +112,49 @@ class CommandGroup(Struct, frozen=True):
         Returns:
             A decorator function that registers the command
         """
+        _emit_legacy_command_warning(self.full_name)
+        return self._command(name)
+
+    def _command(self, name: str | F) -> Callable[[F], F] | F:
+        """Internal helper used by :meth:`command` after deprecation accounting."""
         if isinstance(name, FunctionType):
-            # If we were not passed a name in the decorator call, we're being called with a function
-            # and we need to use the function name as the command name
-            return self.command(name.__name__.replace("_", "-"))(name)
+            # Bare-decorator form: `name` is actually the wrapped function.
+            # Register it under its (hyphenated) function name and return
+            # the function itself.
+            cli_name = name.__name__.replace("_", "-")
+            inner = cast("Callable[[F], F]", self._command(cli_name))
+            return inner(cast("F", name))
 
         if TYPE_CHECKING:
             assert isinstance(name, str)
 
-        def decorator(func: F) -> F:
+        def register(func: F) -> F:
             if name in self.__commands:
                 log.debug("Command '%s' already exists in group '%s', overriding", name, self.full_name)
             self.__commands[name] = func
             return func
 
-        return decorator
+        return register
 
     def command_group(
         self,
         name: str,
-        title: str,
+        title: str = "",
         description: str | None = None,
         long_description: str | None = None,
         docstring: str | None = None,
     ) -> CommandGroup:
-        """Create a nested command group within this group.
+        """Create a nested command group within this group (deprecated method form).
 
-        This is a wrapper around the [command_group][toolr._registry.command_group] function
-        that sets the parent to this group's full name.
+        .. deprecated:: 0.x
+            Use the top-level :func:`toolr.command_group` with a dotted
+            path (``command_group("parent.child", ...)``) or the
+            ``parent="parent"`` keyword instead. Removed in toolr 1.0.
 
         Returns:
             A CommandGroup instance
         """
+        _emit_legacy_command_group_method_warning(self.full_name, name)
         return command_group(
             name,
             title,

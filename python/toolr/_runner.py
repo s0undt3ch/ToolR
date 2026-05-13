@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Annotated
@@ -27,10 +28,20 @@ from typing import get_type_hints
 
 import msgspec
 
+from toolr._exc import ToolrDeprecationWarning
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from toolr._context import Context
+
+# Promote toolr's own deprecation warnings to visible-by-default. The
+# stdlib silences DeprecationWarning by default for non-__main__ code,
+# which means user `tools/*.py` files would never surface the legacy
+# decorator warnings. Filter is per-location ("default") so each call
+# site fires once per process — keeps output bounded across runs with
+# many legacy decorators.
+warnings.simplefilter("default", ToolrDeprecationWarning)
 
 SCHEMA_VERSION: int = 1
 
