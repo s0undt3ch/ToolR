@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/toolr-core"]
+members = ["crates/toolr-core", "crates/toolr"]
 resolver = "2"
 
 [workspace.package]

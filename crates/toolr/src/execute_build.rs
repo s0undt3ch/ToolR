@@ -6,10 +6,9 @@ use std::path::Path;
 use clap::ArgMatches;
 use serde_json::Value;
 
-use crate::manifest::{Argument, ArgumentKind, Command};
-use crate::parser::SupportedType;
-
-use super::spec::{ContextSpec, ExecutionSpec, RUNNER_SCHEMA_VERSION};
+use _rust_utils::execute::{ContextSpec, ExecutionSpec, RUNNER_SCHEMA_VERSION};
+use _rust_utils::manifest::{Argument, ArgumentKind, Command};
+use _rust_utils::parser::SupportedType;
 
 /// Build the spec to write to disk, given:
 ///
@@ -193,7 +192,7 @@ fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{Argument, ArgumentKind, Command, Origin};
+    use _rust_utils::manifest::{Argument, ArgumentKind, Command, Origin};
     use clap::{Arg, ArgAction};
 
     fn cmd_hello_with_name_arg() -> Command {
@@ -213,7 +212,7 @@ mod tests {
                 resolved_type: None,
                 path_constraints: None,
                 allowed_values: vec![],
-                metadata: crate::manifest::ArgMetadata::default(),
+                metadata: _rust_utils::manifest::ArgMetadata::default(),
             }],
             imports: vec![],
             origin: Origin::Static,
@@ -278,7 +277,7 @@ mod tests {
                 resolved_type: None,
                 path_constraints: None,
                 allowed_values: vec![],
-                metadata: crate::manifest::ArgMetadata::default(),
+                metadata: _rust_utils::manifest::ArgMetadata::default(),
             }],
             imports: vec![],
             origin: Origin::Static,

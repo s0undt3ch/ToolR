@@ -1,5 +1,6 @@
 mod cli;
 mod dispatch;
+mod execute_build;
 mod init_scaffold;
 mod init_templates;
 mod markdown;

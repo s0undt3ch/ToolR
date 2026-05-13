@@ -2299,6 +2299,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
+name = "toolr"
+version = "0.20.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "email_address",
+ "humansize",
+ "pep440_rs",
+ "serde_json",
+ "tempfile",
+ "termimad",
+ "toolr-core",
+ "uuid",
+ "which",
+]
+
+[[package]]
 name = "toolr-core"
 version = "0.20.0"
 dependencies = [
@@ -2306,7 +2324,6 @@ dependencies = [
  "assert_cmd",
  "blake3",
  "chrono",
- "clap",
  "dirs",
  "email_address",
  "glob",
@@ -2322,7 +2339,6 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "tempfile",
- "termimad",
  "thiserror 1.0.69",
  "tokio",
  "toml",

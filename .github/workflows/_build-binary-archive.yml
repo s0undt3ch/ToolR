@@ -106,12 +106,12 @@ jobs:
       - name: Build binary (native)
         if: ${{ !matrix.target.cross }}
         working-directory: workdir
-        run: cargo build --release --locked --bin toolr --target ${{ matrix.target.triple }}
+        run: cargo build --release --locked -p toolr --bin toolr --target ${{ matrix.target.triple }}
 
       - name: Build binary (cross)
         if: matrix.target.cross
         working-directory: workdir
-        run: cross build --release --locked --bin toolr --target ${{ matrix.target.triple }}
+        run: cross build --release --locked -p toolr --bin toolr --target ${{ matrix.target.triple }}
 
       - name: Stage archive contents
         working-directory: workdir

@@ -12,10 +12,6 @@ publish = false
 name = "_rust_utils"
 crate-type = ["cdylib", "rlib"]
 
-[[bin]]
-name = "toolr"
-path = "src/bin/toolr/main.rs"
-
 [dependencies]
 tokio.workspace = true
 serde.workspace = true
@@ -40,8 +36,6 @@ humansize.workspace = true
 log.workspace = true
 reqwest.workspace = true
 which.workspace = true
-clap.workspace = true
-termimad.workspace = true
 pyo3 = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]

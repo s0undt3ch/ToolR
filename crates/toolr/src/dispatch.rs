@@ -9,11 +9,12 @@ use _rust_utils::complete::{
 };
 use _rust_utils::discovery::discover_project_root;
 use _rust_utils::execute::{
-    OutputOptions, build_spec, resolve_python, spawn_runner_capturing_stderr, wait_with_signals,
-    write_spec_to_tempfile,
+    resolve_python, spawn_runner_capturing_stderr, wait_with_signals, write_spec_to_tempfile,
 };
 use _rust_utils::manifest::Manifest;
 use _rust_utils::venv::resolve_venv_path;
+
+use crate::execute_build::{OutputOptions, build_spec};
 
 pub fn dispatch(
     matches: &ArgMatches,

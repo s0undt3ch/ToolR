@@ -55,8 +55,8 @@ pub struct ExecutionSpec {
 
 impl ExecutionSpec {
     /// Construct a default-shaped spec with empty args and a quiet/normal
-    /// context. Most callers use the builder pattern in
-    /// `crate::execute::build_spec` (Task 9); this is for tests.
+    /// context. Most callers use the builder pattern in the `toolr` binary
+    /// crate's `execute_build::build_spec`; this is for tests.
     #[must_use]
     pub fn new(
         group: impl Into<String>,
