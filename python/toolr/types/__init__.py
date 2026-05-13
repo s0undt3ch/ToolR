@@ -39,6 +39,12 @@ Supported entries:
 For bare :class:`pathlib.Path`, no rust-side processing is applied —
 the value reaches your command function as whatever the user typed
 (wrapped in ``Path``).
+
+- :data:`Count` — alias for :class:`int`. The rust front-end gives
+  this special clap treatment: the matching CLI flag uses
+  ``ArgAction::Count``, so repeating the short form (``-vvv``) yields
+  the number of repetitions on the python side. Default of ``0`` is
+  expected.
 """
 
 from __future__ import annotations
@@ -64,10 +70,15 @@ ResolvedPath = _pathlib.Path
 # valid `local@domain` address.
 Email = str
 Version = _Version
+# Count is just an int at runtime; the rust parser detects the
+# `toolr.types.Count` annotation and configures clap with
+# ArgAction::Count so `-v -v -v` (or `-vvv`) increments the slot.
+Count = int
 
 __all__ = [
     "UUID",
     "AbsolutePath",
+    "Count",
     "Date",
     "DateTime",
     "Email",

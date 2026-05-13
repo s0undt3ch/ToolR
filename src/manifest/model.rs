@@ -102,11 +102,81 @@ pub struct Argument {
     #[serde(default)]
     pub allowed_values: Vec<String>,
     /// Path-constraint metadata harvested from
-    /// `Annotated[Path, arg(must_exist=True, ...)]`. Applied by the
-    /// path value-parsers in `src/bin/toolr/value_parsers.rs`. `None`
-    /// when no constraint flags were set; ignored for non-path types.
+    /// `Annotated[Path, arg(path_must_exist=True, ...)]`. Applied by
+    /// the path value-parsers in `src/bin/toolr/value_parsers.rs`.
+    /// `None` when no constraint flags were set; ignored for non-path
+    /// types.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_constraints: Option<PathConstraints>,
+    /// Additional clap-flavoured metadata harvested from
+    /// `Annotated[T, arg(...)]`. The CLI builder consumes each field
+    /// independently; unset fields are no-ops. Skipped during
+    /// serialisation when empty to keep manifests diffable.
+    #[serde(default, skip_serializing_if = "ArgMetadata::is_empty")]
+    pub metadata: ArgMetadata,
+}
+
+/// Optional clap-flavoured metadata harvested from `arg(...)`.
+///
+/// Each field maps onto exactly one clap call; an empty value means
+/// "leave clap's default behaviour alone." Stored as a single struct
+/// rather than inline fields on `Argument` to keep additions cheap.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArgMetadata {
+    /// Extra flag spellings: single-char entries become clap shorts
+    /// (`Arg::short`), longer entries become long aliases
+    /// (`Arg::alias`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+    /// Custom placeholder shown in `--help` (clap `Arg::value_name`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metavar: Option<String>,
+    /// When set, clap reads the default from this env var
+    /// (`Arg::env`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<String>,
+    /// `Arg::hide(true)` when set — omit from `--help` but still parse.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hide: bool,
+    /// Lower values render first in `--help`
+    /// (`Arg::display_order`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_order: Option<u32>,
+    /// Optional help-heading title + description. Rendered as
+    /// `Arg::help_heading(title)`; the description, if present, is
+    /// shown by the CLI builder as a one-line prose blurb under the
+    /// heading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub help_section: Option<HelpSection>,
+    /// Names of other parameters that conflict with this one
+    /// (`Arg::conflicts_with_all`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conflicts_with: Vec<String>,
+    /// Names of other parameters that must also be set when this one
+    /// is (`Arg::requires_all`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
+}
+
+impl ArgMetadata {
+    pub fn is_empty(&self) -> bool {
+        self.aliases.is_empty()
+            && self.metavar.is_none()
+            && self.env.is_none()
+            && !self.hide
+            && self.display_order.is_none()
+            && self.help_section.is_none()
+            && self.conflicts_with.is_empty()
+            && self.requires.is_empty()
+    }
+}
+
+/// A `--help`-section heading + optional descriptive prose.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HelpSection {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -123,6 +193,10 @@ pub enum ArgumentKind {
     Repeated,
     /// Variadic trailing positional (`def f(ctx, *files: str)` → `toolr ... a.py b.py`).
     VarPositional,
+    /// Counting flag (`-vvv` → 3) via clap `ArgAction::Count`. Drives
+    /// `toolr.types.Count`-annotated parameters; the runtime value
+    /// passed to the Python function is the resulting integer.
+    Count,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

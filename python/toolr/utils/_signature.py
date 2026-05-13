@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import inspect
 import logging
+import warnings
 from argparse import Action
 from collections.abc import Callable
 from enum import Enum
@@ -29,6 +30,7 @@ from msgspec import Struct
 
 from toolr._exc import SignatureError
 from toolr._exc import SignatureParameterError
+from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._docstrings import Docstring
 
 if TYPE_CHECKING:
@@ -164,67 +166,239 @@ class Signature(Struct, Generic[F], frozen=True):
         self.func(ctx, *bound.args, **bound.kwargs)
 
 
+class ArgSection(Struct, frozen=True):
+    """A named --help section for grouping related arguments.
+
+    Declare once at module scope, then reference it from each member
+    argument's :func:`arg` annotation. The rust front-end renders the
+    title as a clap help-heading and (when present) prints the
+    description as a one-line prose blurb under it.
+
+    Identity-based: two ``ArgSection(title="...")`` instances with the
+    same title are *not* the same section. Define the section once and
+    reuse the same Python object so a typo can't silently create a new
+    section.
+
+    Example::
+
+        from toolr import arg, arg_section, command
+
+        LOGGING = arg_section("Logging Options",
+                              description="Control verbosity and output.")
+
+        @command(group="example")
+        def hello(
+            ctx,
+            verbose: Annotated[bool, arg(help_section=LOGGING)] = False,
+            quiet: Annotated[bool, arg(help_section=LOGGING,
+                                       conflicts_with=["verbose"])] = False,
+        ): ...
+    """
+
+    title: str
+    description: str | None = None
+
+
+def arg_section(title: str, *, description: str | None = None) -> ArgSection:
+    """Construct an :class:`ArgSection` for use as ``arg(help_section=...)``.
+
+    Args:
+        title: Short heading shown in ``--help`` above the section's
+            arguments. Renders as a clap help-heading.
+        description: Optional one-line prose displayed under the
+            heading. Markdown is supported via the same termimad
+            renderer toolr uses elsewhere.
+
+    Returns:
+        An ``ArgSection`` instance — store it at module scope and pass
+        it (by reference, not by re-instantiating) to every member
+        argument.
+    """
+    return ArgSection(title=title, description=description)
+
+
 class ArgumentAnnotation(Struct, frozen=True):
+    """Metadata harvested from ``Annotated[T, arg(...)]``.
+
+    The python runtime keeps the fields it actually uses (the legacy
+    argparse-era kwargs); the rust static parser independently reads
+    the same call expression and harvests the kwargs *it* uses, so the
+    two sides don't need a serialised representation of this struct.
+    """
+
+    # Plumbed through to clap by the rust front-end.
     aliases: list[str] | None = None
-    required: bool | None = None
     metavar: str | None = None
+    env: str | None = None
+    hide: bool = False
+    help_section: ArgSection | None = None
+    display_order: int | None = None
+    conflicts_with: list[str] | None = None
+    requires: list[str] | None = None
+    # Path constraints (renamed; old names still accepted via `arg()`).
+    path_must_exist: bool = False
+    path_must_be_file: bool = False
+    path_must_be_dir: bool = False
+    # Deprecated kwargs — kept on the struct so existing call sites
+    # don't TypeError, but every one of them emits a
+    # `ToolrDeprecationWarning` from `arg()`.
+    required: bool | None = None
     action: str | None = None
     choices: list[Any] | None = None
     nargs: NargsType | None = None
     group: str | None = None
-    # Path constraints. Apply to any `pathlib.Path` / `toolr.types.*Path`
-    # parameter; ignored on other types. The rust static parser reads
-    # these from the `arg(...)` call inside `Annotated[Path, arg(...)]`
-    # and configures clap to enforce them at CLI parse time.
-    must_exist: bool = False
-    must_be_file: bool = False
-    must_be_dir: bool = False
 
 
-def arg(
+_SENTINEL: Any = object()
+
+
+def _deprecated(name: str, *, replacement: str) -> None:
+    warnings.warn(
+        f"arg({name}=...) is deprecated and will be removed in toolr 1.0. {replacement}",
+        ToolrDeprecationWarning,
+        stacklevel=3,
+    )
+
+
+def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose; each is intentionally distinct.
     *,
+    # Active kwargs (plumbed through to clap).
     aliases: list[str] | None = None,
-    required: bool | None = None,
     metavar: str | None = None,
+    env: str | None = None,
+    hide: bool = False,
+    help_section: ArgSection | None = None,
+    display_order: int | None = None,
+    conflicts_with: list[str] | None = None,
+    requires: list[str] | None = None,
+    path_must_exist: bool = False,
+    path_must_be_file: bool = False,
+    path_must_be_dir: bool = False,
+    # Deprecated legacy kwargs. Each emits a `ToolrDeprecationWarning`
+    # and (when applicable) maps onto the new field internally.
+    required: bool | None = None,
     action: str | None = None,
     choices: list[Any] | None = None,
     nargs: NargsType | None = None,
     group: str | None = None,
-    must_exist: bool = False,
-    must_be_file: bool = False,
-    must_be_dir: bool = False,
+    must_exist: bool | Any = _SENTINEL,
+    must_be_file: bool | Any = _SENTINEL,
+    must_be_dir: bool | Any = _SENTINEL,
 ) -> ArgumentAnnotation:
-    """
-    Create an ArgumentAnnotation.
-
-    This function is meant to be used with :class:`typing.Annotated` to create an ArgumentAnnotation.
+    """Create an :class:`ArgumentAnnotation` for use with ``typing.Annotated``.
 
     Args:
-        aliases: Aliases for the argument.
-        required: Whether the argument is required.
-        metavar: The metavar for the argument.
-        action: The action for the argument.
-        choices: The choices for the argument.
-        nargs: The number of arguments to accept.
-        group: The name of the mutually exclusive group for the argument.
-        must_exist: For path-typed params: reject paths that don't exist
-            on disk. Useful for "input file" style arguments.
-        must_be_file: For path-typed params: also require the path is a
-            regular file. Implies ``must_exist=True``.
-        must_be_dir: For path-typed params: also require the path is a
-            directory. Implies ``must_exist=True``.
+        aliases: Extra short or long flag spellings (e.g. ``["-n", "--who"]``).
+            Single-character entries become clap shorts; longer entries
+            become aliases.
+        metavar: Custom placeholder shown in ``--help``
+            (e.g. ``"PATH"`` → ``--config <PATH>``).
+        env: Read the default from this environment variable when the
+            flag isn't passed. Maps to clap ``Arg::env(...)``.
+        hide: When ``True``, omit the argument from ``--help`` output.
+            Still parseable on the command line.
+        help_section: An :class:`ArgSection` returned by
+            :func:`arg_section`. Groups related arguments under a
+            named heading in ``--help``.
+        display_order: Integer ordering hint for ``--help`` rendering.
+            Lower values render first; arguments without a value fall
+            back to source order.
+        conflicts_with: Names of other parameters that may not be used
+            together with this one.
+        requires: Names of other parameters that must also be set when
+            this one is.
+        path_must_exist: For path-typed params: reject paths that don't
+            exist on disk. Useful for "input file" style arguments.
+        path_must_be_file: For path-typed params: also require the path
+            is a regular file. Implies ``path_must_exist=True``.
+        path_must_be_dir: For path-typed params: also require the path
+            is a directory. Implies ``path_must_exist=True``.
+        required: **Deprecated.** Removed in 1.0. Use ``T | None`` or
+            ``*args: T`` to express optional / zero-or-more.
+        action: **Deprecated.** Removed in 1.0. ``bool`` defaults imply
+            flag actions; ``list[T]`` implies append; ``Count`` implies
+            counting.
+        choices: **Deprecated.** Removed in 1.0. Use ``Literal["a","b"]``
+            or an :class:`enum.Enum` subclass instead.
+        nargs: **Deprecated.** Removed in 1.0. ``T | None``,
+            ``*args: T``, and ``tuple[T1, T2]`` cover the cases.
+        group: **Deprecated.** Removed in 1.0. Use
+            ``conflicts_with=[...]`` for mutex relationships and
+            ``help_section=`` for display grouping.
+        must_exist: **Deprecated.** Removed in 1.0; rename to
+            ``path_must_exist``.
+        must_be_file: **Deprecated.** Removed in 1.0; rename to
+            ``path_must_be_file``.
+        must_be_dir: **Deprecated.** Removed in 1.0; rename to
+            ``path_must_be_dir``.
     """
+    if required is not None:
+        _deprecated(
+            "required",
+            replacement=(
+                "Use `T | None` (with a default of None) for optional args, or `*args: T` for zero-or-more positionals."
+            ),
+        )
+    if action is not None:
+        _deprecated(
+            "action",
+            replacement=(
+                "Action is inferred from the parameter type: `bool` → flag, "
+                "`list[T]` → append, `toolr.types.Count` → count."
+            ),
+        )
+    if choices is not None:
+        _deprecated(
+            "choices",
+            replacement=(
+                "Use `Literal['a', 'b']` or an `enum.Enum` subclass instead — "
+                "the choices come from the type annotation."
+            ),
+        )
+    if nargs is not None:
+        _deprecated(
+            "nargs",
+            replacement=(
+                "Use `T | None` (zero-or-one), `*args: T` (zero-or-more), "
+                "or `tuple[T1, T2, ...]` (fixed arity) — all driven by the type."
+            ),
+        )
+    if group is not None:
+        _deprecated(
+            "group",
+            replacement=(
+                "Use `conflicts_with=[...]` for mutually-exclusive arguments "
+                "or `help_section=` (via `arg_section(...)`) for display grouping."
+            ),
+        )
+    # Old path-constraint kwargs map onto the new names; emit a single
+    # warning per offender, then fold into the new fields.
+    if must_exist is not _SENTINEL:
+        _deprecated("must_exist", replacement="Rename to `path_must_exist`.")
+        path_must_exist = path_must_exist or bool(must_exist)
+    if must_be_file is not _SENTINEL:
+        _deprecated("must_be_file", replacement="Rename to `path_must_be_file`.")
+        path_must_be_file = path_must_be_file or bool(must_be_file)
+    if must_be_dir is not _SENTINEL:
+        _deprecated("must_be_dir", replacement="Rename to `path_must_be_dir`.")
+        path_must_be_dir = path_must_be_dir or bool(must_be_dir)
     return ArgumentAnnotation(
         aliases=aliases,
-        required=required,
         metavar=metavar,
+        env=env,
+        hide=hide,
+        help_section=help_section,
+        display_order=display_order,
+        conflicts_with=conflicts_with,
+        requires=requires,
+        path_must_exist=path_must_exist,
+        path_must_be_file=path_must_be_file,
+        path_must_be_dir=path_must_be_dir,
+        required=required,
         action=action,
         choices=choices,
         nargs=nargs,
         group=group,
-        must_exist=must_exist,
-        must_be_file=must_be_file,
-        must_be_dir=must_be_dir,
     )
 
 

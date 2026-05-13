@@ -110,5 +110,6 @@ fn argument_from_fragment(fa: FragmentArgument) -> Argument {
         resolved_type: None,
         path_constraints: None,
         allowed_values: fa.allowed_values,
+        metadata: crate::manifest::ArgMetadata::default(),
     }
 }

@@ -25,6 +25,7 @@ import toolr.types
 #   3. be resolved by `parser::types::resolve_toolr_types_name` in rust
 EXPECTED_TOOLR_TYPES_NAMES = {
     "AbsolutePath",
+    "Count",
     "Date",
     "DateTime",
     "Email",

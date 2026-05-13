@@ -14,8 +14,8 @@
 use ruff_python_ast::{Expr, ExprCall, ModModule, Stmt, StmtFunctionDef};
 use serde::{Deserialize, Serialize};
 
-use super::symbols::{EnumTable, TypeAliasTable};
-use crate::manifest::Argument;
+use super::symbols::{ArgSectionTable, EnumTable, TypeAliasTable};
+use crate::manifest::{ArgMetadata, Argument, ArgumentKind, HelpSection};
 
 /// Filesystem constraints layered on top of a `Path`/`AbsolutePath`/
 /// `ResolvedPath` parameter, expressed via `arg(must_exist=True, ...)`
@@ -68,6 +68,10 @@ pub enum SupportedType {
     /// the `pep440_rs` crate (the same parser uv uses). Runtime value
     /// is `packaging.version.Version`.
     Version,
+    /// `toolr.types.Count` — int counter accumulating repeated flags
+    /// (`-vvv` → 3). Wired via clap `ArgAction::Count`. Runtime value
+    /// is :class:`int`.
+    Count,
     /// `Literal["a", "b"]` — string validated against the allowed set.
     Literal(Vec<String>),
     /// Enum subclass resolved via [`EnumTable`].
@@ -252,12 +256,14 @@ impl TypeImports {
 /// matching [`Argument`]. Unsupported annotations are pushed to `errors`
 /// with `module` / function-name context, and the corresponding
 /// `Argument.resolved_type` stays `None`.
+#[allow(clippy::too_many_arguments)] // every parameter carries a distinct compile-time context; bundling would hide call-site intent.
 pub fn resolve_arguments(
     func: &StmtFunctionDef,
     arguments: &mut [Argument],
     enums: &EnumTable,
     type_imports: &TypeImports,
     aliases: &TypeAliasTable,
+    sections: &ArgSectionTable,
     module: &str,
     errors: &mut Vec<TypeResolutionError>,
 ) {
@@ -272,6 +278,7 @@ pub fn resolve_arguments(
             enums,
             type_imports,
             aliases,
+            sections,
             module,
             &function,
             errors,
@@ -285,6 +292,7 @@ pub fn resolve_arguments(
             enums,
             type_imports,
             aliases,
+            sections,
             module,
             &function,
             errors,
@@ -298,6 +306,7 @@ pub fn resolve_arguments(
             enums,
             type_imports,
             aliases,
+            sections,
             module,
             &function,
             errors,
@@ -313,6 +322,7 @@ fn resolve_one(
     enums: &EnumTable,
     type_imports: &TypeImports,
     aliases: &TypeAliasTable,
+    sections: &ArgSectionTable,
     module: &str,
     function: &str,
     errors: &mut Vec<TypeResolutionError>,
@@ -325,11 +335,31 @@ fn resolve_one(
     };
     // Path constraints come from `Annotated[T, arg(...)]` metadata —
     // either directly on the parameter, or by following a module-level
-    // type alias (e.g. `Foo = Annotated[Path, arg(must_exist=True)]`).
+    // type alias (e.g. `Foo = Annotated[Path, arg(path_must_exist=True)]`).
     arg.path_constraints = extract_path_constraints(expr)
         .or_else(|| follow_alias_for_path_constraints(expr, aliases));
+    // Same drill for the broader clap metadata (aliases, conflicts,
+    // env, help_section, ...). One harvest pass through every
+    // `Annotated[T, arg(...)]` call on the parameter, optionally via a
+    // module-level type alias.
+    if let Some(md) = extract_arg_metadata(expr, sections)
+        .or_else(|| follow_alias_for_arg_metadata(expr, aliases, sections))
+    {
+        arg.metadata = md;
+    }
     match resolve(expr, enums, type_imports, aliases) {
-        Ok(ty) => arg.resolved_type = Some(ty),
+        Ok(ty) => {
+            // Post-resolution kind override: `toolr.types.Count` is the
+            // only type that flips the inferred kind, since the type
+            // itself is semantically a counting flag rather than a
+            // value-taking one. Done here (not in the syntactic
+            // classifier) so it also fires through `Annotated[Count, ...]`
+            // and module-level aliases.
+            if is_count_type(&ty) {
+                arg.kind = ArgumentKind::Count;
+            }
+            arg.resolved_type = Some(ty);
+        }
         Err(reason) => errors.push(TypeResolutionError {
             module: module.to_string(),
             function: function.to_string(),
@@ -340,6 +370,11 @@ fn resolve_one(
     }
 }
 
+fn is_count_type(ty: &SupportedType) -> bool {
+    matches!(ty, SupportedType::Count)
+        || matches!(ty, SupportedType::Optional(inner) if matches!(inner.as_ref(), SupportedType::Count))
+}
+
 fn follow_alias_for_path_constraints(
     expr: &Expr,
     aliases: &TypeAliasTable,
@@ -347,6 +382,176 @@ fn follow_alias_for_path_constraints(
     let Expr::Name(name) = expr else { return None };
     let aliased = aliases.lookup(name.id.as_str())?;
     extract_path_constraints(aliased)
+}
+
+fn follow_alias_for_arg_metadata(
+    expr: &Expr,
+    aliases: &TypeAliasTable,
+    sections: &ArgSectionTable,
+) -> Option<ArgMetadata> {
+    let Expr::Name(name) = expr else { return None };
+    let aliased = aliases.lookup(name.id.as_str())?;
+    extract_arg_metadata(aliased, sections)
+}
+
+/// Harvest the full clap-flavoured metadata block from any
+/// `Annotated[T, arg(...), ...]` annotation. Returns `None` when the
+/// annotation isn't `Annotated[...]` or carries no metadata kwargs
+/// other than path constraints (which travel separately).
+pub fn extract_arg_metadata(
+    annotation: &Expr,
+    sections: &ArgSectionTable,
+) -> Option<ArgMetadata> {
+    let Expr::Subscript(sub) = annotation else {
+        return None;
+    };
+    let head = match sub.value.as_ref() {
+        Expr::Name(n) => n.id.as_str(),
+        Expr::Attribute(a) => a.attr.as_str(),
+        _ => return None,
+    };
+    if head != "Annotated" {
+        return None;
+    }
+    let elts: Vec<&Expr> = match sub.slice.as_ref() {
+        Expr::Tuple(t) => t.elts.iter().collect(),
+        single => vec![single],
+    };
+    let mut md = ArgMetadata::default();
+    let mut hit = false;
+    for elt in elts.iter().skip(1) {
+        let Expr::Call(call) = elt else { continue };
+        if !is_toolr_arg_call(call) {
+            continue;
+        }
+        for kw in &call.arguments.keywords {
+            let Some(name) = kw.arg.as_ref().map(|n| n.as_str()) else {
+                continue;
+            };
+            match name {
+                "aliases" => {
+                    if let Some(list) = literal_str_list(&kw.value) {
+                        md.aliases = list;
+                        hit = true;
+                    }
+                }
+                "metavar" => {
+                    if let Some(s) = literal_str(&kw.value) {
+                        md.metavar = Some(s);
+                        hit = true;
+                    }
+                }
+                "env" => {
+                    if let Some(s) = literal_str(&kw.value) {
+                        md.env = Some(s);
+                        hit = true;
+                    }
+                }
+                "hide" => {
+                    if let Expr::BooleanLiteral(b) = &kw.value {
+                        md.hide = b.value;
+                        if b.value {
+                            hit = true;
+                        }
+                    }
+                }
+                "display_order" => {
+                    if let Some(n) = literal_u32(&kw.value) {
+                        md.display_order = Some(n);
+                        hit = true;
+                    }
+                }
+                "conflicts_with" => {
+                    if let Some(list) = literal_str_list(&kw.value) {
+                        md.conflicts_with = list;
+                        hit = true;
+                    }
+                }
+                "requires" => {
+                    if let Some(list) = literal_str_list(&kw.value) {
+                        md.requires = list;
+                        hit = true;
+                    }
+                }
+                "help_section" => {
+                    if let Some(section) = resolve_help_section(&kw.value, sections) {
+                        md.help_section = Some(section);
+                        hit = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if hit { Some(md) } else { None }
+}
+
+fn resolve_help_section(value: &Expr, sections: &ArgSectionTable) -> Option<HelpSection> {
+    // Three accepted shapes:
+    //   1. `arg(help_section=LOGGING)` — reference a module-level
+    //      `LOGGING = arg_section("...", description="...")` binding.
+    //   2. `arg(help_section="Logging")` — bare string with no description.
+    //   3. `arg(help_section=arg_section("Logging", description="..."))` —
+    //      inline call, for users who want one-off sections without a
+    //      module-level constant.
+    match value {
+        Expr::Name(n) => sections.lookup(n.id.as_str()).map(|entry| HelpSection {
+            title: entry.title.clone(),
+            description: entry.description.clone(),
+        }),
+        Expr::StringLiteral(s) => Some(HelpSection {
+            title: s.value.to_str().to_string(),
+            description: None,
+        }),
+        Expr::Call(call) if is_arg_section_call_expr(call) => parse_inline_arg_section(call),
+        _ => None,
+    }
+}
+
+fn is_arg_section_call_expr(call: &ExprCall) -> bool {
+    match call.func.as_ref() {
+        Expr::Name(n) => n.id.as_str() == "arg_section",
+        Expr::Attribute(a) => a.attr.as_str() == "arg_section",
+        _ => false,
+    }
+}
+
+fn parse_inline_arg_section(call: &ExprCall) -> Option<HelpSection> {
+    let title = call.arguments.args.first().and_then(literal_str)?;
+    let description = call
+        .arguments
+        .keywords
+        .iter()
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("description"))
+        .and_then(|k| literal_str(&k.value));
+    Some(HelpSection { title, description })
+}
+
+fn literal_str(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
+        _ => None,
+    }
+}
+
+fn literal_str_list(expr: &Expr) -> Option<Vec<String>> {
+    let Expr::List(list) = expr else { return None };
+    let out: Vec<String> = list.elts.iter().filter_map(literal_str).collect();
+    if out.len() == list.elts.len() {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn literal_u32(expr: &Expr) -> Option<u32> {
+    match expr {
+        Expr::NumberLiteral(n) => match &n.value {
+            ruff_python_ast::Number::Int(i) => i.as_u64().and_then(|v| u32::try_from(v).ok()),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// Walk an `Annotated[T, arg(...), ...]` annotation and extract
@@ -382,15 +587,15 @@ pub fn extract_path_constraints(annotation: &Expr) -> Option<PathConstraints> {
             };
             let Expr::BooleanLiteral(b) = &kw.value else { continue };
             match name {
-                "must_exist" => {
+                "path_must_exist" | "must_exist" => {
                     constraints.must_exist = b.value;
                     hit = true;
                 }
-                "must_be_file" => {
+                "path_must_be_file" | "must_be_file" => {
                     constraints.must_be_file = b.value;
                     hit = true;
                 }
-                "must_be_dir" => {
+                "path_must_be_dir" | "must_be_dir" => {
                     constraints.must_be_dir = b.value;
                     hit = true;
                 }
@@ -510,6 +715,7 @@ fn resolve_toolr_types_name(name: &str) -> Result<SupportedType, UnsupportedType
         "ResolvedPath" => Ok(SupportedType::ResolvedPath),
         "Email" => Ok(SupportedType::Email),
         "Version" => Ok(SupportedType::Version),
+        "Count" => Ok(SupportedType::Count),
         other => Err(UnsupportedType::UnknownName(format!("toolr.types.{other}"))),
     }
 }
@@ -809,6 +1015,7 @@ mod tests {
     fn toolr_types_names_match_python_surface() {
         let names = [
             "AbsolutePath",
+            "Count",
             "Date",
             "DateTime",
             "Email",
@@ -909,5 +1116,97 @@ def f(x: A): pass
                 values: vec!["fast".into(), "slow".into()],
             }
         );
+    }
+
+    #[test]
+    fn extract_arg_metadata_harvests_aliases_and_metavar() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[str, arg(aliases=[\"-n\", \"--also\"], metavar=\"NAME\")]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
+        assert_eq!(md.aliases, vec!["-n", "--also"]);
+        assert_eq!(md.metavar.as_deref(), Some("NAME"));
+    }
+
+    #[test]
+    fn extract_arg_metadata_harvests_env_and_hide_and_order() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[str, arg(env=\"X\", hide=True, display_order=5)]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
+        assert_eq!(md.env.as_deref(), Some("X"));
+        assert!(md.hide);
+        assert_eq!(md.display_order, Some(5));
+    }
+
+    #[test]
+    fn extract_arg_metadata_harvests_conflicts_and_requires() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[bool, arg(conflicts_with=[\"verbose\"], requires=[\"flag\"])]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
+        assert_eq!(md.conflicts_with, vec!["verbose"]);
+        assert_eq!(md.requires, vec!["flag"]);
+    }
+
+    #[test]
+    fn extract_arg_metadata_resolves_help_section_from_table() {
+        let src = r#"
+LOGGING = arg_section("Logging Options", description="Control verbosity.")
+def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
+"#;
+        let m = module(src);
+        let sections = ArgSectionTable::from_module(&m);
+        let (_, ann) = first_annotation(src);
+        let md = extract_arg_metadata(&ann, &sections).unwrap();
+        let section = md.help_section.unwrap();
+        assert_eq!(section.title, "Logging Options");
+        assert_eq!(section.description.as_deref(), Some("Control verbosity."));
+    }
+
+    #[test]
+    fn extract_arg_metadata_inline_help_section_call() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[bool, arg(help_section=arg_section(\"Net\", description=\"...\"))]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
+        let section = md.help_section.unwrap();
+        assert_eq!(section.title, "Net");
+        assert_eq!(section.description.as_deref(), Some("..."));
+    }
+
+    #[test]
+    fn extract_arg_metadata_bare_string_help_section() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[bool, arg(help_section=\"Logging\")]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
+        let section = md.help_section.unwrap();
+        assert_eq!(section.title, "Logging");
+        assert!(section.description.is_none());
+    }
+
+    #[test]
+    fn path_constraints_accept_path_prefixed_names() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[Path, arg(path_must_exist=True, path_must_be_file=True)]): pass\n",
+        );
+        let pc = extract_path_constraints(&ann).unwrap();
+        assert!(pc.must_exist);
+        assert!(pc.must_be_file);
+        assert!(!pc.must_be_dir);
+    }
+
+    #[test]
+    fn count_resolves_to_supported_type() {
+        let (_, ann) = first_annotation(
+            "from toolr.types import Count\n\ndef f(x: Count): pass\n",
+        );
+        let src = "from toolr.types import Count\n\ndef f(x: Count): pass\n";
+        let m = module(src);
+        let imports = TypeImports::from_module(&m);
+        let resolved =
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap();
+        assert_eq!(resolved, SupportedType::Count);
     }
 }

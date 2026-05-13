@@ -6,6 +6,7 @@ use ruff_python_ast::{Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
 use super::signatures::extract_arguments;
+use super::symbols::ArgSectionTable;
 use super::symbols::EnumTable;
 use super::symbols::TypeAliasTable;
 use super::types::{TypeImports, TypeResolutionError, resolve_arguments};
@@ -25,6 +26,7 @@ pub fn extract_commands(
     enums: &EnumTable,
     type_imports: &TypeImports,
     aliases: &TypeAliasTable,
+    sections: &ArgSectionTable,
     global_vars: &GlobalVars,
     errors: &mut Vec<TypeResolutionError>,
 ) -> Vec<Command> {
@@ -68,6 +70,7 @@ pub fn extract_commands(
             enums,
             type_imports,
             aliases,
+            sections,
             errors,
         ));
     }
@@ -185,6 +188,7 @@ fn build_command(
     enums: &EnumTable,
     type_imports: &TypeImports,
     aliases: &TypeAliasTable,
+    sections: &ArgSectionTable,
     errors: &mut Vec<TypeResolutionError>,
 ) -> Command {
     let raw_doc = function_docstring(func);
@@ -205,7 +209,16 @@ fn build_command(
             }
         }
     }
-    resolve_arguments(func, &mut arguments, enums, type_imports, aliases, module_path, errors);
+    resolve_arguments(
+        func,
+        &mut arguments,
+        enums,
+        type_imports,
+        aliases,
+        sections,
+        module_path,
+        errors,
+    );
     let cli_name = override_name
         .map(str::to_string)
         .unwrap_or_else(|| func.name.as_str().replace('_', "-"));
@@ -246,7 +259,7 @@ def generate_build_matrix(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "generate-build-matrix");
         assert_eq!(commands[0].group, "ci");
@@ -263,7 +276,7 @@ def x(ctx):
 "#;
         let m = parse_src(src);
         let bindings = vec![];
-        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -276,7 +289,7 @@ def bare_function(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -291,7 +304,7 @@ def hello(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert_eq!(commands[0].summary, "Say hello.");
     }
 
@@ -313,6 +326,7 @@ def check_run_build(ctx):
             &EnumTable::default(),
             &TypeImports::default(),
             &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
             &HashMap::new(),
             &mut Vec::new(),
         );
@@ -339,6 +353,7 @@ def check_snippets(ctx):
             &EnumTable::default(),
             &TypeImports::default(),
             &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
             &HashMap::new(),
             &mut Vec::new(),
         );
@@ -366,6 +381,7 @@ def hello(ctx):
             &EnumTable::default(),
             &TypeImports::default(),
             &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
             &HashMap::new(),
             &mut Vec::new(),
         );
@@ -388,7 +404,7 @@ def hello(ctx, name="world"):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         let name_arg = commands[0]
             .arguments
             .iter()

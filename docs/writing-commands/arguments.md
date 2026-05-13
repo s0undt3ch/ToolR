@@ -31,6 +31,7 @@ table is rejected at manifest-build time with an error pointing at
 | `toolr.types.IPv6` | clap (`std::net::Ipv6Addr`) | string | `ipaddress.IPv6Address` |
 | `toolr.types.Email` | clap (`email_address` crate) | string | `str` (pre-validated) |
 | `toolr.types.Version` | clap (`pep440_rs` crate) | string | `packaging.version.Version` |
+| `toolr.types.Count` | clap (`ArgAction::Count`) | integer | `int` |
 | `Literal["a", "b"]` | clap (allowed-values) | string | `Literal` value |
 | `Enum` subclass | clap (member values) | string | enum member |
 | `list[T]` (T above) | clap per-element | JSON array | `list[T]` |
@@ -159,9 +160,9 @@ variants) accept additional opt-in filesystem checks through
 
 | Constraint | Effect |
 |---|---|
-| `arg(must_exist=True)` | reject paths that don't exist on disk |
-| `arg(must_be_file=True)` | reject anything that isn't a regular file (implies `must_exist`) |
-| `arg(must_be_dir=True)` | reject anything that isn't a directory (implies `must_exist`) |
+| `arg(path_must_exist=True)` | reject paths that don't exist on disk |
+| `arg(path_must_be_file=True)` | reject anything that isn't a regular file (implies `path_must_exist`) |
+| `arg(path_must_be_dir=True)` | reject anything that isn't a directory (implies `path_must_exist`) |
 
 ```python
 from pathlib import Path
@@ -170,8 +171,8 @@ from toolr import arg
 
 def read_config(
     ctx: Context,
-    config: Annotated[Path, arg(must_be_file=True)],
-    workdir: Annotated[Path, arg(must_be_dir=True)],
+    config: Annotated[Path, arg(path_must_be_file=True)],
+    workdir: Annotated[Path, arg(path_must_be_dir=True)],
 ) -> None:
     ...
 ```
@@ -232,5 +233,40 @@ toolr graph link foo 7      # OK
 toolr graph link foo bar    # error: invalid value 'bar' for slot 1: invalid digit
 toolr graph link foo        # error: missing slot 1
 ```
+
+The same shape works for keyword args too:
+
+```python
+def deploy(ctx: Context, port_range: tuple[int, int] = (8000, 8100)) -> None: ...
+# → toolr cluster deploy --port-range 9000 9100
+```
+
+clap consumes two values per `--port-range` occurrence; msgspec coerces
+each slot to `int` against the function's hint.
+
+## Counting flags
+
+`toolr.types.Count` turns a parameter into a "repeat the short form to
+count" flag, matching the classic `-vvv` pattern:
+
+```python
+from typing import Annotated
+from toolr import arg, command
+from toolr.types import Count
+
+@command(group="example")
+def serve(ctx: Context, verbose: Annotated[Count, arg(aliases=["-v"])] = 0) -> None:
+    ctx.print(f"verbosity level: {verbose}")
+```
+
+```sh
+toolr example serve            # verbosity level: 0
+toolr example serve -v         # verbosity level: 1
+toolr example serve -vvv       # verbosity level: 3
+```
+
+The Python runtime value is plain `int` (`Count` is just an `int`
+alias); the rust side wires `clap::ArgAction::Count` based on the
+annotation.
 
 Next: [Docstrings →](docstrings.md)

@@ -67,6 +67,13 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
             let v = matches.get_flag(arg.name.as_str());
             Some(Value::Bool(v))
         }
+        ArgumentKind::Count => {
+            // clap stores a u8 via ArgAction::Count. Forward to Python
+            // as a JSON number so msgspec can coerce into the target
+            // `int` (or `toolr.types.Count`, which is int at runtime).
+            let n = matches.get_count(arg.name.as_str());
+            Some(Value::Number(u64::from(n).into()))
+        }
         ArgumentKind::Positional | ArgumentKind::Optional => {
             extract_scalar(arg, matches)
         }
@@ -179,6 +186,7 @@ mod tests {
                 resolved_type: None,
                 path_constraints: None,
                 allowed_values: vec![],
+                metadata: crate::manifest::ArgMetadata::default(),
             }],
             imports: vec![],
             origin: Origin::Static,
@@ -247,6 +255,7 @@ mod tests {
                 resolved_type: None,
                 path_constraints: None,
                 allowed_values: vec![],
+                metadata: crate::manifest::ArgMetadata::default(),
             }],
             imports: vec![],
             origin: Origin::Static,

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
+from toolr._exc import ToolrDeprecationWarning
+from toolr.utils._signature import ArgSection
 from toolr.utils._signature import ArgumentAnnotation
 from toolr.utils._signature import arg
+from toolr.utils._signature import arg_section
 
 
 def test_argument_annotation_creation():
@@ -95,3 +100,64 @@ def test_arg_function_mutually_exclusive_group_only():
     assert annotation.action is None
     assert annotation.choices is None
     assert annotation.nargs is None
+
+
+def test_arg_section_carries_title_and_description():
+    """arg_section() returns an ArgSection with title and optional description."""
+    section = arg_section("Logging", description="Control verbosity.")
+    assert isinstance(section, ArgSection)
+    assert section.title == "Logging"
+    assert section.description == "Control verbosity."
+
+
+def test_arg_section_omits_description_when_not_passed():
+    section = arg_section("Network")
+    assert section.title == "Network"
+    assert section.description is None
+
+
+def test_arg_accepts_help_section_and_other_new_kwargs():
+    """The new kwargs land on the resulting annotation as-is."""
+    section = arg_section("Logging")
+    annotation = arg(
+        env="DEPLOY_TOKEN",
+        hide=True,
+        display_order=3,
+        conflicts_with=["quiet"],
+        requires=["log_file"],
+        help_section=section,
+        path_must_be_file=True,
+    )
+    assert annotation.env == "DEPLOY_TOKEN"
+    assert annotation.hide is True
+    assert annotation.display_order == 3
+    assert annotation.conflicts_with == ["quiet"]
+    assert annotation.requires == ["log_file"]
+    assert annotation.help_section is section
+    assert annotation.path_must_be_file is True
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"required": True},
+        {"choices": ["a", "b"]},
+        {"nargs": "*"},
+        {"action": "store_true"},
+        {"group": "verbosity"},
+        {"must_exist": True},
+        {"must_be_file": True},
+        {"must_be_dir": True},
+    ],
+)
+def test_legacy_kwargs_emit_deprecation_warning(kwargs):
+    with pytest.warns(ToolrDeprecationWarning):
+        arg(**kwargs)
+
+
+def test_legacy_path_kwargs_map_onto_new_names():
+    """Old `must_exist=` flows through to the new `path_must_exist`."""
+    with pytest.warns(ToolrDeprecationWarning):
+        annotation = arg(must_exist=True, must_be_dir=True)
+    assert annotation.path_must_exist is True
+    assert annotation.path_must_be_dir is True

@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use clap::Arg;
+use clap::ValueHint;
 use clap::builder::ValueParser;
 use email_address::EmailAddress;
 use pep440_rs::Version as Pep440Version;
@@ -38,6 +39,23 @@ pub fn apply_value_parser(
 ) -> Arg {
     let inner = unwrap_optional(ty);
     let pc = path_constraints.copied().unwrap_or_default();
+    // Path / Email types carry shell-completion hints derived from the
+    // type itself; path constraints refine them further (must_be_dir →
+    // DirPath, must_be_file → FilePath).
+    let arg = match inner {
+        SupportedType::Path | SupportedType::AbsolutePath | SupportedType::ResolvedPath => {
+            let hint = if pc.must_be_dir {
+                ValueHint::DirPath
+            } else if pc.must_be_file {
+                ValueHint::FilePath
+            } else {
+                ValueHint::AnyPath
+            };
+            arg.value_hint(hint)
+        }
+        SupportedType::Email => arg.value_hint(ValueHint::EmailAddress),
+        _ => arg,
+    };
     match inner {
         SupportedType::Int => arg.value_parser(clap::value_parser!(i64)),
         SupportedType::Float => arg.value_parser(clap::value_parser!(f64)),
@@ -54,6 +72,9 @@ pub fn apply_value_parser(
         SupportedType::Ipv6 => arg.value_parser(ipv6_parser()),
         SupportedType::Email => arg.value_parser(email_parser()),
         SupportedType::Version => arg.value_parser(version_parser()),
+        // Count is wired via ArgAction::Count, which consumes no value
+        // and stores a u8. No value_parser to set; let clap handle it.
+        SupportedType::Count => arg,
         SupportedType::Literal(values) => arg.value_parser(values.clone()),
         SupportedType::Enum { values, .. } => arg.value_parser(values.clone()),
         // For collection kinds we configure the *element* parser; clap's

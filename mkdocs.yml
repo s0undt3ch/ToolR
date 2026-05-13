@@ -62,6 +62,7 @@ nav:
     - command_group: reference/command_group.md
     - command: reference/command.md
     - arg: reference/arg.md
+    - arg_section: reference/arg_section.md
     - testing: reference/testing.md
     - build: reference/build.md
   - Contributing: contributing.md

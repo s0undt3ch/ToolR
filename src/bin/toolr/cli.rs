@@ -407,6 +407,12 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
                     .num_args(0..)
                     .trailing_var_arg(true);
             }
+            ArgumentKind::Count => {
+                // `-v`, `-vv`, `-vvv` → 1 / 2 / 3 via clap's
+                // ArgAction::Count. Python receives the resulting int
+                // through `toolr.types.Count` (which is `int`).
+                a = a.long(long_flag).action(ArgAction::Count);
+            }
         }
         // Apply the per-type value_parser when we have structured type
         // info (preferred path). Fall back to the legacy
@@ -423,7 +429,54 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
         } else if !arg.allowed_values.is_empty() {
             a = a.value_parser(arg.allowed_values.clone());
         }
+        a = apply_arg_metadata(a, &arg.metadata);
         c = c.arg(a);
     }
     c
+}
+
+/// Translate the parser-harvested `ArgMetadata` into clap `Arg` calls.
+/// Every field is independently optional — empty / `None` means "leave
+/// clap's default behaviour alone."
+fn apply_arg_metadata(
+    mut a: Arg,
+    meta: &_rust_utils::manifest::ArgMetadata,
+) -> Arg {
+    for alias in &meta.aliases {
+        if alias.is_empty() {
+            continue;
+        }
+        // Single-char entries become clap shorts (`-v`); longer entries
+        // become long aliases (`--also-this`).
+        let stripped = alias.trim_start_matches('-');
+        if stripped.chars().count() == 1 {
+            if let Some(c) = stripped.chars().next() {
+                a = a.short(c);
+            }
+        } else if !stripped.is_empty() {
+            a = a.alias(stripped.to_string());
+        }
+    }
+    if let Some(name) = &meta.metavar {
+        a = a.value_name(name.clone());
+    }
+    if let Some(env) = &meta.env {
+        a = a.env(env);
+    }
+    if meta.hide {
+        a = a.hide(true);
+    }
+    if let Some(order) = meta.display_order {
+        a = a.display_order(order as usize);
+    }
+    if !meta.conflicts_with.is_empty() {
+        a = a.conflicts_with_all(meta.conflicts_with.clone());
+    }
+    if !meta.requires.is_empty() {
+        a = a.requires_all(meta.requires.clone());
+    }
+    if let Some(section) = &meta.help_section {
+        a = a.help_heading(section.title.clone());
+    }
+    a
 }

@@ -126,6 +126,84 @@ fn looks_like_annotation(expr: &Expr) -> bool {
     )
 }
 
+/// One resolved `arg_section(...)` binding at module scope.
+#[derive(Debug, Clone, Default)]
+pub struct ArgSectionEntry {
+    pub title: String,
+    pub description: Option<String>,
+}
+
+/// Module-level bindings of the form
+/// ``NAME = arg_section("Title", description="...")``. The type
+/// resolver consults this table when an `arg(help_section=NAME)`
+/// reference is encountered inside an `Annotated[...]` annotation.
+#[derive(Debug, Default, Clone)]
+pub struct ArgSectionTable {
+    sections: HashMap<String, ArgSectionEntry>,
+}
+
+impl ArgSectionTable {
+    pub fn from_module(module: &ModModule) -> Self {
+        let mut table = ArgSectionTable::default();
+        for stmt in &module.body {
+            let Stmt::Assign(StmtAssign { targets, value, .. }) = stmt else {
+                continue;
+            };
+            if targets.len() != 1 {
+                continue;
+            }
+            let Expr::Name(target) = &targets[0] else {
+                continue;
+            };
+            let Expr::Call(call) = value.as_ref() else {
+                continue;
+            };
+            if !is_arg_section_call(call) {
+                continue;
+            }
+            let Some(entry) = parse_arg_section_call(call) else {
+                continue;
+            };
+            table.sections.insert(target.id.as_str().to_string(), entry);
+        }
+        table
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<&ArgSectionEntry> {
+        self.sections.get(name)
+    }
+
+    pub fn merge(&mut self, other: ArgSectionTable) {
+        self.sections.extend(other.sections);
+    }
+}
+
+fn is_arg_section_call(call: &ruff_python_ast::ExprCall) -> bool {
+    match call.func.as_ref() {
+        Expr::Name(n) => n.id.as_str() == "arg_section",
+        Expr::Attribute(a) => a.attr.as_str() == "arg_section",
+        _ => false,
+    }
+}
+
+fn parse_arg_section_call(call: &ruff_python_ast::ExprCall) -> Option<ArgSectionEntry> {
+    let title = call.arguments.args.first().and_then(literal_str)?;
+    let description = call
+        .arguments
+        .keywords
+        .iter()
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("description"))
+        .and_then(|k| literal_str(&k.value));
+    Some(ArgSectionEntry { title, description })
+}
+
+fn literal_str(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
+        _ => None,
+    }
+}
+
 fn is_enum_subclass(class: &StmtClassDef) -> bool {
     let Some(args) = class.arguments.as_ref() else {
         return false;
@@ -228,5 +306,32 @@ class Foo:
 "#;
         let table = EnumTable::from_module(&parse(src));
         assert!(table.lookup("Foo").is_none());
+    }
+
+    #[test]
+    fn arg_section_collects_module_bindings() {
+        let src = r#"
+LOGGING = arg_section("Logging Options", description="Control verbosity.")
+"#;
+        let table = ArgSectionTable::from_module(&parse(src));
+        let entry = table.lookup("LOGGING").unwrap();
+        assert_eq!(entry.title, "Logging Options");
+        assert_eq!(entry.description.as_deref(), Some("Control verbosity."));
+    }
+
+    #[test]
+    fn arg_section_without_description_is_none() {
+        let src = r#"NETWORK = arg_section("Network Options")"#;
+        let table = ArgSectionTable::from_module(&parse(src));
+        let entry = table.lookup("NETWORK").unwrap();
+        assert_eq!(entry.title, "Network Options");
+        assert!(entry.description.is_none());
+    }
+
+    #[test]
+    fn arg_section_ignores_non_arg_section_calls() {
+        let src = r#"FOO = something_else("title")"#;
+        let table = ArgSectionTable::from_module(&parse(src));
+        assert!(table.lookup("FOO").is_none());
     }
 }

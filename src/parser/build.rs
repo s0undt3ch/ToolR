@@ -13,7 +13,7 @@ use crate::parser::{
     commands::extract_commands,
     groups::extract_groups,
     parse_python_file,
-    symbols::{EnumTable, TypeAliasTable},
+    symbols::{ArgSectionTable, EnumTable, TypeAliasTable},
 };
 use crate::third_party::{ThirdPartyError, discover_and_merge};
 
@@ -33,13 +33,17 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
 fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
     let py_files = list_python_files(tools_dir);
 
-    // Pass 1: build cross-file enum + type-alias tables from every module.
+    // Pass 1: build cross-file enum + type-alias + arg-section tables
+    // from every module so later passes can resolve symbols regardless
+    // of which file they live in.
     let mut enums = EnumTable::default();
     let mut aliases = TypeAliasTable::default();
+    let mut sections = ArgSectionTable::default();
     for path in &py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         enums.merge(EnumTable::from_module(&module));
         aliases.merge(TypeAliasTable::from_module(&module));
+        sections.merge(ArgSectionTable::from_module(&module));
     }
 
     // Pass 2: extract groups + commands per file using the merged tables.
@@ -72,6 +76,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
             &enums,
             &type_imports,
             &aliases,
+            &sections,
             &global_vars,
             &mut type_errors,
         );

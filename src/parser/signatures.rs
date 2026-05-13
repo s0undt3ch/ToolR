@@ -78,6 +78,7 @@ fn build_argument(
         resolved_type: None,
         path_constraints: None,
         allowed_values,
+        metadata: crate::manifest::ArgMetadata::default(),
     }
 }
 
