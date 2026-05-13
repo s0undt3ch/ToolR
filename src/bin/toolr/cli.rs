@@ -332,7 +332,12 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
             ArgumentKind::Optional => {
                 a = a.long(long_flag).required(false);
                 if let Some(def) = &arg.default {
-                    a = a.default_value(def.clone());
+                    // Empty default means "no observable default at the
+                    // CLI" — let Python's function default kick in
+                    // (e.g. `param: str | None = None`).
+                    if !def.is_empty() {
+                        a = a.default_value(def.clone());
+                    }
                 }
             }
             ArgumentKind::Flag => {

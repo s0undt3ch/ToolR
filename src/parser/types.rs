@@ -14,7 +14,7 @@
 use ruff_python_ast::{Expr, ExprCall, ModModule, Stmt, StmtFunctionDef};
 use serde::{Deserialize, Serialize};
 
-use super::symbols::EnumTable;
+use super::symbols::{EnumTable, TypeAliasTable};
 use crate::manifest::Argument;
 
 /// Filesystem constraints layered on top of a `Path`/`AbsolutePath`/
@@ -257,6 +257,7 @@ pub fn resolve_arguments(
     arguments: &mut [Argument],
     enums: &EnumTable,
     type_imports: &TypeImports,
+    aliases: &TypeAliasTable,
     module: &str,
     errors: &mut Vec<TypeResolutionError>,
 ) {
@@ -270,6 +271,7 @@ pub fn resolve_arguments(
             &mut arguments[i],
             enums,
             type_imports,
+            aliases,
             module,
             &function,
             errors,
@@ -282,6 +284,7 @@ pub fn resolve_arguments(
             &mut arguments[i],
             enums,
             type_imports,
+            aliases,
             module,
             &function,
             errors,
@@ -294,6 +297,7 @@ pub fn resolve_arguments(
             &mut arguments[i],
             enums,
             type_imports,
+            aliases,
             module,
             &function,
             errors,
@@ -302,11 +306,13 @@ pub fn resolve_arguments(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // contextual fields each have distinct meaning; bundling would obscure the call sites.
 fn resolve_one(
     annotation: Option<&Expr>,
     arg: &mut Argument,
     enums: &EnumTable,
     type_imports: &TypeImports,
+    aliases: &TypeAliasTable,
     module: &str,
     function: &str,
     errors: &mut Vec<TypeResolutionError>,
@@ -317,8 +323,12 @@ fn resolve_one(
         // python registry still imposes its own runtime checks.
         return;
     };
-    arg.path_constraints = extract_path_constraints(expr);
-    match resolve(expr, enums, type_imports) {
+    // Path constraints come from `Annotated[T, arg(...)]` metadata —
+    // either directly on the parameter, or by following a module-level
+    // type alias (e.g. `Foo = Annotated[Path, arg(must_exist=True)]`).
+    arg.path_constraints = extract_path_constraints(expr)
+        .or_else(|| follow_alias_for_path_constraints(expr, aliases));
+    match resolve(expr, enums, type_imports, aliases) {
         Ok(ty) => arg.resolved_type = Some(ty),
         Err(reason) => errors.push(TypeResolutionError {
             module: module.to_string(),
@@ -328,6 +338,15 @@ fn resolve_one(
             reason,
         }),
     }
+}
+
+fn follow_alias_for_path_constraints(
+    expr: &Expr,
+    aliases: &TypeAliasTable,
+) -> Option<PathConstraints> {
+    let Expr::Name(name) = expr else { return None };
+    let aliased = aliases.lookup(name.id.as_str())?;
+    extract_path_constraints(aliased)
 }
 
 /// Walk an `Annotated[T, arg(...), ...]` annotation and extract
@@ -395,9 +414,29 @@ pub fn resolve(
     annotation: &Expr,
     enums: &EnumTable,
     imports: &TypeImports,
+    aliases: &TypeAliasTable,
 ) -> Result<SupportedType, UnsupportedType> {
+    resolve_inner(annotation, enums, imports, aliases, &mut Vec::new())
+}
+
+/// `seen` tracks names currently being expanded to break alias cycles
+/// (`A = B; B = A`). Capped depth gives a second line of defence.
+const MAX_ALIAS_DEPTH: usize = 16;
+
+fn resolve_inner(
+    annotation: &Expr,
+    enums: &EnumTable,
+    imports: &TypeImports,
+    aliases: &TypeAliasTable,
+    seen: &mut Vec<String>,
+) -> Result<SupportedType, UnsupportedType> {
+    if seen.len() >= MAX_ALIAS_DEPTH {
+        return Err(UnsupportedType::UnsupportedShape(
+            "type alias chain too deep".to_string(),
+        ));
+    }
     match annotation {
-        Expr::Name(n) => resolve_name(n.id.as_str(), enums, imports),
+        Expr::Name(n) => resolve_name(n.id.as_str(), enums, imports, aliases, seen),
         Expr::Attribute(_) => {
             if let Some(toolr_name) = imports.resolve_attribute(annotation) {
                 return resolve_toolr_types_name(toolr_name);
@@ -411,8 +450,8 @@ pub fn resolve(
             }
             Err(UnsupportedType::UnknownName(rendered))
         }
-        Expr::Subscript(sub) => resolve_subscript(sub, enums, imports),
-        Expr::BinOp(op) => resolve_bin_op(op, enums, imports),
+        Expr::Subscript(sub) => resolve_subscript(sub, enums, imports, aliases, seen),
+        Expr::BinOp(op) => resolve_bin_op(op, enums, imports, aliases, seen),
         _ => Err(UnsupportedType::UnknownName(annotation_to_label(annotation))),
     }
 }
@@ -421,6 +460,8 @@ fn resolve_name(
     name: &str,
     enums: &EnumTable,
     imports: &TypeImports,
+    aliases: &TypeAliasTable,
+    seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
     if let Some(canonical) = imports.resolve_direct(name) {
         return resolve_toolr_types_name(canonical);
@@ -433,13 +474,26 @@ fn resolve_name(
         "Path" => Ok(SupportedType::Path),
         _ => {
             if let Some(values) = enums.lookup(name) {
-                Ok(SupportedType::Enum {
+                return Ok(SupportedType::Enum {
                     name: name.to_string(),
                     values: values.to_vec(),
-                })
-            } else {
-                Err(UnsupportedType::UnknownName(name.to_string()))
+                });
             }
+            // Module-level type alias fallback: `Foo = Annotated[T, ...]`
+            // / `Bar = str | None` / `HostList = list[str]`. Recurse
+            // with a guard against cyclic chains.
+            if let Some(aliased) = aliases.lookup(name) {
+                if seen.iter().any(|n| n == name) {
+                    return Err(UnsupportedType::UnsupportedShape(format!(
+                        "cyclic type alias `{name}`"
+                    )));
+                }
+                seen.push(name.to_string());
+                let result = resolve_inner(aliased, enums, imports, aliases, seen);
+                seen.pop();
+                return result;
+            }
+            Err(UnsupportedType::UnknownName(name.to_string()))
         }
     }
 }
@@ -464,6 +518,8 @@ fn resolve_subscript(
     sub: &ruff_python_ast::ExprSubscript,
     enums: &EnumTable,
     imports: &TypeImports,
+    aliases: &TypeAliasTable,
+    seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
     let head = match sub.value.as_ref() {
         Expr::Name(n) => n.id.as_str(),
@@ -480,7 +536,7 @@ fn resolve_subscript(
             }
         }
         "list" | "List" => {
-            let inner = resolve(sub.slice.as_ref(), enums, imports)
+            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::List(Box::new(inner)))
         }
@@ -488,14 +544,14 @@ fn resolve_subscript(
             let parts = tuple_element_exprs(sub.slice.as_ref());
             let resolved: Result<Vec<_>, _> = parts
                 .into_iter()
-                .map(|elt| resolve(elt, enums, imports))
+                .map(|elt| resolve_inner(elt, enums, imports, aliases, seen))
                 .collect();
             Ok(SupportedType::Tuple(
                 resolved.map_err(|e| UnsupportedType::Inner(Box::new(e)))?,
             ))
         }
         "Optional" => {
-            let inner = resolve(sub.slice.as_ref(), enums, imports)
+            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
@@ -507,7 +563,7 @@ fn resolve_subscript(
             let first = exprs
                 .first()
                 .ok_or_else(|| UnsupportedType::UnsupportedShape("Annotated[]".into()))?;
-            resolve(first, enums, imports)
+            resolve_inner(first, enums, imports, aliases, seen)
         }
         other => Err(UnsupportedType::UnsupportedShape(other.to_string())),
     }
@@ -517,6 +573,8 @@ fn resolve_bin_op(
     op: &ruff_python_ast::ExprBinOp,
     enums: &EnumTable,
     imports: &TypeImports,
+    aliases: &TypeAliasTable,
+    seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
     if !matches!(op.op, ruff_python_ast::Operator::BitOr) {
         return Err(UnsupportedType::UnsupportedShape(format!("{:?}", op.op)));
@@ -528,12 +586,12 @@ fn resolve_bin_op(
     let none_rhs = matches!(rhs, Expr::NoneLiteral(_));
     match (none_lhs, none_rhs) {
         (false, true) => {
-            let inner = resolve(lhs, enums, imports)
+            let inner = resolve_inner(lhs, enums, imports, aliases, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
         (true, false) => {
-            let inner = resolve(rhs, enums, imports)
+            let inner = resolve_inner(rhs, enums, imports, aliases, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
@@ -617,22 +675,22 @@ mod tests {
     fn primitives_resolve() {
         let (_, ann) = first_annotation("def f(x: int): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Int
         );
         let (_, ann) = first_annotation("def f(x: float): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Float
         );
         let (_, ann) = first_annotation("def f(x: bool): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Bool
         );
         let (_, ann) = first_annotation("def f(x: str): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Str
         );
     }
@@ -641,7 +699,7 @@ mod tests {
     fn bare_path_name_is_supported() {
         let (_, ann) = first_annotation("def f(x: Path): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Path
         );
     }
@@ -650,7 +708,7 @@ mod tests {
     fn pathlib_path_attribute_is_supported() {
         let (_, ann) = first_annotation("def f(x: pathlib.Path): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Path
         );
     }
@@ -662,7 +720,7 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports).unwrap(),
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap(),
             SupportedType::ResolvedPath
         );
     }
@@ -674,7 +732,7 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports).unwrap(),
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap(),
             SupportedType::ResolvedPath
         );
     }
@@ -686,7 +744,7 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports).unwrap(),
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap(),
             SupportedType::AbsolutePath
         );
     }
@@ -695,7 +753,7 @@ mod tests {
     fn unknown_dotted_name_errors_with_pointer_to_toolr_types() {
         let (_, ann) = first_annotation("def f(x: datetime.datetime): pass\n");
         let err =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).expect_err("should fail");
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).expect_err("should fail");
         let msg = err.to_string();
         assert!(msg.contains("datetime.datetime"), "msg was: {msg}");
         assert!(msg.contains("toolr.types"), "msg was: {msg}");
@@ -705,7 +763,7 @@ mod tests {
     fn list_of_int_resolves() {
         let (_, ann) = first_annotation("def f(x: list[int]): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::List(Box::new(SupportedType::Int))
         );
     }
@@ -714,7 +772,7 @@ mod tests {
     fn tuple_str_int_resolves_heterogeneous() {
         let (_, ann) = first_annotation("def f(x: tuple[str, int]): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Tuple(vec![SupportedType::Str, SupportedType::Int])
         );
     }
@@ -725,7 +783,7 @@ mod tests {
             "from typing import Literal\ndef f(x: Literal[\"a\", \"b\"]): pass\n",
         );
         let SupportedType::Literal(values) =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap()
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap()
         else {
             panic!("expected Literal");
         };
@@ -736,7 +794,7 @@ mod tests {
     fn optional_via_bin_or_with_none() {
         let (_, ann) = first_annotation("def f(x: int | None): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
             SupportedType::Optional(Box::new(SupportedType::Int))
         );
     }
@@ -779,6 +837,63 @@ mod tests {
         }
     }
 
+    /// `CommitHash = Annotated[str | None, arg(aliases=["--sha"])]` —
+    /// a module-level alias should resolve to its underlying base
+    /// type (`Optional[Str]` here) when used as a parameter annotation.
+    #[test]
+    fn module_level_alias_to_annotated_optional_str_resolves() {
+        let src = r#"
+from typing import Annotated
+from toolr import arg
+
+CommitHash = Annotated[str | None, arg(aliases=["--sha", "--commit-sha"])]
+
+def f(commit_sha: CommitHash): pass
+"#;
+        let m = module(src);
+        let (_, ann) = first_annotation(src);
+        let aliases = TypeAliasTable::from_module(&m);
+        let resolved =
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases).unwrap();
+        assert_eq!(
+            resolved,
+            SupportedType::Optional(Box::new(SupportedType::Str))
+        );
+    }
+
+    #[test]
+    fn module_level_alias_to_list_of_primitive_resolves() {
+        let src = r#"
+HostList = list[str]
+
+def f(hosts: HostList): pass
+"#;
+        let m = module(src);
+        let (_, ann) = first_annotation(src);
+        let aliases = TypeAliasTable::from_module(&m);
+        let resolved =
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases).unwrap();
+        assert_eq!(resolved, SupportedType::List(Box::new(SupportedType::Str)));
+    }
+
+    #[test]
+    fn cyclic_aliases_are_rejected_not_hung() {
+        let src = r#"
+A = B
+B = A
+
+def f(x: A): pass
+"#;
+        let m = module(src);
+        let (_, ann) = first_annotation(src);
+        let aliases = TypeAliasTable::from_module(&m);
+        let err =
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases)
+                .expect_err("cycle must error");
+        let msg = err.to_string();
+        assert!(msg.contains("cyclic"), "got: {msg}");
+    }
+
     #[test]
     fn enum_subclass_resolves_via_table() {
         let src = "from enum import StrEnum\n\nclass Mode(StrEnum):\n    FAST = \"fast\"\n    SLOW = \"slow\"\n\ndef f(x: Mode): pass\n";
@@ -786,7 +901,7 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let mut enums = EnumTable::default();
         enums.merge(EnumTable::from_module(&m));
-        let resolved = resolve(&ann, &enums, &TypeImports::default()).unwrap();
+        let resolved = resolve(&ann, &enums, &TypeImports::default(), &TypeAliasTable::default()).unwrap();
         assert_eq!(
             resolved,
             SupportedType::Enum {

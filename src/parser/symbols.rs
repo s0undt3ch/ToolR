@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use ruff_python_ast::{Expr, ModModule, Stmt, StmtClassDef};
+use ruff_python_ast::{Expr, ModModule, Stmt, StmtAssign, StmtClassDef};
 
 /// A single enum member: its Python name (`ADD`) and serialised value
 /// (`"add"` for `StrEnum`, or the name itself when the underlying type
@@ -64,6 +64,66 @@ impl EnumTable {
     pub fn merge(&mut self, other: EnumTable) {
         self.members.extend(other.members);
     }
+}
+
+/// Module-level type aliases that the rust static parser knows how to
+/// follow. Triggered by patterns like:
+///
+/// ```python
+/// CommitHash = Annotated[str | None, arg(aliases=["--sha"])]
+/// MaybeName  = str | None
+/// HostList   = list[str]
+/// ```
+///
+/// The RHS must look like a parameter annotation (a `Name` / `Attribute`
+/// / `Subscript` / `BinOp` shape). Anything else — function calls,
+/// numeric literals, builders — is ignored. The resolver consults the
+/// table after exhausting primitives / `toolr.types` / enums, so user
+/// shadowing is impossible.
+#[derive(Debug, Default, Clone)]
+pub struct TypeAliasTable {
+    aliases: HashMap<String, Expr>,
+}
+
+impl TypeAliasTable {
+    pub fn from_module(module: &ModModule) -> Self {
+        let mut table = TypeAliasTable::default();
+        for stmt in &module.body {
+            let Stmt::Assign(StmtAssign { targets, value, .. }) = stmt else {
+                continue;
+            };
+            if targets.len() != 1 {
+                continue;
+            }
+            let Expr::Name(target) = &targets[0] else {
+                continue;
+            };
+            if !looks_like_annotation(value.as_ref()) {
+                continue;
+            }
+            table
+                .aliases
+                .insert(target.id.as_str().to_string(), (**value).clone());
+        }
+        table
+    }
+
+    /// Returns the underlying annotation expression for `name`, if it
+    /// was assigned via a module-level type alias.
+    pub fn lookup(&self, name: &str) -> Option<&Expr> {
+        self.aliases.get(name)
+    }
+
+    pub fn merge(&mut self, other: TypeAliasTable) {
+        self.aliases.extend(other.aliases);
+    }
+}
+
+fn looks_like_annotation(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Name(_) | Expr::Attribute(_) | Expr::Subscript(_) | Expr::BinOp(_)
+    )
 }
 
 fn is_enum_subclass(class: &StmtClassDef) -> bool {

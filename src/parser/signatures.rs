@@ -152,7 +152,14 @@ fn literal_default(expr: &Expr, enums: &EnumTable) -> String {
             Number::Complex { real, imag } => format!("({real}+{imag}j)"),
         },
         Expr::BooleanLiteral(b) => if b.value { "true" } else { "false" }.to_string(),
-        Expr::NoneLiteral(_) => "None".to_string(),
+        // `None` default means "absent on the wire" — clap doesn't set
+        // a default_value, `extract_value` doesn't emit anything, and
+        // the python function's own `= None` default is what runs.
+        // Render as empty so the manifest's `default` reads as "no
+        // observable default" downstream (matched by `Option<String>::is_none()`
+        // once we ship the schema flip; today the empty-string check
+        // in cli.rs:build_user_command skips applying it).
+        Expr::NoneLiteral(_) => String::new(),
         Expr::List(l) if l.elts.is_empty() => String::new(),
         Expr::Attribute(attr) => resolve_enum_attribute_default(attr, enums)
             .unwrap_or_else(|| "<expr>".to_string()),

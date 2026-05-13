@@ -16,7 +16,7 @@ pub mod signatures;
 pub use signatures::extract_arguments;
 
 pub mod symbols;
-pub use symbols::EnumTable;
+pub use symbols::{EnumTable, TypeAliasTable};
 
 pub mod types;
 pub use types::{
