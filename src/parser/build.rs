@@ -94,6 +94,38 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         return Err(BuildError::UnsupportedTypes(type_errors));
     }
 
+    // Validate that every command points at a registered group. Catches
+    // typos in `@command(group="ci.helm-diff-pre-comment")` and missing
+    // `command_group("…")` declarations.
+    let registered: HashSet<&str> =
+        all_groups.iter().map(|g| g.name.as_str()).collect::<HashSet<_>>();
+    let registered_paths: HashSet<String> =
+        all_groups.iter().map(|g| g.full_path()).collect();
+    let mut unknown = Vec::new();
+    for cmd in &all_commands {
+        if cmd.group.is_empty() {
+            unknown.push(UnknownGroupRef {
+                command: cmd.name.clone(),
+                module: cmd.module.clone(),
+                referenced: String::new(),
+                suggestion: nearest_group(&cmd.group, &registered_paths),
+            });
+            continue;
+        }
+        if !registered_paths.contains(&cmd.group) {
+            unknown.push(UnknownGroupRef {
+                command: cmd.name.clone(),
+                module: cmd.module.clone(),
+                referenced: cmd.group.clone(),
+                suggestion: nearest_group(&cmd.group, &registered_paths),
+            });
+        }
+    }
+    drop(registered);
+    if !unknown.is_empty() {
+        return Err(BuildError::UnknownGroupRefs(unknown));
+    }
+
     let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
     Ok(Manifest {
         schema_version: SCHEMA_VERSION,
@@ -123,6 +155,96 @@ pub enum BuildError {
     ThirdParty(#[from] ThirdPartyError),
     #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
+    #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
+    UnknownGroupRefs(Vec<UnknownGroupRef>),
+}
+
+/// One command whose `group="…"` reference doesn't match any
+/// `command_group("…")` declaration in `tools/`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownGroupRef {
+    /// Command name (CLI-visible, hyphenated).
+    pub command: String,
+    /// Dotted python module the command lives in.
+    pub module: String,
+    /// The unknown group path the user typed. Empty string when the
+    /// `@command` decorator didn't pass `group=` at all.
+    pub referenced: String,
+    /// Suggested alternative — the most similar registered group path
+    /// by Levenshtein distance — to help with typos. `None` when no
+    /// group is registered yet or no close match exists.
+    pub suggestion: Option<String>,
+}
+
+fn format_unknown_groups(errors: &[UnknownGroupRef]) -> String {
+    let mut s = String::new();
+    for (i, err) in errors.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        use std::fmt::Write as _;
+        if err.referenced.is_empty() {
+            let _ = write!(
+                &mut s,
+                "  - {}::{}: `@command` is missing a `group=...` kwarg.",
+                err.module, err.command,
+            );
+        } else {
+            let _ = write!(
+                &mut s,
+                "  - {}::{}: references group `{}` which has no `command_group(...)` declaration.",
+                err.module, err.command, err.referenced,
+            );
+            if let Some(suggestion) = &err.suggestion {
+                let _ = write!(&mut s, " Did you mean `{suggestion}`?");
+            }
+        }
+    }
+    s
+}
+
+/// Return the closest registered group path to `target` by simple
+/// edit-distance scoring, when it's within a small threshold. None if
+/// nothing useful is close.
+fn nearest_group(target: &str, registered: &HashSet<String>) -> Option<String> {
+    let max = (target.len() / 3).max(2);
+    let mut best: Option<(usize, &String)> = None;
+    for candidate in registered {
+        let d = edit_distance(target, candidate);
+        if d > max {
+            continue;
+        }
+        if best.map(|(bd, _)| d < bd).unwrap_or(true) {
+            best = Some((d, candidate));
+        }
+    }
+    best.map(|(_, s)| s.clone())
+}
+
+/// Plain Levenshtein distance (insert / delete / substitute).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let (m, n) = (a.len(), b.len());
+    if m == 0 {
+        return n;
+    }
+    if n == 0 {
+        return m;
+    }
+    let mut prev: Vec<usize> = (0..=n).collect();
+    let mut curr: Vec<usize> = vec![0; n + 1];
+    for i in 1..=m {
+        curr[0] = i;
+        for j in 1..=n {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            curr[j] = (prev[j] + 1)
+                .min(curr[j - 1] + 1)
+                .min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[n]
 }
 
 fn format_type_errors(errors: &[TypeResolutionError]) -> String {
@@ -270,5 +392,85 @@ def hello(ctx):
         assert_eq!(m.commands.len(), 1);
         assert_eq!(m.commands[0].name, "hello");
         assert!(!m.static_hash.is_empty());
+    }
+
+    /// `@command(group="…")` in one file referring to a
+    /// `command_group(...)` declared in another file resolves cleanly
+    /// regardless of the file scan order.
+    #[test]
+    fn cross_file_command_group_string_path_resolves() {
+        let tmp = TempDir::new().unwrap();
+        // gh_actions.py declares an @command(group="ci") even though
+        // ci's command_group(...) lives in _common.py — which sorts
+        // earlier, but the registry collection pass makes order
+        // irrelevant anyway.
+        write(
+            tmp.path(),
+            "tools/_common.py",
+            r#""""CI utilities."""
+command_group("ci", docstring=__doc__)
+"#,
+        );
+        write(
+            tmp.path(),
+            "tools/gh_actions.py",
+            r#""""GH Actions helpers."""
+@command(group="ci")
+def check_run_build(ctx):
+    """Check."""
+    pass
+"#,
+        );
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        assert_eq!(m.commands.len(), 1);
+        assert_eq!(m.commands[0].group, "ci");
+        assert_eq!(m.commands[0].name, "check-run-build");
+    }
+
+    /// Typo'd `group=` reference surfaces as a build error with a
+    /// nearest-neighbour suggestion.
+    #[test]
+    fn unknown_group_ref_errors_with_suggestion() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/c.py",
+            r#""""CI utilities."""
+command_group("ci.helm-diff-pr-comment", docstring=__doc__)
+
+@command(group="ci.helm-diff-pre-comment")
+def backend(ctx):
+    """Backend."""
+    pass
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("unknown group references"), "got: {msg}");
+        assert!(msg.contains("ci.helm-diff-pre-comment"), "got: {msg}");
+        assert!(msg.contains("Did you mean"), "got: {msg}");
+        assert!(msg.contains("ci.helm-diff-pr-comment"), "got: {msg}");
+    }
+
+    /// Bare `@command` (no `group=` kwarg) is a build error pointing
+    /// at the missing kwarg.
+    #[test]
+    fn bare_direct_command_missing_group_errors() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/c.py",
+            r#""""CI utilities."""
+command_group("ci", docstring=__doc__)
+
+@command
+def hello(ctx):
+    """Hi."""
+    pass
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("missing a `group=...` kwarg"), "got: {msg}");
     }
 }

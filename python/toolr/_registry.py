@@ -265,9 +265,75 @@ def _get_command_group_storage() -> dict[str, CommandGroup]:
     return collector
 
 
+def command(
+    name_or_func: str | Callable[..., Any] | None = None,
+    *,
+    group: str | None = None,
+    aliases: list[str] | None = None,
+) -> Callable[..., Any]:
+    """Register a function as a toolr CLI command.
+
+    String-path attachment to a group, used as an alternative to the
+    legacy ``@<binding>.command`` decorator. Lets you declare commands
+    in any file without importing a shared ``CommandGroup`` binding —
+    the ``group=`` string is the only contract.
+
+    Usage::
+
+        from toolr import command, command_group
+
+        command_group("ci.helm-diff-pr-comment", docstring=__doc__)
+
+        @command(group="ci.helm-diff-pr-comment")
+        def backend(ctx, env): ...
+
+        # Optional explicit command name (otherwise the function
+        # name is hyphenated and used).
+        @command("snippet-checker", group="ci.helm-diff-pr-comment")
+        def check_snippets(ctx): ...
+
+    Args:
+        name_or_func: When called as a bare decorator (``@command``),
+            this is the wrapped function. When called with parentheses
+            (``@command("name", group=...)``), this is the override
+            for the command's CLI name; the function name (hyphenated)
+            is used otherwise.
+        group: Dotted full path of the target group
+            (e.g. ``"ci"`` or ``"ci.helm-diff-pr-comment"``). A
+            matching ``command_group(...)`` declaration must exist
+            elsewhere in ``tools/``; otherwise manifest-build fails
+            with a clear error.
+        aliases: Reserved for future use; currently no-op (tracked
+            with the rest of the ``arg(aliases=...)`` plumbing in
+            issue #198).
+
+    Returns:
+        The decorated function unchanged; the decorator's only job is
+        to record metadata that the static parser picks up. At runtime
+        toolr calls the function directly with the parsed args.
+    """
+    # Bare form: @command def f(...) — no kwargs allowed in this shape.
+    if callable(name_or_func):
+        if group is not None or aliases is not None:
+            err_msg = (
+                '@command(...) with kwargs must be used as `@command(group="…")`'
+                " — drop the parens-less form or move the kwargs into them."
+            )
+            raise TypeError(err_msg)
+        return name_or_func
+
+    # Parameterised form: @command(...) — returns a decorator. The
+    # decorator itself is currently a passthrough; the static parser
+    # is what consumes the `group=` / `name` strings.
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        return func
+
+    return decorator
+
+
 def command_group(
     name: str,
-    title: str,
+    title: str = "",
     description: str | None = None,
     long_description: str | None = None,
     docstring: str | None = None,
@@ -275,13 +341,19 @@ def command_group(
 ) -> CommandGroup:
     """Register a new command group.
 
+    The ``name`` may be either a bare leaf name (``"ci"``) or a dotted
+    path (``"ci.helm-diff-pr-comment"``). When dotted, everything
+    before the final dot is the parent's full path; explicit
+    ``parent=`` is ignored in that case.
+
     If you pass ``docstring``, you won't be allowed to pass ``description`` or ``long_description``.
     Those will be parsed by [docstring-parser](https://pypi.org/project/docstring-parser/).
     The first line of the docstring will be used as the description, the rest will be used as the long description.
 
     Args:
-        name: Name of the command group
-        title: Title for the command group
+        name: Name of the command group; may include dotted parent path.
+        title: Optional short title shown in --help. Defaults to the
+            leaf name when omitted.
         description: Description for the command group
         long_description: Long description for the command group
         docstring: Docstring for the command group
@@ -291,10 +363,26 @@ def command_group(
         A CommandGroup instance
 
     """
+    # Dotted-path form: split the leaf off the parent path. Explicit
+    # `parent=` kwarg takes a back seat to the dotted form so users
+    # pick one style and stick with it.
+    if "." in name:
+        parent_from_path, _, leaf = name.rpartition(".")
+        if parent is not None and parent != parent_from_path:
+            log.warning(
+                "command_group(%r, parent=%r): explicit parent overridden by dotted path; using %r",
+                name,
+                parent,
+                parent_from_path,
+            )
+        name = leaf
+        parent = parent_from_path
     if parent is not None and not parent.startswith("tools."):
         parent = f"tools.{parent}"
     elif parent is None:
         parent = "tools"
+    if not title:
+        title = name
 
     collector = _get_command_group_storage()
 

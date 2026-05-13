@@ -1,7 +1,8 @@
 """ToolR Python package.
 
 Importable surface: :class:`toolr.Context`, :func:`toolr.command_group`,
-:func:`toolr.arg`, :func:`toolr.report_on_import_errors`.
+:func:`toolr.command`, :func:`toolr.arg`,
+:func:`toolr.report_on_import_errors`.
 
 Implementation modules (not part of the user-facing API):
 
@@ -21,6 +22,7 @@ except ImportError:
 
 from toolr._context import Context
 from toolr._registry import MANIFEST_SCHEMA_VERSION
+from toolr._registry import command
 from toolr._registry import command_group
 from toolr.build import BuildManifestError
 from toolr.build import BuildResult
@@ -36,6 +38,7 @@ __all__ = [
     "__version__",
     "arg",
     "build_manifest",
+    "command",
     "command_group",
     "report_on_import_errors",
 ]

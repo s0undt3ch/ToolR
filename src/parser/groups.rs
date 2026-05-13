@@ -28,15 +28,29 @@ pub fn extract_groups(
 ) -> Vec<GroupBinding> {
     let mut out: Vec<GroupBinding> = Vec::new();
     for stmt in &module.body {
-        let Stmt::Assign(StmtAssign { targets, value, .. }) = stmt else {
-            continue;
-        };
-        // Only handle `single_var = (...).command_group(...)`.
-        let Some(var_name) = single_name_target(targets) else {
-            continue;
-        };
-        let Expr::Call(call) = value.as_ref() else {
-            continue;
+        // Two recognised shapes:
+        //   1. `var = command_group(...)` — legacy binding style.
+        //   2. `command_group("path", ...)` — bare expression-statement,
+        //      the modern string-path style. No binding var to capture
+        //      (the leaf name becomes a synthetic var so `@var.command`
+        //      keeps working when a user mixes styles).
+        let (var_name, call) = match stmt {
+            Stmt::Assign(StmtAssign { targets, value, .. }) => {
+                let Some(name) = single_name_target(targets) else {
+                    continue;
+                };
+                let Expr::Call(call) = value.as_ref() else {
+                    continue;
+                };
+                (Some(name), call)
+            }
+            Stmt::Expr(expr_stmt) => {
+                let Expr::Call(call) = expr_stmt.value.as_ref() else {
+                    continue;
+                };
+                (None, call)
+            }
+            _ => continue,
         };
         if !is_command_group_call(call) {
             continue;
@@ -44,21 +58,32 @@ pub fn extract_groups(
         // Parent path can come from three source patterns:
         //   1. Method-call style: `child = parent.command_group(...)` —
         //      look up `parent` locally first, then in the global
-        //      cross-file binding map (covers
-        //      `from ._common import group; diff = group.command_group(...)`).
+        //      cross-file binding map.
         //   2. Keyword-arg with variable reference:
-        //      `child = command_group(..., parent=parent_var)` —
-        //      same resolution as (1).
+        //      `child = command_group(..., parent=parent_var)`.
         //   3. Keyword-arg with literal string:
-        //      `child = command_group(..., parent="ci")` — use the
-        //      literal as the dotted full_path verbatim.
+        //      `child = command_group(..., parent="ci")`.
+        //
+        // Plus the dotted-name shape — `command_group("ci.helm-diff-pr-comment", ...)`
+        // — splits the leaf off inside `parse_group_call` and overrides
+        // whatever parent_path we resolve here.
         let parent_path = parent_var_name(call)
             .or_else(|| parent_kwarg_var(call))
             .and_then(|pv| resolve_var(&pv, &out, global_vars))
             .or_else(|| parent_kwarg_literal(call));
-        let Some(binding) = parse_group_call(call, &var_name, module_docstring, parent_path) else {
+        let chosen_var = var_name.clone().unwrap_or_default();
+        let Some(mut binding) =
+            parse_group_call(call, &chosen_var, module_docstring, parent_path)
+        else {
             continue;
         };
+        // For bare-form (no explicit var), use the leaf name as the
+        // synthetic var so legacy `@<leaf>.command` decorators still
+        // resolve when authors mix the new and old styles. Skip when
+        // there's a real binding name.
+        if var_name.is_none() {
+            binding.var = binding.group.name.clone();
+        }
         out.push(binding);
     }
     out
@@ -142,7 +167,17 @@ fn parse_group_call(
     parent: Option<String>,
 ) -> Option<GroupBinding> {
     // Positional args: name, title. Keyword `docstring` may be __doc__.
-    let name = call.arguments.args.first().and_then(literal_str)?;
+    let raw_name = call.arguments.args.first().and_then(literal_str)?;
+    // Dotted name form (`command_group("ci.helm-diff-pr-comment", ...)`):
+    // split the leaf off the parent path. Explicit `parent=` (from the
+    // earlier resolution path) takes a back seat — pick one style.
+    let (name, parent) = if let Some(idx) = raw_name.rfind('.') {
+        let dotted_parent = raw_name[..idx].to_string();
+        let leaf = raw_name[idx + 1..].to_string();
+        (leaf, Some(dotted_parent))
+    } else {
+        (raw_name, parent)
+    };
     let title = call
         .arguments
         .args
