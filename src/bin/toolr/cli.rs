@@ -83,7 +83,9 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .long("debug")
                 .action(ArgAction::SetTrue)
                 .help_heading(OUTPUT_HEADING)
-                .help("Increase verbosity (also enables DEBUG logging)"),
+                .help(crate::markdown::render(
+                    "Increase verbosity (also enables `DEBUG` logging).",
+                )),
         )
         .arg(
             Arg::new("quiet")
@@ -92,7 +94,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .action(ArgAction::SetTrue)
                 .conflicts_with("debug")
                 .help_heading(OUTPUT_HEADING)
-                .help("Suppress non-error output"),
+                .help(crate::markdown::render("Suppress non-error output.")),
         )
         .arg(
             Arg::new("timestamps")
@@ -101,7 +103,9 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .action(ArgAction::SetTrue)
                 .conflicts_with("no-timestamps")
                 .help_heading(OUTPUT_HEADING)
-                .help("Prepend ISO-8601 timestamps to log lines"),
+                .help(crate::markdown::render(
+                    "Prepend ISO-8601 timestamps to log lines.",
+                )),
         )
         .arg(
             Arg::new("no-timestamps")
@@ -109,7 +113,9 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .alias("nts")
                 .action(ArgAction::SetTrue)
                 .help_heading(OUTPUT_HEADING)
-                .help("Suppress log-line timestamps (default; overrides --timestamps)"),
+                .help(crate::markdown::render(
+                    "Suppress log-line timestamps (default; overrides `--timestamps`).",
+                )),
         )
         .arg(
             Arg::new("timeout-secs")
@@ -118,10 +124,10 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .value_name("SECONDS")
                 .value_parser(clap::value_parser!(f64))
                 .help_heading(OUTPUT_HEADING)
-                .help(
+                .help(crate::markdown::render(
                     "Default timeout applied to every `ctx.run(...)` subprocess \
                      (per-call `timeout_secs=` wins when set).",
-                ),
+                )),
         )
         .arg(
             Arg::new("no-output-timeout-secs")
@@ -130,11 +136,11 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .value_name("SECONDS")
                 .value_parser(clap::value_parser!(f64))
                 .help_heading(OUTPUT_HEADING)
-                .help(
+                .help(crate::markdown::render(
                     "Default no-output watchdog applied to every `ctx.run(...)` \
                      subprocess — abort if no stdout/stderr for this many \
                      seconds. Per-call `no_output_timeout_secs=` wins when set.",
-                ),
+                )),
         );
 
     let children = children_by_parent(manifest);
