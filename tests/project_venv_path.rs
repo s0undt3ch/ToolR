@@ -46,7 +46,16 @@ fn project_venv_path_prints_in_tree_path_when_configured() {
         .unwrap();
     assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let expected = tmp.path().join("tools").join(".venv");
+    // Canonicalise the expected path so the comparison matches toolr's
+    // output across platforms. On Windows `TempDir` paths return the
+    // 8.3 short form (`RUNNER~1`), while toolr internally calls
+    // `canonicalize()` which produces the verbatim long-form
+    // (`\\?\C:\Users\runneradmin\...`). On macOS `/tmp` is a symlink
+    // to `/private/tmp`. Canonicalising the parent (which exists)
+    // then joining `.venv` (which doesn't yet) lines both sides up.
+    let expected = std::fs::canonicalize(tmp.path().join("tools"))
+        .unwrap()
+        .join(".venv");
     assert!(
         stdout.contains(expected.to_string_lossy().as_ref()),
         "expected in-tree path {} in: {stdout}",
