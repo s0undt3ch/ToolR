@@ -16,20 +16,20 @@ fn write_entry(
     let cache_dir = cache_root.join(key);
     fs::create_dir_all(cache_dir.join("venv")).unwrap();
     fs::write(cache_dir.join("venv/blob.bin"), vec![0u8; 256]).unwrap();
-    let json = format!(
-        r#"{{
-          "schema_version": 1,
-          "repo_path": "{}",
-          "toolr_version": "1.0.0",
-          "python_version": "3.13.1",
-          "created_at": "{}",
-          "last_used_at": "{}"
-        }}"#,
-        repo_path.display(),
-        last_used_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-        last_used_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-    );
-    fs::write(cache_dir.join("meta.json"), json).unwrap();
+    let stamp = last_used_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    // Build JSON via serde_json so Windows backslash paths get
+    // properly escaped — `format!` + `Path::display()` produced
+    // invalid JSON on Windows (`"C:\Users\..."` has illegal escapes),
+    // and the cache parser silently skipped malformed entries.
+    let meta = serde_json::json!({
+        "schema_version": 1,
+        "repo_path": repo_path.to_string_lossy(),
+        "toolr_version": "1.0.0",
+        "python_version": "3.13.1",
+        "created_at": stamp,
+        "last_used_at": stamp,
+    });
+    fs::write(cache_dir.join("meta.json"), meta.to_string()).unwrap();
 }
 
 #[test]
