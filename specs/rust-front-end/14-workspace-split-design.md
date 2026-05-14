@@ -932,3 +932,107 @@ The split is "done" when:
   — this design supersedes Plan 9's Task 1 ("maturin auto-ships
   `[[bin]]` in pyo3 wheels"), which is empirically false against
   maturin 1.8.4.
+
+---
+
+## Amendments learned during execution
+
+This section captures clarifications and deviations from the original
+design that emerged during implementation (Stages 1–11). The main
+body of the spec above remains the canonical description of the
+end-state shape; this section explains the nuances.
+
+### `_decorators.py` preserves user-facing API from `_registry.py`
+
+The Python frontend retirement (Stage 8) deleted `_parser.py` and
+`_registry.py`. However, `_registry.py` contained two distinct
+concerns:
+
+- CLI-internal classes (`CommandRegistry`, argparse plumbing) — gone.
+- **User-facing decorators** (`command_group`, `@command`,
+  `CommandGroup`, `MANIFEST_SCHEMA_VERSION`,
+  `_get_command_group_storage`) — these are part of the
+  `toolr-py` public API consumed by user tool scripts (every
+  `tools/*.py` does `from toolr import command_group, command`).
+
+The surviving public-API portion now lives in a new module
+`crates/toolr-py/python/toolr/_decorators.py`. The public surface
+(`from toolr import command_group, command`) is unchanged.
+
+### README and LICENSE need crate-local symlinks
+
+Each per-crate `pyproject.toml` references the repo-root README and
+LICENSE. The design spec originally specified `readme = "../../README.md"`
+and `license = { file = "../../LICENSE" }` with path-traversal.
+
+In practice, maturin's PEP 517 metadata backend (which `uv sync`
+invokes via `prepare_metadata_for_build_editable`) rejects
+path-traversal in those fields with `project.<field> must be a safe
+relative path inside the project`. The fix is a crate-local
+relative symlink:
+
+```text
+crates/toolr/README.md       -> ../../README.md
+crates/toolr/LICENSE         -> ../../LICENSE
+crates/toolr-py/README.md    -> ../../README.md
+crates/toolr-py/LICENSE      -> ../../LICENSE
+```
+
+Each `pyproject.toml` then references `readme = "README.md"` and
+`license = { file = "LICENSE" }` (crate-local), with the symlink
+resolving to the repo-root copy. No content duplication.
+
+### Two per-crate sdists, not one workspace-wide sdist
+
+The design spec originally implied a single source tarball (built at
+the workspace root) that both wheel builds would consume.
+
+After Stage 7's review revealed that the root `pyproject.toml`
+no longer has a `[build-system]` table, `uv build --sdist` at the
+workspace root fails with `Multiple top-level packages discovered
+in a flat-layout`. The fix is to build **two per-crate sdists**:
+
+```bash
+uv build --sdist --package toolr      # crates/toolr sdist
+uv build --sdist --package toolr-py   # crates/toolr-py sdist
+```
+
+`_prepare-release.yml` exposes two outputs: `binary-release-tarball-name`
+and `py-release-tarball-name`. `_build.yml` consumes one per call;
+`CIBW_CONFIG_FILE` is no longer needed because each sdist has its own
+`pyproject.toml` at root, which cibuildwheel discovers natively.
+
+`release.yml`'s `publish-release` job downloads both sdists into `dist/`.
+
+### `execute_build.rs` (clap→ExecutionSpec) lives in `crates/toolr/`
+
+The design spec's Section 2 declared "no `clap`" in `toolr-core`. The
+file `src/execute/build.rs` (now `crates/toolr/src/execute_build.rs`)
+translates `clap::ArgMatches` into the `ExecutionSpec` runtime type.
+Because it consumes a clap type, it cannot live in `toolr-core`
+without re-introducing the clap dependency. The translator was
+moved to `crates/toolr/src/execute_build.rs`. The pure
+`ExecutionSpec` type and its runtime stay in `toolr-core`.
+
+### `.cargo/config.toml` for macOS pyo3 cdylib link flags
+
+Maturin sets `-undefined dynamic_lookup` itself when it drives the
+build, allowing the `extension-module` cdylib to leave Python
+symbols unresolved at link time (the dynamic linker resolves them
+against the host CPython at import time).
+
+Plain `cargo build` (outside maturin) does not set these flags.
+The plan requires `cargo build --workspace --release` to succeed
+without going through maturin, so the workspace ships a
+`.cargo/config.toml`:
+
+```toml
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+```
+
+Linux and Windows are unaffected (their dynamic linkers handle
+undefined extension-module symbols natively).

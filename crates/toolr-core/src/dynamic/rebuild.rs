@@ -23,7 +23,7 @@ pub struct RebuildOutcome {
 /// Full rebuild: static layer + dynamic layer + write.
 ///
 /// `python` is the absolute path to the tools-venv Python interpreter
-/// (resolved by Plan 3's `_rust_utils::venv::resolve_venv_path`).
+/// (resolved by Plan 3's `toolr_core::venv::resolve_venv_path`).
 /// `venv_root` is the venv directory used by [`compute_dynamic_hash`].
 pub fn rebuild_manifest_full(
     project_root: &Path,

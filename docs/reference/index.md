@@ -1,7 +1,7 @@
 # API reference
 
 The user-facing Python API. For internal-only modules see the source
-under [`python/toolr/`](https://github.com/s0undt3ch/ToolR/tree/main/python/toolr).
+under [`crates/toolr-py/python/toolr/`](https://github.com/s0undt3ch/ToolR/tree/main/crates/toolr-py/python/toolr).
 
 - [`Context`](context.md) — passed to every command function as `ctx`.
 - [`command_group`](command_group.md) — declared at module scope in

@@ -25,7 +25,7 @@ pub enum IntrospectError {
 /// Run the dynamic introspection helper.
 ///
 /// `python` is the absolute path to the Python interpreter inside the
-/// tools venv (resolved by `_rust_utils::venv` from Plan 3). `tools_dir`
+/// tools venv (resolved by `toolr_core::venv` from Plan 3). `tools_dir`
 /// is the project's `tools/` directory; the helper inserts its parent on
 /// `sys.path` before importing.
 pub fn run_introspect(python: &Path, tools_dir: &Path) -> Result<DynamicPayload, IntrospectError> {

@@ -28,4 +28,3 @@ which.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 assert_cmd.workspace = true
-chrono.workspace = true
