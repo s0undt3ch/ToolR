@@ -5,6 +5,7 @@ description = "Toolr dogfooding tools venv (in-repo only; not published)"
 requires-python = ">=3.11"
 dependencies = [
     "toolr-py",
+    "packaging>=25.0",
 ]
 
 [tool.uv.sources]

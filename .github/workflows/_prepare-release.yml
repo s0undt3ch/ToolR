@@ -96,16 +96,12 @@ jobs:
           cache: true
           cache_key_prefix: ${{ inputs.cache-seed }}|mise|prepare-release|${{ runner.os }}|${{ runner.arch }}
 
-      - name: Generate additional ToolR requirements file
-        shell: bash
-        run: |
-          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
-
-      - name: Setup ToolR
-        id: setup-toolr
-        uses: s0undt3ch/ToolR@8cd163aa75e825c20207500024cad82f14ff6a87 # v0.11.1
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
         with:
-          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
+          cache-prefix: prepare-release
+          cache-seed: ${{ inputs.cache-seed }}
+          python-version: ""
 
       - name: Setup Prek
         id: setup-pre-commit
