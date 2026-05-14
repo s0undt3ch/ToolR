@@ -187,6 +187,62 @@ jobs:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
 
+  distribution-tests:
+    name: Distribution tests (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifact-pattern: cibw-wheel-*-*linux*
+          - os: macos-latest
+            platform: macos
+            artifact-pattern: cibw-wheel-*-*macosx*
+          - os: windows-latest
+            platform: windows
+            artifact-pattern: cibw-wheel-*-*win*
+    runs-on: ${{ matrix.os }}
+    needs:
+      - prepare-ci
+      - build-binary-wheel-linux
+      - build-binary-wheel-windows
+      - build-binary-wheel-macos
+      - build-py-wheel-linux
+      - build-py-wheel-windows
+      - build-py-wheel-macos
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: dist-tests-${{ matrix.platform }}
+          cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+          python-version: ""
+
+      - name: Download platform wheels
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: ${{ matrix.artifact-pattern }}
+          path: wheelhouse/
+          merge-multiple: true
+
+      - name: List downloaded wheels
+        shell: bash
+        run: ls -la wheelhouse/
+
+      - name: Run distribution tests
+        shell: bash
+        run: uv run pytest tests/distribution/ -v
+
   build-binary-archive:
     name: Build binary archives (per triple)
     needs:
@@ -213,6 +269,7 @@ jobs:
       - build-binary-wheel-macos
       - build-py-wheel-macos
       - build-binary-archive
+      - distribution-tests
       - prepare-release
     runs-on: ubuntu-latest
     permissions:
