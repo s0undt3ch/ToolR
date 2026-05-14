@@ -44,7 +44,7 @@ version-scheme = "pep440"
 [tool.maturin]
 features = []
 module-name = "toolr.utils._rust_utils"
-python-source = "python"
+python-source = "crates/toolr-py/python"
 bindings = "pyo3"
 strip = true
 # Require Cargo.lock is up to date
@@ -122,8 +122,10 @@ show-fixes = true
 target-version = "py311"
 respect-gitignore = true
 src = [
-  "src",
-  "python",
+  "crates/toolr-core/src",
+  "crates/toolr/src",
+  "crates/toolr-py/src",
+  "crates/toolr-py/python",
   "tests",
   "tools",
 ]
@@ -164,15 +166,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"python/**/*.py" = [
+"crates/toolr-py/python/**/*.py" = [
   "D104",   # Missing docstring in public package
   "D107",   # Missing docstring in `__init__`
   "PT",     # flake8-pytest-style (PT) - Disabled in production code, only enforced in tests
 ]
-"python/toolr/_context.py" = [
+"crates/toolr-py/python/toolr/_context.py" = [
   "PYI041", # redundant-numeric-union
 ]
-"python/toolr/utils/_rust_utils.pyi" = [
+"crates/toolr-py/python/toolr/utils/_rust_utils.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
   "N818",   # Exception name `*` should be named with an Error suffix"
 ]
@@ -252,7 +254,7 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
 warn_unused_ignores = true
-mypy_path = "python"
+mypy_path = "crates/toolr-py/python"
 exclude = [
   "tests/.*/files/.*\\.py",
   "^tests/([^/]*/)*files/.*",

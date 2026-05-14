@@ -2,7 +2,7 @@
 //!
 //! Wire format: JSON. The Python side decodes with
 //! `msgspec.json.decode(data, type=RunnerSpec)`. Field names and types
-//! here must stay in lock-step with `python/toolr/_runner.py`.
+//! here must stay in lock-step with `crates/toolr-py/python/toolr/_runner.py`.
 
 use std::collections::BTreeMap;
 
