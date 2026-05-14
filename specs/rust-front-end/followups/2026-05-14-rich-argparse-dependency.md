@@ -2,7 +2,7 @@
 
 - **Created:** 2026-05-14
 - **Related plan:** [`../15-plan-12-workspace-split.md`](../15-plan-12-workspace-split.md)
-- **Status:** Open
+- **Status:** Closed
 
 ## Context
 
@@ -54,3 +54,30 @@ After the workspace split lands and the Python frontend is gone:
 
 This is a local follow-up note. If a tracking issue is desired, file
 under the repository's issue tracker referencing this file by path.
+
+---
+
+## Resolution (2026-05-14)
+
+Verified zero importers in the post-Stage-8 codebase (`grep -rn
+"rich.argparse\|rich_argparse\|RichHelpFormatter"` over `crates/toolr-py/python/`,
+`tools/`, `tests/`, `docs/`, `scripts/` returns no production-code hits — only
+comment/docstring references in `crates/toolr/src/cli.rs`,
+`crates/toolr/src/markdown.rs`, `CHANGELOG.md`, and the spec/followup docs).
+Removed `rich-argparse>=1.7.0` from `crates/toolr-py/pyproject.toml [project]
+dependencies`. `uv sync --dev` re-resolves cleanly; `rich-argparse` is gone
+from `uv.lock` (28-line net deletion from the lockfile). Wheel METADATA no
+longer lists it: `unzip -p toolr_py-*.whl '*METADATA' | grep -i rich`
+returns only `Requires-Dist: rich>=13.0.0,<14.3` plus an unrelated README
+line.
+
+A side-effect surfaced while validating: `rich.console.getpass` (patched in
+`tests/context/test_prompt.py::test_prompt_password`) is gone in `rich`
+14.3+. Previously rich-argparse 1.8.0 transitively pinned `rich==14.2.0`, so
+the lockfile masked the issue. To keep tests green without scope-creeping
+into a test refactor, `rich` is now declared as a direct dep with the
+constraint `rich>=13.0.0,<14.3` and a code comment marking it as a
+follow-up. Tests: 281 Python pass, full cargo workspace passes (`cargo test
+--workspace --release`).
+
+Closing.
