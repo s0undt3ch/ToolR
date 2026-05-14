@@ -61,7 +61,7 @@ def _import_tools_modules(warnings: list[str]) -> None:
 
 def _walk_registry() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Read groups and commands from the toolr registry singleton."""
-    from toolr._registry import _get_command_group_storage  # noqa: PLC0415
+    from toolr._decorators import _get_command_group_storage  # noqa: PLC0415
 
     storage = _get_command_group_storage()
     groups: list[dict[str, Any]] = []

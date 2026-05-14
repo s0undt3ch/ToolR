@@ -1,14 +1,20 @@
+"""User-facing decorator surface for declaring toolr command groups and commands.
+
+This module survives the retirement of the Python CLI frontend
+(``_parser.py`` / ``_registry.py``). User tool scripts continue to do::
+
+    from toolr import command, command_group
+
+and the decorators record metadata in a process-local registry. The
+Rust binary's static parser and the manifest builder consume that
+registry; there is no longer an in-process Python argparse driver.
+"""
+
 from __future__ import annotations
 
-import importlib
 import logging
-import os
-import pkgutil
 import warnings
-from argparse import _SubParsersAction
 from collections.abc import Callable
-from operator import attrgetter
-from pathlib import Path
 from types import FunctionType
 from typing import TYPE_CHECKING
 from typing import Any
@@ -17,16 +23,10 @@ from typing import overload
 
 from msgspec import Struct
 from msgspec import field
-from msgspec import structs
-from rich.markdown import Markdown
 
 from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._docstrings import Docstring
 from toolr.utils._signature import F
-from toolr.utils._signature import get_signature
-
-if TYPE_CHECKING:
-    from toolr._parser import Parser
 
 log = logging.getLogger(__name__)
 
@@ -167,140 +167,6 @@ class CommandGroup(Struct, frozen=True):
     def get_commands(self) -> dict[str, Callable[..., Any]]:
         """Get the commands in this group."""
         return {name: self.__commands[name] for name in sorted(self.__commands)}
-
-
-class CommandRegistry(Struct, frozen=True):
-    """Registry for CLI commands and their subcommands."""
-
-    _built: bool = False
-    _parser: Parser | None = None
-
-    @property
-    def parser(self) -> Parser:
-        """Get the parser for this registry."""
-        if self._parser is None:
-            err_msg = "The parser is not set. Please pass a parser instance when calling self.discover_and_build()"
-            raise RuntimeError(err_msg)
-        return self._parser
-
-    def _set_parser(self, parser: Parser) -> None:
-        """Set the parser for this registry."""
-        if self._parser is not None:
-            err_msg = "A parser has already been set?!"
-            raise RuntimeError(err_msg)
-        structs.force_setattr(self, "_parser", parser)
-
-    def _discover_commands(self) -> None:
-        """Discover both project local as well as 3rd party commands."""
-        self._discover_entry_points_commands()
-        self._discover_local_commands()
-
-    def _discover_local_commands(self) -> None:
-        """Recursively discover and import command modules from tools/."""
-        tools_dir = self.parser.repo_root / "tools"
-        if not tools_dir.is_dir():
-            return
-
-        def import_commands(path: Path, package: str) -> None:
-            log.debug("Importing commands from %s with package %s", path, package)
-            for item in pkgutil.iter_modules([str(path)]):
-                try:
-                    if item.ispkg:
-                        # Recurse into subpackages
-                        import_commands(path / item.name, f"{package}.{item.name}")
-                    else:
-                        # Import the module which will trigger command registration
-                        importlib.import_module(f"{package}.{item.name}")
-                except ModuleNotFoundError as exc:
-                    # If we're not debugging imports, we don't want to raise an error
-                    if os.environ.get("TOOLR_DEBUG_IMPORTS", "0") == "1":
-                        raise exc from None
-                except ImportError as exc:
-                    # This is likely something wrong with the environment, raise it to the user
-                    raise exc from None
-
-        import_commands(tools_dir, "tools")
-
-    def _discover_entry_points_commands(self) -> None:
-        """Discover and import command modules from entry points."""
-        for entry_point in importlib.metadata.entry_points(group="toolr.tools"):
-            log.debug("Importing commands from entry point %s", entry_point.module)
-            entry_point.load()
-
-    def _build_parsers(self) -> None:
-        """Build the argument parsers from the registered command groups and commands."""
-        if self._built:
-            return
-
-        # Create a hierarchy of subparsers based on the dot notation paths
-        parser_hierarchy: dict[str, _SubParsersAction] = {}
-
-        collector = _get_command_group_storage()
-
-        for group in sorted(collector.values(), key=attrgetter("full_name")):
-            if group.parent == "tools":
-                # Top-level command group
-                parent_subparsers = self.parser.subparsers
-            else:
-                # Nested command group
-                if group.parent not in parser_hierarchy:
-                    # Parent doesn't exist yet - this shouldn't happen with our sorting
-                    err_msg = (
-                        f"Parent command group '{group.parent}' for command '{group.name}' "
-                        "does not exist. Please check your code."
-                    )
-                    raise ValueError(err_msg)
-                parent_subparsers = parser_hierarchy[group.parent]
-
-            # Create subparsers for this group
-            if TYPE_CHECKING:
-                assert parent_subparsers is not None
-
-            # Cast description to str to satisfy mypy since the formatter_class will know what to do with it
-            group_parser_description = cast("str", Markdown(group.description, style="argparse.text", justify="left"))
-            group_parser = parent_subparsers.add_parser(
-                group.name,
-                help=f"{group.title} - {group.description}",
-                description=group_parser_description,
-                formatter_class=self.parser.formatter_class,
-            )
-
-            # Create subparsers for this group's commands
-            subparsers_description = cast(
-                "str", Markdown(group.long_description or group.description, style="argparse.text", justify="left")
-            )
-            group_full_name = group.full_name
-            subparsers = group_parser.add_subparsers(
-                title=group.title,
-                description=subparsers_description,
-                dest=f"{group_full_name.replace('.', '_')}_command",
-            )
-
-            parser_hierarchy[group_full_name] = subparsers
-
-            # Now add all the pending commands to their respective groups
-            commands = group.get_commands()
-            for command_name in commands:
-                signature = get_signature(commands[command_name])
-                long_command_description = cast(
-                    "str", Markdown(signature.long_description, style="argparse.text", justify="left")
-                )
-                cmd_parser = subparsers.add_parser(
-                    command_name,
-                    help=signature.short_description,
-                    description=long_command_description,
-                    formatter_class=self.parser.formatter_class,
-                )
-                signature.setup_parser(cmd_parser)
-
-        structs.force_setattr(self, "_built", True)  # noqa: FBT003
-
-    def discover_and_build(self, parser: Parser | None = None) -> None:
-        """Discover all commands and build the parser hierarchy."""
-        if parser is not None:
-            self._set_parser(parser)
-        self._discover_commands()
-        self._build_parsers()
 
 
 def _get_command_group_storage() -> dict[str, CommandGroup]:
@@ -469,3 +335,11 @@ def command_group(
         long_description=long_description,
     )
     return group
+
+
+__all__ = [
+    "MANIFEST_SCHEMA_VERSION",
+    "CommandGroup",
+    "command",
+    "command_group",
+]

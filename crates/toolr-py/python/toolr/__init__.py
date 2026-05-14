@@ -21,9 +21,9 @@ except ImportError:
     __version__ = "0.0.0.not-installed"
 
 from toolr._context import Context
-from toolr._registry import MANIFEST_SCHEMA_VERSION
-from toolr._registry import command
-from toolr._registry import command_group
+from toolr._decorators import MANIFEST_SCHEMA_VERSION
+from toolr._decorators import command
+from toolr._decorators import command_group
 from toolr.build import BuildManifestError
 from toolr.build import BuildResult
 from toolr.build import build_manifest

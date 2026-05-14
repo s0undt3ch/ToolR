@@ -18,8 +18,8 @@ from typing import Any
 from typing import get_args
 from typing import get_origin
 
-from toolr._registry import MANIFEST_SCHEMA_VERSION
-from toolr._registry import _get_command_group_storage
+from toolr._decorators import MANIFEST_SCHEMA_VERSION
+from toolr._decorators import _get_command_group_storage
 from toolr.utils._signature import Arg
 from toolr.utils._signature import KwArg
 from toolr.utils._signature import VarArg
