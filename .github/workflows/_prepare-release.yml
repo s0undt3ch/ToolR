@@ -130,6 +130,30 @@ jobs:
         run: |
           toolr version bump --write --check-existing-tag ${{ inputs.release-version }}
 
+      - name: Load UNRELEASED.md into TOOLR_RELEASE_NOTES env var
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Strip HTML comments from UNRELEASED.md and expose the result
+          # to the subsequent cliff steps via `TOOLR_RELEASE_NOTES`.
+          # The cliff.toml body template reads that env var via Tera's
+          # `get_env` and renders the content under a `### Notes` heading
+          # in the per-version section. Using python for the comment
+          # strip handles multi-line comments, content alongside
+          # comments, and missing close tags robustly.
+          notes_file=UNRELEASED.md
+          if [ -s "$notes_file" ]; then
+            notes=$(python3 -c "import re,sys; sys.stdout.write(re.sub(r'<!--.*?-->', '', open('UNRELEASED.md').read(), flags=re.DOTALL).strip())")
+          else
+            notes=""
+          fi
+          # Multi-line-safe env-var write per GitHub Actions docs.
+          {
+            echo "TOOLR_RELEASE_NOTES<<TOOLR_RELEASE_NOTES_EOF"
+            echo "$notes"
+            echo "TOOLR_RELEASE_NOTES_EOF"
+          } >> "$GITHUB_ENV"
+
       - name: Generate changelog for GH release
         id: git-cliff
         uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
@@ -137,6 +161,8 @@ jobs:
           config: cliff.toml
           args: --unreleased --strip all
         env:
+          # TOOLR_RELEASE_NOTES is inherited from the previous step's
+          # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
           OUTPUT: .release-changes.md
           GITHUB_REPO: ${{ github.repository }}
 
@@ -169,7 +195,36 @@ jobs:
           config: cliff.toml
           args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
         env:
+          # TOOLR_RELEASE_NOTES is inherited from the loader step's
+          # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
           GITHUB_REPO: ${{ github.repository }}
+
+      - name: Reset UNRELEASED.md
+        shell: bash
+        run: |
+          # Restore the file to its steady-state empty form (just the
+          # HTML comment header) so the next release cycle starts fresh.
+          # The lines below must match the committed UNRELEASED.md
+          # exactly; if they drift, the post-release commit will show
+          # a spurious diff on the file. printf with explicit \n keeps
+          # the content free of any YAML/heredoc indentation surprises.
+          # The backticks below are literal Markdown back-quotes; the
+          # surrounding single-quotes intentionally suppress expansion.
+          # shellcheck disable=SC2016
+          printf '%s\n' \
+            '<!--' \
+            'UNRELEASED.md — Queued release notes for the next release.' \
+            '' \
+            "Append narrative entries here as PRs land. On release, the" \
+            '`_prepare-release.yml` workflow folds the content of this file' \
+            'into the `### Notes` subsection of both the GitHub release body' \
+            "and CHANGELOG.md (under the new version's heading), then resets" \
+            'this file to empty for the next cycle.' \
+            '' \
+            "Empty between releases is the steady-state — there's no header," \
+            'no scaffolding. Just write whatever should appear in the notes.' \
+            '-->' \
+            > UNRELEASED.md
 
       - name: Show Changes Diff
         shell: bash
