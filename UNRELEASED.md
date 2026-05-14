@@ -10,3 +10,224 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+This release lands the **Rust front-end rewrite** together with a
+**workspace split** and a **distribution-channel reshuffle**. The
+argparse-driven Python CLI is fully retired; the `toolr` command is
+now a native Rust binary, and the PyPI footprint splits into two
+packages so the CLI and the Python runtime can be installed
+independently.
+
+If you only invoke `toolr ...` from a project that already ships a
+`tools/` directory, the smallest migration is: install the new CLI
+binary, add `toolr-py` to `tools/pyproject.toml`, and move on. The
+sections below spell out every other place this rewrite is visible
+from the outside.
+
+## ⚠ Breaking changes
+
+### `python -m toolr` is gone
+
+- **What changed:** the `[project.scripts] toolr` console entry
+  point and `toolr/__main__.py` have been removed. The Python
+  package no longer ships a CLI at all — invoking `python -m toolr`
+  fails with `No module named toolr.__main__`.
+- **Migration:** install the new Rust CLI (via `pip install toolr`,
+  `install.sh`, mise, or a GitHub release archive — see below) and
+  invoke it as `toolr <args>`. The argument surface is unchanged;
+  only the entry point moved.
+
+### `pip install toolr` no longer makes `import toolr` work
+
+- **What changed:** PyPI now hosts **two** packages. `toolr` is a
+  binary-only wheel (`bindings = "bin"`) — it drops the `toolr`
+  executable into the wheel's `scripts/` directory and has **no
+  Python source**. The Python runtime (`import toolr`, `Context`,
+  `command_group`, `toolr.utils`, the `_rust_utils` extension)
+  lives in a separate package, `toolr-py`.
+- **Migration:** if your project's `tools/*.py` scripts do
+  `from toolr import ...`, declare `toolr-py` as a dependency of
+  the tools venv (typically in `tools/pyproject.toml`). The CLI
+  on `PATH` will then find it when it shells out to execute a
+  command. See the [installation
+  docs](https://toolr.readthedocs.io/en/latest/installation/) for
+  the full layout.
+
+### Install scripts moved from `dist/` to `installation/`
+
+- **What changed:** `dist/install.sh` → `installation/install.sh`
+  (and the same for `install.ps1`). Pinned
+  `raw.githubusercontent.com/.../main/dist/install.sh` URLs in
+  CI configs, READMEs, or provisioning scripts will 404.
+- **Migration:** update any pinned URLs to the new path:
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
+  ```
+
+  PowerShell users:
+
+  ```powershell
+  irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
+  ```
+
+### mise plugin URL changed (and the external repo is retired)
+
+- **What changed:** the mise plugin used to be hosted out-of-tree
+  at `s0undt3ch/mise-toolr`, and the in-repo copy lived at
+  `dist/mise-plugin`. It is now self-contained at
+  `installation/mise/` inside this repo, and the external
+  `mise-toolr` repository is retired. Both
+  `mise plugin add toolr https://github.com/s0undt3ch/mise-toolr`
+  and
+  `mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#dist/mise-plugin`
+  stop working.
+- **Migration:**
+
+  ```sh
+  mise plugin remove toolr   # if previously installed from the old paths
+  mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+  mise use --global toolr@latest
+  ```
+
+### The argparse Python CLI internals were deleted
+
+- **What changed:** `toolr/__main__.py`, `toolr/_parser.py`, and
+  `toolr/_registry.py` have been deleted. Anything that imported
+  `Parser`, `CommandRegistry`, or other internals from those
+  modules will break.
+- **Migration:** the user-facing decorator surface
+  (`command_group`, `@command`, `CommandGroup`,
+  `MANIFEST_SCHEMA_VERSION`) is preserved. It has moved to
+  `toolr._decorators` and is re-exported from the top-level
+  package, so the public form continues to work:
+
+  ```python
+  from toolr import command_group, command, CommandGroup
+  ```
+
+  If you were reaching into `toolr._registry` or `toolr._parser`
+  directly, there is no replacement — the Rust binary owns
+  manifest discovery, argument parsing, and dispatch now. The
+  Python runtime is invoked per-command via a JSON spec file
+  (`toolr._runner`).
+
+### `testing.py` import surface tightened
+
+- **What changed:** `toolr.testing` previously re-exposed a few
+  helpers that leaned on the now-deleted `_parser` /
+  `_registry` modules. Those have been replaced or removed as
+  part of the three-way test prune; the supported public surface
+  is whatever `toolr.testing` exports today.
+- **Migration:** if your test suite imported internal helpers
+  from `toolr.testing` and the import now fails, lean on the
+  documented `Context` / `command_group` factories or open an
+  issue describing the use case.
+
+### `rich-argparse` is no longer pulled in
+
+- **What changed:** `rich-argparse` was only used by the deleted
+  `_parser.py`. It has been dropped from `toolr-py`'s
+  dependencies. Anything that relied on toolr transitively
+  bringing it into the tools venv will need to declare it
+  explicitly.
+- **Migration:** add `rich-argparse` to your own
+  `pyproject.toml` if you depend on it for non-toolr code.
+
+## 🚀 New features
+
+- **Rust CLI binary.** `toolr` is now a native binary built from a
+  Cargo workspace. Manifest discovery, argument parsing, help
+  rendering, and command dispatch all run in Rust. Python is only
+  involved at execution time (per-command subprocess via
+  `toolr._runner`), so cold-start latency drops dramatically and
+  shell completion is no longer gated on Python import overhead.
+- **Three install channels, one source of truth.** The same
+  `toolr` binary ships through:
+    - `pip install toolr` (a new `py3-none-<plat>` binary wheel),
+    - `curl ... | sh` via `installation/install.sh`,
+    - mise via `installation/mise/`,
+    - GitHub Release archives (`toolr-<version>-<target>.tar.gz`,
+      with `.sha256` siblings).
+
+  All four are produced from the same workspace build and share a
+  single version number.
+- **`toolr-py` PyPI package.** A standalone wheel providing
+  `import toolr` for user tool scripts — declared in
+  `tools/pyproject.toml`, materialised into the tools venv by
+  `uv sync`. Decouples "what CLI you have on PATH" from "what
+  Python bindings your tool scripts pin."
+- **Python 3.14 support.** Added to the test matrix and the
+  `toolr-py` classifier list.
+- **Per-project `tools/` venv with uv.** The Rust binary
+  materialises (and, if needed, bootstraps) a `tools/` venv via
+  `uv` before each execute. Includes missing-dependency
+  diagnostics, manifest caching, and cache pruning. See the
+  rebuilt [installation /
+  usage](https://toolr.readthedocs.io/en/latest/) docs for the
+  end-to-end story.
+- **Native shell completion.** Generated by the Rust frontend
+  (clap-based), available for the usual shells.
+- **In-repo mise plugin smoke test.** The plugin lives at
+  `installation/mise/` and is covered by the same end-to-end
+  smoke harness as the other install channels.
+
+## 🗺 Migration cheat-sheet
+
+| If you used... | Replace with... |
+|---|---|
+| `python -m toolr ...` | `toolr ...` (install the CLI via pip / install.sh / mise / release archive) |
+| `pip install toolr` to get `import toolr` | `pip install toolr-py` (or add it to `tools/pyproject.toml`) |
+| `curl .../main/dist/install.sh \| sh` | `curl .../main/installation/install.sh \| sh` |
+| `irm .../main/dist/install.ps1 \| iex` | `irm .../main/installation/install.ps1 \| iex` |
+| `mise plugin add toolr https://github.com/s0undt3ch/mise-toolr` | `mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise` |
+| `mise plugin add toolr <repo>#dist/mise-plugin` | `mise plugin add toolr <repo>#installation/mise` |
+| `from toolr._registry import command_group` | `from toolr import command_group` |
+| `from toolr._registry import CommandGroup` | `from toolr import CommandGroup` |
+| `from toolr._parser import Parser` (and friends) | No replacement — the Rust binary owns parsing now |
+| Relying on `rich-argparse` via toolr | Depend on `rich-argparse` directly |
+
+## 🧱 Internal — for contributors
+
+These changes affect anyone hacking on toolr itself but are
+invisible to end users:
+
+- **Cargo workspace split.** Three crates under `crates/`:
+    - `toolr-core` — private library (no pyo3, no clap). Manifest
+      discovery, AST parsing, manifest cache, venv plumbing.
+    - `toolr` — the binary crate (`bindings = "bin"`). Depends on
+      `toolr-core` plus `clap` and `termimad`.
+    - `toolr-py` — the pyo3 dynlib + Python source
+      (`bindings = "pyo3"`, `module-name = "toolr.utils._rust_utils"`).
+- **Python source location.** Moved from `python/toolr/` to
+  `crates/toolr-py/python/toolr/`. The repo-root `python/`
+  directory is gone.
+- **Two PyPI wheels, one workspace version.** `toolr` and
+  `toolr-py` are released together at the same
+  `[workspace.package] version`. Both have their own
+  `pyproject.toml` and `cibuildwheel` matrices; CI fans the
+  wheel builds out per crate and reassembles them at release.
+- **Root `pyproject.toml` is dev-tooling only.** It retains
+  `[tool.ruff]`, `[tool.mypy]`, `[tool.pytest.ini_options]`,
+  `[tool.uv]`, `[tool.uv.workspace]`, `[dependency-groups]` —
+  no `[build-system]`, no `[project]`, no `[tool.maturin]`.
+- **No `python` feature flag.** The
+  `[features] python = ["pyo3"]` dance and the
+  `#[cfg(feature = "python")]` annotations are gone. pyo3 lives
+  exclusively in `crates/toolr-py/` as a non-optional
+  dependency.
+- **`tools/version.py` simplified.** Cargo.toml writes go
+  through `cargo set-version` (via cargo-edit) instead of
+  hand-rolled regex edits.
+- **`rich` is a direct `toolr-py` dependency.** Previously
+  transitive through `rich-argparse`.
+- **`UNRELEASED.md` → release notes pipeline.** The file you're
+  reading is now part of every release: `_prepare-release.yml`
+  strips this comment header, exports the body as
+  `TOOLR_RELEASE_NOTES`, and the cliff template renders it as
+  a `### Notes` section in both the GitHub release body and
+  `CHANGELOG.md` under the new version's heading.
+- **Dogfooding tools venv.** `tools/pyproject.toml` declares
+  `toolr-py` as a workspace dependency — the repo's own
+  `tools/*.py` scripts run against the same Python runtime
+  users get from PyPI.
