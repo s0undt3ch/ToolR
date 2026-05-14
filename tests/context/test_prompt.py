@@ -48,7 +48,12 @@ def test_prompt_string_with_choices(
 
 def test_prompt_password(ctx: Context, capfd: pytest.CaptureFixture[str]):
     """Test prompt with password type."""
-    with patch("rich.console.getpass", return_value="secret123"):
+    # rich 14.3+ removed the module-level `rich.console.getpass` symbol and
+    # now calls `getpass.getpass` lazily from inside `Console.input` via a
+    # local `import getpass`. Patching the stdlib symbol is robust across
+    # rich versions because attribute lookup on the freshly-imported module
+    # resolves to the patched object.
+    with patch("getpass.getpass", return_value="secret123"):
         stream_input = ""
         result = ctx._prompt(
             "Enter password",
