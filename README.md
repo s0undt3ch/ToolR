@@ -59,13 +59,16 @@ irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.ps1 | ie
 
 ### mise
 
+If you use [mise](https://mise.jdx.dev/) for tool version management:
+
 ```sh
-mise plugin add toolr https://github.com/s0undt3ch/ToolR.git --branch main
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise install toolr@latest
 mise use --global toolr@latest
 ```
 
-The plugin source lives in `toolr-mise/` (development) and
-`dist/mise-plugin/` (release-tracked).
+See the [mise installation guide](https://s0undt3ch.github.io/ToolR/installation/mise/)
+for `.mise.toml` integration and project-level pinning.
 
 ### pip
 

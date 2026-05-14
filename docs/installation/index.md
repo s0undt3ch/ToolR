@@ -31,12 +31,13 @@ irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.ps1 | ie
 ## mise
 
 ```sh
-mise plugin add toolr https://github.com/s0undt3ch/ToolR.git --branch main
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
 mise use --global toolr@latest
 ```
 
-The plugin source lives in `toolr-mise/` (development) and
-`dist/mise-plugin/` (release-tracked).
+The plugin source ships in this repo under `installation/mise/`. See
+the dedicated [mise](mise.md) page for `.mise.toml` / `.tool-versions`
+integration and task-runner examples.
 
 ## pip
 
