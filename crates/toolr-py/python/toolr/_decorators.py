@@ -26,7 +26,9 @@ from msgspec import field
 
 from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._docstrings import Docstring
-from toolr.utils._signature import F
+
+if TYPE_CHECKING:
+    from toolr.utils._signature import F
 
 log = logging.getLogger(__name__)
 
