@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/toolr-core", "crates/toolr"]
+members = ["crates/toolr-core", "crates/toolr", "crates/toolr-py"]
 resolver = "2"
 
 [workspace.package]

@@ -17,7 +17,7 @@ use email_address::EmailAddress;
 use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
-use _rust_utils::parser::{PathConstraints, SupportedType};
+use toolr_core::parser::{PathConstraints, SupportedType};
 
 /// Attach the right `value_parser` to a clap `Arg` for the given
 /// supported type. `Optional(T)` is unwrapped automatically — the

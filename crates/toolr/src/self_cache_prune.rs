@@ -9,7 +9,7 @@ use chrono::Utc;
 use clap::ArgMatches;
 use humansize::{BINARY, format_size};
 
-use _rust_utils::cache::{
+use toolr_core::cache::{
     CachedVenv, Candidate, Classification, PruneReason, classify_entries, enumerate_caches,
 };
 

@@ -15,8 +15,6 @@ pub mod project;
 pub mod third_party;
 pub mod uv;
 pub mod venv;
-#[cfg(feature = "python")]
-mod python_bindings;
 
 // Re-export the core functionality for direct Rust usage
 pub use command::{
@@ -24,12 +22,11 @@ pub use command::{
     CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError
 };
 
+#[cfg(windows)]
+pub use command::ThreadSafeHandle;
+
 // Re-export docstring parsing functionality
 pub use docstrings::{
     Docstring, Example, ParseError,
     SimpleDocstringParser
 };
-
-// Re-export Python modules
-#[cfg(feature = "python")]
-pub use python_bindings::_rust_utils;

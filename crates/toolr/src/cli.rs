@@ -17,7 +17,7 @@ fn help_styles() -> Styles {
         .error(AnsiColor::Red.on_default() | Effects::BOLD)
 }
 
-use _rust_utils::manifest::{ArgumentKind, Group, Manifest};
+use toolr_core::manifest::{ArgumentKind, Group, Manifest};
 
 const RESERVED_GROUPS: &[&str] = &["self", "project"];
 
@@ -388,7 +388,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
     root
 }
 
-fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
+fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
     // Run the docstring prose through the markdown→ANSI renderer
     // before handing it to clap. On a non-TTY (piped / captured help
     // text) the renderer returns plain text, so doc-snippet captures
@@ -428,7 +428,7 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
         let mut a = Arg::new(arg.name.clone()).help(crate::markdown::render(&arg.help));
         let is_optional_wrapper = matches!(
             arg.resolved_type,
-            Some(_rust_utils::parser::SupportedType::Optional(_))
+            Some(toolr_core::parser::SupportedType::Optional(_))
         );
         match arg.kind {
             ArgumentKind::Positional => {
@@ -497,7 +497,7 @@ fn build_user_command(cmd: &_rust_utils::manifest::Command) -> Command {
 /// clap's default behaviour alone."
 fn apply_arg_metadata(
     mut a: Arg,
-    meta: &_rust_utils::manifest::ArgMetadata,
+    meta: &toolr_core::manifest::ArgMetadata,
 ) -> Arg {
     for alias in &meta.aliases {
         if alias.is_empty() {

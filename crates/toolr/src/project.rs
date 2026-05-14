@@ -68,9 +68,9 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
     }
 
     // Auto-sync — same path as `toolr project deps sync`.
-    let consent = _rust_utils::uv::install::ConsentMode::from_env();
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
     let (resolved, uv) =
-        _rust_utils::project::ensure_venv_ready(&cwd, consent, /*force_sync=*/ true)?;
+        toolr_core::project::ensure_venv_ready(&cwd, consent, /*force_sync=*/ true)?;
     if !quiet {
         println!(
             "toolr: synced venv at {} using uv {}.{}.{}",
@@ -108,11 +108,11 @@ fn detect_requires_python() -> String {
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {
-    use _rust_utils::dynamic::rebuild_manifest_full;
+    use toolr_core::dynamic::rebuild_manifest_full;
 
     let cwd = std::env::current_dir()?;
-    let repo_root = _rust_utils::discovery::discover_project_root(&cwd)?;
-    let resolved = _rust_utils::venv::resolve_venv_path(&repo_root)?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+    let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
     let outcome = rebuild_manifest_full(&repo_root, &resolved.python, &resolved.venv_dir)?;
     for w in &outcome.warnings {
         eprintln!("toolr: warning: {w}");
@@ -128,8 +128,8 @@ fn manifest_rebuild() -> Result<ExitCode> {
 
 fn deps_sync() -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
-    let consent = _rust_utils::uv::install::ConsentMode::from_env();
-    let (resolved, uv) = _rust_utils::project::ensure_venv_ready(
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd, consent, /*force_sync=*/ true,
     )?;
     println!(
@@ -142,8 +142,8 @@ fn deps_sync() -> Result<ExitCode> {
 
 fn venv_path() -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
-    let repo_root = _rust_utils::discovery::discover_project_root(&cwd)?;
-    let resolved = _rust_utils::venv::resolve_venv_path(&repo_root)?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+    let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
     println!("{}", resolved.venv_dir.display());
     Ok(ExitCode::SUCCESS)
 }
@@ -152,8 +152,8 @@ fn venv_shell() -> Result<ExitCode> {
     use std::process::Command;
 
     let cwd = std::env::current_dir()?;
-    let consent = _rust_utils::uv::install::ConsentMode::from_env();
-    let (resolved, _) = _rust_utils::project::ensure_venv_ready(
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, _) = toolr_core::project::ensure_venv_ready(
         &cwd, consent, /*force_sync=*/ false,
     )?;
 

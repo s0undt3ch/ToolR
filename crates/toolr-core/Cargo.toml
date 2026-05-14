@@ -8,10 +8,6 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
-[lib]
-name = "_rust_utils"
-crate-type = ["cdylib", "rlib"]
-
 [dependencies]
 tokio.workspace = true
 serde.workspace = true
@@ -36,7 +32,6 @@ humansize.workspace = true
 log.workspace = true
 reqwest.workspace = true
 which.workspace = true
-pyo3 = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["handleapi", "namedpipeapi", "processthreadsapi", "winnt", "fileapi", "minwinbase"] }
@@ -46,7 +41,3 @@ tempfile.workspace = true
 anyhow.workspace = true
 libc.workspace = true
 assert_cmd = "2"
-
-[features]
-default = []
-python = ["pyo3"]

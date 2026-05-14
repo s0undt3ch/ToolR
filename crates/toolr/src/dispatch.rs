@@ -3,16 +3,16 @@ use std::process::ExitCode;
 
 use clap::ArgMatches;
 
-use _rust_utils::complete::{
+use toolr_core::complete::{
     InstallOptions, InstallOutcome, Shell as CompletionShell, completion_script, install_script,
     resolve_manifest_at_tab, serve_completions,
 };
-use _rust_utils::discovery::discover_project_root;
-use _rust_utils::execute::{
+use toolr_core::discovery::discover_project_root;
+use toolr_core::execute::{
     resolve_python, spawn_runner_capturing_stderr, wait_with_signals, write_spec_to_tempfile,
 };
-use _rust_utils::manifest::Manifest;
-use _rust_utils::venv::resolve_venv_path;
+use toolr_core::manifest::Manifest;
+use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{OutputOptions, build_spec};
 
@@ -87,7 +87,7 @@ pub fn dispatch(
     // Plan 8: touch last_used_at on every invocation against a cached venv.
     if let Some(venv) = &venv_dir {
         if let Some(cache_dir) = venv.parent() {
-            if let Err(e) = _rust_utils::cache::touch_last_used(cache_dir) {
+            if let Err(e) = toolr_core::cache::touch_last_used(cache_dir) {
                 eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
             }
         }
@@ -100,8 +100,8 @@ pub fn dispatch(
         .is_some_and(|v| !v.is_empty() && v != "0");
     if !skip_preflight {
         if let Some(venv) = &venv_dir {
-            if let Some(sp) = _rust_utils::deps_check::site_packages_dir(venv) {
-                if let Err(err) = _rust_utils::deps_check::check_imports(&sp, &cmd.imports) {
+            if let Some(sp) = toolr_core::deps_check::site_packages_dir(venv) {
+                if let Err(err) = toolr_core::deps_check::check_imports(&sp, &cmd.imports) {
                     eprintln!("toolr: {err}");
                     return Ok(ExitCode::from(78));
                 }
@@ -115,7 +115,7 @@ pub fn dispatch(
     let stderr_str = String::from_utf8_lossy(&stderr_bytes);
     use std::io::Write;
     if !status.success() {
-        if let Some(report) = _rust_utils::deps_check::intercept_import_error(&stderr_str) {
+        if let Some(report) = toolr_core::deps_check::intercept_import_error(&stderr_str) {
             std::io::stderr().write_all(report.render().as_bytes())?;
         } else {
             std::io::stderr().write_all(&stderr_bytes)?;
@@ -283,7 +283,7 @@ fn ensure_dynamic_layer_fresh(
     project_root: &std::path::Path,
     manifest: &Manifest,
 ) -> anyhow::Result<()> {
-    use _rust_utils::dynamic::{compute_dynamic_hash, rebuild_dynamic_only};
+    use toolr_core::dynamic::{compute_dynamic_hash, rebuild_dynamic_only};
 
     // Skip projects that don't have a tools venv configured.
     if !project_root.join("tools").join("pyproject.toml").is_file() {
@@ -329,11 +329,11 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
 
 fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
-    let root = _rust_utils::discovery::discover_project_root(&cwd)?;
+    let root = toolr_core::discovery::discover_project_root(&cwd)?;
     let tools = root.join("tools");
-    let manifest = _rust_utils::parser::build_static_manifest(&tools)?;
+    let manifest = toolr_core::parser::build_static_manifest(&tools)?;
     let path = tools.join(".toolr-manifest.json");
-    _rust_utils::manifest::write_manifest(&path, &manifest)?;
+    toolr_core::manifest::write_manifest(&path, &manifest)?;
     println!(
         "toolr: wrote {} groups / {} commands to {}",
         manifest.groups.len(),
@@ -344,11 +344,11 @@ fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
 }
 
 fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
-    let consent = _rust_utils::uv::install::ConsentMode {
+    let consent = toolr_core::uv::install::ConsentMode {
         yes_flag: true,
         auto_install_env: true,
     };
-    let uv = _rust_utils::uv::ensure_uv(consent)?;
+    let uv = toolr_core::uv::ensure_uv(consent)?;
     println!(
         "toolr: uv {}.{}.{} ready at {} (source: {:?})",
         uv.version.0,
@@ -390,8 +390,8 @@ fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {
 }
 
 #[allow(dead_code)]
-pub(crate) fn report_uv_error(err: &_rust_utils::uv::UvError) -> String {
-    use _rust_utils::uv::UvError;
+pub(crate) fn report_uv_error(err: &toolr_core::uv::UvError) -> String {
+    use toolr_core::uv::UvError;
     match err {
         UvError::UserRefusedInstall => {
             "toolr: uv is required for this command. Install from \

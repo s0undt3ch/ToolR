@@ -11,8 +11,8 @@ mod value_parsers;
 
 use std::process::ExitCode;
 
-use _rust_utils::discovery::discover_project_root;
-use _rust_utils::manifest::{Manifest, SCHEMA_VERSION, load_manifest};
+use toolr_core::discovery::discover_project_root;
+use toolr_core::manifest::{Manifest, SCHEMA_VERSION, load_manifest};
 
 fn main() -> ExitCode {
     match run() {
@@ -56,8 +56,8 @@ fn maybe_emit_cache_hint_from_argv() {
     let Ok(cache_root) = self_cache::resolve_cache_root() else {
         return;
     };
-    let cfg = _rust_utils::cache::HintConfig::default();
-    if let Ok(Some(msg)) = _rust_utils::cache::compute_hint(&cache_root, &cfg, chrono::Utc::now()) {
+    let cfg = toolr_core::cache::HintConfig::default();
+    if let Ok(Some(msg)) = toolr_core::cache::compute_hint(&cache_root, &cfg, chrono::Utc::now()) {
         eprintln!("{msg}");
     }
 }

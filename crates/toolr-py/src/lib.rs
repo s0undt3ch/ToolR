@@ -3,17 +3,17 @@ use std::path::PathBuf;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
-use crate::command::{
+use toolr_core::{
     CommandConfig, run_command_internal,
-    CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError
+    CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError,
+    SimpleDocstringParser,
 };
-use crate::docstrings::*;
 use pyo3::types::{PyDict, PyList};
 
 #[cfg(windows)]
 use std::os::windows::io::RawHandle;
 #[cfg(windows)]
-use crate::command::ThreadSafeHandle;
+use toolr_core::ThreadSafeHandle;
 
 // Define Python-specific exceptions
 pyo3::create_exception!(_command, CommandError, PyException);

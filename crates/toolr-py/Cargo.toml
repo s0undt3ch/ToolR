@@ -1,0 +1,20 @@
+[package]
+name = "toolr-py"
+description = "pyo3 bindings for toolr (Python extension module)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "_rust_utils"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+toolr-core = { path = "../toolr-core" }
+pyo3.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+libc.workspace = true

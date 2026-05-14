@@ -9,12 +9,12 @@ use chrono::{DateTime, Utc};
 use clap::ArgMatches;
 use humansize::{BINARY, format_size};
 
-use _rust_utils::cache::{CachedVenv, enumerate_caches};
+use toolr_core::cache::{CachedVenv, enumerate_caches};
 
 /// Resolve `$XDG_CACHE_HOME/toolr/`. Same precedence as
-/// `_rust_utils::uv::toolr_cache_dir` so writers and readers agree.
+/// `toolr_core::uv::toolr_cache_dir` so writers and readers agree.
 pub fn resolve_cache_root() -> Result<PathBuf> {
-    _rust_utils::uv::toolr_cache_dir()
+    toolr_core::uv::toolr_cache_dir()
         .ok_or_else(|| anyhow::anyhow!("could not resolve toolr cache directory"))
 }
 

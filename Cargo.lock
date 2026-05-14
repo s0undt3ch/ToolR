@@ -2331,7 +2331,6 @@ dependencies = [
  "libc",
  "log",
  "pep440_rs",
- "pyo3",
  "reqwest",
  "ruff_python_ast",
  "ruff_python_parser",
@@ -2346,6 +2345,15 @@ dependencies = [
  "walkdir",
  "which",
  "winapi",
+]
+
+[[package]]
+name = "toolr-py"
+version = "0.20.0"
+dependencies = [
+ "libc",
+ "pyo3",
+ "toolr-core",
 ]
 
 [[package]]
