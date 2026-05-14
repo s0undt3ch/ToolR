@@ -97,10 +97,10 @@ jobs:
       attestations: write
     with:
       display-name: Linux
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      pyproject-path: crates/toolr/pyproject.toml
+      wheel-kind: binary
 
   build-py-wheel-linux:
     name: Build (toolr-py wheel)
@@ -114,10 +114,10 @@ jobs:
       attestations: write
     with:
       display-name: Linux
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      pyproject-path: crates/toolr-py/pyproject.toml
+      wheel-kind: py
 
   build-binary-wheel-windows:
     name: Build (binary wheel)
@@ -131,10 +131,10 @@ jobs:
       attestations: write
     with:
       display-name: Windows
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      pyproject-path: crates/toolr/pyproject.toml
+      wheel-kind: binary
 
   build-py-wheel-windows:
     name: Build (toolr-py wheel)
@@ -148,10 +148,10 @@ jobs:
       attestations: write
     with:
       display-name: Windows
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      pyproject-path: crates/toolr-py/pyproject.toml
+      wheel-kind: py
 
   build-binary-wheel-macos:
     name: Build (binary wheel)
@@ -165,10 +165,10 @@ jobs:
       attestations: write
     with:
       display-name: macOS
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      pyproject-path: crates/toolr/pyproject.toml
+      wheel-kind: binary
 
   build-py-wheel-macos:
     name: Build (toolr-py wheel)
@@ -182,10 +182,10 @@ jobs:
       attestations: write
     with:
       display-name: macOS
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      pyproject-path: crates/toolr-py/pyproject.toml
+      wheel-kind: py
 
   publish-release:
     name: Publish Release
@@ -259,7 +259,12 @@ jobs:
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+          name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+          path: dist/
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
           path: dist/
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0

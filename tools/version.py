@@ -152,9 +152,19 @@ CARGO_TOML_PATH: Final[Path] = Path("Cargo.toml")
 # and comments (the toml stdlib `tomllib` is read-only; `tomlkit`/`tomli_w`
 # would be additional dependencies). The block-scoped regex is anchored on
 # `[workspace.package]` followed by a `version = "..."` assignment.
+#
+# Both anchors are pinned to start-of-line (with optional leading whitespace)
+# under `re.MULTILINE`, which rejects:
+#   * a commented section header like `# [workspace.package]`, and
+#   * a commented version line like `# version = "0.99.0"` inside the real
+#     `[workspace.package]` block.
+# The `[^\[]*?` between the two anchors stops the search at the next TOML
+# header so we never cross into a sibling table.
 _WORKSPACE_PACKAGE_VERSION_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?P<prefix>\[workspace\.package\][^\[]*?\bversion\s*=\s*\")(?P<version>[^\"]+)(?P<suffix>\")",
-    re.DOTALL,
+    r"(?P<prefix>^[ \t]*\[workspace\.package\][^\[]*?^[ \t]*version\s*=\s*\")"
+    r"(?P<version>[^\"]+)"
+    r"(?P<suffix>\")",
+    re.DOTALL | re.MULTILINE,
 )
 
 

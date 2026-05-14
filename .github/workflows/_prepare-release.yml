@@ -35,9 +35,12 @@ on:
       release-notes-filename:
         description: 'Name of the release notes file'
         value: ${{ jobs.prepare-release.outputs.release-notes-filename }}
-      release-tarball-name:
-        description: 'Name of the release tarball'
-        value: ${{ jobs.prepare-release.outputs.release-tarball-name }}
+      binary-release-tarball-name:
+        description: 'Name of the binary-wheel (toolr) sdist tarball'
+        value: ${{ jobs.prepare-release.outputs.binary-release-tarball-name }}
+      py-release-tarball-name:
+        description: 'Name of the toolr-py (pyo3) sdist tarball'
+        value: ${{ jobs.prepare-release.outputs.py-release-tarball-name }}
 
 permissions:
   contents: read
@@ -55,7 +58,8 @@ jobs:
       release-version: ${{ steps.bump-version.outputs.release-version }}
       release-patch-name: ${{ steps.bump-version.outputs.release-patch-name }}
       release-notes-filename: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
-      release-tarball-name: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
+      binary-release-tarball-name: ${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+      py-release-tarball-name: ${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -206,28 +210,59 @@ jobs:
         with:
           subject-path: toolr-${{ env.RELEASE_VERSION }}.patch
 
-      - name: Create Source Tarball
+      - name: Create Source Tarballs
         id: create-source-tarball
         shell: bash
+        # Build per-crate sdists. Each tarball unpacks to a single
+        # top-level dir containing the crate's `pyproject.toml`, the
+        # workspace `Cargo.toml`, `Cargo.lock`, and all sources needed
+        # to compile from that pyproject. cibuildwheel can then run
+        # against `package-dir: <unpacked-dir>` natively, without
+        # needing CIBW_CONFIG_FILE.
         run: |
-          uv build --sdist
+          rm -rf dist
+          uv build --sdist --package toolr --out-dir dist
+          uv build --sdist --package toolr-py --out-dir dist
+          binary_tarball=""
+          py_tarball=""
           for file in dist/*.tar.gz; do
-            echo "release-tarball-name=$(basename "$file")" >> "$GITHUB_OUTPUT"
-            break
+            name="$(basename "$file")"
+            case "$name" in
+              toolr-*.tar.gz) binary_tarball="$name" ;;
+              toolr_py-*.tar.gz) py_tarball="$name" ;;
+            esac
           done
+          if [ -z "$binary_tarball" ] || [ -z "$py_tarball" ]; then
+            echo "Failed to locate both sdists in dist/:"
+            ls -la dist/
+            exit 1
+          fi
+          echo "binary-release-tarball-name=$binary_tarball" >> "$GITHUB_OUTPUT"
+          echo "py-release-tarball-name=$py_tarball" >> "$GITHUB_OUTPUT"
 
-      - name: Upload Source Tarball Artifact
-        id: upload-source-tarball
+      - name: Upload Binary-Wheel Source Tarball Artifact
+        id: upload-binary-source-tarball
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: ${{ steps.create-source-tarball.outputs.release-tarball-name }}
-          path: dist/${{ steps.create-source-tarball.outputs.release-tarball-name }}
+          name: ${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+          path: dist/${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
           retention-days: 7
           if-no-files-found: error
 
-      - name: Attest source tarball artifact
+      - name: Upload toolr-py Source Tarball Artifact
+        id: upload-py-source-tarball
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
+          path: dist/${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attest source tarball artifacts
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         # Only run attestations on the main repository, not on forks
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
-          subject-path: dist/${{ steps.create-source-tarball.outputs.release-tarball-name }}
+          subject-path: |
+            dist/${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+            dist/${{ steps.create-source-tarball.outputs.py-release-tarball-name }}

@@ -19,10 +19,10 @@ on:
         required: true
         type: string
         description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
-      pyproject-path:
+      wheel-kind:
         required: true
         type: string
-        description: 'Path to the pyproject.toml that cibuildwheel should use as its CIBW_CONFIG_FILE.'
+        description: 'Label distinguishing the wheel build. Use "binary" for the toolr (bin) wheel and "py" for the toolr-py (pyo3) wheel. Embedded in the uploaded artifact name to avoid collisions between the two builds for identical python x platform combinations.'
 
 permissions:
   contents: read
@@ -75,10 +75,10 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ inputs.cache-seed }}|cibw|${{ inputs.pyproject-path }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', inputs.pyproject-path) }}
+          key: ${{ inputs.cache-seed }}|cibw|${{ inputs.wheel-kind }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', format('crates/toolr{0}/pyproject.toml', inputs.wheel-kind == 'py' && '-py' || '')) }}
           restore-keys: |
-            ${{ inputs.cache-seed }}|cibw|${{ inputs.pyproject-path }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|
-            ${{ inputs.cache-seed }}|cibw|${{ inputs.pyproject-path }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
+            ${{ inputs.cache-seed }}|cibw|${{ inputs.wheel-kind }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|
+            ${{ inputs.cache-seed }}|cibw|${{ inputs.wheel-kind }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
 
       - name: Build wheels
         uses: pypa/cibuildwheel@8d2b08b68458a16aeb24b64e68a09ab1c8e82084 # v3.4.1
@@ -89,10 +89,16 @@ jobs:
           CIBW_BUILD_VERBOSITY: 1
           # Pass Cargo cache to the container
           CIBW_ENVIRONMENT_LINUX: CARGO_HOME=/host$HOME/.cargo
-          # Select which pyproject.toml (binary-wheel vs pyo3 wheel)
-          # cibuildwheel reads for [tool.cibuildwheel] configuration.
-          CIBW_CONFIG_FILE: ${{ inputs.pyproject-path }}
         with:
+          # Each cibuildwheel job downloads its own per-crate sdist
+          # tarball (binary vs pyo3) into $GITHUB_WORKSPACE; cibuildwheel
+          # accepts a .tar.gz path here and auto-unpacks it, then builds
+          # using the crate's own `pyproject.toml` at the sdist root
+          # (which carries both `[project]` and `[tool.cibuildwheel]`).
+          # This is why we don't pass CIBW_CONFIG_FILE: the per-crate
+          # sdist already has the right config baked in. The two builds
+          # never share input files, so artifact-name collisions are
+          # impossible by construction.
           package-dir: ${{ inputs.release-tarball-name }}
 
       - name: Attest build provenance
@@ -104,5 +110,9 @@ jobs:
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cibw-wheel-${{ matrix.python }}-${{ matrix.platform.name }}
+          # `wheel-kind` must be embedded here: actions/upload-artifact@v4+
+          # rejects duplicate artifact names within a workflow run, and
+          # both the binary-wheel and pyo3-wheel matrices iterate over
+          # the same python x platform combinations.
+          name: cibw-wheel-${{ inputs.wheel-kind }}-${{ matrix.python }}-${{ matrix.platform.name }}
           path: wheelhouse/*.whl

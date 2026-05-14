@@ -100,3 +100,67 @@ def test_write_workspace_version_raises_when_missing(
     path = cargo_toml("[workspace]\nmembers = []\n")
     with pytest.raises(ValueError, match=r"workspace\.package"):
         _write_workspace_version(Version("0.21.0"), path)
+
+
+def test_commented_section_header_is_ignored(
+    cargo_toml: Callable[[str], Path],
+) -> None:
+    """A commented `# [workspace.package]` header (with a commented version line
+    beneath it) must not be picked up by the regex when a real
+    `[workspace.package]` block follows.
+    """
+    body = """\
+    [workspace]
+    members = ["crates/toolr-core", "crates/toolr", "crates/toolr-py"]
+    resolver = "2"
+
+    # [workspace.package]
+    # version = "0.99.0"
+
+    [workspace.package]
+    version = "0.20.0"
+    edition = "2021"
+    """
+    path = cargo_toml(body)
+    assert _read_workspace_version(path) == Version("0.20.0")
+
+    _write_workspace_version(Version("0.21.0"), path)
+    text = path.read_text(encoding="utf-8")
+    # The commented line must be untouched.
+    assert '# version = "0.99.0"' in text
+    # The real version must be updated.
+    assert _read_workspace_version(path) == Version("0.21.0")
+
+
+def test_commented_version_line_inside_real_section_is_ignored(
+    cargo_toml: Callable[[str], Path],
+) -> None:
+    """A commented `# version = "..."` line inside the real
+    `[workspace.package]` block must not be picked up; the live `version =`
+    line below must be the one matched.
+    """
+    body = """\
+    [workspace]
+    members = ["crates/toolr-core", "crates/toolr", "crates/toolr-py"]
+    resolver = "2"
+
+    [workspace.package]
+    # version = "0.99.0"
+    version = "0.20.0"
+    edition = "2021"
+    """
+    path = cargo_toml(body)
+    assert _read_workspace_version(path) == Version("0.20.0")
+
+    _write_workspace_version(Version("0.21.0"), path)
+    text = path.read_text(encoding="utf-8")
+    # Commented version line stays exactly as it was.
+    assert '# version = "0.99.0"' in text
+    # Live version was updated.
+    assert _read_workspace_version(path) == Version("0.21.0")
+    # And we did not produce two live `version = ...` lines.
+    live_version_lines = [
+        line for line in text.splitlines() if line.strip().startswith("version =") and not line.strip().startswith("#")
+    ]
+    assert len(live_version_lines) == 1
+    assert '"0.21.0"' in live_version_lines[0]
