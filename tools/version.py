@@ -44,13 +44,28 @@ def _set_workspace_version(ctx: Context, new_version: str) -> None:
         ctx.exit(ret.returncode)
 
 
+def _bump_patch(base: str) -> str:
+    """Return ``base`` with its patch component incremented by one.
+
+    Semver-wise, a pre-release of ``X.Y.Z`` (e.g. ``X.Y.Z-devN``) is *less
+    than* ``X.Y.Z``. ``cargo set-version`` (cargo-edit) refuses to write a
+    "smaller" version, so a dev version derived from the latest tag must
+    target the next patch release. This matches the ``setuptools-scm`` /
+    ``hatch-vcs`` convention of "pre-release of the NEXT patch release".
+    """
+    major, minor, patch = base.split(".")
+    return f"{major}.{minor}.{int(patch) + 1}"
+
+
 def _compute_dev_version(ctx: Context) -> str:
     """Compute a dev-version string from ``git describe``.
 
-    Output is the hyphenated form ``X.Y.Z-devN`` (a semver pre-release
-    identifier and also valid PEP 440 input). For pull-request builds we
-    append the commit SHA as semver build-metadata so concurrent PRs don't
-    collide on TestPyPI.
+    Output is the hyphenated form ``X.Y.(Z+1)-devN`` (a semver pre-release
+    identifier and also valid PEP 440 input). The patch component is
+    bumped relative to the latest tag so the result is strictly greater
+    than that tag — see :func:`_bump_patch` for why. For pull-request
+    builds we append the commit SHA as semver build-metadata so
+    concurrent PRs don't collide on TestPyPI.
     """
     ret = ctx.run(
         "git",
@@ -64,14 +79,15 @@ def _compute_dev_version(ctx: Context) -> str:
     )
     describe: str = ret.stdout.read().rstrip()  # type: ignore[assignment]
     if not describe:
-        # No matching tag in history — use the fallback base.
+        # No matching tag in history — use the fallback base. ``TODAY_VERSION``
+        # already ends in ``.0`` so the patch-bump yields ``.1``.
         ret = ctx.run("git", "rev-list", "--count", "HEAD", capture_output=True, stream_output=False)
         count: str = ret.stdout.read().rstrip() or "0"  # type: ignore[assignment]
-        return f"{TODAY_VERSION}-dev{count}"
+        return f"{_bump_patch(TODAY_VERSION)}-dev{count}"
     # Format: vX.Y.Z-N-gSHA  →  base=X.Y.Z, count=N, sha=gSHA
     base, count, sha = describe.split("-")
     base = base.lstrip("v")
-    version_str = f"{base}-dev{count}"
+    version_str = f"{_bump_patch(base)}-dev{count}"
     if os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request":
         version_str += f"+{sha}"
     return version_str

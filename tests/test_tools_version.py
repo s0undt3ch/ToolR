@@ -24,6 +24,7 @@ from unittest import mock
 
 import pytest
 from tools.version import TODAY_VERSION
+from tools.version import _bump_patch
 from tools.version import _compute_dev_version
 from tools.version import _read_workspace_version
 
@@ -115,12 +116,24 @@ def _ctx_with_run(run: _FakeRun) -> Any:
     return mock.Mock(run=run)
 
 
+def test_bump_patch() -> None:
+    """`_bump_patch` increments the patch component only."""
+    assert _bump_patch("0.11.1") == "0.11.2"
+    assert _bump_patch("0.20.0") == "0.20.1"
+    assert _bump_patch("1.2.9") == "1.2.10"
+
+
 def test_compute_dev_version_from_git_describe(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`git describe` returns ``v0.20.0-42-gabc1234`` → ``0.20.0-dev42``."""
+    """`git describe` returns ``v0.20.0-42-gabc1234`` → ``0.20.1-dev42``.
+
+    The patch is bumped relative to the tag base so the result is semver-greater
+    than the tag (cargo set-version refuses to "downgrade", and a pre-release of
+    the SAME version is semver-wise a downgrade).
+    """
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
     run = _FakeRun(["v0.20.0-42-gabc1234\n"])
     ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == "0.20.0-dev42"
+    assert _compute_dev_version(ctx) == "0.20.1-dev42"
 
 
 def test_compute_dev_version_pull_request_appends_sha(
@@ -130,15 +143,15 @@ def test_compute_dev_version_pull_request_appends_sha(
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     run = _FakeRun(["v0.11.0-7-gdeadbee\n"])
     ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == "0.11.0-dev7+gdeadbee"
+    assert _compute_dev_version(ctx) == "0.11.1-dev7+gdeadbee"
 
 
 def test_compute_dev_version_no_tags_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Empty `git describe` falls back to ``TODAY_VERSION-dev<count>``."""
+    """Empty `git describe` falls back to ``bump(TODAY_VERSION)-dev<count>``."""
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
     run = _FakeRun(["\n", "13\n"])
     ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == f"{TODAY_VERSION}-dev13"
+    assert _compute_dev_version(ctx) == f"{_bump_patch(TODAY_VERSION)}-dev13"
 
 
 def test_compute_dev_version_no_tags_and_no_commits(
@@ -148,4 +161,4 @@ def test_compute_dev_version_no_tags_and_no_commits(
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
     run = _FakeRun(["\n", "\n"])
     ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == f"{TODAY_VERSION}-dev0"
+    assert _compute_dev_version(ctx) == f"{_bump_patch(TODAY_VERSION)}-dev0"

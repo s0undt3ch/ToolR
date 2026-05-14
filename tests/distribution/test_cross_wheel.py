@@ -5,9 +5,17 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _workspace_version() -> str:
+    with (REPO_ROOT / "Cargo.toml").open("rb") as f:
+        return tomllib.load(f)["workspace"]["package"]["version"]
 
 
 @pytest.mark.distribution
@@ -46,7 +54,8 @@ def test_install_both_wheels_and_run_subcommand(
         text=True,
         check=True,
     )
-    assert "0.20.0" in result.stdout, f"unexpected --version output: {result.stdout!r}"
+    version = _workspace_version()
+    assert version in result.stdout, f"unexpected --version output: {result.stdout!r}"
 
     result = subprocess.run(  # noqa: S603
         [str(python), "-c", "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"],
@@ -54,4 +63,4 @@ def test_install_both_wheels_and_run_subcommand(
         text=True,
         check=True,
     )
-    assert "0.20.0" in result.stdout
+    assert version in result.stdout
