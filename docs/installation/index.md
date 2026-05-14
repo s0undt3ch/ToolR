@@ -15,7 +15,7 @@ that matches your environment.
 ## `curl ... | sh` (Linux + macOS)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
 Pass `--version X.Y.Z` after `sh -s --` to pin a specific release, or
@@ -25,7 +25,7 @@ is `$XDG_BIN_HOME` (or `~/.local/bin`).
 ## PowerShell (Windows)
 
 ```powershell
-irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.ps1 | iex
+irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
 ```
 
 ## mise
@@ -66,8 +66,8 @@ attestation produced by the GitHub-hosted release workflow. The
 automatically when the `gh` CLI is on PATH. To require verification:
 
 ```sh
-sh dist/install.sh --verify-attestation=require   # POSIX
-./dist/install.ps1 -VerifyAttestation require     # Windows
+sh installation/install.sh --verify-attestation=require   # POSIX
+./installation/install.ps1 -VerifyAttestation require     # Windows
 ```
 
 Or verify a downloaded archive manually:

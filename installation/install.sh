@@ -3,7 +3,7 @@
 # the `toolr` binary to $XDG_BIN_HOME (or ~/.local/bin).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 #   curl -fsSL ...install.sh | sh -s -- --version 1.2.3 --triple x86_64-apple-darwin
 set -eu
 

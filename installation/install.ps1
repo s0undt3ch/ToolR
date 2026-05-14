@@ -3,7 +3,7 @@
 Install the toolr binary from a GitHub release on Windows.
 
 .EXAMPLE
-iwr -useb https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
 #>
 [CmdletBinding()]
 param(

@@ -13,9 +13,9 @@ on:
     branches:
       - main
     paths:
-      - 'dist/install.sh'
-      - 'dist/install.ps1'
-      - 'dist/mise-plugin/**'
+      - 'installation/install.sh'
+      - 'installation/install.ps1'
+      - 'installation/mise/**'
       - '.github/workflows/install-smoke.yml'
 
 permissions:
@@ -48,12 +48,12 @@ jobs:
           # The runner image ships the `gh` CLI; --verify-attestation=require
           # fails the job if the SLSA attestation does not validate.
           if [ -n "${{ inputs.version }}" ]; then
-            sh ./dist/install.sh \
+            sh ./installation/install.sh \
               --version "${{ inputs.version }}" \
               --prefix "$RUNNER_TEMP/toolr-bin" \
               --verify-attestation=require
           else
-            sh ./dist/install.sh \
+            sh ./installation/install.sh \
               --prefix "$RUNNER_TEMP/toolr-bin" \
               --verify-attestation=require
           fi
@@ -78,9 +78,9 @@ jobs:
         run: |
           $prefix = Join-Path $env:RUNNER_TEMP "toolr-bin"
           if ("${{ inputs.version }}" -ne "") {
-            ./dist/install.ps1 -Version "${{ inputs.version }}" -Prefix $prefix -VerifyAttestation require
+            ./installation/install.ps1 -Version "${{ inputs.version }}" -Prefix $prefix -VerifyAttestation require
           } else {
-            ./dist/install.ps1 -Prefix $prefix -VerifyAttestation require
+            ./installation/install.ps1 -Prefix $prefix -VerifyAttestation require
           }
           & (Join-Path $prefix "toolr.exe") --version
 
@@ -157,7 +157,7 @@ jobs:
           install: false
       - name: Install plugin from local staging dir
         run: |
-          mise plugin add toolr "$PWD/dist/mise-plugin"
+          mise plugin add toolr "$PWD/installation/mise"
           if [ -n "${{ inputs.version }}" ]; then
             mise install "toolr@${{ inputs.version }}"
             mise exec "toolr@${{ inputs.version }}" -- toolr --version

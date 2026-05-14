@@ -8,13 +8,13 @@ end-to-end. For a full install matrix, see [Installation](installation/index.md)
 On Linux or macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
 On Windows (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/dist/install.ps1 | iex
+irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
 ```
 
 Verify:

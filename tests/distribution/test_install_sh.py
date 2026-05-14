@@ -1,4 +1,4 @@
-"""Tests for `dist/install.sh`."""
+"""Tests for `installation/install.sh`."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-INSTALL_SH = REPO_ROOT / "dist" / "install.sh"
+INSTALL_SH = REPO_ROOT / "installation" / "install.sh"
 
 
 def _sh() -> str:

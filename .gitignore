@@ -15,10 +15,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/*
-# Tracked distribution scaffolding (installers + mise plugin staging).
-!dist/install.sh
-!dist/install.ps1
-!dist/mise-plugin/
 downloads/
 eggs/
 .eggs/
