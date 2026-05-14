@@ -5,6 +5,7 @@ shellcheck = "latest"
 rust = { version = "stable" }
 uv = { version = "latest" }
 prek = "latest"
+"cargo:cargo-edit" = "latest"
 
 [env]
 _.python.venv = { path = ".venv", create = true, uv_create_args = ['--seed'] }
