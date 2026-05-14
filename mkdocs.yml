@@ -85,7 +85,7 @@ plugins:
       enable_inventory: true
       handlers:
         python:
-          paths: [python]
+          paths: [crates/toolr-py/python]
           options:
             allow_inspection: true
             show_source: true
@@ -121,5 +121,5 @@ markdown_extensions:
       base_path: .
 
 watch:
-  - python
+  - crates/toolr-py/python
   - docs
