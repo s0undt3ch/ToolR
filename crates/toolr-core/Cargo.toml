@@ -40,4 +40,4 @@ winapi = { version = "0.3", features = ["handleapi", "namedpipeapi", "processthr
 tempfile.workspace = true
 anyhow.workspace = true
 libc.workspace = true
-assert_cmd = "2"
+assert_cmd.workspace = true

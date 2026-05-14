@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from toolr._registry import _get_command_group_storage
+from toolr._decorators import _get_command_group_storage
 from toolr.build import build_manifest
 
 

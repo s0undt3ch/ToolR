@@ -2303,6 +2303,7 @@ name = "toolr"
 version = "0.20.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "chrono",
  "clap",
  "email_address",

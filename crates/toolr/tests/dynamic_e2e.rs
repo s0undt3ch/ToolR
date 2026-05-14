@@ -6,8 +6,8 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use _rust_utils::dynamic::rebuild_manifest_full;
-use _rust_utils::manifest::{Origin, load_manifest};
+use toolr_core::dynamic::rebuild_manifest_full;
+use toolr_core::manifest::{Origin, load_manifest};
 use tempfile::TempDir;
 
 fn write(path: &Path, contents: &str) {

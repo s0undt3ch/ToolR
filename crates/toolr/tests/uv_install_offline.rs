@@ -1,7 +1,7 @@
 //! Offline tests for the install path. The network-touching
 //! `perform_install` is exercised manually by the implementer in Task 4.3.
 
-use _rust_utils::uv::install::{asset_url, host_asset};
+use toolr_core::uv::install::{asset_url, host_asset};
 
 #[test]
 fn host_asset_present_on_supported_targets() {

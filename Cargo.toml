@@ -36,6 +36,7 @@ which = "6"
 clap = { version = "4", features = ["derive", "env", "string", "wrap_help"] }
 termimad = "0.34"
 pyo3 = { version = "0.27", features = ["extension-module"] }
+assert_cmd = "2"
 
 [profile.release]
 strip = true
