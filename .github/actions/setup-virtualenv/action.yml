@@ -71,6 +71,13 @@ runs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: .venv
+        # Cache key hashes the workspace lockfile AND every pyproject.toml
+        # that contributes to `uv sync --dev` — root pyproject (dev/docs
+        # groups), each crate's pyproject (toolr/toolr-py wheel manifests),
+        # and tools/pyproject.toml (dogfooding-tools workspace member). In
+        # practice the root uv.lock changes whenever any of those manifests
+        # do, but listing them explicitly catches the rare case where the
+        # lockfile happens not to re-resolve.
         key: >-
           venv|
           ${{ inputs.cache-seed }}|
@@ -78,7 +85,7 @@ runs:
           ${{ inputs.cache-prefix }}|
           ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
           ${{ steps.uv-version-checksum.outputs.version-sha256sum }}|
-          ${{ hashFiles('**/uv.lock') }}
+          ${{ hashFiles('uv.lock', 'pyproject.toml', 'crates/*/pyproject.toml', 'tools/pyproject.toml') }}
 
     - name: Install Python Dependencies
       shell: bash

@@ -4,8 +4,11 @@ version = "0.0.0"
 description = "Toolr dogfooding tools venv (in-repo only; not published)"
 requires-python = ">=3.11"
 dependencies = [
+    # `toolr-py` declares `packaging>=23.0` itself (it uses
+    # `packaging.version.Version` in its public surface), so
+    # `tools/version.py`'s `from packaging.version import Version`
+    # gets it transitively. No need to pin packaging here separately.
     "toolr-py",
-    "packaging>=25.0",
 ]
 
 [tool.uv.sources]
