@@ -187,6 +187,21 @@ jobs:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
 
+  build-binary-archive:
+    name: Build binary archives (per triple)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build-binary-archive.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      release-version: ${{ needs.prepare-release.outputs.release-version }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+
   publish-release:
     name: Publish Release
     environment: release
@@ -197,6 +212,7 @@ jobs:
       - build-py-wheel-windows
       - build-binary-wheel-macos
       - build-py-wheel-macos
+      - build-binary-archive
       - prepare-release
     runs-on: ubuntu-latest
     permissions:
@@ -267,6 +283,16 @@ jobs:
           name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
           path: dist/
 
+      # Per-triple binary archives (consumed by install.sh and the mise
+      # plugin). Downloaded to a separate path so they are NOT uploaded to
+      # PyPI — they are not Python distributions. They are still attached
+      # to the GitHub Release alongside the wheels and sdists.
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: toolr-archive-*
+          path: release-assets
+          merge-multiple: true
+
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: ${{ needs.prepare-release.outputs.release-notes-filename }}
@@ -282,7 +308,9 @@ jobs:
           tag_name: v${{ needs.prepare-release.outputs.release-version }}
           name: ${{ needs.prepare-release.outputs.release-version }}
           body_path: ${{ needs.prepare-release.outputs.release-notes-filename }}
-          files: dist/*
+          files: |
+            dist/*
+            release-assets/*
           draft: false
           prerelease: false
           make_latest: true

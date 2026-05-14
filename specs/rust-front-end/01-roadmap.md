@@ -246,7 +246,7 @@
 
 ### Plan 12: Cargo workspace split + Python frontend retirement
 
-- **Status:** 📝 Plan Drafted
+- **Status:** ✅ Done
 - **Design doc:** [14-workspace-split-design.md](./14-workspace-split-design.md)
 - **Plan doc:** [15-plan-12-workspace-split.md](./15-plan-12-workspace-split.md)
 - **Depends on:** Plan 9 (supersedes its Task 1 — the "maturin auto-ships
