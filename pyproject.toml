@@ -17,6 +17,7 @@ members = [
     "crates/toolr",
     "crates/toolr-py",
     "tests/support/3rd-party-pkg",
+    "tools",
 ]
 
 [tool.uv.sources]

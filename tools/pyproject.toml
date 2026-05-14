@@ -1,0 +1,11 @@
+[project]
+name = "toolr-tools"
+version = "0.0.0"
+description = "Toolr dogfooding tools venv (in-repo only; not published)"
+requires-python = ">=3.11"
+dependencies = [
+    "toolr-py",
+]
+
+[tool.uv.sources]
+toolr-py = { workspace = true }

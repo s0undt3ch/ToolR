@@ -11,6 +11,7 @@ members = [
     "3rd-party-pkg",
     "toolr",
     "toolr-py",
+    "toolr-tools",
 ]
 
 [manifest.dependency-groups]
@@ -1112,6 +1113,17 @@ requires-dist = [
     { name = "packaging", specifier = ">=23.0" },
     { name = "rich-argparse", specifier = ">=1.7.0" },
 ]
+
+[[package]]
+name = "toolr-tools"
+version = "0.0.0"
+source = { virtual = "tools" }
+dependencies = [
+    { name = "toolr-py" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "toolr-py", editable = "crates/toolr-py" }]
 
 [[package]]
 name = "typing-extensions"
