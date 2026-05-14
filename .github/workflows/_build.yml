@@ -19,6 +19,10 @@ on:
         required: true
         type: string
         description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
+      pyproject-path:
+        required: true
+        type: string
+        description: 'Path to the pyproject.toml that cibuildwheel should use as its CIBW_CONFIG_FILE.'
 
 permissions:
   contents: read
@@ -71,10 +75,10 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ inputs.cache-seed }}|cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', 'pyproject.toml') }}
+          key: ${{ inputs.cache-seed }}|cibw|${{ inputs.pyproject-path }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', inputs.pyproject-path) }}
           restore-keys: |
-            ${{ inputs.cache-seed }}|cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|
-            ${{ inputs.cache-seed }}|cibw|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
+            ${{ inputs.cache-seed }}|cibw|${{ inputs.pyproject-path }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|
+            ${{ inputs.cache-seed }}|cibw|${{ inputs.pyproject-path }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
 
       - name: Build wheels
         uses: pypa/cibuildwheel@8d2b08b68458a16aeb24b64e68a09ab1c8e82084 # v3.4.1
@@ -85,6 +89,9 @@ jobs:
           CIBW_BUILD_VERBOSITY: 1
           # Pass Cargo cache to the container
           CIBW_ENVIRONMENT_LINUX: CARGO_HOME=/host$HOME/.cargo
+          # Select which pyproject.toml (binary-wheel vs pyo3 wheel)
+          # cibuildwheel reads for [tool.cibuildwheel] configuration.
+          CIBW_CONFIG_FILE: ${{ inputs.pyproject-path }}
         with:
           package-dir: ${{ inputs.release-tarball-name }}
 

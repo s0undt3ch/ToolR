@@ -103,20 +103,38 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
-      - name: pip install toolr (latest from PyPI)
+      - name: Smoke `pip install toolr` (binary wheel)
         shell: bash
         run: |
-          python -m venv .venv
+          # `toolr` on PyPI is now the binary-only wheel produced from
+          # crates/toolr/pyproject.toml — it ships the `toolr` executable
+          # entry point but has no importable Python module.
+          python -m venv .venv-bin
           if [ "$RUNNER_OS" = "Windows" ]; then
-            .venv/Scripts/python.exe -m pip install --upgrade pip
-            .venv/Scripts/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
-            # `python -m toolr` was removed in this release; verify the
-            # wheel imports cleanly instead.
-            .venv/Scripts/python.exe -c "import toolr; print(toolr.__version__)"
+            .venv-bin/Scripts/python.exe -m pip install --upgrade pip
+            .venv-bin/Scripts/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-bin/Scripts/toolr.exe --version
           else
-            .venv/bin/python -m pip install --upgrade pip
-            .venv/bin/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
-            .venv/bin/python -c "import toolr; print(toolr.__version__)"
+            .venv-bin/bin/python -m pip install --upgrade pip
+            .venv-bin/bin/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-bin/bin/toolr --version
+          fi
+
+      - name: Smoke `pip install toolr-py` (pyo3 wheel)
+        shell: bash
+        run: |
+          # `toolr-py` on PyPI is the pyo3 bindings wheel produced from
+          # crates/toolr-py/pyproject.toml — installs as `import toolr`
+          # with the Rust extension at `toolr.utils._rust_utils`.
+          python -m venv .venv-py
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            .venv-py/Scripts/python.exe -m pip install --upgrade pip
+            .venv-py/Scripts/pip install toolr-py${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-py/Scripts/python.exe -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
+          else
+            .venv-py/bin/python -m pip install --upgrade pip
+            .venv-py/bin/pip install toolr-py${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-py/bin/python -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
           fi
 
   smoke-mise-plugin:

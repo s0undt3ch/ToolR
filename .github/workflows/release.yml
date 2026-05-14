@@ -85,8 +85,8 @@ jobs:
     secrets:
       github-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-  build-linux:
-    name: Build
+  build-binary-wheel-linux:
+    name: Build (binary wheel)
     needs:
       - prepare-ci
       - prepare-release
@@ -100,9 +100,27 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      pyproject-path: crates/toolr/pyproject.toml
 
-  build-windows:
-    name: Build
+  build-py-wheel-linux:
+    name: Build (toolr-py wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      display-name: Linux
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      pyproject-path: crates/toolr-py/pyproject.toml
+
+  build-binary-wheel-windows:
+    name: Build (binary wheel)
     needs:
       - prepare-ci
       - prepare-release
@@ -116,9 +134,27 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      pyproject-path: crates/toolr/pyproject.toml
 
-  build-macos:
-    name: Build
+  build-py-wheel-windows:
+    name: Build (toolr-py wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      display-name: Windows
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      pyproject-path: crates/toolr-py/pyproject.toml
+
+  build-binary-wheel-macos:
+    name: Build (binary wheel)
     needs:
       - prepare-ci
       - prepare-release
@@ -132,14 +168,35 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      pyproject-path: crates/toolr/pyproject.toml
+
+  build-py-wheel-macos:
+    name: Build (toolr-py wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      display-name: macOS
+      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      pyproject-path: crates/toolr-py/pyproject.toml
 
   publish-release:
     name: Publish Release
     environment: release
     needs:
-      - build-linux
-      - build-windows
-      - build-macos
+      - build-binary-wheel-linux
+      - build-py-wheel-linux
+      - build-binary-wheel-windows
+      - build-py-wheel-windows
+      - build-binary-wheel-macos
+      - build-py-wheel-macos
       - prepare-release
     runs-on: ubuntu-latest
     permissions:

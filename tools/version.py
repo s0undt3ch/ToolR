@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 from typing import Final
 
@@ -144,11 +146,45 @@ class ProjectVersion(Struct, frozen=True):
         return Version(version_str)
 
 
+CARGO_TOML_PATH: Final[Path] = Path("Cargo.toml")
+# Regex matches the `version = "..."` line inside the [workspace.package]
+# table. We deliberately avoid a full TOML round-trip to preserve formatting
+# and comments (the toml stdlib `tomllib` is read-only; `tomlkit`/`tomli_w`
+# would be additional dependencies). The block-scoped regex is anchored on
+# `[workspace.package]` followed by a `version = "..."` assignment.
+_WORKSPACE_PACKAGE_VERSION_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?P<prefix>\[workspace\.package\][^\[]*?\bversion\s*=\s*\")(?P<version>[^\"]+)(?P<suffix>\")",
+    re.DOTALL,
+)
+
+
+def _read_workspace_version(cargo_toml: Path = CARGO_TOML_PATH) -> Version:
+    """Read `[workspace.package] version` out of the root `Cargo.toml`."""
+    text = cargo_toml.read_text(encoding="utf-8")
+    match = _WORKSPACE_PACKAGE_VERSION_RE.search(text)
+    if match is None:
+        msg = f"Could not find [workspace.package] version in {cargo_toml}"
+        raise ValueError(msg)
+    return Version(match.group("version"))
+
+
+def _write_workspace_version(new_version: Version, cargo_toml: Path = CARGO_TOML_PATH) -> None:
+    """Update `[workspace.package] version` in the root `Cargo.toml`."""
+    text = cargo_toml.read_text(encoding="utf-8")
+    match = _WORKSPACE_PACKAGE_VERSION_RE.search(text)
+    if match is None:
+        msg = f"Could not find [workspace.package] version in {cargo_toml}"
+        raise ValueError(msg)
+    new_text = (
+        text[: match.start()] + match.group("prefix") + str(new_version) + match.group("suffix") + text[match.end() :]
+    )
+    cargo_toml.write_text(new_text, encoding="utf-8")
+
+
 def _current_version(ctx: Context) -> Version:
-    ret = ctx.run("uv", "version", "--short", capture_output=True, stream_output=False)
     try:
-        return Version(ret.stdout.read().rstrip())  # type: ignore[arg-type]
-    except InvalidVersion:
+        return _read_workspace_version()
+    except (FileNotFoundError, ValueError, InvalidVersion):
         return Version("0.0.0")
 
 
@@ -203,6 +239,7 @@ def bump(
             f.write(f"Releasing version: `{version}`\n")
 
     if write:
-        ctx.run("uv", "version", str(version))
+        ctx.info(f"Writing version {version} to [workspace.package] in {CARGO_TOML_PATH} ...")
+        _write_workspace_version(version)
 
     ctx.print(str(version))
