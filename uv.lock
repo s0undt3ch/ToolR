@@ -10,7 +10,30 @@ resolution-markers = [
 members = [
     "3rd-party-pkg",
     "toolr",
+    "toolr-py",
 ]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "3rd-party-pkg", editable = "tests/support/3rd-party-pkg" },
+    { name = "attrs", specifier = ">=25.3.0" },
+    { name = "coverage", specifier = ">=7.8.0" },
+    { name = "hypothesis", specifier = ">=6.0.0" },
+    { name = "pytest", specifier = ">=8.3.5" },
+    { name = "pytest-skip-markers", specifier = ">=1.5.2" },
+    { name = "pytest-subtests", specifier = ">=0.14.2" },
+    { name = "toolr-py", editable = "crates/toolr-py" },
+]
+docs = [
+    { name = "markdown-include", specifier = ">=0.8.1" },
+    { name = "mkdocs", specifier = ">=1.6.1" },
+    { name = "mkdocs-awesome-nav", specifier = ">=3.1.2" },
+    { name = "mkdocs-material", specifier = ">=9.6.16" },
+    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.30.0" },
+    { name = "ruff", specifier = ">=0.12.9" },
+    { name = "toolr-py", editable = "crates/toolr-py" },
+]
+tools = [{ name = "packaging", specifier = ">=25.0" }]
 
 [[package]]
 name = "3rd-party-pkg"
@@ -21,7 +44,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "toolr", editable = "." }]
+requires-dist = [{ name = "toolr", editable = "crates/toolr" }]
 
 [[package]]
 name = "annotated-types"
@@ -1072,34 +1095,15 @@ wheels = [
 
 [[package]]
 name = "toolr"
-version = "0.20.0"
-source = { editable = "." }
+source = { editable = "crates/toolr" }
+
+[[package]]
+name = "toolr-py"
+source = { editable = "crates/toolr-py" }
 dependencies = [
     { name = "msgspec" },
     { name = "packaging" },
     { name = "rich-argparse" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "3rd-party-pkg" },
-    { name = "attrs" },
-    { name = "coverage" },
-    { name = "hypothesis" },
-    { name = "pytest" },
-    { name = "pytest-skip-markers" },
-    { name = "pytest-subtests" },
-]
-docs = [
-    { name = "markdown-include" },
-    { name = "mkdocs" },
-    { name = "mkdocs-awesome-nav" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings", extra = ["python"] },
-    { name = "ruff" },
-]
-tools = [
-    { name = "packaging" },
 ]
 
 [package.metadata]
@@ -1108,26 +1112,6 @@ requires-dist = [
     { name = "packaging", specifier = ">=23.0" },
     { name = "rich-argparse", specifier = ">=1.7.0" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "3rd-party-pkg", editable = "tests/support/3rd-party-pkg" },
-    { name = "attrs", specifier = ">=25.3.0" },
-    { name = "coverage", specifier = ">=7.8.0" },
-    { name = "hypothesis", specifier = ">=6.0.0" },
-    { name = "pytest", specifier = ">=8.3.5" },
-    { name = "pytest-skip-markers", specifier = ">=1.5.2" },
-    { name = "pytest-subtests", specifier = ">=0.14.2" },
-]
-docs = [
-    { name = "markdown-include", specifier = ">=0.8.1" },
-    { name = "mkdocs", specifier = ">=1.6.1" },
-    { name = "mkdocs-awesome-nav", specifier = ">=3.1.2" },
-    { name = "mkdocs-material", specifier = ">=9.6.16" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=0.30.0" },
-    { name = "ruff", specifier = ">=0.12.9" },
-]
-tools = [{ name = "packaging", specifier = ">=25.0" }]
 
 [[package]]
 name = "typing-extensions"

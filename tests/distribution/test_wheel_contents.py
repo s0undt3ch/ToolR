@@ -70,6 +70,17 @@ def test_wheel_includes_rust_binary(built_wheel: Callable[[], Path]) -> None:
     assert candidates, f"expected `data/scripts/{binary_name}` inside wheel, got names: {names[:20]}..."
 
 
+@pytest.mark.xfail(
+    reason=(
+        "Workspace split (Plan 12 Stage 5+6): the root pyproject.toml no longer "
+        "exposes a [build-system], so `maturin build` from REPO_ROOT fails. The "
+        "Python package now ships in the separate `toolr-py` wheel, built from "
+        "`crates/toolr-py/pyproject.toml`. Stage 11 replaces this whole test "
+        "file with per-wheel shape assertions in test_toolr_wheel.py / "
+        "test_toolr_py_wheel.py."
+    ),
+    strict=False,
+)
 def test_wheel_includes_python_package(built_wheel: Callable[[], Path]) -> None:
     wheel = built_wheel()
     with zipfile.ZipFile(wheel) as zf:

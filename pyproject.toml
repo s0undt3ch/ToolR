@@ -1,76 +1,3 @@
-[build-system]
-requires = ["maturin>=1.7,<2.0"]
-build-backend = "maturin"
-
-[project]
-name = "toolr"
-version = "0.20.0"
-description = "In-project CLI tooling support"
-readme = "README.md"
-requires-python = ">=3.11,<3.15"
-license = {file = "LICENSE"}
-authors = [
-    {name = "Pedro Algarvio", email = "pedro@algarvio.me"},
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Programming Language :: Rust",
-    "License :: OSI Approved :: Apache Software License",
-]
-dependencies = [
-    "msgspec>=0.19.0",
-    "rich-argparse>=1.7.0",
-    "packaging>=23.0",
-]
-
-[project.urls]
-Repository = "https://github.com/s0undt3ch/ToolR"
-Documentation = "https://toolr.readthedocs.io"
-Issues = "https://github.com/s0undt3ch/ToolR/issues"
-Changelog = "https://github.com/s0undt3ch/ToolR/blob/main/CHANGELOG.md"
-
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch-vcs]
-# Use PEP 440 compatible versioning
-version-scheme = "pep440"
-
-[tool.maturin]
-features = []
-module-name = "toolr.utils._rust_utils"
-python-source = "crates/toolr-py/python"
-bindings = "pyo3"
-strip = true
-# Require Cargo.lock is up to date
-locked = true
-manifest-path = "crates/toolr-py/Cargo.toml"
-
-[tool.cibuildwheel]
-# Skip problematic or irrelevant platforms
-# Only include skip patterns that match enabled builds
-# Removed: pp* (no PyPy builds enabled), *-i686 (no 32-bit builds), *-s390x (no s390x builds)
-skip = "*-win32 *-musllinux_i686"
-# Explicitly define supported Python versions
-build = "cp311-* cp312-* cp313-*"
-
-[tool.cibuildwheel.linux]
-archs = ["x86_64", "aarch64"]
-
-[tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]
-
-[tool.cibuildwheel.windows]
-archs = ["AMD64"]
-
-[tool.cibuildwheel.environment]
-MACOSX_DEPLOYMENT_TARGET = "11.0"
-
 [tool.pytest.ini_options]
 testpaths = ["tests/"]
 python_files = "test_*.py"
@@ -85,18 +12,22 @@ addopts = [
 
 [tool.uv]
 
-[tool.uv.sources]
-toolr = { workspace = true }
-3rd-party-pkg = { workspace = true }
-
 [tool.uv.workspace]
 members = [
+    "crates/toolr",
+    "crates/toolr-py",
     "tests/support/3rd-party-pkg",
 ]
+
+[tool.uv.sources]
+toolr = { workspace = true }
+toolr-py = { workspace = true }
+"3rd-party-pkg" = { workspace = true }
 
 [dependency-groups]
 dev = [
     "3rd-party-pkg",
+    "toolr-py",
     "attrs>=25.3.0",
     "coverage>=7.8.0",
     "hypothesis>=6.0.0",
@@ -105,6 +36,7 @@ dev = [
     "pytest-subtests>=0.14.2",
 ]
 docs = [
+    "toolr-py",
     "markdown-include>=0.8.1",
     "mkdocs>=1.6.1",
     "mkdocs-awesome-nav>=3.1.2",
