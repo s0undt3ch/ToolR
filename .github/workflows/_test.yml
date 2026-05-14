@@ -99,13 +99,19 @@ jobs:
         run: |
           cargo install cargo-tarpaulin --target-dir target/coverage
 
+      # toolr-py is a pyo3 cdylib that imports Python symbols at runtime
+      # via the loaded CPython host. `cargo test`/`cargo tarpaulin` build a
+      # standalone test binary that has no host, so the Python symbols
+      # (Py_TYPE, PySequence_Check, etc.) are undefined at link time on
+      # Linux. The pyo3 wrapper is exercised by Python-side tests via the
+      # cdylib; excluding it here is the right call.
       - name: Tarpaulin Build
         run: |
-          cargo tarpaulin --no-run --target-dir target/coverage
+          cargo tarpaulin --no-run --workspace --exclude toolr-py --target-dir target/coverage
 
       - name: Run Rust Tests
         run: |
-          cargo tarpaulin --workspace --tests --skip-clean --timeout 120 --out Xml --out Json --output-dir target/coverage
+          cargo tarpaulin --workspace --exclude toolr-py --tests --skip-clean --timeout 120 --out Xml --out Json --output-dir target/coverage
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
