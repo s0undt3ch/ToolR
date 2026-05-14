@@ -50,15 +50,15 @@ serde = "1"
 
 def test_read_workspace_version(cargo_toml: Callable[[str], Path]) -> None:
     path = cargo_toml(CARGO_TOML_BASE)
-    assert _read_workspace_version(path) == Version("0.20.0")
+    assert _read_workspace_version(path) == "0.20.0"
 
 
 def test_write_workspace_version_updates_in_place(
     cargo_toml: Callable[[str], Path],
 ) -> None:
     path = cargo_toml(CARGO_TOML_BASE)
-    _write_workspace_version(Version("0.21.0"), path)
-    assert _read_workspace_version(path) == Version("0.21.0")
+    _write_workspace_version("0.21.0", path)
+    assert _read_workspace_version(path) == "0.21.0"
 
     # Confirm we did not touch unrelated keys around it.
     text = path.read_text(encoding="utf-8")
@@ -77,13 +77,13 @@ def test_write_workspace_version_does_not_match_project_version(
         '# [project]\n# version = "0.99.0"\n\n[workspace]',
     )
     path = cargo_toml(body)
-    _write_workspace_version(Version("0.21.0"), path)
+    _write_workspace_version("0.21.0", path)
 
     text = path.read_text(encoding="utf-8")
     # Comment is untouched.
     assert '# version = "0.99.0"' in text
     # Real workspace version was updated.
-    assert _read_workspace_version(path) == Version("0.21.0")
+    assert _read_workspace_version(path) == "0.21.0"
 
 
 def test_read_workspace_version_raises_when_missing(
@@ -99,7 +99,7 @@ def test_write_workspace_version_raises_when_missing(
 ) -> None:
     path = cargo_toml("[workspace]\nmembers = []\n")
     with pytest.raises(ValueError, match=r"workspace\.package"):
-        _write_workspace_version(Version("0.21.0"), path)
+        _write_workspace_version("0.21.0", path)
 
 
 def test_commented_section_header_is_ignored(
@@ -122,14 +122,14 @@ def test_commented_section_header_is_ignored(
     edition = "2021"
     """
     path = cargo_toml(body)
-    assert _read_workspace_version(path) == Version("0.20.0")
+    assert _read_workspace_version(path) == "0.20.0"
 
-    _write_workspace_version(Version("0.21.0"), path)
+    _write_workspace_version("0.21.0", path)
     text = path.read_text(encoding="utf-8")
     # The commented line must be untouched.
     assert '# version = "0.99.0"' in text
     # The real version must be updated.
-    assert _read_workspace_version(path) == Version("0.21.0")
+    assert _read_workspace_version(path) == "0.21.0"
 
 
 def test_commented_version_line_inside_real_section_is_ignored(
@@ -150,17 +150,34 @@ def test_commented_version_line_inside_real_section_is_ignored(
     edition = "2021"
     """
     path = cargo_toml(body)
-    assert _read_workspace_version(path) == Version("0.20.0")
+    assert _read_workspace_version(path) == "0.20.0"
 
-    _write_workspace_version(Version("0.21.0"), path)
+    _write_workspace_version("0.21.0", path)
     text = path.read_text(encoding="utf-8")
     # Commented version line stays exactly as it was.
     assert '# version = "0.99.0"' in text
     # Live version was updated.
-    assert _read_workspace_version(path) == Version("0.21.0")
+    assert _read_workspace_version(path) == "0.21.0"
     # And we did not produce two live `version = ...` lines.
     live_version_lines = [
         line for line in text.splitlines() if line.strip().startswith("version =") and not line.strip().startswith("#")
     ]
     assert len(live_version_lines) == 1
     assert '"0.21.0"' in live_version_lines[0]
+
+
+def test_write_workspace_version_preserves_hyphenated_dev_version(
+    cargo_toml: Callable[[str], Path],
+) -> None:
+    """Hyphenated dev versions (semver pre-release form) must round-trip
+    verbatim — packaging.Version would normalize `0.11.0-dev42` to
+    `0.11.0.dev42`, which cargo then rejects.
+    """
+    path = cargo_toml(CARGO_TOML_BASE)
+    _write_workspace_version("0.11.0-dev42", path)
+    # The literal hyphenated form must end up in the file.
+    text = path.read_text(encoding="utf-8")
+    assert 'version = "0.11.0-dev42"' in text
+    assert _read_workspace_version(path) == "0.11.0-dev42"
+    # And it still parses as a valid PEP 440 version (normalized internally).
+    assert Version(_read_workspace_version(path)) == Version("0.11.0.dev42")

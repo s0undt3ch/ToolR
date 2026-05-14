@@ -18,7 +18,10 @@ from toolr import Context
 from toolr import arg
 from toolr import command_group
 
-TODAY_VERSION: Final[str] = datetime.now(UTC).date().strftime("%y.%-m.0")
+_NOW: Final[datetime] = datetime.now(UTC)
+# Avoid GNU-only strftime extensions (e.g. `%-m`) — Windows' C runtime rejects
+# them, which breaks module import (and pytest collection) on Windows.
+TODAY_VERSION: Final[str] = f"{_NOW.year % 100}.{_NOW.month}.0"
 VERSION_REGEX = r"v?[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,4}"
 
 group = command_group("version", "Versioning utilities", docstring=__doc__)
@@ -139,11 +142,23 @@ class ProjectVersion(Struct, frozen=True):
 
     @property
     def next_dev_version(self) -> Version:
-        """The next development version."""
-        version_str = f"{self.version}.dev{self.distance_to_latest_tag}"
+        """The next development version, in normalized PEP 440 form."""
+        return Version(self.next_dev_version_string)
+
+    @property
+    def next_dev_version_string(self) -> str:
+        """The next development version, as a string valid for both semver and PEP 440.
+
+        Cargo enforces semver and rejects PEP 440's `.devN` suffix (e.g.
+        `0.11.0.dev42`). The hyphenated form `0.11.0-dev42` is valid both as
+        a semver pre-release identifier and as PEP 440 input (which would
+        normalize internally to `0.11.0.dev42`). We return the hyphenated
+        form so callers writing to Cargo.toml get a value cargo accepts.
+        """
+        version_str = f"{self.version}-dev{self.distance_to_latest_tag}"
         if os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request":
             version_str += f"+{self.short_commit_hash}"
-        return Version(version_str)
+        return version_str
 
 
 CARGO_TOML_PATH: Final[Path] = Path("Cargo.toml")
@@ -168,40 +183,62 @@ _WORKSPACE_PACKAGE_VERSION_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-def _read_workspace_version(cargo_toml: Path = CARGO_TOML_PATH) -> Version:
-    """Read `[workspace.package] version` out of the root `Cargo.toml`."""
+def _read_workspace_version(cargo_toml: Path = CARGO_TOML_PATH) -> str:
+    """Read `[workspace.package] version` out of the root `Cargo.toml`.
+
+    Returns the raw string from the manifest (not a `packaging.Version`) so
+    that callers writing it back round-trip exactly the form cargo wrote
+    (cargo / semver accepts hyphenated pre-release identifiers like
+    `0.11.0-dev42` which `packaging.Version` would normalize to
+    `0.11.0.dev42` — a form cargo then rejects).
+    """
     text = cargo_toml.read_text(encoding="utf-8")
     match = _WORKSPACE_PACKAGE_VERSION_RE.search(text)
     if match is None:
         msg = f"Could not find [workspace.package] version in {cargo_toml}"
         raise ValueError(msg)
-    return Version(match.group("version"))
+    return match.group("version")
 
 
-def _write_workspace_version(new_version: Version, cargo_toml: Path = CARGO_TOML_PATH) -> None:
-    """Update `[workspace.package] version` in the root `Cargo.toml`."""
+def _write_workspace_version(new_version: str, cargo_toml: Path = CARGO_TOML_PATH) -> None:
+    """Update `[workspace.package] version` in the root `Cargo.toml`.
+
+    `new_version` is written verbatim — callers are responsible for passing
+    a string that is valid for both semver (so cargo accepts it) and PEP 440
+    (so maturin/pip accept it). See `_version_str_for_cargo` for the
+    validation wrapper used by `bump()`.
+    """
     text = cargo_toml.read_text(encoding="utf-8")
     match = _WORKSPACE_PACKAGE_VERSION_RE.search(text)
     if match is None:
         msg = f"Could not find [workspace.package] version in {cargo_toml}"
         raise ValueError(msg)
-    new_text = (
-        text[: match.start()] + match.group("prefix") + str(new_version) + match.group("suffix") + text[match.end() :]
-    )
+    new_text = text[: match.start()] + match.group("prefix") + new_version + match.group("suffix") + text[match.end() :]
     cargo_toml.write_text(new_text, encoding="utf-8")
 
 
-def _current_version(ctx: Context) -> Version:
+def _version_str_for_cargo(version_input: str) -> str:
+    """Validate `version_input` as PEP 440 and return the original string.
+
+    We deliberately do NOT round-trip through `str(Version(...))` because that
+    normalizes `0.11.0-dev42` (semver-acceptable) to `0.11.0.dev42`
+    (semver-broken). Callers should write the original input to Cargo.toml.
+    """
+    Version(version_input)  # raises InvalidVersion on bad input
+    return version_input
+
+
+def _current_version(ctx: Context) -> str:
     try:
         return _read_workspace_version()
     except (FileNotFoundError, ValueError, InvalidVersion):
-        return Version("0.0.0")
+        return "0.0.0"
 
 
 @group.command
 def current(ctx: Context) -> None:
     """Get the current version."""
-    ctx.print(str(_current_version(ctx)))
+    ctx.print(_current_version(ctx))
 
 
 @group.command
@@ -220,36 +257,42 @@ def bump(
         write: Whether to write the version to the file.
     """
     if new_version is None:
-        version = ProjectVersion.discover(ctx).next_dev_version
+        version_str = ProjectVersion.discover(ctx).next_dev_version_string
     else:
-        version = Version(new_version)
+        version_str = new_version
+
+    # Validate (raises InvalidVersion on bad input) and keep the original
+    # string — we must NOT round-trip through packaging.Version's normalized
+    # form, which would corrupt hyphenated dev versions like `0.11.0-dev42`
+    # into `0.11.0.dev42` (which cargo then rejects).
+    version_str = _version_str_for_cargo(version_str)
 
     if check_existing_tag:
-        ret = ctx.run("git", "tag", "-v", str(version), capture_output=True, stream_output=False)
+        ret = ctx.run("git", "tag", "-v", version_str, capture_output=True, stream_output=False)
         if ret.returncode == 0:
-            ctx.error(f"Tag {version} already exists")
+            ctx.error(f"Tag {version_str} already exists")
             ctx.exit(1)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         ctx.info("Writing release-version and release-patch-name to GitHub output file ...")
         with open(github_output, "a") as f:
-            f.write(f"release-version={version}\n")
-            f.write(f"release-patch-name=toolr-{version}.patch\n")
+            f.write(f"release-version={version_str}\n")
+            f.write(f"release-patch-name=toolr-{version_str}.patch\n")
 
     github_env = os.environ.get("GITHUB_ENV")
     if github_env:
         ctx.info("Writing RELEASE_VERSION to GitHub environment file ...")
         with open(github_env, "a") as f:
-            f.write(f"RELEASE_VERSION={version}\n")
+            f.write(f"RELEASE_VERSION={version_str}\n")
 
     github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if github_step_summary:
         with open(github_step_summary, "a") as f:
-            f.write(f"Releasing version: `{version}`\n")
+            f.write(f"Releasing version: `{version_str}`\n")
 
     if write:
-        ctx.info(f"Writing version {version} to [workspace.package] in {CARGO_TOML_PATH} ...")
-        _write_workspace_version(version)
+        ctx.info(f"Writing version {version_str} to [workspace.package] in {CARGO_TOML_PATH} ...")
+        _write_workspace_version(version_str)
 
-    ctx.print(str(version))
+    ctx.print(version_str)
