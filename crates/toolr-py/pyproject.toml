@@ -42,6 +42,13 @@ features = []
 strip = true
 # Require Cargo.lock is up to date
 locked = true
+# The python-source packager would otherwise include any local
+# __pycache__/ directories sitting next to the .py files (left over
+# from contributor-side `python -c "import toolr"` runs). pip
+# recompiles bytecode on install — shipping precompiled .pyc files
+# inflates the wheel by ~150 KB for no benefit and pins them to the
+# building interpreter's tag.
+exclude = ["**/__pycache__/**", "**/*.pyc"]
 
 [tool.cibuildwheel]
 # Skip problematic or irrelevant platforms
