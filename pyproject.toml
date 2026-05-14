@@ -2,6 +2,9 @@
 testpaths = ["tests/"]
 python_files = "test_*.py"
 junit_family = "xunit2"
+markers = [
+    "distribution: tests that build/install real wheels (slow; opt-in)",
+]
 addopts = [
   "-ra",
   "-s",
