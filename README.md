@@ -38,10 +38,25 @@ Extend ToolR's functionality by installing packages that provide additional comm
 
 ## Installation
 
-`toolr` ships as a single self-contained binary. Choose the install
-method that matches your environment:
+`toolr` ships in two complementary PyPI packages:
 
-### `curl ... | sh` (Linux + macOS)
+- **`toolr`** — the Rust CLI binary you run as `toolr` from the
+  shell. Installs via pip, curl, mise, or a release archive. No
+  Python source, no `import toolr`.
+- **`toolr-py`** — the Python runtime your `tools/*.py` scripts
+  import (`from toolr import Context, command_group`). Provides the
+  `toolr` import name and the `_rust_utils` extension module the
+  framework runs under the hood.
+
+For a typical project you'll want **both**, in different venvs: the
+CLI installed once on PATH, and `toolr-py` added to your
+`tools/pyproject.toml` so it's resolved into your tools venv.
+
+### Install the CLI binary (`toolr`)
+
+Pick whichever method matches your environment.
+
+#### `curl ... | sh` (Linux + macOS)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
@@ -51,13 +66,13 @@ Pass `--version X.Y.Z` after `sh -s --` to pin a specific release, or
 `--prefix /custom/bin` to choose an install directory. Default prefix
 is `$XDG_BIN_HOME` (or `~/.local/bin`).
 
-### PowerShell (Windows)
+#### PowerShell (Windows)
 
 ```powershell
 irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
 ```
 
-### mise
+#### mise
 
 If you use [mise](https://mise.jdx.dev/) for tool version management:
 
@@ -70,24 +85,38 @@ mise use --global toolr@latest
 See the [mise installation guide](https://s0undt3ch.github.io/ToolR/installation/mise/)
 for `.mise.toml` integration and project-level pinning.
 
-### pip
+#### pip
 
 ```sh
 pip install toolr
 ```
 
-The wheel installs the Python runtime support — the `toolr` package and
-the `_rust_utils` extension module — needed by `tools/*.py` commands at
-execute time. The `toolr` **binary** is not bundled in the wheel; install
-it via one of the methods above (install.sh, mise, or release archive).
-The package no longer exposes a `python -m toolr` entry point.
+The `toolr` wheel ships only the Rust CLI binary; there's no Python
+source and no `import toolr` inside it. `python -m toolr` was removed
+in the rust front-end rewrite — use the `toolr` executable instead.
 
-### GitHub release archives
+#### GitHub release archives
 
 Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for
 Windows) from <https://github.com/s0undt3ch/ToolR/releases> and
 extract it onto `$PATH` manually. Each archive ships with a `.sha256`
 sibling for verification.
+
+### Enable `import toolr` in your tool scripts (`toolr-py`)
+
+Add `toolr-py` to your project's `tools/pyproject.toml` so the
+import surface is available when toolr executes your commands:
+
+```toml
+# tools/pyproject.toml
+[project]
+dependencies = ["toolr-py"]
+```
+
+`toolr-py` provides the `toolr` package (`Context`, `command_group`,
+helpers in `toolr.utils`, …) and the `_rust_utils` extension module.
+See [docs/installation/index.md](https://s0undt3ch.github.io/ToolR/installation/)
+for the longer write-up.
 
 ### Supply-chain verification (SLSA attestations)
 
