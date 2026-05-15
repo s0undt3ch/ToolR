@@ -78,7 +78,7 @@ runs:
           ${{ inputs.cache-prefix }}|
           ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
           ${{ steps.uv-version-checksum.outputs.version-sha256sum }}|
-          ${{ hashFiles('**/uv.lock') }}
+          ${{ hashFiles('**/uv.lock', '**/pyproject.toml') }}
 
     - name: Install Python Dependencies
       shell: bash
