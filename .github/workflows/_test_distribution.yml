@@ -1,0 +1,84 @@
+name: Test Distribution
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+        description: 'Operating system to run tests on'
+      display-name:
+        required: true
+        type: string
+        description: 'Display name for the test job'
+      cache-seed:
+        required: true
+        type: string
+        description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
+      artifact-pattern:
+        required: true
+        type: string
+        description: 'Pattern for artifact names to download andtest'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ inputs.display-name }}
+    runs-on: ${{ inputs.os }}
+    permissions:
+      id-token: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: test-dist
+          cache-seed: ${{ inputs.cache-seed }}
+          python-version: ""
+
+      - name: Download platform wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ${{ inputs.artifact-pattern }}
+          path: wheelhouse/
+          merge-multiple: true
+
+      - name: List downloaded wheels
+        shell: bash
+        run: ls -la wheelhouse/
+
+      - name: Run Distribution Tests
+        env:
+          PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
+          COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
+        run: |
+          uv run coverage run -m pytest -ra -s -v --color=yes --junitxml=junit-dist-${{ inputs.os }}.xml tests/distribution/
+
+      - name: Report Python Coverage
+        run: |
+          uv run coverage combine || true
+          uv run coverage xml
+          uv run coverage report
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          # Use OpenID Connect for secure authentication (no token needed)
+          use_oidc: true
+          flags: ${{ inputs.os }}
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
+        with:
+          # Use OpenID Connect for secure authentication (no token needed)
+          use_oidc: true
+          flags: ${{ inputs.os }}

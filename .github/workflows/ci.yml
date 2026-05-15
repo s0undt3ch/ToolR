@@ -268,61 +268,53 @@ jobs:
       id-token: write
       attestations: write
 
-  distribution-tests:
-    name: Distribution tests (${{ matrix.platform }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            artifact-pattern: cibw-wheel-*-*linux*
-          - os: macos-latest
-            platform: macos
-            artifact-pattern: cibw-wheel-*-*macosx*
-          - os: windows-latest
-            platform: windows
-            artifact-pattern: cibw-wheel-*-*win*
-    runs-on: ${{ matrix.os }}
+  test-distribution-linux:
+    name: Test
     needs:
       - prepare-ci
-      - build-binary-wheel-linux
-      - build-binary-wheel-windows
-      - build-binary-wheel-macos
       - build-py-wheel-linux
-      - build-py-wheel-windows
-      - build-py-wheel-macos
+      - build-binary-wheel-linux
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: ubuntu-latest
+      display-name: Linux
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*linux*
     permissions:
       contents: read
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
-        with:
-          egress-policy: audit
+      id-token: write
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+  test-distribution-macos:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-py-wheel-macos
+      - build-binary-wheel-macos
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: macos-latest
+      display-name: macOS
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*macosx*
+    permissions:
+      contents: read
+      id-token: write
 
-      - name: Setup Virtual Environment
-        uses: ./.github/actions/setup-virtualenv
-        with:
-          cache-prefix: dist-tests-${{ matrix.platform }}
-          cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-          python-version: ""
-
-      - name: Download platform wheels
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: ${{ matrix.artifact-pattern }}
-          path: wheelhouse/
-          merge-multiple: true
-
-      - name: List downloaded wheels
-        shell: bash
-        run: ls -la wheelhouse/
-
-      - name: Run distribution tests
-        shell: bash
-        run: uv run pytest tests/distribution/ -v
+  test-distribution-windows:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-py-wheel-windows
+      - build-binary-wheel-windows
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: windows-latest
+      display-name: Windows
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*win*
+    permissions:
+      contents: read
+      id-token: write
 
   docs:
     name: Publish Docs
@@ -381,7 +373,9 @@ jobs:
       - build-py-wheel-windows
       - build-binary-wheel-macos
       - build-py-wheel-macos
-      - distribution-tests
+      - test-distribution-linux
+      - test-distribution-windows
+      - test-distribution-macos
     runs-on: ubuntu-latest
     permissions:
       id-token: write
