@@ -1106,11 +1106,15 @@ name = "toolr-tools"
 version = "0.0.0"
 source = { virtual = "tools" }
 dependencies = [
+    { name = "packaging" },
     { name = "toolr-py" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "toolr-py", editable = "crates/toolr-py" }]
+requires-dist = [
+    { name = "packaging", specifier = ">=25.0" },
+    { name = "toolr-py", editable = "crates/toolr-py" },
+]
 
 [[package]]
 name = "typing-extensions"
