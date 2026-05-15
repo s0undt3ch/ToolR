@@ -21,6 +21,7 @@ env:
   # Bump to invalidate every cache (mise install dirs, .venv, prek hooks,
   # mypy/ruff caches, ...) used by this workflow.
   CACHE_SEED: "1"
+  MISE_VERSION: "v2026.5.6"
 
 jobs:
   prepare-ci:
@@ -51,8 +52,9 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
+          version: ${{ env.MISE_VERSION }}
           cache: true
-          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|prepare-ci|${{ runner.os }}|${{ runner.arch }}
+          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|prepare-ci|${{ runner.os }}|${{ runner.arch }}
 
       - name: Generate additional ToolR requirements file
         run: |
