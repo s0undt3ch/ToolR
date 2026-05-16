@@ -210,64 +210,62 @@ jobs:
       wheel-kind: py
       pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 
-  distribution-tests:
-    name: Distribution tests (${{ matrix.platform }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            artifact-pattern: cibw-wheel-*-*linux*
-          - os: macos-latest
-            platform: macos
-            artifact-pattern: cibw-wheel-*-*macosx*
-          - os: windows-latest
-            platform: windows
-            artifact-pattern: cibw-wheel-*-*win*
-    runs-on: ${{ matrix.os }}
+  # release.yml's distribution-tests defer to the same reusable
+  # workflow ci.yml uses, so the test harness, action SHAs, coverage
+  # upload, and junit reporting stay in lockstep across both
+  # pipelines. Per-OS jobs (one workflow_call each) instead of a
+  # `strategy.matrix` since `workflow_call` doesn't compose with
+  # `strategy.matrix` on the caller side.
+  test-distribution-linux:
+    name: Test
     needs:
       - prepare-ci
       - build-binary-wheel-linux
-      - build-binary-wheel-windows
-      - build-binary-wheel-macos
       - build-py-wheel-linux
-      - build-py-wheel-windows
-      - build-py-wheel-macos
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: ubuntu-latest
+      display-name: Linux
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*linux*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
-        with:
-          egress-policy: audit
+      id-token: write
 
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+  test-distribution-macos:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-binary-wheel-macos
+      - build-py-wheel-macos
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: macos-latest
+      display-name: macOS
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*macosx*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
 
-      - name: Load shared env vars
-        run: cat .github/env >> "$GITHUB_ENV"
-
-      - name: Setup Virtual Environment
-        uses: ./.github/actions/setup-virtualenv
-        with:
-          cache-prefix: dist-tests-${{ matrix.platform }}
-          cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-          mise-version: ${{ env.MISE_VERSION }}
-
-      - name: Download platform wheels
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          pattern: ${{ matrix.artifact-pattern }}
-          path: wheelhouse/
-          merge-multiple: true
-
-      - name: List downloaded wheels
-        shell: bash
-        run: ls -la wheelhouse/
-
-      - name: Run distribution tests
-        shell: bash
-        run: uv run pytest tests/distribution/ -v
+  test-distribution-windows:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-binary-wheel-windows
+      - build-py-wheel-windows
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: windows-latest
+      display-name: Windows
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*win*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
 
   build-binary-archive:
     name: Build binary archives (per triple)
@@ -297,7 +295,9 @@ jobs:
       - build-binary-wheel-macos
       - build-py-wheel-macos
       - build-binary-archive
-      - distribution-tests
+      - test-distribution-linux
+      - test-distribution-macos
+      - test-distribution-windows
       - prepare-release
     runs-on: ubuntu-latest
     permissions:
