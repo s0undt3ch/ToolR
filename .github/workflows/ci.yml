@@ -382,6 +382,13 @@ jobs:
       # build-binary-archive lets us use the same Rust binary CI builds
       # for testing — no per-job `cargo build --release`.
       - build-binary-archive
+      # `regen-doc-snippets.py` runs `toolr project manifest rebuild`
+      # inside a fixture, which dispatches to Python and needs
+      # `import toolr` to succeed. We install the prebuilt toolr-py
+      # wheel into the venv (matching mise.toml's pinned CPython) so
+      # `uv sync --no-install-workspace` doesn't have to rebuild
+      # toolr-py from source.
+      - build-py-wheel-linux
 
     permissions:
       contents: write
@@ -400,18 +407,11 @@ jobs:
         with:
           cache-prefix: docs
           cache-seed: ${{ env.CACHE_SEED }}
-          # Empty string keeps the version pinned in mise.toml.
+          # Empty string keeps the version pinned in mise.toml (3.14.5).
           python-version: ""
-          # Workspace install is REQUIRED here: the regen script's
-          # `_materialise_in_tree_venv` symlinks the fixture's fake
-          # `tools/.venv` to this `.venv`, then runs `toolr project
-          # manifest rebuild` inside the fixture — which dispatches to
-          # Python and needs `import toolr` to succeed. That import only
-          # works if toolr-py is in `.venv/site-packages`, which only
-          # happens when the workspace member is installed. Skipping the
-          # workspace install collapses snippet regen with a non-zero
-          # exit from `toolr project manifest rebuild`.
-          uv-sync-args: "--group docs"
+          # Skip workspace install (no maturin rebuild of toolr/toolr-py).
+          # toolr-py gets pip-installed below from the prebuilt cp314 wheel.
+          uv-sync-args: "--group docs --no-install-workspace"
           mise-version: ${{ env.MISE_VERSION }}
 
       - uses: ./.github/actions/configure-git
@@ -419,6 +419,28 @@ jobs:
         uses: ./.github/actions/apply-release-patch
         with:
           release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
+
+      - name: Download toolr-py wheel (cp314 / manylinux_x86_64)
+        # `regen-doc-snippets.py` runs `toolr project manifest rebuild`,
+        # which dispatches to a Python that must `import toolr`. The dev
+        # venv (.venv) gets toolr-py via this pip install — no per-job
+        # maturin rebuild. mise.toml pins python=3.14.5, so cp314.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cibw-wheel-py-cp314-manylinux_x86_64
+          path: ${{ runner.temp }}/toolr-py-wheel
+
+      - name: Install toolr-py from prebuilt wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel=$(find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 1 -type f -name 'toolr_py-*.whl' -print -quit)
+          if [ -z "$wheel" ]; then
+            echo "no toolr_py wheel found under $RUNNER_TEMP/toolr-py-wheel/" >&2
+            find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          uv pip install --force-reinstall "$wheel"
 
       - name: Download toolr binary archive (linux-gnu)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
