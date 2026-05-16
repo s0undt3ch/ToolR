@@ -46,16 +46,104 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # setup-virtualenv runs jdx/mise-action under the hood, which installs
-      # the Rust toolchain pinned in mise.toml alongside Python and uv.
+      # Derive the artifact identifiers we'll download below from the
+      # matrix entry + the runner OS. Centralised here so the rest of the
+      # job can reference `steps.artifacts.outputs.*` instead of repeating
+      # the same `case $RUNNER_OS` everywhere.
+      - name: Compute artifact identifiers
+        id: artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Linux)   triple=x86_64-unknown-linux-gnu;  wheelplat=manylinux_x86_64 ;;
+            macOS)   triple=aarch64-apple-darwin;     wheelplat=macosx_arm64 ;;
+            Windows) triple=x86_64-pc-windows-msvc;   wheelplat=win_amd64 ;;
+            *) echo "unknown RUNNER_OS=$RUNNER_OS" >&2; exit 1 ;;
+          esac
+          # 3.11 -> cp311 (drop the dot)
+          pyver="${{ matrix.python-version }}"
+          cptag="cp${pyver//./}"
+          {
+            echo "toolr-triple=$triple"
+            echo "wheel-platform=$wheelplat"
+            echo "cp-tag=$cptag"
+          } >> "$GITHUB_OUTPUT"
+
+      # `--no-install-package toolr-py` is the key change: uv still sets
+      # up dev/all-extras deps and installs the OTHER workspace members
+      # (tools, tests/support/3rd-party-pkg), but skips toolr-py. We then
+      # pip-install the prebuilt wheel matching this matrix entry — same
+      # binary CI uploads to PyPI, no per-matrix maturin recompile.
       - uses: ./.github/actions/setup-virtualenv
         id: setup-virtualenv
         with:
-          cache-prefix: test
+          # Bumped from `test` to invalidate caches that still hold a
+          # source-built (editable) toolr-py.
+          cache-prefix: test-prebuilt-toolr-py
           cache-seed: ${{ inputs.cache-seed }}
           python-version: ${{ matrix.python-version }}
-          uv-sync-args: "--all-extras --dev"
+          uv-sync-args: "--no-install-package toolr-py --all-extras --dev"
           mise-version: ${{ inputs.mise-version }}
+
+      - name: Download toolr-py wheel
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cibw-wheel-py-${{ steps.artifacts.outputs.cp-tag }}-${{ steps.artifacts.outputs.wheel-platform }}
+          path: ${{ runner.temp }}/toolr-py-wheel
+
+      - name: Install toolr-py from prebuilt wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel=$(find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 1 -type f -name 'toolr_py-*.whl' -print -quit)
+          if [ -z "$wheel" ]; then
+            echo "no toolr_py wheel found under $RUNNER_TEMP/toolr-py-wheel/" >&2
+            find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          # `--force-reinstall` overrides any leftover editable install
+          # that may still be cached in .venv from older runs.
+          uv pip install --force-reinstall "$wheel"
+
+      - name: Download toolr binary archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: toolr-archive-${{ steps.artifacts.outputs.toolr-triple }}
+          path: ${{ runner.temp }}/toolr-archive
+
+      # Extract the standalone `toolr` binary from the archive and put it
+      # on PATH. tests/conftest.py's `toolr_bin` fixture (and any future
+      # subprocess-test) picks it up via `shutil.which("toolr")`.
+      - name: Extract toolr binary onto PATH
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/toolr-bin"
+          mkdir -p "$dest"
+          archive=$(find "$RUNNER_TEMP/toolr-archive" -maxdepth 1 -type f \( -name 'toolr-*.tar.gz' -o -name 'toolr-*.zip' \) -print -quit)
+          if [ -z "$archive" ]; then
+            echo "no toolr archive found under $RUNNER_TEMP/toolr-archive/" >&2
+            find "$RUNNER_TEMP/toolr-archive" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          case "$archive" in
+            *.tar.gz)
+              tar -xzf "$archive" -C "$dest" --strip-components=1
+              ;;
+            *.zip)
+              unzip -q "$archive" -d "$dest"
+              # `Compress-Archive` retains the top-level dir; flatten so
+              # `toolr.exe` lands directly in $dest.
+              inner=$(find "$dest" -maxdepth 1 -mindepth 1 -type d | head -n1)
+              if [ -n "$inner" ]; then
+                mv "$inner"/* "$dest"/
+                rmdir "$inner"
+              fi
+              ;;
+          esac
+          chmod +x "$dest"/toolr* 2>/dev/null || true
+          echo "$dest" >> "$GITHUB_PATH"
 
       - id: rust-version-checksum
         shell: bash
@@ -69,23 +157,12 @@ jobs:
             ~/.cargo/git
           key: ${{ inputs.cache-seed }}|${{ runner.os }}|cargo|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
-      - name: Cache Rust `target/release`
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: |
-            target/release
-          key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|release|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-
       - name: Cache Rust `target/coverage`
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             target/coverage
           key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|coverage|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
-
-      - name: Build Rust Release
-        run: |
-          cargo build --release --target-dir target/release
 
       - name: Run Python Tests
         env:

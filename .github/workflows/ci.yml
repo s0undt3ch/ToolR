@@ -151,11 +151,18 @@ jobs:
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
 
+  # test-* now CONSUMES the prebuilt artifacts (toolr binary archive + the
+  # matching toolr-py wheel for each matrix python) instead of compiling
+  # them itself. The DAG is intentionally `prepare-ci → wheels/archive →
+  # test-*`; signal lands later than before, but every test exercises the
+  # exact artifact that ships, and there's no per-matrix maturin rebuild.
   test-linux:
     name: Test
     needs:
       - prepare-ci
       - pre-commit
+      - build-py-wheel-linux
+      - build-binary-archive
     uses: ./.github/workflows/_test.yml
     with:
       os: ubuntu-latest
@@ -171,6 +178,8 @@ jobs:
     needs:
       - prepare-ci
       - pre-commit
+      - build-py-wheel-windows
+      - build-binary-archive
     uses: ./.github/workflows/_test.yml
     with:
       os: windows-latest
@@ -186,6 +195,8 @@ jobs:
     needs:
       - prepare-ci
       - pre-commit
+      - build-py-wheel-macos
+      - build-binary-archive
     uses: ./.github/workflows/_test.yml
     with:
       os: macos-latest
@@ -200,7 +211,6 @@ jobs:
     name: Build (binary wheel)
     needs:
       - prepare-ci
-      - test-linux
       - prepare-release
     uses: ./.github/workflows/_build.yml
     with:
@@ -219,7 +229,6 @@ jobs:
     name: Build (toolr-py wheel)
     needs:
       - prepare-ci
-      - test-linux
       - prepare-release
     uses: ./.github/workflows/_build.yml
     with:
@@ -238,7 +247,6 @@ jobs:
     name: Build (binary wheel)
     needs:
       - prepare-ci
-      - test-windows
       - prepare-release
     uses: ./.github/workflows/_build.yml
     with:
@@ -257,7 +265,6 @@ jobs:
     name: Build (toolr-py wheel)
     needs:
       - prepare-ci
-      - test-windows
       - prepare-release
     uses: ./.github/workflows/_build.yml
     with:
@@ -276,7 +283,6 @@ jobs:
     name: Build (binary wheel)
     needs:
       - prepare-ci
-      - test-macos
       - prepare-release
     uses: ./.github/workflows/_build.yml
     with:
@@ -295,7 +301,6 @@ jobs:
     name: Build (toolr-py wheel)
     needs:
       - prepare-ci
-      - test-macos
       - prepare-release
     uses: ./.github/workflows/_build.yml
     with:
@@ -464,6 +469,12 @@ jobs:
       - prepare-ci
       - pre-commit
       - prepare-release
+      # test-* used to be transitive (publish ← wheels ← test-*); now that
+      # tests are downstream consumers of the wheels, list them explicitly
+      # so a failed test still flips the pipeline status to failure.
+      - test-linux
+      - test-macos
+      - test-windows
       - docs
       - publish
     steps:
