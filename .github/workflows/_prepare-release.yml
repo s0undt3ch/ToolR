@@ -101,6 +101,11 @@ jobs:
           cache: true
           cache_key_prefix: ${{ inputs.cache-seed }}|mise|${{ inputs.mise-version }}|prepare-release|${{ runner.os }}|${{ runner.arch }}
 
+      - name: Get the Python Binary path from Mise
+        id: mise-python-executable
+        shell: bash
+        run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
+
       - name: Generate additional ToolR requirements file
         shell: bash
         run: |
@@ -108,8 +113,9 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: s0undt3ch/ToolR@8cd163aa75e825c20207500024cad82f14ff6a87 # v0.11.1
+        uses: s0undt3ch/ToolR@dc169a1a43916ad01f8f3627493b5c9520da60d5 # v0.11.1
         with:
+          python-path: ${{ steps.mise-python-executable.outputs.python }}
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
       - name: Setup Prek
