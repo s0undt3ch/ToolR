@@ -3,7 +3,12 @@ name = "tools"
 version = "0.0.0"
 requires-python = "{REQUIRES_PYTHON}"
 dependencies = [
-    "toolr",
+    # `toolr-py` provides the Python runtime that backs `from toolr
+    # import Context, command, command_group, ...`. The `toolr` binary
+    # on PATH (the CLI) is invoked, not imported — it does not need to
+    # be a tools-venv dependency. Add your own `tools/*.py` dependencies
+    # below.
+    "toolr-py",
 ]
 
 [tool.toolr]
