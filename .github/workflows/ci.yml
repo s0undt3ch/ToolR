@@ -402,12 +402,13 @@ jobs:
           cache-seed: ${{ env.CACHE_SEED }}
           # Empty string keeps the version pinned in mise.toml.
           python-version: ""
-          # Docs job needs workspace members installed: `uv run toolr`
-          # below resolves to `.venv/bin/toolr` (workspace member) and
-          # `toolr ci check-doc-snippets` dispatches into `tools.ci`
-          # (also a workspace member). Skipping the workspace install
-          # would leave both unavailable.
-          uv-sync-args: "--group docs"
+          # Docs job runs `mkdocs build` and `.pre-commit-hooks/regen-doc-snippets.py`,
+          # neither of which needs the workspace members installed
+          # (mkdocstrings reads `crates/toolr-py/python` via `paths:` and
+          # the regen script invokes the toolr binary directly via
+          # TOOLR_REGEN_BINARY). Skipping workspace install saves the
+          # ~3-minute maturin rebuild of toolr/toolr-py.
+          uv-sync-args: "--group docs --no-install-workspace"
           mise-version: ${{ env.MISE_VERSION }}
 
       - uses: ./.github/actions/configure-git
@@ -438,10 +439,45 @@ jobs:
           chmod +x "$dest/toolr"
           echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
 
+      # Inline rather than via `toolr ci check-doc-snippets`: the latter
+      # requires `tools.ci` to be importable in the venv, but `tools/`
+      # has no `[build-system]` table so `uv sync` can't install it as a
+      # site-packages entry. The bash version only needs the script +
+      # the extracted toolr binary, both of which we already have.
       - name: Verify doc snippets are in sync
         env:
           TOOLR_REGEN_BINARY: ${{ steps.toolr-binary.outputs.path }}
-        run: uv run toolr ci check-doc-snippets
+        run: |
+          set +e
+          .pre-commit-hooks/regen-doc-snippets.py --check 2> "$RUNNER_TEMP/snippet-diff"
+          status=$?
+          set -e
+          # Echo the captured diff to the job log for searchability.
+          cat "$RUNNER_TEMP/snippet-diff" >&2 || true
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## ❌ Doc snippets are stale"
+              echo
+              echo "The captured \`--help\` snippets under \`docs/\` no longer match the current \`toolr\` binary. The pre-commit hook is advisory (skipped when no \`toolr\` is on PATH locally), so CI is the authoritative check."
+              echo
+              echo "**Fix locally:**"
+              echo
+              echo '```bash'
+              echo '.pre-commit-hooks/regen-doc-snippets.py'
+              echo 'git add docs/'
+              echo 'git commit -m "docs: regen snippets"'
+              echo '```'
+              echo
+              echo "<details><summary>Diff</summary>"
+              echo
+              echo '```diff'
+              cat "$RUNNER_TEMP/snippet-diff"
+              echo '```'
+              echo
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Build MkDocs site
         run: uv run mkdocs build --strict
