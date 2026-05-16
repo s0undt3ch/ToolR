@@ -16,7 +16,9 @@ env:
   TOOLR_DEBUG_IMPORTS: "1"
   # Bump to invalidate every cache used by this workflow.
   CACHE_SEED: "1"
-  MISE_VERSION: "v2026.5.6"
+  # `MISE_VERSION` lives in `.github/env` (loaded per-job by a
+  # "Load shared env vars" step) so a single edit propagates to every
+  # workflow.
 
 permissions: {}
 
@@ -58,13 +60,16 @@ jobs:
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
+      - name: Load shared env vars
+        run: cat .github/env >> "$GITHUB_ENV"
+
       - name: Expose cache seed
         id: cache-seed
         run: echo "cache-seed=${{ env.CACHE_SEED }}" >> "$GITHUB_OUTPUT"
 
       - name: Expose mise version
         id: mise-version
-        run: echo "mise-version=${{ env.MISE_VERSION }}" >> "$GITHUB_OUTPUT"
+        run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
@@ -238,6 +243,9 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Load shared env vars
+        run: cat .github/env >> "$GITHUB_ENV"
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv

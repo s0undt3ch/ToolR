@@ -18,7 +18,7 @@ permissions:
 env:
   # Bump to invalidate every cache used by this workflow.
   CACHE_SEED: "1"
-  MISE_VERSION: "v2026.5.6"
+  # `MISE_VERSION` lives in `.github/env` (loaded per-job).
 
 jobs:
   update-rolling-tags:
@@ -67,6 +67,10 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
+
+      - name: Load shared env vars
+        shell: bash
+        run: cat .github/env >> "$GITHUB_ENV"
 
       - name: Set up mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1

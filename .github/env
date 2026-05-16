@@ -1,0 +1,9 @@
+# Shared environment variables for every workflow that needs them.
+# Each top-level workflow's first job step (after `actions/checkout`)
+# loads this file with `cat .github/env >> "$GITHUB_ENV"`. The format
+# is `KEY=VALUE` per line (no shell quoting / interpolation) which is
+# what `$GITHUB_ENV` consumes verbatim.
+#
+# Bump `MISE_VERSION` here to upgrade every workflow's mise install in
+# a single edit. Lockstep with `mise.toml`'s tooling pins.
+MISE_VERSION=v2026.5.10

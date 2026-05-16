@@ -21,7 +21,11 @@ env:
   # Bump to invalidate every cache (mise install dirs, .venv, prek hooks,
   # mypy/ruff caches, ...) used by this workflow.
   CACHE_SEED: "3"
-  MISE_VERSION: "v2026.5.10"
+  # `MISE_VERSION` lives in `.github/env` — loaded per-job by a
+  # "Load shared env vars" step (immediately after `actions/checkout`)
+  # so the value is available via `$MISE_VERSION` / `env.MISE_VERSION`
+  # to every subsequent step. Bump that file to upgrade mise across
+  # every workflow in a single edit.
 
 jobs:
   prepare-ci:
@@ -49,13 +53,16 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Load shared env vars
+        run: cat .github/env >> "$GITHUB_ENV"
+
       - name: Expose cache seed
         id: cache-seed
         run: echo "cache-seed=${{ env.CACHE_SEED }}" >> "$GITHUB_OUTPUT"
 
       - name: Expose mise version
         id: mise-version
-        run: echo "mise-version=${{ env.MISE_VERSION }}" >> "$GITHUB_OUTPUT"
+        run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -107,6 +114,9 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Load shared env vars
+        run: cat .github/env >> "$GITHUB_ENV"
 
       - name: Setup Prek
         id: setup-pre-commit
@@ -401,6 +411,9 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Load shared env vars
+        run: cat .github/env >> "$GITHUB_ENV"
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
