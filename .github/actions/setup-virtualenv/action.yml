@@ -3,8 +3,11 @@ description: Install all repo tooling via mise (Python, uv, rust, prek, ...) and
 
 inputs:
   python-version:
-    required: true
-    description: 'Python version to use. Overrides the version pinned in mise.toml via MISE_PYTHON_VERSION.'
+    default: ""
+    description: >-
+      Python version to use. Overrides the version pinned in mise.toml via
+      `MISE_PYTHON_VERSION`. Leave empty (the default) to inherit mise.toml's
+      pin; pass a concrete version (e.g. `"3.11"`) from a matrix entry.
 
   cache-prefix:
     required: true

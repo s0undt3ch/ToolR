@@ -46,7 +46,6 @@ jobs:
         with:
           cache-prefix: test-dist
           cache-seed: ${{ inputs.cache-seed }}
-          python-version: ""
           mise-version: ${{ inputs.mise-version }}
 
       - name: Download platform wheels
