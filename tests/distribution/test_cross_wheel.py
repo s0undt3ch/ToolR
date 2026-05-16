@@ -41,10 +41,24 @@ def test_install_both_wheels_and_run_subcommand(
         python = venv_dir / "bin" / "python"
         toolr = venv_dir / "bin" / "toolr"
 
-    subprocess.run(  # noqa: S603
+    # The conftest parametrizes both wheel fixtures over every wheel
+    # currently in `wheelhouse/`, which in CI is "all wheels for this OS
+    # family" (manylinux + musllinux + aarch64 + x86_64 + every CPython).
+    # Most combinations are not installable on the current runner; pip
+    # surfaces that as `is not a supported wheel on this platform`. Treat
+    # those as a skip — the goal of the test is to assert the cross-wheel
+    # install path works *for installable wheels*, not to verify pip's
+    # platform-tag rejection logic.
+    result = subprocess.run(  # noqa: S603
         [str(python), "-m", "pip", "install", str(toolr_wheel), str(toolr_py_wheel)],
-        check=True,
+        capture_output=True,
+        text=True,
+        check=False,
     )
+    if result.returncode != 0:
+        if "is not a supported wheel on this platform" in (result.stderr + result.stdout):
+            pytest.skip(f"platform-incompatible wheel combo on this runner: {toolr_wheel.name} + {toolr_py_wheel.name}")
+        pytest.fail(f"pip install failed:\n{result.stdout}\n{result.stderr}")
 
     assert toolr.exists(), f"toolr binary not installed at {toolr}"
 

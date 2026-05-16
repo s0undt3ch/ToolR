@@ -134,7 +134,13 @@ jobs:
           base="toolr-${VERSION}-${TRIPLE}"
           mkdir -p dist
           tar -czvf "dist/${base}.tar.gz" -C stage "${base}"
-          ( cd dist && sha256sum "${base}.tar.gz" > "${base}.tar.gz.sha256" )
+          # macOS runners don't ship GNU coreutils — no `sha256sum`. The
+          # BSD `shasum -a 256` produces identical "<hex>  <file>" output.
+          if command -v sha256sum >/dev/null 2>&1; then
+            ( cd dist && sha256sum "${base}.tar.gz" > "${base}.tar.gz.sha256" )
+          else
+            ( cd dist && shasum -a 256 "${base}.tar.gz" > "${base}.tar.gz.sha256" )
+          fi
 
       - name: Create archive (zip)
         if: matrix.target.archive == 'zip'
