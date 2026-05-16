@@ -446,7 +446,7 @@ jobs:
           name: toolr-archive-x86_64-unknown-linux-gnu
           path: ${{ runner.temp }}/toolr-archive
 
-      - name: Extract toolr binary onto PATH
+      - name: Extract toolr binary
         id: toolr-binary
         run: |
           set -euo pipefail
@@ -461,13 +461,53 @@ jobs:
           tar -xzf "$archive" -C "$dest" --strip-components=1
           chmod +x "$dest/toolr"
           echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
-          # Prepend to PATH so subsequent steps can invoke `toolr` directly.
-          echo "$dest" >> "$GITHUB_PATH"
 
+      # Inline rather than via `toolr ci check-doc-snippets`. That
+      # command requires `tools/.toolr-manifest.json` to exist (it's
+      # gitignored) AND for the toolr dispatcher's resolved tools-venv
+      # to contain toolr-py. The docs job ships toolr-py in `<repo>/.venv`
+      # but toolr resolves a *different* venv (per `tools/pyproject.toml`'s
+      # `venv-location`, default cache), so the bootstrap would need an
+      # extra `toolr project manifest rebuild` + venv resolution dance.
+      # The bash version only needs the regen script + the extracted
+      # toolr binary, both already present. The `tools/ci.py`'s
+      # `check_doc_snippets` function stays as the canonical surface for
+      # any job that does have a fully bootstrapped toolr (e.g.
+      # `prepare-ci` via the `s0undt3ch/ToolR` action).
       - name: Verify doc snippets are in sync
         env:
           TOOLR_REGEN_BINARY: ${{ steps.toolr-binary.outputs.path }}
-        run: toolr ci check-doc-snippets
+        run: |
+          set +e
+          .pre-commit-hooks/regen-doc-snippets.py --check 2> "$RUNNER_TEMP/snippet-diff"
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/snippet-diff" >&2 || true
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## ❌ Doc snippets are stale"
+              echo
+              echo "The captured \`--help\` snippets under \`docs/\` no longer match the current \`toolr\` binary. The pre-commit hook is advisory (skipped when no \`toolr\` is on PATH locally), so CI is the authoritative check."
+              echo
+              echo "**Fix locally:**"
+              echo
+              echo '```bash'
+              echo 'cargo build --release -p toolr   # ensure target/release/toolr is current'
+              echo '.pre-commit-hooks/regen-doc-snippets.py'
+              echo 'git add docs/'
+              echo 'git commit -m "docs: regen snippets"'
+              echo '```'
+              echo
+              echo "<details><summary>Diff</summary>"
+              echo
+              echo '```diff'
+              cat "$RUNNER_TEMP/snippet-diff"
+              echo '```'
+              echo
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Build MkDocs site
         run: uv run mkdocs build --strict

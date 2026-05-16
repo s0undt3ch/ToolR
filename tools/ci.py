@@ -133,11 +133,11 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
                 label = platform.title() if idx == 0 else ""
                 wfh.write(f"| {label} | {item['name']} | {item['os']} |\n")
         wfh.write("\n### Standalone binary archives\n\n")
-        wfh.write("| Triple | GH runner | Build mode |\n")
-        wfh.write("|--------|-----------|------------|\n")
+        wfh.write("| Triple | GH runner | Build mode | Archive |\n")
+        wfh.write("|--------|-----------|------------|---------|\n")
         for t in binary_archive_triples:
             mode = "cross" if t["cross"] else "native"
-            wfh.write(f"| `{t['triple']}` | {t['runner']} | {mode} |\n")
+            wfh.write(f"| `{t['triple']}` | {t['runner']} | {mode} | `{t['archive']}` |\n")
         wfh.write("\n### Python ABIs\n\n")
         wfh.write(f"- Binary wheel: `{', '.join(BINARY_WHEEL_PYTHONS)}`\n")
         wfh.write(f"- toolr-py wheel: `{', '.join(ALL_CPYTHONS)}`\n\n")
@@ -193,6 +193,7 @@ def check_doc_snippets(ctx: Context) -> None:
             )
             wfh.write("**Fix locally:**\n\n")
             wfh.write("```bash\n")
+            wfh.write("cargo build --release -p toolr   # ensure target/release/toolr is current\n")
             wfh.write(".pre-commit-hooks/regen-doc-snippets.py\n")
             wfh.write("git add docs/\n")
             wfh.write('git commit -m "docs: regen snippets"\n')

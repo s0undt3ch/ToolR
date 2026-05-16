@@ -76,6 +76,17 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
+          # Exact-match key includes matrix.python so a cp311 build never
+          # restores a cache populated by another CPython's run-state. The
+          # restore-keys ladder narrows in two steps: (1) drop the
+          # hashFiles segment to fall back to "any prior run of THIS
+          # python+platform"; (2) drop matrix.python to fall back to a
+          # sibling cp's cache. Step (2) is intentional: the cached
+          # contents are `~/.cache/cibuildwheel` (mostly download metadata
+          # and build-tool fetches that cibuildwheel sandboxes per-build
+          # anyway) and `~/.cargo/registry|git` (Python-agnostic). No
+          # per-CPython state survives a sibling-cp restore in a way that
+          # affects the produced wheel.
           key: ${{ inputs.cache-seed }}|cibw|${{ inputs.wheel-kind }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|${{ hashFiles('Cargo.lock', format('crates/toolr{0}/pyproject.toml', inputs.wheel-kind == 'py' && '-py' || '')) }}
           restore-keys: |
             ${{ inputs.cache-seed }}|cibw|${{ inputs.wheel-kind }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|${{ matrix.python }}|

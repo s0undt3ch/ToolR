@@ -17,10 +17,6 @@ inputs:
     default: "1"
     description: "Bumpable seed mixed into every cache key. Bump to invalidate all caches for this composite."
 
-  uv-version:
-    default: ""
-    description: "Deprecated. uv is pinned by mise.toml; this input is ignored and retained for backward compatibility."
-
   uv-sync-args:
     default: "--all-extras --dev --no-install-workspace"
     description: "The arguments to pass to the uv sync command. e.g., `--group docs` or `--dev`"
@@ -94,15 +90,7 @@ runs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: .venv
-        key: >-
-          venv|
-          ${{ inputs.cache-seed }}|
-          ${{ inputs.mise-version }}|
-          ${{ runner.os }}|
-          ${{ inputs.cache-prefix }}|
-          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
-          ${{ steps.uv-version-checksum.outputs.version-sha256sum }}|
-          ${{ hashFiles('**/uv.lock', '**/pyproject.toml') }}
+        key: venv|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ inputs.cache-prefix }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.uv-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock', '**/pyproject.toml') }}
 
     - name: Install Python Dependencies
       shell: bash

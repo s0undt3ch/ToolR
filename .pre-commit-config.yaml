@@ -26,7 +26,11 @@ repos:
         entry: .pre-commit-hooks/regen-doc-snippets.py --check
         language: system
         pass_filenames: false
-        files: ^(docs/|\.pre-commit-hooks/regen-doc-snippets\.py$|src/bin/toolr/|src/bin/toolr/init_templates/)
+        # Fire on docs that include captured snippets and on the
+        # Rust crates whose source determines clap's --help output
+        # (binary main.rs, the project-init scaffold templates, and
+        # the manifest/parser layer in toolr-core).
+        files: ^(docs/|\.pre-commit-hooks/regen-doc-snippets\.py$|crates/toolr/src/.*\.rs$|crates/toolr/src/init_templates/|crates/toolr-core/src/.*\.rs$)
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7

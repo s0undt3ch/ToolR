@@ -155,7 +155,10 @@ jobs:
           # comments, and missing close tags robustly.
           notes_file=UNRELEASED.md
           if [ -s "$notes_file" ]; then
-            notes=$(python3 -c "import re,sys; sys.stdout.write(re.sub(r'<!--.*?-->', '', open('UNRELEASED.md').read(), flags=re.DOTALL).strip())")
+            # Use the mise-resolved python (same interpreter the rest of
+            # this job uses) instead of a bare `python3` — keeps the
+            # runtime aligned with mise.toml's pin.
+            notes=$("${{ steps.mise-python-executable.outputs.python }}" -c "import re,sys; sys.stdout.write(re.sub(r'<!--.*?-->', '', open('UNRELEASED.md').read(), flags=re.DOTALL).strip())")
           else
             notes=""
           fi
