@@ -402,7 +402,12 @@ jobs:
           cache-seed: ${{ env.CACHE_SEED }}
           # Empty string keeps the version pinned in mise.toml.
           python-version: ""
-          uv-sync-args: "--group docs --no-install-workspace"
+          # Docs job needs workspace members installed: `uv run toolr`
+          # below resolves to `.venv/bin/toolr` (workspace member) and
+          # `toolr ci check-doc-snippets` dispatches into `tools.ci`
+          # (also a workspace member). Skipping the workspace install
+          # would leave both unavailable.
+          uv-sync-args: "--group docs"
           mise-version: ${{ env.MISE_VERSION }}
 
       - uses: ./.github/actions/configure-git

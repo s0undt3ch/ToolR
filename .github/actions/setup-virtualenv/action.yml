@@ -44,11 +44,24 @@ outputs:
 runs:
   using: composite
   steps:
+    # Export MISE_PYTHON_VERSION to $GITHUB_ENV BEFORE `Set up mise` runs.
+    # That way the override applies not only to the mise-action step but
+    # to every subsequent step in the job (uv sync, install python deps,
+    # etc.). Without this, mise re-resolves to mise.toml's `python = ...`
+    # pin in later steps and the venv ends up on the wrong CPython —
+    # symptom seen on Windows test runs (matrix asked for 3.11, venv
+    # ended up cp314 because that's what mise.toml pins).
+    - name: Export MISE_PYTHON_VERSION
+      if: inputs.python-version != ''
+      shell: bash
+      run: echo "MISE_PYTHON_VERSION=${{ inputs.python-version }}" >> "$GITHUB_ENV"
+
     - name: Set up mise
       uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
       env:
-        # Overrides `python = ...` in mise.toml so this composite can drive
-        # the matrix Python version in test.yml without editing the toml.
+        # Belt-and-braces: also pass via the step `env:` so the override
+        # takes effect even when the previous step is skipped (empty
+        # `python-version` input).
         MISE_PYTHON_VERSION: ${{ inputs.python-version }}
       with:
         version: ${{ inputs.mise-version }}
