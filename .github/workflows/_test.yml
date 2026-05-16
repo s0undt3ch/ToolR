@@ -19,6 +19,10 @@ on:
         required: true
         type: string
         description: 'Version of mise to install (forwarded to the setup-virtualenv composite). Pass the caller workflow''s MISE_VERSION env var.'
+      pythons:
+        required: true
+        type: string
+        description: 'JSON-encoded array of dotted CPython versions to test against (e.g. ''["3.11","3.12","3.13","3.14"]''). Produced by `toolr ci generate-build-matrix` (`test-pythons` output) so the test matrix stays in lockstep with the wheel-build matrix.'
 
 permissions:
   contents: read
@@ -32,11 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version:
-          - "3.11"
-          - "3.12"
-          - "3.13"
-          - "3.14"
+        python-version: ${{ fromJson(inputs.pythons) }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)

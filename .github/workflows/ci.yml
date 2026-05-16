@@ -39,6 +39,7 @@ jobs:
       binary-archive-triples: ${{ steps.generate-build-matrix.outputs.binary-archive-triples }}
       pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
       pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
+      test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
       # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
       # reusable workflows can read them via `needs.prepare-ci.outputs.*`
       # (the `env` context is not allowed in workflow-call `with:` blocks).
@@ -184,6 +185,7 @@ jobs:
       display-name: Linux
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
     permissions:
       contents: read
       id-token: write
@@ -201,6 +203,7 @@ jobs:
       display-name: Windows
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
     permissions:
       contents: read
       id-token: write
@@ -218,6 +221,7 @@ jobs:
       display-name: macOS
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
     permissions:
       contents: read
       id-token: write
@@ -431,14 +435,24 @@ jobs:
         with:
           release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
 
-      - name: Download toolr-py wheel (cp314 / manylinux_x86_64)
+      - name: Compute docs Python cp-tag
+        id: cp-tag
+        shell: bash
+        # Derive the wheel ABI tag from the venv's active Python so a
+        # mise.toml python bump (e.g. 3.14 → 3.15) automatically picks
+        # the matching wheel artifact below — no second edit needed.
+        run: |
+          pyver=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+          echo "cp-tag=cp${pyver//./}" >> "$GITHUB_OUTPUT"
+
+      - name: Download toolr-py wheel
         # `regen-doc-snippets.py` runs `toolr project manifest rebuild`,
         # which dispatches to a Python that must `import toolr`. The dev
         # venv (.venv) gets toolr-py via this pip install — no per-job
-        # maturin rebuild. mise.toml pins python=3.14.5, so cp314.
+        # maturin rebuild. The cp-tag tracks mise.toml's pinned Python.
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: cibw-wheel-py-cp314-manylinux_x86_64
+          name: cibw-wheel-py-${{ steps.cp-tag.outputs.cp-tag }}-manylinux_x86_64
           path: ${{ runner.temp }}/toolr-py-wheel
 
       - name: Install toolr-py from prebuilt wheel

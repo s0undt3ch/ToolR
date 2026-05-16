@@ -27,6 +27,25 @@ group = command_group("ci", "CI utilities", docstring=__doc__)
 # lockstep when a new CPython is added/removed.
 ALL_CPYTHONS = ["cp311", "cp312", "cp313", "cp314"]
 
+
+def _cp_tag_to_dotted(tag: str) -> str:
+    """Convert a cibuildwheel ABI tag back to the dotted form.
+
+    `cp311` -> `3.11`, `cp310` -> `3.10`, etc. Used to derive the
+    `_test.yml` matrix's `python-version` entries from `ALL_CPYTHONS`
+    so the test matrix and the wheel-build matrix can't drift.
+    """
+    if not tag.startswith("cp"):
+        msg = f"unexpected python tag: {tag!r}"
+        raise ValueError(msg)
+    rest = tag[2:]
+    return f"{rest[:1]}.{rest[1:]}"
+
+
+# Dotted-form CPython versions for the `_test.yml` matrix. Derived
+# from ALL_CPYTHONS so a single bump propagates.
+TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
+
 # The toolr binary wheel uses `bindings = "bin"` → produces a single
 # py3-none-<plat> wheel per platform. One cibuildwheel invocation
 # suffices regardless of CPython matrix.
@@ -81,13 +100,15 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
     """
     Emit the CI matrix configuration consumed by `prepare-ci` jobs.
 
-    Writes four GITHUB_OUTPUT keys:
+    Writes five GITHUB_OUTPUT keys:
 
       - `platform-matrix` — wheel platform map per OS (used by _build.yml).
       - `binary-archive-triples` — list of triple+runner+cross+archive
         objects (used by _build-binary-archive.yml's matrix).
       - `pythons-binary` — CPython ABI tags for the toolr binary wheel.
       - `pythons-py` — CPython ABI tags for the toolr-py (pyo3) wheel.
+      - `test-pythons` — dotted-form CPython versions for the test matrix
+        in `_test.yml` (derived from `pythons-py`, so the two cannot drift).
 
     Centralising these in one place (vs. hardcoded YAML across multiple
     workflow files) keeps the binary-wheel/py-wheel/binary-archive matrices
@@ -112,6 +133,7 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
         "binary-archive-triples": binary_archive_triples,
         "pythons-binary": BINARY_WHEEL_PYTHONS,
         "pythons-py": ALL_CPYTHONS,
+        "test-pythons": TEST_PYTHONS,
     }
 
     github_output = os.environ.get("GITHUB_OUTPUT")
