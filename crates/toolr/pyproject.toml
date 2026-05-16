@@ -27,8 +27,12 @@ Changelog = "https://github.com/s0undt3ch/ToolR/blob/main/CHANGELOG.md"
 [tool.maturin]
 bindings = "bin"
 strip = true
-# Require Cargo.lock is up to date
-locked = true
+# NOTE: `locked = true` would pass `--locked` to cargo during the wheel
+# build. The per-crate sdist that cibuildwheel consumes excludes the
+# `crates/toolr-py` workspace member but doesn't prune the bundled
+# `Cargo.lock`, so cargo needs to remove the stale toolr-py-only entries
+# on first build — `--locked` refuses that prune. The sdist itself is
+# the reproducibility artifact (its Cargo.lock is the canonical lock).
 
 [tool.cibuildwheel]
 # Binary-only wheel: bindings = "bin" produces py3-none-<plat> wheels

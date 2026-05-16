@@ -86,15 +86,22 @@ jobs:
         if: matrix.target.cross
         run: cargo install cross --locked --version "^0.2"
 
+      # `--locked` is intentionally absent: `uv build --sdist --package toolr`
+      # rewrites the sdist's workspace `Cargo.toml` to drop `crates/toolr-py`,
+      # but does NOT prune the bundled `Cargo.lock`. Cargo's in-place prune
+      # of the stale toolr-py-only entries during build is mechanical (no
+      # dep-version drift); `--locked` would refuse and fail the build. The
+      # sdist itself is the reproducibility artifact — its Cargo.lock is the
+      # canonical lock.
       - name: Build binary (native)
         if: ${{ !matrix.target.cross }}
         working-directory: workdir
-        run: cargo build --release --locked -p toolr --bin toolr --target ${{ matrix.target.triple }}
+        run: cargo build --release -p toolr --bin toolr --target ${{ matrix.target.triple }}
 
       - name: Build binary (cross)
         if: matrix.target.cross
         working-directory: workdir
-        run: cross build --release --locked -p toolr --bin toolr --target ${{ matrix.target.triple }}
+        run: cross build --release -p toolr --bin toolr --target ${{ matrix.target.triple }}
 
       - name: Stage archive contents
         working-directory: workdir

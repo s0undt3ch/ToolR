@@ -40,8 +40,12 @@ module-name = "toolr.utils._rust_utils"
 python-source = "python"
 features = []
 strip = true
-# Require Cargo.lock is up to date
-locked = true
+# NOTE: defensively omit `locked = true` here even though toolr-py's
+# current sdist still includes every workspace member it needs (toolr-py
+# transitively pulls in toolr-core). The moment some Rust dep ends up
+# used only by toolr (binary) the sdist would drop it from the
+# workspace.members list without pruning Cargo.lock — same trap that
+# bit crates/toolr/pyproject.toml.
 # The python-source packager would otherwise include any local
 # __pycache__/ directories sitting next to the .py files (left over
 # from contributor-side `python -c "import toolr"` runs). pip
