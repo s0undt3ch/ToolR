@@ -128,6 +128,29 @@ jobs:
       id-token: write
       attestations: write
 
+  build-binary-archive:
+    name: Build binary archives (per triple)
+    # `prepare-ci.outputs.binary-archive-triples` (in ci mode) lists the
+    # runner-native triples — x86_64-unknown-linux-gnu, aarch64-apple-darwin,
+    # x86_64-pc-windows-msvc — so downstream tests + the docs job can
+    # download the standalone `toolr` binary as an artifact instead of
+    # paying for a per-job `cargo build --release`. release.yml builds
+    # the same workflow with the full 7-triple matrix.
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build-binary-archive.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      release-version: ${{ needs.prepare-release.outputs.release-version }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
+
   test-linux:
     name: Test
     needs:
