@@ -22,8 +22,11 @@ inputs:
     default: "--all-extras --dev"
     description: "The arguments to pass to the uv sync command. e.g., `--group docs` or `--dev`"
   mise-version:
-    default: "v2026.5.6"
-    description: "The version of mise to install."
+    required: true
+    description: >-
+      Version of mise to install via jdx/mise-action. Callers should pass the
+      `MISE_VERSION` env var from the top-level workflow so every job uses the
+      same pinned mise build (and shares the matching mise-install cache).
 
 outputs:
   uv-version:

@@ -18,6 +18,7 @@ permissions:
 env:
   # Bump to invalidate every cache used by this workflow.
   CACHE_SEED: "1"
+  MISE_VERSION: "v2026.5.6"
 
 jobs:
   update-rolling-tags:
@@ -70,8 +71,9 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
+          version: ${{ env.MISE_VERSION }}
           cache: true
-          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|sync-rolling-tags|${{ runner.os }}|${{ runner.arch }}
+          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|sync-rolling-tags|${{ runner.os }}|${{ runner.arch }}
 
       - name: Generate additional ToolR requirements file
         shell: bash
@@ -89,6 +91,7 @@ jobs:
         uses: ./.github/actions/setup-pre-commit
         with:
           cache-seed: ${{ env.CACHE_SEED }}|sync-rolling-tags
+          mise-version: ${{ env.MISE_VERSION }}
 
       - name: Update rolling tags
         id: update-rolling-tags

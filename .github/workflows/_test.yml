@@ -15,6 +15,10 @@ on:
         required: true
         type: string
         description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
+      mise-version:
+        required: true
+        type: string
+        description: 'Version of mise to install (forwarded to the setup-virtualenv composite). Pass the caller workflow''s MISE_VERSION env var.'
 
 permissions:
   contents: read
@@ -51,6 +55,7 @@ jobs:
           cache-seed: ${{ inputs.cache-seed }}
           python-version: ${{ matrix.python-version }}
           uv-sync-args: "--all-extras --dev"
+          mise-version: ${{ inputs.mise-version }}
 
       - id: rust-version-checksum
         shell: bash

@@ -11,6 +11,12 @@ inputs:
       Optional override for the Python version mise installs. Defaults to the pin in mise.toml.
     required: false
     default: ""
+  mise-version:
+    description: >-
+      Version of mise to install via jdx/mise-action. Callers should pass the
+      `MISE_VERSION` env var from the top-level workflow so every job uses the
+      same pinned mise build (and shares the matching mise-install cache).
+    required: true
 
 outputs:
   prek-version:
@@ -30,8 +36,9 @@ runs:
       env:
         MISE_PYTHON_VERSION: ${{ inputs.python-version }}
       with:
+        version: ${{ inputs.mise-version }}
         cache: true
-        cache_key_prefix: mise|${{ inputs.cache-seed }}|${{ runner.os }}|${{ runner.arch }}|pre-commit
+        cache_key_prefix: mise|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|pre-commit
 
     - name: Get prek version
       id: prek-version

@@ -32,10 +32,11 @@ jobs:
     outputs:
       should-run-build: ${{ steps.check-build.outputs.should-run-build }}
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
-      # Mirrors env.CACHE_SEED. Exposed as an output so reusable
-      # workflows can read it via needs.prepare-ci.outputs.cache-seed
+      # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
+      # reusable workflows can read them via `needs.prepare-ci.outputs.*`
       # (the `env` context is not allowed in workflow-call `with:` blocks).
       cache-seed: ${{ steps.cache-seed.outputs.cache-seed }}
+      mise-version: ${{ steps.mise-version.outputs.mise-version }}
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
@@ -48,6 +49,10 @@ jobs:
       - name: Expose cache seed
         id: cache-seed
         run: echo "cache-seed=${{ env.CACHE_SEED }}" >> "$GITHUB_OUTPUT"
+
+      - name: Expose mise version
+        id: mise-version
+        run: echo "mise-version=${{ env.MISE_VERSION }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -100,6 +105,7 @@ jobs:
         uses: ./.github/actions/setup-pre-commit
         with:
           cache-seed: ${{ env.CACHE_SEED }}|ci
+          mise-version: ${{ env.MISE_VERSION }}
 
       - name: Run Prek
         run: |
@@ -113,6 +119,7 @@ jobs:
     uses: ./.github/workflows/_prepare-release.yml
     with:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
@@ -128,6 +135,7 @@ jobs:
       os: ubuntu-latest
       display-name: Linux
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
@@ -142,6 +150,7 @@ jobs:
       os: windows-latest
       display-name: Windows
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
@@ -156,6 +165,7 @@ jobs:
       os: macos-latest
       display-name: macOS
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
@@ -280,6 +290,7 @@ jobs:
       display-name: Linux
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       artifact-pattern: cibw-wheel-*-*linux*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
@@ -296,6 +307,7 @@ jobs:
       display-name: macOS
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       artifact-pattern: cibw-wheel-*-*macosx*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
@@ -312,6 +324,7 @@ jobs:
       display-name: Windows
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       artifact-pattern: cibw-wheel-*-*win*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
@@ -344,6 +357,7 @@ jobs:
           # Empty string keeps the version pinned in mise.toml.
           python-version: ""
           uv-sync-args: "--group docs"
+          mise-version: ${{ env.MISE_VERSION }}
 
       - uses: ./.github/actions/configure-git
       - name: Apply Release Patch
