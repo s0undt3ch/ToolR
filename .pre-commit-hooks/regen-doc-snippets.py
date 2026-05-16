@@ -120,26 +120,33 @@ SNIPPETS: tuple[Snippet, ...] = (
 )
 
 
-def find_toolr() -> Path:
-    """Resolve the toolr binary the regen should use."""
+def find_toolr() -> Path | None:
+    """Resolve the toolr binary the regen should use, or `None` if none is available.
+
+    Precedence:
+    1. `TOOLR_REGEN_BINARY` env var (explicit override; CI sets this to the
+       extracted standalone archive).
+    2. `target/release/toolr` then `target/debug/toolr` (working-tree cargo
+       build, so the captures reflect uncommitted Rust changes).
+    3. `toolr` on PATH (system install via mise / install.sh).
+    4. `None` — caller decides whether to skip or fail.
+
+    There is intentionally no cargo-build fallback: the local pre-commit
+    hook stays fast (or no-ops with a warning) when no toolr is around,
+    and CI always provisions a binary via artifact download.
+    """
     override = os.environ.get("TOOLR_REGEN_BINARY")
     if override:
         return Path(override)
-    release = REPO_ROOT / "target" / "release" / "toolr"
-    if release.is_file():
-        return release
-    debug = REPO_ROOT / "target" / "debug" / "toolr"
-    if debug.is_file():
-        return debug
-    # No binary on disk — build a debug binary. Debug is much faster
-    # to compile than release; output diff is identical for `--help`
-    # text and example execution.
-    subprocess.run(  # noqa: S603
-        ["cargo", "build", "--bin", "toolr", "--quiet"],  # noqa: S607
-        cwd=REPO_ROOT,
-        check=True,
-    )
-    return debug
+    for candidate in (
+        REPO_ROOT / "target" / "release" / "toolr",
+        REPO_ROOT / "target" / "debug" / "toolr",
+    ):
+        if candidate.is_file():
+            return candidate
+    if path_hit := shutil.which("toolr"):
+        return Path(path_hit)
+    return None
 
 
 def find_runner_python() -> Path:
@@ -316,11 +323,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not shutil.which("cargo") and not (REPO_ROOT / "target/release/toolr").is_file():
-        print("regen-doc-snippets: cargo missing and no pre-built toolr binary", file=sys.stderr)
-        return 1
-
     toolr = find_toolr()
+    if toolr is None:
+        print(
+            "regen-doc-snippets: no `toolr` binary found "
+            "(checked $TOOLR_REGEN_BINARY, target/release, target/debug, PATH); "
+            "skipping. Run `cargo build --release` or install toolr to enable "
+            "this hook locally — CI verifies snippet freshness regardless.",
+            file=sys.stderr,
+        )
+        return 0
     python = find_runner_python()
     clean = True
     with tempfile.TemporaryDirectory(prefix="toolr-doc-fixture-") as tmpdir:
