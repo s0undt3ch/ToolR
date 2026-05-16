@@ -402,13 +402,16 @@ jobs:
           cache-seed: ${{ env.CACHE_SEED }}
           # Empty string keeps the version pinned in mise.toml.
           python-version: ""
-          # Docs job runs `mkdocs build` and `.pre-commit-hooks/regen-doc-snippets.py`,
-          # neither of which needs the workspace members installed
-          # (mkdocstrings reads `crates/toolr-py/python` via `paths:` and
-          # the regen script invokes the toolr binary directly via
-          # TOOLR_REGEN_BINARY). Skipping workspace install saves the
-          # ~3-minute maturin rebuild of toolr/toolr-py.
-          uv-sync-args: "--group docs --no-install-workspace"
+          # Workspace install is REQUIRED here: the regen script's
+          # `_materialise_in_tree_venv` symlinks the fixture's fake
+          # `tools/.venv` to this `.venv`, then runs `toolr project
+          # manifest rebuild` inside the fixture — which dispatches to
+          # Python and needs `import toolr` to succeed. That import only
+          # works if toolr-py is in `.venv/site-packages`, which only
+          # happens when the workspace member is installed. Skipping the
+          # workspace install collapses snippet regen with a non-zero
+          # exit from `toolr project manifest rebuild`.
+          uv-sync-args: "--group docs"
           mise-version: ${{ env.MISE_VERSION }}
 
       - uses: ./.github/actions/configure-git
