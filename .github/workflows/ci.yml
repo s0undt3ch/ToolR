@@ -373,6 +373,10 @@ jobs:
     needs:
       - pre-commit
       - prepare-release
+      # Snippet regeneration shells out to the toolr binary. Depending on
+      # build-binary-archive lets us use the same Rust binary CI builds
+      # for testing — no per-job `cargo build --release`.
+      - build-binary-archive
 
     permissions:
       contents: write
@@ -402,8 +406,62 @@ jobs:
         with:
           release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
 
+      - name: Download toolr binary archive (linux-gnu)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: toolr-archive-x86_64-unknown-linux-gnu
+          path: ${{ runner.temp }}/toolr-archive
+
+      - name: Extract toolr binary
+        id: toolr-binary
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/toolr-bin"
+          mkdir -p "$dest"
+          archive=$(find "$RUNNER_TEMP/toolr-archive" -maxdepth 1 -type f -name 'toolr-*.tar.gz' -print -quit)
+          if [ -z "$archive" ]; then
+            echo "no toolr-*.tar.gz archive found under $RUNNER_TEMP/toolr-archive/" >&2
+            find "$RUNNER_TEMP/toolr-archive" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          tar -xzf "$archive" -C "$dest" --strip-components=1
+          chmod +x "$dest/toolr"
+          echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
+
       - name: Verify doc snippets are in sync
-        run: .pre-commit-hooks/regen-doc-snippets.py --check
+        env:
+          TOOLR_REGEN_BINARY: ${{ steps.toolr-binary.outputs.path }}
+        run: |
+          set +e
+          .pre-commit-hooks/regen-doc-snippets.py --check 2> "$RUNNER_TEMP/snippet-diff"
+          status=$?
+          set -e
+          # Always echo the captured diff to the job log for searchability.
+          cat "$RUNNER_TEMP/snippet-diff" >&2 || true
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## ❌ Doc snippets are stale"
+              echo
+              echo "The captured \`--help\` snippets under \`docs/\` no longer match the current \`toolr\` binary. The pre-commit hook is advisory (skipped when no \`toolr\` is on PATH locally), so CI is the authoritative check."
+              echo
+              echo "**Fix locally:**"
+              echo
+              echo '```bash'
+              echo '.pre-commit-hooks/regen-doc-snippets.py'
+              echo 'git add docs/'
+              echo 'git commit -m "docs: regen snippets"'
+              echo '```'
+              echo
+              echo "<details><summary>Diff</summary>"
+              echo
+              echo '```diff'
+              cat "$RUNNER_TEMP/snippet-diff"
+              echo '```'
+              echo
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Build MkDocs site
         run: uv run mkdocs build --strict
