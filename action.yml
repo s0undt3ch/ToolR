@@ -7,6 +7,10 @@ inputs:
     description: ToolR version to install (defaults to the action's git ref version, or 'latest' if not a tag)
     default: ""
 
+  python-path:
+    description: Path to the Python executable that shall be used
+    default: "python"
+
   requirements-file:
     description: Additional requirements file to install
     default: ""
@@ -75,16 +79,23 @@ runs:
       id: python-version-checksum
       shell: bash
       run: |
-        VERSION_SHA256SUM=$(python --version --version | sha256sum | cut -d ' ' -f 1)
+        PYTHON_PATH=${{ inputs.python-path || 'python' }}
+        echo "PYTHON_PATH=$PYTHON_PATH"
+        echo "python-path=$PYTHON_PATH" >> "$GITHUB_OUTPUT"
+        PYTHON_VERSION=$("$PYTHON_PATH" --version --version)
+        echo "PYTHON_VERSION=$PYTHON_VERSION"
+        VERSION_SHA256SUM=$(echo "$PYTHON_VERSION" | sha256sum | cut -d ' ' -f 1)
         echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
-        echo "python-path=$(which python)" >> "$GITHUB_OUTPUT"
 
     - name: Get pipx version checksum
       id: pipx-version-checksum
       shell: bash
       run: |
-        VERSION_SHA256SUM=$(pipx --version | sha256sum | cut -d ' ' -f 1)
+        PIPX_PATH=$(which pipx)
+        echo "PIPX_PATH=$PIPX_PATH"
+        echo "pipx-path=$PIPX_PATH" >> "$GITHUB_OUTPUT"
+        VERSION_SHA256SUM=$("$PIPX_PATH" --version | sha256sum | cut -d ' ' -f 1)
         echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
 
@@ -108,10 +119,10 @@ runs:
       if: ${{ inputs.version }} != 'local'
       with:
         key: >-
-          pipx|toolr|${{ steps.parse-version.outputs.version}}|
-          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
-          ${{ steps.pipx-version-checksum.outputs.version-sha256sum }}|
-          ${{ hashFiles(inputs.requirements-file, steps.parse-version.outputs.requirements-file) }}|
+          pipx|toolr|${{ steps.parse-version.outputs.version}}|${{
+            steps.python-version-checksum.outputs.version-sha256sum }}|${{
+            steps.pipx-version-checksum.outputs.version-sha256sum }}|${{
+            hashFiles(inputs.requirements-file, steps.parse-version.outputs.requirements-file) }}
         path: |
           ${{ steps.setup-pipx.outputs.cache-home-dir }}
           ${{ steps.setup-pipx.outputs.cache-bin-dir }}
