@@ -19,7 +19,7 @@ inputs:
     description: "Deprecated. uv is pinned by mise.toml; this input is ignored and retained for backward compatibility."
 
   uv-sync-args:
-    default: "--all-extras --dev"
+    default: "--all-extras --dev --no-install-workspace"
     description: "The arguments to pass to the uv sync command. e.g., `--group docs` or `--dev`"
   mise-version:
     required: true

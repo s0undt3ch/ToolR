@@ -402,7 +402,7 @@ jobs:
           cache-seed: ${{ env.CACHE_SEED }}
           # Empty string keeps the version pinned in mise.toml.
           python-version: ""
-          uv-sync-args: "--group docs"
+          uv-sync-args: "--group docs --no-install-workspace"
           mise-version: ${{ env.MISE_VERSION }}
 
       - uses: ./.github/actions/configure-git
