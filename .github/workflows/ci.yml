@@ -20,7 +20,7 @@ env:
   TOOLR_DEBUG_IMPORTS: "1"
   # Bump to invalidate every cache (mise install dirs, .venv, prek hooks,
   # mypy/ruff caches, ...) used by this workflow.
-  CACHE_SEED: "2"
+  CACHE_SEED: "3"
   MISE_VERSION: "v2026.5.6"
 
 jobs:
