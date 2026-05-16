@@ -183,6 +183,9 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
+      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
+      # cibuildwheel invocation per platform suffices.
+      pythons: '["cp311"]'
     permissions:
       contents: read
       id-token: write
@@ -201,6 +204,9 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
+      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
+      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
+      pythons: '["cp311","cp312","cp313","cp314"]'
     permissions:
       contents: read
       id-token: write
@@ -219,6 +225,9 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
+      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
+      # cibuildwheel invocation per platform suffices.
+      pythons: '["cp311"]'
     permissions:
       contents: read
       id-token: write
@@ -237,6 +246,9 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
+      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
+      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
+      pythons: '["cp311","cp312","cp313","cp314"]'
     permissions:
       contents: read
       id-token: write
@@ -255,6 +267,9 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
+      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
+      # cibuildwheel invocation per platform suffices.
+      pythons: '["cp311"]'
     permissions:
       contents: read
       id-token: write
@@ -273,6 +288,9 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
+      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
+      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
+      pythons: '["cp311","cp312","cp313","cp314"]'
     permissions:
       contents: read
       id-token: write

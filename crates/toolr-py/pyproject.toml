@@ -55,8 +55,11 @@ exclude = ["**/__pycache__/**", "**/*.pyc"]
 # Only include skip patterns that match enabled builds
 # Removed: pp* (no PyPy builds enabled), *-i686 (no 32-bit builds), *-s390x (no s390x builds)
 skip = "*-win32 *-musllinux_i686"
-# Explicitly define supported Python versions
-build = "cp311-* cp312-* cp313-*"
+# Explicitly define supported Python versions. Must stay aligned with
+# `requires-python` above — cibuildwheel respects requires-python as a
+# secondary filter, but keeping the explicit list makes intent obvious
+# at-a-glance and lets the build matrix in CI mirror it.
+build = "cp311-* cp312-* cp313-* cp314-*"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]

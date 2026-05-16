@@ -23,6 +23,10 @@ on:
         required: true
         type: string
         description: 'Label distinguishing the wheel build. Use "binary" for the toolr (bin) wheel and "py" for the toolr-py (pyo3) wheel. Embedded in the uploaded artifact name to avoid collisions between the two builds for identical python x platform combinations.'
+      pythons:
+        required: true
+        type: string
+        description: 'JSON-encoded array of cibuildwheel Python ABI tags to build (e.g. ''["cp311","cp312","cp313","cp314"]''). Callers should mirror each crate''s `requires-python` / `[tool.cibuildwheel] build` line — binary wheels only need cp311 (py3-none-<plat>), py wheels need every supported CPython.'
 
 permissions:
   contents: read
@@ -39,10 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJson(inputs.platform-matrix) }}
-        python:
-          - "cp311"
-          - "cp312"
-          - "cp313"
+        python: ${{ fromJson(inputs.pythons) }}
 
     defaults:
       run:
