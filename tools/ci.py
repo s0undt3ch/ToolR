@@ -7,11 +7,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
+from pathlib import Path
 
 from packaging.version import Version
 
 from toolr import Context
 from toolr import command_group
+
+# tools/ci.py → repo root (two parents up resolves the `tools/` directory).
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 group = command_group("ci", "CI utilities", docstring=__doc__)
 
@@ -141,6 +146,64 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
     ctx.print(outputs)
     with open(github_output, "a") as f:
         f.writelines(f"{key}={json.dumps(value)}\n" for key, value in outputs.items())
+
+
+@group.command
+def check_doc_snippets(ctx: Context) -> None:
+    """
+    Verify captured `--help` snippets under docs/ match the toolr binary.
+
+    Runs `.pre-commit-hooks/regen-doc-snippets.py --check` and, on drift,
+    writes a remediation block + the unified diff to $GITHUB_STEP_SUMMARY
+    so PR reviewers see exactly what changed and how to regenerate.
+
+    The captured stderr is also echoed to the job log for searchability.
+    Honour `TOOLR_REGEN_BINARY` to pick the toolr binary used during the
+    check (CI sets it to the extracted toolr-archive artifact).
+    """
+    script = REPO_ROOT / ".pre-commit-hooks" / "regen-doc-snippets.py"
+    if not script.is_file():
+        ctx.error(f"regen-doc-snippets.py not found at {script}")
+        ctx.exit(1)
+
+    result = ctx.run(str(script), "--check", capture_output=True, stream_output=False)
+    stderr_text = result.stderr.read() if result.stderr is not None else ""
+
+    # Always replay the captured stderr so the diff shows up in the
+    # actions job log (searchable, copyable). Step summary is the
+    # human-friendly surface; the log is the durable one.
+    if stderr_text:
+        sys.stderr.write(stderr_text)
+        sys.stderr.flush()
+
+    if result.returncode == 0:
+        ctx.info("Doc snippets are in sync.")
+        return
+
+    github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if github_step_summary is not None:
+        diff_body = stderr_text if stderr_text.endswith("\n") else stderr_text + "\n"
+        with open(github_step_summary, "a") as wfh:
+            wfh.write("## ❌ Doc snippets are stale\n\n")
+            wfh.write(
+                "The captured `--help` snippets under `docs/` no longer match "
+                "the current `toolr` binary. The pre-commit hook is advisory "
+                "(skipped when no `toolr` is on PATH locally), so CI is the "
+                "authoritative check.\n\n"
+            )
+            wfh.write("**Fix locally:**\n\n")
+            wfh.write("```bash\n")
+            wfh.write(".pre-commit-hooks/regen-doc-snippets.py\n")
+            wfh.write("git add docs/\n")
+            wfh.write('git commit -m "docs: regen snippets"\n')
+            wfh.write("```\n\n")
+            wfh.write("<details><summary>Diff</summary>\n\n")
+            wfh.write("```diff\n")
+            wfh.write(diff_body)
+            wfh.write("```\n\n")
+            wfh.write("</details>\n")
+
+    ctx.exit(result.returncode or 1)
 
 
 @group.command
