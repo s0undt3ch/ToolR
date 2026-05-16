@@ -35,6 +35,9 @@ jobs:
       contents: read
     outputs:
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
+      binary-archive-triples: ${{ steps.generate-build-matrix.outputs.binary-archive-triples }}
+      pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
+      pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
       # Mirrors env.CACHE_SEED / env.MISE_VERSION. Reusable workflows can't
       # read `env` from a caller's `with:` block, so they read these
       # outputs instead.
@@ -74,7 +77,7 @@ jobs:
       - name: Generate Build Matrix
         id: generate-build-matrix
         run: |
-          uv run toolr ci generate-build-matrix
+          uv run toolr ci generate-build-matrix --workflow release
 
   prepare-release:
     name: Prepare Release
@@ -110,9 +113,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
-      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
-      # cibuildwheel invocation per platform suffices.
-      pythons: '["cp311"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
   build-py-wheel-linux:
     name: Build (toolr-py wheel)
@@ -130,9 +131,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
-      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
-      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
-      pythons: '["cp311","cp312","cp313","cp314"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 
   build-binary-wheel-windows:
     name: Build (binary wheel)
@@ -150,9 +149,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
-      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
-      # cibuildwheel invocation per platform suffices.
-      pythons: '["cp311"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
   build-py-wheel-windows:
     name: Build (toolr-py wheel)
@@ -170,9 +167,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
-      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
-      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
-      pythons: '["cp311","cp312","cp313","cp314"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 
   build-binary-wheel-macos:
     name: Build (binary wheel)
@@ -190,9 +185,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
-      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
-      # cibuildwheel invocation per platform suffices.
-      pythons: '["cp311"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
   build-py-wheel-macos:
     name: Build (toolr-py wheel)
@@ -210,9 +203,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
-      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
-      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
-      pythons: '["cp311","cp312","cp313","cp314"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 
   distribution-tests:
     name: Distribution tests (${{ matrix.platform }})
@@ -286,6 +277,7 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
 
   publish-release:
     name: Publish Release

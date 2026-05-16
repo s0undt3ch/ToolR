@@ -19,6 +19,10 @@ on:
         required: true
         type: string
         description: 'Version of mise to install. Pass the caller workflow''s MISE_VERSION env var.'
+      targets:
+        required: true
+        type: string
+        description: 'JSON-encoded array of {triple, runner, cross, archive} objects describing which standalone binaries to build. Produced by `toolr ci generate-build-matrix --workflow {ci,release}` so the matrix stays centralized in tools/ci.py.'
 
 permissions:
   contents: read
@@ -34,38 +38,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          # Native runners cover x86_64/arm64 on Linux + macOS + Windows.
-          # `cross` is reserved for the musl targets where GitHub does not
-          # provide a matching native runner.
-          - triple: x86_64-unknown-linux-gnu
-            runner: ubuntu-latest
-            cross: false
-            archive: tar.gz
-          - triple: aarch64-unknown-linux-gnu
-            runner: ubuntu-24.04-arm
-            cross: false
-            archive: tar.gz
-          - triple: x86_64-unknown-linux-musl
-            runner: ubuntu-latest
-            cross: true
-            archive: tar.gz
-          - triple: aarch64-unknown-linux-musl
-            runner: ubuntu-24.04-arm
-            cross: true
-            archive: tar.gz
-          - triple: x86_64-apple-darwin
-            runner: macos-13
-            cross: false
-            archive: tar.gz
-          - triple: aarch64-apple-darwin
-            runner: macos-14
-            cross: false
-            archive: tar.gz
-          - triple: x86_64-pc-windows-msvc
-            runner: windows-latest
-            cross: false
-            archive: zip
+        # Each entry: {triple, runner, cross, archive}. Native runners
+        # cover x86_64/arm64 on Linux + macOS + Windows; `cross` is reserved
+        # for the musl targets where GitHub does not provide a matching
+        # native runner. See tools/ci.py:_BINARY_ARCHIVE_TRIPLES for the
+        # canonical list.
+        target: ${{ fromJson(inputs.targets) }}
 
     defaults:
       run:

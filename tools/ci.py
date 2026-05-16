@@ -16,28 +16,99 @@ from toolr import command_group
 group = command_group("ci", "CI utilities", docstring=__doc__)
 
 
-@group.command
-def generate_build_matrix(ctx: Context) -> None:
-    """
-    Generate a build matrix.
-    """
-    matrix = {
-        "macos": [
-            {"name": "macosx_x86_64", "os": "macos-15-intel"},
-            {"name": "macosx_arm64", "os": "macos-14"},
-        ],
-        "windows": [
-            {"name": "win_amd64", "os": "windows-2025"},
-        ],
-        "linux": [
-            {"name": "manylinux_x86_64", "os": "ubuntu-latest"},
-            {"name": "musllinux_x86_64", "os": "ubuntu-latest"},
-            {"name": "manylinux_aarch64", "os": "ubuntu-24.04-arm"},
-            {"name": "musllinux_aarch64", "os": "ubuntu-24.04-arm"},
-            # If we ever get a bug report asking to add s390x support, we can add it back.
-            # {"name": "manylinux_s390x", "os": "ubuntu-latest", "emulation": True},
-        ],
+# CPython ABI tags for the toolr-py (pyo3) wheel. Keep aligned with
+# `requires-python` in crates/toolr-py/pyproject.toml and the explicit
+# `[tool.cibuildwheel] build = ...` list in that same file. Bump in
+# lockstep when a new CPython is added/removed.
+ALL_CPYTHONS = ["cp311", "cp312", "cp313", "cp314"]
+
+# The toolr binary wheel uses `bindings = "bin"` → produces a single
+# py3-none-<plat> wheel per platform. One cibuildwheel invocation
+# suffices regardless of CPython matrix.
+BINARY_WHEEL_PYTHONS = ["cp311"]
+
+# Per-triple metadata for the standalone toolr binary archives that
+# `_build-binary-archive.yml` builds. release.yml ships all of them
+# (downstream consumers: install.sh, mise plugin); ci.yml only needs the
+# runner-native subset to back the test/docs jobs (see CI_BINARY_TRIPLES).
+_BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
+    {"triple": "x86_64-unknown-linux-gnu", "runner": "ubuntu-latest", "cross": False, "archive": "tar.gz"},
+    {"triple": "aarch64-unknown-linux-gnu", "runner": "ubuntu-24.04-arm", "cross": False, "archive": "tar.gz"},
+    {"triple": "x86_64-unknown-linux-musl", "runner": "ubuntu-latest", "cross": True, "archive": "tar.gz"},
+    {"triple": "aarch64-unknown-linux-musl", "runner": "ubuntu-24.04-arm", "cross": True, "archive": "tar.gz"},
+    {"triple": "x86_64-apple-darwin", "runner": "macos-13", "cross": False, "archive": "tar.gz"},
+    {"triple": "aarch64-apple-darwin", "runner": "macos-14", "cross": False, "archive": "tar.gz"},
+    {"triple": "x86_64-pc-windows-msvc", "runner": "windows-latest", "cross": False, "archive": "zip"},
+]
+
+# Triples that ci.yml builds on every PR — one native triple per OS
+# in the test matrix. musl + cross-compiled aarch64 only build in
+# release.yml.
+_CI_BINARY_ARCHIVE_TRIPLE_NAMES = frozenset(
+    {
+        "x86_64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc",
     }
+)
+
+_WHEEL_PLATFORM_MATRIX: dict[str, list[dict[str, str]]] = {
+    "macos": [
+        {"name": "macosx_x86_64", "os": "macos-15-intel"},
+        {"name": "macosx_arm64", "os": "macos-14"},
+    ],
+    "windows": [
+        {"name": "win_amd64", "os": "windows-2025"},
+    ],
+    "linux": [
+        {"name": "manylinux_x86_64", "os": "ubuntu-latest"},
+        {"name": "musllinux_x86_64", "os": "ubuntu-latest"},
+        {"name": "manylinux_aarch64", "os": "ubuntu-24.04-arm"},
+        {"name": "musllinux_aarch64", "os": "ubuntu-24.04-arm"},
+        # If we ever get a bug report asking to add s390x support, we can add it back.
+        # {"name": "manylinux_s390x", "os": "ubuntu-latest", "emulation": True},
+    ],
+}
+
+
+@group.command
+def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
+    """
+    Emit the CI matrix configuration consumed by `prepare-ci` jobs.
+
+    Writes four GITHUB_OUTPUT keys:
+
+      - `platform-matrix` — wheel platform map per OS (used by _build.yml).
+      - `binary-archive-triples` — list of triple+runner+cross+archive
+        objects (used by _build-binary-archive.yml's matrix).
+      - `pythons-binary` — CPython ABI tags for the toolr binary wheel.
+      - `pythons-py` — CPython ABI tags for the toolr-py (pyo3) wheel.
+
+    Centralising these in one place (vs. hardcoded YAML across multiple
+    workflow files) keeps the binary-wheel/py-wheel/binary-archive matrices
+    in sync and lets workflow files stay declarative.
+
+    Args:
+        workflow: Which workflow is asking. `"ci"` emits the native-triple
+            subset (fast PR builds against linux-gnu + darwin-arm + win-msvc);
+            `"release"` emits the full 7-triple matrix that ships to users.
+    """
+    if workflow not in ("ci", "release"):
+        ctx.error(f"unknown workflow: {workflow!r} (expected 'ci' or 'release')")
+        ctx.exit(1)
+
+    if workflow == "release":
+        binary_archive_triples: list[dict[str, object]] = list(_BINARY_ARCHIVE_TRIPLES)
+    else:
+        binary_archive_triples = [t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES]
+
+    outputs: dict[str, object] = {
+        "platform-matrix": _WHEEL_PLATFORM_MATRIX,
+        "binary-archive-triples": binary_archive_triples,
+        "pythons-binary": BINARY_WHEEL_PYTHONS,
+        "pythons-py": ALL_CPYTHONS,
+    }
+
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output is None:
         ctx.error("GITHUB_OUTPUT environment variable is not set")
@@ -46,19 +117,30 @@ def generate_build_matrix(ctx: Context) -> None:
     if github_step_summary is None:
         ctx.error("GITHUB_STEP_SUMMARY environment variable is not set")
         ctx.exit(1)
+
     with open(github_step_summary, "a") as wfh:
-        wfh.write("## Build Matrix\n\n")
-        wfh.write("| Platform | CI Build Wheel Image | GH Runner |\n")
+        wfh.write(f"## Build matrix ({workflow})\n\n")
+        wfh.write("### Wheels\n\n")
+        wfh.write("| Platform | cibuildwheel platform | GH runner |\n")
         wfh.write("|----------|----------------------|-----------|\n")
-        for platform, values in sorted(matrix.items()):
+        for platform, values in sorted(_WHEEL_PLATFORM_MATRIX.items()):
             for idx, item in enumerate(values):
-                platform_name = platform.title() if idx == 0 else ""
-                wfh.write(f"| {platform_name} | {item['name']} | {item['os']} |\n")
-        wfh.write("\n")
-    ctx.info("Writing build matrix to github output file ...")
-    ctx.print(matrix)
+                label = platform.title() if idx == 0 else ""
+                wfh.write(f"| {label} | {item['name']} | {item['os']} |\n")
+        wfh.write("\n### Standalone binary archives\n\n")
+        wfh.write("| Triple | GH runner | Build mode |\n")
+        wfh.write("|--------|-----------|------------|\n")
+        for t in binary_archive_triples:
+            mode = "cross" if t["cross"] else "native"
+            wfh.write(f"| `{t['triple']}` | {t['runner']} | {mode} |\n")
+        wfh.write("\n### Python ABIs\n\n")
+        wfh.write(f"- Binary wheel: `{', '.join(BINARY_WHEEL_PYTHONS)}`\n")
+        wfh.write(f"- toolr-py wheel: `{', '.join(ALL_CPYTHONS)}`\n\n")
+
+    ctx.info(f"Emitting build matrix outputs for workflow={workflow!r}")
+    ctx.print(outputs)
     with open(github_output, "a") as f:
-        f.write(f"platform-matrix={json.dumps(matrix)}\n")
+        f.writelines(f"{key}={json.dumps(value)}\n" for key, value in outputs.items())
 
 
 @group.command

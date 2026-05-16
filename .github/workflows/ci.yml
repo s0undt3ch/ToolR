@@ -32,6 +32,9 @@ jobs:
     outputs:
       should-run-build: ${{ steps.check-build.outputs.should-run-build }}
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
+      binary-archive-triples: ${{ steps.generate-build-matrix.outputs.binary-archive-triples }}
+      pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
+      pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
       # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
       # reusable workflows can read them via `needs.prepare-ci.outputs.*`
       # (the `env` context is not allowed in workflow-call `with:` blocks).
@@ -82,7 +85,7 @@ jobs:
         id: generate-build-matrix
         if: fromJSON(steps.check-build.outputs.should-run-build)
         run: |
-          toolr ci generate-build-matrix
+          toolr ci generate-build-matrix --workflow ci
 
   pre-commit:
     name: Pre-commit
@@ -183,9 +186,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
-      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
-      # cibuildwheel invocation per platform suffices.
-      pythons: '["cp311"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
     permissions:
       contents: read
       id-token: write
@@ -204,9 +205,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
-      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
-      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
-      pythons: '["cp311","cp312","cp313","cp314"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
     permissions:
       contents: read
       id-token: write
@@ -225,9 +224,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
-      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
-      # cibuildwheel invocation per platform suffices.
-      pythons: '["cp311"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
     permissions:
       contents: read
       id-token: write
@@ -246,9 +243,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
-      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
-      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
-      pythons: '["cp311","cp312","cp313","cp314"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
     permissions:
       contents: read
       id-token: write
@@ -267,9 +262,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: binary
-      # Binary wheel uses `bindings = "bin"` → py3-none-<plat>; one
-      # cibuildwheel invocation per platform suffices.
-      pythons: '["cp311"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
     permissions:
       contents: read
       id-token: write
@@ -288,9 +281,7 @@ jobs:
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       wheel-kind: py
-      # toolr-py is a pyo3 cdylib — one wheel per CPython ABI. Keep this
-      # list aligned with `requires-python` in crates/toolr-py/pyproject.toml.
-      pythons: '["cp311","cp312","cp313","cp314"]'
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
     permissions:
       contents: read
       id-token: write
