@@ -153,7 +153,8 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Load shared env vars
-        run: cat .github/env >> "$GITHUB_ENV"
+        # See ci.yml's matching step for why we sed-filter instead of cat.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           version: ${{ env.MISE_VERSION }}

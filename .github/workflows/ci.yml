@@ -55,7 +55,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Load shared env vars
-        run: cat .github/env >> "$GITHUB_ENV"
+        # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
+        # blank/comment lines as "Invalid format". Filter `.github/env`
+        # to the assignment lines (sed `p`-prints lines starting with
+        # an uppercase letter) so comments in the source file are
+        # preserved for human readers but skipped by the loader.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
 
       - name: Expose cache seed
         id: cache-seed
@@ -117,7 +122,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Load shared env vars
-        run: cat .github/env >> "$GITHUB_ENV"
+        # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
+        # blank/comment lines as "Invalid format". Filter `.github/env`
+        # to the assignment lines (sed `p`-prints lines starting with
+        # an uppercase letter) so comments in the source file are
+        # preserved for human readers but skipped by the loader.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
 
       - name: Setup Prek
         id: setup-pre-commit
@@ -417,7 +427,12 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Load shared env vars
-        run: cat .github/env >> "$GITHUB_ENV"
+        # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
+        # blank/comment lines as "Invalid format". Filter `.github/env`
+        # to the assignment lines (sed `p`-prints lines starting with
+        # an uppercase letter) so comments in the source file are
+        # preserved for human readers but skipped by the loader.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv

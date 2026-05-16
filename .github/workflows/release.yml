@@ -61,7 +61,8 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Load shared env vars
-        run: cat .github/env >> "$GITHUB_ENV"
+        # See ci.yml's matching step for why we sed-filter instead of cat.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
 
       - name: Expose cache seed
         id: cache-seed
