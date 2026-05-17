@@ -52,6 +52,9 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
+# cargo-tarpaulin / cargo-llvm-cov drop these next to test binaries
+# when run locally; they're build artefacts, never source.
+*.profraw
 .hypothesis/
 .pytest_cache/
 cover/

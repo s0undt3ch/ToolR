@@ -407,3 +407,168 @@ pub(crate) fn report_uv_error(err: &toolr_core::uv::UvError) -> String {
         other => format!("toolr: {other}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! In-process unit tests for the pure helpers in this module.
+    //!
+    //! Integration tests under `crates/toolr/tests/` spawn the `toolr`
+    //! binary via `assert_cmd`, so they exercise the dispatcher's
+    //! observable behaviour but don't contribute to tarpaulin's
+    //! line-coverage of this file (tarpaulin doesn't aggregate
+    //! subprocess profraws by default). These unit tests run inside the
+    //! test process so the coverage counter actually moves.
+    use super::*;
+    use toolr_core::uv::UvError;
+
+    // ----------------------------------------------------------------
+    // report_uv_error: one assertion per variant.
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn report_uv_error_renders_user_refused_install() {
+        let s = report_uv_error(&UvError::UserRefusedInstall);
+        assert!(s.contains("uv is required"));
+        assert!(s.contains("TOOLR_AUTO_INSTALL_UV"));
+    }
+
+    #[test]
+    fn report_uv_error_renders_version_too_old() {
+        let s = report_uv_error(&UvError::VersionTooOld {
+            found: (0, 1, 2),
+            required: (3, 4, 5),
+        });
+        assert!(s.contains("0.1.2"), "actual: {s}");
+        assert!(s.contains("3.4.5"), "actual: {s}");
+        assert!(s.contains("Upgrade uv"), "actual: {s}");
+    }
+
+    #[test]
+    fn report_uv_error_renders_other_variant() {
+        // Any non-(UserRefused|VersionTooOld) variant falls into the
+        // catch-all `format!("toolr: {other}")` arm.
+        let s = report_uv_error(&UvError::NotAvailable);
+        assert!(s.starts_with("toolr:"), "actual: {s}");
+    }
+
+    // ----------------------------------------------------------------
+    // resolve_python_for_build: override / VIRTUAL_ENV / PATH fallback.
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn resolve_python_for_build_accepts_existing_override() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let p = tmp.path().join("python");
+        std::fs::write(&p, "").unwrap();
+        let resolved = resolve_python_for_build(Some(p.to_str().unwrap())).unwrap();
+        assert_eq!(resolved, p);
+    }
+
+    #[test]
+    fn resolve_python_for_build_rejects_nonexistent_override() {
+        let err = resolve_python_for_build(Some("/definitely/not/a/python")).unwrap_err();
+        assert!(err.to_string().contains("not a file"), "actual: {err}");
+    }
+
+    // Note: the VIRTUAL_ENV + PATH fallback branches mutate process-wide
+    // env state, which races against any other test in the same binary
+    // that also reads `$VIRTUAL_ENV`. We rely on the integration tests
+    // in `cli_smoke.rs` (which spawn fresh subprocesses) to exercise
+    // those branches. Coverage on lines 196-210 is therefore expected
+    // to remain partial under tarpaulin's in-process metric.
+
+    // ----------------------------------------------------------------
+    // dirs_home: $HOME present / absent.
+    // ----------------------------------------------------------------
+
+    // Same env-mutation reasoning as above — `$HOME` is set on every
+    // sane CI runner, so the happy path is implicitly covered by the
+    // completion-install integration tests. We don't exercise the
+    // "no HOME" bail branch here for the same reason.
+
+    // ----------------------------------------------------------------
+    // output_options_from_matches: every flag knob.
+    // ----------------------------------------------------------------
+
+    /// Build a one-group manifest so `cli::build_command` can produce a
+    /// root command we can call `try_get_matches_from` on. The manifest
+    /// content doesn't matter for output-option tests — only the root
+    /// flags do.
+    fn empty_manifest() -> Manifest {
+        Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            dynamic_hash: String::new(),
+            groups: Vec::new(),
+            commands: Vec::new(),
+        }
+    }
+
+    fn parse(args: &[&str]) -> ArgMatches {
+        let manifest = empty_manifest();
+        let root = crate::cli::build_command(&manifest);
+        let mut full: Vec<String> = vec!["toolr".into()];
+        full.extend(args.iter().map(|s| (*s).to_string()));
+        root.try_get_matches_from(full).unwrap()
+    }
+
+    #[test]
+    fn output_options_defaults_when_no_flags_set() {
+        let m = parse(&[]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.verbosity, OutputOptions::default().verbosity);
+        assert_eq!(opts.log_level, OutputOptions::default().log_level);
+        assert!(!opts.timestamps);
+        assert!(opts.default_timeout_secs.is_none());
+        assert!(opts.default_no_output_timeout_secs.is_none());
+    }
+
+    #[test]
+    fn output_options_quiet_overrides_verbosity_and_log_level() {
+        let m = parse(&["--quiet"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.verbosity, "quiet");
+        assert_eq!(opts.log_level, "INFO");
+    }
+
+    #[test]
+    fn output_options_debug_overrides_verbosity_and_log_level() {
+        let m = parse(&["--debug"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.verbosity, "verbose");
+        assert_eq!(opts.log_level, "DEBUG");
+    }
+
+    #[test]
+    fn output_options_timestamps_flag_is_propagated() {
+        let m = parse(&["--timestamps"]);
+        let opts = output_options_from_matches(&m);
+        assert!(opts.timestamps);
+    }
+
+    #[test]
+    fn output_options_no_timestamps_wins_over_timestamps() {
+        // The cli defines `--no-timestamps` as the override; setting both
+        // (which clap rejects via `conflicts_with`) isn't reachable.
+        // The code path explicitly checks `!no-timestamps`, so the
+        // default-no-flag case + an explicit `--no-timestamps` both
+        // result in `timestamps = false`.
+        let m = parse(&["--no-timestamps"]);
+        let opts = output_options_from_matches(&m);
+        assert!(!opts.timestamps);
+    }
+
+    #[test]
+    fn output_options_propagates_timeout_secs() {
+        let m = parse(&["--timeout-secs", "12.5"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.default_timeout_secs, Some(12.5));
+    }
+
+    #[test]
+    fn output_options_propagates_no_output_timeout_secs() {
+        let m = parse(&["--no-output-timeout-secs", "3"]);
+        let opts = output_options_from_matches(&m);
+        assert_eq!(opts.default_no_output_timeout_secs, Some(3.0));
+    }
+}
