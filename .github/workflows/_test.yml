@@ -192,17 +192,30 @@ jobs:
           cargo tarpaulin --no-run --workspace --exclude toolr-py --target-dir target/coverage
 
       - name: Run Rust Tests
-        # `--follow-exec` is intentionally NOT passed here: tarpaulin's
-        # ptrace engine segfaults on some integration tests that spawn the
-        # `toolr` binary (observed in cache_fixtures' end_to_end exercise
-        # under Linux ptrace, ~50% reproducibility). Subprocess coverage
-        # was the original motivation for the flag, but in-process unit
-        # tests in the affected modules (dispatch.rs, project.rs,
-        # uv::install) already cover the relevant branches directly.
-        # `--timeout 300` stays in for the signal-driven tests that need
-        # headroom under tarpaulin's instrumented binaries.
+        # Flag combination explained:
+        #   --engine ptrace      explicit so newer tarpaulin builds don't
+        #                        auto-pick Llvm, which silently loses
+        #                        subprocess coverage (profraw collisions
+        #                        between parent + spawned `toolr` child).
+        #   --follow-exec        credits coverage from `target/debug/toolr`
+        #                        subprocesses spawned by integration tests
+        #                        (cli_smoke, dispatch_coverage, …).
+        #   --forward-signals    stops ptrace from intercepting signals
+        #                        destined for the child binary — the
+        #                        signal-driven tests (SIGCHLD waits,
+        #                        timeout enforcement) hang otherwise.
+        #   --test-threads 1     serialises subprocess spawning. Mitigates
+        #                        the well-known tarpaulin ptrace bug where
+        #                        the parent waitpid() loop mishandles
+        #                        multiple concurrent children and
+        #                        segfaults non-deterministically
+        #                        (tarpaulin #461, #790, #317; reproduced
+        #                        ~50% on Linux GHA in this repo's
+        #                        cache_fixtures e2e test).
+        #   --timeout 300        signal-driven tests need headroom under
+        #                        tarpaulin's instrumented binaries.
         run: |
-          cargo tarpaulin --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage
+          cargo tarpaulin --engine ptrace --follow-exec --forward-signals --test-threads 1 --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
