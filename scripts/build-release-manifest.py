@@ -13,8 +13,15 @@ import re
 import sys
 from pathlib import Path
 
+# Inner character class is `[^-.]+` (not `[^-]+`) so each version segment
+# is unambiguously terminated by a literal `.`. With `[^-]+(?:\.[^-]+)*`
+# the inner `[^-]+` happily matches dots too, giving the regex engine
+# multiple ways to split a many-dot input — catastrophic backtracking on
+# adversarial filenames (CodeQL js/redos rule). Forcing `.` as the only
+# segment separator eliminates the ambiguity without changing what the
+# regex accepts on real wheels (e.g. `0.11.2`, `0.11.2.dev262`).
 ARCHIVE_RE = re.compile(
-    r"^toolr-(?P<version>[^-]+(?:\.[^-]+)*)-(?P<triple>[a-z0-9_]+(?:-[a-z0-9_]+)+)\."
+    r"^toolr-(?P<version>[^-.]+(?:\.[^-.]+)*)-(?P<triple>[a-z0-9_]+(?:-[a-z0-9_]+)+)\."
     r"(?P<ext>tar\.gz|zip)$"
 )
 
