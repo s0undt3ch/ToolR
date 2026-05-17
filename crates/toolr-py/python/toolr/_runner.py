@@ -95,11 +95,14 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
         raise SpecError(msg) from exc
     try:
         spec = msgspec.json.decode(data, type=RunnerSpec)
+    except msgspec.ValidationError as exc:
+        # `ValidationError` is a subclass of `DecodeError` in msgspec, so
+        # the more-specific clause must come first; otherwise the broader
+        # "not valid JSON" message swallows real type/schema mismatches.
+        msg = f"toolr spec file failed schema validation ({spec_path}): {exc}"
+        raise SpecError(msg) from exc
     except msgspec.DecodeError as exc:
         msg = f"toolr spec file is not valid JSON ({spec_path}): {exc}"
-        raise SpecError(msg) from exc
-    except msgspec.ValidationError as exc:
-        msg = f"toolr spec file failed schema validation ({spec_path}): {exc}"
         raise SpecError(msg) from exc
     if spec.schema_version != SCHEMA_VERSION:
         msg = (
