@@ -204,18 +204,22 @@ jobs:
         #                        destined for the child binary — the
         #                        signal-driven tests (SIGCHLD waits,
         #                        timeout enforcement) hang otherwise.
-        #   --test-threads 1     serialises subprocess spawning. Mitigates
-        #                        the well-known tarpaulin ptrace bug where
-        #                        the parent waitpid() loop mishandles
-        #                        multiple concurrent children and
-        #                        segfaults non-deterministically
-        #                        (tarpaulin #461, #790, #317; reproduced
-        #                        ~50% on Linux GHA in this repo's
-        #                        cache_fixtures e2e test).
         #   --timeout 300        signal-driven tests need headroom under
         #                        tarpaulin's instrumented binaries.
+        #   -- --test-threads=1  forwarded to the libtest harness inside
+        #                        each test binary; serialises subprocess
+        #                        spawning. Mitigates the well-known
+        #                        tarpaulin ptrace bug where the parent
+        #                        waitpid() loop mishandles multiple
+        #                        concurrent children and segfaults
+        #                        non-deterministically (tarpaulin #461,
+        #                        #790, #317; reproduced ~50% on Linux
+        #                        GHA in this repo's cache_fixtures e2e
+        #                        test). NOTE: must come after `--` since
+        #                        tarpaulin itself has no --test-threads
+        #                        flag — it infers one and passes through.
         run: |
-          cargo tarpaulin --engine ptrace --follow-exec --forward --test-threads 1 --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage
+          cargo tarpaulin --engine ptrace --follow-exec --forward --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage -- --test-threads=1
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
