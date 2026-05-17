@@ -15,7 +15,7 @@ def test_empty_project_emits_valid_payload(tmp_path: Path) -> None:
     # local registrations. Wipe PYTHONPATH so the repo's tools/ doesn't leak
     # in from the parent test process.
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    proc = subprocess.run(  # noqa: S603
+    proc = subprocess.run(
         [sys.executable, "-m", "toolr._introspect"],
         capture_output=True,
         text=True,
@@ -31,7 +31,7 @@ def test_empty_project_emits_valid_payload(tmp_path: Path) -> None:
 
 
 def test_help_flag_exits_zero() -> None:
-    proc = subprocess.run(  # noqa: S603
+    proc = subprocess.run(
         [sys.executable, "-m", "toolr._introspect", "--help"],
         capture_output=True,
         text=True,

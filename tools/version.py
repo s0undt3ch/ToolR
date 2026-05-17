@@ -116,7 +116,7 @@ def bump(
         write: Actually apply the bump via ``cargo set-version --workspace``;
             otherwise this is a dry-run that only prints the resolved version.
     """
-    version = new_version if new_version else _compute_dev_version(ctx)
+    version = new_version or _compute_dev_version(ctx)
 
     if check_existing_tag:
         ret = ctx.run("git", "tag", "-l", f"v{version}", capture_output=True, stream_output=False)

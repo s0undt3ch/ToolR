@@ -72,7 +72,7 @@ def run_runner(tmp_path: Path) -> Callable[[Path], subprocess.CompletedProcess[s
         # import target (the real toolr project root also contains a ``tools/``
         # directory which would otherwise shadow it via ``python -m`` injecting
         # cwd as ``sys.path[0]``).
-        return subprocess.run(  # noqa: S603
+        return subprocess.run(
             [sys.executable, "-m", "toolr._runner"],
             env=env,
             cwd=str(tmp_path),
@@ -155,7 +155,7 @@ def test_runner_fails_clearly_when_spec_env_unset(tmp_path: Path) -> None:
     # fixtures because the whole point is the absence of ``TOOLR_SPEC_FILE``.
     env = os.environ.copy()
     env.pop("TOOLR_SPEC_FILE", None)
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, "-m", "toolr._runner"],
         env=env,
         cwd=str(tmp_path),

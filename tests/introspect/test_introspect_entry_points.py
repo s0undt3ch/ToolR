@@ -35,7 +35,7 @@ def test_entry_point_module_groups_appear(tmp_path: Path) -> None:
     (dist_info / "METADATA").write_text("Metadata-Version: 2.1\nName: fake-toolr-legacy\nVersion: 0.0.0\n")
     (dist_info / "entry_points.txt").write_text("[toolr.commands]\nlegacy = fake_toolr_legacy\n")
 
-    proc = subprocess.run(  # noqa: S603
+    proc = subprocess.run(
         [sys.executable, "-m", "toolr._introspect"],
         capture_output=True,
         text=True,
