@@ -171,8 +171,7 @@ def find_runner_python() -> Path:
 
 
 def _materialise_in_tree_venv(fixture: Path, runner_python: Path) -> None:
-    """Build a fake in-tree venv at `fixture/tools/.venv/` that points to
-    `runner_python` (the dev venv).
+    """Build a fake in-tree venv at `fixture/tools/.venv/` that points to `runner_python` (the dev venv).
 
     This lets `toolr project manifest rebuild` resolve a real Python
     interpreter without paying the cost of `uv sync`. The fixture's
@@ -239,13 +238,16 @@ def prepare_fixture(
         for src in extra_tools_files:
             shutil.copy(src, dest / "tools" / src.name)
     _materialise_in_tree_venv(dest, runner_python)
-    subprocess.run(  # noqa: S603
+    ret = subprocess.run(  # noqa: S603
         [str(toolr), "project", "manifest", "rebuild"],
         cwd=dest,
-        check=True,
+        check=False,
         capture_output=True,
         env={**os.environ, "TOOLR_NO_CACHE_HINT": "1"},
     )
+    if ret.returncode != 0:
+        print("Failed to rebuild manifest")
+        sys.exit(1)
 
 
 def capture(toolr: Path, fixture: Path, _python: Path, snippet: Snippet) -> str:
@@ -269,7 +271,13 @@ def capture(toolr: Path, fixture: Path, _python: Path, snippet: Snippet) -> str:
         text=True,
         check=False,
         env=env,
+        # Disconnect stdin in order for clap to respect the COLUMNS variable
+        stdin=subprocess.DEVNULL,
     )
+    if result.returncode != 0:
+        print("Failed to run snippet")
+        sys.exit(1)
+
     # Concatenate stdout + stderr so error-path captures work too.
     # Most snippets are clean `--help`, but executing commands may
     # interleave logs on stderr.
@@ -364,4 +372,5 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    retcode = main()
+    raise SystemExit(retcode)
