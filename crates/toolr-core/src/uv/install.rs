@@ -229,6 +229,7 @@ fn extract_zip(archive: &Path, into: &Path) -> Result<(), UvError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     #[test]
     fn already_available_when_path_present() {
@@ -271,4 +272,191 @@ mod tests {
             InstallDecision::Refuse
         );
     }
+
+    #[test]
+    fn decide_install_auto_smoke() {
+        // Path-found short-circuits before reading `is_terminal`, so this is
+        // stable regardless of how the test process's stdin is wired.
+        assert_eq!(
+            decide_install_auto(true, false, ConsentMode::default()),
+            InstallDecision::AlreadyAvailable
+        );
+    }
+
+    #[test]
+    fn consent_mode_from_env_reads_toolr_auto_install_uv() {
+        // Mutating process env is racy across tests in the same binary;
+        // serialise inside a single test by handling both states here.
+        let prev = std::env::var_os("TOOLR_AUTO_INSTALL_UV");
+        // SAFETY: single-threaded test, see comment above.
+        unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "1") };
+        let on = ConsentMode::from_env();
+        assert!(on.auto_install_env);
+        assert!(!on.yes_flag);
+
+        unsafe { std::env::remove_var("TOOLR_AUTO_INSTALL_UV") };
+        let off = ConsentMode::from_env();
+        assert!(!off.auto_install_env);
+
+        // Non-"1" value also counts as "not set" for our purposes.
+        unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "true") };
+        let other = ConsentMode::from_env();
+        assert!(!other.auto_install_env);
+
+        // Restore prior value so we don't leak into sibling tests.
+        match prev {
+            Some(v) => unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", v) },
+            None => unsafe { std::env::remove_var("TOOLR_AUTO_INSTALL_UV") },
+        }
+    }
+
+    #[test]
+    fn host_asset_returns_a_known_triple_or_none() {
+        let result = host_asset();
+        match (std::env::consts::OS, std::env::consts::ARCH) {
+            ("linux" | "macos" | "windows", "x86_64" | "aarch64") => {
+                assert!(result.is_some());
+                let (asset, ext) = result.unwrap();
+                assert!(asset.starts_with("uv-"));
+                assert!(ext == "tar.gz" || ext == "zip");
+            }
+            _ => {
+                // Exotic platform - host_asset returns None, that's fine.
+                let _ = result;
+            }
+        }
+    }
+
+    #[test]
+    fn asset_url_points_at_latest_download() {
+        let url = asset_url("uv-x86_64-apple-darwin", "tar.gz");
+        assert_eq!(
+            url,
+            "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-apple-darwin.tar.gz"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn set_executable_marks_file_runnable() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("victim");
+        fs::write(&path, b"#!/bin/sh\necho hi\n").unwrap();
+        // Start with 0o600 so we can observe the bit flip.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        set_executable(&path).unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_tar_gz_unpacks_archive_into_dest() {
+        // Skip when `tar` isn't on PATH (very rare; CI containers have it).
+        if which::which("tar").is_err() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let src_dir = tmp.path().join("src");
+        let payload = src_dir.join("hello.txt");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(&payload, b"world").unwrap();
+
+        let archive = tmp.path().join("bundle.tar.gz");
+        let status = Command::new("tar")
+            .arg("-czf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(tmp.path())
+            .arg("src")
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        extract_tar_gz(&archive, &out).unwrap();
+        assert_eq!(fs::read(out.join("src").join("hello.txt")).unwrap(), b"world");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_tar_gz_reports_failure_for_missing_archive() {
+        if which::which("tar").is_err() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("nope.tar.gz");
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        let err = extract_tar_gz(&missing, &out).unwrap_err();
+        match err {
+            UvError::Http(msg) => assert!(msg.contains("tar exited with status")),
+            other => panic!("expected Http error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_zip_unpacks_archive_into_dest() {
+        if which::which("zip").is_err() || which::which("unzip").is_err() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let src_dir = tmp.path().join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("hello.txt"), b"world").unwrap();
+        let archive = tmp.path().join("bundle.zip");
+        let status = Command::new("zip")
+            .arg("-qr")
+            .arg(&archive)
+            .arg("src")
+            .current_dir(tmp.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        extract_zip(&archive, &out).unwrap();
+        assert_eq!(fs::read(out.join("src").join("hello.txt")).unwrap(), b"world");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_zip_reports_failure_for_missing_archive() {
+        if which::which("unzip").is_err() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        let err = extract_zip(&tmp.path().join("nope.zip"), &out).unwrap_err();
+        match err {
+            UvError::Http(msg) => assert!(msg.contains("unzip exited with status")),
+            other => panic!("expected Http error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn perform_install_surfaces_http_failure_for_unreachable_host() {
+        // Drive `download_and_extract` directly with a guaranteed-bad URL so
+        // we exercise the reqwest error path without touching the network's
+        // real DNS / firewall behaviour. Using a `.invalid` TLD per RFC 2606.
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("bin").join("uv");
+        let err = download_and_extract(
+            "http://this-host-cannot-exist.invalid/uv-x86_64-apple-darwin.tar.gz",
+            "uv-x86_64-apple-darwin",
+            "tar.gz",
+            &dest,
+        )
+        .unwrap_err();
+        match err {
+            UvError::Http(_) => {}
+            other => panic!("expected Http error, got {other:?}"),
+        }
+    }
+
 }
