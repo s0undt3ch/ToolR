@@ -200,7 +200,7 @@ jobs:
         #   --follow-exec        credits coverage from `target/debug/toolr`
         #                        subprocesses spawned by integration tests
         #                        (cli_smoke, dispatch_coverage, …).
-        #   --forward-signals    stops ptrace from intercepting signals
+        #   --forward            stops ptrace from intercepting signals
         #                        destined for the child binary — the
         #                        signal-driven tests (SIGCHLD waits,
         #                        timeout enforcement) hang otherwise.
@@ -215,7 +215,7 @@ jobs:
         #   --timeout 300        signal-driven tests need headroom under
         #                        tarpaulin's instrumented binaries.
         run: |
-          cargo tarpaulin --engine ptrace --follow-exec --forward-signals --test-threads 1 --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage
+          cargo tarpaulin --engine ptrace --follow-exec --forward --test-threads 1 --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
