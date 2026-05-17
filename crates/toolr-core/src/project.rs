@@ -76,15 +76,22 @@ mod tests {
 
     #[test]
     fn ensure_venv_ready_reports_missing_project_root() {
-        // No pyproject.toml or marker - `discover_project_root` errors and
-        // the error is annotated with our "locating project root" context.
+        // No pyproject.toml or marker - `ensure_venv_ready` must fail and
+        // surface a clear error. On most hosts we hit "locating project
+        // root" via `discover_project_root` returning NotFound. On GHA
+        // Windows runners `C:\tools\` ships pre-populated, so the walk
+        // succeeds up to `C:\` and we instead fail at the resolve step
+        // ("resolving the tools venv path" because `C:\tools\pyproject.toml`
+        // is missing). Either error proves the orchestration aborts before
+        // any uv interaction - which is what the test is really asserting.
         let tmp = tempfile::tempdir().unwrap();
         let err = ensure_venv_ready(tmp.path(), ConsentMode::default(), false)
-            .expect_err("expected discovery to fail in an empty dir");
+            .expect_err("expected ensure_venv_ready to fail without a project");
         let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
+        let expected_one_of = ["locating project root", "resolving the tools venv path"];
         assert!(
-            chain.iter().any(|m| m.contains("locating project root")),
-            "expected context message in error chain, got: {chain:?}"
+            chain.iter().any(|m| expected_one_of.iter().any(|hint| m.contains(hint))),
+            "expected one of {expected_one_of:?} in the error chain, got: {chain:?}"
         );
     }
 

@@ -192,18 +192,17 @@ jobs:
           cargo tarpaulin --no-run --workspace --exclude toolr-py --target-dir target/coverage
 
       - name: Run Rust Tests
-        # `--follow-exec`: tarpaulin's ptrace engine only follows the
-        # parent process by default, so an integration test that spawns
-        # `target/debug/toolr` (cli_smoke, dispatch_coverage, etc.) gets
-        # zero coverage credit from anything inside the child. Following
-        # exec calls into child binaries built with the same coverage
-        # instrumentation merges that data back into the report. Known
-        # caveat: ptrace interferes with signal delivery, which has
-        # historically caused 60s test timeouts on subprocess-heavy
-        # suites — bump `--timeout` to 300 to give signal-driven tests
-        # (waiting on child SIGCHLD, etc.) headroom.
+        # `--follow-exec` is intentionally NOT passed here: tarpaulin's
+        # ptrace engine segfaults on some integration tests that spawn the
+        # `toolr` binary (observed in cache_fixtures' end_to_end exercise
+        # under Linux ptrace, ~50% reproducibility). Subprocess coverage
+        # was the original motivation for the flag, but in-process unit
+        # tests in the affected modules (dispatch.rs, project.rs,
+        # uv::install) already cover the relevant branches directly.
+        # `--timeout 300` stays in for the signal-driven tests that need
+        # headroom under tarpaulin's instrumented binaries.
         run: |
-          cargo tarpaulin --follow-exec --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage
+          cargo tarpaulin --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
