@@ -9,10 +9,10 @@
       
       
       
-        <link rel="prev" href="../quickstart/">
+        <link rel="prev" href="../cli/">
       
       
-        <link rel="next" href="mise/">
+        <link rel="next" href="../internals/">
       
       
         
@@ -23,7 +23,7 @@
     
     
       
-        <title>Overview - ToolR Documentation</title>
+        <title>Third-party packages - ToolR Documentation</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#installation" class="md-skip">
+        <a href="#third-party-packages" class="md-skip">
           Skip to content
         </a>
       
@@ -107,7 +107,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Overview
+              Third-party packages
             
           </span>
         </div>
@@ -218,13 +218,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
           
   
   
@@ -340,9 +338,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../third-party/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -527,8 +527,6 @@
       
   
   
-    
-  
   
   
     
@@ -544,23 +542,20 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="./" class="md-nav__link md-nav__link--active">
+            <a href="../installation/" class="md-nav__link ">
               
   
   
@@ -578,13 +573,13 @@
             </a>
             
               
-              <label class="md-nav__link md-nav__link--active" for="__nav_3" id="__nav_3_label" tabindex="">
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -604,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="mise/" class="md-nav__link">
+      <a href="../installation/mise/" class="md-nav__link">
         
   
   
@@ -1058,10 +1053,37 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../third-party/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Third-party packages
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1077,6 +1099,131 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-ship-a-static-manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why ship a static manifest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-toolr-manifestjson-fragment-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The toolr-manifest.json fragment format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-python-build-helper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Python build helper
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Python build helper">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#-check-for-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --check for CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-rust-cli-wrapper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The rust CLI wrapper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#entry-point-fallback-legacy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entry-point fallback (legacy)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-example-in-the-repo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working example in the repo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#command-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command resolution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#distribution-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distribution checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1640,10 +1787,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
+  <a href="#why-ship-a-static-manifest" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Requirements
+        Why ship a static manifest
       
     </span>
   </a>
@@ -1651,66 +1798,33 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-the-cli-binary-toolr" class="md-nav__link">
+  <a href="#the-toolr-manifestjson-fragment-format" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install the CLI binary (toolr)
+        The toolr-manifest.json fragment format
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Install the CLI binary (toolr)">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-python-build-helper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Python build helper
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Python build helper">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#curl-sh-linux-macos" class="md-nav__link">
+  <a href="#-check-for-ci" class="md-nav__link">
     <span class="md-ellipsis">
       
-        curl ... | sh (Linux + macOS)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#powershell-windows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PowerShell (Windows)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mise" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        mise
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#pip" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        pip
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#github-release-archives" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GitHub release archives
+        --check for CI
       
     </span>
   </a>
@@ -1723,10 +1837,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#enable-import-toolr-in-your-tool-scripts-toolr-py" class="md-nav__link">
+  <a href="#the-rust-cli-wrapper" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Enable import toolr in your tool scripts (toolr-py)
+        The rust CLI wrapper
       
     </span>
   </a>
@@ -1734,10 +1848,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#supply-chain-verification-slsa-attestations" class="md-nav__link">
+  <a href="#entry-point-fallback-legacy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Supply-chain verification (SLSA attestations)
+        Entry-point fallback (legacy)
       
     </span>
   </a>
@@ -1745,10 +1859,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#verifying-the-install" class="md-nav__link">
+  <a href="#working-example-in-the-repo" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Verifying the install
+        Working example in the repo
       
     </span>
   </a>
@@ -1756,10 +1870,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#development-install" class="md-nav__link">
+  <a href="#command-resolution" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Development install
+        Command resolution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#distribution-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distribution checklist
       
     </span>
   </a>
@@ -1784,46 +1909,6 @@
   
 
 
-  <nav class="md-path" aria-label="Navigation" >
-    <ol class="md-path__list">
-      
-        
-  
-  
-    <li class="md-path__item">
-      <a href=".." class="md-path__link">
-        
-  <span class="md-ellipsis">
-    Home
-  </span>
-
-      </a>
-    </li>
-  
-
-      
-      
-        
-  
-  
-    
-    
-      <li class="md-path__item">
-        <a href="./" class="md-path__link">
-          
-  <span class="md-ellipsis">
-    Installation
-  </span>
-
-        </a>
-      </li>
-    
-  
-
-      
-    </ol>
-  </nav>
-
               
               <article class="md-content__inner md-typeset">
                 
@@ -1831,157 +1916,138 @@
 
 
 
-<h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<p><code>toolr</code> is distributed as <strong>two complementary PyPI packages</strong> that
-live in different venvs:</p>
-<table>
-<thead>
-<tr>
-<th>Package</th>
-<th>What it is</th>
-<th>How you use it</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>toolr</code></td>
-<td>The Rust CLI binary — <code>toolr ...</code> on the shell.</td>
-<td>Install once, globally, on PATH (pip, install.sh, mise, release archive).</td>
-</tr>
-<tr>
-<td><code>toolr-py</code></td>
-<td>The Python runtime: <code>import toolr</code>, <code>Context</code>, <code>command_group</code>, <code>_rust_utils</code>.</td>
-<td>Add to your project's <code>tools/pyproject.toml</code> so it resolves into the tools venv.</td>
-</tr>
-</tbody>
-</table>
-<p>A typical project setup uses <strong>both</strong>:</p>
+<h1 id="third-party-packages">Third-party packages<a class="headerlink" href="#third-party-packages" title="Permanent link">&para;</a></h1>
+<p>Toolr supports <strong>third-party command packages</strong> — installable Python
+packages that contribute commands to the <code>toolr</code> CLI when present in
+the tools venv.</p>
+<p>There are two registration mechanisms, in order of preference:</p>
 <ol>
-<li>Install the <code>toolr</code> CLI on PATH once (any method below).</li>
-<li>Add <code>toolr-py</code> to <code>tools/pyproject.toml</code> so <code>tools/*.py</code> scripts can
-   <code>from toolr import Context, command_group</code>.</li>
+<li><strong>Static manifest fragment</strong> (recommended) — the package ships a
+   <code>toolr-manifest.json</code> next to its source. Toolr's binary discovers
+   it via glob during manifest build; no import required.</li>
+<li><strong>Entry-point fallback</strong> (legacy) — the package declares
+   <code>[project.entry-points."toolr.tools"]</code> in its <code>pyproject.toml</code>.
+   Toolr discovers it via <code>importlib.metadata</code> and imports the named
+   module to collect registrations.</li>
 </ol>
-<p>The CLI shells out into a per-project tools venv at execute time; it
-doesn't share its own venv with your tool scripts.</p>
-<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
+<h2 id="why-ship-a-static-manifest">Why ship a static manifest<a class="headerlink" href="#why-ship-a-static-manifest" title="Permanent link">&para;</a></h2>
+<p>Tab completion and <code>--help</code> need the command tree available <strong>before</strong>
+Python starts. With an entry-point registration, toolr has to spawn
+Python and import every entry-point's module to learn what's there —
+costly on every shell tab press.</p>
+<p>A <code>toolr-manifest.json</code> is a sub-millisecond <code>glob()</code> + JSON parse,
+no Python involved. For interactive use the difference is the
+boundary between "instant" and "noticeable lag".</p>
+<h2 id="the-toolr-manifestjson-fragment-format">The <code>toolr-manifest.json</code> fragment format<a class="headerlink" href="#the-toolr-manifestjson-fragment-format" title="Permanent link">&para;</a></h2>
+<p>A fragment is a JSON object that declares groups and commands. Toolr
+validates it against a schema version and merges it into the project's
+manifest at build time.</p>
+<p>Minimal shape:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;toolr_schema_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">&quot;groups&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-pkg&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">      </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;My Package&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Commands contributed by my-pkg.&quot;</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="p">],</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">  </span><span class="nt">&quot;commands&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;hello&quot;</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">      </span><span class="nt">&quot;group&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-pkg&quot;</span><span class="p">,</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">      </span><span class="nt">&quot;module&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my_pkg.commands&quot;</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">      </span><span class="nt">&quot;function&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;hello&quot;</span><span class="p">,</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">      </span><span class="nt">&quot;summary&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Say hello.&quot;</span><span class="p">,</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">      </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">      </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">        </span><span class="p">{</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">          </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;name&quot;</span><span class="p">,</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">          </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;keyword&quot;</span><span class="p">,</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">          </span><span class="nt">&quot;help&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Name to greet.&quot;</span><span class="p">,</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="w">          </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;world&quot;</span><span class="p">,</span>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">          </span><span class="nt">&quot;type_annotation&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;str&quot;</span><span class="p">,</span>
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="w">          </span><span class="nt">&quot;allowed_values&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="w">      </span><span class="p">]</span>
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="w">  </span><span class="p">]</span>
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>The file lives at <code>&lt;package_dir&gt;/toolr-manifest.json</code> — i.e. next to
+<code>my_pkg/__init__.py</code>. Toolr's manifest builder finds it via the glob
+<code>&lt;tools-venv&gt;/lib/python*/site-packages/*/toolr-manifest.json</code>.</p>
+<h2 id="the-python-build-helper">The Python build helper<a class="headerlink" href="#the-python-build-helper" title="Permanent link">&para;</a></h2>
+<p>Most packages won't write the JSON by hand — they declare commands
+with the usual <code>command_group</code> / <code>@command</code> API and let
+<code>toolr.build</code> introspect.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_manifest</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">build_manifest</span><span class="p">(</span><span class="s2">&quot;my_pkg&quot;</span><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wrote </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">output_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>See <a href="../reference/build/"><code>toolr.build</code></a> in the API reference for the
+full signature.</p>
+<p>Or via the bundled CLI:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>toolr.build<span class="w"> </span>my_pkg
+</span></code></pre></div>
+<p>Re-run whenever your <code>command_group</code> / <code>@command</code> registrations
+change.</p>
+<h3 id="-check-for-ci"><code>--check</code> for CI<a class="headerlink" href="#-check-for-ci" title="Permanent link">&para;</a></h3>
+<p>In a CI job, pass <code>--check</code> to verify the committed manifest matches
+what regeneration would produce:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>-m<span class="w"> </span>toolr.build<span class="w"> </span>my_pkg<span class="w"> </span>--check
+</span></code></pre></div>
+<p>Exit code 0 if in sync, non-zero (with a diff on stderr) if drifted.</p>
+<h2 id="the-rust-cli-wrapper">The rust CLI wrapper<a class="headerlink" href="#the-rust-cli-wrapper" title="Permanent link">&para;</a></h2>
+<p>If you're outside the package's own venv, the toolr binary will find
+a working Python and run the build for you:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>build-manifest<span class="w"> </span>my_pkg<span class="w"> </span>--check
+</span></code></pre></div>
+<p>Same flags as <code>python -m toolr.build</code>. See
+<a href="../cli/#self-build-manifest">CLI reference → <code>self build-manifest</code></a>.</p>
+<h2 id="entry-point-fallback-legacy">Entry-point fallback (legacy)<a class="headerlink" href="#entry-point-fallback-legacy" title="Permanent link">&para;</a></h2>
+<p>For packages that haven't migrated to static manifests yet, toolr
+falls back to entry-points:</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># pyproject.toml in the third-party package</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">[project.entry-points.</span><span class="s2">&quot;toolr.tools&quot;</span><span class="k">]</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">commands</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;my_pkg.commands&quot;</span>
+</span></code></pre></div>
+<p>When toolr's binary doesn't find a <code>toolr-manifest.json</code> next to
+the package, it spawns Python and imports <code>my_pkg.commands</code>. The
+module's import-time <code>command_group</code> / <code>@command</code> calls register
+the commands into the global registry.</p>
+<p>This works but is <strong>slower at completion time</strong> — every tab press
+pays the import cost. Once a package has any users, ship a static
+manifest instead.</p>
+<h2 id="working-example-in-the-repo">Working example in the repo<a class="headerlink" href="#working-example-in-the-repo" title="Permanent link">&para;</a></h2>
+<p><a href="https://github.com/s0undt3ch/ToolR/tree/main/tests/support/3rd-party-pkg"><code>tests/support/3rd-party-pkg/</code></a>
+in the toolr repo is a complete third-party package fixture. It uses
+the entry-point mechanism (older style) and is exercised by the
+integration tests; treat it as a copy-pasteable starting point.</p>
+<h2 id="command-resolution">Command resolution<a class="headerlink" href="#command-resolution" title="Permanent link">&para;</a></h2>
+<p>When multiple sources contribute commands with the same name:</p>
 <ul>
-<li><strong>Python 3.11 or later</strong> is needed at execute time. The toolr binary
-  itself is standalone, but every user command runs inside a Python
-  subprocess.</li>
-<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> is needed to materialise the
-  tools venv (<code>uv sync</code>). If you don't have it on PATH, toolr can
-  install a managed copy on first use.</li>
+<li><strong>Project commands</strong> (defined in your <code>tools/</code>) always win — they
+  override anything from a third-party package.</li>
+<li><strong>Group augmentation:</strong> if a third-party package targets an
+  existing group name, its commands are added to that group rather
+  than creating a duplicate.</li>
+<li><strong>Between third-party packages:</strong> order is undefined — packages
+  that share group/command names will produce a manifest-build error,
+  pointing you to fix one of them.</li>
 </ul>
-<h2 id="install-the-cli-binary-toolr">Install the CLI binary (<code>toolr</code>)<a class="headerlink" href="#install-the-cli-binary-toolr" title="Permanent link">&para;</a></h2>
-<p>Pick whichever method matches your environment.</p>
-<h3 id="curl-sh-linux-macos"><code>curl ... | sh</code> (Linux + macOS)<a class="headerlink" href="#curl-sh-linux-macos" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-</span></code></pre></div>
-<p>Pass <code>--version X.Y.Z</code> after <code>sh -s --</code> to pin a specific release, or
-<code>--prefix /custom/bin</code> to choose an install directory. Default prefix
-is <code>$XDG_BIN_HOME</code> (or <code>~/.local/bin</code>).</p>
-<h3 id="powershell-windows">PowerShell (Windows)<a class="headerlink" href="#powershell-windows" title="Permanent link">&para;</a></h3>
-<div class="language-powershell highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">irm </span><span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">s0undt3ch</span><span class="p">/</span><span class="n">ToolR</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">installation</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="p">|</span> <span class="nb">iex</span>
-</span></code></pre></div>
-<h3 id="mise">mise<a class="headerlink" href="#mise" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git#installation/mise
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>toolr@latest
-</span></code></pre></div>
-<p>The plugin source ships in this repo under <code>installation/mise/</code>. See
-the dedicated <a href="mise/">mise</a> page for <code>.mise.toml</code> / <code>.tool-versions</code>
-integration and task-runner examples.</p>
-<h3 id="pip">pip<a class="headerlink" href="#pip" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>toolr
-</span></code></pre></div>
-<p>This installs <strong>only</strong> the Rust CLI binary. The wheel has no Python
-source and no <code>import toolr</code> — that's what <code>toolr-py</code> is for (see
-below). <code>python -m toolr</code> was removed in the rust front-end rewrite;
-use the <code>toolr</code> executable instead.</p>
-<h3 id="github-release-archives">GitHub release archives<a class="headerlink" href="#github-release-archives" title="Permanent link">&para;</a></h3>
-<p>Download <code>toolr-&lt;version&gt;-&lt;target-triple&gt;.tar.gz</code> (or <code>.zip</code> for
-Windows) from <a href="https://github.com/s0undt3ch/ToolR/releases">https://github.com/s0undt3ch/ToolR/releases</a> and
-extract it onto <code>$PATH</code> manually. Each archive ships with a <code>.sha256</code>
-sibling for verification.</p>
-<h2 id="enable-import-toolr-in-your-tool-scripts-toolr-py">Enable <code>import toolr</code> in your tool scripts (<code>toolr-py</code>)<a class="headerlink" href="#enable-import-toolr-in-your-tool-scripts-toolr-py" title="Permanent link">&para;</a></h2>
-<p>The <code>toolr-py</code> wheel provides the Python runtime your <code>tools/*.py</code>
-scripts use — the <code>toolr</code> package (<code>Context</code>, <code>command_group</code>,
-helpers under <code>toolr.utils</code>) and the <code>_rust_utils</code> extension module
-the framework calls internally.</p>
-<p>Add it as a dependency of your project's tools venv:</p>
-<div class="language-toml highlight"><span class="filename">tools/pyproject.toml</span><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">[project]</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;my-project-tools&quot;</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.11&quot;</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="s2">&quot;toolr-py&quot;</span><span class="p">,</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">]</span>
-</span></code></pre></div>
-<p><code>uv sync</code> (or whatever resolver you use for <code>tools/</code>) will pull it
-in. The <code>toolr</code> CLI on PATH will then find <code>import toolr</code> inside
-your tools venv when it executes commands.</p>
-<div class="admonition note">
-<p class="admonition-title">Why two packages?</p>
-<p>The CLI is a Rust binary built with <code>maturin --bindings bin</code>,
-which produces a Python-version-independent wheel that ships
-only the executable. The runtime users <code>import</code> is a separate
-pyo3-extension wheel built for each (CPython, ABI) pair. Splitting
-them lets the CLI be one global install while the runtime tracks
-each project's tools venv.</p>
-</div>
-<h2 id="supply-chain-verification-slsa-attestations">Supply-chain verification (SLSA attestations)<a class="headerlink" href="#supply-chain-verification-slsa-attestations" title="Permanent link">&para;</a></h2>
-<p>Every release archive is signed with a SLSA build-provenance
-attestation produced by the GitHub-hosted release workflow. The
-<code>install.sh</code> and <code>install.ps1</code> scripts verify the attestation
-automatically when the <code>gh</code> CLI is on PATH. To require verification:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>sh<span class="w"> </span>installation/install.sh<span class="w"> </span>--verify-attestation<span class="o">=</span>require<span class="w">   </span><span class="c1"># POSIX</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>./installation/install.ps1<span class="w"> </span>-VerifyAttestation<span class="w"> </span>require<span class="w">     </span><span class="c1"># Windows</span>
-</span></code></pre></div>
-<p>Or verify a downloaded archive manually:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>gh<span class="w"> </span>attestation<span class="w"> </span>verify<span class="w"> </span>toolr-1.2.3-aarch64-apple-darwin.tar.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--repo<span class="w"> </span>s0undt3ch/ToolR
-</span></code></pre></div>
-<h2 id="verifying-the-install">Verifying the install<a class="headerlink" href="#verifying-the-install" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>toolr<span class="w"> </span>--version
-</span></code></pre></div>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>toolr<span class="w"> </span>--help
-</span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>In-project CLI tooling support
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Usage: toolr [OPTIONS] [COMMAND]
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>Commands:
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>  example  Example commands
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>  project  Operations on the current repo&#39;s tools/ directory
-</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>  self     Operations on toolr itself
-</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
-</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>Options:
-</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>  -h, --help     Print help
-</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>  -V, --version  Print version
-</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>
-</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>Output Options:
-</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>  -d, --debug
-</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>          Increase verbosity (also enables `DEBUG` logging).
-</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>  -q, --quiet
-</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>          Suppress non-error output.
-</span><span id="__span-9-19"><a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>      --timestamps
-</span><span id="__span-9-20"><a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>          Prepend ISO-8601 timestamps to log lines.
-</span><span id="__span-9-21"><a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>      --no-timestamps
-</span><span id="__span-9-22"><a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>          Suppress log-line timestamps (default; overrides `--timestamps`).
-</span><span id="__span-9-23"><a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>      --timeout-secs &lt;SECONDS&gt;
-</span><span id="__span-9-24"><a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>          Default timeout applied to every `ctx.run(...)` subprocess (per-call `timeout_secs=` wins
-</span><span id="__span-9-25"><a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a>          when set).
-</span><span id="__span-9-26"><a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a>      --no-output-timeout-secs &lt;SECONDS&gt;
-</span><span id="__span-9-27"><a id="__codelineno-9-27" name="__codelineno-9-27" href="#__codelineno-9-27"></a>          Default no-output watchdog applied to every `ctx.run(...)` subprocess — abort if no
-</span><span id="__span-9-28"><a id="__codelineno-9-28" name="__codelineno-9-28" href="#__codelineno-9-28"></a>          stdout/stderr for this many seconds. Per-call `no_output_timeout_secs=` wins when set.
-</span></code></pre></div>
-<h2 id="development-install">Development install<a class="headerlink" href="#development-install" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nb">cd</span><span class="w"> </span>ToolR
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>uv<span class="w"> </span>sync<span class="w"> </span>--dev
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release<span class="w"> </span>--bin<span class="w"> </span>toolr
-</span></code></pre></div>
-<p>The <code>target/release/toolr</code> binary is what you'll exercise during
-development; put <code>target/release/</code> on your PATH (or alias <code>toolr</code> to
-it) while iterating.</p>
+<h2 id="distribution-checklist">Distribution checklist<a class="headerlink" href="#distribution-checklist" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Include <code>toolr-manifest.json</code> in your package via
+  <code>package_data</code> (setuptools), <code>include</code> (hatch), or the equivalent
+  in your build backend. Verify it's in the built wheel before
+  publishing.</li>
+<li>Pin a compatible <code>toolr</code> version in your package's dependencies.</li>
+<li>Toolr migrates older fragment schemas in-process when a newer
+  binary meets an older fragment, but pin defensively if you're
+  shipping pre-1.0.</li>
+</ul>
 
 
 
@@ -2019,7 +2085,7 @@ it) while iterating.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../quickstart/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Quickstart">
+          <a href="../cli/" class="md-footer__link md-footer__link--prev" aria-label="Previous: CLI reference">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2029,20 +2095,20 @@ it) while iterating.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Quickstart
+                CLI reference
               </div>
             </div>
           </a>
         
         
           
-          <a href="mise/" class="md-footer__link md-footer__link--next" aria-label="Next: mise">
+          <a href="../internals/" class="md-footer__link md-footer__link--next" aria-label="Next: Overview">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                mise
+                Overview
               </div>
             </div>
             <div class="md-footer__button md-icon">

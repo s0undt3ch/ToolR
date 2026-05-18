@@ -1,0 +1,6 @@
+Run `uv sync` against tools/
+
+Usage: toolr project deps sync
+
+Options:
+  -h, --help  Print help

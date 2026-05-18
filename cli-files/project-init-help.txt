@@ -1,0 +1,14 @@
+Scaffold tools/ in the current directory
+
+Usage: toolr project init [OPTIONS]
+
+Options:
+      --force                     Overwrite an existing tools/ directory
+      --no-sync                   Skip the automatic `uv sync` after scaffolding
+      --venv-location <LOCATION>  Where the tools venv should live [default: cache] [possible
+                                  values: cache, in-tree]
+      --no-example                Skip generating tools/example.py
+      --python <VERSION>          `requires-python` value for tools/pyproject.toml (defaults to the
+                                  running Python's >=major.minor)
+  -q, --quiet                     Suppress informational output
+  -h, --help                      Print help
