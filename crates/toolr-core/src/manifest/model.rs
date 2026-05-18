@@ -102,7 +102,7 @@ pub struct Argument {
     #[serde(default)]
     pub allowed_values: Vec<String>,
     /// Path-constraint metadata harvested from
-    /// `Annotated[Path, arg(path_must_exist=True, ...)]`. Applied by
+    /// `Annotated[Path, arg(must_exist=True, ...)]`. Applied by
     /// the path value-parsers in `src/bin/toolr/value_parsers.rs`.
     /// `None` when no constraint flags were set; ignored for non-path
     /// types.

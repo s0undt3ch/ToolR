@@ -235,10 +235,10 @@ class ArgumentAnnotation(Struct, frozen=True):
     display_order: int | None = None
     conflicts_with: list[str] | None = None
     requires: list[str] | None = None
-    # Path constraints (renamed; old names still accepted via `arg()`).
-    path_must_exist: bool = False
-    path_must_be_file: bool = False
-    path_must_be_dir: bool = False
+    # Path constraints — only meaningful for Path-typed parameters.
+    must_exist: bool = False
+    must_be_file: bool = False
+    must_be_dir: bool = False
     # Deprecated kwargs — kept on the struct so existing call sites
     # don't TypeError, but every one of them emits a
     # `ToolrDeprecationWarning` from `arg()`.
@@ -247,9 +247,6 @@ class ArgumentAnnotation(Struct, frozen=True):
     choices: list[Any] | None = None
     nargs: NargsType | None = None
     group: str | None = None
-
-
-_SENTINEL: Any = object()
 
 
 def _deprecated(name: str, *, replacement: str) -> None:
@@ -271,9 +268,9 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
     display_order: int | None = None,
     conflicts_with: list[str] | None = None,
     requires: list[str] | None = None,
-    path_must_exist: bool = False,
-    path_must_be_file: bool = False,
-    path_must_be_dir: bool = False,
+    must_exist: bool = False,
+    must_be_file: bool = False,
+    must_be_dir: bool = False,
     # Deprecated legacy kwargs. Each emits a `ToolrDeprecationWarning`
     # and (when applicable) maps onto the new field internally.
     required: bool | None = None,
@@ -281,9 +278,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
     choices: list[Any] | None = None,
     nargs: NargsType | None = None,
     group: str | None = None,
-    must_exist: bool | Any = _SENTINEL,
-    must_be_file: bool | Any = _SENTINEL,
-    must_be_dir: bool | Any = _SENTINEL,
 ) -> ArgumentAnnotation:
     """Create an :class:`ArgumentAnnotation` for use with ``typing.Annotated``.
 
@@ -307,12 +301,12 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
             together with this one.
         requires: Names of other parameters that must also be set when
             this one is.
-        path_must_exist: For path-typed params: reject paths that don't
+        must_exist: For path-typed params: reject paths that don't
             exist on disk. Useful for "input file" style arguments.
-        path_must_be_file: For path-typed params: also require the path
-            is a regular file. Implies ``path_must_exist=True``.
-        path_must_be_dir: For path-typed params: also require the path
-            is a directory. Implies ``path_must_exist=True``.
+        must_be_file: For path-typed params: also require the path
+            is a regular file. Implies ``must_exist=True``.
+        must_be_dir: For path-typed params: also require the path
+            is a directory. Implies ``must_exist=True``.
         required: **Deprecated.** Removed in 1.0. Use ``T | None`` or
             ``*args: T`` to express optional / zero-or-more.
         action: **Deprecated.** Removed in 1.0. ``bool`` defaults imply
@@ -325,12 +319,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
         group: **Deprecated.** Removed in 1.0. Use
             ``conflicts_with=[...]`` for mutex relationships and
             ``help_section=`` for display grouping.
-        must_exist: **Deprecated.** Removed in 1.0; rename to
-            ``path_must_exist``.
-        must_be_file: **Deprecated.** Removed in 1.0; rename to
-            ``path_must_be_file``.
-        must_be_dir: **Deprecated.** Removed in 1.0; rename to
-            ``path_must_be_dir``.
     """
     if required is not None:
         _deprecated(
@@ -371,17 +359,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
                 "or `help_section=` (via `arg_section(...)`) for display grouping."
             ),
         )
-    # Old path-constraint kwargs map onto the new names; emit a single
-    # warning per offender, then fold into the new fields.
-    if must_exist is not _SENTINEL:
-        _deprecated("must_exist", replacement="Rename to `path_must_exist`.")
-        path_must_exist = path_must_exist or bool(must_exist)
-    if must_be_file is not _SENTINEL:
-        _deprecated("must_be_file", replacement="Rename to `path_must_be_file`.")
-        path_must_be_file = path_must_be_file or bool(must_be_file)
-    if must_be_dir is not _SENTINEL:
-        _deprecated("must_be_dir", replacement="Rename to `path_must_be_dir`.")
-        path_must_be_dir = path_must_be_dir or bool(must_be_dir)
     return ArgumentAnnotation(
         aliases=aliases,
         metavar=metavar,
@@ -391,9 +368,9 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
         display_order=display_order,
         conflicts_with=conflicts_with,
         requires=requires,
-        path_must_exist=path_must_exist,
-        path_must_be_file=path_must_be_file,
-        path_must_be_dir=path_must_be_dir,
+        must_exist=must_exist,
+        must_be_file=must_be_file,
+        must_be_dir=must_be_dir,
         required=required,
         action=action,
         choices=choices,

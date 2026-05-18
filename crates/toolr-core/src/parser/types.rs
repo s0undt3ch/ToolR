@@ -335,7 +335,7 @@ fn resolve_one(
     };
     // Path constraints come from `Annotated[T, arg(...)]` metadata —
     // either directly on the parameter, or by following a module-level
-    // type alias (e.g. `Foo = Annotated[Path, arg(path_must_exist=True)]`).
+    // type alias (e.g. `Foo = Annotated[Path, arg(must_exist=True)]`).
     arg.path_constraints = extract_path_constraints(expr)
         .or_else(|| follow_alias_for_path_constraints(expr, aliases));
     // Same drill for the broader clap metadata (aliases, conflicts,
@@ -587,15 +587,15 @@ pub fn extract_path_constraints(annotation: &Expr) -> Option<PathConstraints> {
             };
             let Expr::BooleanLiteral(b) = &kw.value else { continue };
             match name {
-                "path_must_exist" | "must_exist" => {
+                "must_exist" => {
                     constraints.must_exist = b.value;
                     hit = true;
                 }
-                "path_must_be_file" | "must_be_file" => {
+                "must_be_file" => {
                     constraints.must_be_file = b.value;
                     hit = true;
                 }
-                "path_must_be_dir" | "must_be_dir" => {
+                "must_be_dir" => {
                     constraints.must_be_dir = b.value;
                     hit = true;
                 }
@@ -1187,9 +1187,9 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
     }
 
     #[test]
-    fn path_constraints_accept_path_prefixed_names() {
+    fn path_constraints_extract_from_must_kwargs() {
         let (_, ann) = first_annotation(
-            "def f(x: Annotated[Path, arg(path_must_exist=True, path_must_be_file=True)]): pass\n",
+            "def f(x: Annotated[Path, arg(must_exist=True, must_be_file=True)]): pass\n",
         );
         let pc = extract_path_constraints(&ann).unwrap();
         assert!(pc.must_exist);

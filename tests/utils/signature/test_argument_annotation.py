@@ -126,7 +126,7 @@ def test_arg_accepts_help_section_and_other_new_kwargs():
         conflicts_with=["quiet"],
         requires=["log_file"],
         help_section=section,
-        path_must_be_file=True,
+        must_be_file=True,
     )
     assert annotation.env == "DEPLOY_TOKEN"
     assert annotation.hide is True
@@ -134,7 +134,7 @@ def test_arg_accepts_help_section_and_other_new_kwargs():
     assert annotation.conflicts_with == ["quiet"]
     assert annotation.requires == ["log_file"]
     assert annotation.help_section is section
-    assert annotation.path_must_be_file is True
+    assert annotation.must_be_file is True
 
 
 @pytest.mark.parametrize(
@@ -145,9 +145,6 @@ def test_arg_accepts_help_section_and_other_new_kwargs():
         {"nargs": "*"},
         {"action": "store_true"},
         {"group": "verbosity"},
-        {"must_exist": True},
-        {"must_be_file": True},
-        {"must_be_dir": True},
     ],
 )
 def test_legacy_kwargs_emit_deprecation_warning(kwargs):
@@ -155,9 +152,9 @@ def test_legacy_kwargs_emit_deprecation_warning(kwargs):
         arg(**kwargs)
 
 
-def test_legacy_path_kwargs_map_onto_new_names():
-    """Old `must_exist=` flows through to the new `path_must_exist`."""
-    with pytest.warns(ToolrDeprecationWarning):
-        annotation = arg(must_exist=True, must_be_dir=True)
-    assert annotation.path_must_exist is True
-    assert annotation.path_must_be_dir is True
+def test_path_constraint_kwargs_land_on_annotation():
+    """`must_exist` / `must_be_file` / `must_be_dir` are first-class fields."""
+    annotation = arg(must_exist=True, must_be_dir=True)
+    assert annotation.must_exist is True
+    assert annotation.must_be_dir is True
+    assert annotation.must_be_file is False
