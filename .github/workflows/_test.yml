@@ -189,6 +189,7 @@ jobs:
         # `llvm-tools-preview` is required for the underlying llvm-profdata
         # / llvm-cov binaries. cargo-llvm-cov can install it on demand but
         # we add it explicitly so any failure surfaces here, not mid-run.
+        shell: bash
         run: |
           rustup component add llvm-tools-preview
           cargo install cargo-llvm-cov --locked
@@ -208,11 +209,14 @@ jobs:
         #                     timing doesn't surprise us; llvm-cov itself
         #                     has no concurrency limitation, this is purely
         #                     for test stability under tempdir-heavy specs.
+        # Single-line invocation so the same step works under both bash
+        # (Linux/macOS) and PowerShell (Windows runners use `pwsh` by
+        # default, where bash's `\` line-continuation is a unary operator
+        # and the line gets parsed as a separate command).
+        shell: bash
         run: |
           mkdir -p target/coverage
-          cargo llvm-cov --workspace --exclude toolr-py --tests \
-            --cobertura --output-path target/coverage/cobertura.xml \
-            -- --test-threads=1
+          cargo llvm-cov --workspace --exclude toolr-py --tests --cobertura --output-path target/coverage/cobertura.xml -- --test-threads=1
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
