@@ -32,6 +32,12 @@ theme:
 docs_dir: docs
 site_dir: site
 
+# Internal design history lives under docs/superpowers/ — not part
+# of the published site. Exclude the whole subtree so mkdocs --strict
+# doesn't flag specs as "in docs_dir but not in nav".
+exclude_docs: |
+  superpowers/
+
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
