@@ -1,0 +1,12 @@
+Say hello.
+
+Usage: toolr greeting hello [OPTIONS]
+
+Options:
+  -h, --help
+          Print help
+
+      --name <name>
+          The name of the person to greet.
+
+          [default: World]

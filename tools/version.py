@@ -3,185 +3,126 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from datetime import UTC
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 from typing import Final
-
-from msgspec import Struct
-from packaging.version import InvalidVersion
-from packaging.version import Version
 
 from toolr import Context
 from toolr import arg
 from toolr import command_group
 
-TODAY_VERSION: Final[str] = datetime.now(UTC).date().strftime("%y.%-m.0")
-VERSION_REGEX = r"v?[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,4}"
+# Built-in fallback for when there are no tags (e.g. brand-new repo).
+# Avoid GNU-only strftime extensions (e.g. `%-m`) — Windows' C runtime rejects
+# them, which breaks module import (and pytest collection) on Windows.
+_NOW: Final[datetime] = datetime.now(UTC)
+TODAY_VERSION: Final[str] = f"{_NOW.year % 100}.{_NOW.month}.0"
+
+CARGO_TOML_PATH: Final[Path] = Path("Cargo.toml")
 
 group = command_group("version", "Versioning utilities", docstring=__doc__)
 
 
-class GitDescribe(Struct, frozen=True):
-    """The result of git describe."""
-
-    version: Version
-    distance_to_latest_tag: int
-    short_commit_hash: str
-
-    @staticmethod
-    def discover(ctx: Context) -> GitDescribe:
-        """Discover the current version."""
-        __discovered_version__: GitDescribe
-        try:
-            return GitDescribe.discover.__discovered_version__  # type: ignore[attr-defined]
-        except AttributeError:
-            version_str: str = TODAY_VERSION
-            distance_to_latest_tag: str
-            short_commit_hash: str
-
-            ret = ctx.run(
-                "git",
-                "describe",
-                "--tags",
-                "--long",
-                "--match",
-                "v[0-9]*.[0-9]*.[0-9]*",
-                capture_output=True,
-                stream_output=False,
-            )
-            git_describe_output: str = ret.stdout.read().rstrip()  # type: ignore[assignment]
-            if not git_describe_output:
-                # This happens when there are no tags
-                ret = ctx.run("git", "describe", "--always", capture_output=True, stream_output=False)
-                short_commit_hash = f"g{ret.stdout.read().rstrip()}"  # type: ignore[str-bytes-safe]
-                ret = ctx.run("git", "rev-list", "--count", "HEAD", capture_output=True, stream_output=False)
-                distance_to_latest_tag = ret.stdout.read().rstrip()  # type: ignore[assignment]
-            else:
-                ctx.info(f"The output of git describe is: '{git_describe_output}'")
-                version_str, distance_to_latest_tag, short_commit_hash = git_describe_output.split("-")
-            try:
-                version = Version(version_str)
-            except InvalidVersion as exc:
-                ctx.warn(f"Invalid version: {exc}")
-                ctx.warn(f"Using default version of {TODAY_VERSION}")
-                version = Version(TODAY_VERSION)
-            __discovered_version__ = GitDescribe(
-                version=version,
-                distance_to_latest_tag=int(distance_to_latest_tag),
-                short_commit_hash=short_commit_hash,
-            )
-            GitDescribe.discover.__discovered_version__ = __discovered_version__  # type: ignore[attr-defined]
-
-        return GitDescribe.discover.__discovered_version__  # type: ignore[attr-defined]
-
-
-class ProjectVersion(Struct, frozen=True):
-    """The version of the project."""
-
-    version: Version
-    distance_to_latest_tag: int
-    short_commit_hash: str
-
-    @staticmethod
-    def discover(ctx: Context) -> ProjectVersion:
-        """Discover the current version."""
-        __discovered_version__: ProjectVersion
-        try:
-            return ProjectVersion.discover.__discovered_version__  # type: ignore[attr-defined]
-        except AttributeError:
-            version_str: str = TODAY_VERSION
-            distance_to_latest_tag: int
-            short_commit_hash: str
-
-            ret = ctx.run(
-                "git",
-                "describe",
-                "--tags",
-                "--long",
-                "--match",
-                "v[0-9]*.[0-9]*.[0-9]*",
-                capture_output=True,
-                stream_output=False,
-            )
-            git_describe_output: str = ret.stdout.read().rstrip()  # type: ignore[assignment]
-            if not git_describe_output:
-                ret = ctx.run("git", "describe", "--always", capture_output=True, stream_output=False)
-                short_commit_hash = f"g{ret.stdout.read().rstrip()}"  # type: ignore[str-bytes-safe]
-                ret = ctx.run("git", "rev-list", "--count", "HEAD", capture_output=True, stream_output=False)
-                distance_to_latest_tag = int(ret.stdout.read().rstrip())
-            else:
-                ctx.info(f"The output of git describe is: '{git_describe_output}'")
-                version_str, _distance_to_latest_tag, short_commit_hash = git_describe_output.split("-")
-                distance_to_latest_tag = int(_distance_to_latest_tag)
-            try:
-                version = Version(version_str)
-            except InvalidVersion as exc:
-                ctx.warn(f"Invalid version: {exc}")
-                ctx.warn(f"Using default version of {TODAY_VERSION}")
-                version = Version(TODAY_VERSION)
-
-            __discovered_version__ = ProjectVersion(
-                version=version,
-                distance_to_latest_tag=distance_to_latest_tag,
-                short_commit_hash=short_commit_hash,
-            )
-            ProjectVersion.discover.__discovered_version__ = __discovered_version__  # type: ignore[attr-defined]
-
-        return ProjectVersion.discover.__discovered_version__  # type: ignore[attr-defined]
-
-    @property
-    def current_version(self) -> Version:
-        """The current version."""
-        return self.version
-
-    @property
-    def next_dev_version(self) -> Version:
-        """The next development version."""
-        version_str = f"{self.version}.dev{self.distance_to_latest_tag}"
-        if os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request":
-            version_str += f"+{self.short_commit_hash}"
-        return Version(version_str)
-
-
-def _current_version(ctx: Context) -> Version:
-    ret = ctx.run("uv", "version", "--short", capture_output=True, stream_output=False)
+def _read_workspace_version(cargo_toml: Path = CARGO_TOML_PATH) -> str:
+    """Return `[workspace.package] version` from the root Cargo.toml."""
+    with cargo_toml.open("rb") as f:
+        data = tomllib.load(f)
     try:
-        return Version(ret.stdout.read().rstrip())  # type: ignore[arg-type]
-    except InvalidVersion:
-        return Version("0.0.0")
+        return data["workspace"]["package"]["version"]
+    except KeyError as exc:
+        msg = f"No [workspace.package].version in {cargo_toml}"
+        raise ValueError(msg) from exc
+
+
+def _set_workspace_version(ctx: Context, new_version: str) -> None:
+    """Update `[workspace.package] version` via ``cargo set-version``."""
+    ret = ctx.run("cargo", "set-version", "--workspace", new_version)
+    if ret.returncode != 0:
+        ctx.error(f"cargo set-version failed with exit code {ret.returncode}")
+        ctx.exit(ret.returncode)
+
+
+def _bump_patch(base: str) -> str:
+    """Return ``base`` with its patch component incremented by one.
+
+    Semver-wise, a pre-release of ``X.Y.Z`` (e.g. ``X.Y.Z-devN``) is *less
+    than* ``X.Y.Z``. ``cargo set-version`` (cargo-edit) refuses to write a
+    "smaller" version, so a dev version derived from the latest tag must
+    target the next patch release. This matches the ``setuptools-scm`` /
+    ``hatch-vcs`` convention of "pre-release of the NEXT patch release".
+    """
+    major, minor, patch = base.split(".")
+    return f"{major}.{minor}.{int(patch) + 1}"
+
+
+def _compute_dev_version(ctx: Context) -> str:
+    """Compute a dev-version string from ``git describe``.
+
+    Output is the hyphenated form ``X.Y.(Z+1)-devN`` (a semver pre-release
+    identifier and also valid PEP 440 input). The patch component is
+    bumped relative to the latest tag so the result is strictly greater
+    than that tag — see :func:`_bump_patch` for why. For pull-request
+    builds we append the commit SHA as semver build-metadata so
+    concurrent PRs don't collide on TestPyPI.
+    """
+    ret = ctx.run(
+        "git",
+        "describe",
+        "--tags",
+        "--long",
+        "--match",
+        "v[0-9]*.[0-9]*.[0-9]*",
+        capture_output=True,
+        stream_output=False,
+    )
+    describe: str = ret.stdout.read().rstrip()  # type: ignore[assignment]
+    if not describe:
+        # No matching tag in history — use the fallback base. ``TODAY_VERSION``
+        # already ends in ``.0`` so the patch-bump yields ``.1``.
+        ret = ctx.run("git", "rev-list", "--count", "HEAD", capture_output=True, stream_output=False)
+        count: str = ret.stdout.read().rstrip() or "0"  # type: ignore[assignment]
+        return f"{_bump_patch(TODAY_VERSION)}-dev{count}"
+    # Format: vX.Y.Z-N-gSHA  →  base=X.Y.Z, count=N, sha=gSHA
+    base, count, sha = describe.split("-")
+    base = base.lstrip("v")
+    version_str = f"{_bump_patch(base)}-dev{count}"
+    if os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request":
+        version_str += f"+{sha}"
+    return version_str
 
 
 @group.command
 def current(ctx: Context) -> None:
-    """Get the current version."""
-    ctx.print(str(_current_version(ctx)))
+    """Print the current `[workspace.package] version` from Cargo.toml."""
+    ctx.print(_read_workspace_version())
 
 
 @group.command
 def bump(
     ctx: Context,
-    new_version: Annotated[str | None, arg(nargs="?")],
+    new_version: Annotated[str | None, arg(nargs="?")] = None,
     check_existing_tag: bool = False,
     write: bool = False,
 ) -> None:
-    """Bump the version.
+    """Bump the workspace version.
 
     Args:
-        dev: Whether to bump the version for a development version.
-        new_version: The version to bump to.
-        check_existing_tag: Whether to check if the release tag already exists.
-        write: Whether to write the version to the file.
+        new_version: Explicit version to bump to. If omitted, a dev version is
+            derived from ``git describe`` (``X.Y.Z-devN``).
+        check_existing_tag: Refuse to write if a tag ``v<version>`` already
+            exists (release safety net).
+        write: Actually apply the bump via ``cargo set-version --workspace``;
+            otherwise this is a dry-run that only prints the resolved version.
     """
-    if new_version is None:
-        version = ProjectVersion.discover(ctx).next_dev_version
-    else:
-        version = Version(new_version)
+    version = new_version or _compute_dev_version(ctx)
 
     if check_existing_tag:
-        ret = ctx.run("git", "tag", "-v", str(version), capture_output=True, stream_output=False)
-        if ret.returncode == 0:
-            ctx.error(f"Tag {version} already exists")
+        ret = ctx.run("git", "tag", "-l", f"v{version}", capture_output=True, stream_output=False)
+        existing: str = ret.stdout.read().strip()  # type: ignore[assignment]
+        if existing:
+            ctx.error(f"Tag v{version} already exists")
             ctx.exit(1)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -203,6 +144,7 @@ def bump(
             f.write(f"Releasing version: `{version}`\n")
 
     if write:
-        ctx.run("uv", "version", str(version))
+        ctx.info(f"Setting [workspace.package] version to {version} via cargo set-version ...")
+        _set_workspace_version(ctx, version)
 
-    ctx.print(str(version))
+    ctx.print(version)

@@ -26,6 +26,16 @@ body = """
 {%- else %}\
     ## Unreleased
 {%- endif %}\
+
+{%- set release_notes = get_env(name="TOOLR_RELEASE_NOTES", default="") -%}
+{%- if release_notes | trim != "" %}
+
+### Notes
+
+{{ release_notes | trim }}
+
+{%- endif %}\
+
 {%- for group, commits in commits | filter(attribute="merge_commit", value=false) | group_by(attribute="group") %}
 
     ### {{ group | upper_first }}

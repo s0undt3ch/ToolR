@@ -14,6 +14,11 @@ env:
   COLUMNS: 190
   FORCE_COLOR: "1"
   TOOLR_DEBUG_IMPORTS: "1"
+  # Bump to invalidate every cache used by this workflow.
+  CACHE_SEED: "1"
+  # `MISE_VERSION` lives in `.github/env` (loaded per-job by a
+  # "Load shared env vars" step) so a single edit propagates to every
+  # workflow.
 
 permissions: {}
 
@@ -32,6 +37,14 @@ jobs:
       contents: read
     outputs:
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
+      binary-archive-triples: ${{ steps.generate-build-matrix.outputs.binary-archive-triples }}
+      pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
+      pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
+      # Mirrors env.CACHE_SEED / env.MISE_VERSION. Reusable workflows can't
+      # read `env` from a caller's `with:` block, so they read these
+      # outputs instead.
+      cache-seed: ${{ steps.cache-seed.outputs.cache-seed }}
+      mise-version: ${{ steps.mise-version.outputs.mise-version }}
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
@@ -47,22 +60,36 @@ jobs:
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
+      - name: Load shared env vars
+        # See ci.yml's matching step for why we sed-filter instead of cat.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
+
+      - name: Expose cache seed
+        id: cache-seed
+        run: echo "cache-seed=${{ env.CACHE_SEED }}" >> "$GITHUB_OUTPUT"
+
+      - name: Expose mise version
+        id: mise-version
+        run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
         with:
           cache-prefix: prepare-release
+          cache-seed: ${{ env.CACHE_SEED }}
           python-version: "3.11"
+          mise-version: ${{ env.MISE_VERSION }}
 
       - name: Generate Build Matrix
         id: generate-build-matrix
         run: |
-          uv run toolr ci generate-build-matrix
+          uv run toolr ci generate-build-matrix --workflow release
 
   prepare-release:
     name: Prepare Release
     needs:
       - prepare-ci
-    uses: ./.github/workflows/prepare-release.yml
+    uses: ./.github/workflows/_prepare-release.yml
     permissions:
       contents: write
       id-token: write
@@ -71,61 +98,207 @@ jobs:
       release-version: ${{ inputs.release-version }}
       github-app-id: ${{ vars.GH_APP_ID }}
       environment: release
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     secrets:
       github-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-  build-linux:
-    name: Build
+  build-binary-wheel-linux:
+    name: Build (binary wheel)
     needs:
       - prepare-ci
       - prepare-release
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/_build.yml
     permissions:
       contents: read
       id-token: write
       attestations: write
     with:
       display-name: Linux
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: binary
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
-  build-windows:
-    name: Build
+  build-py-wheel-linux:
+    name: Build (toolr-py wheel)
     needs:
       - prepare-ci
       - prepare-release
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      display-name: Linux
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: py
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
+
+  build-binary-wheel-windows:
+    name: Build (binary wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
     permissions:
       contents: read
       id-token: write
       attestations: write
     with:
       display-name: Windows
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: binary
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
-  build-macos:
-    name: Build
+  build-py-wheel-windows:
+    name: Build (toolr-py wheel)
     needs:
       - prepare-ci
       - prepare-release
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      display-name: Windows
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: py
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
+
+  build-binary-wheel-macos:
+    name: Build (binary wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
     permissions:
       contents: read
       id-token: write
       attestations: write
     with:
       display-name: macOS
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: binary
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
+
+  build-py-wheel-macos:
+    name: Build (toolr-py wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      display-name: macOS
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: py
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
+
+  # release.yml's distribution-tests defer to the same reusable
+  # workflow ci.yml uses, so the test harness, action SHAs, coverage
+  # upload, and junit reporting stay in lockstep across both
+  # pipelines. Per-OS jobs (one workflow_call each) instead of a
+  # `strategy.matrix` since `workflow_call` doesn't compose with
+  # `strategy.matrix` on the caller side.
+  test-distribution-linux:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-binary-wheel-linux
+      - build-py-wheel-linux
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: ubuntu-latest
+      display-name: Linux
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*linux*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
+
+  test-distribution-macos:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-binary-wheel-macos
+      - build-py-wheel-macos
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: macos-latest
+      display-name: macOS
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*macosx*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
+
+  test-distribution-windows:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-binary-wheel-windows
+      - build-py-wheel-windows
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: windows-latest
+      display-name: Windows
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*win*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
+
+  build-binary-archive:
+    name: Build binary archives (per triple)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build-binary-archive.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      release-version: ${{ needs.prepare-release.outputs.release-version }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
 
   publish-release:
     name: Publish Release
     environment: release
     needs:
-      - build-linux
-      - build-windows
-      - build-macos
+      - build-binary-wheel-linux
+      - build-py-wheel-linux
+      - build-binary-wheel-windows
+      - build-py-wheel-windows
+      - build-binary-wheel-macos
+      - build-py-wheel-macos
+      - build-binary-archive
+      - test-distribution-linux
+      - test-distribution-macos
+      - test-distribution-windows
       - prepare-release
     runs-on: ubuntu-latest
     permissions:
@@ -188,8 +361,23 @@ jobs:
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+          name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
           path: dist/
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+          path: dist/
+
+      # Per-triple binary archives (consumed by install.sh and the mise
+      # plugin). Downloaded to a separate path so they are NOT uploaded to
+      # PyPI — they are not Python distributions. They are still attached
+      # to the GitHub Release alongside the wheels and sdists.
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: toolr-archive-*
+          path: release-assets
+          merge-multiple: true
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
@@ -206,7 +394,9 @@ jobs:
           tag_name: v${{ needs.prepare-release.outputs.release-version }}
           name: ${{ needs.prepare-release.outputs.release-version }}
           body_path: ${{ needs.prepare-release.outputs.release-notes-filename }}
-          files: dist/*
+          files: |
+            dist/*
+            release-assets/*
           draft: false
           prerelease: false
           make_latest: true

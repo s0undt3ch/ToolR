@@ -1,0 +1,43 @@
+[package]
+name = "toolr-core"
+description = "Core domain library for toolr (no pyo3, no CLI)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+libc.workspace = true
+email_address.workspace = true
+pep440_rs.workspace = true
+walkdir.workspace = true
+ruff_python_parser.workspace = true
+ruff_python_ast.workspace = true
+tempfile.workspace = true
+signal-hook.workspace = true
+toml.workspace = true
+dirs.workspace = true
+glob.workspace = true
+humansize.workspace = true
+log.workspace = true
+reqwest.workspace = true
+which.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["handleapi", "namedpipeapi", "processthreadsapi", "winnt", "fileapi", "minwinbase"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+anyhow.workspace = true
+libc.workspace = true
+assert_cmd.workspace = true

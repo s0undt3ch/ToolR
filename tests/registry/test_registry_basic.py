@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from toolr import Context
 from toolr import command_group
-from toolr._registry import CommandGroup
+from toolr._decorators import CommandGroup
 
 
 def test_create_simple_command_group(commands_tester):

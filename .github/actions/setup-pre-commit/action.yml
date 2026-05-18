@@ -1,27 +1,27 @@
 name: setup-pre-commit
-description: Setup 'pre-commit'
+description: Install prek (and its Rust/uv/Python prerequisites) via mise, then prime the prek hook cache.
 
 inputs:
-  version:
-    description: Prek version to install
-    default: "0.2.3"
   cache-seed:
     description: Cache seed to use for prek
     required: true
     default: prek-action
-  rust-toolchain:
+  python-version:
+    description: >-
+      Optional override for the Python version mise installs. Defaults to the pin in mise.toml.
+    required: false
+    default: ""
+  mise-version:
+    description: >-
+      Version of mise to install via jdx/mise-action. Callers should pass the
+      `MISE_VERSION` env var from the top-level workflow so every job uses the
+      same pinned mise build (and shares the matching mise-install cache).
     required: true
-    description: Rust toolchain to install
-    default: stable
-  rust-components:
-    required: true
-    description: Rust components to install
-    default: clippy,rustfmt
 
 outputs:
   prek-version:
     description: Prek version installed
-    value: ${{ steps.install-prek.outputs.prek-version }}
+    value: ${{ steps.prek-version.outputs.prek-version }}
   prek-home:
     description: Prek home directory
     value: ${{ steps.setup-prek-home.outputs.prek-home }}
@@ -31,6 +31,23 @@ runs:
 
   steps:
 
+    - name: Set up mise
+      uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+      env:
+        MISE_PYTHON_VERSION: ${{ inputs.python-version }}
+      with:
+        version: ${{ inputs.mise-version }}
+        cache: true
+        cache_key_prefix: mise|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|pre-commit
+
+    - name: Get prek version
+      id: prek-version
+      shell: bash
+      run: |
+        PREK_VERSION=$(prek --version | awk '{print $2}')
+        echo "PREK_VERSION=$PREK_VERSION"
+        echo "prek-version=$PREK_VERSION" >> "$GITHUB_OUTPUT"
+
     - name: Get Python version checksum
       id: python-version-checksum
       shell: bash
@@ -39,12 +56,6 @@ runs:
         echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
         echo "python-path=$(which python)" >> "$GITHUB_OUTPUT"
-
-    - name: Install prek
-      id: install-prek
-      uses: j178/prek-action@91fd7d7cf70ae1dee9f4f44e7dfa5d1073fe6623 # v1.0.11
-      with:
-        install-only: true
 
     - name: Setup prek home
       shell: bash
@@ -56,34 +67,27 @@ runs:
         echo "PREK_COLOR=always" >> "$GITHUB_ENV"
 
     - name: Cache MyPy & Ruff Caches
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: |
           ${{ github.workspace }}/.mypy_cache
           ${{ github.workspace }}/.ruff_cache
         key: |-
           mypy-ruff-cache|${{ inputs.cache-seed }}|${{ runner.os }}|${{ runner.arch }}|${{
-            steps.install-prek.outputs.prek-version }}|${{
+            steps.prek-version.outputs.prek-version }}|${{
             steps.python-version-checksum.outputs.version-sha256sum }}|${{
             hashFiles('pyproject.toml') }}|${{
             hashFiles(format('{0}/**/.pre-commit-config.yaml', github.workspace))
           }}
 
-    - name: Setup Rust Toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
-      with:
-        cache-key: prek|${{ inputs.cache-seed }}
-        toolchain: ${{ inputs.rust-toolchain }}
-        components: ${{ inputs.rust-components }}
-
     - name: Set up prek hooks cache
       id: cache-prek-hooks
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ steps.setup-prek-home.outputs.prek-home }}
         key: |-
           prek-home|${{ inputs.cache-seed }}|${{ runner.os }}|${{ runner.arch }}|${{
-            steps.install-prek.outputs.prek-version }}|${{
+            steps.prek-version.outputs.prek-version }}|${{
             steps.python-version-checksum.outputs.version-sha256sum }}|${{
             hashFiles(format('{0}/**/.pre-commit-config.yaml', github.workspace))
           }}

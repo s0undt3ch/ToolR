@@ -18,6 +18,14 @@ env:
   COLUMNS: 190
   FORCE_COLOR: "1"
   TOOLR_DEBUG_IMPORTS: "1"
+  # Bump to invalidate every cache (mise install dirs, .venv, prek hooks,
+  # mypy/ruff caches, ...) used by this workflow.
+  CACHE_SEED: "3"
+  # `MISE_VERSION` lives in `.github/env` — loaded per-job by a
+  # "Load shared env vars" step (immediately after `actions/checkout`)
+  # so the value is available via `$MISE_VERSION` / `env.MISE_VERSION`
+  # to every subsequent step. Bump that file to upgrade mise across
+  # every workflow in a single edit.
 
 jobs:
   prepare-ci:
@@ -28,6 +36,15 @@ jobs:
     outputs:
       should-run-build: ${{ steps.check-build.outputs.should-run-build }}
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
+      binary-archive-triples: ${{ steps.generate-build-matrix.outputs.binary-archive-triples }}
+      pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
+      pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
+      test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
+      # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
+      # reusable workflows can read them via `needs.prepare-ci.outputs.*`
+      # (the `env` context is not allowed in workflow-call `with:` blocks).
+      cache-seed: ${{ steps.cache-seed.outputs.cache-seed }}
+      mise-version: ${{ steps.mise-version.outputs.mise-version }}
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
@@ -35,16 +52,34 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Python
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - name: Load shared env vars
+        # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
+        # blank/comment lines as "Invalid format". Filter `.github/env`
+        # to the assignment lines (sed `p`-prints lines starting with
+        # an uppercase letter) so comments in the source file are
+        # preserved for human readers but skipped by the loader.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
+
+      - name: Expose cache seed
+        id: cache-seed
+        run: echo "cache-seed=${{ env.CACHE_SEED }}" >> "$GITHUB_OUTPUT"
+
+      - name: Expose mise version
+        id: mise-version
+        run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          python-version: "3.11"
+          version: ${{ env.MISE_VERSION }}
+          cache: true
+          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|prepare-ci|${{ runner.os }}|${{ runner.arch }}
 
-      - name: Install uv
-        id: install-uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Get the Python Binary path from Mise
+        id: mise-python-executable
+        run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
 
       - name: Generate additional ToolR requirements file
         run: |
@@ -52,8 +87,9 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: s0undt3ch/ToolR@8cd163aa75e825c20207500024cad82f14ff6a87 # v0.11.1
+        uses: s0undt3ch/ToolR@dc169a1a43916ad01f8f3627493b5c9520da60d5 # v0.11.1
         with:
+          python-path: ${{ steps.mise-python-executable.outputs.python }}
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
       - name: Check if the build should run
@@ -67,7 +103,7 @@ jobs:
         id: generate-build-matrix
         if: fromJSON(steps.check-build.outputs.should-run-build)
         run: |
-          toolr ci generate-build-matrix
+          toolr ci generate-build-matrix --workflow ci
 
   pre-commit:
     name: Pre-commit
@@ -83,13 +119,22 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Load shared env vars
+        # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
+        # blank/comment lines as "Invalid format". Filter `.github/env`
+        # to the assignment lines (sed `p`-prints lines starting with
+        # an uppercase letter) so comments in the source file are
+        # preserved for human readers but skipped by the loader.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
 
       - name: Setup Prek
         id: setup-pre-commit
         uses: ./.github/actions/setup-pre-commit
         with:
-          cache-seed: ci
+          cache-seed: ${{ env.CACHE_SEED }}|ci
+          mise-version: ${{ env.MISE_VERSION }}
 
       - name: Run Prek
         run: |
@@ -98,21 +143,59 @@ jobs:
   prepare-release:
     name: Prepare Release
     needs:
+      - prepare-ci
       - pre-commit
-    uses: ./.github/workflows/prepare-release.yml
+    uses: ./.github/workflows/_prepare-release.yml
+    with:
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     permissions:
       contents: read
       id-token: write
       attestations: write
 
+  build-binary-archive:
+    name: Build binary archives (per triple)
+    # `prepare-ci.outputs.binary-archive-triples` (in ci mode) lists the
+    # runner-native triples — x86_64-unknown-linux-gnu, aarch64-apple-darwin,
+    # x86_64-pc-windows-msvc — so downstream tests + the docs job can
+    # download the standalone `toolr` binary as an artifact instead of
+    # paying for a per-job `cargo build --release`. release.yml builds
+    # the same workflow with the full 7-triple matrix.
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build-binary-archive.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      release-version: ${{ needs.prepare-release.outputs.release-version }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
+
+  # test-* now CONSUMES the prebuilt artifacts (toolr binary archive + the
+  # matching toolr-py wheel for each matrix python) instead of compiling
+  # them itself. The DAG is intentionally `prepare-ci → wheels/archive →
+  # test-*`; signal lands later than before, but every test exercises the
+  # exact artifact that ships, and there's no per-matrix maturin rebuild.
   test-linux:
     name: Test
     needs:
+      - prepare-ci
       - pre-commit
-    uses: ./.github/workflows/test.yml
+      - build-py-wheel-linux
+      - build-binary-archive
+    uses: ./.github/workflows/_test.yml
     with:
       os: ubuntu-latest
       display-name: Linux
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
     permissions:
       contents: read
       id-token: write
@@ -120,11 +203,17 @@ jobs:
   test-windows:
     name: Test
     needs:
+      - prepare-ci
       - pre-commit
-    uses: ./.github/workflows/test.yml
+      - build-py-wheel-windows
+      - build-binary-archive
+    uses: ./.github/workflows/_test.yml
     with:
       os: windows-latest
       display-name: Windows
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
     permissions:
       contents: read
       id-token: write
@@ -132,62 +221,179 @@ jobs:
   test-macos:
     name: Test
     needs:
+      - prepare-ci
       - pre-commit
-    uses: ./.github/workflows/test.yml
+      - build-py-wheel-macos
+      - build-binary-archive
+    uses: ./.github/workflows/_test.yml
     with:
       os: macos-latest
       display-name: macOS
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
     permissions:
       contents: read
       id-token: write
 
-  build-linux:
-    name: Build
+  build-binary-wheel-linux:
+    name: Build (binary wheel)
     needs:
       - prepare-ci
-      - test-linux
       - prepare-release
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/_build.yml
     with:
       display-name: Linux
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: binary
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
     permissions:
       contents: read
       id-token: write
       attestations: write
 
-  build-windows:
-    name: Build
+  build-py-wheel-linux:
+    name: Build (toolr-py wheel)
     needs:
       - prepare-ci
-      - test-windows
       - prepare-release
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/_build.yml
+    with:
+      display-name: Linux
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: py
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+  build-binary-wheel-windows:
+    name: Build (binary wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
     with:
       display-name: Windows
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: binary
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
     permissions:
       contents: read
       id-token: write
       attestations: write
 
-  build-macos:
-    name: Build
+  build-py-wheel-windows:
+    name: Build (toolr-py wheel)
     needs:
       - prepare-ci
-      - test-macos
       - prepare-release
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/_build.yml
     with:
-      display-name: macOS
-      release-tarball-name: ${{ needs.prepare-release.outputs.release-tarball-name }}
-      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+      display-name: Windows
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: py
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
     permissions:
       contents: read
       id-token: write
       attestations: write
+
+  build-binary-wheel-macos:
+    name: Build (binary wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
+    with:
+      display-name: macOS
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: binary
+      pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+  build-py-wheel-macos:
+    name: Build (toolr-py wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build.yml
+    with:
+      display-name: macOS
+      release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
+      platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      wheel-kind: py
+      pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+  test-distribution-linux:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-py-wheel-linux
+      - build-binary-wheel-linux
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: ubuntu-latest
+      display-name: Linux
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*linux*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
+
+  test-distribution-macos:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-py-wheel-macos
+      - build-binary-wheel-macos
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: macos-latest
+      display-name: macOS
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*macosx*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
+
+  test-distribution-windows:
+    name: Test
+    needs:
+      - prepare-ci
+      - build-py-wheel-windows
+      - build-binary-wheel-windows
+    uses: ./.github/workflows/_test_distribution.yml
+    with:
+      os: windows-latest
+      display-name: Windows
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      artifact-pattern: cibw-wheel-*-*win*
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+      id-token: write
 
   docs:
     name: Publish Docs
@@ -196,6 +402,17 @@ jobs:
     needs:
       - pre-commit
       - prepare-release
+      # Snippet regeneration shells out to the toolr binary. Depending on
+      # build-binary-archive lets us use the same Rust binary CI builds
+      # for testing — no per-job `cargo build --release`.
+      - build-binary-archive
+      # `regen-doc-snippets.py` runs `toolr project manifest rebuild`
+      # inside a fixture, which dispatches to Python and needs
+      # `import toolr` to succeed. We install the prebuilt toolr-py
+      # wheel into the venv (matching mise.toml's pinned CPython) so
+      # `uv sync --no-install-workspace` doesn't have to rebuild
+      # toolr-py from source.
+      - build-py-wheel-linux
 
     permissions:
       contents: write
@@ -207,14 +424,25 @@ jobs:
           egress-policy: audit
 
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Load shared env vars
+        # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
+        # blank/comment lines as "Invalid format". Filter `.github/env`
+        # to the assignment lines (sed `p`-prints lines starting with
+        # an uppercase letter) so comments in the source file are
+        # preserved for human readers but skipped by the loader.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
         with:
           cache-prefix: docs
-          python-version: "3.11"
-          uv-sync-args: "--group docs"
+          cache-seed: ${{ env.CACHE_SEED }}
+          # Skip workspace install (no maturin rebuild of toolr/toolr-py).
+          # toolr-py gets pip-installed below from the prebuilt cp314 wheel.
+          uv-sync-args: "--group docs --no-install-workspace"
+          mise-version: ${{ env.MISE_VERSION }}
 
       - uses: ./.github/actions/configure-git
       - name: Apply Release Patch
@@ -222,11 +450,112 @@ jobs:
         with:
           release-patch-name: ${{ needs.prepare-release.outputs.release-patch-name }}
 
+      - name: Compute docs Python cp-tag
+        id: cp-tag
+        shell: bash
+        # Derive the wheel ABI tag from the venv's active Python so a
+        # mise.toml python bump (e.g. 3.14 → 3.15) automatically picks
+        # the matching wheel artifact below — no second edit needed.
+        run: |
+          pyver=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+          echo "cp-tag=cp${pyver//./}" >> "$GITHUB_OUTPUT"
+
+      - name: Download toolr-py wheel
+        # `regen-doc-snippets.py` runs `toolr project manifest rebuild`,
+        # which dispatches to a Python that must `import toolr`. The dev
+        # venv (.venv) gets toolr-py via this pip install — no per-job
+        # maturin rebuild. The cp-tag tracks mise.toml's pinned Python.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cibw-wheel-py-${{ steps.cp-tag.outputs.cp-tag }}-manylinux_x86_64
+          path: ${{ runner.temp }}/toolr-py-wheel
+
+      - name: Install toolr-py from prebuilt wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel=$(find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 1 -type f -name 'toolr_py-*.whl' -print -quit)
+          if [ -z "$wheel" ]; then
+            echo "no toolr_py wheel found under $RUNNER_TEMP/toolr-py-wheel/" >&2
+            find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          uv pip install --force-reinstall "$wheel"
+
+      - name: Download toolr binary archive (linux-gnu)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: toolr-archive-x86_64-unknown-linux-gnu
+          path: ${{ runner.temp }}/toolr-archive
+
+      - name: Extract toolr binary
+        id: toolr-binary
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/toolr-bin"
+          mkdir -p "$dest"
+          archive=$(find "$RUNNER_TEMP/toolr-archive" -maxdepth 1 -type f -name 'toolr-*.tar.gz' -print -quit)
+          if [ -z "$archive" ]; then
+            echo "no toolr-*.tar.gz archive found under $RUNNER_TEMP/toolr-archive/" >&2
+            find "$RUNNER_TEMP/toolr-archive" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          tar -xzf "$archive" -C "$dest" --strip-components=1
+          chmod +x "$dest/toolr"
+          echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
+
+      # Inline rather than via `toolr ci check-doc-snippets`. That
+      # command requires `tools/.toolr-manifest.json` to exist (it's
+      # gitignored) AND for the toolr dispatcher's resolved tools-venv
+      # to contain toolr-py. The docs job ships toolr-py in `<repo>/.venv`
+      # but toolr resolves a *different* venv (per `tools/pyproject.toml`'s
+      # `venv-location`, default cache), so the bootstrap would need an
+      # extra `toolr project manifest rebuild` + venv resolution dance.
+      # The bash version only needs the regen script + the extracted
+      # toolr binary, both already present. The `tools/ci.py`'s
+      # `check_doc_snippets` function stays as the canonical surface for
+      # any job that does have a fully bootstrapped toolr (e.g.
+      # `prepare-ci` via the `s0undt3ch/ToolR` action).
+      - name: Verify doc snippets are in sync
+        env:
+          TOOLR_REGEN_BINARY: ${{ steps.toolr-binary.outputs.path }}
+        run: |
+          set +e
+          .pre-commit-hooks/regen-doc-snippets.py --check 2> "$RUNNER_TEMP/snippet-diff"
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/snippet-diff" >&2 || true
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## ❌ Doc snippets are stale"
+              echo
+              echo "The captured \`--help\` snippets under \`docs/\` no longer match the current \`toolr\` binary. The pre-commit hook is advisory (skipped when no \`toolr\` is on PATH locally), so CI is the authoritative check."
+              echo
+              echo "**Fix locally:**"
+              echo
+              echo '```bash'
+              echo 'cargo build --release -p toolr   # ensure target/release/toolr is current'
+              echo '.pre-commit-hooks/regen-doc-snippets.py'
+              echo 'git add docs/'
+              echo 'git commit -m "docs: regen snippets"'
+              echo '```'
+              echo
+              echo "<details><summary>Diff</summary>"
+              echo
+              echo '```diff'
+              cat "$RUNNER_TEMP/snippet-diff"
+              echo '```'
+              echo
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
       - name: Build MkDocs site
-        run: uv run mkdocs build
+        run: uv run mkdocs build --strict
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.0.0
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         if: github.ref == 'refs/heads/main'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -235,9 +564,15 @@ jobs:
   publish:
     name: Publish to Test PyPI
     needs:
-      - build-linux
-      - build-windows
-      - build-macos
+      - build-binary-wheel-linux
+      - build-py-wheel-linux
+      - build-binary-wheel-windows
+      - build-py-wheel-windows
+      - build-binary-wheel-macos
+      - build-py-wheel-macos
+      - test-distribution-linux
+      - test-distribution-windows
+      - test-distribution-macos
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -249,7 +584,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: cibw-wheel-*
           path: dist
@@ -261,7 +596,7 @@ jobs:
 
       - name: Publish to Test PyPI (Trusted Publisher)
         if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
@@ -280,6 +615,12 @@ jobs:
       - prepare-ci
       - pre-commit
       - prepare-release
+      # test-* used to be transitive (publish ← wheels ← test-*); now that
+      # tests are downstream consumers of the wheels, list them explicitly
+      # so a failed test still flips the pipeline status to failure.
+      - test-linux
+      - test-macos
+      - test-windows
       - docs
       - publish
     steps:

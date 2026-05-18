@@ -1,3 +1,0 @@
-# toolr.testing
-
-::: toolr.testing

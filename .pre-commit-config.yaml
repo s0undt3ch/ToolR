@@ -15,18 +15,22 @@ repos:
 
   - repo: local
     hooks:
-      - id: update-doc-stubs
-        name: Update reference documentation stubs
-        language: system
-        entry: python .pre-commit-hooks/ref-doc-stubs.py
-        files: ^(docs/.*\.md|python/toolr/.*\.py)$
-        pass_filenames: false
-
       - id: pin-github-actions
         name: Pin GitHub Actions to commit SHAs
         language: python
         entry: python .pre-commit-hooks/pin-github-actions.py
         files: ^\.github/workflows/.*\.ya?ml$
+
+      - id: regen-doc-snippets
+        name: Verify doc snippets are in sync
+        entry: .pre-commit-hooks/regen-doc-snippets.py --check
+        language: system
+        pass_filenames: false
+        # Fire on docs that include captured snippets and on the
+        # Rust crates whose source determines clap's --help output
+        # (binary main.rs, the project-init scaffold templates, and
+        # the manifest/parser layer in toolr-core).
+        files: ^(docs/|\.pre-commit-hooks/regen-doc-snippets\.py$|crates/toolr/src/.*\.rs$|crates/toolr/src/init_templates/|crates/toolr-core/src/.*\.rs$)
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
@@ -37,6 +41,10 @@ repos:
     rev: v0.11.0
     hooks:
       - id: shellcheck
+        # shellcheck only understands sh/bash. The zsh and fish
+        # completion scripts under src/complete/scripts/ use shell-specific
+        # syntax that shellcheck cannot parse.
+        exclude: '\.(zsh|fish)$'
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.8.23
@@ -44,7 +52,7 @@ repos:
       - id: uv-lock
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.13.3"
+    rev: "v0.15.13"
     hooks:
       - id: ruff-format
       - id: ruff-check

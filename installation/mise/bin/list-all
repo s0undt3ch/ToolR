@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# mise asdf-plugin contract: print whitespace-separated versions to stdout.
+set -euo pipefail
+
+REPO="${TOOLR_REPO:-s0undt3ch/ToolR}"
+
+if command -v curl >/dev/null 2>&1; then
+  fetch() { curl -fsSL "$1"; }
+elif command -v wget >/dev/null 2>&1; then
+  fetch() { wget -qO- "$1"; }
+else
+  echo "list-all: neither curl nor wget available" >&2
+  exit 1
+fi
+
+# GitHub returns newest-first; mise wants oldest-first. We can't use
+# GNU coreutils `tac` (missing on macOS) or BSD `tail -r` (missing on
+# Linux) without a fallback chain — use awk instead, which is in POSIX
+# and present on every supported platform.
+fetch "https://api.github.com/repos/${REPO}/releases?per_page=100" \
+  | grep -E '"tag_name":' \
+  | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/' \
+  | awk '{a[NR]=$0} END{for(i=NR;i;i--) print a[i]}'

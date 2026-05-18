@@ -1,0 +1,193 @@
+name: Install Smoke Tests
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to smoke-test (defaults to latest release)'
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - 'installation/install.sh'
+      - 'installation/install.ps1'
+      - 'installation/mise/**'
+      - '.github/workflows/install-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+
+  smoke-install-sh:
+    name: install.sh (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-13
+          - macos-14
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install via install.sh (requires attestation verification)
+        env:
+          # `gh attestation verify` reads $GH_TOKEN to authenticate
+          # against the GitHub API for attestation lookup.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The runner image ships the `gh` CLI; --verify-attestation=require
+          # fails the job if the SLSA attestation does not validate.
+          if [ -n "${{ inputs.version }}" ]; then
+            sh ./installation/install.sh \
+              --version "${{ inputs.version }}" \
+              --prefix "$RUNNER_TEMP/toolr-bin" \
+              --verify-attestation=require
+          else
+            sh ./installation/install.sh \
+              --prefix "$RUNNER_TEMP/toolr-bin" \
+              --verify-attestation=require
+          fi
+      - name: Verify
+        run: |
+          "$RUNNER_TEMP/toolr-bin/toolr" --version
+          "$RUNNER_TEMP/toolr-bin/toolr" --help
+
+  smoke-install-ps1:
+    name: install.ps1 (windows)
+    runs-on: windows-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install via install.ps1 (requires attestation verification)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP "toolr-bin"
+          if ("${{ inputs.version }}" -ne "") {
+            ./installation/install.ps1 -Version "${{ inputs.version }}" -Prefix $prefix -VerifyAttestation require
+          } else {
+            ./installation/install.ps1 -Prefix $prefix -VerifyAttestation require
+          }
+          & (Join-Path $prefix "toolr.exe") --version
+
+  smoke-pip-wheel:
+    name: pip install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-13
+          - macos-14
+          - windows-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Smoke `pip install toolr` (binary wheel)
+        shell: bash
+        run: |
+          # `toolr` on PyPI is now the binary-only wheel produced from
+          # crates/toolr/pyproject.toml — it ships the `toolr` executable
+          # entry point but has no importable Python module.
+          python -m venv .venv-bin
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            .venv-bin/Scripts/python.exe -m pip install --upgrade pip
+            .venv-bin/Scripts/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-bin/Scripts/toolr.exe --version
+          else
+            .venv-bin/bin/python -m pip install --upgrade pip
+            .venv-bin/bin/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-bin/bin/toolr --version
+          fi
+
+      - name: Smoke `pip install toolr-py` (pyo3 wheel)
+        shell: bash
+        run: |
+          # `toolr-py` on PyPI is the pyo3 bindings wheel produced from
+          # crates/toolr-py/pyproject.toml — installs as `import toolr`
+          # with the Rust extension at `toolr.utils._rust_utils`.
+          python -m venv .venv-py
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            .venv-py/Scripts/python.exe -m pip install --upgrade pip
+            .venv-py/Scripts/pip install toolr-py${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-py/Scripts/python.exe -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
+          else
+            .venv-py/bin/python -m pip install --upgrade pip
+            .venv-py/bin/pip install toolr-py${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-py/bin/python -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
+          fi
+
+  smoke-mise-plugin:
+    name: mise plugin (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-14
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Load shared env vars
+        # See ci.yml's matching step for why we sed-filter instead of cat.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          version: ${{ env.MISE_VERSION }}
+          install: false
+      - name: Install plugin from local staging dir
+        run: |
+          mise plugin add toolr "$PWD/installation/mise"
+          if [ -n "${{ inputs.version }}" ]; then
+            mise install "toolr@${{ inputs.version }}"
+            mise exec "toolr@${{ inputs.version }}" -- toolr --version
+          else
+            latest=$(mise ls-remote toolr | tail -1)
+            mise install "toolr@${latest}"
+            mise exec "toolr@${latest}" -- toolr --version
+          fi
+
+  report:
+    name: Report
+    if: always()
+    runs-on: ubuntu-latest
+    needs:
+      - smoke-install-sh
+      - smoke-install-ps1
+      - smoke-pip-wheel
+      - smoke-mise-plugin
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: martialonline/workflow-status@326830cacf79872efe767e15031f58d1ea0508c4 # v4.2
+        id: check
+      - run: echo "Install channels failed"
+        if: steps.check.outputs.status == 'failure'
+      - run: echo "Install channels OK"
+        if: steps.check.outputs.status == 'success'

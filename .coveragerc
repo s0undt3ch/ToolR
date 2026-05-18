@@ -5,7 +5,7 @@ parallel = True
 concurrency = multiprocessing
 
 source =
-  python/
+  crates/toolr-py/python/
   tests/
 
 omit =

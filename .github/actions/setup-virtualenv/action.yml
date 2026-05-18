@@ -1,27 +1,36 @@
 name: Setup UV
-description: Setup UV for a given Python version
+description: Install all repo tooling via mise (Python, uv, rust, prek, ...) and sync the project venv.
 
 inputs:
   python-version:
-    required: true
-    description: 'Python version to use'
+    default: ""
+    description: >-
+      Python version to use. Overrides the version pinned in mise.toml via
+      `MISE_PYTHON_VERSION`. Leave empty (the default) to inherit mise.toml's
+      pin; pass a concrete version (e.g. `"3.11"`) from a matrix entry.
 
   cache-prefix:
     required: true
-    description: "The prefix to use for the cache key"
+    description: "The prefix to use for the .venv cache key"
 
-  uv-version:
-    default: ""
-    description: "The version of uv to install e.g., `0.5.0` Defaults to the version in pyproject.toml or 'latest'."
+  cache-seed:
+    default: "1"
+    description: "Bumpable seed mixed into every cache key. Bump to invalidate all caches for this composite."
 
   uv-sync-args:
-    default: "--all-extras --dev"
+    default: "--all-extras --dev --no-install-workspace"
     description: "The arguments to pass to the uv sync command. e.g., `--group docs` or `--dev`"
+  mise-version:
+    required: true
+    description: >-
+      Version of mise to install via jdx/mise-action. Callers should pass the
+      `MISE_VERSION` env var from the top-level workflow so every job uses the
+      same pinned mise build (and shares the matching mise-install cache).
 
 outputs:
   uv-version:
     description: "The version of uv installed"
-    value: ${{ steps.install-uv.outputs.uv-version }}
+    value: ${{ steps.uv-version-checksum.outputs.uv-version }}
 
   python-version-checksum:
     description: "The checksum of the Python version"
@@ -34,10 +43,29 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install Python
-      uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+    # Export MISE_PYTHON_VERSION to $GITHUB_ENV BEFORE `Set up mise` runs.
+    # That way the override applies not only to the mise-action step but
+    # to every subsequent step in the job (uv sync, install python deps,
+    # etc.). Without this, mise re-resolves to mise.toml's `python = ...`
+    # pin in later steps and the venv ends up on the wrong CPython —
+    # symptom seen on Windows test runs (matrix asked for 3.11, venv
+    # ended up cp314 because that's what mise.toml pins).
+    - name: Export MISE_PYTHON_VERSION
+      if: inputs.python-version != ''
+      shell: bash
+      run: echo "MISE_PYTHON_VERSION=${{ inputs.python-version }}" >> "$GITHUB_ENV"
+
+    - name: Set up mise
+      uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+      env:
+        # Belt-and-braces: also pass via the step `env:` so the override
+        # takes effect even when the previous step is skipped (empty
+        # `python-version` input).
+        MISE_PYTHON_VERSION: ${{ inputs.python-version }}
       with:
-        python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.mise-version }}
+        cache: true
+        cache_key_prefix: mise|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|${{ inputs.cache-prefix }}
 
     - name: Get Python version checksum
       id: python-version-checksum
@@ -47,31 +75,22 @@ runs:
         echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
 
-    - name: Install uv
-      id: install-uv
-      uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
-      with:
-        version: ${{ inputs.uv-version }}
-
     - name: Get UV version checksum
       id: uv-version-checksum
       shell: bash
       run: |
+        UV_VERSION=$(uv --version | awk '{print $2}')
         VERSION_SHA256SUM=$(uv --version | sha256sum | cut -d ' ' -f 1)
+        echo "UV_VERSION=$UV_VERSION"
         echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
+        echo "uv-version=$UV_VERSION" >> "$GITHUB_OUTPUT"
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
 
     - name: Set up cache
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: .venv
-        key: >-
-          venv|
-          ${{ runner.os }}|
-          ${{ inputs.cache-prefix }}|
-          ${{ steps.python-version-checksum.outputs.version-sha256sum }}|
-          ${{ steps.uv-version-checksum.outputs.version-sha256sum }}|
-          ${{ hashFiles('**/uv.lock') }}
+        key: venv|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ inputs.cache-prefix }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.uv-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock', '**/pyproject.toml') }}
 
     - name: Install Python Dependencies
       shell: bash

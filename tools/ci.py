@@ -7,37 +7,135 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
+from pathlib import Path
 
 from packaging.version import Version
 
 from toolr import Context
 from toolr import command_group
 
+# tools/ci.py → repo root (two parents up resolves the `tools/` directory).
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 group = command_group("ci", "CI utilities", docstring=__doc__)
 
 
-@group.command
-def generate_build_matrix(ctx: Context) -> None:
+# CPython ABI tags for the toolr-py (pyo3) wheel. Keep aligned with
+# `requires-python` in crates/toolr-py/pyproject.toml and the explicit
+# `[tool.cibuildwheel] build = ...` list in that same file. Bump in
+# lockstep when a new CPython is added/removed.
+ALL_CPYTHONS = ["cp311", "cp312", "cp313", "cp314"]
+
+
+def _cp_tag_to_dotted(tag: str) -> str:
+    """Convert a cibuildwheel ABI tag back to the dotted form.
+
+    `cp311` -> `3.11`, `cp310` -> `3.10`, etc. Used to derive the
+    `_test.yml` matrix's `python-version` entries from `ALL_CPYTHONS`
+    so the test matrix and the wheel-build matrix can't drift.
     """
-    Generate a build matrix.
-    """
-    matrix = {
-        "macos": [
-            {"name": "macosx_x86_64", "os": "macos-15-intel"},
-            {"name": "macosx_arm64", "os": "macos-14"},
-        ],
-        "windows": [
-            {"name": "win_amd64", "os": "windows-2025"},
-        ],
-        "linux": [
-            {"name": "manylinux_x86_64", "os": "ubuntu-latest"},
-            {"name": "musllinux_x86_64", "os": "ubuntu-latest"},
-            {"name": "manylinux_aarch64", "os": "ubuntu-24.04-arm"},
-            {"name": "musllinux_aarch64", "os": "ubuntu-24.04-arm"},
-            # If we ever get a bug report asking to add s390x support, we can add it back.
-            # {"name": "manylinux_s390x", "os": "ubuntu-latest", "emulation": True},
-        ],
+    if not tag.startswith("cp"):
+        msg = f"unexpected python tag: {tag!r}"
+        raise ValueError(msg)
+    rest = tag[2:]
+    return f"{rest[:1]}.{rest[1:]}"
+
+
+# Dotted-form CPython versions for the `_test.yml` matrix. Derived
+# from ALL_CPYTHONS so a single bump propagates.
+TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
+
+# The toolr binary wheel uses `bindings = "bin"` → produces a single
+# py3-none-<plat> wheel per platform. One cibuildwheel invocation
+# suffices regardless of CPython matrix.
+BINARY_WHEEL_PYTHONS = ["cp311"]
+
+# Per-triple metadata for the standalone toolr binary archives that
+# `_build-binary-archive.yml` builds. release.yml ships all of them
+# (downstream consumers: install.sh, mise plugin); ci.yml only needs the
+# runner-native subset to back the test/docs jobs (see CI_BINARY_TRIPLES).
+_BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
+    {"triple": "x86_64-unknown-linux-gnu", "runner": "ubuntu-latest", "cross": False, "archive": "tar.gz"},
+    {"triple": "aarch64-unknown-linux-gnu", "runner": "ubuntu-24.04-arm", "cross": False, "archive": "tar.gz"},
+    {"triple": "x86_64-unknown-linux-musl", "runner": "ubuntu-latest", "cross": True, "archive": "tar.gz"},
+    {"triple": "aarch64-unknown-linux-musl", "runner": "ubuntu-24.04-arm", "cross": True, "archive": "tar.gz"},
+    {"triple": "x86_64-apple-darwin", "runner": "macos-13", "cross": False, "archive": "tar.gz"},
+    {"triple": "aarch64-apple-darwin", "runner": "macos-14", "cross": False, "archive": "tar.gz"},
+    {"triple": "x86_64-pc-windows-msvc", "runner": "windows-latest", "cross": False, "archive": "zip"},
+]
+
+# Triples that ci.yml builds on every PR — one native triple per OS
+# in the test matrix. musl + cross-compiled aarch64 only build in
+# release.yml.
+_CI_BINARY_ARCHIVE_TRIPLE_NAMES = frozenset(
+    {
+        "x86_64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc",
     }
+)
+
+_WHEEL_PLATFORM_MATRIX: dict[str, list[dict[str, str]]] = {
+    "macos": [
+        {"name": "macosx_x86_64", "os": "macos-15-intel"},
+        {"name": "macosx_arm64", "os": "macos-14"},
+    ],
+    "windows": [
+        {"name": "win_amd64", "os": "windows-2025"},
+    ],
+    "linux": [
+        {"name": "manylinux_x86_64", "os": "ubuntu-latest"},
+        {"name": "musllinux_x86_64", "os": "ubuntu-latest"},
+        {"name": "manylinux_aarch64", "os": "ubuntu-24.04-arm"},
+        {"name": "musllinux_aarch64", "os": "ubuntu-24.04-arm"},
+        # If we ever get a bug report asking to add s390x support, we can add it back.
+        # {"name": "manylinux_s390x", "os": "ubuntu-latest", "emulation": True},
+    ],
+}
+
+
+@group.command
+def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
+    """
+    Emit the CI matrix configuration consumed by `prepare-ci` jobs.
+
+    Writes five GITHUB_OUTPUT keys:
+
+      - `platform-matrix` — wheel platform map per OS (used by _build.yml).
+      - `binary-archive-triples` — list of triple+runner+cross+archive
+        objects (used by _build-binary-archive.yml's matrix).
+      - `pythons-binary` — CPython ABI tags for the toolr binary wheel.
+      - `pythons-py` — CPython ABI tags for the toolr-py (pyo3) wheel.
+      - `test-pythons` — dotted-form CPython versions for the test matrix
+        in `_test.yml` (derived from `pythons-py`, so the two cannot drift).
+
+    Centralising these in one place (vs. hardcoded YAML across multiple
+    workflow files) keeps the binary-wheel/py-wheel/binary-archive matrices
+    in sync and lets workflow files stay declarative.
+
+    Args:
+        workflow: Which workflow is asking. `"ci"` emits the native-triple
+            subset (fast PR builds against linux-gnu + darwin-arm + win-msvc);
+            `"release"` emits the full 7-triple matrix that ships to users.
+    """
+    if workflow not in ("ci", "release"):
+        ctx.error(f"unknown workflow: {workflow!r} (expected 'ci' or 'release')")
+        ctx.exit(1)
+
+    if workflow == "release":
+        binary_archive_triples: list[dict[str, object]] = list(_BINARY_ARCHIVE_TRIPLES)
+    else:
+        binary_archive_triples = [t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES]
+
+    outputs: dict[str, object] = {
+        "platform-matrix": _WHEEL_PLATFORM_MATRIX,
+        "binary-archive-triples": binary_archive_triples,
+        "pythons-binary": BINARY_WHEEL_PYTHONS,
+        "pythons-py": ALL_CPYTHONS,
+        "test-pythons": TEST_PYTHONS,
+    }
+
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output is None:
         ctx.error("GITHUB_OUTPUT environment variable is not set")
@@ -46,19 +144,89 @@ def generate_build_matrix(ctx: Context) -> None:
     if github_step_summary is None:
         ctx.error("GITHUB_STEP_SUMMARY environment variable is not set")
         ctx.exit(1)
+
     with open(github_step_summary, "a") as wfh:
-        wfh.write("## Build Matrix\n\n")
-        wfh.write("| Platform | CI Build Wheel Image | GH Runner |\n")
+        wfh.write(f"## Build matrix ({workflow})\n\n")
+        wfh.write("### Wheels\n\n")
+        wfh.write("| Platform | cibuildwheel platform | GH runner |\n")
         wfh.write("|----------|----------------------|-----------|\n")
-        for platform, values in sorted(matrix.items()):
+        for platform, values in sorted(_WHEEL_PLATFORM_MATRIX.items()):
             for idx, item in enumerate(values):
-                platform_name = platform.title() if idx == 0 else ""
-                wfh.write(f"| {platform_name} | {item['name']} | {item['os']} |\n")
-        wfh.write("\n")
-    ctx.info("Writing build matrix to github output file ...")
-    ctx.print(matrix)
+                label = platform.title() if idx == 0 else ""
+                wfh.write(f"| {label} | {item['name']} | {item['os']} |\n")
+        wfh.write("\n### Standalone binary archives\n\n")
+        wfh.write("| Triple | GH runner | Build mode | Archive |\n")
+        wfh.write("|--------|-----------|------------|---------|\n")
+        for t in binary_archive_triples:
+            mode = "cross" if t["cross"] else "native"
+            wfh.write(f"| `{t['triple']}` | {t['runner']} | {mode} | `{t['archive']}` |\n")
+        wfh.write("\n### Python ABIs\n\n")
+        wfh.write(f"- Binary wheel: `{', '.join(BINARY_WHEEL_PYTHONS)}`\n")
+        wfh.write(f"- toolr-py wheel: `{', '.join(ALL_CPYTHONS)}`\n\n")
+
+    ctx.info(f"Emitting build matrix outputs for workflow={workflow!r}")
+    ctx.print(outputs)
     with open(github_output, "a") as f:
-        f.write(f"platform-matrix={json.dumps(matrix)}\n")
+        f.writelines(f"{key}={json.dumps(value)}\n" for key, value in outputs.items())
+
+
+@group.command
+def check_doc_snippets(ctx: Context) -> None:
+    """
+    Verify captured `--help` snippets under docs/ match the toolr binary.
+
+    Runs `.pre-commit-hooks/regen-doc-snippets.py --check` and, on drift,
+    writes a remediation block + the unified diff to $GITHUB_STEP_SUMMARY
+    so PR reviewers see exactly what changed and how to regenerate.
+
+    The captured stderr is also echoed to the job log for searchability.
+    Honour `TOOLR_REGEN_BINARY` to pick the toolr binary used during the
+    check (CI sets it to the extracted toolr-archive artifact).
+    """
+    script = REPO_ROOT / ".pre-commit-hooks" / "regen-doc-snippets.py"
+    if not script.is_file():
+        ctx.error(f"regen-doc-snippets.py not found at {script}")
+        ctx.exit(1)
+
+    result = ctx.run(str(script), "--check", capture_output=True, stream_output=False)
+    stderr_text = result.stderr.read() if result.stderr is not None else ""
+
+    # Always replay the captured stderr so the diff shows up in the
+    # actions job log (searchable, copyable). Step summary is the
+    # human-friendly surface; the log is the durable one.
+    if stderr_text:
+        sys.stderr.write(stderr_text)
+        sys.stderr.flush()
+
+    if result.returncode == 0:
+        ctx.info("Doc snippets are in sync.")
+        return
+
+    github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if github_step_summary is not None:
+        diff_body = stderr_text if stderr_text.endswith("\n") else stderr_text + "\n"
+        with open(github_step_summary, "a") as wfh:
+            wfh.write("## ❌ Doc snippets are stale\n\n")
+            wfh.write(
+                "The captured `--help` snippets under `docs/` no longer match "
+                "the current `toolr` binary. The pre-commit hook is advisory "
+                "(skipped when no `toolr` is on PATH locally), so CI is the "
+                "authoritative check.\n\n"
+            )
+            wfh.write("**Fix locally:**\n\n")
+            wfh.write("```bash\n")
+            wfh.write("cargo build --release -p toolr   # ensure target/release/toolr is current\n")
+            wfh.write(".pre-commit-hooks/regen-doc-snippets.py\n")
+            wfh.write("git add docs/\n")
+            wfh.write('git commit -m "docs: regen snippets"\n')
+            wfh.write("```\n\n")
+            wfh.write("<details><summary>Diff</summary>\n\n")
+            wfh.write("```diff\n")
+            wfh.write(diff_body)
+            wfh.write("```\n\n")
+            wfh.write("</details>\n")
+
+    ctx.exit(result.returncode or 1)
 
 
 @group.command

@@ -1,0 +1,78 @@
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "toolr-py"
+description = "Python bindings for the toolr framework (import as `toolr`)"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Pedro Algarvio", email = "pedro@algarvio.me" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "msgspec>=0.19.0",
+    "packaging>=23.0",
+    "rich>=13.0.0",
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/s0undt3ch/ToolR"
+Documentation = "https://toolr.readthedocs.io"
+Issues = "https://github.com/s0undt3ch/ToolR/issues"
+Changelog = "https://github.com/s0undt3ch/ToolR/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "toolr.utils._rust_utils"
+python-source = "python"
+features = []
+strip = true
+# NOTE: defensively omit `locked = true` here even though toolr-py's
+# current sdist still includes every workspace member it needs (toolr-py
+# transitively pulls in toolr-core). The moment some Rust dep ends up
+# used only by toolr (binary) the sdist would drop it from the
+# workspace.members list without pruning Cargo.lock — same trap that
+# bit crates/toolr/pyproject.toml.
+# The python-source packager would otherwise include any local
+# __pycache__/ directories sitting next to the .py files (left over
+# from contributor-side `python -c "import toolr"` runs). pip
+# recompiles bytecode on install — shipping precompiled .pyc files
+# inflates the wheel by ~150 KB for no benefit and pins them to the
+# building interpreter's tag.
+exclude = ["**/__pycache__/**", "**/*.pyc"]
+
+[tool.cibuildwheel]
+# Skip problematic or irrelevant platforms
+# Only include skip patterns that match enabled builds
+# Removed: pp* (no PyPy builds enabled), *-i686 (no 32-bit builds), *-s390x (no s390x builds)
+skip = "*-win32 *-musllinux_i686"
+# Explicitly define supported Python versions. Must stay aligned with
+# `requires-python` above — cibuildwheel respects requires-python as a
+# secondary filter, but keeping the explicit list makes intent obvious
+# at-a-glance and lets the build matrix in CI mirror it.
+build = "cp311-* cp312-* cp313-* cp314-*"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+
+[tool.cibuildwheel.environment]
+MACOSX_DEPLOYMENT_TARGET = "11.0"

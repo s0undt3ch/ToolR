@@ -1,81 +1,10 @@
-[build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
-
-[project]
-name = "toolr"
-version = "0.11.1"
-description = "In-project CLI tooling support"
-readme = "README.md"
-requires-python = ">=3.11,<3.15"
-license = {file = "LICENSE"}
-authors = [
-    {name = "Pedro Algarvio", email = "pedro@algarvio.me"},
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Programming Language :: Rust",
-    "License :: OSI Approved :: Apache Software License",
-]
-dependencies = [
-    "msgspec>=0.19.0",
-    "rich-argparse>=1.7.0",
-]
-
-[project.scripts]
-toolr = "toolr.__main__:main"
-
-[project.urls]
-Repository = "https://github.com/s0undt3ch/ToolR"
-Documentation = "https://toolr.readthedocs.io"
-Issues = "https://github.com/s0undt3ch/ToolR/issues"
-Changelog = "https://github.com/s0undt3ch/ToolR/blob/main/CHANGELOG.md"
-
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch-vcs]
-# Use PEP 440 compatible versioning
-version-scheme = "pep440"
-
-[tool.maturin]
-features = ["python"]
-module-name = "toolr.utils._rust_utils"
-python-source = "python"
-bindings = "pyo3"
-strip = true
-# Require Cargo.lock is up to date
-locked = true
-
-[tool.cibuildwheel]
-# Skip problematic or irrelevant platforms
-# Only include skip patterns that match enabled builds
-# Removed: pp* (no PyPy builds enabled), *-i686 (no 32-bit builds), *-s390x (no s390x builds)
-skip = "*-win32 *-musllinux_i686"
-# Explicitly define supported Python versions
-build = "cp311-* cp312-* cp313-*"
-
-[tool.cibuildwheel.linux]
-archs = ["x86_64", "aarch64"]
-
-[tool.cibuildwheel.macos]
-archs = ["x86_64", "arm64"]
-
-[tool.cibuildwheel.windows]
-archs = ["AMD64"]
-
-[tool.cibuildwheel.environment]
-MACOSX_DEPLOYMENT_TARGET = "11.0"
-
 [tool.pytest.ini_options]
 testpaths = ["tests/"]
 python_files = "test_*.py"
 junit_family = "xunit2"
+markers = [
+    "distribution: tests that build/install real wheels (slow; opt-in)",
+]
 addopts = [
   "-ra",
   "-s",
@@ -86,18 +15,23 @@ addopts = [
 
 [tool.uv]
 
-[tool.uv.sources]
-toolr = { workspace = true }
-3rd-party-pkg = { workspace = true }
-
 [tool.uv.workspace]
 members = [
+    "crates/toolr",
+    "crates/toolr-py",
     "tests/support/3rd-party-pkg",
+    "tools",
 ]
+
+[tool.uv.sources]
+toolr = { workspace = true }
+toolr-py = { workspace = true }
+"3rd-party-pkg" = { workspace = true }
 
 [dependency-groups]
 dev = [
     "3rd-party-pkg",
+    "toolr-py",
     "attrs>=25.3.0",
     "coverage>=7.8.0",
     "hypothesis>=6.0.0",
@@ -106,6 +40,7 @@ dev = [
     "pytest-subtests>=0.14.2",
 ]
 docs = [
+    "toolr-py",
     "markdown-include>=0.8.1",
     "mkdocs>=1.6.1",
     "mkdocs-awesome-nav>=3.1.2",
@@ -123,14 +58,17 @@ show-fixes = true
 target-version = "py311"
 respect-gitignore = true
 src = [
-  "src",
-  "python",
+  "crates/toolr-core/src",
+  "crates/toolr/src",
+  "crates/toolr-py/src",
+  "crates/toolr-py/python",
   "tests",
   "tools",
 ]
 extend-exclude = [
   ".nox/**",
-  "tests/**/files/*.py"
+  "tests/**/files/*.py",
+  "docs/.fixtures/**/*.py",
 ]
 extend-include = [
 ]
@@ -164,19 +102,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"python/**/*.py" = [
+"crates/toolr-py/python/**/*.py" = [
   "D104",   # Missing docstring in public package
   "D107",   # Missing docstring in `__init__`
   "PT",     # flake8-pytest-style (PT) - Disabled in production code, only enforced in tests
 ]
-"python/toolr/__main__.py" = [
-  "F401",   #  `tools` imported but unused
-  "PLC0415" # `import` should be at the top-level of a file
-]
-"python/toolr/_context.py" = [
+"crates/toolr-py/python/toolr/_context.py" = [
   "PYI041", # redundant-numeric-union
 ]
-"python/toolr/utils/_rust_utils.pyi" = [
+"crates/toolr-py/python/toolr/utils/_rust_utils.pyi" = [
   "A002",   # Function argument `input` is shadowing a Python builtin
   "N818",   # Exception name `*` should be named with an Error suffix"
 ]
@@ -202,6 +136,9 @@ ignore = [
 ]
 "tests/support/coverage/*.py" = [
   "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
+]
+"scripts/*.py" = [
+  "INP001",   # Standalone scripts, no package needed
 ]
 "docs/**/files/*.py" = [
   "BLE001",   # Do not catch blind exception: `Exception`
@@ -253,7 +190,7 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
 warn_unused_ignores = true
-mypy_path = "python"
+mypy_path = "crates/toolr-py/python"
 exclude = [
   "tests/.*/files/.*\\.py",
   "^tests/([^/]*/)*files/.*",
@@ -268,14 +205,6 @@ disallow_untyped_calls = false
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
-
-[[tool.mypy.overrides]]
-module = [
-  "toolr.__main__"
-]
-disable_error_code = [
-  "unused-ignore"
-]
 
 [[tool.mypy.overrides]]
 module = [

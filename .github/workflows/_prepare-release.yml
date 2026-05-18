@@ -1,0 +1,338 @@
+name: Prepare Release
+
+on:
+  workflow_call:
+    inputs:
+      release-version:
+        required: false
+        type: string
+        description: 'Release version to prepare'
+        default: ''
+      github-app-id:
+        required: false
+        type: string
+        description: 'GitHub App ID for authentication'
+      environment:
+        required: false
+        type: string
+        description: 'GitHub environment to use'
+        default: ''
+      cache-seed:
+        required: true
+        type: string
+        description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
+      mise-version:
+        required: true
+        type: string
+        description: 'Version of mise to install. Pass the caller workflow''s MISE_VERSION env var.'
+    secrets:
+      github-app-private-key:
+        required: false
+        description: 'GitHub App private key for authentication'
+    outputs:
+      release-version:
+        description: 'Prepared release version'
+        value: ${{ jobs.prepare-release.outputs.release-version }}
+      release-patch-name:
+        description: 'Name of the release patch'
+        value: ${{ jobs.prepare-release.outputs.release-patch-name }}
+      release-notes-filename:
+        description: 'Name of the release notes file'
+        value: ${{ jobs.prepare-release.outputs.release-notes-filename }}
+      binary-release-tarball-name:
+        description: 'Name of the binary-wheel (toolr) sdist tarball'
+        value: ${{ jobs.prepare-release.outputs.binary-release-tarball-name }}
+      py-release-tarball-name:
+        description: 'Name of the toolr-py (pyo3) sdist tarball'
+        value: ${{ jobs.prepare-release.outputs.py-release-tarball-name }}
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment != '' && inputs.environment || null }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      release-version: ${{ steps.bump-version.outputs.release-version }}
+      release-patch-name: ${{ steps.bump-version.outputs.release-patch-name }}
+      release-notes-filename: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+      binary-release-tarball-name: ${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+      py-release-tarball-name: ${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
+      - name: Create GitHub App Token
+        if: inputs.github-app-id != ''
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ inputs.github-app-id }}
+          private-key: ${{ secrets.github-app-private-key }}
+
+      - name: Get GitHub App User ID
+        if: inputs.github-app-id != ''
+        id: get-user-id
+        shell: bash
+        run: |
+          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          fetch-depth: 0
+
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          version: ${{ inputs.mise-version }}
+          cache: true
+          cache_key_prefix: ${{ inputs.cache-seed }}|mise|${{ inputs.mise-version }}|prepare-release|${{ runner.os }}|${{ runner.arch }}
+
+      - name: Get the Python Binary path from Mise
+        id: mise-python-executable
+        shell: bash
+        run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate additional ToolR requirements file
+        shell: bash
+        run: |
+          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup ToolR
+        id: setup-toolr
+        uses: s0undt3ch/ToolR@dc169a1a43916ad01f8f3627493b5c9520da60d5 # v0.11.1
+        with:
+          python-path: ${{ steps.mise-python-executable.outputs.python }}
+          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup Prek
+        id: setup-pre-commit
+        uses: ./.github/actions/setup-pre-commit
+        with:
+          cache-seed: ${{ inputs.cache-seed }}|prepare-release
+          mise-version: ${{ inputs.mise-version }}
+
+      - name: Configure Git (with App)
+        if: inputs.github-app-id != ''
+        shell: bash
+        run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      - name: Configure Git (default)
+        if: inputs.github-app-id == ''
+        uses: ./.github/actions/configure-git
+
+      - name: Bump Version
+        id: bump-version
+        shell: bash
+        run: |
+          toolr version bump --write --check-existing-tag ${{ inputs.release-version }}
+
+      - name: Load UNRELEASED.md into TOOLR_RELEASE_NOTES env var
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Strip HTML comments from UNRELEASED.md and expose the result
+          # to the subsequent cliff steps via `TOOLR_RELEASE_NOTES`.
+          # The cliff.toml body template reads that env var via Tera's
+          # `get_env` and renders the content under a `### Notes` heading
+          # in the per-version section. Using python for the comment
+          # strip handles multi-line comments, content alongside
+          # comments, and missing close tags robustly.
+          notes_file=UNRELEASED.md
+          if [ -s "$notes_file" ]; then
+            # Use the mise-resolved python (same interpreter the rest of
+            # this job uses) instead of a bare `python3` — keeps the
+            # runtime aligned with mise.toml's pin.
+            notes=$("${{ steps.mise-python-executable.outputs.python }}" -c "import re,sys; sys.stdout.write(re.sub(r'<!--.*?-->', '', open('UNRELEASED.md').read(), flags=re.DOTALL).strip())")
+          else
+            notes=""
+          fi
+          # Multi-line-safe env-var write per GitHub Actions docs.
+          {
+            echo "TOOLR_RELEASE_NOTES<<TOOLR_RELEASE_NOTES_EOF"
+            echo "$notes"
+            echo "TOOLR_RELEASE_NOTES_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Generate changelog for GH release
+        id: git-cliff
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        with:
+          config: cliff.toml
+          args: --unreleased --strip all
+        env:
+          # TOOLR_RELEASE_NOTES is inherited from the previous step's
+          # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
+          OUTPUT: .release-changes.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Prepare GH Release changelog
+        id: prepare-release-notes
+        shell: bash
+        run: |
+          tail -n +3 .release-changes.md > release-notes.md
+          echo "release-notes-filename=release-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Release Notes Artifact
+        id: upload-release-notes
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+          path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attest release notes artifact
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        # Only run attestations on the main repository, not on forks
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+        with:
+          subject-path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
+
+      - name: Update CHANGELOG.md
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        with:
+          config: cliff.toml
+          args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
+        env:
+          # TOOLR_RELEASE_NOTES is inherited from the loader step's
+          # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Reset UNRELEASED.md
+        shell: bash
+        run: |
+          # Restore the file to its steady-state empty form (just the
+          # HTML comment header) so the next release cycle starts fresh.
+          # The lines below must match the committed UNRELEASED.md
+          # exactly; if they drift, the post-release commit will show
+          # a spurious diff on the file. printf with explicit \n keeps
+          # the content free of any YAML/heredoc indentation surprises.
+          # The backticks below are literal Markdown back-quotes; the
+          # surrounding single-quotes intentionally suppress expansion.
+          # shellcheck disable=SC2016
+          printf '%s\n' \
+            '<!--' \
+            'UNRELEASED.md — Queued release notes for the next release.' \
+            '' \
+            "Append narrative entries here as PRs land. On release, the" \
+            '`_prepare-release.yml` workflow folds the content of this file' \
+            'into the `### Notes` subsection of both the GitHub release body' \
+            "and CHANGELOG.md (under the new version's heading), then resets" \
+            'this file to empty for the next cycle.' \
+            '' \
+            "Empty between releases is the steady-state — there's no header," \
+            'no scaffolding. Just write whatever should appear in the notes.' \
+            '-->' \
+            > UNRELEASED.md
+
+      - name: Show Changes Diff
+        shell: bash
+        run: |
+          git diff --color
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          # Run prek against the changes
+          prek run --all-files --show-diff-on-failure || true
+          # Commit the changes
+          git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
+
+      - name: Tag the release
+        shell: bash
+        run: |
+          git tag -a "${{ env.RELEASE_VERSION }}" -m "Release ${{ env.RELEASE_VERSION }}"
+
+      - name: Create Release Patch
+        shell: bash
+        run: |
+          git format-patch --keep-subject --binary --stdout HEAD^ > toolr-${{ env.RELEASE_VERSION }}.patch
+
+      - name: Upload Changes Diff Artifact
+        id: upload-release-patch
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: toolr-${{ env.RELEASE_VERSION }}.patch
+          path: toolr-${{ env.RELEASE_VERSION }}.patch
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attest release patch artifact
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        # Only run attestations on the main repository, not on forks
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+        with:
+          subject-path: toolr-${{ env.RELEASE_VERSION }}.patch
+
+      - name: Create Source Tarballs
+        id: create-source-tarball
+        shell: bash
+        # Build per-crate sdists. Each tarball unpacks to a single
+        # top-level dir containing the crate's `pyproject.toml`, the
+        # workspace `Cargo.toml`, `Cargo.lock`, and all sources needed
+        # to compile from that pyproject. cibuildwheel can then run
+        # against `package-dir: <unpacked-dir>` natively, without
+        # needing CIBW_CONFIG_FILE.
+        run: |
+          rm -rf dist
+          uv build --sdist --package toolr --out-dir dist
+          uv build --sdist --package toolr-py --out-dir dist
+          binary_tarball=""
+          py_tarball=""
+          for file in dist/*.tar.gz; do
+            name="$(basename "$file")"
+            case "$name" in
+              toolr-*.tar.gz) binary_tarball="$name" ;;
+              toolr_py-*.tar.gz) py_tarball="$name" ;;
+            esac
+          done
+          if [ -z "$binary_tarball" ] || [ -z "$py_tarball" ]; then
+            echo "Failed to locate both sdists in dist/:"
+            ls -la dist/
+            exit 1
+          fi
+          echo "binary-release-tarball-name=$binary_tarball" >> "$GITHUB_OUTPUT"
+          echo "py-release-tarball-name=$py_tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Binary-Wheel Source Tarball Artifact
+        id: upload-binary-source-tarball
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+          path: dist/${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload toolr-py Source Tarball Artifact
+        id: upload-py-source-tarball
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
+          path: dist/${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attest source tarball artifacts
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        # Only run attestations on the main repository, not on forks
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+        with:
+          subject-path: |
+            dist/${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
+            dist/${{ steps.create-source-tarball.outputs.py-release-tarball-name }}

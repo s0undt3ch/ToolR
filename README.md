@@ -36,13 +36,110 @@ Built-in support for rich text formatting and automatic help generation from doc
 
 Extend ToolR's functionality by installing packages that provide additional commands through Python entry points.
 
+## Installation
+
+`toolr` ships in two complementary PyPI packages:
+
+- **`toolr`** — the Rust CLI binary you run as `toolr` from the
+  shell. Installs via pip, curl, mise, or a release archive. No
+  Python source, no `import toolr`.
+- **`toolr-py`** — the Python runtime your `tools/*.py` scripts
+  import (`from toolr import Context, command_group`). Provides the
+  `toolr` import name and the `_rust_utils` extension module the
+  framework runs under the hood.
+
+For a typical project you'll want **both**, in different venvs: the
+CLI installed once on PATH, and `toolr-py` added to your
+`tools/pyproject.toml` so it's resolved into your tools venv.
+
+### Install the CLI binary (`toolr`)
+
+Pick whichever method matches your environment.
+
+#### `curl ... | sh` (Linux + macOS)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
+```
+
+Pass `--version X.Y.Z` after `sh -s --` to pin a specific release, or
+`--prefix /custom/bin` to choose an install directory. Default prefix
+is `$XDG_BIN_HOME` (or `~/.local/bin`).
+
+#### PowerShell (Windows)
+
+```powershell
+irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
+```
+
+#### mise
+
+If you use [mise](https://mise.jdx.dev/) for tool version management:
+
+```sh
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise install toolr@latest
+mise use --global toolr@latest
+```
+
+See the [mise installation guide](https://s0undt3ch.github.io/ToolR/installation/mise/)
+for `.mise.toml` integration and project-level pinning.
+
+#### pip
+
+```sh
+pip install toolr
+```
+
+The `toolr` wheel ships only the Rust CLI binary; there's no Python
+source and no `import toolr` inside it. `python -m toolr` was removed
+in the rust front-end rewrite — use the `toolr` executable instead.
+
+#### GitHub release archives
+
+Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for
+Windows) from <https://github.com/s0undt3ch/ToolR/releases> and
+extract it onto `$PATH` manually. Each archive ships with a `.sha256`
+sibling for verification.
+
+### Enable `import toolr` in your tool scripts (`toolr-py`)
+
+Add `toolr-py` to your project's `tools/pyproject.toml` so the
+import surface is available when toolr executes your commands:
+
+```toml
+# tools/pyproject.toml
+[project]
+dependencies = ["toolr-py"]
+```
+
+`toolr-py` provides the `toolr` package (`Context`, `command_group`,
+helpers in `toolr.utils`, …) and the `_rust_utils` extension module.
+See [docs/installation/index.md](https://s0undt3ch.github.io/ToolR/installation/)
+for the longer write-up.
+
+### Supply-chain verification (SLSA attestations)
+
+Every release archive is signed with a SLSA build-provenance
+attestation produced by the GitHub-hosted release workflow. The
+`install.sh` and `install.ps1` scripts will verify the attestation
+automatically when the `gh` CLI is on PATH. To require verification:
+
+```sh
+sh installation/install.sh --verify-attestation=require   # POSIX
+./installation/install.ps1 -VerifyAttestation require     # Windows
+```
+
+You can also verify a downloaded archive manually:
+
+```sh
+gh attestation verify toolr-1.2.3-aarch64-apple-darwin.tar.gz \
+  --repo s0undt3ch/ToolR
+```
+
 ## Quick Start
 
-1. **Install ToolR**:
-
-   ```bash
-   python -m pip install toolr
-   ```
+1. **Install ToolR** (see [Installation](#installation) above).
 
 2. **Create a tools package** in your project root:
 

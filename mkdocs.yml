@@ -32,6 +32,44 @@ theme:
 docs_dir: docs
 site_dir: site
 
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Installation:
+    - Overview: installation/index.md
+    - mise: installation/mise.md
+  - How toolr is laid out: concepts.md
+  - Writing commands:
+    - Overview: writing-commands/index.md
+    - Groups & commands: writing-commands/groups.md
+    - Arguments: writing-commands/arguments.md
+    - Docstrings: writing-commands/docstrings.md
+    - Using `ctx`: writing-commands/context.md
+    - Annotations: writing-commands/annotations.md
+    - Scaling across files: writing-commands/across-files.md
+    - Nested groups: writing-commands/nesting.md
+    - Known bugs: writing-commands/known-bugs.md
+  - Migration (nested subgroup form): migration.md
+  - Project configuration: project-config.md
+  - CLI reference: cli.md
+  - Third-party packages: third-party.md
+  - Internals:
+    - Overview: internals/index.md
+    - Manifest layers: internals/manifest.md
+    - Cache layout: internals/cache.md
+    - Pre-commit integration: internals/pre-commit.md
+    - Diagnostics: internals/diagnostics.md
+  - API reference:
+    - Overview: reference/index.md
+    - Context: reference/context.md
+    - command_group: reference/command_group.md
+    - command: reference/command.md
+    - arg: reference/arg.md
+    - arg_section: reference/arg_section.md
+    - testing: reference/testing.md
+    - build: reference/build.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
 
 # https://www.mkdocs.org/user-guide/configuration/#validation
 validation:
@@ -43,13 +81,12 @@ plugins:
   - autorefs:
       resolve_closest: true
   - search
-  - awesome-nav
   - mkdocstrings:
       default_handler: python
       enable_inventory: true
       handlers:
         python:
-          paths: [python]
+          paths: [crates/toolr-py/python]
           options:
             allow_inspection: true
             show_source: true
@@ -85,5 +122,5 @@ markdown_extensions:
       base_path: .
 
 watch:
-  - python
+  - crates/toolr-py/python
   - docs

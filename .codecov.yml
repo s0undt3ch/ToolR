@@ -1,0 +1,74 @@
+---
+# Codecov configuration.
+#
+# Validate after edits with:
+#     curl --data-binary @.codecov.yml https://codecov.io/validate
+#
+# Reference: https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  # The headline number Codecov reports. We round to one decimal place
+  # so the GitHub status text isn't 91.234567%.
+  precision: 1
+  round: down
+  range: "80...100"
+
+  status:
+    project:
+      default:
+        # Block PR merges if total coverage drops below 90%.
+        target: 90%
+        # Allow a 1% wobble for noise (random scheduler differences in
+        # signal-driven tests, etc.) without auto-failing the status.
+        threshold: 1%
+        # Wait until every flag has reported before computing the status.
+        # We upload 8 flags (4 Python × 2 OSes); without this Codecov
+        # sometimes flips green/red as the partial uploads land.
+        if_not_found: success
+        if_ci_failed: error
+
+    patch:
+      default:
+        # Lines touched by the PR must themselves hit 90%.
+        target: 90%
+        threshold: 0%
+        if_not_found: success
+        if_ci_failed: error
+
+# Source files we never measure. Listing them here keeps the displayed
+# coverage focused on production code and prevents un-instrumented
+# files from dragging the project number down.
+ignore:
+  # pyo3 cdylib: tested via Python, no direct Rust coverage. The
+  # workflow already passes `--exclude toolr-py` to cargo llvm-cov.
+  - "crates/toolr-py/src"
+  # Test files themselves shouldn't count toward source coverage — we
+  # care about what they exercise, not their own line hits.
+  - "tests"
+  - "crates/*/tests"
+  # Embedded shell completion scripts; not Rust/Python source.
+  - "crates/toolr-core/src/complete/scripts"
+  # Init-template fixture text — copied verbatim into new projects.
+  - "crates/toolr/src/init_templates"
+  # Auto-generated / vendored output.
+  - "target"
+  - "wheelhouse"
+  - "**/__pycache__"
+
+# Post a Codecov summary comment on every PR and update it in place
+# on each new upload instead of stacking a new comment each push.
+comment:
+  layout: "reach,diff,flags,files"
+  # `default` edits the existing Codecov comment when one is found
+  # (creating one on the first build) — same comment node, refreshed
+  # contents. The alternatives are `new` (delete + repost at bottom),
+  # `once` (never updates after the first post), and `spammy` (one new
+  # comment per build; do not use).
+  behavior: default
+  # `false` so the comment posts even when there's no coverage delta —
+  # gives reviewers a single permanent surface for the numbers.
+  require_changes: false
+  # Wait until at least one Python and one Rust report have arrived
+  # before posting; otherwise the first comment can look like coverage
+  # tanked because only half the flags are in.
+  after_n_builds: 2

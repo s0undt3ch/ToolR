@@ -1,0 +1,12 @@
+Example commands
+
+Usage: toolr example [COMMAND]
+
+Commands:
+  hello    Greet someone.
+  commit   Print the short SHA of the current git HEAD.
+  confirm  Prompt for confirmation before doing something destructive.
+  setlog   Set a log level (for demonstration only — does nothing).
+
+Options:
+  -h, --help  Print help

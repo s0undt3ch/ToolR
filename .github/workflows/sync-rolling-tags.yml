@@ -15,6 +15,11 @@ defaults:
 permissions:
   contents: read
 
+env:
+  # Bump to invalidate every cache used by this workflow.
+  CACHE_SEED: "1"
+  # `MISE_VERSION` lives in `.github/env` (loaded per-job).
+
 jobs:
   update-rolling-tags:
     name: Update Rolling Tags
@@ -63,9 +68,22 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
-      - name: Install uv
-        id: install-uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Load shared env vars
+        shell: bash
+        # See ci.yml's matching step for why we sed-filter instead of cat.
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
+
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          version: ${{ env.MISE_VERSION }}
+          cache: true
+          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|sync-rolling-tags|${{ runner.os }}|${{ runner.arch }}
+
+      - name: Get the Python Binary path from Mise
+        id: mise-python-executable
+        shell: bash
+        run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
 
       - name: Generate additional ToolR requirements file
         shell: bash
@@ -74,15 +92,17 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: s0undt3ch/ToolR@8cd163aa75e825c20207500024cad82f14ff6a87 # v0.11.1
+        uses: s0undt3ch/ToolR@dc169a1a43916ad01f8f3627493b5c9520da60d5 # v0.11.1
         with:
+          python-path: ${{ steps.mise-python-executable.outputs.python }}
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
       - name: Setup Prek
         id: setup-pre-commit
         uses: ./.github/actions/setup-pre-commit
         with:
-          cache-seed: sync-rolling-tags
+          cache-seed: ${{ env.CACHE_SEED }}|sync-rolling-tags
+          mise-version: ${{ env.MISE_VERSION }}
 
       - name: Update rolling tags
         id: update-rolling-tags

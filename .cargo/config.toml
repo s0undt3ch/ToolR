@@ -1,0 +1,14 @@
+# Linker flags for building pyo3 `extension-module` cdylibs outside of
+# maturin. Maturin sets these automatically; when running `cargo build`
+# directly (e.g. `cargo build --workspace --release` in CI / dev loops),
+# we still need them so the `_rust_utils` dynlib in `toolr-py` links
+# without an unresolved `libpython` reference.
+#
+# `-undefined dynamic_lookup` on macOS and unspecified-symbol behaviour
+# on Linux defer libpython symbol resolution to the host Python process
+# that loads the extension at runtime.
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
