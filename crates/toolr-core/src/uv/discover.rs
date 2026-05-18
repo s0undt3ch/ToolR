@@ -126,4 +126,159 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("0.1.0") || msg.contains("(0, 1, 0)"));
     }
+
+    /// Mutating `PATH` for the duration of a test is unavoidable for
+    /// `which_uv` / `find_uv_on_path` coverage. Serialise so cargo's
+    /// parallel runner doesn't race.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn with_path<R>(value: Option<&str>, f: impl FnOnce() -> R) -> R {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os("PATH");
+        // SAFETY: ENV_LOCK serialises the only tests in this module
+        // that touch PATH.
+        unsafe {
+            match value {
+                Some(v) => std::env::set_var("PATH", v),
+                None => std::env::remove_var("PATH"),
+            }
+        }
+        let r = f();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("PATH", v),
+                None => std::env::remove_var("PATH"),
+            }
+        }
+        r
+    }
+
+    #[test]
+    fn which_uv_returns_none_when_path_unset() {
+        let result = with_path(None, which_uv);
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[test]
+    fn which_uv_returns_none_when_no_directory_contains_uv() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path_value = tmp.path().to_string_lossy().into_owned();
+        let result = with_path(Some(&path_value), which_uv);
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn which_uv_finds_uv_in_first_directory_that_contains_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_dir = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let stub = bin_dir.join("uv");
+        std::fs::write(&stub, b"#!/bin/sh\necho uv 1.0.0\n").unwrap();
+        let mut perms = std::fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&stub, perms).unwrap();
+
+        let path_value = bin_dir.to_string_lossy().into_owned();
+        let found = with_path(Some(&path_value), which_uv).unwrap();
+        assert_eq!(found, Some(stub));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_against_stub_uv_returns_uv_binary() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let stub = tmp.path().join("uv");
+        std::fs::write(&stub, b"#!/bin/sh\necho 'uv 0.5.0 (abcdef)'\n").unwrap();
+        let mut perms = std::fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&stub, perms).unwrap();
+
+        let bin = probe(&stub, UvSource::Path).expect("0.5.0 >= 0.4.0 should succeed");
+        assert_eq!(bin.version, (0, 5, 0));
+        assert_eq!(bin.source, UvSource::Path);
+        assert_eq!(bin.path, stub);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_rejects_old_version_with_version_too_old() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let stub = tmp.path().join("uv");
+        std::fs::write(&stub, b"#!/bin/sh\necho 'uv 0.1.0'\n").unwrap();
+        let mut perms = std::fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&stub, perms).unwrap();
+
+        let err = probe(&stub, UvSource::Path).unwrap_err();
+        assert!(matches!(err, UvError::VersionTooOld { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_rejects_unparsable_version_string() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let stub = tmp.path().join("uv");
+        std::fs::write(&stub, b"#!/bin/sh\necho 'no version here'\n").unwrap();
+        let mut perms = std::fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&stub, perms).unwrap();
+
+        let err = probe(&stub, UvSource::Path).unwrap_err();
+        assert!(matches!(err, UvError::UnparsableVersion(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_rejects_nonzero_exit_as_unparsable_version() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let stub = tmp.path().join("uv");
+        std::fs::write(&stub, b"#!/bin/sh\necho 'oops' 1>&2\nexit 1\n").unwrap();
+        let mut perms = std::fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&stub, perms).unwrap();
+
+        let err = probe(&stub, UvSource::Path).unwrap_err();
+        // Non-zero exit lands on the `UnparsableVersion(stderr)` arm.
+        match err {
+            UvError::UnparsableVersion(msg) => assert!(msg.contains("oops"), "got: {msg}"),
+            other => panic!("expected UnparsableVersion, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn probe_returns_io_when_binary_is_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = probe(&tmp.path().join("does-not-exist"), UvSource::Path).unwrap_err();
+        // Command::output() returns Err for ENOENT, which maps via
+        // #[from std::io::Error] to UvError::Io.
+        assert!(matches!(err, UvError::Io(_)));
+    }
+
+    #[test]
+    fn find_managed_uv_returns_none_when_managed_path_absent() {
+        // Constrain $XDG_DATA_HOME to an empty tempdir so managed_uv_path
+        // resolves into a non-existent file. Use ENV_LOCK to avoid
+        // colliding with sibling tests that also touch env vars.
+        let tmp = tempfile::tempdir().unwrap();
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os("XDG_DATA_HOME");
+        // SAFETY: serialised by the module-level ENV_LOCK.
+        unsafe {
+            std::env::set_var("XDG_DATA_HOME", tmp.path());
+        }
+        let result = find_managed_uv();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("XDG_DATA_HOME", v),
+                None => std::env::remove_var("XDG_DATA_HOME"),
+            }
+        }
+        assert!(matches!(result, Ok(None)));
+    }
 }
