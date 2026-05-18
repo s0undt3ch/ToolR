@@ -691,4 +691,85 @@ mod test_suite {
             })
         }
     }
+
+    // --------------------------------------------------------------------
+    // Public-surface coverage for CommandConfig builder methods + error
+    // constructors / Display impls. These never get exercised by the
+    // existing subprocess-run tests, leaving a sizeable chunk of
+    // command.rs uncovered for what is essentially trivial code.
+    // --------------------------------------------------------------------
+
+    use crate::command::{
+        CommandExecutionError, CommandNoOutputTimeoutError, CommandTimeoutExceededError,
+    };
+
+    #[test]
+    fn config_new_seeds_args_and_inherits_defaults() {
+        let cfg = CommandConfig::new(vec!["echo".into(), "hi".into()]);
+        assert_eq!(cfg.args, vec!["echo".to_string(), "hi".to_string()]);
+        assert!(cfg.env.is_empty());
+        assert!(cfg.input.is_none());
+        assert!(cfg.timeout_secs.is_none());
+        assert!(cfg.no_output_timeout_secs.is_none());
+    }
+
+    #[test]
+    fn config_with_env_replaces_environment_map() {
+        let mut env = HashMap::new();
+        env.insert("FOO".into(), "bar".into());
+        let cfg = CommandConfig::new(vec!["echo".into()]).with_env(env);
+        assert_eq!(cfg.env.get("FOO"), Some(&"bar".to_string()));
+    }
+
+    #[test]
+    fn config_with_input_records_stdin_payload() {
+        let cfg = CommandConfig::new(vec!["cat".into()]).with_input(b"hello".to_vec());
+        assert_eq!(cfg.input.as_deref(), Some(b"hello".as_ref()));
+    }
+
+    #[test]
+    fn config_with_cwd_overrides_default_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = CommandConfig::new(vec!["pwd".into()]).with_cwd(tmp.path().to_path_buf());
+        assert_eq!(cfg.cwd.as_deref(), Some(tmp.path()));
+    }
+
+    #[test]
+    fn command_execution_error_display_propagates_message() {
+        let err = CommandExecutionError::new("boom");
+        assert_eq!(err.to_string(), "boom");
+        // Round-trip through `dyn Error` so the `Error` impl is exercised.
+        let boxed: Box<dyn std::error::Error> = Box::new(err);
+        assert_eq!(boxed.to_string(), "boom");
+    }
+
+    #[test]
+    fn command_timeout_error_display_propagates_message() {
+        let err = CommandTimeoutExceededError::new("timed out after 1s");
+        assert_eq!(err.to_string(), "timed out after 1s");
+        let boxed: Box<dyn std::error::Error> = Box::new(err);
+        assert!(boxed.to_string().contains("timed out"));
+    }
+
+    #[test]
+    fn command_no_output_timeout_error_display_propagates_message() {
+        let err = CommandNoOutputTimeoutError::new("no output for 0.5s");
+        assert_eq!(err.to_string(), "no output for 0.5s");
+        let boxed: Box<dyn std::error::Error> = Box::new(err);
+        assert!(boxed.to_string().contains("no output"));
+    }
+
+    #[test]
+    fn run_command_internal_reports_spawn_failure_via_command_execution_error() {
+        // Spawning a nonexistent binary returns Err via the
+        // `CommandExecutionError::new("Failed to execute command: …")`
+        // arm — pin that the message has the documented prefix.
+        let cfg = CommandConfig::new(vec!["definitely-not-on-path-toolr-test".into()]);
+        let err = run_command_internal(cfg).expect_err("spawn should fail");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Failed to execute command"),
+            "expected spawn-failure prefix, got: {msg}",
+        );
+    }
 }
