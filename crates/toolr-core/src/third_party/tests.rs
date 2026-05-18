@@ -130,6 +130,83 @@ fn parse_rejects_malformed_json() {
     assert!(matches!(err, ThirdPartyError::Json { .. }));
 }
 
+#[test]
+fn parse_rejects_missing_file_with_io_error() {
+    let tmp = TempDir::new().unwrap();
+    let missing = tmp.path().join("no-such-file.json");
+    let err = parse_fragment(&missing).expect_err("missing file should error");
+    match err {
+        ThirdPartyError::Io { path, source } => {
+            assert_eq!(path, missing);
+            assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+        }
+        other => panic!("expected Io error, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_treats_zero_version_as_missing() {
+    // `toolr_schema_version: 0` fails the `>= 1` filter and falls through
+    // to MissingVersion — same as if the key was absent. Pinning this
+    // behaviour catches accidental drift in the version-extraction chain.
+    let tmp = TempDir::new().unwrap();
+    let path = write_fragment(
+        &tmp,
+        "zero_pkg",
+        r#"{"toolr_schema_version": 0, "package": "zero_pkg"}"#,
+    );
+    let err = parse_fragment(&path).expect_err("zero version should reject");
+    assert!(matches!(err, ThirdPartyError::MissingVersion { .. }));
+}
+
+#[test]
+fn parse_treats_non_integer_version_as_missing() {
+    let tmp = TempDir::new().unwrap();
+    let path = write_fragment(
+        &tmp,
+        "str_pkg",
+        r#"{"toolr_schema_version": "one", "package": "str_pkg"}"#,
+    );
+    let err = parse_fragment(&path).expect_err("string version should reject");
+    assert!(matches!(err, ThirdPartyError::MissingVersion { .. }));
+}
+
+#[test]
+fn parse_treats_non_object_root_as_missing_version() {
+    // A top-level JSON array has no `toolr_schema_version` key at all.
+    let tmp = TempDir::new().unwrap();
+    let path = write_fragment(&tmp, "arr_pkg", "[]");
+    let err = parse_fragment(&path).expect_err("array root should reject");
+    assert!(matches!(err, ThirdPartyError::MissingVersion { .. }));
+}
+
+#[test]
+fn third_party_error_io_renders_path_and_reason() {
+    // `Display`-trait coverage for the `Io` arm — surfaces the path
+    // and the underlying io::Error.
+    let err = ThirdPartyError::Io {
+        path: std::path::PathBuf::from("/tmp/x.json"),
+        source: std::io::Error::new(std::io::ErrorKind::PermissionDenied, "boom"),
+    };
+    let s = err.to_string();
+    assert!(s.contains("/tmp/x.json"));
+    assert!(s.contains("boom"));
+}
+
+#[test]
+fn third_party_error_duplicate_command_renders_both_packages() {
+    let err = ThirdPartyError::DuplicateCommand {
+        group: "demo".into(),
+        name: "hello".into(),
+        first_package: "pkg-a".into(),
+        second_package: "pkg-b".into(),
+    };
+    let s = err.to_string();
+    assert!(s.contains("demo/hello"));
+    assert!(s.contains("pkg-a"));
+    assert!(s.contains("pkg-b"));
+}
+
 use super::merge::merge_into_manifest;
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
 
