@@ -512,3 +512,61 @@ fn install_with_force_overwrites_existing() {
     let contents = std::fs::read_to_string(&target).unwrap();
     assert!(contents.contains("toolr __complete"));
 }
+
+#[test]
+fn install_fish_uses_xdg_config_home_override() {
+    let tmp = TempDir::new().unwrap();
+    let opts = InstallOptions {
+        shell: Shell::Fish,
+        xdg_data_home: None,
+        xdg_config_home: Some(tmp.path().join("config")),
+        home: tmp.path().to_path_buf(),
+        force: false,
+        interactive: false,
+    };
+    let outcome = install_script(&opts).unwrap();
+    assert!(matches!(outcome, InstallOutcome::Wrote { .. }));
+    let target = tmp.path().join("config/fish/completions/toolr.fish");
+    assert!(target.exists());
+    let contents = std::fs::read_to_string(&target).unwrap();
+    assert!(contents.contains("complete -c toolr"));
+}
+
+#[test]
+fn install_zsh_lands_under_home_zfunc() {
+    let tmp = TempDir::new().unwrap();
+    let opts = InstallOptions {
+        shell: Shell::Zsh,
+        xdg_data_home: None,
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        force: false,
+        interactive: false,
+    };
+    let outcome = install_script(&opts).unwrap();
+    assert!(matches!(outcome, InstallOutcome::Wrote { .. }));
+    let target = tmp.path().join(".zfunc/_toolr");
+    assert!(target.exists());
+    let contents = std::fs::read_to_string(&target).unwrap();
+    assert!(contents.contains("toolr __complete"));
+}
+
+#[test]
+fn install_fish_without_xdg_falls_back_to_home_config() {
+    // Exercises the `unwrap_or_else(|| home.join(".config"))` arm for
+    // the Fish branch of `install_path_for` (and for `install_script`).
+    let tmp = TempDir::new().unwrap();
+    let path = install_path_for(Shell::Fish, None, tmp.path()).unwrap();
+    assert_eq!(path, tmp.path().join(".config/fish/completions/toolr.fish"));
+}
+
+#[test]
+fn install_bash_without_xdg_falls_back_to_home_local_share() {
+    // Same fallback story for Bash.
+    let tmp = TempDir::new().unwrap();
+    let path = install_path_for(Shell::Bash, None, tmp.path()).unwrap();
+    assert_eq!(
+        path,
+        tmp.path().join(".local/share/bash-completion/completions/toolr")
+    );
+}
