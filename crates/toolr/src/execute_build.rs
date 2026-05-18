@@ -293,4 +293,238 @@ mod tests {
         );
         assert_eq!(spec.args.get("force"), Some(&Value::Bool(true)));
     }
+
+    /// Helper that returns an `Argument` with the given name + kind +
+    /// resolved type, defaults everywhere else. Used by the type-router
+    /// tests so each test reads as "given this resolved type, do we
+    /// route to the right `get_one`/`get_many` arm?".
+    fn arg_of(name: &str, kind: ArgumentKind, ty: SupportedType) -> Argument {
+        Argument {
+            name: name.into(),
+            kind,
+            help: String::new(),
+            default: None,
+            type_annotation: None,
+            resolved_type: Some(ty),
+            path_constraints: None,
+            allowed_values: vec![],
+            metadata: toolr_core::manifest::ArgMetadata::default(),
+        }
+    }
+
+    fn cmd_with(args: Vec<Argument>) -> Command {
+        Command {
+            name: "test".into(),
+            group: "g".into(),
+            module: "tools.g".into(),
+            function: "test".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: args,
+            imports: vec![],
+            origin: Origin::Static,
+        }
+    }
+
+    #[test]
+    fn build_spec_extracts_count_arg() {
+        let cmd = cmd_with(vec![arg_of("verbose", ArgumentKind::Count, SupportedType::Int)]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .action(ArgAction::Count),
+            )
+            .get_matches_from(["test", "-vvv"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(spec.args.get("verbose"), Some(&Value::Number(3.into())));
+    }
+
+    #[test]
+    fn build_spec_extracts_int_scalar() {
+        let cmd = cmd_with(vec![arg_of("n", ArgumentKind::Optional, SupportedType::Int)]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("n")
+                    .long("n")
+                    .value_parser(clap::value_parser!(i64))
+                    .default_value("42"),
+            )
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(spec.args.get("n"), Some(&Value::Number(42.into())));
+    }
+
+    #[test]
+    fn build_spec_extracts_float_scalar() {
+        let cmd = cmd_with(vec![arg_of("ratio", ArgumentKind::Optional, SupportedType::Float)]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("ratio")
+                    .long("ratio")
+                    .value_parser(clap::value_parser!(f64))
+                    .default_value("1.5"),
+            )
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        match spec.args.get("ratio") {
+            Some(Value::Number(n)) => assert_eq!(n.as_f64(), Some(1.5)),
+            other => panic!("expected Float number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_spec_extracts_bool_scalar_via_optional() {
+        let cmd = cmd_with(vec![arg_of("dry", ArgumentKind::Optional, SupportedType::Bool)]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("dry")
+                    .long("dry")
+                    .value_parser(clap::value_parser!(bool))
+                    .default_value("false"),
+            )
+            .get_matches_from(["test", "--dry", "true"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(spec.args.get("dry"), Some(&Value::Bool(true)));
+    }
+
+    #[test]
+    fn build_spec_extracts_path_scalar_as_string() {
+        let cmd = cmd_with(vec![arg_of("file", ArgumentKind::Optional, SupportedType::Path)]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("file")
+                    .long("file")
+                    .value_parser(clap::value_parser!(std::path::PathBuf))
+                    .default_value("/tmp/x"),
+            )
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(spec.args.get("file"), Some(&Value::String("/tmp/x".into())));
+    }
+
+    #[test]
+    fn build_spec_extracts_optional_inner_type_via_unwrap_optional() {
+        // `Optional<Int>` should resolve to the Int arm of `extract_scalar`.
+        let cmd = cmd_with(vec![arg_of(
+            "maybe_n",
+            ArgumentKind::Optional,
+            SupportedType::Optional(Box::new(SupportedType::Int)),
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("maybe_n")
+                    .long("maybe-n")
+                    .value_parser(clap::value_parser!(i64))
+                    .default_value("7"),
+            )
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(spec.args.get("maybe_n"), Some(&Value::Number(7.into())));
+    }
+
+    #[test]
+    fn build_spec_extracts_repeated_int_as_json_array() {
+        let cmd = cmd_with(vec![arg_of(
+            "ports",
+            ArgumentKind::Repeated,
+            SupportedType::List(Box::new(SupportedType::Int)),
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("ports")
+                    .long("port")
+                    .action(ArgAction::Append)
+                    .value_parser(clap::value_parser!(i64)),
+            )
+            .get_matches_from(["test", "--port", "80", "--port", "443"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("ports"),
+            Some(&Value::Array(vec![Value::Number(80.into()), Value::Number(443.into())])),
+        );
+    }
+
+    #[test]
+    fn build_spec_extracts_repeated_path_as_json_strings() {
+        let cmd = cmd_with(vec![arg_of(
+            "files",
+            ArgumentKind::Repeated,
+            SupportedType::List(Box::new(SupportedType::Path)),
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("files")
+                    .long("file")
+                    .action(ArgAction::Append)
+                    .value_parser(clap::value_parser!(std::path::PathBuf)),
+            )
+            .get_matches_from(["test", "--file", "/a", "--file", "/b"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("files"),
+            Some(&Value::Array(vec![
+                Value::String("/a".into()),
+                Value::String("/b".into()),
+            ])),
+        );
+    }
+
+    #[test]
+    fn build_spec_extracts_tuple_arg_with_num_args() {
+        // Heterogeneous Tuple routes through `extract_many` even though
+        // the kind is Positional — verify the `is_tuple` early branch.
+        let cmd = cmd_with(vec![arg_of(
+            "pair",
+            ArgumentKind::Positional,
+            SupportedType::Tuple(vec![SupportedType::Str, SupportedType::Int]),
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(
+                Arg::new("pair")
+                    .num_args(2)
+                    .value_parser(clap::value_parser!(String)),
+            )
+            .get_matches_from(["test", "name", "42"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("pair"),
+            Some(&Value::Array(vec![
+                Value::String("name".into()),
+                Value::String("42".into()),
+            ])),
+        );
+    }
+
+    #[test]
+    fn build_spec_missing_optional_value_does_not_appear_in_args_map() {
+        // No clap value present → extract_scalar returns None → key is
+        // absent from the args map. Pinning this protects the Python
+        // side, which uses `args.get(name)` and relies on absence
+        // (rather than null) for "user didn't pass this".
+        let cmd = cmd_with(vec![arg_of(
+            "absent",
+            ArgumentKind::Optional,
+            SupportedType::Str,
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("absent").long("absent"))
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert!(!spec.args.contains_key("absent"));
+    }
+
+    #[test]
+    fn output_options_default_values_match_python_runner_expectations() {
+        // The runner side defaults `verbosity` to "normal" and
+        // `log_level` to "INFO" when not overridden. Document those
+        // strings here so a Rust-side rename gets caught by a unit
+        // test instead of a CLI smoke run.
+        let opts = OutputOptions::default();
+        assert_eq!(opts.verbosity, "normal");
+        assert!(!opts.timestamps);
+        assert_eq!(opts.log_level, "INFO");
+        assert!(opts.default_timeout_secs.is_none());
+        assert!(opts.default_no_output_timeout_secs.is_none());
+    }
 }
