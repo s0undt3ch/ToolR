@@ -55,9 +55,20 @@ ignore:
   - "wheelhouse"
   - "**/__pycache__"
 
-# Don't post the auto-generated review comment on every PR; the status
-# checks plus the codecov.io dashboard are enough signal.
+# Post a Codecov summary comment on every PR and update it in place
+# on each new upload instead of stacking a new comment each push.
 comment:
   layout: "reach,diff,flags,files"
+  # `default` edits the existing Codecov comment when one is found
+  # (creating one on the first build) — same comment node, refreshed
+  # contents. The alternatives are `new` (delete + repost at bottom),
+  # `once` (never updates after the first post), and `spammy` (one new
+  # comment per build; do not use).
   behavior: default
-  require_changes: true
+  # `false` so the comment posts even when there's no coverage delta —
+  # gives reviewers a single permanent surface for the numbers.
+  require_changes: false
+  # Wait until at least one Python and one Rust report have arrived
+  # before posting; otherwise the first comment can look like coverage
+  # tanked because only half the flags are in.
+  after_n_builds: 2
