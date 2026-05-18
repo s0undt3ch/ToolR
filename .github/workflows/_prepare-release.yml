@@ -67,14 +67,14 @@ jobs:
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
         with:
           egress-policy: audit
 
       - name: Create GitHub App Token
         if: inputs.github-app-id != ''
         id: app-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ inputs.github-app-id }}
           private-key: ${{ secrets.github-app-private-key }}
@@ -89,7 +89,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app-token.outputs.token || github.token }}
           fetch-depth: 0
@@ -113,7 +113,7 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: s0undt3ch/ToolR@dc169a1a43916ad01f8f3627493b5c9520da60d5 # v0.11.1
+        uses: s0undt3ch/ToolR@33c66330ac459207c36584723c8a9f2054f59b24 # v0.11.1
         with:
           python-path: ${{ steps.mise-python-executable.outputs.python }}
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
@@ -190,7 +190,7 @@ jobs:
 
       - name: Upload Release Notes Artifact
         id: upload-release-notes
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
           path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
@@ -198,7 +198,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attest release notes artifact
-        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         # Only run attestations on the main repository, not on forks
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
@@ -266,7 +266,7 @@ jobs:
 
       - name: Upload Changes Diff Artifact
         id: upload-release-patch
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: toolr-${{ env.RELEASE_VERSION }}.patch
           path: toolr-${{ env.RELEASE_VERSION }}.patch
@@ -274,7 +274,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attest release patch artifact
-        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         # Only run attestations on the main repository, not on forks
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
@@ -312,7 +312,7 @@ jobs:
 
       - name: Upload Binary-Wheel Source Tarball Artifact
         id: upload-binary-source-tarball
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
           path: dist/${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
@@ -321,7 +321,7 @@ jobs:
 
       - name: Upload toolr-py Source Tarball Artifact
         id: upload-py-source-tarball
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
           path: dist/${{ steps.create-source-tarball.outputs.py-release-tarball-name }}
@@ -329,7 +329,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attest source tarball artifacts
-        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         # Only run attestations on the main repository, not on forks
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
