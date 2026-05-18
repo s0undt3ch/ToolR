@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("example", title="Example", description="Example commands")
+example = command_group("example", title="Example", description="Example commands")
 
 
-@command(group="example")
+@example.command
 def echo(ctx: Context, what: str):
     """
     Command title line.

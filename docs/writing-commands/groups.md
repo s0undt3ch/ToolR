@@ -1,8 +1,7 @@
 # Groups & commands
 
 Every CLI subcommand starts with a [`command_group`][toolr.command_group]
-declaration and one or more functions decorated with
-[`@command`][toolr.command].
+declaration and one or more functions attached to it.
 
 ## Minimal example
 
@@ -18,12 +17,11 @@ prints it.
 
 ## What's happening
 
-- `command_group("example", title="Example", description="…")`
-  registers a top-level group. The first argument (`"example"`) is
-  the invocation name; the title and description appear in `--help`.
-  No assignment needed — toolr's static parser picks up the call as
-  a module-level statement.
-- `@command(group="example")` attaches the decorated function to the
+- `example = command_group("example", title="Example", description="…")`
+  registers a top-level group and returns a binding you can attach
+  commands to. The first argument (`"example"`) is the invocation
+  name; the title and description appear in `--help`.
+- `@example.command` attaches the decorated function to the
   registered group. The function name (`echo`) becomes the CLI name;
   underscores are converted to hyphens (`render_diff` →
   `toolr example render-diff`).
@@ -36,34 +34,14 @@ prints it.
   become optional flags. See [Arguments](arguments.md) for the full
   inference rules.
 
-## Order independence across files
-
-Toolr does a two-pass static parse: every `command_group(...)`
-declaration is collected first, then every `@command(group=...)`
-reference is resolved against the registry. The order files are
-scanned in doesn't matter — `tools/a.py` can declare a group that
-`tools/b.py` attaches commands to, regardless of which file the
-parser visits first.
-
 ## Overriding the CLI name
 
 To register a command under a name different from its function:
 
 ```python
-@command("snippet-checker", group="example")
+@example.command("snippet-checker")
 def check_snippets(ctx): ...
 # → toolr example snippet-checker
-```
-
-## Typo safety
-
-If `@command(group="ci.helm-fdif")` references a group that doesn't
-exist, manifest-build fails with the nearest match suggested:
-
-```text
-error: unknown group references (1):
-  - tools.gh_actions::check-snippets: references group `ci.helm-fdif`
-    which has no `command_group(...)` declaration. Did you mean `ci.helm-diff`?
 ```
 
 ## Function-name-to-command-name conversion
@@ -76,12 +54,30 @@ Each function name with underscores becomes a hyphenated CLI command:
 `simple_function` → `toolr names simple-function`,
 `function_with_underscores` → `toolr names function-with-underscores`.
 
-!!! warning "Legacy decorator deprecated"
-    Toolr still accepts the older binding-style decorator
-    (`group = command_group(...)` + `@group.command`) so existing
-    projects keep running, but every legacy call emits a
-    `ToolrDeprecationWarning` at runtime. The legacy form will be
-    removed in toolr 1.0. See the [migration guide](../migration.md)
-    for the (short) rewrite recipe.
+## When you outgrow a single file
+
+The bound-decorator form above is the canonical shape for tools that
+live in one file: the `example` binding sits right next to the
+commands it owns, so the relationship is obvious from a glance.
+
+Tools tend to grow. When you want commands in `tools/foo.py` to
+attach to a group declared in `tools/_common.py`, importing the
+binding across files gets awkward. Toolr's *string-keyed* decorator
+is built for that case:
+
+```python
+# tools/foo.py
+from toolr import command
+
+@command(group="example")
+def run(ctx): ...
+```
+
+The static parser resolves the `group="example"` reference at
+manifest-build time, so the file declaring `command_group("example", …)`
+and the file declaring the command don't need to share an import.
+Read [*Scaling command groups across files*](across-files.md) for
+the full picture, including the typo-safety guarantees the
+string-keyed form gives you.
 
 Next: [Arguments →](arguments.md)

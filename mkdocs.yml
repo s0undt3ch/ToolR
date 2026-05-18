@@ -46,9 +46,10 @@ nav:
     - Docstrings: writing-commands/docstrings.md
     - Using `ctx`: writing-commands/context.md
     - Annotations: writing-commands/annotations.md
+    - Scaling across files: writing-commands/across-files.md
     - Nested groups: writing-commands/nesting.md
     - Known bugs: writing-commands/known-bugs.md
-  - Migration (legacy → string-path): migration.md
+  - Migration (nested subgroup form): migration.md
   - Project configuration: project-config.md
   - CLI reference: cli.md
   - Third-party packages: third-party.md

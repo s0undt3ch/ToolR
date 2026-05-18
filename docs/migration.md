@@ -1,97 +1,38 @@
-# Migration: legacy decorators → string-path API
+# Migration: nested-group method form → dotted strings
 
-Toolr's original decorator API attached commands to a captured
-`CommandGroup` binding. That style is **deprecated** and will be
-removed in **toolr 1.0**. Every legacy call emits a
-`ToolrDeprecationWarning` at runtime so the offenders are easy to
-spot.
+Toolr originally let you declare a subgroup by calling
+`.command_group(...)` on a captured parent binding:
 
-The replacement is mechanical — most projects can migrate with two
-search-and-replace passes per file.
+```python
+docker = command_group("docker", "Docker", "Container utilities")
+docker_image = docker.command_group("image", "Image")
+```
+
+That form is **deprecated** and will be removed in **toolr 1.0**.
+Every call emits a `ToolrDeprecationWarning` at runtime, so the
+offenders are easy to spot.
+
+The bound `@group.command` decorator on a captured `CommandGroup` is
+**not** deprecated and continues to be supported — see
+[Groups & commands](writing-commands/groups.md) for the canonical
+single-file usage and
+[Scaling command groups across files](writing-commands/across-files.md)
+for the string-keyed form you'd use across multiple files.
 
 ## What's changing
 
 | Legacy (deprecated)                              | Replacement                                  |
 |--------------------------------------------------|----------------------------------------------|
-| `group = command_group("foo", ...)`              | `command_group("foo", ...)` (no assignment)  |
-| `@group.command`                                 | `@command(group="foo")`                      |
-| `@group.command("custom-name")`                  | `@command("custom-name", group="foo")`       |
 | `parent.command_group("child", ...)`             | `command_group("parent.child", ...)`         |
 | `command_group("child", parent=parent_var)`      | `command_group("parent.child", ...)`         |
 
-The legacy forms continue to work through the 0.x line; the goal of
-migrating now is to silence the deprecation warnings and avoid
-breakage when 1.0 lands.
+`@group.command` and `@group.command("custom-name")` continue to
+work without warnings.
 
-## Step 1 — Imports
+## Recipe
 
-Add `command` to your `toolr` imports (alongside `command_group`):
-
-```python
-from toolr import command
-from toolr import command_group
-```
-
-## Step 2 — Group declarations
-
-Drop the binding. The string in the first positional argument is the
-only identity the new API needs.
-
-Before:
-
-```python
-group = command_group(
-    "example",
-    "Example commands",
-    description="…",
-)
-```
-
-After:
-
-```python
-command_group(
-    "example",
-    "Example commands",
-    description="…",
-)
-```
-
-## Step 3 — Command decorators
-
-Replace the bound method with the free-function decorator. The group
-name is passed by string.
-
-Before:
-
-```python
-@group.command
-def hello(ctx, name="world"):
-    ctx.print(f"hello, {name}")
-
-
-@group.command("custom-name")
-def some_function(ctx):
-    ...
-```
-
-After:
-
-```python
-@command(group="example")
-def hello(ctx, name="world"):
-    ctx.print(f"hello, {name}")
-
-
-@command("custom-name", group="example")
-def some_function(ctx):
-    ...
-```
-
-## Step 4 — Nested groups
-
-Replace method-call subgroups with dotted paths. The child names its
-parent inline.
+Replace the bound subgroup-method call with a dotted
+`command_group(...)` declaration. The child names its parent inline:
 
 Before:
 
@@ -107,11 +48,11 @@ def build(ctx, tag: str): ...
 After:
 
 ```python
-command_group("docker", "Docker", "Container utilities")
-command_group("docker.image", "Image")
+docker = command_group("docker", "Docker", "Container utilities")
+docker_image = command_group("docker.image", "Image")
 
 
-@command(group="docker.image")
+@docker_image.command
 def build(ctx, tag: str): ...
 ```
 
@@ -122,29 +63,18 @@ prefer to keep the child's leaf name unprefixed:
 command_group("image", parent="docker", description="…")
 ```
 
-## Step 5 — Run the deprecation warnings to zero
-
-Invoke any toolr command from your repo and inspect stderr. Each
-remaining legacy site emits a one-time warning identifying:
-
-- The deprecated call.
-- The exact line of source.
-- The migration recipe.
-
-Re-run after each batch of edits until no warnings remain.
-
 ## Why migrate
 
-- **Files become decoupled.** No need to import a shared
-  `CommandGroup` binding across files just to attach commands.
-- **Order independence.** A `@command` in `tools/foo.py` can attach
-  to a `command_group` declared in `tools/_common.py`, regardless of
-  scan order.
-- **Typo safety.** Misspelled group references fail manifest-build
-  with a "did you mean" suggestion instead of a runtime
-  `NameError` (or silent registration on the wrong binding).
-- **Forward compatibility.** The legacy decorators won't ship in
-  toolr 1.0. Migrating now means no last-minute scramble.
+The legacy decorators won't ship in toolr 1.0 — migrating now means
+no last-minute scramble. The captured-binding form for *subgroups*
+also reads awkwardly once nesting gets deeper than one level
+(`a.command_group("b").command_group("c", ...)`); dotted strings
+flatten that to `command_group("a.b.c", ...)` with no chain.
+
+The remaining rationale for the string-keyed `@command(group="…")`
+form lives in
+[Scaling command groups across files](writing-commands/across-files.md) —
+that decorator is a choice, not a deprecation step.
 
 If you hit anything the recipe above doesn't cover — for instance,
 projects that subclass `CommandGroup` or wrap the decorators — open

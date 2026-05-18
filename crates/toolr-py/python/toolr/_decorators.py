@@ -33,27 +33,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _emit_legacy_command_warning(group_full_name: str) -> None:
-    """Surface a deprecation warning for ``@<binding>.command`` usage.
-
-    Fires on every legacy decorator invocation; the runner installs a
-    ``"default"`` filter so each call site warns once per process,
-    keeping output noise bounded.
-    """
-    leaf = group_full_name.removeprefix("tools.")
-    warnings.warn(
-        "@<binding>.command is deprecated and will be removed in toolr 1.0. "
-        f"Migrate to `@command(group={leaf!r})`:\n"
-        "  from toolr import command, command_group\n"
-        f"  command_group({leaf!r}, ...)\n"
-        f"  @command(group={leaf!r})\n"
-        "  def my_command(ctx, ...): ...\n"
-        "See https://s0undt3ch.github.io/ToolR/migration/ for the full guide.",
-        ToolrDeprecationWarning,
-        stacklevel=3,
-    )
-
-
 def _emit_legacy_command_group_method_warning(parent_full_name: str, child: str) -> None:
     """Surface a deprecation warning for ``parent.command_group(...)`` usage."""
     parent_leaf = parent_full_name.removeprefix("tools.")
@@ -102,29 +81,27 @@ class CommandGroup(Struct, frozen=True):
     def command(self, name: str) -> Callable[[F], F]: ...
 
     def command(self, name: str | F) -> Callable[[F], F] | F:
-        """Register a new command (deprecated binding-style decorator).
+        """Register a new command via the captured group binding.
 
-        .. deprecated:: 0.x
-            Use :func:`toolr.command` with ``group="..."`` instead.
-            Removed in toolr 1.0.
+        The canonical single-file form. Use the standalone
+        :func:`toolr.command` decorator with ``group="..."`` when the
+        command lives in a different file from its group declaration
+        — see *Scaling command groups across files* in the docs.
 
         Args:
-            name: Name of the command. If not passed, the function name will be used.
+            name: Name of the command. If not passed, the function
+                name will be used (with underscores converted to
+                hyphens).
 
         Returns:
-            A decorator function that registers the command
+            A decorator function that registers the command.
         """
-        _emit_legacy_command_warning(self.full_name)
-        return self._command(name)
-
-    def _command(self, name: str | F) -> Callable[[F], F] | F:
-        """Internal helper used by :meth:`command` after deprecation accounting."""
         if isinstance(name, FunctionType):
             # Bare-decorator form: `name` is actually the wrapped function.
             # Register it under its (hyphenated) function name and return
             # the function itself.
             cli_name = name.__name__.replace("_", "-")
-            inner = cast("Callable[[F], F]", self._command(cli_name))
+            inner = cast("Callable[[F], F]", self.command(cli_name))
             return inner(cast("F", name))
 
         if TYPE_CHECKING:

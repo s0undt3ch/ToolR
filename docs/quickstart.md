@@ -62,10 +62,17 @@ toolr example --help
 
 ## 4. Edit `tools/example.py` (or replace it)
 
-Open the generated file. Each function decorated with
-`@command(group="example")` becomes a CLI subcommand. The first
-argument is a [`Context`][toolr.Context] object; the rest become CLI
-arguments inferred from your type hints and docstring.
+Open the generated file. The scaffold declares a group with
+`example = command_group("example", ...)` and attaches commands by
+decorating functions with `@example.command`. Each decorated
+function becomes a CLI subcommand. The first argument is a
+[`Context`][toolr.Context] object; the rest become CLI arguments
+inferred from your type hints and docstring.
+
+When your tools grow past a single file and you want commands in one
+file to attach to a group declared in another, switch to the
+string-keyed form: `@command(group="example")`. See
+[*Scaling command groups across files*](writing-commands/across-files.md).
 
 For the full authoring guide, head to [Writing commands](writing-commands/index.md).
 

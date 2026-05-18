@@ -2,15 +2,21 @@
 
 The existing introspect/runner tests exercise `command_group` indirectly,
 but several branches (the bare-callable form of `@command`, the dotted
-name-with-conflicting-parent warning, the legacy `@group.command`
-binding decorator) never fire from them. This file pokes the helpers
-directly so the coverage counter moves and so any regression in the
-decorator surface (which is part of toolr's public API) is caught early.
+name-with-conflicting-parent warning, the bound `@group.command`
+decorator) never fire from them. This file pokes the helpers directly
+so the coverage counter moves and so any regression in the decorator
+surface (which is part of toolr's public API) is caught early.
+
+The bound `@group.command` form is no longer deprecated — it is the
+canonical single-file form. The bound *subgroup* form
+(`parent.command_group("child", ...)`) is still on track for removal
+in toolr 1.0 and continues to emit `ToolrDeprecationWarning`.
 """
 
 from __future__ import annotations
 
 import logging
+import warnings
 from collections.abc import Iterator
 
 import pytest
@@ -19,6 +25,7 @@ from toolr._decorators import CommandGroup
 from toolr._decorators import _get_command_group_storage
 from toolr._decorators import command
 from toolr._decorators import command_group
+from toolr._exc import ToolrDeprecationWarning
 
 
 @pytest.fixture
@@ -53,16 +60,25 @@ def test_command_group_full_name_for_nested_returns_dotted_path():
 
 
 # --------------------------------------------------------------------
-# Legacy `@group.command` binding decorator
+# Bound `@group.command` decorator
+#
+# This is the canonical single-file form. The decorator was previously
+# deprecated; the deprecation was rolled back so each test here asserts
+# that NO `ToolrDeprecationWarning` fires. The still-deprecated
+# bound-subgroup form (`parent.command_group("child", ...)`) is covered
+# separately below.
 # --------------------------------------------------------------------
 
 
-def test_legacy_group_command_decorator_returns_callable_unchanged(clean_registry: None):
+def test_group_command_decorator_returns_callable_unchanged(clean_registry: None):
     del clean_registry
     g = command_group("legacy", "Legacy", description="Legacy group for tests")
 
-    @g.command
-    def f(ctx) -> None: ...
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ToolrDeprecationWarning)
+
+        @g.command
+        def f(ctx) -> None: ...
 
     # The decorator's only contract is "return the function unchanged";
     # the static parser is what records the metadata downstream. Asserting
@@ -70,15 +86,30 @@ def test_legacy_group_command_decorator_returns_callable_unchanged(clean_registr
     assert f.__name__ == "f"
 
 
-def test_legacy_group_command_with_explicit_name_returns_decorator(clean_registry: None):
+def test_group_command_with_explicit_name_returns_decorator(clean_registry: None):
     del clean_registry
     g = command_group("legacy", "Legacy", description="Legacy group for tests")
-    decorator = g.command("my-cmd")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ToolrDeprecationWarning)
+        decorator = g.command("my-cmd")
     assert callable(decorator)
 
     def f(ctx) -> None: ...
 
     assert decorator(f) is f
+
+
+def test_parent_command_group_method_still_emits_deprecation(clean_registry: None):
+    """The bound-subgroup form (`parent.command_group("child", ...)`) is
+    still on track for removal in toolr 1.0 — guard the warning stays."""
+    del clean_registry
+    parent = command_group("legacy_parent", "Parent", description="Parent group")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ToolrDeprecationWarning)
+        parent.command_group("child", "Child", description="Child group")
+    assert any(issubclass(w.category, ToolrDeprecationWarning) for w in caught), (
+        "expected ToolrDeprecationWarning from parent.command_group(...)"
+    )
 
 
 # --------------------------------------------------------------------
