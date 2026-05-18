@@ -227,8 +227,12 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
+        # codecov/test-results-action is deprecated in favour of running
+        # codecov-action a second time with report_type: test_results.
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           # Use OpenID Connect for secure authentication (no token needed)
           use_oidc: true
+          report_type: test_results
+          files: junit-${{ matrix.python-version }}-${{ inputs.os }}.xml
           flags: ${{ inputs.os }},${{ matrix.python-version }}
