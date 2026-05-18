@@ -177,49 +177,42 @@ jobs:
           uv run coverage xml
           uv run coverage report
 
-      - name: Install Tarpaulin
+      - name: Install cargo-llvm-cov
+        # Replaces cargo-tarpaulin. tarpaulin's ptrace engine segfaulted
+        # non-deterministically on nested subprocess trees (toolr → sh →
+        # python) used by cli_smoke and cache_fixtures (~50% repro on
+        # Linux GHA; tarpaulin issues #461 / #790 / #317). cargo-llvm-cov
+        # uses LLVM source-based coverage with LLVM_PROFILE_FILE=…%p.profraw
+        # so each spawned process writes a unique profraw and they're
+        # merged at the end — subprocess coverage works without ptrace.
+        #
+        # `llvm-tools-preview` is required for the underlying llvm-profdata
+        # / llvm-cov binaries. cargo-llvm-cov can install it on demand but
+        # we add it explicitly so any failure surfaces here, not mid-run.
         run: |
-          cargo install cargo-tarpaulin --target-dir target/coverage
+          rustup component add llvm-tools-preview
+          cargo install cargo-llvm-cov --locked
 
       # toolr-py is a pyo3 cdylib that imports Python symbols at runtime
-      # via the loaded CPython host. `cargo test`/`cargo tarpaulin` build a
-      # standalone test binary that has no host, so the Python symbols
-      # (Py_TYPE, PySequence_Check, etc.) are undefined at link time on
-      # Linux. The pyo3 wrapper is exercised by Python-side tests via the
-      # cdylib; excluding it here is the right call.
-      - name: Tarpaulin Build
+      # via the loaded CPython host. `cargo test` builds a standalone test
+      # binary that has no host, so the Python symbols (Py_TYPE,
+      # PySequence_Check, etc.) are undefined at link time on Linux. The
+      # pyo3 wrapper is exercised by Python-side tests via the cdylib;
+      # excluding it from the Rust coverage run is the right call.
+      - name: Run Rust Tests with Coverage
+        # --tests             include both unit and `tests/*.rs` integration tests.
+        # --cobertura         emit Cobertura XML (Codecov accepts it natively).
+        # --output-path       deterministic file location for the upload step.
+        # -- --test-threads=1 forwarded to libtest. Keeps the integration
+        #                     suite serialised so flaky subprocess-spawn
+        #                     timing doesn't surprise us; llvm-cov itself
+        #                     has no concurrency limitation, this is purely
+        #                     for test stability under tempdir-heavy specs.
         run: |
-          cargo tarpaulin --no-run --workspace --exclude toolr-py --target-dir target/coverage
-
-      - name: Run Rust Tests
-        # Flag combination explained:
-        #   --engine ptrace      explicit so newer tarpaulin builds don't
-        #                        auto-pick Llvm, which silently loses
-        #                        subprocess coverage (profraw collisions
-        #                        between parent + spawned `toolr` child).
-        #   --follow-exec        credits coverage from `target/debug/toolr`
-        #                        subprocesses spawned by integration tests
-        #                        (cli_smoke, dispatch_coverage, …).
-        #   --forward            stops ptrace from intercepting signals
-        #                        destined for the child binary — the
-        #                        signal-driven tests (SIGCHLD waits,
-        #                        timeout enforcement) hang otherwise.
-        #   --timeout 300        signal-driven tests need headroom under
-        #                        tarpaulin's instrumented binaries.
-        #   -- --test-threads=1  forwarded to the libtest harness inside
-        #                        each test binary; serialises subprocess
-        #                        spawning. Mitigates the well-known
-        #                        tarpaulin ptrace bug where the parent
-        #                        waitpid() loop mishandles multiple
-        #                        concurrent children and segfaults
-        #                        non-deterministically (tarpaulin #461,
-        #                        #790, #317; reproduced ~50% on Linux
-        #                        GHA in this repo's cache_fixtures e2e
-        #                        test). NOTE: must come after `--` since
-        #                        tarpaulin itself has no --test-threads
-        #                        flag — it infers one and passes through.
-        run: |
-          cargo tarpaulin --engine ptrace --follow-exec --forward --workspace --exclude toolr-py --tests --skip-clean --timeout 300 --out Xml --out Json --output-dir target/coverage -- --test-threads=1
+          mkdir -p target/coverage
+          cargo llvm-cov --workspace --exclude toolr-py --tests \
+            --cobertura --output-path target/coverage/cobertura.xml \
+            -- --test-threads=1
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
