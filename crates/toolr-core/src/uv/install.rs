@@ -459,4 +459,127 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn download_and_extract_against_local_http_with_missing_binary_in_archive() {
+        // Stands up a one-shot HTTP/1.1 server on 127.0.0.1:<auto> that
+        // serves a tar.gz lacking the `uv` binary, then asserts that
+        // `download_and_extract` walks the pipeline and surfaces the
+        // "extracted archive did not contain a uv binary" Http error.
+        // This covers the post-fetch / post-extract branch that the
+        // unreachable-host test can't reach.
+        if which::which("tar").is_err() {
+            return;
+        }
+        // Build a tar.gz with one file that isn't `uv`.
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("uv-fake-asset").join("not-uv");
+        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
+        std::fs::write(&src, b"placeholder").unwrap();
+        let archive = tmp.path().join("uv.tar.gz");
+        let ok = Command::new("tar")
+            .arg("-czf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(tmp.path())
+            .arg("uv-fake-asset")
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok);
+        let payload = std::fs::read(&archive).unwrap();
+
+        let server = serve_once(payload);
+        let dest = tmp.path().join("bin").join("uv");
+        let err = download_and_extract(
+            &format!("http://{}/uv.tar.gz", server.addr),
+            "uv-fake-asset",
+            "tar.gz",
+            &dest,
+        )
+        .unwrap_err();
+        match err {
+            UvError::Http(msg) => assert!(
+                msg.contains("did not contain a uv binary"),
+                "got: {msg}"
+            ),
+            other => panic!("expected Http error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn download_and_extract_happy_path_writes_executable_uv_binary() {
+        // Serve a tar.gz containing a fake `uv` script at the asset root.
+        // Verifies the full pipeline: fetch → extract → locate binary →
+        // copy → set_executable. This is the single test that drives
+        // download_and_extract's success arm end-to-end.
+        if which::which("tar").is_err() {
+            return;
+        }
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let asset_name = "uv-asset-x";
+        let src_dir = tmp.path().join(asset_name);
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let fake_uv = src_dir.join("uv");
+        std::fs::write(&fake_uv, b"#!/bin/sh\necho fake-uv\n").unwrap();
+        std::fs::set_permissions(&fake_uv, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let archive = tmp.path().join("uv.tar.gz");
+        assert!(
+            Command::new("tar")
+                .arg("-czf")
+                .arg(&archive)
+                .arg("-C")
+                .arg(tmp.path())
+                .arg(asset_name)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let payload = std::fs::read(&archive).unwrap();
+
+        let server = serve_once(payload);
+        let dest = tmp.path().join("dest").join("uv");
+        download_and_extract(
+            &format!("http://{}/uv.tar.gz", server.addr),
+            asset_name,
+            "tar.gz",
+            &dest,
+        )
+        .expect("happy path should succeed");
+        assert!(dest.is_file(), "destination uv should exist");
+        let mode = std::fs::metadata(&dest).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755, "set_executable should mark dest 0o755");
+    }
+
+    /// Minimal one-shot HTTP/1.1 server for the install tests. Binds an
+    /// ephemeral port, replies to the first request with the supplied
+    /// `payload` as `application/octet-stream`, then exits. Lives in a
+    /// background thread; the JoinHandle is detached on drop.
+    struct OneShotServer {
+        addr: String,
+        _join: std::thread::JoinHandle<()>,
+    }
+
+    fn serve_once(payload: Vec<u8>) -> OneShotServer {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let join = std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            // Drain the request headers — we don't care about the body.
+            let _ = sock.read(&mut buf);
+            let header = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n",
+                payload.len()
+            );
+            sock.write_all(header.as_bytes()).unwrap();
+            sock.write_all(&payload).unwrap();
+            let _ = sock.flush();
+        });
+        OneShotServer { addr, _join: join }
+    }
 }
