@@ -148,4 +148,133 @@ mod tests {
             Freshness::Fresh
         );
     }
+
+    /// Build a uv-binary stub that, when invoked, returns `exit_code`.
+    /// On non-Unix the test that uses it is skipped — the stub script
+    /// relies on `#!/bin/sh` + 0o755 perms.
+    #[cfg(unix)]
+    fn stub_uv(tmp: &Path, exit_code: i32) -> UvBinary {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let stub = tmp.join("uv");
+        let mut f = fs::File::create(&stub).unwrap();
+        writeln!(f, "#!/bin/sh\nexit {exit_code}").unwrap();
+        drop(f);
+        let mut perms = fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&stub, perms).unwrap();
+        UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sync_if_needed_skips_run_when_fresh_and_force_off() {
+        // Pre-populate a fresh marker so check_freshness returns Fresh.
+        // The stub `uv` deliberately exits non-zero — but it should
+        // never be invoked.
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("venv");
+        fs::create_dir_all(&venv).unwrap();
+        fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        touch_marker(&venv).unwrap();
+
+        let uv = stub_uv(tmp.path(), 99);
+        let resolved = dummy_resolved(venv);
+        sync_if_needed(&uv, tmp.path(), &resolved, false).expect("fresh should short-circuit");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sync_if_needed_invokes_uv_when_force_set_even_if_fresh() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("venv");
+        fs::create_dir_all(&venv).unwrap();
+        fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        touch_marker(&venv).unwrap();
+
+        // Stub exits 0 — success path. Marker should get re-stamped.
+        let uv = stub_uv(tmp.path(), 0);
+        let resolved = dummy_resolved(venv.clone());
+        sync_if_needed(&uv, tmp.path(), &resolved, true)
+            .expect("force=true should run and succeed");
+        assert!(venv.join(FRESHNESS_MARKER).exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sync_if_needed_propagates_nonzero_exit_as_sync_failed() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("venv");
+        // No prior marker → check_freshness returns Missing → uv runs.
+        let uv = stub_uv(tmp.path(), 17);
+        let resolved = dummy_resolved(venv);
+        let err = sync_if_needed(&uv, tmp.path(), &resolved, false)
+            .expect_err("non-zero exit must surface as SyncFailed");
+        assert!(matches!(err, UvError::SyncFailed(Some(17))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sync_if_needed_translates_spawn_failure_to_uv_error() {
+        // `UvBinary` pointed at a nonexistent path → run_uv_sync's
+        // status() returns Err → sync_if_needed maps that via
+        // `map_err(|e| UvError::Http(e.to_string()))`.
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("venv");
+        let uv = UvBinary {
+            path: tmp.path().join("definitely-not-uv"),
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        };
+        let resolved = dummy_resolved(venv);
+        let err = sync_if_needed(&uv, tmp.path(), &resolved, true)
+            .expect_err("spawn failure should surface");
+        assert!(matches!(err, UvError::Http(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_uv_sync_passes_python_flag_when_config_pins_version() {
+        // Stub uv prints its arguments to a file we can inspect.
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let argdump = tmp.path().join("argdump");
+        let stub = tmp.path().join("uv");
+        let mut f = fs::File::create(&stub).unwrap();
+        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        drop(f);
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+        let uv = UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        };
+
+        let venv = tmp.path().join("venv");
+        let mut resolved = dummy_resolved(venv);
+        resolved.config.python_version = Some("3.13".into());
+
+        run_uv_sync(&uv, tmp.path(), &resolved).expect("stub uv should succeed");
+        let dump = fs::read_to_string(&argdump).unwrap();
+        assert!(dump.contains("sync"));
+        assert!(dump.contains("--python"));
+        assert!(dump.contains("3.13"));
+        assert!(dump.contains("--project"));
+    }
+
+    #[test]
+    fn touch_marker_creates_venv_dir_if_missing() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("nested").join("venv");
+        // Parent missing — create_dir_all should materialise it.
+        touch_marker(&venv).unwrap();
+        assert!(venv.join(FRESHNESS_MARKER).exists());
+    }
 }
