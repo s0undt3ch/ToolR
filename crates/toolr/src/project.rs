@@ -157,29 +157,9 @@ fn venv_shell() -> Result<ExitCode> {
         &cwd, consent, /*force_sync=*/ false,
     )?;
 
-    let shell = std::env::var_os("SHELL")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| {
-            if cfg!(windows) {
-                std::path::PathBuf::from("cmd.exe")
-            } else {
-                std::path::PathBuf::from("/bin/sh")
-            }
-        });
-
-    let bin_dir = if cfg!(windows) {
-        resolved.venv_dir.join("Scripts")
-    } else {
-        resolved.venv_dir.join("bin")
-    };
-    let prepended_path = match std::env::var_os("PATH") {
-        Some(existing) => {
-            let mut paths: Vec<_> = std::env::split_paths(&existing).collect();
-            paths.insert(0, bin_dir.clone());
-            std::env::join_paths(paths)?
-        }
-        None => bin_dir.clone().into_os_string(),
-    };
+    let shell = default_shell_path();
+    let bin_dir = venv_bin_dir(&resolved.venv_dir);
+    let prepended_path = prepend_to_path(&bin_dir, std::env::var_os("PATH").as_deref())?;
 
     let status = Command::new(&shell)
         .env("VIRTUAL_ENV", &resolved.venv_dir)
@@ -188,4 +168,138 @@ fn venv_shell() -> Result<ExitCode> {
         .env("TOOLR_VENV", &resolved.venv_dir)
         .status()?;
     Ok(ExitCode::from(status.code().unwrap_or(1) as u8))
+}
+
+/// Resolve the shell binary to spawn for `toolr project venv shell`.
+/// Honours `$SHELL`, falling back to a per-OS default. Extracted as a
+/// pure helper so the fallback arms are unit-testable.
+fn default_shell_path() -> std::path::PathBuf {
+    std::env::var_os("SHELL")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            if cfg!(windows) {
+                std::path::PathBuf::from("cmd.exe")
+            } else {
+                std::path::PathBuf::from("/bin/sh")
+            }
+        })
+}
+
+/// Resolve the `bin` (Unix) or `Scripts` (Windows) sub-directory of a
+/// venv. Extracted so `venv_shell`'s PATH-prepend logic is testable.
+fn venv_bin_dir(venv_dir: &std::path::Path) -> std::path::PathBuf {
+    if cfg!(windows) {
+        venv_dir.join("Scripts")
+    } else {
+        venv_dir.join("bin")
+    }
+}
+
+/// Prepend `dir` to a colon-separated PATH-style value. When `existing`
+/// is `None`, returns just `dir` as an `OsString`. Surfaces
+/// `join_paths` errors via `?`.
+fn prepend_to_path(
+    dir: &std::path::Path,
+    existing: Option<&std::ffi::OsStr>,
+) -> Result<std::ffi::OsString> {
+    match existing {
+        Some(existing) => {
+            let mut paths: Vec<_> = std::env::split_paths(existing).collect();
+            paths.insert(0, dir.to_path_buf());
+            Ok(std::env::join_paths(paths)?)
+        }
+        None => Ok(dir.as_os_str().to_os_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Mutating SHELL / PATH and observing their effects requires
+    /// process-wide env coordination — serialise so cargo's parallel
+    /// runner doesn't race.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn with_env_var<R>(key: &str, value: Option<&str>, f: impl FnOnce() -> R) -> R {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os(key);
+        // SAFETY: ENV_LOCK serialises every test in this module that
+        // touches env vars.
+        unsafe {
+            match value {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+        let r = f();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+        r
+    }
+
+    #[test]
+    fn default_shell_path_uses_shell_env_when_set() {
+        let p = with_env_var("SHELL", Some("/custom/sh"), default_shell_path);
+        assert_eq!(p, std::path::PathBuf::from("/custom/sh"));
+    }
+
+    #[test]
+    fn default_shell_path_falls_back_to_per_os_default() {
+        let p = with_env_var("SHELL", None, default_shell_path);
+        if cfg!(windows) {
+            assert_eq!(p, std::path::PathBuf::from("cmd.exe"));
+        } else {
+            assert_eq!(p, std::path::PathBuf::from("/bin/sh"));
+        }
+    }
+
+    #[test]
+    fn venv_bin_dir_picks_per_os_subdirectory() {
+        let venv = std::path::Path::new("/tmp/venv");
+        let bin = venv_bin_dir(venv);
+        if cfg!(windows) {
+            assert_eq!(bin, venv.join("Scripts"));
+        } else {
+            assert_eq!(bin, venv.join("bin"));
+        }
+    }
+
+    #[test]
+    fn prepend_to_path_with_existing_inserts_at_front() {
+        let bin = std::path::Path::new("/venv/bin");
+        let existing = if cfg!(windows) {
+            "C:\\Windows;C:\\Windows\\System32"
+        } else {
+            "/usr/bin:/bin"
+        };
+        let result =
+            prepend_to_path(bin, Some(std::ffi::OsStr::new(existing))).unwrap();
+        let paths: Vec<_> = std::env::split_paths(&result).collect();
+        assert_eq!(paths[0], bin);
+        assert!(paths.len() >= 2);
+    }
+
+    #[test]
+    fn prepend_to_path_with_no_existing_returns_bin_alone() {
+        let bin = std::path::Path::new("/venv/bin");
+        let result = prepend_to_path(bin, None).unwrap();
+        assert_eq!(result, bin.as_os_str());
+    }
+
+    #[test]
+    fn detect_requires_python_returns_non_empty_string() {
+        // We can't pin a specific version — depends on the runner's
+        // python3. Just assert the contract: returns something with the
+        // `>=X.Y` prefix, falling back to ">=3.11" if python3 absent.
+        let s = detect_requires_python();
+        assert!(
+            s.starts_with(">="),
+            "expected >= prefix, got: {s}",
+        );
+    }
 }
