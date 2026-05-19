@@ -1,3 +1,4 @@
+mod bootstrap;
 mod cli;
 mod dispatch;
 mod execute_build;
