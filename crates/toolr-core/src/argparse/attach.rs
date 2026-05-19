@@ -117,6 +117,7 @@ pub fn graft_children(
                 imports: vec![],
                 origin: Origin::Static,
                 dispatched_from: Some(format!("argparse:{}", block.name)),
+                is_dispatcher: false,
             });
         }
     }
@@ -192,6 +193,7 @@ mod tests {
             imports: vec![],
             origin: Origin::Static,
             dispatched_from: Some(source.into()),
+            is_dispatcher: false,
         };
         let children: HashMap<String, Vec<Command>> =
             HashMap::from([("django".into(), vec![cmd("a"), cmd("b")])]);

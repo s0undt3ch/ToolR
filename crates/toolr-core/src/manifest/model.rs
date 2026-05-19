@@ -84,6 +84,14 @@ pub struct Command {
     /// regular command call. `None` for normal commands.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispatched_from: Option<String>,
+    /// True when this command hosts grafted children as its own
+    /// subcommands. Set by `argparse::run_for_project` on the parent
+    /// dispatcher entry whenever a `[[tool.toolr.argparse.*.attach]]`
+    /// directs children at it. Read by the CLI builder to decide
+    /// whether to build the command as a flat leaf or as a parent
+    /// that owns children.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_dispatcher: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

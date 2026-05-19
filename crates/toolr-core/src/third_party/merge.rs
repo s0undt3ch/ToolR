@@ -93,6 +93,7 @@ fn command_from_fragment(fc: FragmentCommand) -> Command {
         imports: fc.imports,
         origin: Origin::Static,
         dispatched_from: None,
+        is_dispatcher: false,
     }
 }
 

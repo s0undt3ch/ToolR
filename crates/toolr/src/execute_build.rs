@@ -361,6 +361,7 @@ mod tests {
             imports: vec![],
             origin: Origin::Static,
             dispatched_from: None,
+            is_dispatcher: false,
         }
     }
 
@@ -427,6 +428,7 @@ mod tests {
             imports: vec![],
             origin: Origin::Static,
             dispatched_from: None,
+            is_dispatcher: false,
         };
         let matches = clap::Command::new("switch")
             .arg(Arg::new("force").long("force").action(ArgAction::SetTrue))
@@ -470,6 +472,7 @@ mod tests {
             imports: vec![],
             origin: Origin::Static,
             dispatched_from: None,
+            is_dispatcher: false,
         }
     }
 
@@ -710,6 +713,7 @@ mod dispatched_pack_tests {
             imports: vec![],
             origin: Origin::Static,
             dispatched_from: Some("argparse:django".into()),
+            is_dispatcher: false,
         }
     }
 

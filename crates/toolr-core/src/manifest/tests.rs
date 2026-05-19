@@ -23,6 +23,7 @@ fn sample_manifest() -> Manifest {
             imports: vec!["packaging".into()],
             origin: Origin::Static,
             dispatched_from: None,
+            is_dispatcher: false,
         }],
     }
 }
@@ -97,6 +98,7 @@ mod dispatched_from_tests {
             imports: vec![],
             origin: Origin::Static,
             dispatched_from,
+            is_dispatcher: false,
         }
     }
 
@@ -110,5 +112,38 @@ mod dispatched_from_tests {
     fn command_omits_dispatched_from_when_none() {
         let json = serde_json::to_string(&cmd_with(None)).unwrap();
         assert!(!json.contains("dispatched_from"));
+    }
+}
+
+#[cfg(test)]
+mod is_dispatcher_tests {
+    use super::*;
+
+    fn cmd_with(is_dispatcher: bool) -> Command {
+        Command {
+            name: "job".into(),
+            group: "jenkins".into(),
+            module: "tools.jenkins".into(),
+            function: "job".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher,
+        }
+    }
+
+    #[test]
+    fn command_serializes_is_dispatcher_when_true() {
+        let json = serde_json::to_string(&cmd_with(true)).unwrap();
+        assert!(json.contains(r#""is_dispatcher":true"#));
+    }
+
+    #[test]
+    fn command_omits_is_dispatcher_when_false() {
+        let json = serde_json::to_string(&cmd_with(false)).unwrap();
+        assert!(!json.contains("is_dispatcher"));
     }
 }
