@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
+from toolr.sources._dispatch import DispatchCommand
 from toolr.sources._types import ArgSchema
 from toolr.sources._types import CommandSchema
 
-__all__ = ["ArgSchema", "CommandSchema"]
+__all__ = ["ArgSchema", "CommandSchema", "DispatchCommand"]
