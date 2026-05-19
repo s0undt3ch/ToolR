@@ -333,7 +333,28 @@ impl SourcesImports {
     /// `toolr.sources.DispatchCommand` — either as a direct name (with
     /// or without aliasing) or as a `<module-alias>.DispatchCommand`
     /// attribute access.
+    ///
+    /// Also peels `Annotated[T, ...]` wrappers and handles string
+    /// forward references (`"DispatchCommand"`, common under
+    /// `from __future__ import annotations`). For forward refs we do a
+    /// canonical-name compare against `direct_aliases` rather than
+    /// reparsing the string — the realistic shapes are bare names like
+    /// `"DispatchCommand"` or `"DC"` (after aliasing), and a literal
+    /// match handles both without dragging the ruff parser into the
+    /// static-analysis path.
     pub fn is_dispatch_command(&self, expr: &Expr) -> bool {
+        // `Annotated[DispatchCommand, arg(...)]` — peel to the inner T.
+        if let Some(inner) = peel_annotated_inner(expr) {
+            return self.is_dispatch_command(inner);
+        }
+        // `"DispatchCommand"` / `"DC"` forward-ref string — match the
+        // trimmed contents against direct aliases. Doesn't try to handle
+        // dotted forward refs like `"toolr.sources.DispatchCommand"`;
+        // those are vanishingly rare and a `parse_expression` round-trip
+        // would be heavier than the value it adds.
+        if let Expr::StringLiteral(s) = expr {
+            return self.is_dispatch_command_name(s.value.to_str().trim());
+        }
         match expr {
             Expr::Name(n) => self.direct_aliases.contains(n.id.as_str()),
             Expr::Attribute(attr) => {
@@ -353,6 +374,35 @@ impl SourcesImports {
             }
             _ => false,
         }
+    }
+
+    /// Whether `name` is a local symbol bound to
+    /// `toolr.sources.DispatchCommand` (e.g. `DispatchCommand` itself
+    /// or any `as <alias>` rebinding). Used to resolve string
+    /// forward-ref annotations without reparsing.
+    pub fn is_dispatch_command_name(&self, name: &str) -> bool {
+        self.direct_aliases.contains(name)
+    }
+}
+
+/// If `expr` is `Annotated[T, ...]`, return `T`; otherwise `None`.
+/// Mirrors the helper in `signatures.rs` — kept here so
+/// `is_dispatch_command` can peel without that helper being public.
+fn peel_annotated_inner(expr: &Expr) -> Option<&Expr> {
+    let Expr::Subscript(sub) = expr else {
+        return None;
+    };
+    let head = match sub.value.as_ref() {
+        Expr::Name(n) => n.id.as_str(),
+        Expr::Attribute(a) => a.attr.as_str(),
+        _ => return None,
+    };
+    if head != "Annotated" {
+        return None;
+    }
+    match sub.slice.as_ref() {
+        Expr::Tuple(t) => t.elts.first(),
+        single => Some(single),
     }
 }
 

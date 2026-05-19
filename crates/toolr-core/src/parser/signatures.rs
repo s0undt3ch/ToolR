@@ -579,4 +579,91 @@ def f(ctx, *, name: str = "x", dispatched: toolr.sources.DispatchCommand): pass
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
+
+    /// `Annotated[DispatchCommand, arg(...)]` should be skipped just
+    /// like a bare `DispatchCommand` annotation — users reasonably want
+    /// to attach `arg(...)` metadata to the injection slot. Without
+    /// peeling, the kwarg falls through to the type resolver and the
+    /// whole module is rejected with "type `DispatchCommand` is not
+    /// supported".
+    #[test]
+    fn dispatch_command_kwarg_in_annotated_is_filtered_out() {
+        let src = r#"
+from typing import Annotated
+from toolr.sources import DispatchCommand
+from toolr import arg
+
+def f(ctx, *, cpu: str = "1", dispatched: Annotated[DispatchCommand, arg(help="x")]): pass
+"#;
+        let m = module(src);
+        let sources = SourcesImports::from_module(&m);
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                ruff_python_ast::Stmt::FunctionDef(f) => Some(f.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        assert!(
+            args.iter().all(|a| a.name != "dispatched"),
+            "expected `dispatched` to be filtered out, got {args:?}"
+        );
+    }
+
+    /// String forward-reference annotations (`"DispatchCommand"`) are
+    /// common under `from __future__ import annotations` or just
+    /// stylistic forward refs. Must filter out the same way.
+    #[test]
+    fn dispatch_command_kwarg_in_string_forward_ref_is_filtered_out() {
+        let src = r#"
+from toolr.sources import DispatchCommand
+
+def f(ctx, *, cpu: str = "1", dispatched: "DispatchCommand"): pass
+"#;
+        let m = module(src);
+        let sources = SourcesImports::from_module(&m);
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                ruff_python_ast::Stmt::FunctionDef(f) => Some(f.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        assert!(
+            args.iter().all(|a| a.name != "dispatched"),
+            "expected `dispatched` to be filtered out, got {args:?}"
+        );
+    }
+
+    /// An aliased import (`from toolr.sources import DispatchCommand as DC`)
+    /// combined with a string forward ref (`"DC"`) should also filter
+    /// out — the string contents are compared against the local alias
+    /// table, not just the canonical `"DispatchCommand"` literal.
+    #[test]
+    fn dispatch_command_kwarg_in_aliased_string_forward_ref_is_filtered_out() {
+        let src = r#"
+from toolr.sources import DispatchCommand as DC
+
+def f(ctx, *, cpu: str = "1", dispatched: "DC"): pass
+"#;
+        let m = module(src);
+        let sources = SourcesImports::from_module(&m);
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                ruff_python_ast::Stmt::FunctionDef(f) => Some(f.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        assert!(
+            args.iter().all(|a| a.name != "dispatched"),
+            "expected `dispatched` to be filtered out, got {args:?}"
+        );
+    }
 }
