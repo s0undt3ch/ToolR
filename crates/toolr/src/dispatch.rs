@@ -16,6 +16,35 @@ use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_child_args};
 
+/// Resolve a parsed subcommand `path` (e.g. `["jenkins", "job", "migrate"]`)
+/// to its manifest entry. Tries the most-specific candidate group first
+/// (`path[..len-1]`), then falls back one level up (`path[..len-2]`) so
+/// that grafted children dispatched under a parent group still resolve
+/// when the user typed an extra hop (the dispatcher segment) on the
+/// command line. Returns `None` when no candidate group hosts a command
+/// with the leaf name.
+fn find_command_for_path<'a>(
+    manifest: &'a Manifest,
+    path: &[String],
+) -> Option<&'a toolr_core::manifest::Command> {
+    let leaf_name = path.last()?;
+    let candidates: Vec<String> = if path.len() >= 2 {
+        vec![
+            path[..path.len() - 1].join("."),
+            path[..path.len() - 2].join("."),
+        ]
+    } else {
+        vec![String::new()]
+    };
+    // Try the most-specific group first; first match wins.
+    candidates.iter().find_map(|group| {
+        manifest
+            .commands
+            .iter()
+            .find(|c| &c.group == group && &c.name == leaf_name)
+    })
+}
+
 pub fn dispatch(
     matches: &ArgMatches,
     manifest: &Manifest,
@@ -56,19 +85,13 @@ pub fn dispatch(
         current = next_matches;
     }
     let cmd_matches = current;
-    let leaf_name = path.last().cloned().expect("path non-empty");
-    let group_full_path = path[..path.len() - 1].join(".");
-    if group_full_path.is_empty() {
+    if path.len() < 2 {
         // toolr <group> with no command → print group help
         return Ok(ExitCode::SUCCESS);
     }
-    let cmd = manifest
-        .commands
-        .iter()
-        .find(|c| c.group == group_full_path && c.name == leaf_name)
-        .ok_or_else(|| {
-            anyhow::anyhow!("unknown command: {} {leaf_name}", path[..path.len() - 1].join(" "))
-        })?;
+    let cmd = find_command_for_path(manifest, &path).ok_or_else(|| {
+        anyhow::anyhow!("unknown command: {}", path.join(" "))
+    })?;
 
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;
@@ -605,5 +628,83 @@ mod tests {
         let m = parse(&["--no-output-timeout-secs", "3"]);
         let opts = output_options_from_matches(&m);
         assert_eq!(opts.default_no_output_timeout_secs, Some(3.0));
+    }
+}
+
+#[cfg(test)]
+mod path_lookup_tests {
+    //! Unit tests for `find_command_for_path`, the pure helper that
+    //! resolves a parsed subcommand path to its manifest entry. After
+    //! Task 6 grafts children under dispatchers, a 3-segment path like
+    //! `toolr jenkins job migrate` must still find `migrate` at
+    //! `group == "jenkins"` (the dispatcher hop is invisible to the
+    //! manifest). These tests pin the most-specific-first preference
+    //! and the one-level fallback.
+    use super::*;
+    use toolr_core::manifest::{Command, Manifest, Origin};
+
+    fn cmd(name: &str, group: &str) -> Command {
+        Command {
+            name: name.into(),
+            group: group.into(),
+            module: format!("tools.{name}"),
+            function: name.into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher: false,
+        }
+    }
+
+    fn manifest_with(commands: Vec<Command>) -> Manifest {
+        Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            dynamic_hash: String::new(),
+            groups: vec![],
+            commands,
+        }
+    }
+
+    fn parts(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn finds_two_segment_path_in_group() {
+        let m = manifest_with(vec![cmd("migrate", "jenkins")]);
+        let c = find_command_for_path(&m, &parts(&["jenkins", "migrate"])).unwrap();
+        assert_eq!(c.name, "migrate");
+    }
+
+    #[test]
+    fn finds_three_segment_path_under_dispatcher() {
+        // `migrate` lives at group=jenkins (the group), name=migrate;
+        // the user typed `toolr jenkins job migrate` (3 segments).
+        let m = manifest_with(vec![cmd("migrate", "jenkins")]);
+        let c = find_command_for_path(&m, &parts(&["jenkins", "job", "migrate"])).unwrap();
+        assert_eq!(c.name, "migrate");
+    }
+
+    #[test]
+    fn prefers_more_specific_group_when_both_exist() {
+        // If both `docker.image.build` and `docker.build` exist, the
+        // 3-segment path `docker image build` must resolve to the
+        // nested one, not the top-level one.
+        let m = manifest_with(vec![
+            cmd("build", "docker"),
+            cmd("build", "docker.image"),
+        ]);
+        let c = find_command_for_path(&m, &parts(&["docker", "image", "build"])).unwrap();
+        assert_eq!(c.group, "docker.image");
+    }
+
+    #[test]
+    fn returns_none_when_no_command_matches() {
+        let m = manifest_with(vec![cmd("migrate", "jenkins")]);
+        assert!(find_command_for_path(&m, &parts(&["unknown"])).is_none());
     }
 }
