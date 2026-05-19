@@ -878,6 +878,24 @@ Expected: the tests fail because the current `build_group_subtree` hoists childr
 Locate `crates/toolr/src/cli.rs:40-59`. Replace the body with:
 
 ```rust
+/// Compute the dotted name a dispatcher is addressable by from the
+/// CLI. Mirrors `toolr_core::parser::build::dotted_name`: a command
+/// whose `name` matches the leaf segment of its `group` is addressable
+/// as the group path itself; otherwise it's `"<group>.<name>"` (or
+/// just `name` when the group is empty). `graft_children` sets each
+/// grafted child's `group` field to this dotted name (the
+/// `attachment.parent`), so we use the same value to look children up.
+fn dispatcher_dotted_name(cmd: &toolr_core::manifest::Command) -> String {
+    let leaf = cmd.group.rsplit('.').next().unwrap_or(cmd.group.as_str());
+    if !cmd.group.is_empty() && cmd.name == leaf {
+        cmd.group.clone()
+    } else if cmd.group.is_empty() {
+        cmd.name.clone()
+    } else {
+        format!("{}.{}", cmd.group, cmd.name)
+    }
+}
+
 fn build_group_subtree(
     group: &Group,
     manifest: &Manifest,
@@ -889,35 +907,38 @@ fn build_group_subtree(
         g = g.long_about(group.description.clone());
     }
 
-    // Bucket grafted children of this group by their dispatcher's
-    // (module, function). `graft_children` copies those from the
-    // parent dispatcher entry, so the pair uniquely identifies which
-    // dispatcher hosts each child.
-    let grafted_by_dispatcher: HashMap<(&str, &str), Vec<&toolr_core::manifest::Command>> = manifest
-        .commands
-        .iter()
-        .filter(|c| c.group == full_path && c.dispatched_from.is_some())
-        .fold(HashMap::new(), |mut acc, c| {
-            acc.entry((c.module.as_str(), c.function.as_str()))
-                .or_default()
-                .push(c);
-            acc
-        });
-
-    // For each NON-grafted command in this group, decide whether to
-    // build it as a dispatcher (own args + the children-bucket as
-    // subcommands) or as a normal leaf.
+    // Grafted children's `group` field stores the dispatcher's dotted
+    // name (the `[[attach]] parent` value), NOT the parent group's
+    // name. For each non-grafted command in this group, decide whether
+    // it's a dispatcher and, if so, look up its grafted children at
+    // its own dotted name. When the dispatcher's name matches the
+    // group's leaf (e.g. `command_group("django")` + `def django(...)`)
+    // its dotted name equals the group path itself, and the children
+    // are hoisted directly onto the group (so users type
+    // `toolr django migrate`, not `toolr django django migrate`).
+    let group_leaf = full_path.rsplit('.').next().unwrap_or(full_path.as_str());
     for cmd in manifest
         .commands
         .iter()
         .filter(|c| c.group == full_path && c.dispatched_from.is_none())
     {
         if cmd.is_dispatcher {
-            let dispatched_children = grafted_by_dispatcher
-                .get(&(cmd.module.as_str(), cmd.function.as_str()))
-                .cloned()
-                .unwrap_or_default();
-            g = g.subcommand(build_dispatcher_command(cmd, &dispatched_children));
+            let dotted = dispatcher_dotted_name(cmd);
+            let dispatched_children: Vec<&toolr_core::manifest::Command> = manifest
+                .commands
+                .iter()
+                .filter(|child| child.group == dotted && child.dispatched_from.is_some())
+                .collect();
+            if cmd.name == group_leaf {
+                // Hoist branch: children become direct subcommands of
+                // the group; the dispatcher itself disappears as a
+                // redundant CLI hop.
+                for child in &dispatched_children {
+                    g = g.subcommand(build_user_command(child));
+                }
+            } else {
+                g = g.subcommand(build_dispatcher_command(cmd, &dispatched_children));
+            }
         } else {
             g = g.subcommand(build_user_command(cmd));
         }
@@ -944,6 +965,8 @@ fn build_dispatcher_command(
 ```
 
 `HashMap` may already be imported at the top of `cli.rs`; if not, add `use std::collections::HashMap;`. Same for the `toolr_core::manifest::Command` alias — adjust to whatever the existing code uses.
+
+**Important correction vs. the original plan draft:** an earlier revision of this section bucketed grafted children by `c.group == full_path` (the parent group's name). That's wrong — `argparse::graft_children` stores each child with `group = attachment.parent` (the full **dispatcher** dotted name). The fix above looks up children at the dispatcher's `dispatcher_dotted_name(cmd)` value instead, and adds the hoist branch for the `name == group_leaf` case. The corresponding `dispatch.rs` lookup (Task 7) was likewise fixed to find the dispatcher manifest entry by `(module, function) + is_dispatcher` rather than by name guessing.
 
 - [ ] **Step 4: Run tests**
 
