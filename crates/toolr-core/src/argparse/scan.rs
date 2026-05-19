@@ -4,7 +4,6 @@ use ruff_python_ast::{Expr, ExprCall, ModModule, Stmt};
 use ruff_python_parser as parser;
 use thiserror::Error;
 
-#[allow(unused_imports)] // Used by Task 11 (with_common_args helper).
 use crate::argparse::config::CommonArg;
 use crate::manifest::{ArgMetadata, Argument, ArgumentKind};
 
@@ -441,6 +440,31 @@ pub fn scan_block_paths(
     Ok(out)
 }
 
+/// Append `common` args to `scanned`, skipping any whose `name` collides
+/// with an existing argument. The file's own argument always wins on
+/// collision.
+pub fn with_common_args(mut scanned: ScannedCommand, common: &[CommonArg]) -> ScannedCommand {
+    let existing: std::collections::HashSet<&str> =
+        scanned.arguments.iter().map(|a| a.name.as_str()).collect();
+    let extras: Vec<Argument> = common
+        .iter()
+        .filter(|c| !existing.contains(c.name.as_str()))
+        .map(|c| Argument {
+            name: c.name.clone(),
+            kind: c.kind,
+            help: c.help.clone(),
+            default: c.default.clone(),
+            type_annotation: None,
+            resolved_type: None,
+            allowed_values: c.choices.clone().unwrap_or_default(),
+            path_constraints: None,
+            metadata: Default::default(),
+        })
+        .collect();
+    scanned.arguments.extend(extras);
+    scanned
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -532,6 +556,49 @@ def add_arguments(self, parser):
         let scanned = scan_source("x", source).unwrap();
         assert!(scanned.arguments.is_empty());
         assert!(scanned.warnings.is_empty());
+    }
+
+    #[test]
+    fn common_args_are_appended_when_not_shadowed() {
+        let scanned = ScannedCommand {
+            name: "migrate".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![Argument {
+                name: "verbosity".into(),
+                kind: ArgumentKind::Optional,
+                help: "local".into(),
+                default: Some("2".into()),
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: Default::default(),
+            }],
+            warnings: vec![],
+        };
+        let common = vec![
+            CommonArg {
+                name: "verbosity".into(),
+                kind: ArgumentKind::Optional,
+                help: "common".into(),
+                default: Some("0".into()),
+                choices: None,
+            },
+            CommonArg {
+                name: "traceback".into(),
+                kind: ArgumentKind::Flag,
+                help: "tb".into(),
+                default: None,
+                choices: None,
+            },
+        ];
+        let merged = with_common_args(scanned, &common);
+        let names: Vec<_> = merged.arguments.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["verbosity", "traceback"]);
+        // The local "verbosity" wins.
+        assert_eq!(merged.arguments[0].help, "local");
+        assert_eq!(merged.arguments[0].default.as_deref(), Some("2"));
     }
 
     #[test]
