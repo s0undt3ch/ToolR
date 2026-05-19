@@ -29,3 +29,18 @@ class ArgSchema(Struct, frozen=True):
     metavar: str | None = None
     type_annotation: str | None = None  # "str" / "int" / "float" / "bool"
     nargs: Literal["*", "+", "?"] | int | None = None
+
+
+class CommandSchema(Struct, frozen=True):
+    """One command discovered by the argparse scanner.
+
+    `arguments` carries only the command-specific args. Hoisted
+    common_args (declared in `[tool.toolr.argparse.<name>]`) are
+    applied at attach time and merged with `arguments`; consumers see
+    a single combined list on the manifest side.
+    """
+
+    name: str
+    summary: str
+    description: str
+    arguments: list[ArgSchema]
