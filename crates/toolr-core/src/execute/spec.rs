@@ -51,6 +51,71 @@ pub struct ExecutionSpec {
     /// without per-arg type juggling on the Rust side.
     pub args: BTreeMap<String, serde_json::Value>,
     pub context: ContextSpec,
+    /// Set when the matched command is a dispatched leaf — the runner
+    /// must construct a `DispatchCommand` from this payload and call
+    /// `toolr._runner.invoke_dispatcher` instead of running `args` as
+    /// a regular command call. `module` / `function` point at the
+    /// parent dispatcher function; `args` carries the parent's own
+    /// kwargs (typically empty); this struct carries the leaf's name,
+    /// its packed args, and the schema needed by `DispatchCommand`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatch: Option<DispatchSpec>,
+}
+
+/// Dispatch payload conveyed to the Python runner.
+///
+/// Mirrors the keyword arguments of `toolr._runner.invoke_dispatcher`:
+/// `command` → `child_name`, `command_args` → `child_args`,
+/// `schema` → `child_schema`. The serialised `schema` shape mirrors
+/// `toolr.sources.CommandSchema` so `msgspec.convert` reconstructs the
+/// Python frozen struct one-shot.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DispatchSpec {
+    /// Leaf command name (e.g. `"migrate"`).
+    pub command: String,
+    /// Leaf's argument values, keyed by name. Same shape and encoding
+    /// as `ExecutionSpec::args` for a normal command call — flags are
+    /// JSON bools, counts are numbers, missing optionals are absent.
+    pub command_args: BTreeMap<String, serde_json::Value>,
+    /// Wire-shape of `toolr.sources.CommandSchema` for the leaf.
+    pub schema: CommandSchemaSpec,
+}
+
+/// Wire-shape for `toolr.sources.CommandSchema`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommandSchemaSpec {
+    pub name: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub description: String,
+    pub arguments: Vec<ArgSchemaSpec>,
+}
+
+/// Wire-shape for `toolr.sources.ArgSchema`.
+///
+/// Field order and default-skipping rules match the Python frozen
+/// struct so `msgspec.convert` reconstructs it field-for-field.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ArgSchemaSpec {
+    pub name: String,
+    /// One of `"positional" | "optional" | "flag" | "repeated"`.
+    pub kind: String,
+    #[serde(default)]
+    pub help: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub choices: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metavar: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_annotation: Option<String>,
+    /// `"*" | "+" | "?"` or an integer; serde encodes whichever variant.
+    /// Always `None` from the current Rust scanner — argparse-equivalent
+    /// nargs information isn't tracked yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nargs: Option<serde_json::Value>,
 }
 
 impl ExecutionSpec {
@@ -80,6 +145,7 @@ impl ExecutionSpec {
                 default_timeout_secs: None,
                 default_no_output_timeout_secs: None,
             },
+            dispatch: None,
         }
     }
 }

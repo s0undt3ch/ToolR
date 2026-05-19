@@ -14,7 +14,7 @@ use toolr_core::execute::{
 use toolr_core::manifest::Manifest;
 use toolr_core::venv::resolve_venv_path;
 
-use crate::execute_build::{OutputOptions, build_spec};
+use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_child_args};
 
 pub fn dispatch(
     matches: &ArgMatches,
@@ -43,11 +43,16 @@ pub fn dispatch(
     // Walk down the subcommand chain so nested groups (`docker image
     // build`) reach their leaf command. `path` collects every
     // intermediate name; the last entry is the leaf, the prefix is
-    // the dotted full_path of the owning group.
+    // the dotted full_path of the owning group. `parent_matches`
+    // tracks the matches one level above the leaf — needed when the
+    // leaf is a dispatched grafted command so we can extract the
+    // parent dispatcher's own kwargs.
     let mut path: Vec<String> = vec![first_name.to_string()];
     let mut current = first_matches;
+    let mut parent_matches: &ArgMatches = matches;
     while let Some((next_name, next_matches)) = current.subcommand() {
         path.push(next_name.to_string());
+        parent_matches = current;
         current = next_matches;
     }
     let cmd_matches = current;
@@ -71,7 +76,18 @@ pub fn dispatch(
     // manifest was last written. Tab completion never takes this path.
     ensure_dynamic_layer_fresh(&repo_root, manifest)?;
     let output_opts = output_options_from_matches(matches);
-    let spec = build_spec(cmd, cmd_matches, &repo_root, &output_opts);
+    // Dispatched leaves take a separate spec-shape: the runner sees
+    // `dispatch: Some(...)` and routes to `invoke_dispatcher` instead
+    // of calling `function` as a regular command. Pack the child first,
+    // then build a parent-shaped spec — `cmd.module`/`cmd.function`
+    // already point at the parent dispatcher because `graft_children`
+    // copies them from the matched parent at scan time.
+    let spec = if cmd.dispatched_from.is_some() {
+        let packed = pack_child_args(cmd, cmd_matches);
+        build_dispatch_spec(cmd, parent_matches, packed, &repo_root, &output_opts)
+    } else {
+        build_spec(cmd, cmd_matches, &repo_root, &output_opts)
+    };
 
     let tempfile = write_spec_to_tempfile(&spec)?;
     // Prefer the resolved tools-venv python (Plan 3). Fall back to the

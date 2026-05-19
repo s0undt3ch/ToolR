@@ -6,7 +6,10 @@ use std::path::Path;
 use clap::ArgMatches;
 use serde_json::Value;
 
-use toolr_core::execute::{ContextSpec, ExecutionSpec, RUNNER_SCHEMA_VERSION};
+use toolr_core::execute::{
+    ArgSchemaSpec, CommandSchemaSpec, ContextSpec, DispatchSpec, ExecutionSpec,
+    RUNNER_SCHEMA_VERSION,
+};
 use toolr_core::manifest::{Argument, ArgumentKind, Command};
 use toolr_core::parser::SupportedType;
 
@@ -46,22 +49,18 @@ pub fn build_spec(
             default_timeout_secs: output_opts.default_timeout_secs,
             default_no_output_timeout_secs: output_opts.default_no_output_timeout_secs,
         },
+        dispatch: None,
     }
 }
 
 /// Packed payload extracted from clap matches for a dispatched leaf.
 ///
 /// Built when the matched command has `dispatched_from` set on its
-/// manifest entry. The pyo3 invocation seam (added in Task 17) turns
-/// this into a `toolr.sources.DispatchCommand` and passes it as the
-/// `dispatch` keyword to the parent dispatcher function instead of
-/// running the leaf as a regular command call.
-//
-// `#[allow(dead_code)]` because the dispatch seam that consumes this
-// lands in Task 17. The fields are not read yet — `dead_code` would
-// otherwise trigger because the test module accesses them but the
-// production code does not. Drop this attribute when Task 17 lands.
-#[allow(dead_code)]
+/// manifest entry. The dispatch seam in [`build_dispatch_spec`] turns
+/// this into a `DispatchSpec` (the wire-shape of
+/// `toolr.sources.DispatchCommand`) so the Python runner can call
+/// `toolr._runner.invoke_dispatcher` instead of running the leaf as a
+/// regular command call.
 #[derive(Debug, Clone)]
 pub struct PackedChild {
     /// The leaf command's name (e.g. `"migrate"`).
@@ -82,12 +81,8 @@ pub struct PackedChild {
 ///
 /// Reuses the same per-argument extraction logic as `build_spec` so the
 /// on-the-wire shape of dispatched-leaf args is identical to a normal
-/// command invocation. Task 17 consumes this on the Python side.
-//
-// `#[allow(dead_code)]` for the same reason as `PackedChild`: the
-// dispatch seam that calls this lands in Task 17. The unit tests in
-// `dispatched_pack_tests` already exercise it.
-#[allow(dead_code)]
+/// command invocation. Consumed by [`build_dispatch_spec`] on the
+/// Rust side and `toolr._runner.invoke_dispatcher` on the Python side.
 pub(crate) fn pack_child_args(cmd: &Command, matches: &ArgMatches) -> PackedChild {
     let mut args = BTreeMap::new();
     for arg in &cmd.arguments {
@@ -99,6 +94,102 @@ pub(crate) fn pack_child_args(cmd: &Command, matches: &ArgMatches) -> PackedChil
         name: cmd.name.clone(),
         args,
         schema: cmd.clone(),
+    }
+}
+
+/// Build the execution spec for a dispatched leaf invocation.
+///
+/// `parent` is the dispatcher Command whose `module`/`function` get
+/// invoked; `parent_matches` are clap matches at the level *above* the
+/// leaf (i.e. the group-level matches owning the dispatcher's own
+/// args, if any). `packed` carries the leaf's name + args + schema —
+/// shipped to the runner under [`ExecutionSpec::dispatch`].
+///
+/// The runner sees `module`/`function` pointing at the parent, `args`
+/// carrying the parent's own kwargs, and `dispatch` carrying everything
+/// `invoke_dispatcher` needs to build a `DispatchCommand`.
+pub fn build_dispatch_spec(
+    parent: &Command,
+    parent_matches: &ArgMatches,
+    packed: PackedChild,
+    repo_root: &Path,
+    output_opts: &OutputOptions,
+) -> ExecutionSpec {
+    let mut parent_args = BTreeMap::new();
+    for arg in &parent.arguments {
+        if let Some(value) = extract_value(arg, parent_matches) {
+            parent_args.insert(arg.name.clone(), value);
+        }
+    }
+    ExecutionSpec {
+        schema_version: RUNNER_SCHEMA_VERSION,
+        group: parent.group.clone(),
+        command: parent.name.clone(),
+        module: parent.module.clone(),
+        function: parent.function.clone(),
+        args: parent_args,
+        context: ContextSpec {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+            verbosity: output_opts.verbosity.clone(),
+            timestamps: output_opts.timestamps,
+            log_level: output_opts.log_level.clone(),
+            default_timeout_secs: output_opts.default_timeout_secs,
+            default_no_output_timeout_secs: output_opts.default_no_output_timeout_secs,
+        },
+        dispatch: Some(DispatchSpec {
+            command: packed.name,
+            command_args: packed.args,
+            schema: command_to_schema_spec(&packed.schema),
+        }),
+    }
+}
+
+/// Convert a manifest [`Command`] into the wire-shape consumed by
+/// `msgspec.convert` on the Python side to reconstruct a
+/// `toolr.sources.CommandSchema`.
+fn command_to_schema_spec(cmd: &Command) -> CommandSchemaSpec {
+    CommandSchemaSpec {
+        name: cmd.name.clone(),
+        summary: cmd.summary.clone(),
+        description: cmd.description.clone(),
+        arguments: cmd.arguments.iter().map(argument_to_arg_schema).collect(),
+    }
+}
+
+/// Convert a manifest [`Argument`] into the wire-shape of
+/// `toolr.sources.ArgSchema`.
+///
+/// Maps:
+/// - `kind` → one of `"positional" | "optional" | "flag" | "repeated"`.
+///   `VarPositional` is encoded as `"repeated"` (closest argparse-shaped
+///   equivalent for argv reconstruction); `Count` falls back to
+///   `"flag"`. The argparse scanner only emits the first four kinds, so
+///   those two arms only fire for hand-authored manifests today.
+/// - `choices` ← `allowed_values` (empty → `None`).
+/// - `metavar` ← `metadata.metavar`.
+/// - `type_annotation` ← `type_annotation`.
+/// - `nargs` is always `None` — the manifest doesn't carry argparse-
+///   compatible nargs information.
+fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
+    let kind = match arg.kind {
+        ArgumentKind::Positional => "positional",
+        ArgumentKind::Optional => "optional",
+        ArgumentKind::Flag | ArgumentKind::Count => "flag",
+        ArgumentKind::Repeated | ArgumentKind::VarPositional => "repeated",
+    };
+    ArgSchemaSpec {
+        name: arg.name.clone(),
+        kind: kind.to_string(),
+        help: arg.help.clone(),
+        default: arg.default.clone(),
+        choices: if arg.allowed_values.is_empty() {
+            None
+        } else {
+            Some(arg.allowed_values.clone())
+        },
+        metavar: arg.metadata.metavar.clone(),
+        type_annotation: arg.type_annotation.clone(),
+        nargs: None,
     }
 }
 
@@ -590,9 +681,9 @@ mod dispatched_pack_tests {
     //! `pack_child_args` packs a matched dispatched-leaf into a
     //! `PackedChild`. These tests pin the on-the-wire encoding (which
     //! reuses `extract_value`, so flags stay bools and missing
-    //! arguments stay absent rather than null) — Task 17's pyo3 wiring
-    //! reads the resulting `args` map and must keep getting the same
-    //! JSON shape `build_spec` would have produced.
+    //! arguments stay absent rather than null) — `build_dispatch_spec`
+    //! and the Python runner read the resulting `args` map and must keep
+    //! getting the same JSON shape `build_spec` would have produced.
     use super::*;
     use clap::{Arg, ArgAction};
     use toolr_core::manifest::{Argument, ArgumentKind, Command, Origin};
@@ -651,6 +742,150 @@ mod dispatched_pack_tests {
             .unwrap();
         let packed = pack_child_args(&migrate_cmd(), &matches);
         assert_eq!(packed.args.get("check"), Some(&Value::Bool(false)));
+    }
+
+    #[test]
+    fn build_dispatch_spec_routes_to_parent_function() {
+        // The grafted leaf carries the parent dispatcher's module +
+        // function (set by `graft_children`). `build_dispatch_spec`
+        // copies those into the spec so the runner imports the parent.
+        let leaf = migrate_cmd();
+        let packed = pack_child_args(
+            &leaf,
+            &clap::Command::new("migrate")
+                .arg(Arg::new("check").long("check").action(ArgAction::SetTrue))
+                .try_get_matches_from(vec!["migrate", "--check"])
+                .unwrap(),
+        );
+        // Parent dispatcher has no own args in this scenario — use a
+        // copy of the leaf shape but with an empty arguments list so
+        // `build_dispatch_spec` won't try to extract a `check` arg
+        // from the parent matches.
+        let parent = Command {
+            arguments: vec![],
+            ..migrate_cmd()
+        };
+        let parent_matches = clap::Command::new("django")
+            .try_get_matches_from(vec!["django"])
+            .unwrap();
+        let spec = build_dispatch_spec(
+            &parent,
+            &parent_matches,
+            packed,
+            Path::new("/repo"),
+            &OutputOptions::default(),
+        );
+        assert_eq!(spec.module, "tools.dispatcher");
+        assert_eq!(spec.function, "django");
+        let dispatch = spec.dispatch.expect("dispatch present");
+        assert_eq!(dispatch.command, "migrate");
+        assert_eq!(
+            dispatch.command_args.get("check"),
+            Some(&Value::Bool(true))
+        );
+        assert_eq!(dispatch.schema.name, "migrate");
+        assert_eq!(dispatch.schema.arguments.len(), 1);
+        assert_eq!(dispatch.schema.arguments[0].name, "check");
+        assert_eq!(dispatch.schema.arguments[0].kind, "flag");
+    }
+
+    #[test]
+    fn build_dispatch_spec_extracts_parent_kwargs() {
+        // When the parent dispatcher has its own args (e.g. `--cpu`),
+        // those are extracted from `parent_matches` into `spec.args` —
+        // distinct from the leaf args carried under `dispatch`.
+        let parent = Command {
+            arguments: vec![Argument {
+                name: "cpu".into(),
+                kind: ArgumentKind::Optional,
+                help: String::new(),
+                default: None,
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: Default::default(),
+            }],
+            ..migrate_cmd()
+        };
+        let parent_matches = clap::Command::new("django")
+            .arg(Arg::new("cpu").long("cpu"))
+            .try_get_matches_from(vec!["django", "--cpu", "5000m"])
+            .unwrap();
+        let leaf_matches = clap::Command::new("migrate")
+            .arg(Arg::new("check").long("check").action(ArgAction::SetTrue))
+            .try_get_matches_from(vec!["migrate"])
+            .unwrap();
+        let packed = pack_child_args(&migrate_cmd(), &leaf_matches);
+        let spec = build_dispatch_spec(
+            &parent,
+            &parent_matches,
+            packed,
+            Path::new("/repo"),
+            &OutputOptions::default(),
+        );
+        assert_eq!(
+            spec.args.get("cpu"),
+            Some(&Value::String("5000m".into()))
+        );
+        // Dispatch payload still carries the leaf's args, independent of parent kwargs.
+        let dispatch = spec.dispatch.expect("dispatch present");
+        assert_eq!(dispatch.command_args.get("check"), Some(&Value::Bool(false)));
+    }
+
+    #[test]
+    fn argument_to_arg_schema_maps_all_kinds() {
+        fn argument_named(name: &str, kind: ArgumentKind) -> Argument {
+            Argument {
+                name: name.into(),
+                kind,
+                help: String::new(),
+                default: None,
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: Default::default(),
+            }
+        }
+        let cases = [
+            (ArgumentKind::Positional, "positional"),
+            (ArgumentKind::Optional, "optional"),
+            (ArgumentKind::Flag, "flag"),
+            (ArgumentKind::Count, "flag"),
+            (ArgumentKind::Repeated, "repeated"),
+            (ArgumentKind::VarPositional, "repeated"),
+        ];
+        for (kind, expected) in cases {
+            let schema = argument_to_arg_schema(&argument_named("a", kind));
+            assert_eq!(schema.kind, expected, "kind {kind:?}");
+        }
+    }
+
+    #[test]
+    fn argument_to_arg_schema_carries_choices_metavar_and_type_annotation() {
+        let metadata = toolr_core::manifest::ArgMetadata {
+            metavar: Some("PATH".into()),
+            ..Default::default()
+        };
+        let arg = Argument {
+            name: "out".into(),
+            kind: ArgumentKind::Optional,
+            help: "where to write".into(),
+            default: Some("/tmp".into()),
+            type_annotation: Some("str".into()),
+            resolved_type: None,
+            allowed_values: vec!["a".into(), "b".into()],
+            path_constraints: None,
+            metadata,
+        };
+        let schema = argument_to_arg_schema(&arg);
+        assert_eq!(schema.name, "out");
+        assert_eq!(schema.help, "where to write");
+        assert_eq!(schema.default.as_deref(), Some("/tmp"));
+        assert_eq!(schema.metavar.as_deref(), Some("PATH"));
+        assert_eq!(schema.type_annotation.as_deref(), Some("str"));
+        assert_eq!(schema.choices.as_deref(), Some(&["a".to_string(), "b".to_string()][..]));
     }
 
     #[test]

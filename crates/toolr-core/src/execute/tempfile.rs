@@ -45,6 +45,7 @@ mod tests {
                 default_timeout_secs: None,
                 default_no_output_timeout_secs: None,
             },
+            dispatch: None,
         }
     }
 
