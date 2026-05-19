@@ -132,13 +132,45 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     }
 
     let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
-    Ok(Manifest {
+    let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash,
         dynamic_hash: String::new(),
         groups: all_groups,
         commands: all_commands,
-    })
+    };
+
+    // Run the user's argparse scanner ([tool.toolr.argparse.*] in
+    // tools/pyproject.toml) so its grafted children land in the same
+    // static manifest layer alongside the user's @command-decorated
+    // commands. The dotted-name derivation mirrors the CLI invocation
+    // path: a dispatcher whose name matches its group's leaf segment
+    // (`command_group("django")` + `def django(...)`) is addressable
+    // as `"django"`; any other command is `"<group>.<name>"`.
+    let parents: std::collections::HashMap<String, (String, String)> = manifest
+        .commands
+        .iter()
+        .map(|c| {
+            let leaf = c.group.rsplit('.').next().unwrap_or(c.group.as_str());
+            let dotted = if !c.group.is_empty() && c.name == leaf {
+                c.group.clone()
+            } else if c.group.is_empty() {
+                c.name.clone()
+            } else {
+                format!("{}.{}", c.group, c.name)
+            };
+            (dotted, (c.module.clone(), c.function.clone()))
+        })
+        .collect();
+
+    let project_root = tools_dir.parent().unwrap_or(tools_dir);
+    let grafted = crate::argparse::run_for_project(project_root, &parents)
+        .map_err(BuildError::Argparse)?;
+    for (_parent, mut children) in grafted {
+        manifest.commands.append(&mut children);
+    }
+
+    Ok(manifest)
 }
 
 /// Like `build_static_manifest`, but also globs `tools_venv` for
@@ -162,6 +194,8 @@ pub enum BuildError {
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
     UnknownGroupRefs(Vec<UnknownGroupRef>),
+    #[error("argparse scanner error: {0}")]
+    Argparse(#[from] crate::argparse::ArgparseError),
 }
 
 /// One command whose `group="…"` reference doesn't match any
@@ -455,6 +489,67 @@ def backend(ctx):
         assert!(msg.contains("ci.helm-diff-pre-comment"), "got: {msg}");
         assert!(msg.contains("Did you mean"), "got: {msg}");
         assert!(msg.contains("ci.helm-diff-pr-comment"), "got: {msg}");
+    }
+
+    /// The user's `[tool.toolr.argparse.*]` blocks in
+    /// `tools/pyproject.toml` graft children onto user-decorated
+    /// dispatcher commands inside `build_static_manifest`. Verifies the
+    /// dotted-name derivation that maps a `command_group("django")` +
+    /// `def django(...)` dispatcher onto pyproject's `parent = "django"`.
+    #[test]
+    fn build_static_manifest_grafts_argparse_children() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/dispatcher.py",
+            r#""""Django dispatcher."""
+group = command_group("django", "Django")
+
+@group.command
+def django(ctx):
+    """Dispatch to manage.py."""
+    pass
+"#,
+        );
+        write(
+            tmp.path(),
+            "apps/x/management/commands/migrate.py",
+            "def add_arguments(self, parser):\n    parser.add_argument('--check', action='store_true')\n",
+        );
+        write(
+            tmp.path(),
+            "tools/pyproject.toml",
+            r#"
+[tool.toolr.argparse.django]
+scan_paths = ["apps/*/management/commands/*.py"]
+
+[[tool.toolr.argparse.django.attach]]
+parent = "django"
+"#,
+        );
+
+        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let names: std::collections::BTreeSet<_> =
+            manifest.commands.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains("django"), "names: {names:?}");
+        assert!(names.contains("migrate"), "names: {names:?}");
+        let migrate = manifest
+            .commands
+            .iter()
+            .find(|c| c.name == "migrate")
+            .unwrap();
+        assert_eq!(migrate.group, "django");
+        assert_eq!(
+            migrate.dispatched_from.as_deref(),
+            Some("argparse:django"),
+        );
+        let django = manifest
+            .commands
+            .iter()
+            .find(|c| c.name == "django")
+            .unwrap();
+        assert_eq!(migrate.module, django.module);
+        assert_eq!(migrate.function, django.function);
     }
 
     /// Bare `@command` (no `group=` kwarg) is a build error pointing
