@@ -47,15 +47,58 @@ fn build_group_subtree(
     if !group.description.is_empty() {
         g = g.long_about(group.description.clone());
     }
-    for cmd in manifest.commands.iter().filter(|c| c.group == full_path) {
-        g = g.subcommand(build_user_command(cmd));
+
+    // Bucket grafted children of this group by their dispatcher's
+    // (module, function). `graft_children` copies those from the
+    // parent dispatcher entry, so the pair uniquely identifies which
+    // dispatcher hosts each child.
+    let grafted_by_dispatcher: HashMap<(&str, &str), Vec<&toolr_core::manifest::Command>> = manifest
+        .commands
+        .iter()
+        .filter(|c| c.group == full_path && c.dispatched_from.is_some())
+        .fold(HashMap::new(), |mut acc, c| {
+            acc.entry((c.module.as_str(), c.function.as_str()))
+                .or_default()
+                .push(c);
+            acc
+        });
+
+    // For each NON-grafted command in this group, decide whether to
+    // build it as a dispatcher (own args + the children-bucket as
+    // subcommands) or as a normal leaf.
+    for cmd in manifest
+        .commands
+        .iter()
+        .filter(|c| c.group == full_path && c.dispatched_from.is_none())
+    {
+        if cmd.is_dispatcher {
+            let dispatched_children = grafted_by_dispatcher
+                .get(&(cmd.module.as_str(), cmd.function.as_str()))
+                .cloned()
+                .unwrap_or_default();
+            g = g.subcommand(build_dispatcher_command(cmd, &dispatched_children));
+        } else {
+            g = g.subcommand(build_user_command(cmd));
+        }
     }
+
     if let Some(child_groups) = children.get(&Some(full_path)) {
         for child in child_groups {
             g = g.subcommand(build_group_subtree(child, manifest, children));
         }
     }
     g
+}
+
+fn build_dispatcher_command(
+    dispatcher: &toolr_core::manifest::Command,
+    children: &[&toolr_core::manifest::Command],
+) -> Command {
+    let mut c = build_user_command(dispatcher).subcommand_required(true);
+    for child in children {
+        c = c.subcommand(build_user_command(child));
+    }
+    c
 }
 
 /// Construct the full clap Command tree, given a loaded manifest.
@@ -536,4 +579,177 @@ fn apply_arg_metadata(
         a = a.help_heading(section.title.clone());
     }
     a
+}
+
+#[cfg(test)]
+mod cli_tree_tests {
+    use super::*;
+    use toolr_core::manifest::{Argument, ArgumentKind, Command, Group, Manifest, Origin};
+
+    fn empty_arg(name: &str, kind: ArgumentKind) -> Argument {
+        Argument {
+            name: name.into(),
+            kind,
+            help: String::new(),
+            default: None,
+            type_annotation: None,
+            resolved_type: None,
+            allowed_values: vec![],
+            path_constraints: None,
+            metadata: Default::default(),
+        }
+    }
+
+    fn dispatcher(name: &str, group: &str, args: Vec<Argument>) -> Command {
+        Command {
+            name: name.into(),
+            group: group.into(),
+            module: format!("tools.{name}"),
+            function: name.into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: args,
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher: true,
+        }
+    }
+
+    fn child(name: &str, group: &str, dispatcher_module: &str, dispatcher_fn: &str) -> Command {
+        Command {
+            name: name.into(),
+            group: group.into(),
+            module: dispatcher_module.into(),
+            function: dispatcher_fn.into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: Some(format!("argparse:{group}")),
+            is_dispatcher: false,
+        }
+    }
+
+    fn normal_leaf(name: &str, group: &str) -> Command {
+        Command {
+            name: name.into(),
+            group: group.into(),
+            module: format!("tools.{name}"),
+            function: name.into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher: false,
+        }
+    }
+
+    fn group(name: &str) -> Group {
+        Group {
+            name: name.into(),
+            title: name.into(),
+            description: String::new(),
+            parent: None,
+            origin: Origin::Static,
+        }
+    }
+
+    fn build_for(manifest: Manifest) -> clap::Command {
+        let groups: Vec<&Group> = manifest.groups.iter().collect();
+        let mut children_map: std::collections::HashMap<Option<String>, Vec<&Group>> =
+            std::collections::HashMap::new();
+        for g in &groups {
+            children_map
+                .entry(g.parent.clone())
+                .or_default()
+                .push(g);
+        }
+        let top: Vec<&Group> = manifest.groups.iter().filter(|g| g.parent.is_none()).collect();
+        build_group_subtree(top[0], &manifest, &children_map)
+    }
+
+    #[test]
+    fn dispatcher_hosts_two_grafted_children() {
+        let dispatcher_cmd = dispatcher(
+            "job",
+            "jenkins",
+            vec![empty_arg("cpu", ArgumentKind::Optional)],
+        );
+        let migrate = child("migrate", "jenkins", "tools.job", "job");
+        let runserver = child("runserver", "jenkins", "tools.job", "job");
+
+        let manifest = Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            dynamic_hash: String::new(),
+            groups: vec![group("jenkins")],
+            commands: vec![dispatcher_cmd, migrate, runserver],
+        };
+
+        let jenkins = build_for(manifest);
+
+        let group_subs: Vec<&str> = jenkins.get_subcommands().map(|c| c.get_name()).collect();
+        assert_eq!(group_subs, vec!["job"]);
+
+        let job = jenkins.find_subcommand("job").expect("job under jenkins");
+        let mut job_subs: Vec<&str> = job.get_subcommands().map(|c| c.get_name()).collect();
+        job_subs.sort();
+        assert_eq!(job_subs, vec!["migrate", "runserver"]);
+    }
+
+    #[test]
+    fn two_dispatchers_in_one_group_each_host_their_own_children() {
+        let build_cmd = dispatcher("build", "docker", vec![]);
+        let image_cmd = dispatcher("image", "docker", vec![]);
+        let build_child = child("compile", "docker", "tools.build", "build");
+        let image_child = child("push", "docker", "tools.image", "image");
+
+        let manifest = Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            dynamic_hash: String::new(),
+            groups: vec![group("docker")],
+            commands: vec![build_cmd, image_cmd, build_child, image_child],
+        };
+
+        let docker = build_for(manifest);
+        let build_sub = docker.find_subcommand("build").unwrap();
+        let image_sub = docker.find_subcommand("image").unwrap();
+
+        let build_subs: Vec<&str> = build_sub.get_subcommands().map(|c| c.get_name()).collect();
+        let image_subs: Vec<&str> = image_sub.get_subcommands().map(|c| c.get_name()).collect();
+        assert_eq!(build_subs, vec!["compile"]);
+        assert_eq!(image_subs, vec!["push"]);
+    }
+
+    #[test]
+    fn dispatcher_and_normal_leaf_coexist_in_one_group() {
+        let dispatcher_cmd = dispatcher("job", "jenkins", vec![]);
+        let migrate = child("migrate", "jenkins", "tools.job", "job");
+        let status = normal_leaf("status", "jenkins");
+
+        let manifest = Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            dynamic_hash: String::new(),
+            groups: vec![group("jenkins")],
+            commands: vec![dispatcher_cmd, migrate, status],
+        };
+
+        let jenkins = build_for(manifest);
+        let mut group_subs: Vec<&str> = jenkins.get_subcommands().map(|c| c.get_name()).collect();
+        group_subs.sort();
+        assert_eq!(group_subs, vec!["job", "status"]);
+
+        let job = jenkins.find_subcommand("job").unwrap();
+        let job_subs: Vec<&str> = job.get_subcommands().map(|c| c.get_name()).collect();
+        assert_eq!(job_subs, vec!["migrate"]);
+
+        let status_sub = jenkins.find_subcommand("status").unwrap();
+        assert_eq!(status_sub.get_subcommands().count(), 0);
+    }
 }
