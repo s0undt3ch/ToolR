@@ -4,7 +4,51 @@
 //! See `specs/2026-05-19-fill-the-gaps-design.md` (gap 1) for the
 //! decision logic.
 
-#[allow(dead_code)] // Wired into `main::run` in Task 2.
+use std::path::Path;
+
+use toolr_core::discovery::discover_project_root;
+use toolr_core::dynamic::rebuild_manifest_full;
+use toolr_core::venv::resolve_venv_path;
+
+/// Bootstrap step that runs before clap parses the user's command.
+///
+/// When the manifest is missing AND `tools/pyproject.toml` exists AND
+/// argv doesn't look like a built-in / help / completion call, run a
+/// full `rebuild_manifest_full` so the user's command can succeed on
+/// a fresh clone. Errors propagate so `main.rs` can print them and
+/// exit non-zero — we intentionally do NOT fall through to an empty
+/// manifest, since that's the buggy old behaviour this task fixes.
+pub(crate) fn ensure_manifest_present_or_bootstrap(
+    cwd: &Path,
+    argv: &[String],
+) -> anyhow::Result<()> {
+    let Ok(root) = discover_project_root(cwd) else {
+        return Ok(());
+    };
+    let tools = root.join("tools");
+    if !tools.join("pyproject.toml").is_file() {
+        return Ok(());
+    }
+    if tools.join(".toolr-manifest.json").is_file() {
+        return Ok(());
+    }
+    if should_skip_auto_rebuild(argv) {
+        return Ok(());
+    }
+
+    let resolved = match resolve_venv_path(&root) {
+        Ok(r) => r,
+        Err(_) => return Ok(()),
+    };
+    if !resolved.python.is_file() {
+        return Ok(());
+    }
+
+    eprintln!("toolr: manifest missing; building (first-time setup)...");
+    rebuild_manifest_full(&root, &resolved.python, &resolved.venv_dir)?;
+    Ok(())
+}
+
 pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
     const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
     const HELP_FLAGS: &[&str] = &["--help", "--version", "-h", "-V"];

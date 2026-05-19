@@ -27,9 +27,11 @@ fn main() -> ExitCode {
 
 fn run() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
+    let argv: Vec<String> = std::env::args().collect();
     // Emit the passive cache hint before clap touches argv, so `--version`
     // and `--help` (which would otherwise exit inside clap) still see it.
     maybe_emit_cache_hint_from_argv();
+    bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv)?;
     let manifest = load_or_empty(&cwd);
     let mut command = cli::build_command(&manifest);
     let matches = command.clone().get_matches();
