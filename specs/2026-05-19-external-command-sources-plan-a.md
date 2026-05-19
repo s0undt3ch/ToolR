@@ -1056,7 +1056,20 @@ git commit -m "argparse: scaffold module + parse [tool.toolr.argparse.*] blocks"
 
 - Modify: `crates/toolr-core/src/argparse/scan.rs`
 
-**Background:** Find every call expression whose function is `<anything>.add_argument` and extract structured info about each. We use the existing `ruff_python_parser` workspace dep.
+**Background:** Find every call expression whose function is `<anything>.add_argument` AND whose call shape matches argparse (1+ string-literal positional args + only-argparse-known kwargs). We use the existing `ruff_python_parser` workspace dep.
+
+**Matching heuristic (signature-shape filter):**
+
+The receiver name is intentionally NOT checked — Django uses `parser.add_argument(...)` inside `def add_arguments(self, parser):`, ad-hoc scripts use `parser.add_argument(...)` after `parser = argparse.ArgumentParser()`, and some code uses `self.parser.add_argument(...)`. All should match. But matching every `.add_argument(...)` call would create false positives (e.g. `mylist.add_argument(int_value)` on a custom class).
+
+A call qualifies as an argparse `add_argument` iff:
+
+1. The function is an attribute access ending in `.add_argument` (any receiver).
+2. **At least one positional argument is present, AND every positional argument is a string literal.** Argparse `add_argument` takes one or more name-or-flag strings as positionals (e.g. `add_argument('--verbose', '-v')` or `add_argument('app_label')`); any non-string-literal positional disqualifies the call.
+3. **Every keyword argument's name is in the argparse-known set:**
+   `action`, `nargs`, `const`, `default`, `type`, `choices`, `required`, `help`, `metavar`, `dest`, `version`. An unknown kwarg disqualifies the call.
+
+Calls that fail (2) or (3) are silently skipped — they're not argparse calls and shouldn't surface scanner warnings (otherwise random `.add_argument` calls in user code spam the log).
 
 - [ ] **Step 1: Write failing test**
 
@@ -1148,6 +1161,48 @@ def add_arguments(self, parser):
         assert_eq!(scanned.arguments[0].type_annotation, None);
         assert!(scanned.warnings.iter().any(|w| w.contains("type=")));
     }
+
+    #[test]
+    fn matches_any_receiver_name() {
+        // Django-style (`parser`), nested attribute (`self.parser`), and
+        // a custom name should all be picked up — receiver is not checked.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('a')
+    self.parser.add_argument('--b', action='store_true')
+    sub_parser.add_argument('c')
+"#;
+        let scanned = scan_source("x", source).unwrap();
+        let names: Vec<_> = scanned.arguments.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn skips_calls_whose_positional_is_not_a_string_literal() {
+        // First positional is an int — not an argparse name/flag, skip.
+        let source = "def f(): mylist.add_argument(42, default='x')";
+        let scanned = scan_source("x", source).unwrap();
+        assert!(scanned.arguments.is_empty());
+        assert!(scanned.warnings.is_empty(), "skipping non-argparse calls should not warn");
+    }
+
+    #[test]
+    fn skips_calls_with_unknown_kwarg() {
+        // `frobnicate` is not in the argparse kwarg set; this is some other
+        // method named `add_argument`. Skip silently.
+        let source = "def f(): widget.add_argument('--x', frobnicate=True)";
+        let scanned = scan_source("x", source).unwrap();
+        assert!(scanned.arguments.is_empty());
+        assert!(scanned.warnings.is_empty());
+    }
+
+    #[test]
+    fn skips_calls_with_no_positional_arguments() {
+        let source = "def f(): widget.add_argument(action='store_true')";
+        let scanned = scan_source("x", source).unwrap();
+        assert!(scanned.arguments.is_empty());
+        assert!(scanned.warnings.is_empty());
+    }
 }
 ```
 
@@ -1197,14 +1252,29 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
 }
 ```
 
-`module_docstring`, `split_first_paragraph`, `find_add_argument_calls`, and `argument_from_call` are private helpers in the same file. `argument_from_call` is the bulk of the work:
+`module_docstring`, `split_first_paragraph`, `find_add_argument_calls`, and `argument_from_call` are private helpers in the same file.
 
-- Inspect the first positional argument string literal to determine `kind`:
-    - Starts with `--` → `Optional` or `Flag` (decided by `action=`).
+`find_add_argument_calls` walks the module AST and yields every `Expr::Call` whose `.func` is an `Attribute` access ending in `add_argument`, regardless of the receiver expression's name or shape. That gives the broadest set of candidate calls.
+
+`argument_from_call` applies the signature-shape filter and extracts structure:
+
+1. **Filter — fail-fast (return `Err(skip)`):**
+    - Zero positional arguments → skip.
+    - Any positional argument that isn't a string literal (`Expr::StringLiteral`) → skip.
+    - Any keyword argument whose name is outside the argparse-known set (`action`, `nargs`, `const`, `default`, `type`, `choices`, `required`, `help`, `metavar`, `dest`, `version`) → skip.
+
+    The caller silently drops skipped calls — these are not argparse calls, no warning fires.
+
+2. **Classify `kind` from the first positional string:**
+    - Starts with `--` → `Optional` or `Flag` (refined by `action=` below).
     - Starts with `-` followed by a single character → still `Optional`/`Flag` (short alias).
     - Otherwise → `Positional`.
-- Look at `action=` (`store_true`/`store_false` → `Flag`; `append` → `Repeated`).
-- Pull `default=`, `help=`, `choices=`, `type=`, `nargs=`, `metavar=` as best-effort string-encoded values. Anything not statically resolvable becomes a warning + `None`.
+
+3. **Refine `kind` from `action=`:**
+    - `store_true`/`store_false` → `Flag`.
+    - `append` → `Repeated`.
+
+4. **Pull `default=`, `help=`, `choices=`, `type=`, `nargs=`, `metavar=`** as best-effort string-encoded values. Anything not statically resolvable becomes a warning + `None`.
 
 Use `ruff_python_ast` walkers / pattern matching against `Expr::Call` and the `Attribute` access on `.func`. See the existing usage in `crates/toolr-core/src/parser/` for the AST traversal idioms.
 
@@ -1214,7 +1284,7 @@ Use `ruff_python_ast` walkers / pattern matching against `Expr::Call` and the `A
 cargo test -p toolr-core --quiet argparse::scan
 ```
 
-Expected: 3 passed.
+Expected: 7 passed (3 happy-path + 4 filter / receiver tests).
 
 - [ ] **Step 5: Commit**
 
