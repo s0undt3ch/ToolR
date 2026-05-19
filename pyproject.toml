@@ -49,7 +49,7 @@ docs = [
     "ruff>=0.15.13",
 ]
 tools = [
-    "packaging>=25.0",
+    "packaging>=26.2",
 ]
 
 [tool.ruff]
