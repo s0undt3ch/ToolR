@@ -368,6 +368,79 @@ fn split_docstring(raw: &str) -> (String, String) {
     (summary, description)
 }
 
+use std::path::Path;
+
+/// Expand every glob in `scan_paths` against `root`, scan each match,
+/// and return one `ScannedCommand` per file. Files that failed to parse
+/// become placeholder `ScannedCommand`s (no arguments) with the failure
+/// recorded in their `warnings` field — the rest of the build continues.
+pub fn scan_block_paths(
+    root: &Path,
+    scan_paths: &[String],
+) -> Result<Vec<ScannedCommand>, ScanError> {
+    let mut all_paths: Vec<std::path::PathBuf> = Vec::new();
+    for pattern in scan_paths {
+        let abs = root.join(pattern);
+        // Bad glob pattern is a hard error so the user finds their typo.
+        let pattern_str = abs.to_str().ok_or_else(|| ScanError::Parse {
+            path: pattern.clone(),
+            message: "non-utf8 path in scan_paths".into(),
+        })?;
+        for path in glob::glob(pattern_str)
+            .map_err(|e| ScanError::Parse {
+                path: pattern.clone(),
+                message: e.to_string(),
+            })?
+            .flatten()
+        {
+            if path.is_file() {
+                all_paths.push(path);
+            }
+        }
+    }
+    all_paths.sort();
+    all_paths.dedup();
+
+    let mut out = Vec::with_capacity(all_paths.len());
+    for path in all_paths {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("?")
+            .to_string();
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(err) => {
+                let mut placeholder = ScannedCommand {
+                    name: stem.clone(),
+                    ..Default::default()
+                };
+                placeholder
+                    .warnings
+                    .push(format!("failed to read {}: {}", path.display(), err));
+                out.push(placeholder);
+                continue;
+            }
+        };
+        match scan_source(&stem, &text) {
+            Ok(cmd) => out.push(cmd),
+            Err(ScanError::Parse { message, .. }) => {
+                let mut placeholder = ScannedCommand {
+                    name: stem,
+                    ..Default::default()
+                };
+                placeholder.warnings.push(format!(
+                    "failed to parse {}: {}",
+                    path.display(),
+                    message
+                ));
+                out.push(placeholder);
+            }
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -459,5 +532,29 @@ def add_arguments(self, parser):
         let scanned = scan_source("x", source).unwrap();
         assert!(scanned.arguments.is_empty());
         assert!(scanned.warnings.is_empty());
+    }
+
+    #[test]
+    fn scan_paths_expands_globs_and_skips_unparsable() {
+        let project = tempfile::tempdir().unwrap();
+        let cmds = project.path().join("apps/x/management/commands");
+        std::fs::create_dir_all(&cmds).unwrap();
+        std::fs::write(cmds.join("migrate.py"), "def add_arguments(self, parser):\n    parser.add_argument('app_label')\n").unwrap();
+        std::fs::write(cmds.join("runserver.py"), "def add_arguments(self, parser):\n    parser.add_argument('--insecure', action='store_true')\n").unwrap();
+        std::fs::write(cmds.join("broken.py"), "def add_arguments(self, parser:\n").unwrap(); // syntax error
+
+        let scanned = scan_block_paths(
+            project.path(),
+            &["apps/*/management/commands/*.py".to_string()],
+        ).unwrap();
+
+        // Expect migrate + runserver scanned successfully, broken recorded as a warning placeholder.
+        let names: std::collections::BTreeSet<_> = scanned.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains("migrate"));
+        assert!(names.contains("runserver"));
+        // The broken file should still produce a ScannedCommand placeholder with the
+        // failure recorded in its `warnings` field — confirm at least one ScannedCommand
+        // carries a warning mentioning "broken".
+        assert!(scanned.iter().any(|s| s.warnings.iter().any(|w| w.contains("broken"))));
     }
 }
