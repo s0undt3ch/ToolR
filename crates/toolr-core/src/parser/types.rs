@@ -175,6 +175,37 @@ pub struct TypeImports {
     module_aliases: Vec<String>,
 }
 
+/// Records which local symbols in the current module refer to
+/// `toolr.sources.DispatchCommand` (or to the `toolr.sources` module
+/// itself, when used as `toolr.sources.DispatchCommand`).
+///
+/// `DispatchCommand` is a runtime injection slot, not a CLI argument.
+/// When a keyword-only parameter's annotation resolves to this type
+/// the static parser must skip it during CLI-argument extraction —
+/// otherwise the dispatcher command's `DispatchCommand` kwarg lands in
+/// the type resolver as an unknown name and rejects the whole module.
+///
+/// Supported import shapes (mirrors `TypeImports`):
+///
+/// * `from toolr.sources import DispatchCommand`
+/// * `from toolr.sources import DispatchCommand as <alias>`
+/// * `import toolr.sources` (or `import toolr.sources as X`), then a
+///   `toolr.sources.DispatchCommand` / `X.DispatchCommand` annotation.
+///
+/// Not currently handled: `from toolr import sources` followed by a
+/// `sources.DispatchCommand` reference. That requires tracking which
+/// local name aliases the `sources` submodule and is not in the
+/// canonical-form spec; we'll add it if a real user hits it.
+#[derive(Debug, Default, Clone)]
+pub struct SourcesImports {
+    /// Local names bound to `toolr.sources.DispatchCommand`. Populated by
+    /// `from toolr.sources import DispatchCommand [as <alias>]`.
+    direct_aliases: std::collections::HashSet<String>,
+    /// Local names that refer to the `toolr.sources` module. Populated by
+    /// `import toolr.sources` (default `toolr`) and `import toolr.sources as X`.
+    module_aliases: Vec<String>,
+}
+
 impl TypeImports {
     /// Walk the module's top-level statements to find imports from
     /// `toolr.types`.
@@ -252,6 +283,79 @@ impl TypeImports {
     }
 }
 
+impl SourcesImports {
+    /// Walk the module's top-level statements to find imports that name
+    /// `toolr.sources.DispatchCommand`.
+    pub fn from_module(module: &ModModule) -> Self {
+        let mut imports = Self::default();
+        for stmt in &module.body {
+            match stmt {
+                Stmt::ImportFrom(import) => {
+                    let module_name = import
+                        .module
+                        .as_ref()
+                        .map(|m| m.as_str())
+                        .unwrap_or_default();
+                    if module_name != "toolr.sources" {
+                        continue;
+                    }
+                    for alias in &import.names {
+                        if alias.name.as_str() != "DispatchCommand" {
+                            continue;
+                        }
+                        let local = alias
+                            .asname
+                            .as_ref()
+                            .map(|n| n.as_str().to_string())
+                            .unwrap_or_else(|| alias.name.as_str().to_string());
+                        imports.direct_aliases.insert(local);
+                    }
+                }
+                Stmt::Import(import) => {
+                    for alias in &import.names {
+                        if alias.name.as_str() == "toolr.sources" {
+                            let local = alias
+                                .asname
+                                .as_ref()
+                                .map(|n| n.as_str().to_string())
+                                .unwrap_or_else(|| "toolr".to_string());
+                            imports.module_aliases.push(local);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        imports
+    }
+
+    /// Whether `expr` is a parameter annotation referring to
+    /// `toolr.sources.DispatchCommand` — either as a direct name (with
+    /// or without aliasing) or as a `<module-alias>.DispatchCommand`
+    /// attribute access.
+    pub fn is_dispatch_command(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Name(n) => self.direct_aliases.contains(n.id.as_str()),
+            Expr::Attribute(attr) => {
+                if attr.attr.as_str() != "DispatchCommand" {
+                    return false;
+                }
+                match attr.value.as_ref() {
+                    // `<alias>.DispatchCommand` for `import toolr.sources as <alias>`.
+                    Expr::Name(n) => self.module_aliases.iter().any(|a| a == n.id.as_str()),
+                    // `toolr.sources.DispatchCommand` for bare `import toolr.sources`.
+                    Expr::Attribute(inner) => matches!(
+                        inner.value.as_ref(),
+                        Expr::Name(n) if n.id.as_str() == "toolr" && inner.attr.as_str() == "sources"
+                    ),
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Walk a function's parameters and populate `resolved_type` on each
 /// matching [`Argument`]. Unsupported annotations are pushed to `errors`
 /// with `module` / function-name context, and the corresponding
@@ -262,6 +366,7 @@ pub fn resolve_arguments(
     arguments: &mut [Argument],
     enums: &EnumTable,
     type_imports: &TypeImports,
+    sources: &SourcesImports,
     aliases: &TypeAliasTable,
     sections: &ArgSectionTable,
     module: &str,
@@ -299,7 +404,16 @@ pub fn resolve_arguments(
         );
         i += 1;
     }
+    // Kwarg walk must stay in lockstep with `extract_arguments`, which
+    // already dropped any `DispatchCommand`-annotated kwargs from the
+    // arguments slice. Skip the same params here so we don't run the
+    // type resolver against a runtime injection slot.
     for p in &params.kwonlyargs {
+        if let Some(ann) = p.parameter.annotation.as_deref() {
+            if sources.is_dispatch_command(ann) {
+                continue;
+            }
+        }
         resolve_one(
             p.parameter.annotation.as_deref(),
             &mut arguments[i],

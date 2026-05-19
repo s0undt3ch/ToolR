@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 
 use crate::hash::hash_tools_dir;
 use crate::manifest::{Manifest, SCHEMA_VERSION};
-use crate::parser::types::{TypeImports, TypeResolutionError};
+use crate::parser::types::{SourcesImports, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::extract_commands,
     groups::extract_groups,
@@ -69,12 +69,14 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         let module_doc = module_docstring(&module);
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
+        let sources_imports = SourcesImports::from_module(&module);
         let commands = extract_commands(
             &module,
             &module_path,
             &bindings,
             &enums,
             &type_imports,
+            &sources_imports,
             &aliases,
             &sections,
             &global_vars,
@@ -550,6 +552,41 @@ parent = "django"
             .unwrap();
         assert_eq!(migrate.module, django.module);
         assert_eq!(migrate.function, django.function);
+    }
+
+    /// A dispatcher command with both a real CLI flag (`cpu`) and a
+    /// `DispatchCommand`-annotated injection kwarg builds cleanly: the
+    /// CLI flag lands on the manifest, the injection kwarg is dropped
+    /// rather than rejected as "unsupported type `DispatchCommand`".
+    #[test]
+    fn dispatcher_with_real_flags_and_injection_kwarg_builds() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/dispatcher.py",
+            r#""""Django dispatcher."""
+from toolr.sources import DispatchCommand
+
+group = command_group("django", "Django")
+
+@group.command
+def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
+    """Dispatch."""
+    return 0
+"#,
+        );
+        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let django = manifest
+            .commands
+            .iter()
+            .find(|c| c.name == "django")
+            .expect("django command present");
+        let arg_names: Vec<&str> = django.arguments.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(
+            arg_names,
+            vec!["cpu"],
+            "expected dispatcher arguments to keep `cpu` and drop `dispatched`",
+        );
     }
 
     /// Bare `@command` (no `group=` kwarg) is a build error pointing
