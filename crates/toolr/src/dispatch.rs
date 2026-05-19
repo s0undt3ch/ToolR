@@ -79,12 +79,31 @@ pub fn dispatch(
     // Dispatched leaves take a separate spec-shape: the runner sees
     // `dispatch: Some(...)` and routes to `invoke_dispatcher` instead
     // of calling `function` as a regular command. Pack the child first,
-    // then build a parent-shaped spec — `cmd.module`/`cmd.function`
-    // already point at the parent dispatcher because `graft_children`
-    // copies them from the matched parent at scan time.
+    // then build a parent-shaped spec around the dispatcher entry.
+    //
+    // The dispatcher's own manifest entry lives next to the leaf in the
+    // same group; its `name` matches the group's final segment (the
+    // "@group.command def <group_leaf>(...)" pattern produced by
+    // `graft_children`). We look it up so `build_dispatch_spec` can
+    // iterate the dispatcher's OWN arguments (the --cpu/--ram-style
+    // outer flags) and extract them from `parent_matches`, instead of
+    // iterating the leaf's arguments (which are packed in `packed`).
     let spec = if cmd.dispatched_from.is_some() {
         let packed = pack_child_args(cmd, cmd_matches);
-        build_dispatch_spec(cmd, parent_matches, packed, &repo_root, &output_opts)
+        let group_leaf = cmd.group.rsplit('.').next().unwrap_or(cmd.group.as_str());
+        let dispatcher = manifest
+            .commands
+            .iter()
+            .find(|p| p.group == cmd.group && p.name == group_leaf)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "dispatcher manifest entry for `{}` (group `{}`, name `{}`) not found",
+                    cmd.name,
+                    cmd.group,
+                    group_leaf,
+                )
+            })?;
+        build_dispatch_spec(dispatcher, parent_matches, packed, &repo_root, &output_opts)
     } else {
         build_spec(cmd, cmd_matches, &repo_root, &output_opts)
     };
