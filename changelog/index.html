@@ -1646,15 +1646,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev311-2026-05-19" class="md-nav__link">
+  <a href="#0112-dev323-2026-05-19" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev311 - 2026-05-19
+        0.11.2-dev323 - 2026-05-19
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev311 - 2026-05-19">
+    <nav class="md-nav" aria-label="0.11.2-dev323 - 2026-05-19">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2146,15 +2146,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev311-2026-05-19" class="md-nav__link">
+  <a href="#0112-dev323-2026-05-19" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev311 - 2026-05-19
+        0.11.2-dev323 - 2026-05-19
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev311 - 2026-05-19">
+    <nav class="md-nav" aria-label="0.11.2-dev323 - 2026-05-19">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2641,7 +2641,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev311-2026-05-19">0.11.2-dev311 - 2026-05-19<a class="headerlink" href="#0112-dev311-2026-05-19" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev323-2026-05-19">0.11.2-dev323 - 2026-05-19<a class="headerlink" href="#0112-dev323-2026-05-19" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3051,6 +3051,11 @@ invisible to end users:</p>
 <li>Un-deprecate @group.command, keep parent.command_group on track for 1.0 removal (<a href="https://github.com/s0undt3ch/ToolR/commit/93986dd11cdce4b75fb598081bb250655a9272fc"><code>93986dd</code></a>)</li>
 <li>Exclude superpowers/ subtree from the published site (<a href="https://github.com/s0undt3ch/ToolR/commit/f041644dd119977ca51137bedf4cd337106a25b6"><code>f041644</code></a>)</li>
 <li>Migrate off deprecated codecov/test-results-action (<a href="https://github.com/s0undt3ch/ToolR/commit/9cef749d02d260a1ad54c0481f6248ecb2376ca1"><code>9cef749</code></a>)</li>
+<li><em>(deps)</em> Bump ruff_python_parser from 0.14.0 to 0.15.13 (<a href="https://github.com/s0undt3ch/ToolR/commit/4c167b978e358c3a828fe287eaded8ff1795f4fe"><code>4c167b9</code></a>)</li>
+<li><em>(deps)</em> Bump signal-hook from 0.3.18 to 0.4.4 (<a href="https://github.com/s0undt3ch/ToolR/commit/90e5b95840d25daa18362071165f35a5e8dc41a1"><code>90e5b95</code></a>)</li>
+<li><em>(deps)</em> Bump thiserror from 1.0.69 to 2.0.18 (<a href="https://github.com/s0undt3ch/ToolR/commit/0842727bbdf1b4010985c50ac831e58a8370a38b"><code>0842727</code></a>)</li>
+<li>Upgrade Python and Rust dependencies to latest (<a href="https://github.com/s0undt3ch/ToolR/commit/e2862a0e5b7162a99fd45fc13b9b2e6ea581d315"><code>e2862a0</code></a>)</li>
+<li>Pin ToolR action to a SHA that supports python-path (<a href="https://github.com/s0undt3ch/ToolR/commit/f54a7fee9c66942924ce46e28f2aeeb4e49825e0"><code>f54a7fe</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3132,6 +3137,7 @@ invisible to end users:</p>
 <li><em>(distribution)</em> Assert wheel shapes and cross-wheel install path (<a href="https://github.com/s0undt3ch/ToolR/commit/b86870908263f03836ebe4fb91bf69aa214d2c37"><code>b868709</code></a>)</li>
 <li><em>(distribution)</em> Add maturin to dev deps so distribution tests run (<a href="https://github.com/s0undt3ch/ToolR/commit/90610224a3639f03012b0ee16d812faa6aa05a84"><code>9061022</code></a>)</li>
 <li><em>(distribution)</em> Consume pre-built wheels in a dedicated CI job (<a href="https://github.com/s0undt3ch/ToolR/commit/7dcb5c1b42955a9731996ae2969c66b14369b495"><code>7dcb5c1</code></a>)</li>
+<li>Update pyo3 TypeError message for pyo3 0.28 (<a href="https://github.com/s0undt3ch/ToolR/commit/b4c8ea38899b39ff4b4419c7f634993927fd2e19"><code>b4c8ea3</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
