@@ -60,8 +60,8 @@ _BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
     {"triple": "aarch64-unknown-linux-gnu", "runner": "ubuntu-24.04-arm", "cross": False, "archive": "tar.gz"},
     {"triple": "x86_64-unknown-linux-musl", "runner": "ubuntu-latest", "cross": True, "archive": "tar.gz"},
     {"triple": "aarch64-unknown-linux-musl", "runner": "ubuntu-24.04-arm", "cross": True, "archive": "tar.gz"},
-    {"triple": "x86_64-apple-darwin", "runner": "macos-13", "cross": False, "archive": "tar.gz"},
     {"triple": "aarch64-apple-darwin", "runner": "macos-14", "cross": False, "archive": "tar.gz"},
+    {"triple": "x86_64-apple-darwin", "runner": "macos-15-intel", "cross": False, "archive": "tar.gz"},
     {"triple": "x86_64-pc-windows-msvc", "runner": "windows-latest", "cross": False, "archive": "zip"},
 ]
 
