@@ -209,14 +209,18 @@ def test_e2e_same_source_attached_to_two_parents(tmp_path: Path, toolr_bin: Path
         tools_py,
         pyproject,
         {
-            "apps/x/management/commands/migrate.py": 'def add_arguments(self, parser):\n    parser.add_argument("--check", action="store_true")\n'
+            "apps/x/management/commands/migrate.py": (
+                'def add_arguments(self, parser):\n    parser.add_argument("--check", action="store_true")\n'
+            )
         },
     )
 
     env = {**os.environ, "TOOLR_TEST_PYTHON": sys.executable}
-    subprocess.run([str(toolr_bin), "project", "manifest", "rebuild"], check=True, cwd=project, env=env)
+    subprocess.run(  # noqa: S603
+        [str(toolr_bin), "project", "manifest", "rebuild"], check=True, cwd=project, env=env
+    )
 
-    out_local = subprocess.run(
+    out_local = subprocess.run(  # noqa: S603
         [str(toolr_bin), "django", "migrate"],
         check=True,
         cwd=project,
@@ -224,7 +228,7 @@ def test_e2e_same_source_attached_to_two_parents(tmp_path: Path, toolr_bin: Path
         capture_output=True,
         text=True,
     ).stdout.strip()
-    out_remote = subprocess.run(
+    out_remote = subprocess.run(  # noqa: S603
         [str(toolr_bin), "jenkins", "migrate"],
         check=True,
         cwd=project,
@@ -291,7 +295,7 @@ def test_e2e_collision_across_sources_fails_build(tmp_path: Path, toolr_bin: Pat
     )
 
     env = {**os.environ, "TOOLR_TEST_PYTHON": sys.executable}
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603
         [str(toolr_bin), "project", "manifest", "rebuild"],
         check=False,
         cwd=project,
@@ -303,15 +307,10 @@ def test_e2e_collision_across_sources_fails_build(tmp_path: Path, toolr_bin: Pat
     combined = result.stdout + result.stderr
     assert "migrate" in combined
     # Names of both colliding sources surface in the error.
-    assert "first" in combined and "second" in combined
+    assert "first" in combined
+    assert "second" in combined
 
 
-@pytest.mark.skip(
-    reason="Auto-rebuild on missing manifest is not implemented in the binary "
-    "yet. main.rs::load_or_empty silently returns an empty manifest and clap "
-    "rejects the user's command before dispatch::ensure_dynamic_layer_fresh "
-    "gets a chance to rebuild. See follow-up task in the plan."
-)
 def test_e2e_auto_rebuild_runs_argparse(
     project_with_dispatcher_and_command: Path,
     tmp_path: Path,
