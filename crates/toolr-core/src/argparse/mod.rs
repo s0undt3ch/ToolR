@@ -2,7 +2,7 @@
 //! `[tool.toolr.argparse.*]` and grafts their `parser.add_argument`
 //! calls as manifest children of user-declared dispatcher commands.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use thiserror::Error;
@@ -25,42 +25,61 @@ pub enum ArgparseError {
     Attach(#[from] attach::AttachError),
 }
 
+/// Outcome of running the argparse pipeline for a project.
+#[derive(Debug, Clone, Default)]
+pub struct GraftResult {
+    /// `{parent_dotted_name -> [grafted child Command]}`.
+    pub children_by_parent: HashMap<String, Vec<Command>>,
+    /// Dotted names of parents that received at least one grafted
+    /// child. The caller flips `is_dispatcher = true` on each.
+    pub dispatchers: HashSet<String>,
+}
+
 /// Run the full argparse pipeline for a project: read pyproject,
 /// scan files, validate attachments, graft children, detect
-/// collisions. Returns `{parent_dotted_name: [child Commands]}`.
+/// collisions. Returns a [`GraftResult`] mapping each parent dotted
+/// name to its grafted children and recording which parents received
+/// any children (so the caller can flip `is_dispatcher`).
 ///
 /// `parents` maps every potential dispatcher's dotted name to
 /// `(module, function)`. The static parser populates this from the
 /// freshly-walked registry before calling `run_for_project`.
 ///
-/// Returns an empty map when no `tools/pyproject.toml` exists or
-/// when it has no `[tool.toolr.argparse.*]` blocks.
+/// Returns an empty [`GraftResult`] when no `tools/pyproject.toml`
+/// exists or when it has no `[tool.toolr.argparse.*]` blocks.
 pub fn run_for_project(
     project_root: &Path,
     parents: &HashMap<String, (String, String)>,
-) -> Result<HashMap<String, Vec<Command>>, ArgparseError> {
+) -> Result<GraftResult, ArgparseError> {
     let pyproject = project_root.join("tools").join("pyproject.toml");
     if !pyproject.exists() {
-        return Ok(HashMap::new());
+        return Ok(GraftResult::default());
     }
     let blocks = config::parse_blocks_from_pyproject(&pyproject)?;
     if blocks.is_empty() {
-        return Ok(HashMap::new());
+        return Ok(GraftResult::default());
     }
     attach::validate_attachments(&blocks, parents)?;
 
     let mut out: HashMap<String, Vec<Command>> = HashMap::new();
+    let mut dispatchers: HashSet<String> = HashSet::new();
     for block in &blocks {
         let scanned: Vec<scan::ScannedCommand> = scan::scan_block_paths(project_root, &block.scan_paths)?
             .into_iter()
             .map(|s| scan::with_common_args(s, &block.common_args))
             .collect();
         for (parent, children) in attach::graft_children(block, &scanned, parents)? {
+            if !children.is_empty() {
+                dispatchers.insert(parent.clone());
+            }
             out.entry(parent).or_default().extend(children);
         }
     }
     attach::validate_no_collisions(&out)?;
-    Ok(out)
+    Ok(GraftResult {
+        children_by_parent: out,
+        dispatchers,
+    })
 }
 
 #[cfg(test)]
@@ -99,12 +118,15 @@ mod tests {
         );
 
         let result = run_for_project(project.path(), &parents).unwrap();
-        let django_children = result.get("django").unwrap();
+        let django_children = result.children_by_parent.get("django").unwrap();
         assert_eq!(django_children.len(), 1);
         assert_eq!(django_children[0].name, "sync");
         assert_eq!(
             django_children[0].dispatched_from.as_deref(),
             Some("argparse:django"),
         );
+
+        // `django` received grafted children, so it's in `dispatchers`.
+        assert!(result.dispatchers.contains("django"));
     }
 }

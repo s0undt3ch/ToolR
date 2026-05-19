@@ -152,27 +152,42 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let parents: std::collections::HashMap<String, (String, String)> = manifest
         .commands
         .iter()
-        .map(|c| {
-            let leaf = c.group.rsplit('.').next().unwrap_or(c.group.as_str());
-            let dotted = if !c.group.is_empty() && c.name == leaf {
-                c.group.clone()
-            } else if c.group.is_empty() {
-                c.name.clone()
-            } else {
-                format!("{}.{}", c.group, c.name)
-            };
-            (dotted, (c.module.clone(), c.function.clone()))
-        })
+        .map(|c| (dotted_name(c), (c.module.clone(), c.function.clone())))
         .collect();
 
     let project_root = tools_dir.parent().unwrap_or(tools_dir);
     let grafted = crate::argparse::run_for_project(project_root, &parents)
         .map_err(BuildError::Argparse)?;
-    for (_parent, mut children) in grafted {
+
+    // Splice grafted children into the manifest.
+    for (_parent, mut children) in grafted.children_by_parent {
         manifest.commands.append(&mut children);
     }
 
+    // Flip the dispatcher flag on each parent that received children.
+    for cmd in manifest.commands.iter_mut() {
+        if grafted.dispatchers.contains(&dotted_name(cmd)) {
+            cmd.is_dispatcher = true;
+        }
+    }
+
     Ok(manifest)
+}
+
+/// Compute the dotted name a command is addressable by from the CLI
+/// (mirrors the dispatcher's `command_group(name)` + `def <name>(...)`
+/// pattern). A command whose `name` matches the leaf segment of its
+/// `group` is addressable as the group path itself; otherwise it's
+/// `"<group>.<name>"` (or just `name` when the group is empty).
+fn dotted_name(cmd: &crate::manifest::Command) -> String {
+    let leaf = cmd.group.rsplit('.').next().unwrap_or(cmd.group.as_str());
+    if !cmd.group.is_empty() && cmd.name == leaf {
+        cmd.group.clone()
+    } else if cmd.group.is_empty() {
+        cmd.name.clone()
+    } else {
+        format!("{}.{}", cmd.group, cmd.name)
+    }
 }
 
 /// Like `build_static_manifest`, but also globs `tools_venv` for
@@ -552,6 +567,10 @@ parent = "django"
             .unwrap();
         assert_eq!(migrate.module, django.module);
         assert_eq!(migrate.function, django.function);
+        assert!(
+            django.is_dispatcher,
+            "expected dispatcher flag set on django",
+        );
     }
 
     /// A dispatcher command with both a real CLI flag (`cpu`) and a
