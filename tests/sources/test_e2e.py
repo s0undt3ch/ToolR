@@ -335,3 +335,100 @@ def test_e2e_auto_rebuild_runs_argparse(
     captured = json.loads(sidecar.read_text())
     assert captured["command"] == "migrate"
     assert captured["command_args"]["check"] is True
+
+
+def test_e2e_dispatcher_outer_flags(tmp_path: Path, toolr_bin: Path) -> None:
+    """Dispatcher's --cpu/--ram flags are reachable on the child path.
+
+    Invocation shape: `toolr jenkins job --cpu 5000m migrate --check`.
+    The dispatcher writes both its own kwargs (`cpu`) and the
+    DispatchCommand payload (`migrate`, `check=True`) to a sidecar.
+    """
+    tools_py = (
+        textwrap.dedent(
+            """
+        import json
+        import os
+        from toolr import command_group, Context
+        from toolr.sources import DispatchCommand
+
+        group = command_group("jenkins", "Jenkins", description="Jenkins dispatcher")
+
+        @group.command
+        def job(
+            ctx: Context,
+            *,
+            cpu: str = "1000m",
+            ram: str = "4Gi",
+            dispatched: DispatchCommand,
+        ) -> int:
+            payload = {
+                "cpu": cpu,
+                "ram": ram,
+                "command": dispatched.command,
+                "command_args": dispatched.command_args,
+            }
+            with open(os.environ["E2E_SIDECAR"], "w") as fh:
+                json.dump(payload, fh)
+            return 0
+        """
+        ).strip()
+        + "\n"
+    )
+    pyproject = (
+        textwrap.dedent(
+            """
+        [project]
+        name = "demo-tools"
+        version = "0"
+
+        [tool.toolr]
+        venv-location = "in-tree"
+
+        [tool.toolr.argparse.django]
+        scan_paths = ["apps/*/management/commands/*.py"]
+
+        [[tool.toolr.argparse.django.attach]]
+        parent = "jenkins.job"
+        """
+        ).strip()
+        + "\n"
+    )
+    migrate_body = 'def add_arguments(self, parser):\n    parser.add_argument("--check", action="store_true")\n'
+    project = _make_project(
+        tmp_path,
+        "dispatcher-flags",
+        tools_py,
+        pyproject,
+        {"apps/x/management/commands/migrate.py": migrate_body},
+    )
+
+    sidecar = tmp_path / "captured.json"
+    env = {**os.environ, "TOOLR_TEST_PYTHON": sys.executable, "E2E_SIDECAR": str(sidecar)}
+
+    subprocess.run(  # noqa: S603
+        [str(toolr_bin), "project", "manifest", "rebuild"],
+        check=True,
+        cwd=project,
+        env=env,
+    )
+    result = subprocess.run(  # noqa: S603
+        [str(toolr_bin), "jenkins", "job", "--cpu", "5000m", "migrate", "--check"],
+        check=False,
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        msg = (
+            f"dispatcher-outer-flags dispatch failed (exit {result.returncode})\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
+        raise AssertionError(msg)
+
+    captured = json.loads(sidecar.read_text())
+    assert captured["cpu"] == "5000m"
+    assert captured["ram"] == "4Gi"  # default value preserved
+    assert captured["command"] == "migrate"
+    assert captured["command_args"]["check"] is True
