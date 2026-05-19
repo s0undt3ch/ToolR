@@ -35,6 +35,24 @@ fn children_by_parent(manifest: &Manifest) -> HashMap<Option<String>, Vec<&Group
     map
 }
 
+/// Compute the dotted name a dispatcher is addressable by from the
+/// CLI. Mirrors `toolr_core::parser::build::dotted_name`: a command
+/// whose `name` matches the leaf segment of its `group` is addressable
+/// as the group path itself; otherwise it's `"<group>.<name>"` (or
+/// just `name` when the group is empty). The argparse pipeline sets
+/// each grafted child's `group` field to this dotted name (the
+/// attachment.parent), so we use the same value to look children up.
+fn dispatcher_dotted_name(cmd: &toolr_core::manifest::Command) -> String {
+    let leaf = cmd.group.rsplit('.').next().unwrap_or(cmd.group.as_str());
+    if !cmd.group.is_empty() && cmd.name == leaf {
+        cmd.group.clone()
+    } else if cmd.group.is_empty() {
+        cmd.name.clone()
+    } else {
+        format!("{}.{}", cmd.group, cmd.name)
+    }
+}
+
 /// Recursively build a clap `Command` subtree for `group`, attaching
 /// direct commands and child groups discovered via `children`.
 fn build_group_subtree(
@@ -48,35 +66,40 @@ fn build_group_subtree(
         g = g.long_about(group.description.clone());
     }
 
-    // Bucket grafted children of this group by their dispatcher's
-    // (module, function). `graft_children` copies those from the
-    // parent dispatcher entry, so the pair uniquely identifies which
-    // dispatcher hosts each child.
-    let grafted_by_dispatcher: HashMap<(&str, &str), Vec<&toolr_core::manifest::Command>> = manifest
-        .commands
-        .iter()
-        .filter(|c| c.group == full_path && c.dispatched_from.is_some())
-        .fold(HashMap::new(), |mut acc, c| {
-            acc.entry((c.module.as_str(), c.function.as_str()))
-                .or_default()
-                .push(c);
-            acc
-        });
-
     // For each NON-grafted command in this group, decide whether to
     // build it as a dispatcher (own args + the children-bucket as
-    // subcommands) or as a normal leaf.
+    // subcommands) or as a normal leaf. Grafted children live under
+    // the dispatcher's dotted name (set by `graft_children` from the
+    // `[[attach]] parent = "..."` value).
+    //
+    // When the dispatcher's name matches the group's leaf segment
+    // (e.g. `command_group("django")` + `def django(...)`), its dotted
+    // name equals the group path. In that case its grafted children
+    // are hoisted directly onto the group itself, so the user types
+    // `toolr django migrate` rather than `toolr django django migrate`.
+    let group_leaf = full_path.rsplit('.').next().unwrap_or(full_path.as_str());
     for cmd in manifest
         .commands
         .iter()
         .filter(|c| c.group == full_path && c.dispatched_from.is_none())
     {
         if cmd.is_dispatcher {
-            let dispatched_children = grafted_by_dispatcher
-                .get(&(cmd.module.as_str(), cmd.function.as_str()))
-                .cloned()
-                .unwrap_or_default();
-            g = g.subcommand(build_dispatcher_command(cmd, &dispatched_children));
+            let dotted = dispatcher_dotted_name(cmd);
+            let dispatched_children: Vec<&toolr_core::manifest::Command> = manifest
+                .commands
+                .iter()
+                .filter(|child| child.group == dotted && child.dispatched_from.is_some())
+                .collect();
+            if cmd.name == group_leaf {
+                // Hoist: the dispatcher's children become direct
+                // subcommands of the group, and the dispatcher itself
+                // disappears as a redundant CLI hop.
+                for child in &dispatched_children {
+                    g = g.subcommand(build_user_command(child));
+                }
+            } else {
+                g = g.subcommand(build_dispatcher_command(cmd, &dispatched_children));
+            }
         } else {
             g = g.subcommand(build_user_command(cmd));
         }
@@ -679,8 +702,10 @@ mod cli_tree_tests {
             "jenkins",
             vec![empty_arg("cpu", ArgumentKind::Optional)],
         );
-        let migrate = child("migrate", "jenkins", "tools.job", "job");
-        let runserver = child("runserver", "jenkins", "tools.job", "job");
+        // Grafted children live under the dispatcher's dotted_name
+        // ("jenkins.job"), mirroring the argparse pipeline's output.
+        let migrate = child("migrate", "jenkins.job", "tools.job", "job");
+        let runserver = child("runserver", "jenkins.job", "tools.job", "job");
 
         let manifest = Manifest {
             schema_version: 1,
@@ -705,8 +730,8 @@ mod cli_tree_tests {
     fn two_dispatchers_in_one_group_each_host_their_own_children() {
         let build_cmd = dispatcher("build", "docker", vec![]);
         let image_cmd = dispatcher("image", "docker", vec![]);
-        let build_child = child("compile", "docker", "tools.build", "build");
-        let image_child = child("push", "docker", "tools.image", "image");
+        let build_child = child("compile", "docker.build", "tools.build", "build");
+        let image_child = child("push", "docker.image", "tools.image", "image");
 
         let manifest = Manifest {
             schema_version: 1,
@@ -729,7 +754,7 @@ mod cli_tree_tests {
     #[test]
     fn dispatcher_and_normal_leaf_coexist_in_one_group() {
         let dispatcher_cmd = dispatcher("job", "jenkins", vec![]);
-        let migrate = child("migrate", "jenkins", "tools.job", "job");
+        let migrate = child("migrate", "jenkins.job", "tools.job", "job");
         let status = normal_leaf("status", "jenkins");
 
         let manifest = Manifest {
@@ -751,5 +776,28 @@ mod cli_tree_tests {
 
         let status_sub = jenkins.find_subcommand("status").unwrap();
         assert_eq!(status_sub.get_subcommands().count(), 0);
+    }
+
+    #[test]
+    fn dispatcher_with_matching_leaf_name_hoists_children_onto_group() {
+        // command_group("django") + def django(...) → dotted_name == "django"
+        // (matches the leaf), so the dispatcher's children appear
+        // directly under the group, not under a redundant `django`
+        // subcommand. User types `toolr django migrate`, not
+        // `toolr django django migrate`.
+        let dispatcher_cmd = dispatcher("django", "django", vec![]);
+        let migrate = child("migrate", "django", "tools.dispatcher", "django");
+
+        let manifest = Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            dynamic_hash: String::new(),
+            groups: vec![group("django")],
+            commands: vec![dispatcher_cmd, migrate],
+        };
+
+        let django = build_for(manifest);
+        let group_subs: Vec<&str> = django.get_subcommands().map(|c| c.get_name()).collect();
+        assert_eq!(group_subs, vec!["migrate"]);
     }
 }

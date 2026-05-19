@@ -113,17 +113,26 @@ pub fn dispatch(
     // iterating the leaf's arguments (which are packed in `packed`).
     let spec = if cmd.dispatched_from.is_some() {
         let packed = pack_child_args(cmd, cmd_matches);
-        let group_leaf = cmd.group.rsplit('.').next().unwrap_or(cmd.group.as_str());
+        // The dispatcher's manifest entry shares `(module, function)`
+        // with each of its grafted children (the argparse pipeline
+        // copies those fields onto the children at graft time). Find
+        // the dispatcher's own entry by matching that pair and
+        // requiring `is_dispatcher = true` so we don't accidentally
+        // grab a sibling child.
         let dispatcher = manifest
             .commands
             .iter()
-            .find(|p| p.group == cmd.group && p.name == group_leaf)
+            .find(|p| {
+                p.is_dispatcher
+                    && p.module == cmd.module
+                    && p.function == cmd.function
+            })
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "dispatcher manifest entry for `{}` (group `{}`, name `{}`) not found",
+                    "dispatcher manifest entry for `{}` (module `{}`, function `{}`) not found",
                     cmd.name,
-                    cmd.group,
-                    group_leaf,
+                    cmd.module,
+                    cmd.function,
                 )
             })?;
         build_dispatch_spec(dispatcher, parent_matches, packed, &repo_root, &output_opts)
