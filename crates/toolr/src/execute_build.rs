@@ -49,6 +49,59 @@ pub fn build_spec(
     }
 }
 
+/// Packed payload extracted from clap matches for a dispatched leaf.
+///
+/// Built when the matched command has `dispatched_from` set on its
+/// manifest entry. The pyo3 invocation seam (added in Task 17) turns
+/// this into a `toolr.sources.DispatchCommand` and passes it as the
+/// `dispatch` keyword to the parent dispatcher function instead of
+/// running the leaf as a regular command call.
+//
+// `#[allow(dead_code)]` because the dispatch seam that consumes this
+// lands in Task 17. The fields are not read yet — `dead_code` would
+// otherwise trigger because the test module accesses them but the
+// production code does not. Drop this attribute when Task 17 lands.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct PackedChild {
+    /// The leaf command's name (e.g. `"migrate"`).
+    pub name: String,
+    /// Per-argument values extracted from clap matches, keyed by the
+    /// argument's manifest name. Values are JSON-shaped so the existing
+    /// `extract_value` machinery (used by `build_spec`) drives the
+    /// encoding — keeping flags as bools, counts as numbers, etc. —
+    /// rather than coercing everything to `String`.
+    pub args: BTreeMap<String, Value>,
+    /// The full manifest entry for the leaf, so the runtime side has
+    /// access to schema metadata (argument list, dispatched_from, …)
+    /// without re-looking-up the command.
+    pub schema: Command,
+}
+
+/// Pack a matched dispatched-leaf's clap arguments into a `PackedChild`.
+///
+/// Reuses the same per-argument extraction logic as `build_spec` so the
+/// on-the-wire shape of dispatched-leaf args is identical to a normal
+/// command invocation. Task 17 consumes this on the Python side.
+//
+// `#[allow(dead_code)]` for the same reason as `PackedChild`: the
+// dispatch seam that calls this lands in Task 17. The unit tests in
+// `dispatched_pack_tests` already exercise it.
+#[allow(dead_code)]
+pub(crate) fn pack_child_args(cmd: &Command, matches: &ArgMatches) -> PackedChild {
+    let mut args = BTreeMap::new();
+    for arg in &cmd.arguments {
+        if let Some(value) = extract_value(arg, matches) {
+            args.insert(arg.name.clone(), value);
+        }
+    }
+    PackedChild {
+        name: cmd.name.clone(),
+        args,
+        schema: cmd.clone(),
+    }
+}
+
 /// Plumbing struct bundling the root-level "Output Options" flag
 /// values for `build_spec`. Adding a new flag is a one-field change
 /// instead of growing the `build_spec` argument list again.
@@ -529,5 +582,102 @@ mod tests {
         assert_eq!(opts.log_level, "INFO");
         assert!(opts.default_timeout_secs.is_none());
         assert!(opts.default_no_output_timeout_secs.is_none());
+    }
+}
+
+#[cfg(test)]
+mod dispatched_pack_tests {
+    //! `pack_child_args` packs a matched dispatched-leaf into a
+    //! `PackedChild`. These tests pin the on-the-wire encoding (which
+    //! reuses `extract_value`, so flags stay bools and missing
+    //! arguments stay absent rather than null) — Task 17's pyo3 wiring
+    //! reads the resulting `args` map and must keep getting the same
+    //! JSON shape `build_spec` would have produced.
+    use super::*;
+    use clap::{Arg, ArgAction};
+    use toolr_core::manifest::{Argument, ArgumentKind, Command, Origin};
+
+    fn migrate_cmd() -> Command {
+        Command {
+            name: "migrate".into(),
+            group: "django".into(),
+            module: "tools.dispatcher".into(),
+            function: "django".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![Argument {
+                name: "check".into(),
+                kind: ArgumentKind::Flag,
+                help: String::new(),
+                default: None,
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: Default::default(),
+            }],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: Some("argparse:django".into()),
+        }
+    }
+
+    #[test]
+    fn pack_child_args_extracts_flag_as_bool() {
+        let clap_cmd = clap::Command::new("migrate")
+            .arg(Arg::new("check").long("check").action(ArgAction::SetTrue));
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["migrate", "--check"])
+            .unwrap();
+        let cmd = migrate_cmd();
+        let packed = pack_child_args(&cmd, &matches);
+        assert_eq!(packed.name, "migrate");
+        assert_eq!(packed.args.get("check"), Some(&Value::Bool(true)));
+        // Schema round-trips intact (Task 17 reads it on the Python side).
+        assert_eq!(packed.schema.dispatched_from.as_deref(), Some("argparse:django"));
+        assert_eq!(packed.schema.function, "django");
+    }
+
+    #[test]
+    fn pack_child_args_unset_flag_records_false_value() {
+        // Flags route through `get_flag`, which always yields a bool,
+        // so an unset flag still appears in the map as `false`. This
+        // matches `build_spec`'s encoding — `extract_value` always
+        // returns Some for `ArgumentKind::Flag`.
+        let clap_cmd = clap::Command::new("migrate")
+            .arg(Arg::new("check").long("check").action(ArgAction::SetTrue));
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["migrate"])
+            .unwrap();
+        let packed = pack_child_args(&migrate_cmd(), &matches);
+        assert_eq!(packed.args.get("check"), Some(&Value::Bool(false)));
+    }
+
+    #[test]
+    fn pack_child_args_omits_unset_optional() {
+        // Optional args with no clap value present should be absent
+        // from the packed map (rather than `null`) — matches the
+        // `build_spec_missing_optional_value_does_not_appear_in_args_map`
+        // contract.
+        let cmd = Command {
+            arguments: vec![Argument {
+                name: "label".into(),
+                kind: ArgumentKind::Optional,
+                help: String::new(),
+                default: None,
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: Default::default(),
+            }],
+            ..migrate_cmd()
+        };
+        let clap_cmd = clap::Command::new("migrate").arg(Arg::new("label").long("label"));
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["migrate"])
+            .unwrap();
+        let packed = pack_child_args(&cmd, &matches);
+        assert!(!packed.args.contains_key("label"));
     }
 }
