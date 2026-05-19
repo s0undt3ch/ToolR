@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from toolr.sources import ArgSchema
 from toolr.sources import CommandSchema
 from toolr.sources import DispatchCommand
@@ -28,3 +30,59 @@ def test_dispatch_command_holds_match():
     assert dc.command == "migrate"
     assert dc.command_args == {"check": True, "database": "primary"}
     assert dc.schema.name == "migrate"
+
+
+@pytest.mark.parametrize(
+    ("args_in", "schema_args", "expected"),
+    [
+        # Positional value.
+        (
+            {"app_label": "auth"},
+            [ArgSchema(name="app_label", kind="positional", help="")],
+            ["auth"],
+        ),
+        # Flag set True → emit, False → omit.
+        (
+            {"check": True, "verbose": False},
+            [
+                ArgSchema(name="check", kind="flag", help=""),
+                ArgSchema(name="verbose", kind="flag", help=""),
+            ],
+            ["--check"],
+        ),
+        # Optional with default — omit when equal, emit otherwise.
+        (
+            {"database": "default"},
+            [ArgSchema(name="database", kind="optional", help="", default="default")],
+            [],
+        ),
+        (
+            {"database": "primary"},
+            [ArgSchema(name="database", kind="optional", help="", default="default")],
+            ["--database", "primary"],
+        ),
+        # Repeated → one `--name value` per element.
+        (
+            {"exclude": ["a", "b"]},
+            [ArgSchema(name="exclude", kind="repeated", help="")],
+            ["--exclude", "a", "--exclude", "b"],
+        ),
+        # Underscores in the name become dashes on the wire.
+        (
+            {"dry_run": True},
+            [ArgSchema(name="dry_run", kind="flag", help="")],
+            ["--dry-run"],
+        ),
+    ],
+)
+def test_argv_reconstruction(args_in, schema_args, expected):
+    schema = CommandSchema(name="x", summary="", description="", arguments=schema_args)
+    dc = DispatchCommand(command="x", command_args=args_in, schema=schema)
+    assert dc.argv == expected
+
+
+def test_argv_unknown_arg_name_raises():
+    schema = CommandSchema(name="x", summary="", description="", arguments=[])
+    dc = DispatchCommand(command="x", command_args={"surprise": True}, schema=schema)
+    with pytest.raises(ValueError, match="surprise"):
+        _ = dc.argv
