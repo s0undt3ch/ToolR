@@ -216,6 +216,7 @@ mod tests {
             }],
             imports: vec![],
             origin: Origin::Static,
+            dispatched_from: None,
         }
     }
 
@@ -281,6 +282,7 @@ mod tests {
             }],
             imports: vec![],
             origin: Origin::Static,
+            dispatched_from: None,
         };
         let matches = clap::Command::new("switch")
             .arg(Arg::new("force").long("force").action(ArgAction::SetTrue))
@@ -323,6 +325,7 @@ mod tests {
             arguments: args,
             imports: vec![],
             origin: Origin::Static,
+            dispatched_from: None,
         }
     }
 

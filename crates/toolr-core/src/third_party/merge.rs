@@ -92,6 +92,7 @@ fn command_from_fragment(fc: FragmentCommand) -> Command {
             .collect(),
         imports: fc.imports,
         origin: Origin::Static,
+        dispatched_from: None,
     }
 }
 

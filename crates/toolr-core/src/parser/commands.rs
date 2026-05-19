@@ -232,6 +232,7 @@ fn build_command(
         arguments,
         imports: Vec::new(),
         origin: Origin::Static,
+        dispatched_from: None,
     }
 }
 

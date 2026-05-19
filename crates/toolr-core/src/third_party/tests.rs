@@ -276,6 +276,7 @@ fn merge_skips_third_party_command_when_local_already_defines_it() {
         arguments: vec![],
         imports: vec![],
         origin: Origin::Static,
+        dispatched_from: None,
     });
     let merged =
         merge_into_manifest(base, vec![sample_fragment("pkg_a", "deploy", "rollout")]).unwrap();
