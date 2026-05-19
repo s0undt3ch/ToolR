@@ -13,7 +13,7 @@ pub enum ManifestError {
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("unknown manifest schema_version {0}; this toolr supports up to {}", SCHEMA_VERSION)]
+    #[error("unknown manifest schema_version {0}; this toolr supports up to {max}", max = SCHEMA_VERSION)]
     UnknownSchemaVersion(u32),
 }
 
