@@ -1,41 +1,44 @@
-# External command sources and dispatchers
+# External command sources via the argparse scanner
 
-**Status:** Draft (2026-05-19)
-**Topic:** Let toolr expose commands that the user never wrote — discovered by external source plugins (e.g. Django management commands, Jenkins jobs) — under user-declared dispatcher commands, with first-class completion and `--help`.
+**Status:** Draft (2026-05-19, revised second pass)
+**Topic:** Let toolr expose commands the user never wrote — by AST-scanning Python files that use `argparse` and grafting the discovered commands under user-written *dispatcher* toolr commands, with first-class completion and `--help`.
 
 ## Background
 
-Toolr's manifest model already supports static third-party fragments (Plan 5). The next problem on top of that: real users want to run *foreign* command sets through toolr — Django `manage.py` subcommands, Jenkins jobs, in principle anything with a discoverable argument schema — without writing one toolr command per foreign command. Two concrete cases drive this:
+Toolr already supports three kinds of commands in its manifest:
 
-1. **Django management commands.** Issue [#192](https://github.com/s0undt3ch/ToolR/issues/192) sketches a `toolr-django` plugin that AST-scans `*/management/commands/*.py`, extracts each command's `add_arguments`, and exposes them under a `django` group. Killer feature: full Tab completion of `manage.py migrate --check`, `runserver --insecure`, etc., without importing Django at completion time.
+1. **User-decorated commands** in `tools/*.py` (Rust AST-scanned by `parser::build_static_manifest`).
+2. **Dynamic-only commands** discovered by importing user `tools.*` modules (the Python introspect helper at `_introspect.py`).
+3. **Static fragments shipped by installed PyPI packages** (the `<venv>/lib/python*/site-packages/*/toolr-manifest.json` glob in `crates/toolr-core/src/third_party/glob.rs`).
 
-2. **Jenkins jobs.** The dashtastic repo's `tools/jenkins/cli.py` queries the Jenkins API at startup, caches results in sqlite, and dynamically builds an argparse tree — one subparser per Jenkins job, each with its job-specific parameter set. Same shape as Django: a foreign source provides a set of "commands" with structured args.
+The next problem on top of that: real users want to run *foreign* command sets through toolr — Django `manage.py` subcommands, ad-hoc argparse-based scripts, anything whose argument schema is statically discoverable from `parser.add_argument(...)` calls — without writing one toolr command per foreign command. Two driving cases:
 
-Both want the same thing from toolr: **a stable, parent-agnostic way to graft externally-discovered commands into the manifest** so that completion and `--help` work natively, and **a user-pluggable dispatcher** that decides how to actually run each match (locally? submit to Jenkins? something else?).
+1. **Django management commands.** Tracked at [#192](https://github.com/s0undt3ch/ToolR/issues/192). The killer feature is full Tab completion of `manage.py migrate --check`, `runserver --insecure`, etc., without Django runtime overhead. The vast majority of Django commands declare their args in plain `def add_arguments(self, parser): parser.add_argument(...)` calls — exactly the shape an AST scanner can read.
 
-Crucially, the same Django source set should be reachable via **multiple dispatchers** on the same user's machine — locally (`toolr django migrate --check`) and via a Jenkins job that runs `manage.py` on a worker (`toolr jenkins job --cpu 5000m -- migrate --check`). The source-side scan happens once; only the dispatch side differs.
+2. **Multiple dispatch surfaces over the same command set.** The same Django commands should be reachable both locally (`toolr django migrate --check`) and via a Jenkins job that runs `manage.py` on a worker with its own flags (`toolr jenkins job --cpu 5000m -- migrate --check`). The argument schema is discovered once; only the dispatcher behaviour differs.
+
+Both want the same two things from toolr: **a stable way to graft externally-discovered commands into the manifest** (so completion and `--help` work natively), and **a user-pluggable dispatcher** (so the user decides what to actually do when one of those commands is invoked).
+
+The choice in this spec is to deliver category-1 discovery via a **built-in Rust AST scanner** rather than a Python plugin contract. The scanner runs at `build_static_manifest` time, uses the `ruff_python_parser` crate already in toolr-core, requires no plugin install, and ships in the toolr binary. Sources whose schemas aren't AST-discoverable (Jenkins jobs, GitHub Actions workflows, etc.) are explicitly out of scope here — a plugin contract for them is the natural follow-up, but not part of v1 of this feature.
 
 ## Goal
 
-Define the contract by which an external Python package (a *source plugin*) feeds toolr's manifest with command schemas it discovered, and the user-side surface by which those commands are routed through a *dispatcher* toolr command of the user's own design.
+Define (a) the user-side contract for declaring *dispatchers* (toolr commands annotated to receive a matched-child payload), and (b) the toolr-side argparse scanner that turns AST-discovered `parser.add_argument(...)` calls into manifest children grafted under those dispatchers.
 
 In one picture:
 
 ```text
                      ┌────────────────────────────┐
-                     │ Source plugin              │
-                     │  toolr-django (pyo3 wheel) │
-                     │  crates/toolr-django/      │
-                     │  scan() -> SourceFragment  │
-                     └────────────┬───────────────┘
-                                  │ parent-agnostic schema
-                                  ▼
-                     ┌────────────────────────────┐
-   pyproject.toml ──►│ toolr manifest builder     │
-   [[attach]]        │ - resolves entry points    │
-                     │ - calls scan() w/ freshness│
+   pyproject.toml ──►│ toolr-core static layer    │
+   [tool.toolr.      │ - parses                   │
+    argparse.<name>] │   [tool.toolr.argparse.*]  │
+                     │ - AST-scans scan_paths     │
+                     │   via ruff_python_parser   │
+                     │ - extracts add_argument()  │
+                     │ - applies common_args      │
                      │ - grafts children under    │
-                     │   each declared parent     │
+                     │   each [[attach]] parent   │
+                     │   with dispatched_from set │
                      └────────────┬───────────────┘
                                   │ manifest.json
                                   ▼
@@ -50,123 +53,50 @@ In one picture:
 
 ## Non-goals
 
-- This spec defines the toolr-side contract and the manifest-builder integration, not the internals of the reference plugin. `toolr-django` lives in-tree (see Alternatives considered) but its scanner details — `add_arguments` AST extraction, `BaseCommand` MRO handling, app discovery — are deferred to the implementation plan and may evolve separately from the contract.
-- Not designing a Jenkins-side source plugin. Same reasoning; the dashtastic migration is a downstream consumer that consumes whatever contract this spec lands.
-- No new clap escape hatch (the proxy/raw-bucket variadic idea from the brainstorm origin is unnecessary for this design; documented in "Alternatives considered" for future reference).
-- No dynamic / runtime-only scanning. Sources are scanned at `toolr build` time only; the runtime never imports a source plugin.
-- No daemon, no background refresh, no filesystem watcher.
+- **No Python plugin contract** in v1. Sources that need a Python callable (Jenkins API queries, framework-aware introspection beyond plain `add_argument`) are deferred. If/when a real case shows up, a plugin contract is a strict extension over this design — the user-side `DispatchCommand` API does not need to change.
+- **No Django-specific logic.** No BaseCommand MRO walking, no `INSTALLED_APPS` discovery, no app-loading. Users declare `scan_paths` in `pyproject.toml`; toolr scans literally those files. Framework awareness is the user's job.
+- **No runtime-only scanning.** All argparse discovery happens at `build_static_manifest` time. Completion is served by the static manifest, never re-runs the scanner.
+- **No dynamic argparse parser builders.** Files where the parser is constructed inside `if`/`for`/runtime callbacks are out of scope; the scanner only sees lexically-direct `parser.add_argument(...)` calls (and the equivalents on the per-command argparse parser argument).
 
 ## Architecture
 
-Three concepts, two of which already exist:
+Three pieces, two of which extend existing code:
 
 | Piece | Owner | New? |
 |---|---|---|
-| **Source plugin** — produces parent-agnostic `SourceFragment` schemas | In-tree workspace member (`crates/toolr-django/`), independent PyPI release | Yes (contract); reuses Plan 5 manifest-fragment ideas |
-| **Attachment + dispatcher** — `[tool.toolr.sources.<name>]` in `tools/pyproject.toml`, plus a user-written dispatcher command with a `DispatchCommand`-annotated parameter | User's project | Yes |
-| **Manifest builder** — reads sources, calls plugins, grafts children under declared parents | toolr (`toolr build`) | Small additions to existing builder |
+| **Argparse AST scanner** — read `[tool.toolr.argparse.*]`, walk `scan_paths` with `ruff_python_parser`, extract `parser.add_argument` calls, produce `CommandSchema`s | `crates/toolr-core/src/argparse/` (new) | Yes |
+| **Attachment + dispatcher** — `[tool.toolr.argparse.<name>]` + `[[attach]]` in `tools/pyproject.toml`, plus user-written dispatcher commands annotated with `dispatched: DispatchCommand` | User's project + `toolr.sources` Python module | Yes |
+| **Manifest builder integration** — graft scanner output as children of declared parents, emit `dispatched_from` on each | Extends `toolr-core::parser::build_static_manifest` | Small additions |
 
-### Source plugin contract
+### `pyproject.toml` configuration
 
-A source plugin is a regular PyPI package. It declares a Python entry point under `toolr.sources` whose value is a callable named `scan`:
-
-```toml
-# Source plugin's own pyproject.toml
-[project.entry-points."toolr.sources"]
-django = "toolr_django.source:scan"
-```
-
-The callable's signature:
-
-```python
-def scan(*, root: Path, config: dict[str, Any]) -> SourceFragment: ...
-```
-
-- `root` — the user's project root (containing `tools/pyproject.toml`).
-- `config` — the user's `[tool.toolr.sources.<name>]` table parsed into a dict. Opaque to toolr; whatever keys the plugin documents.
-- Returns a `SourceFragment` (defined in `toolr.sources`).
-
-The plugin **does not know which toolr group its output will be attached under**. It returns a parent-agnostic schema; attachment is the manifest builder's job (see "User surface" below).
-
-`scan` is synchronous. Plugins that need to do network I/O (Jenkins API) do it inline; toolr won't drive an event loop on their behalf.
-
-#### `SourceFragment` shape
-
-Defined in `toolr.sources` as msgspec Structs (frozen):
-
-```python
-class SourceFragment(Struct, frozen=True):
-    schema_version: int                  # currently 1
-    common_args: list[ArgSchema]         # hoisted once, applied to every command at attach time
-    commands: list[CommandSchema]
-    freshness: FileSetFreshness | OpaqueFreshness
-
-class CommandSchema(Struct, frozen=True):
-    name: str                            # e.g. "migrate"
-    summary: str                         # one-liner
-    description: str                     # full help body (may be empty)
-    arguments: list[ArgSchema]           # command-specific args (no common_args here)
-
-class ArgSchema(Struct, frozen=True):
-    name: str
-    kind: Literal["positional", "optional", "flag", "repeated"]
-    help: str
-    default: str | None
-    choices: list[str] | None
-    metavar: str | None
-    type_annotation: str | None          # "str" / "int" / "float" / "bool"
-    nargs: Literal["*", "+", "?"] | int | None
-
-class FileSetFreshness(Struct, frozen=True, tag="files"):
-    files: list[Path]                    # absolute, resolved against root
-
-class OpaqueFreshness(Struct, frozen=True, tag="opaque"):
-    blob: bytes                          # plugin-defined, stored verbatim by toolr
-```
-
-`common_args` is the BaseCommand-style "every Django command takes `--verbosity`, `--traceback`" set. The manifest builder spreads them across every attached child so they don't have to be duplicated in every `CommandSchema`.
-
-`freshness` is a typed sum so the cache file stays self-describing:
-
-- **`FileSetFreshness`** — toolr stat()s every path on subsequent builds; mismatched mtime/size means re-scan. Django plugin returns this with the discovered command files.
-- **`OpaqueFreshness`** — plugin owns the check via an optional sibling entry point:
-
-  ```toml
-  [project.entry-points."toolr.sources"]
-  jenkins = "toolr_jenkins.source:scan"
-  jenkins_is_fresh = "toolr_jenkins.source:is_fresh"
-  ```
-
-  with signature `def is_fresh(*, blob: bytes, root: Path, config: dict) -> bool`. If no `<name>_is_fresh` entry point is registered, toolr treats opaque freshness as always stale.
-
-### User surface
-
-#### Attachment config
-
-In the user's `tools/pyproject.toml`:
+In `tools/pyproject.toml`:
 
 ```toml
-[tool.toolr.sources.django]
-# Everything here is opaque to toolr — passed through to the plugin's
-# `scan(..., config=...)` argument as-is.
-manage_py  = "src/manage.py"
-scan_paths = ["apps/*/management/commands"]
+[tool.toolr.argparse.django]
+scan_paths = ["apps/*/management/commands/*.py"]
+# Hoisted once and applied to every command discovered by this block.
+common_args = [
+  { name = "verbosity", kind = "optional", default = "1",
+    choices = ["0", "1", "2", "3"], help = "Output verbosity level" },
+  { name = "traceback", kind = "flag",
+    help = "Raise on CommandError exceptions" },
+]
 
-# One [[attach]] per dispatcher routing.
-[[tool.toolr.sources.django.attach]]
-parent = "django"           # dotted name of the dispatcher command
+[[tool.toolr.argparse.django.attach]]
+parent = "django"            # dotted name of a user-written dispatcher
 
-[[tool.toolr.sources.django.attach]]
-parent = "jenkins.job"      # same source, second dispatcher
+[[tool.toolr.argparse.django.attach]]
+parent = "jenkins.job"       # same scan results, second dispatcher
 ```
 
-The table key `django` matches the entry-point name (`[project.entry-points."toolr.sources"] django = ...`). No magic strings beyond that.
+- The block key (`django` above) is a user-chosen identifier; appears in `dispatched_from` on each grafted child.
+- `scan_paths` is a list of glob patterns relative to `tools_dir`'s parent (i.e., the project root). Resolved by the Rust scanner via the `glob` crate.
+- `common_args` is optional; entries are applied to every discovered command after the per-command args.
+- Each `[[attach]]` is one dispatcher routing. Multiple sources may attach to the same parent. Conflicts on child command name across sources sharing a parent are a build-time error.
+- Per-attachment overrides (e.g. running the same source under two parents with different defaults) are not in v1 — drop the historical `extra = { ... }` idea.
 
-Multiple sources may attach to the same parent. Conflicts on child command name across sources sharing a parent are a build-time error.
-
-#### Dispatcher command
-
-The user writes the dispatcher as a normal toolr command. The signal that *this* command is a dispatcher (and not a leaf the user wants to invoke directly) is the presence of a parameter annotated with `DispatchCommand`:
+### Dispatcher command (user-side)
 
 ```python
 from toolr import command_group, Context
@@ -182,7 +112,7 @@ def job(
     ram: str = "4Gi",
     log_level: str = "info",
     on_demand: bool = False,
-    dispatched: DispatchCommand,      # any param name — annotation is the trigger
+    dispatched: DispatchCommand,   # any param name — annotation is the trigger
 ) -> int:
     """Submit a tools command to Jenkins."""
     return submit_jenkins(
@@ -192,7 +122,25 @@ def job(
     )
 ```
 
-`DispatchCommand` lives in `toolr.sources`:
+Canonical local dispatcher (used in docs):
+
+```python
+@group.command
+def django(ctx: Context, *, dispatched: DispatchCommand) -> int:
+    return ctx.run("python", "manage.py", *dispatched.argv).returncode
+```
+
+`ctx.run(...)` exists today (`crates/toolr-py/python/toolr/_context.py:195`).
+
+### Detection rule
+
+A command is treated as a dispatcher iff **exactly one** keyword-only parameter's annotation resolves to `toolr.sources.DispatchCommand`. Subclasses are not supported in v1. Multiple `DispatchCommand`-annotated params is a build-time error. Positional `DispatchCommand` parameter is a build-time error. The parameter name is free.
+
+A command with a `DispatchCommand` parameter and no `[[attach]]` directing children at it is permitted (the dispatcher is just inactive — useful while iterating). The reverse — an `[[attach]]` targeting a command that lacks a `DispatchCommand` parameter — is a build-time error.
+
+### `DispatchCommand`
+
+Defined in `toolr.sources` (Python, msgspec):
 
 ```python
 class DispatchCommand(Struct, frozen=True):
@@ -202,86 +150,51 @@ class DispatchCommand(Struct, frozen=True):
 
     @property
     def argv(self) -> list[str]:
-        """Argparse-shaped argv reconstructed from command_args per schema.
-
-        Walks schema.arguments + the inherited common_args, emits each value
-        as one or more argv tokens (flag, --opt value, repeated --opt value
-        per list element, omits any value equal to the schema default)."""
+        """Argparse-shaped argv reconstructed from command_args per schema."""
         ...
 ```
 
-Canonical local-dispatcher example, used in docs:
+`CommandSchema` and `ArgSchema` are the same msgspec structs used internally by the Rust scanner to serialise discovered schemas into the manifest; they are public for `DispatchCommand.schema` consumers but their *primary* role is the internal Rust→Python wire format.
 
-```python
-@group.command
-def django(ctx: Context, *, dispatched: DispatchCommand) -> int:
-    return ctx.run("python", "manage.py", *dispatched.argv).returncode
-```
+### Manifest field
 
-`ctx.run(...)` already exists (`toolr-py` `_context.py:195`). No new runtime API needed for the local case.
-
-#### Detection rule
-
-A command is treated as a dispatcher iff **exactly one** keyword-only parameter's annotation resolves to `toolr.sources.DispatchCommand` (the class itself; subclasses are not supported in v1). The parameter name is free. Position must be keyword-only. Multiple `DispatchCommand`-annotated parameters on the same command is a build-time error.
-
-A `DispatchCommand`-annotated parameter on a command that has no `[[attach]]` directing children at it is permitted (the dispatcher is just inactive). The reverse — an `[[attach]]` targeting a command that lacks a `DispatchCommand` parameter — is a build-time error.
-
-### Manifest builder integration
-
-Three new phases in `toolr build`, sequenced between "collect Python registry" and "write manifest":
-
-#### 1. Resolve sources
-
-For each `[tool.toolr.sources.<name>]` block:
-
-1. Look up the matching entry point under `toolr.sources` in the installed tools venv. Missing → hard fail with a suggested `pip install` line that names the convention (`toolr-<name>` if applicable).
-2. Import the `scan` callable. Import error → hard fail naming the entry point target.
-3. For each `[[attach]]` entry, validate that `parent` resolves to a known command in the in-progress manifest (i.e., the user's Python decorators have been imported and registered). Missing → hard fail naming both the attach line and the closest existing dotted name.
-4. For each named parent, validate it has at least one `DispatchCommand`-annotated keyword-only param. Missing → hard fail naming the function file:line and the existing signature.
-
-#### 2. Run scans (freshness short-circuit)
-
-```text
-for source in sources:
-    cached = freshness_cache.get(source.name)
-    if cached:
-        if isinstance(cached.freshness, FileSetFreshness):
-            if all paths stat()-match cached, reuse cached.fragment
-        elif isinstance(cached.freshness, OpaqueFreshness):
-            if <name>_is_fresh entry point exists and returns True, reuse
-    fragment = plugin.scan(root=root, config=config)
-    freshness_cache.put(source.name, fragment)
-```
-
-Cache lives at `tools/.toolr/sources/<name>.json`. Same gitignore convention as the existing manifest cache.
-
-#### 3. Graft fragments under parents
-
-For each `[[attach]]` entry `parent = "<dotted>"`:
-
-1. Locate the parent command node.
-2. For each `CommandSchema` in the fragment:
-   - Build a child `Command` manifest entry:
-        - `name` = `schema.name`
-        - `arguments` = `schema.arguments` + the fragment's `common_args` (in that order; child wins on name collisions).
-        - `summary` = `schema.summary`, `description` = `schema.description`.
-   - Set the child's `target` to the parent's `target` (same Python function will be invoked).
-   - Mark the child with `dispatched_from = "<source-name>"` so the runtime knows to inject `DispatchCommand` rather than the parent's normal keyword args.
-3. Reject name collisions across sources attaching to the same parent.
-
-The manifest format gains one optional field on `Command`:
+`Command` gains one optional field:
 
 ```rust
 #[serde(default, skip_serializing_if = "Option::is_none")]
 pub dispatched_from: Option<String>,
 ```
 
-Bump `FRAGMENT_SCHEMA_VERSION` (the **existing** manifest-fragment schema in `toolr-core`) from 1 → 2. Older toolrs reading a v2 manifest fail at load time with a clear "rebuild required" error.
+Set to the `[tool.toolr.argparse.<name>]` block key for every grafted child. `None` for every other command. **No `SCHEMA_VERSION` bump** — toolr is pre-1.0, the field is added to v1 in place and back-compat is handled by the `serde(default)` attribute.
 
-Note that this is distinct from `SourceFragment.schema_version` defined above. The two schemas evolve independently:
+### Scanner contract
 
-- `FRAGMENT_SCHEMA_VERSION` — the on-disk manifest format consumed by the toolr runtime. Bumped here for `dispatched_from`.
-- `SourceFragment.schema_version` — the plugin↔toolr contract for what `scan()` returns. Starts at 1; bumped only when the source-plugin contract itself changes.
+The Rust argparse scanner (`crates/toolr-core/src/argparse/`):
+
+1. Parses `[tool.toolr.argparse.*]` from `tools/pyproject.toml` (via the existing `toml` crate).
+2. For each block, expands `scan_paths` globs against the project root.
+3. For each file, parses with `ruff_python_parser` (already a workspace dep).
+4. Walks the AST looking for calls of the form `<receiver>.add_argument(...)` where `<receiver>` is any identifier — typically `parser`, `subparser`, or `self.parser`. The scanner doesn't try to verify the receiver type; it just extracts every such call.
+5. Per file, aggregates the calls into one `CommandSchema`:
+   - `name` derived from filename: `migrate.py` → `migrate`. Underscores in the filename are preserved.
+   - `summary`/`description` extracted from the module docstring (first paragraph / rest).
+   - `arguments` = the extracted argparse args.
+6. Applies `common_args` after per-file args (per-file wins on name collision).
+7. Emits one child manifest `Command` per `CommandSchema`, set under each `[[attach]].parent`, with `dispatched_from = "<block-name>"`.
+
+Argparse calls translated:
+
+| `add_argument` signature | `ArgSchema.kind` | Notes |
+|---|---|---|
+| `add_argument('positional')` | `positional` | Single positional, required by default |
+| `add_argument('--opt', default='x')` | `optional` | Value-taking option |
+| `add_argument('--flag', action='store_true')` | `flag` | Boolean flag (also `store_false` — defaults inverted) |
+| `add_argument('--many', action='append')` | `repeated` | Append-style repeated value |
+| `add_argument(..., type=int)` | `type_annotation = "int"` | `type=int`/`float`/`str` extracted as a string; others dropped to `None` |
+| `add_argument(..., choices=[...])` | `choices = [...]` | Literal lists/tuples of strings only |
+| `add_argument(..., nargs=...)` | `nargs` | Passed through verbatim |
+
+Anything the scanner can't statically resolve (dynamic `type=` callable, computed `choices`, etc.) is recorded as a warning and the corresponding field is left `None`. The command still appears in the manifest with a best-effort schema.
 
 ### Runtime dispatch path
 
@@ -289,7 +202,7 @@ In `crates/toolr/src/cli.rs`, when a matched leaf has `dispatched_from` set:
 
 1. Parse the child's args normally via clap (no change to parsing).
 2. Pack the parsed values into a Python dict, keyed by argument name.
-3. Construct a `DispatchCommand` Python object: `{command, command_args, schema}` where `schema` is the child's `CommandSchema` (serialised into the manifest fragment).
+3. Construct a `DispatchCommand` Python object: `{command, command_args, schema}` where `schema` is the child's `CommandSchema` serialised from the manifest.
 4. When invoking the parent's Python function, fill the `DispatchCommand`-annotated parameter with that object. Other parent parameters (`cpu`, `ram`, …) are populated from clap as today, because clap parses both the parent's own flags and the child's subcommand naturally.
 
 Completion, `--help`, error messages — all free. Children are first-class clap subcommands.
@@ -298,66 +211,66 @@ Completion, `--help`, error messages — all free. Children are first-class clap
 
 ### Refresh triggers
 
-- **Explicit**: `toolr build` always picks up source changes (subject to freshness short-circuit).
-- **Implicit**: `toolr build --check` mode (exits non-zero if any source is stale or the manifest is out of date), suitable for pre-commit / CI.
-- Source plugins ship their own pre-commit hooks if they want commit-time freshness (`toolr-django` would filter on `^manage\.py$|.*/management/commands/.*\.py$`).
+- **Explicit:** `toolr project manifest rebuild` always re-runs the argparse scanner along with the rest of the static layer.
+- **Implicit:** the existing auto-rebuild path (manifest missing, `dynamic_hash` empty, etc., see `crates/toolr/tests/cli_smoke.rs:206` and `crates/toolr-core/src/complete/freshness.rs`) calls into `build_static_manifest`, which runs the scanner automatically. First-run cost = one AST walk over `scan_paths`; subsequent runs short-circuit on file-mtime via the existing static-layer hash.
+
+The freshness story is therefore **identical to existing static-layer freshness** — no separate per-source cache file; the manifest itself is the cache, and the static-layer rebuild detection (file mtime over `tools/` + `scan_paths`) drives invalidation.
 
 ### Build-time validation (the hard-fail set)
 
 | Condition | Message references |
 |---|---|
-| Source declared in pyproject.toml but no matching `toolr.sources` entry point installed | source name + suggested install command |
 | `[[attach]]` `parent` doesn't resolve to a known command | attach line + closest existing dotted name |
 | Resolved parent has no `DispatchCommand`-annotated keyword-only param | function file:line + actual signature |
 | Two sources attached to the same parent produce the same child name | both source names + colliding child name |
 | `DispatchCommand`-annotated param not keyword-only | function file:line + parameter name |
-| Manifest fragment schema_version mismatch | plugin name + version + supported range |
-
-Every message names both ends of the broken link.
+| Multiple `DispatchCommand` params on the same command | function file:line + parameter names |
+| `scan_paths` matches no files | warning only (not a hard fail) |
+| File can't be parsed | warning only, file skipped |
+| `add_argument` call uses an unresolvable `type=`/`choices=` | warning, field left `None` |
 
 ### Testing strategy
 
-- **Schema types** (`toolr.sources`): msgspec round-trip tests, `DispatchCommand.argv` table-driven over positional / flag / repeated / optional-with-default / suppress-default cases.
-- **Manifest grafting** (Rust): unit tests over synthetic `SourceFragment` + synthetic registry, asserting children land under the right parents with `dispatched_from` set. Cover the hard-fail matrix.
-- **Runtime injection** (Rust → pyo3): integration tests via a fake in-tree source plugin (`tests/support/toolr-source-fake/`) that emits a fixed fragment. Exercise `toolr build` then `toolr <parent> <child> --foo bar` and assert the dispatcher function received the right `DispatchCommand`.
-- **Entry-point resolution**: dedicated tests for the "plugin not installed" / "import error" / "wrong return type" failure modes.
+- **Detection rule** — table-driven tests on `detect_dispatch_parameter` in the existing `_signature.py` test pattern.
+- **Schema types** — msgspec round-trip + `DispatchCommand.argv` reconstruction over the matrix of `kind`s.
+- **Scanner (Rust)** — golden tests over fixture `.py` files in `crates/toolr-core/src/argparse/fixtures/`. Each fixture is one `.py` plus an expected `CommandSchema` JSON.
+- **Grafting** — Rust unit tests that feed synthetic `CommandSchema`s through the attach + collision pipeline.
+- **E2E** — `tests/argparse/` suite: build a tiny project with `tools/`, `tools/pyproject.toml`, `apps/x/management/commands/migrate.py`. Run `toolr project manifest rebuild`, then `toolr django migrate --check`. Cover the auto-rebuild path explicitly (delete the manifest, run the command, assert it was rebuilt).
 
 ## Migration notes
 
-For the dashtastic Jenkins setup (the design's other driver), the current `tools/jenkins/cli.py` becomes two pieces:
+For the dashtastic Jenkins use case: the Django half can be done today with the argparse scanner. The Jenkins half (jobs discovered via HTTP API) is out of scope for this feature and waits for the deferred plugin contract.
 
-1. A `toolr-jenkins-jobs` source plugin (separate repo on PyPI). Reuses dashtastic's existing sqlite-cached Jenkins API query code. Emits `SourceFragment` with `OpaqueFreshness` keyed on the API ETag.
-2. A `jenkins.job` dispatcher command (lives in dashtastic's own `tools/`) with the `dispatched: DispatchCommand` parameter and the existing Jenkins-submission logic in its body.
-
-The runtime parser-building inside `job_to_parser` (current `tools/jenkins/cli.py:58-100`) goes away entirely; clap handles the same job tree via the manifest.
-
-The Django case is symmetric: `pip install toolr-django`, add `[tool.toolr.sources.django]`, write a 5-line `@django.command` dispatcher that calls `ctx.run("python", "manage.py", *dispatched.argv)`.
+For users who currently maintain hand-written toolr commands that mirror Django `manage.py` commands: install nothing, drop the hand-written commands, add the `[tool.toolr.argparse.django]` block, run `toolr project manifest rebuild`. Done.
 
 ## Alternatives considered
 
-### Proxy / raw-bucket variadic decorator
+### Python plugin contract (`toolr.sources` entry points with `scan()` callable)
 
-The original framing of this design space — "let a `*args: str` variadic swallow `--flags` so the user can implement an in-Python proxy command" — solves a strictly weaker problem. It produces a runtime parser with one bucket per dispatcher; completion of inner commands is impossible because their schemas are never seen. The source-plugin design replaces it for the cases we have, but the variadic primitive remains a reasonable future addition for non-introspectable sources (e.g. proxying to an arbitrary binary whose CLI surface can't be discovered). Tracked as a future feature, not part of this spec.
+Considered at length earlier in this design. The plugin model would have let third-party packages contribute schemas through a Python-callable `scan(root, config) -> SourceFragment` entry point. Rejected for v1 because:
+
+1. The most-asked-for case (Django `add_arguments`) is statically AST-discoverable; a Rust scanner inside the static layer is faster, simpler, and requires no plugin install.
+2. The Jenkins case that *did* need a plugin contract turned out to be a category we don't yet need to ship (dashtastic continues to use its existing `tools/jenkins/cli.py` until we decide otherwise).
+3. Reducing the v1 surface to "Rust scanner + DispatchCommand contract" makes the user-side API a strict subset of what a future plugin contract would also expose — the plugin path becomes a strict extension, not a competing design.
+
+The plugin contract remains a sensible follow-up when (and if) a non-argparse-discoverable source needs first-class toolr support.
 
 ### Flat: outer flags merged into every generated command
 
-Considered and rejected. Would have produced `toolr django migrate --cpu 5000m --check` with the parent's flags duplicated into every Django child. Pros: flatter UX; no `--` separator. Cons: M outer × N children explosion in the manifest, name conflicts when parent and child both define `--verbosity`, harder for the user to keep the dispatcher's "outer concerns" mentally separate from each Django command's "inner concerns".
+Considered. Would have produced `toolr django migrate --cpu 5000m --check` with the parent's flags duplicated into every Django child. Pros: flatter UX; no `--` separator. Cons: M outer × N children explosion in the manifest, name conflicts when parent and child both define `--verbosity`, harder for the user to keep the dispatcher's "outer concerns" mentally separate from each Django command's "inner concerns". Rejected in favour of the hierarchical clap-nested-subcommand form.
 
 ### Source plugins emit parent-aware fragments directly
 
-Considered and rejected. Would have meant `toolr-django` reads the user's `pyproject.toml`, knows about the user's parent commands, and produces one pre-attached fragment per attachment. Each plugin would re-implement TOML parsing + parent resolution. The chosen design keeps that logic in toolr core; plugins stay focused on discovery.
+Considered and rejected — would have required plugins to read `pyproject.toml` and resolve parents themselves. The chosen design keeps that logic in toolr core; sources stay focused on discovery.
 
-### Executable plugin contract (CLI binary emitting JSON)
+### Reference plugin (`toolr-django`) shipped in-tree
 
-Considered. Would have decoupled plugins from Python. Rejected for v1: the marginal cost of supporting non-Python plugins is high (process spawn per build, JSON envelope versioning, harder error reporting) and there's no signal yet that non-Python plugins are wanted. Revisit if a Go/Rust-only plugin author shows up.
-
-### Reference plugin shipped out of tree from day one
-
-Considered and reversed during the brainstorm. Out-of-tree would have forced the contract to be honest — anything the plugin needs would have to be reachable through public toolr APIs, with no monorepo shortcuts. Reversed because the contract is still moving and cross-repo schema-bump coordination is friction we don't need yet. **Chosen approach:** the reference `toolr-django` lives in-tree at `crates/toolr-django/` as an additional Rust + pyo3 workspace member. It participates in the *existing* CI (lint / typecheck / test / wheel-build matrix in `ci.yml` + `_test.yml` + `_build.yml`) on every PR alongside the rest of the workspace, so schema changes on one side always exercise the other. **Only the release path is separate:** a new `release-toolr-django.yml` cuts `toolr-django X.Y.Z` independently of `toolr A.B.C`, so the two PyPI versions move at their own cadences. Anything the plugin needs from toolr still imports through `toolr.sources` — no direct crate-internal dependencies, keeping the contract honest even with in-tree proximity.
+Considered through several rounds. The argparse-scanner choice obsoletes the need for a Django-specific plugin entirely — Django commands fall under the generic argparse scanner. If a future Django need arises that the generic scanner can't satisfy (e.g. `BaseCommand` MRO walking), it would come back as a plugin under the deferred contract.
 
 ## Open questions
 
-- **Schema versioning across the toolr ↔ plugin boundary.** Plugins declare a `schema_version` on their `SourceFragment`. With the in-tree-plus-separate-release decision, the toolr↔toolr-django boundary becomes lockstep (both bump in the same PR), so strict-equality enforcement is unnecessary inside this repo. The version field still matters for *future* third-party plugins that take a dependency on whichever toolr version they were built against. Default suggestion: emit a clear `toolr build` warning on `cached.schema_version < current` (suggest plugin re-install), hard fail on `cached.schema_version > current` (toolr can't read it).
-- **`scan_paths` semantics.** Plugins decide whether `scan_paths` is a glob, regex, or whatever — toolr passes it through. Should toolr offer any helpers (e.g. a `toolr.sources.glob_paths(root, patterns)` utility)? Open; YAGNI for v1, add when a second plugin needs the same logic.
-- **Performance budget for `scan()` at build time.** No hard limit proposed. Plugins are expected to use their `freshness` callback to skip work — toolr just times the calls and emits a warning if any one source takes >5s on a fresh build.
-- **Help text rendering for dispatched commands.** When the user runs `toolr jenkins job --help`, the rendered output should make it clear that `migrate`, `runserver`, etc. are dispatched-from-source children, not direct subcommands the user wrote. Cosmetic only; suggested approach is a `(via toolr-django)` annotation in the children listing. Not load-bearing for v1.
+- **Command name derivation.** Filename-stem only (`migrate.py` → `migrate`), or also support a `name = "…"` directive inside the file (e.g. a module docstring tag)? v1 suggestion: filename only; revisit when a real conflict appears.
+- **Multi-command files.** Some argparse scripts define multiple subcommands inside one file via `argparse.add_subparsers()`. v1 suggestion: treat each subparser's calls as one `CommandSchema` keyed on the subparser name; if none, fall back to filename.
+- **Type inference beyond `type=int|float|str`.** Pydantic, attrs, custom callables, etc. v1 suggestion: leave `type_annotation = None` (manifest still completes; the value is parsed as a string at dispatch).
+- **`scan_paths` glob semantics.** Use the `glob` crate's default (no recursive `**` without trailing `/`)? Or always-recursive? v1 suggestion: support `**` recursive globs (`apps/*/management/commands/**/*.py`) since Django apps may nest commands under subdirectories.
+- **Help-text rendering for dispatched commands.** When the user runs `toolr jenkins job --help`, should the rendered output annotate `(via argparse:django)` next to each child? Cosmetic; not load-bearing for v1.
