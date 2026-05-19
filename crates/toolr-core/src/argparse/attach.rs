@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::argparse::config::ArgparseBlock;
-use crate::manifest::Command;
+use crate::argparse::scan::ScannedCommand;
+use crate::manifest::{Command, Origin};
 
 #[derive(Debug, Error)]
 pub enum AttachError {
@@ -88,6 +89,40 @@ fn closest_parent_hint(
     }
 }
 
+pub fn graft_children(
+    block: &ArgparseBlock,
+    scanned: &[ScannedCommand],
+    parents: &HashMap<String, (String, String)>,
+) -> Result<HashMap<String, Vec<Command>>, AttachError> {
+    let mut out: HashMap<String, Vec<Command>> = HashMap::new();
+    for attachment in &block.attach {
+        let (module, function) =
+            parents
+                .get(&attachment.parent)
+                .ok_or_else(|| AttachError::UnknownParent {
+                    block: block.name.clone(),
+                    parent: attachment.parent.clone(),
+                    hint: String::new(),
+                })?;
+        let entries = out.entry(attachment.parent.clone()).or_default();
+        for sc in scanned {
+            entries.push(Command {
+                name: sc.name.clone(),
+                group: attachment.parent.clone(),
+                module: module.clone(),
+                function: function.clone(),
+                summary: sc.summary.clone(),
+                description: sc.description.clone(),
+                arguments: sc.arguments.clone(),
+                imports: vec![],
+                origin: Origin::Static,
+                dispatched_from: Some(format!("argparse:{}", block.name)),
+            });
+        }
+    }
+    Ok(out)
+}
+
 fn edit_distance(a: &str, b: &str) -> usize {
     let (a, b) = (a.as_bytes(), b.as_bytes());
     let mut prev = (0..=b.len()).collect::<Vec<_>>();
@@ -165,5 +200,34 @@ mod tests {
             AttachError::Collision { name, .. } => assert_eq!(name, "migrate"),
             other => panic!("unexpected error variant: {other:?}"),
         }
+    }
+
+    #[test]
+    fn graft_emits_one_child_per_scanned_with_dispatched_from() {
+        let block = ArgparseBlock {
+            name: "django".into(),
+            scan_paths: vec![],
+            common_args: vec![],
+            attach: vec![Attachment {
+                parent: "django".into(),
+            }],
+        };
+        let scanned = vec![ScannedCommand {
+            name: "migrate".into(),
+            summary: "Migrate".into(),
+            description: "".into(),
+            arguments: vec![],
+            warnings: vec![],
+        }];
+        let children = graft_children(&block, &scanned, &parents_with_django()).unwrap();
+        assert_eq!(children.len(), 1);
+        let django_children = children.get("django").unwrap();
+        assert_eq!(django_children[0].name, "migrate");
+        assert_eq!(
+            django_children[0].dispatched_from.as_deref(),
+            Some("argparse:django")
+        );
+        assert_eq!(django_children[0].module, "tools.dispatcher");
+        assert_eq!(django_children[0].function, "django");
     }
 }
