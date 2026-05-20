@@ -9,7 +9,7 @@ use super::signatures::extract_arguments;
 use super::symbols::ArgSectionTable;
 use super::symbols::EnumTable;
 use super::symbols::TypeAliasTable;
-use super::types::{TypeImports, TypeResolutionError, resolve_arguments};
+use super::types::{SourcesImports, TypeImports, TypeResolutionError, resolve_arguments};
 use crate::SimpleDocstringParser;
 use crate::manifest::{Command, Origin};
 
@@ -25,6 +25,7 @@ pub fn extract_commands(
     bindings: &[GroupBinding],
     enums: &EnumTable,
     type_imports: &TypeImports,
+    sources: &SourcesImports,
     aliases: &TypeAliasTable,
     sections: &ArgSectionTable,
     global_vars: &GlobalVars,
@@ -69,6 +70,7 @@ pub fn extract_commands(
             module_path,
             enums,
             type_imports,
+            sources,
             aliases,
             sections,
             errors,
@@ -187,6 +189,7 @@ fn build_command(
     module_path: &str,
     enums: &EnumTable,
     type_imports: &TypeImports,
+    sources: &SourcesImports,
     aliases: &TypeAliasTable,
     sections: &ArgSectionTable,
     errors: &mut Vec<TypeResolutionError>,
@@ -201,7 +204,7 @@ fn build_command(
         .as_ref()
         .and_then(|d| d.long_description.clone())
         .unwrap_or_default();
-    let mut arguments = extract_arguments(func, enums);
+    let mut arguments = extract_arguments(func, enums, sources);
     if let Some(d) = parsed.as_ref() {
         for arg in &mut arguments {
             if let Some(Some(help)) = d.params.get(&arg.name) {
@@ -214,6 +217,7 @@ fn build_command(
         &mut arguments,
         enums,
         type_imports,
+        sources,
         aliases,
         sections,
         module_path,
@@ -232,6 +236,8 @@ fn build_command(
         arguments,
         imports: Vec::new(),
         origin: Origin::Static,
+        dispatched_from: None,
+        is_dispatcher: false,
     }
 }
 
@@ -259,7 +265,7 @@ def generate_build_matrix(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "generate-build-matrix");
         assert_eq!(commands[0].group, "ci");
@@ -276,7 +282,7 @@ def x(ctx):
 "#;
         let m = parse_src(src);
         let bindings = vec![];
-        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -289,7 +295,7 @@ def bare_function(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert!(commands.is_empty());
     }
 
@@ -304,7 +310,7 @@ def hello(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         assert_eq!(commands[0].summary, "Say hello.");
     }
 
@@ -325,6 +331,7 @@ def check_run_build(ctx):
             &bindings,
             &EnumTable::default(),
             &TypeImports::default(),
+            &SourcesImports::default(),
             &TypeAliasTable::default(),
             &ArgSectionTable::default(),
             &HashMap::new(),
@@ -352,6 +359,7 @@ def check_snippets(ctx):
             &bindings,
             &EnumTable::default(),
             &TypeImports::default(),
+            &SourcesImports::default(),
             &TypeAliasTable::default(),
             &ArgSectionTable::default(),
             &HashMap::new(),
@@ -380,6 +388,7 @@ def hello(ctx):
             &bindings,
             &EnumTable::default(),
             &TypeImports::default(),
+            &SourcesImports::default(),
             &TypeAliasTable::default(),
             &ArgSectionTable::default(),
             &HashMap::new(),
@@ -404,7 +413,7 @@ def hello(ctx, name="world"):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
         let name_arg = commands[0]
             .arguments
             .iter()

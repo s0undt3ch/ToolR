@@ -54,6 +54,8 @@ mod tests {
             arguments: vec![],
             imports: vec![],
             origin,
+            dispatched_from: None,
+            is_dispatcher: false,
         }
     }
 

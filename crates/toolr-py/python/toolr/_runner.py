@@ -29,6 +29,9 @@ from typing import get_type_hints
 import msgspec
 
 from toolr._exc import ToolrDeprecationWarning
+from toolr.sources import CommandSchema
+from toolr.sources import DispatchCommand
+from toolr.utils._signature import detect_dispatch_parameter
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -66,6 +69,21 @@ class ContextSpec(msgspec.Struct, frozen=True):
     default_no_output_timeout_secs: float | None = None
 
 
+class DispatchPayloadSpec(msgspec.Struct, frozen=True):
+    """Dispatch payload written by the Rust binary for dispatched leaves.
+
+    Mirrors `DispatchSpec` in `crates/toolr-core/src/execute/spec.rs`.
+    When set on a :class:`RunnerSpec`, the runner constructs a
+    `toolr.sources.DispatchCommand` from these fields and calls
+    :func:`invoke_dispatcher` instead of running the spec as a normal
+    command invocation.
+    """
+
+    command: str
+    command_args: dict[str, Any]
+    schema: CommandSchema
+
+
 class RunnerSpec(msgspec.Struct, frozen=True):
     """Top-level spec written by the Rust binary into ``$TOOLR_SPEC_FILE``."""
 
@@ -76,6 +94,7 @@ class RunnerSpec(msgspec.Struct, frozen=True):
     function: str
     args: dict[str, Any]
     context: ContextSpec
+    dispatch: DispatchPayloadSpec | None = None
 
 
 def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
@@ -273,6 +292,33 @@ def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[
     return positional, keyword
 
 
+def invoke_dispatcher(
+    *,
+    ctx: Any,
+    func: Callable[..., Any],
+    parent_kwargs: dict[str, Any],
+    child_name: str,
+    child_args: dict[str, Any],
+    child_schema: CommandSchema,
+) -> Any:
+    """Call ``func(ctx, **parent_kwargs, <dispatch_param>=DispatchCommand(...))``.
+
+    Raises ``RuntimeError`` if ``func`` doesn't have a DispatchCommand-
+    annotated parameter (manifest builder should have caught this at
+    build time; this is a defensive guard against a stale manifest).
+    """
+    param = detect_dispatch_parameter(func)
+    if param is None:
+        msg = f"invoke_dispatcher: {func.__qualname__!r} has no DispatchCommand parameter (manifest out of sync?)"
+        raise RuntimeError(msg)
+    dispatched = DispatchCommand(
+        command=child_name,
+        command_args=child_args,
+        schema=child_schema,
+    )
+    return func(ctx, **parent_kwargs, **{param: dispatched})
+
+
 def run(spec: RunnerSpec) -> int:
     """Execute the command described by ``spec``. Returns a process exit code.
 
@@ -282,8 +328,24 @@ def run(spec: RunnerSpec) -> int:
     try:
         ctx = _build_context(spec)
         target = _import_target(spec)
-        var_args, kw_args = _coerce_args(target, spec.args)
-        target(ctx, *var_args, **kw_args)
+        if spec.dispatch is not None:
+            # Dispatched leaf: `target` is the parent dispatcher, `args`
+            # carries the parent's own kwargs, `dispatch` carries the
+            # child name/args/schema. Coerce the parent kwargs against
+            # the parent's hints — `invoke_dispatcher` injects the
+            # `DispatchCommand` keyword on top of those.
+            _, parent_kwargs = _coerce_args(target, spec.args)
+            invoke_dispatcher(
+                ctx=ctx,
+                func=target,
+                parent_kwargs=parent_kwargs,
+                child_name=spec.dispatch.command,
+                child_args=spec.dispatch.command_args,
+                child_schema=spec.dispatch.schema,
+            )
+        else:
+            var_args, kw_args = _coerce_args(target, spec.args)
+            target(ctx, *var_args, **kw_args)
     except SystemExit as exc:
         code = exc.code
         if code is None:

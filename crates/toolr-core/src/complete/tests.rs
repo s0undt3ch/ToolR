@@ -45,6 +45,8 @@ fn fixture() -> Manifest {
                 }],
                 imports: vec![],
                 origin: Origin::Static,
+                dispatched_from: None,
+                is_dispatcher: false,
             },
             Command {
                 name: "deploy".into(),
@@ -66,6 +68,8 @@ fn fixture() -> Manifest {
                 }],
                 imports: vec![],
                 origin: Origin::Static,
+                dispatched_from: None,
+                is_dispatcher: false,
             },
             Command {
                 name: "load".into(),
@@ -87,6 +91,8 @@ fn fixture() -> Manifest {
                 }],
                 imports: vec![],
                 origin: Origin::Static,
+                dispatched_from: None,
+                is_dispatcher: false,
             },
         ],
     }
@@ -196,6 +202,8 @@ fn nested_fixture() -> Manifest {
                 arguments: vec![],
                 imports: vec![],
                 origin: Origin::Static,
+                dispatched_from: None,
+                is_dispatcher: false,
             },
             Command {
                 name: "start".into(),
@@ -207,6 +215,8 @@ fn nested_fixture() -> Manifest {
                 arguments: vec![],
                 imports: vec![],
                 origin: Origin::Static,
+                dispatched_from: None,
+                is_dispatcher: false,
             },
         ],
     }
@@ -327,6 +337,8 @@ fn preserves_dynamic_entries_from_cache_when_reparsing() {
         arguments: vec![],
         imports: vec![],
         origin: Origin::Dynamic,
+        dispatched_from: None,
+        is_dispatcher: false,
     });
     seeded.groups.push(crate::manifest::Group {
         name: "dyn-group".into(),
