@@ -388,7 +388,15 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     let Ok(resolved) = resolve_manifest_at_tab(&cwd) else {
         return Ok(ExitCode::from(1));
     };
-    for candidate in serve_completions(&resolved.manifest, &tokens) {
+    // The engine is purely manifest-driven, but the binary owns its own
+    // built-in `self` / `project` subtree. Inject synthetic entries that
+    // mirror `cli::build_command` so those subcommands also complete.
+    let mut manifest = resolved.manifest;
+    let (extra_groups, extra_commands) =
+        crate::builtin_completions::built_in_completion_entries();
+    manifest.groups.extend(extra_groups);
+    manifest.commands.extend(extra_commands);
+    for candidate in serve_completions(&manifest, &tokens) {
         println!("{candidate}");
     }
     Ok(ExitCode::SUCCESS)
