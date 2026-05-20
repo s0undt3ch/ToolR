@@ -13,7 +13,7 @@ pub use enumerate::{CachedVenv, dir_size_bytes, enumerate_caches};
 pub use hint::{HintConfig, compute_hint};
 pub use init::write_meta_for_new_venv;
 pub use meta::{Meta, MetaError, SCHEMA_VERSION};
-pub use touch::touch_last_used;
+pub use touch::{touch_last_used, touch_or_backfill};
 
 #[cfg(test)]
 mod tests;

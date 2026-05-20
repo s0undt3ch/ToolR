@@ -103,7 +103,7 @@ fn write_meta_for_new_venv_overwrites_existing() {
     assert_eq!(loaded.python_version, "3.13.0");
 }
 
-use super::touch::touch_last_used;
+use super::touch::{touch_last_used, touch_or_backfill};
 
 #[test]
 fn touch_last_used_updates_only_last_used_at() {
@@ -136,6 +136,59 @@ fn touch_last_used_is_a_noop_when_sidecar_is_missing() {
     let tmp = TempDir::new().unwrap();
     let result = touch_last_used(tmp.path());
     assert!(result.is_ok());
+    assert!(
+        !tmp.path().join("meta.json").exists(),
+        "touch_last_used must not create a sidecar — use touch_or_backfill for that",
+    );
+}
+
+#[test]
+fn touch_or_backfill_updates_existing_sidecar() {
+    let tmp = TempDir::new().unwrap();
+    let cache_dir = tmp.path().join("repo-key");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+
+    let original = write_meta_for_new_venv(
+        &cache_dir,
+        "/abs/repo".as_ref(),
+        "1.0.0",
+        "3.13.1",
+    )
+    .unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+
+    touch_or_backfill(&cache_dir, "/different/repo".as_ref(), "9.9.9", "3.99.0")
+        .expect("touch_or_backfill");
+    let after = Meta::load(&cache_dir).expect("load");
+
+    // Existing sidecar must be respected; backfill context is ignored.
+    assert_eq!(after.created_at, original.created_at);
+    assert_eq!(after.repo_path, original.repo_path);
+    assert_eq!(after.toolr_version, original.toolr_version);
+    assert_eq!(after.python_version, original.python_version);
+    assert!(after.last_used_at > original.last_used_at);
+}
+
+#[test]
+fn touch_or_backfill_writes_sidecar_when_missing() {
+    // Regression for the user-visible inconsistency where
+    // `toolr project venv path` showed a venv directory but
+    // `toolr self cache list` reported nothing — the entry existed
+    // without a `meta.json` sidecar, so `enumerate_caches` skipped it.
+    let tmp = TempDir::new().unwrap();
+    let cache_dir = tmp.path().join("repo-key");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    assert!(!cache_dir.join("meta.json").exists());
+
+    touch_or_backfill(&cache_dir, "/abs/repo".as_ref(), "2.0.0", "3.13.1")
+        .expect("backfill");
+    let meta = Meta::load(&cache_dir).expect("load");
+
+    assert_eq!(meta.repo_path, std::path::PathBuf::from("/abs/repo"));
+    assert_eq!(meta.toolr_version, "2.0.0");
+    assert_eq!(meta.python_version, "3.13.1");
+    assert_eq!(meta.last_used_at, meta.created_at);
 }
 
 use super::enumerate::{CachedVenv, enumerate_caches};
