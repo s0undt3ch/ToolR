@@ -1646,15 +1646,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev337-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev373-2026-05-20" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev337 - 2026-05-20
+        0.11.2-dev373 - 2026-05-20
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev337 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev373 - 2026-05-20">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2146,15 +2146,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev337-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev373-2026-05-20" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev337 - 2026-05-20
+        0.11.2-dev373 - 2026-05-20
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev337 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev373 - 2026-05-20">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2641,7 +2641,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev337-2026-05-20">0.11.2-dev337 - 2026-05-20<a class="headerlink" href="#0112-dev337-2026-05-20" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev373-2026-05-20">0.11.2-dev373 - 2026-05-20<a class="headerlink" href="#0112-dev373-2026-05-20" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3063,6 +3063,36 @@ invisible to end users:</p>
 <li><em>(deps-dev)</em> Update mkdocstrings[python] requirement (<a href="https://github.com/s0undt3ch/ToolR/commit/1912ca83e0a6735307c9fcf73a4f887c40ea1d28"><code>1912ca8</code></a>)</li>
 <li>External command sources and dispatchers (<a href="https://github.com/s0undt3ch/ToolR/commit/665fa69ed1af38a9b9fb4b3bc904d5d9232068fe"><code>665fa69</code></a>)</li>
 <li>Refresh uv.lock for packaging&gt;=26.2 in toolr-py (<a href="https://github.com/s0undt3ch/ToolR/commit/5ed62d6663d3338ecaf0eba537e85c874fa36de0"><code>5ed62d6</code></a>)</li>
+<li>Introduce ArgSchema for externally-discovered commands (<a href="https://github.com/s0undt3ch/ToolR/commit/08fbd71d0127c1237acb8008a68de4835ec45822"><code>08fbd71</code></a>)</li>
+<li>Add CommandSchema (<a href="https://github.com/s0undt3ch/ToolR/commit/580045e65431f48367557746e0caf37f63f3c38a"><code>580045e</code></a>)</li>
+<li>Add DispatchCommand (<a href="https://github.com/s0undt3ch/ToolR/commit/533acaf934fc95fd871a056f2831c33eee52ae0b"><code>533acaf</code></a>)</li>
+<li>Implement DispatchCommand.argv reconstruction (<a href="https://github.com/s0undt3ch/ToolR/commit/303a88d987bd3e120f6a114bc8d6edc75ec8dce9"><code>303a88d</code></a>)</li>
+<li>Lock down toolr.sources public surface (<a href="https://github.com/s0undt3ch/ToolR/commit/5be3d57ebc9f0150ff93bf240ecfac717c04a2c8"><code>5be3d57</code></a>)</li>
+<li>Detect dispatcher commands via DispatchCommand annotation (<a href="https://github.com/s0undt3ch/ToolR/commit/aba6995e64524c67a1ec7720e4cf23c6d4a86c49"><code>aba6995</code></a>)</li>
+<li>Add optional dispatched_from field on Command (<a href="https://github.com/s0undt3ch/ToolR/commit/cbf1540eb12eb22848bbc9dd84944aca468924cf"><code>cbf1540</code></a>)</li>
+<li>Scaffold module + parse [tool.toolr.argparse.*] blocks (<a href="https://github.com/s0undt3ch/ToolR/commit/060fac4c5f49f3208b8d1ac51d3062477da5e2fb"><code>060fac4</code></a>)</li>
+<li>AST-extract parser.add_argument calls from a Python source (<a href="https://github.com/s0undt3ch/ToolR/commit/edbe4fefe88f2dba5c4e02f269a75b0d74099c6f"><code>edbe4fe</code></a>)</li>
+<li>Glob-expand scan_paths and scan each file (<a href="https://github.com/s0undt3ch/ToolR/commit/733708bfa696d54569abbfe54940e8c7b85f0aec"><code>733708b</code></a>)</li>
+<li>Apply common_args to each scanned command (<a href="https://github.com/s0undt3ch/ToolR/commit/27dad20b169a126ceb80f80308752aa95bb218db"><code>27dad20</code></a>)</li>
+<li>Validate attachments and detect collisions (<a href="https://github.com/s0undt3ch/ToolR/commit/34b445273191963791c9c761c7008e3ff9b490f2"><code>34b4452</code></a>)</li>
+<li>Graft scanned commands under attached parents (<a href="https://github.com/s0undt3ch/ToolR/commit/f860d6eb0f98f4c0a69125a57bcde77fec543633"><code>f860d6e</code></a>)</li>
+<li>End-to-end run_for_project orchestrator (<a href="https://github.com/s0undt3ch/ToolR/commit/39a63e0564dd0f654693158b3b2e5ed18c578674"><code>39a63e0</code></a>)</li>
+<li>Run the argparse scanner inside build_static_manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/ea604100d5fcdebc25e69f4391c74081ee92e69f"><code>ea60410</code></a>)</li>
+<li>Pack dispatched-child args for runtime injection (<a href="https://github.com/s0undt3ch/ToolR/commit/b4db253c402f496d486e300b6e87b8b5c20badbb"><code>b4db253</code></a>)</li>
+<li>Construct DispatchCommand and invoke parent on dispatched leaves (<a href="https://github.com/s0undt3ch/ToolR/commit/f8713bb568491201e44cd951ffd6669a9b41791e"><code>f8713bb</code></a>)</li>
+<li>Skip DispatchCommand-annotated kwargs in static arg extraction (<a href="https://github.com/s0undt3ch/ToolR/commit/93a5401d61f8aec09a898e89d8a29dbdcce8991f"><code>93a5401</code></a>)</li>
+<li>Handle Annotated[DispatchCommand, ...] and string forward refs (<a href="https://github.com/s0undt3ch/ToolR/commit/e6ace6373968f9a9488da354723357029cac7c6c"><code>e6ace63</code></a>)</li>
+<li>Fill the gaps from Plan A (auto-rebuild + dispatcher-hosts-children) (<a href="https://github.com/s0undt3ch/ToolR/commit/e958a34bccd27c11f937fe923169f3aabb9403b5"><code>e958a34</code></a>)</li>
+<li>Fill the gaps from Plan A (8 tasks across 2 stacks) (<a href="https://github.com/s0undt3ch/ToolR/commit/8209afbbfc1b42a464f2a64b79e0411f1661b3d3"><code>8209afb</code></a>)</li>
+<li>Add should_skip_auto_rebuild argv inspector (<a href="https://github.com/s0undt3ch/ToolR/commit/6ea19dc5a00f1f4cfa28e38615d251d8c68b6502"><code>6ea19dc</code></a>)</li>
+<li>Auto-rebuild manifest when missing for user commands (<a href="https://github.com/s0undt3ch/ToolR/commit/e2cca50bfe1d7e4a05ec4832c15f1b7fd7651840"><code>e2cca50</code></a>)</li>
+<li>Add optional is_dispatcher field on Command (<a href="https://github.com/s0undt3ch/ToolR/commit/31b648c40d381e4a05998c9427e424332c1ae747"><code>31b648c</code></a>)</li>
+<li>Mark dispatcher commands via GraftResult.dispatchers (<a href="https://github.com/s0undt3ch/ToolR/commit/3792fef6f124d2f05167455e25b7b90461024c19"><code>3792fef</code></a>)</li>
+<li>Hoist grafted children into dispatcher subcommands (<a href="https://github.com/s0undt3ch/ToolR/commit/61d81429a919fb81378e39e0cc6becb15ae7d1f5"><code>61d8142</code></a>)</li>
+<li>Widen path lookup to handle 3-segment dispatcher paths (<a href="https://github.com/s0undt3ch/ToolR/commit/a4539a97a21ef01bd87599dc16c860b343a6599c"><code>a4539a9</code></a>)</li>
+<li>Look up grafted children at dispatcher dotted name (<a href="https://github.com/s0undt3ch/ToolR/commit/166413a970d1e74466de1ad2329ec15a74161660"><code>166413a</code></a>)</li>
+<li>Correct Task 6 bucketing to match the working code (<a href="https://github.com/s0undt3ch/ToolR/commit/35d1507c01f8ca8c018ae396442c3b578462b439"><code>35d1507</code></a>)</li>
+<li>Fix rumdl MD007 indent depth in fill-the-gaps plan (<a href="https://github.com/s0undt3ch/ToolR/commit/f830437544d6d532442af986b8f74e11945cd8ed"><code>f830437</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3145,6 +3175,10 @@ invisible to end users:</p>
 <li><em>(distribution)</em> Add maturin to dev deps so distribution tests run (<a href="https://github.com/s0undt3ch/ToolR/commit/90610224a3639f03012b0ee16d812faa6aa05a84"><code>9061022</code></a>)</li>
 <li><em>(distribution)</em> Consume pre-built wheels in a dedicated CI job (<a href="https://github.com/s0undt3ch/ToolR/commit/7dcb5c1b42955a9731996ae2969c66b14369b495"><code>7dcb5c1</code></a>)</li>
 <li>Update pyo3 TypeError message for pyo3 0.28 (<a href="https://github.com/s0undt3ch/ToolR/commit/b4c8ea38899b39ff4b4419c7f634993927fd2e19"><code>b4c8ea3</code></a>)</li>
+<li>E2e happy path + dispatch fix for parent lookup (<a href="https://github.com/s0undt3ch/ToolR/commit/3d8acb8ee08283435981a3da6a83ec18c8e238c3"><code>3d8acb8</code></a>)</li>
+<li>E2e multi-attach + collision detection (auto-rebuild deferred) (<a href="https://github.com/s0undt3ch/ToolR/commit/ebf4163835dadb645c37fa972700827e0664a0b4"><code>ebf4163</code></a>)</li>
+<li>Unskip auto-rebuild E2E now that bootstrap is wired in (<a href="https://github.com/s0undt3ch/ToolR/commit/d913abf3136d54a0d09a593f3401099ba426eeaa"><code>d913abf</code></a>)</li>
+<li>E2e dispatcher outer flags reachable via grafted child path (<a href="https://github.com/s0undt3ch/ToolR/commit/5bfd5ec956b36aa4c3eb44035f2edb38f9393eae"><code>5bfd5ec</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
