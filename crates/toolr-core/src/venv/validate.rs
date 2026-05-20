@@ -1,5 +1,6 @@
 //! Post-sync validation: the venv must contain the toolr Python package.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -8,7 +9,7 @@ use walkdir::WalkDir;
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error(
-        "toolr: tools/pyproject.toml must declare a `toolr>=X.Y` dependency. \
+        "toolr: tools/pyproject.toml must declare a `toolr-py>=X.Y` dependency. \
          Add it and retry."
     )]
     ToolrPackageMissing,
@@ -18,11 +19,51 @@ pub enum ValidationError {
 
 /// Walk the venv's `lib/python*/site-packages` and look for the toolr
 /// package directory. Returns its path on success.
+///
+/// Handles both regular installs (package directory in site-packages) and
+/// editable/direct-url installs where a `.pth` file adds the source root to
+/// `sys.path` (as maturin's editable mode does).
 pub fn locate_toolr_package(venv_dir: &Path) -> Option<PathBuf> {
-    for candidate in candidate_site_packages(venv_dir) {
-        let init = candidate.join("toolr").join("__init__.py");
+    for site_packages in candidate_site_packages(venv_dir) {
+        // Regular (non-editable) install: toolr/__init__.py is in site-packages.
+        let init = site_packages.join("toolr").join("__init__.py");
         if init.is_file() {
-            return Some(candidate.join("toolr"));
+            return Some(site_packages.join("toolr"));
+        }
+        // Editable / direct-url install: a .pth file adds the source root to
+        // sys.path. Walk every .pth file and check if any pointed-to directory
+        // contains toolr/__init__.py.
+        if let Some(path) = locate_via_pth_files(&site_packages) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Read every `.pth` file in `site_packages` and return the `toolr` package
+/// path if any of them point at a directory that contains one.
+fn locate_via_pth_files(site_packages: &Path) -> Option<PathBuf> {
+    let entries = fs::read_dir(site_packages).ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("pth") {
+            continue;
+        }
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        for line in content.lines() {
+            let line = line.trim();
+            // .pth files may contain comments and `import` statements; skip them.
+            if line.is_empty() || line.starts_with('#') || line.starts_with("import ") {
+                continue;
+            }
+            let src = Path::new(line);
+            let init = src.join("toolr").join("__init__.py");
+            if init.is_file() {
+                return Some(src.join("toolr"));
+            }
         }
     }
     None
@@ -107,5 +148,31 @@ mod tests {
         let python = tmp.path().join("bin").join("python");
         let err = validate_venv(tmp.path(), &python).unwrap_err();
         assert!(matches!(err, ValidationError::InterpreterMissing(_)));
+    }
+
+    /// maturin editable installs drop a .pth file in site-packages that adds
+    /// the source root to sys.path — the toolr package directory is NOT copied
+    /// into site-packages itself.
+    #[test]
+    #[cfg(unix)]
+    fn detects_toolr_package_via_pth_file() {
+        let tmp = TempDir::new().unwrap();
+        let py_dir = tmp.path().join("lib").join("python3.13").join("site-packages");
+        std::fs::create_dir_all(&py_dir).unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("python"), b"").unwrap();
+
+        // Simulate the source tree that the .pth file will point at.
+        let src_root = tmp.path().join("src");
+        std::fs::create_dir_all(src_root.join("toolr")).unwrap();
+        std::fs::write(src_root.join("toolr").join("__init__.py"), b"").unwrap();
+
+        // Write the .pth file (as maturin develop would).
+        std::fs::write(py_dir.join("toolr_py.pth"), src_root.to_str().unwrap()).unwrap();
+
+        let python = tmp.path().join("bin").join("python");
+        let pkg = validate_venv(tmp.path(), &python).unwrap();
+        assert!(pkg.ends_with("toolr"), "expected path ending in toolr, got {pkg:?}");
     }
 }
