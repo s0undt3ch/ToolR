@@ -1646,15 +1646,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev381-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev396-2026-05-20" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev381 - 2026-05-20
+        0.11.2-dev396 - 2026-05-20
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev381 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev396 - 2026-05-20">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2146,15 +2146,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev381-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev396-2026-05-20" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev381 - 2026-05-20
+        0.11.2-dev396 - 2026-05-20
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev381 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev396 - 2026-05-20">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2641,7 +2641,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev381-2026-05-20">0.11.2-dev381 - 2026-05-20<a class="headerlink" href="#0112-dev381-2026-05-20" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev396-2026-05-20">0.11.2-dev396 - 2026-05-20<a class="headerlink" href="#0112-dev396-2026-05-20" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3097,6 +3097,19 @@ invisible to end users:</p>
 <li>Ship completion for built-in <code>self</code> and <code>project</code> commands (<a href="https://github.com/s0undt3ch/ToolR/commit/1eeb8c2e9be1938771479feb3732831819ffde51"><code>1eeb8c2</code></a>)</li>
 <li>Honour <code>--force</code> literally + distinguish install outcomes (<a href="https://github.com/s0undt3ch/ToolR/commit/774a27f6ed893c3f198718e6fbfa44c759e70099"><code>774a27f</code></a>)</li>
 <li>Backfill meta.json on touch when sidecar is missing (<a href="https://github.com/s0undt3ch/ToolR/commit/cc98c188271d43b6e640fca1bd3c7c354afaf5a7"><code>cc98c18</code></a>)</li>
+<li>Additive-merge scaffold — per-file conflict detection and prompts (<a href="https://github.com/s0undt3ch/ToolR/commit/5906b0fa39acee0be31a3a1e102ba0221f3fac34"><code>5906b0f</code></a>)</li>
+<li>Harden scaffold after code review — snapshot rollback, --yes flag, injectable confirm (<a href="https://github.com/s0undt3ch/ToolR/commit/6f373e9e4aae0dc9edb42052a733dea80a4b03ca"><code>6f373e9</code></a>)</li>
+<li>Add build tasks for each package (<a href="https://github.com/s0undt3ch/ToolR/commit/d7cc39adc669e6c1a9319b1dba3249822c8f405b"><code>d7cc39a</code></a>)</li>
+<li>Apply remaining review findings — exit 2 for conflicts, symlink guard, PID .tmp (<a href="https://github.com/s0undt3ch/ToolR/commit/99918a201bb3b5322d7a915eda1b176c46421e39"><code>99918a2</code></a>)</li>
+<li>Fix maturin invocations to use crates/toolr-py/Cargo.toml (<a href="https://github.com/s0undt3ch/ToolR/commit/0c9059476d8dcefe51ee3da877c3f005c6c7b047"><code>0c90594</code></a>)</li>
+<li>Copy build artifacts into dist/ (<a href="https://github.com/s0undt3ch/ToolR/commit/886908c856cd3e8f5b03c7b768686cfc0fd7ef52"><code>886908c</code></a>)</li>
+<li>Add build-clean task to wipe target/ and dist/ (<a href="https://github.com/s0undt3ch/ToolR/commit/68cb2c11118458b5e2ad4b28fde1901151782c1a"><code>68cb2c1</code></a>)</li>
+<li>Extend build-clean to remove .so files, <strong>pycache</strong>, and .egg-info (<a href="https://github.com/s0undt3ch/ToolR/commit/c64476a4fc5d46c9064f8637b7c0aa5c21b0626c"><code>c64476a</code></a>)</li>
+<li>Fix error message to say toolr-py not toolr (<a href="https://github.com/s0undt3ch/ToolR/commit/312a4269a74acddc2902870078a55c3d03f5ac0e"><code>312a426</code></a>)</li>
+<li>Unset VIRTUAL_ENV when invoking uv sync to silence mismatch warning (<a href="https://github.com/s0undt3ch/ToolR/commit/01c0685b06b8e0c2af667a35a5bc8a552026073d"><code>01c0685</code></a>)</li>
+<li>Locate toolr package via .pth files for editable installs (<a href="https://github.com/s0undt3ch/ToolR/commit/233da2481bd830262f67e2bbfb671b14c26d391f"><code>233da24</code></a>)</li>
+<li>Scope build-clean .so removal to crates/ only (<a href="https://github.com/s0undt3ch/ToolR/commit/6129c999dc0fa1294d2cbef4290d4735398a9054"><code>6129c99</code></a>)</li>
+<li>Add develop-toolr-py task for editable installs (<a href="https://github.com/s0undt3ch/ToolR/commit/36b05539fb0edeea2aa0bbf496724dbf8bf6bd64"><code>36b0553</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
