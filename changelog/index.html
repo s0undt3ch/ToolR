@@ -1646,15 +1646,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev396-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev401-2026-05-20" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev396 - 2026-05-20
+        0.11.2-dev401 - 2026-05-20
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev396 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev401 - 2026-05-20">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2146,15 +2146,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev396-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev401-2026-05-20" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev396 - 2026-05-20
+        0.11.2-dev401 - 2026-05-20
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev396 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev401 - 2026-05-20">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2641,7 +2641,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev396-2026-05-20">0.11.2-dev396 - 2026-05-20<a class="headerlink" href="#0112-dev396-2026-05-20" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev401-2026-05-20">0.11.2-dev401 - 2026-05-20<a class="headerlink" href="#0112-dev401-2026-05-20" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3110,6 +3110,9 @@ invisible to end users:</p>
 <li>Locate toolr package via .pth files for editable installs (<a href="https://github.com/s0undt3ch/ToolR/commit/233da2481bd830262f67e2bbfb671b14c26d391f"><code>233da24</code></a>)</li>
 <li>Scope build-clean .so removal to crates/ only (<a href="https://github.com/s0undt3ch/ToolR/commit/6129c999dc0fa1294d2cbef4290d4735398a9054"><code>6129c99</code></a>)</li>
 <li>Add develop-toolr-py task for editable installs (<a href="https://github.com/s0undt3ch/ToolR/commit/36b05539fb0edeea2aa0bbf496724dbf8bf6bd64"><code>36b0553</code></a>)</li>
+<li>Add <code>deps upgrade &lt;pkg&gt;</code> for bumping a single dependency (<a href="https://github.com/s0undt3ch/ToolR/commit/b9483b7cf820bd8c8943a0a153b4e002a54381b6"><code>b9483b7</code></a>)</li>
+<li>Replace vague schema-mismatch error with copy-pasteable fix (<a href="https://github.com/s0undt3ch/ToolR/commit/fc3c6ee52cc67e99fe67a0cef316aecff02ae1b3"><code>fc3c6ee</code></a>)</li>
+<li>Document bump policy on both sides (<a href="https://github.com/s0undt3ch/ToolR/commit/62f192e4e1786857d121735afb7cf33b23f9710f"><code>62f192e</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3213,6 +3216,7 @@ invisible to end users:</p>
 <li><em>(workspace-split)</em> Final loose ends — roadmap status, <strong>init</strong> version lookup, binary-archive wiring (<a href="https://github.com/s0undt3ch/ToolR/commit/cadb37eaaada48c59dce70be47e32b83e320a9d7"><code>cadb37e</code></a>)</li>
 <li><em>(coverage)</em> Exclude toolr-py from cargo tarpaulin (<a href="https://github.com/s0undt3ch/ToolR/commit/07ef1bf02ebe127483a7ae21f9461e844f920521"><code>07ef1bf</code></a>)</li>
 <li><em>(release)</em> Replace external ToolR bootstrap with local workspace (<a href="https://github.com/s0undt3ch/ToolR/commit/31d447226b3b9c581242a4cc19cab9d08a0ec3ea"><code>31d4472</code></a>)</li>
+<li>Enforce Rust/Python schema-version lock-step via integration test (<a href="https://github.com/s0undt3ch/ToolR/commit/d08f9482f4789d47fa645a6e03c859278f7f3e8b"><code>d08f948</code></a>)</li>
 </ul>
 <h2 id="0111-2026-05-13">0.11.1 - 2026-05-13<a class="headerlink" href="#0111-2026-05-13" title="Permanent link">&para;</a></h2>
 <h3 id="features_1"><!-- 0 -->🚀 Features<a class="headerlink" href="#features_1" title="Permanent link">&para;</a></h3>

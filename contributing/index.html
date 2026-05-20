@@ -1938,6 +1938,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#runner-schema-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runner schema version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#pre-commit-hooks" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2593,6 +2604,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#runner-schema-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runner schema version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#pre-commit-hooks" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3140,6 +3162,17 @@ or <a href="https://github.com/s0undt3ch/ToolR/labels/help%20wanted"><code>help 
 <li><strong>Update docs/</strong> when adding features</li>
 <li><strong>Keep README.md</strong> up to date</li>
 </ul>
+<h3 id="runner-schema-version">Runner schema version<a class="headerlink" href="#runner-schema-version" title="Permanent link">&para;</a></h3>
+<p>The toolr binary and the toolr-py Python package communicate over a
+versioned JSON spec. Two constants must stay in lock-step:</p>
+<ul>
+<li><code>RUNNER_SCHEMA_VERSION</code> in <code>crates/toolr-core/src/execute/spec.rs</code></li>
+<li><code>SCHEMA_VERSION</code> in <code>crates/toolr-py/python/toolr/_runner.py</code></li>
+</ul>
+<p>Both constants carry a doc-comment listing exactly which changes
+require a bump and which don't. Read those before changing either the
+Rust serde structs or the <code>RunnerSpec</code> Python class. A CI gate fails
+the build when the two values disagree.</p>
 <h3 id="pre-commit-hooks">Pre-commit Hooks<a class="headerlink" href="#pre-commit-hooks" title="Permanent link">&para;</a></h3>
 <p>All formatting and linting is handled automatically by prek:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Run all checks</span>
