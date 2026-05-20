@@ -54,27 +54,57 @@ fn init_no_example_skips_example_py() {
     assert!(!tmp.path().join("tools/example.py").exists());
 }
 
+/// tools/ has unrelated files only → no conflict, scaffold writes alongside them.
 #[test]
-fn init_refuses_when_tools_already_non_empty() {
+fn init_writes_alongside_unrelated_files() {
     let tmp = TempDir::new().unwrap();
     fs::create_dir(tmp.path().join("tools")).unwrap();
-    fs::write(tmp.path().join("tools/existing.py"), "x = 1").unwrap();
+    fs::write(tmp.path().join("tools/my_tool.py"), "# custom").unwrap();
+
+    cargo_bin()
+        .current_dir(tmp.path())
+        .args(["project", "init", "--no-sync", "--quiet"])
+        .assert()
+        .success();
+
+    assert!(tmp.path().join("tools/pyproject.toml").is_file());
+    assert!(tmp.path().join("tools/.gitignore").is_file());
+    assert!(tmp.path().join("tools/example.py").is_file());
+    // Unrelated file untouched.
+    assert_eq!(
+        fs::read_to_string(tmp.path().join("tools/my_tool.py")).unwrap(),
+        "# custom"
+    );
+}
+
+/// tools/ has scaffold files with different content; non-interactive → hard error with list.
+#[test]
+fn init_fails_on_conflict_non_interactive() {
+    let tmp = TempDir::new().unwrap();
+    fs::create_dir(tmp.path().join("tools")).unwrap();
+    fs::write(tmp.path().join("tools/pyproject.toml"), "# stale").unwrap();
 
     let output = cargo_bin()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync", "--quiet"])
         .output()
         .unwrap();
+
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("already exists"), "stderr:\n{stderr}");
-    assert_eq!(
-        fs::read_to_string(tmp.path().join("tools/existing.py")).unwrap(),
-        "x = 1"
+    assert!(
+        stderr.contains("overwritten") || stderr.contains("already exists"),
+        "stderr:\n{stderr}"
     );
-    assert!(!tmp.path().join("tools/pyproject.toml").exists());
+    assert!(stderr.contains("pyproject.toml"), "stderr:\n{stderr}");
+    // Conflicting file must be preserved.
+    assert_eq!(
+        fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap(),
+        "# stale"
+    );
 }
 
+/// --force overwrites conflict files without prompting.
 #[test]
 fn init_force_overwrites_existing_tools() {
     let tmp = TempDir::new().unwrap();
@@ -88,6 +118,24 @@ fn init_force_overwrites_existing_tools() {
         .success();
     let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
     assert!(pyproject.contains(r#"name = "tools""#));
+}
+
+/// Running init twice is idempotent — identical files are skipped.
+#[test]
+fn init_idempotent() {
+    let tmp = TempDir::new().unwrap();
+    cargo_bin()
+        .current_dir(tmp.path())
+        .args(["project", "init", "--no-sync", "--quiet"])
+        .assert()
+        .success();
+
+    // Second run: no conflicts, nothing written, exit 0.
+    cargo_bin()
+        .current_dir(tmp.path())
+        .args(["project", "init", "--no-sync", "--quiet"])
+        .assert()
+        .success();
 }
 
 #[test]

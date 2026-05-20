@@ -1,11 +1,14 @@
 //! Implementation of `toolr project <...>` subcommands.
 
+use std::collections::HashSet;
+use std::io::{IsTerminal as _, Write as _};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::ArgMatches;
 
-use crate::init_scaffold::scaffold;
+use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 
 pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
@@ -49,7 +52,32 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
         venv_location,
         include_example: !no_example,
     };
-    let outcome = scaffold(&cwd, &opts, force)?;
+
+    let outcome = if force {
+        scaffold(&cwd, &opts, true)?
+    } else {
+        let analysis = analyze_scaffold(&cwd, &opts)?;
+        let conflicts = analysis.conflict_files();
+
+        let overwrite: HashSet<PathBuf> = if conflicts.is_empty() {
+            HashSet::new()
+        } else if std::io::stdin().is_terminal() {
+            // Ask once per conflicting file.
+            conflicts
+                .iter()
+                .filter_map(|dest| {
+                    prompt_overwrite_file(dest, &cwd).transpose()
+                })
+                .collect::<Result<_>>()?
+        } else {
+            // Non-interactive: surface the conflict list as a hard error.
+            return Err(anyhow::Error::new(ScaffoldConflictsError {
+                files: conflicts.into_iter().map(PathBuf::from).collect(),
+            }));
+        };
+
+        execute_scaffold(&analysis, &overwrite)?
+    };
 
     if !quiet {
         println!("toolr: scaffolded tools/ at {}", outcome.tools_dir.display());
@@ -88,6 +116,21 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
         );
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Prompt the user whether to overwrite a single conflicting file.
+/// Returns `Some(path)` if approved, `None` if declined.
+fn prompt_overwrite_file(dest: &Path, cwd: &Path) -> Result<Option<PathBuf>> {
+    let rel = dest.strip_prefix(cwd).unwrap_or(dest);
+    eprint!("toolr: overwrite {}? [y/N] ", rel.display());
+    std::io::stderr().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    if answer.trim().eq_ignore_ascii_case("y") {
+        Ok(Some(dest.to_path_buf()))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Default `requires-python` value for new projects.
