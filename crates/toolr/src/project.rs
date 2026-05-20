@@ -1,11 +1,14 @@
 //! Implementation of `toolr project <...>` subcommands.
 
+use std::collections::HashSet;
+use std::io::{IsTerminal as _, Write as _};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::ArgMatches;
 
-use crate::init_scaffold::scaffold;
+use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 
 pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
@@ -33,6 +36,7 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
     let no_sync = matches.get_flag("no-sync");
     let no_example = matches.get_flag("no-example");
     let quiet = matches.get_flag("quiet");
+    let yes_all = matches.get_flag("yes");
     let venv_location_str = matches
         .get_one::<String>("venv-location")
         .map(String::as_str)
@@ -49,12 +53,76 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
         venv_location,
         include_example: !no_example,
     };
-    let outcome = scaffold(&cwd, &opts, force)?;
+
+    // Non-interactive path: detect conflicts early and exit with code 2 so
+    // agents can distinguish "conflicts" from generic failures (exit 1).
+    if !force && !yes_all && !std::io::stdin().is_terminal() {
+        let analysis = analyze_scaffold(&cwd, &opts)?;
+        let conflicts = analysis.conflict_files();
+        if !conflicts.is_empty() {
+            let err = ScaffoldConflictsError {
+                files: conflicts
+                    .into_iter()
+                    .map(|p| p.strip_prefix(&cwd).unwrap_or(p).to_path_buf())
+                    .collect(),
+            };
+            eprintln!("toolr: error: {err}");
+            return Ok(ExitCode::from(2));
+        }
+    }
+
+    run_project_init(
+        &cwd,
+        &opts,
+        force,
+        no_sync,
+        quiet,
+        yes_all,
+        &mut |dest| prompt_overwrite_file(dest, &cwd),
+    )
+}
+
+/// Inner implementation, factored out so the confirm callback can be injected
+/// in tests without spinning up a full process.
+pub(crate) fn run_project_init(
+    cwd: &Path,
+    opts: &ScaffoldOptions,
+    force: bool,
+    no_sync: bool,
+    quiet: bool,
+    yes_all: bool,
+    confirm: &mut dyn FnMut(&Path) -> Result<bool>,
+) -> Result<ExitCode> {
+    let outcome = if force {
+        scaffold(cwd, opts, true)?
+    } else {
+        let analysis = analyze_scaffold(cwd, opts)?;
+        let conflicts = analysis.conflict_files();
+
+        let overwrite: HashSet<PathBuf> = if conflicts.is_empty() {
+            HashSet::new()
+        } else if yes_all {
+            // --yes: approve all conflicts without prompting.
+            conflicts.iter().map(|p| p.to_path_buf()).collect()
+        } else {
+            // Call confirm once per conflicting file; collect approved paths.
+            conflicts
+                .iter()
+                .filter_map(|dest| match confirm(dest) {
+                    Err(e) => Some(Err(e)),
+                    Ok(true) => Some(Ok(dest.to_path_buf())),
+                    Ok(false) => None,
+                })
+                .collect::<Result<_>>()?
+        };
+
+        execute_scaffold(&analysis, &overwrite)?
+    };
 
     if !quiet {
         println!("toolr: scaffolded tools/ at {}", outcome.tools_dir.display());
         for path in &outcome.files_written {
-            let rel = path.strip_prefix(&cwd).unwrap_or(path).display();
+            let rel = path.strip_prefix(cwd).unwrap_or(path).display();
             println!("toolr:   wrote {rel}");
         }
     }
@@ -70,7 +138,7 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
     // Auto-sync — same path as `toolr project deps sync`.
     let consent = toolr_core::uv::install::ConsentMode::from_env();
     let (resolved, uv) =
-        toolr_core::project::ensure_venv_ready(&cwd, consent, /*force_sync=*/ true)?;
+        toolr_core::project::ensure_venv_ready(cwd, consent, /*force_sync=*/ true)?;
     if !quiet {
         println!(
             "toolr: synced venv at {} using uv {}.{}.{}",
@@ -88,6 +156,18 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
         );
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Prompt the user whether to overwrite a single conflicting file.
+/// Returns `Ok(true)` if approved, `Ok(false)` if declined (including EOF).
+fn prompt_overwrite_file(dest: &Path, cwd: &Path) -> Result<bool> {
+    let rel = dest.strip_prefix(cwd).unwrap_or(dest);
+    eprint!("toolr: overwrite {}? [y/N] ", rel.display());
+    std::io::stderr().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    // EOF (0 bytes read) is treated as "no" — same as pressing Enter.
+    Ok(answer.trim().eq_ignore_ascii_case("y"))
 }
 
 /// Default `requires-python` value for new projects.
@@ -215,6 +295,9 @@ fn prepend_to_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::init_templates::{ScaffoldOptions, VenvLocation};
+    use std::fs;
+    use tempfile::TempDir;
 
     /// Mutating SHELL / PATH and observing their effects requires
     /// process-wide env coordination — serialise so cargo's parallel
@@ -240,6 +323,97 @@ mod tests {
             }
         }
         r
+    }
+
+    fn init_opts() -> ScaffoldOptions {
+        ScaffoldOptions {
+            requires_python: ">=3.11".into(),
+            venv_location: VenvLocation::Cache,
+            include_example: true,
+        }
+    }
+
+    /// run_project_init with --yes auto-approves all conflicts.
+    #[test]
+    fn run_project_init_yes_all_overwrites_conflicts() {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        fs::create_dir(&tools).unwrap();
+        fs::write(tools.join("pyproject.toml"), "# stale").unwrap();
+
+        let opts = init_opts();
+        run_project_init(
+            tmp.path(),
+            &opts,
+            /*force=*/ false,
+            /*no_sync=*/ true,
+            /*quiet=*/ true,
+            /*yes_all=*/ true,
+            &mut |_| unreachable!("confirm should not be called when yes_all=true"),
+        )
+        .unwrap();
+
+        let content = fs::read_to_string(tools.join("pyproject.toml")).unwrap();
+        assert!(content.contains(r#"name = "tools""#));
+    }
+
+    /// run_project_init with a confirm closure that says "no" leaves conflicts intact.
+    #[test]
+    fn run_project_init_confirm_no_preserves_conflicts() {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        fs::create_dir(&tools).unwrap();
+        fs::write(tools.join("pyproject.toml"), "# stale").unwrap();
+
+        let opts = init_opts();
+        run_project_init(
+            tmp.path(),
+            &opts,
+            /*force=*/ false,
+            /*no_sync=*/ true,
+            /*quiet=*/ true,
+            /*yes_all=*/ false,
+            &mut |_| Ok(false), // always decline
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(tools.join("pyproject.toml")).unwrap(),
+            "# stale"
+        );
+    }
+
+    /// run_project_init with a confirm closure records which files were approved.
+    #[test]
+    fn run_project_init_confirm_selectively_overwrites() {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        fs::create_dir(&tools).unwrap();
+        fs::write(tools.join("pyproject.toml"), "# stale-pyproject").unwrap();
+        fs::write(tools.join(".gitignore"), "# stale-gitignore").unwrap();
+
+        let opts = init_opts();
+        run_project_init(
+            tmp.path(),
+            &opts,
+            /*force=*/ false,
+            /*no_sync=*/ true,
+            /*quiet=*/ true,
+            /*yes_all=*/ false,
+            &mut |dest| {
+                // Approve only pyproject.toml.
+                Ok(dest.ends_with("pyproject.toml"))
+            },
+        )
+        .unwrap();
+
+        let pyproject = fs::read_to_string(tools.join("pyproject.toml")).unwrap();
+        assert!(pyproject.contains(r#"name = "tools""#), "should be overwritten");
+        assert_eq!(
+            fs::read_to_string(tools.join(".gitignore")).unwrap(),
+            "# stale-gitignore",
+            ".gitignore should be preserved"
+        );
     }
 
     #[test]

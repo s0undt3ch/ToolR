@@ -2,5 +2,5 @@
 
 set -e
 
-uv run maturin develop
+mise run develop-toolr-py
 uv run pytest -s -ra -v "$@"
