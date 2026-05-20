@@ -56,7 +56,10 @@ pub fn run_uv_sync(
     cmd.arg("sync")
         .arg("--project")
         .arg(tools_dir)
-        .env("UV_PROJECT_ENVIRONMENT", &resolved.venv_dir);
+        .env("UV_PROJECT_ENVIRONMENT", &resolved.venv_dir)
+        // Unset any outer VIRTUAL_ENV so uv doesn't warn about a mismatch
+        // with the tools venv (e.g. when invoked inside a mise-managed .venv).
+        .env_remove("VIRTUAL_ENV");
     if let Some(version) = resolved.config.python_version.as_ref() {
         cmd.arg("--python").arg(version);
     }
