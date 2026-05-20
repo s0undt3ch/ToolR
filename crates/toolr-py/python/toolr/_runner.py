@@ -124,10 +124,18 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
         msg = f"toolr spec file is not valid JSON ({spec_path}): {exc}"
         raise SpecError(msg) from exc
     if spec.schema_version != SCHEMA_VERSION:
+        # The binary and toolr-py must agree on the dispatch wire format.
+        # Direct the user at the exact command that brings the venv back
+        # in sync; mention the pin-down-the-binary escape hatch for the
+        # rarer case where they need to stay on the older toolr-py.
         msg = (
-            f"toolr spec file declares schema_version={spec.schema_version}, "
-            f"but this toolr Python package only supports {SCHEMA_VERSION}. "
-            "Upgrade the toolr package in your tools venv."
+            f"toolr-py in this tools venv speaks schema {SCHEMA_VERSION}, "
+            f"but the toolr binary emitted schema {spec.schema_version}. "
+            "The venv is out of sync with the binary.\n\n"
+            "Run:\n"
+            "  toolr project deps upgrade toolr-py\n\n"
+            "Or pin the toolr binary to a version compatible with "
+            f"toolr-py schema {SCHEMA_VERSION}."
         )
         raise SpecError(msg)
     return spec
