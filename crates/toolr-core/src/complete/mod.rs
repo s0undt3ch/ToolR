@@ -19,7 +19,7 @@ pub mod scripts;
 
 pub use engine::serve_completions;
 pub use freshness::{ResolvedManifest, resolve_manifest_at_tab};
-pub use install::{InstallOptions, InstallOutcome, install_path_for, install_script};
+pub use install::{InstallOptions, InstallOutcome, PriorState, install_path_for, install_script};
 pub use scripts::{Shell, completion_script};
 
 #[cfg(test)]

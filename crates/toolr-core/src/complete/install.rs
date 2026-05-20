@@ -27,9 +27,28 @@ pub struct InstallOptions {
 
 #[derive(Debug)]
 pub enum InstallOutcome {
-    Wrote { path: PathBuf },
+    /// The embedded script is now on disk at `path`. `prior` describes
+    /// what (if anything) was there before the write so the caller can
+    /// distinguish a fresh install, a forced re-write of identical
+    /// content, and a forced replacement of differing content.
+    Wrote { path: PathBuf, prior: PriorState },
+    /// `--force` was not set and the on-disk content already matched
+    /// the embedded payload; nothing was written.
     AlreadyInstalled { path: PathBuf },
+    /// `--force` was not set and the on-disk content differs from the
+    /// embedded payload; nothing was written.
     SkippedNeedsForce { path: PathBuf },
+}
+
+#[derive(Debug)]
+pub enum PriorState {
+    /// No file existed at the target path before the write.
+    None,
+    /// A file existed and matched the new payload byte-for-byte. The
+    /// caller passed `--force`, so the file was overwritten anyway.
+    Identical,
+    /// A file existed and its content differed from the new payload.
+    Differed,
 }
 
 /// Compute the target install path for `shell`.
@@ -75,18 +94,30 @@ pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
         ));
     }
 
-    if let Ok(existing) = std::fs::read_to_string(&path) {
-        if existing == payload {
-            return Ok(InstallOutcome::AlreadyInstalled { path });
+    let prior = match std::fs::read_to_string(&path) {
+        Ok(existing) if existing == payload => {
+            // File matches the embedded payload. Honour `--force`
+            // literally and rewrite anyway (useful when the caller
+            // wants to refresh mtime or recover from a manual edit
+            // that happened to round-trip back to the canonical
+            // content); otherwise treat as a no-op.
+            if !opts.force {
+                return Ok(InstallOutcome::AlreadyInstalled { path });
+            }
+            PriorState::Identical
         }
-        if !opts.force {
-            return Ok(InstallOutcome::SkippedNeedsForce { path });
+        Ok(_) => {
+            if !opts.force {
+                return Ok(InstallOutcome::SkippedNeedsForce { path });
+            }
+            PriorState::Differed
         }
-    }
+        Err(_) => PriorState::None,
+    };
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&path, payload)?;
-    Ok(InstallOutcome::Wrote { path })
+    Ok(InstallOutcome::Wrote { path, prior })
 }

@@ -4,7 +4,8 @@ use std::process::ExitCode;
 use clap::ArgMatches;
 
 use toolr_core::complete::{
-    InstallOptions, InstallOutcome, Shell as CompletionShell, completion_script, install_script,
+    InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell, completion_script,
+    install_script,
     resolve_manifest_at_tab, serve_completions,
 };
 use toolr_core::discovery::discover_project_root;
@@ -298,12 +299,25 @@ fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode
 
     let outcome = install_script(&opts)?;
     match outcome {
-        InstallOutcome::Wrote { path } => {
-            println!(
-                "toolr: wrote {} completion script to {}",
-                shell,
-                path.display()
-            );
+        InstallOutcome::Wrote { path, prior } => {
+            let msg = match prior {
+                PriorState::None => format!(
+                    "toolr: wrote {} completion script to {}",
+                    shell,
+                    path.display()
+                ),
+                PriorState::Identical => format!(
+                    "toolr: rewrote {} completion script at {} (--force; content unchanged)",
+                    shell,
+                    path.display()
+                ),
+                PriorState::Differed => format!(
+                    "toolr: replaced existing {} completion script at {}",
+                    shell,
+                    path.display()
+                ),
+            };
+            println!("{msg}");
             if matches!(shell, CompletionShell::Zsh) {
                 println!(
                     "toolr: ensure your ~/.zshrc includes `fpath=(~/.zfunc $fpath)` and \
@@ -314,7 +328,7 @@ fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode
         }
         InstallOutcome::AlreadyInstalled { path } => {
             println!(
-                "toolr: {} completion already installed at {}",
+                "toolr: {} completion already up to date at {}",
                 shell,
                 path.display()
             );
