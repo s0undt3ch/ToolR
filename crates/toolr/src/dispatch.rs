@@ -145,17 +145,31 @@ pub fn dispatch(
     // Prefer the resolved tools-venv python (Plan 3). Fall back to the
     // PATH/TOOLR_PYTHON lookup only when there is no `tools/pyproject.toml`
     // — i.e. legacy projects that never opted into the venv layer.
-    let (python, venv_dir) = if repo_root.join("tools").join("pyproject.toml").is_file() {
-        let resolved = resolve_venv_path(&repo_root)?;
-        (resolved.python, Some(resolved.venv_dir))
-    } else {
-        (resolve_python()?, None)
-    };
+    let (python, venv_dir, python_version) =
+        if repo_root.join("tools").join("pyproject.toml").is_file() {
+            let resolved = resolve_venv_path(&repo_root)?;
+            (
+                resolved.python,
+                Some(resolved.venv_dir),
+                Some(resolved.python_version),
+            )
+        } else {
+            (resolve_python()?, None, None)
+        };
 
     // Plan 8: touch last_used_at on every invocation against a cached venv.
+    // Backfill a fresh `meta.json` for cache entries that predate the
+    // sidecar — without this, `toolr self cache list` would silently
+    // hide venvs created by older binaries.
     if let Some(venv) = &venv_dir {
         if let Some(cache_dir) = venv.parent() {
-            if let Err(e) = toolr_core::cache::touch_last_used(cache_dir) {
+            let py_ver = python_version.as_deref().unwrap_or("");
+            if let Err(e) = toolr_core::cache::touch_or_backfill(
+                cache_dir,
+                &repo_root,
+                env!("CARGO_PKG_VERSION"),
+                py_ver,
+            ) {
                 eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
             }
         }
