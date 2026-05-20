@@ -439,7 +439,7 @@ fn fish_script_does_not_inject_literal_dash_dash_into_args() {
 }
 
 use crate::complete::install::{
-    InstallOptions, InstallOutcome, install_path_for, install_script,
+    InstallOptions, InstallOutcome, PriorState, install_path_for, install_script,
 };
 
 #[test]
@@ -477,7 +477,13 @@ fn install_creates_file_when_absent() {
         interactive: false,
     };
     let outcome = install_script(&opts).unwrap();
-    assert!(matches!(outcome, InstallOutcome::Wrote { .. }));
+    assert!(matches!(
+        outcome,
+        InstallOutcome::Wrote {
+            prior: PriorState::None,
+            ..
+        }
+    ));
     let target = tmp.path().join("data/bash-completion/completions/toolr");
     assert!(target.exists());
 }
@@ -515,8 +521,54 @@ fn install_is_idempotent_when_content_matches() {
     };
     let first = install_script(&opts).unwrap();
     let second = install_script(&opts).unwrap();
-    assert!(matches!(first, InstallOutcome::Wrote { .. }));
+    assert!(matches!(
+        first,
+        InstallOutcome::Wrote {
+            prior: PriorState::None,
+            ..
+        }
+    ));
     assert!(matches!(second, InstallOutcome::AlreadyInstalled { .. }));
+}
+
+#[test]
+fn install_with_force_overwrites_even_when_content_matches() {
+    // Regression: a stale binary that ships a buggy completion script
+    // would write the same buggy script to disk, then refuse to refresh
+    // because the on-disk content matched the (still buggy) payload.
+    // `--force` must be honoured literally so users can re-deploy
+    // unconditionally.
+    let tmp = TempDir::new().unwrap();
+    let bootstrap = InstallOptions {
+        shell: Shell::Bash,
+        xdg_data_home: Some(tmp.path().join("data")),
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        force: false,
+        interactive: false,
+    };
+    assert!(matches!(
+        install_script(&bootstrap).unwrap(),
+        InstallOutcome::Wrote {
+            prior: PriorState::None,
+            ..
+        }
+    ));
+    let forced = InstallOptions {
+        shell: Shell::Bash,
+        xdg_data_home: Some(tmp.path().join("data")),
+        xdg_config_home: None,
+        home: tmp.path().to_path_buf(),
+        force: true,
+        interactive: false,
+    };
+    assert!(matches!(
+        install_script(&forced).unwrap(),
+        InstallOutcome::Wrote {
+            prior: PriorState::Identical,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -534,7 +586,13 @@ fn install_with_force_overwrites_existing() {
         interactive: false,
     };
     let outcome = install_script(&opts).unwrap();
-    assert!(matches!(outcome, InstallOutcome::Wrote { .. }));
+    assert!(matches!(
+        outcome,
+        InstallOutcome::Wrote {
+            prior: PriorState::Differed,
+            ..
+        }
+    ));
     let contents = std::fs::read_to_string(&target).unwrap();
     assert!(contents.contains("toolr __complete"));
 }
