@@ -72,6 +72,30 @@ pub fn run_uv_sync(
     Ok(status)
 }
 
+/// Run `uv lock --upgrade-package <package> --project <tools>` synchronously,
+/// inheriting stdio. Used by `toolr project deps upgrade` to bump a single
+/// package's pin in `tools/uv.lock` before re-syncing.
+pub fn run_uv_lock_upgrade(
+    uv: &UvBinary,
+    tools_dir: &Path,
+    resolved: &ResolvedVenv,
+    package: &str,
+) -> Result<ExitStatus> {
+    let mut cmd = Command::new(&uv.path);
+    cmd.arg("lock")
+        .arg("--upgrade-package")
+        .arg(package)
+        .arg("--project")
+        .arg(tools_dir)
+        .env("UV_PROJECT_ENVIRONMENT", &resolved.venv_dir)
+        .env_remove("VIRTUAL_ENV");
+    if let Some(version) = resolved.config.python_version.as_ref() {
+        cmd.arg("--python").arg(version);
+    }
+    cmd.status()
+        .with_context(|| format!("spawning uv at {}", uv.path.display()))
+}
+
 /// Convenience wrapper that maps a failure to `UvError::SyncFailed`.
 pub fn sync_if_needed(
     uv: &UvBinary,
@@ -270,6 +294,36 @@ mod tests {
         assert!(dump.contains("--python"));
         assert!(dump.contains("3.13"));
         assert!(dump.contains("--project"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_uv_lock_upgrade_passes_package_and_project_args() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let argdump = tmp.path().join("argdump");
+        let stub = tmp.path().join("uv");
+        let mut f = fs::File::create(&stub).unwrap();
+        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        drop(f);
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+        let uv = UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        };
+
+        let venv = tmp.path().join("venv");
+        let resolved = dummy_resolved(venv);
+        run_uv_lock_upgrade(&uv, tmp.path(), &resolved, "toolr-py")
+            .expect("stub uv should succeed");
+
+        let dump = fs::read_to_string(&argdump).unwrap();
+        assert!(dump.contains("lock"), "args: {dump}");
+        assert!(dump.contains("--upgrade-package"), "args: {dump}");
+        assert!(dump.contains("toolr-py"), "args: {dump}");
+        assert!(dump.contains("--project"), "args: {dump}");
     }
 
     #[test]

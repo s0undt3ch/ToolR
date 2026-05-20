@@ -16,6 +16,7 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
         Some(("init", init_m)) => project_init(init_m),
         Some(("deps", deps_m)) => match deps_m.subcommand() {
             Some(("sync", _)) => deps_sync(),
+            Some(("upgrade", upgrade_m)) => deps_upgrade(upgrade_m),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("venv", venv_m)) => match venv_m.subcommand() {
@@ -218,6 +219,111 @@ fn deps_sync() -> Result<ExitCode> {
         uv.version.0, uv.version.1, uv.version.2,
     );
     Ok(ExitCode::SUCCESS)
+}
+
+fn deps_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
+    let package = matches
+        .get_one::<String>("package")
+        .expect("clap marks this required")
+        .as_str();
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+    let tools_dir = repo_root.join("tools");
+
+    // Guard: `uv lock --upgrade-package` silently no-ops if the package
+    // isn't part of the dependency graph. Catch typos and "I thought I
+    // had this declared" cases up front so the user sees a real error.
+    let pyproject = tools_dir.join("pyproject.toml");
+    if !pyproject_declares_dependency(&pyproject, package)? {
+        anyhow::bail!(
+            "package `{package}` is not declared in {} — add it to `[project] dependencies` first",
+            pyproject.display(),
+        );
+    }
+
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) =
+        toolr_core::project::ensure_venv_ready(&cwd, consent, /*force_sync=*/ false)?;
+
+    let lock_status = toolr_core::venv::run_uv_lock_upgrade(&uv, &tools_dir, &resolved, package)?;
+    if !lock_status.success() {
+        anyhow::bail!(
+            "`uv lock --upgrade-package {package}` failed with exit code {:?}",
+            lock_status.code(),
+        );
+    }
+
+    let sync_status = toolr_core::venv::run_uv_sync(&uv, &tools_dir, &resolved)?;
+    if !sync_status.success() {
+        anyhow::bail!(
+            "`uv sync` after upgrade failed with exit code {:?}",
+            sync_status.code(),
+        );
+    }
+
+    println!(
+        "toolr: upgraded `{package}` in {}",
+        resolved.venv_dir.display(),
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Light TOML inspection: does `[project].dependencies` (or any
+/// `[project.optional-dependencies.*]` list) name `package`?
+/// We only need to confirm presence — version pin / extras are uv's
+/// problem from here on.
+fn pyproject_declares_dependency(pyproject: &Path, package: &str) -> Result<bool> {
+    let text = std::fs::read_to_string(pyproject)
+        .map_err(|e| anyhow::anyhow!("reading {}: {e}", pyproject.display()))?;
+    let parsed: toml::Value = toml::from_str(&text)
+        .map_err(|e| anyhow::anyhow!("parsing {}: {e}", pyproject.display()))?;
+
+    let mut found = false;
+    if let Some(deps) = parsed
+        .get("project")
+        .and_then(|p| p.get("dependencies"))
+        .and_then(|v| v.as_array())
+    {
+        for dep in deps {
+            if let Some(s) = dep.as_str() {
+                if dep_name_matches(s, package) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+    if !found {
+        if let Some(opt) = parsed
+            .get("project")
+            .and_then(|p| p.get("optional-dependencies"))
+            .and_then(|v| v.as_table())
+        {
+            for (_extra, list) in opt {
+                if let Some(deps) = list.as_array() {
+                    for dep in deps {
+                        if let Some(s) = dep.as_str() {
+                            if dep_name_matches(s, package) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// PEP 508-light: `foo`, `foo[bar]`, `foo>=1.2`, `foo ==1.2; python_version < "3.13"`
+/// all parse to the name `foo`. We just peel the first identifier-ish token.
+fn dep_name_matches(spec: &str, package: &str) -> bool {
+    let name_end = spec
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-' && c != '.')
+        .unwrap_or(spec.len());
+    spec[..name_end].eq_ignore_ascii_case(package)
 }
 
 fn venv_path() -> Result<ExitCode> {
@@ -463,6 +569,60 @@ mod tests {
         let bin = std::path::Path::new("/venv/bin");
         let result = prepend_to_path(bin, None).unwrap();
         assert_eq!(result, bin.as_os_str());
+    }
+
+    #[test]
+    fn dep_name_matches_strips_version_extras_and_markers() {
+        assert!(dep_name_matches("toolr-py", "toolr-py"));
+        assert!(dep_name_matches("toolr-py>=0.11", "toolr-py"));
+        assert!(dep_name_matches("toolr-py[extra]", "toolr-py"));
+        assert!(dep_name_matches("toolr-py==0.11.2; python_version < \"3.13\"", "toolr-py"));
+        assert!(!dep_name_matches("other", "toolr-py"));
+    }
+
+    #[test]
+    fn dep_name_matches_is_case_insensitive() {
+        assert!(dep_name_matches("Toolr-Py>=0.11", "toolr-py"));
+    }
+
+    #[test]
+    fn pyproject_declares_dependency_finds_direct_dep() {
+        let tmp = TempDir::new().unwrap();
+        let pyproject = tmp.path().join("pyproject.toml");
+        fs::write(
+            &pyproject,
+            r#"[project]
+name = "tools"
+dependencies = [
+    "toolr-py>=0.11",
+    "requests",
+]
+"#,
+        )
+        .unwrap();
+        assert!(pyproject_declares_dependency(&pyproject, "toolr-py").unwrap());
+        assert!(pyproject_declares_dependency(&pyproject, "requests").unwrap());
+        assert!(!pyproject_declares_dependency(&pyproject, "absent").unwrap());
+    }
+
+    #[test]
+    fn pyproject_declares_dependency_finds_optional_dep() {
+        let tmp = TempDir::new().unwrap();
+        let pyproject = tmp.path().join("pyproject.toml");
+        fs::write(
+            &pyproject,
+            r#"[project]
+name = "tools"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+"#,
+        )
+        .unwrap();
+        assert!(pyproject_declares_dependency(&pyproject, "pytest").unwrap());
+        assert!(pyproject_declares_dependency(&pyproject, "ruff").unwrap());
+        assert!(!pyproject_declares_dependency(&pyproject, "absent").unwrap());
     }
 
     #[test]

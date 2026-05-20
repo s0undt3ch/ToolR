@@ -159,8 +159,14 @@ def test_load_spec_type_mismatch_raises_schema_validation(tmp_path: Path, make_s
 
 def test_load_spec_rejects_unknown_schema_version(make_spec_file: Callable[..., Path]) -> None:
     spec_path = make_spec_file(schema_version=SCHEMA_VERSION + 99)
-    with pytest.raises(SpecError, match=r"schema_version=\d+"):
+    with pytest.raises(SpecError) as exc_info:
         load_spec(spec_path)
+    msg = str(exc_info.value)
+    # The error must tell the user exactly which command to run, and must
+    # name both schema versions so they understand which side is stale.
+    assert "toolr project deps upgrade toolr-py" in msg, msg
+    assert f"schema {SCHEMA_VERSION}" in msg, msg
+    assert f"schema {SCHEMA_VERSION + 99}" in msg, msg
 
 
 def test_load_spec_round_trip_preserves_fields(make_spec_file: Callable[..., Path]) -> None:
