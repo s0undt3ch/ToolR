@@ -56,15 +56,15 @@ Use `rg -n 'Command \{' crates/ tests/` to confirm the list at the start of Task
 ## Task index
 
 - Stack A — auto-rebuild on missing manifest:
-  - Task 1: `should_skip_auto_rebuild` argv inspector + tests
-  - Task 2: `ensure_manifest_present_or_bootstrap` + wire into `main.rs::run`
-  - Task 3: Unskip `test_e2e_auto_rebuild_runs_argparse`
+    - Task 1: `should_skip_auto_rebuild` argv inspector + tests
+    - Task 2: `ensure_manifest_present_or_bootstrap` + wire into `main.rs::run`
+    - Task 3: Unskip `test_e2e_auto_rebuild_runs_argparse`
 - Stack B — dispatcher hosts grafted children:
-  - Task 4: `is_dispatcher: bool` field on `Command`
-  - Task 5: `argparse::run_for_project` returns `GraftResult`; `build_static_manifest_inner` flips the flag
-  - Task 6: `cli.rs::build_group_subtree` reshape + `build_dispatcher_command`
-  - Task 7: `dispatch.rs` widens path-to-command lookup
-  - Task 8: New E2E test exercising dispatcher outer flags
+    - Task 4: `is_dispatcher: bool` field on `Command`
+    - Task 5: `argparse::run_for_project` returns `GraftResult`; `build_static_manifest_inner` flips the flag
+    - Task 6: `cli.rs::build_group_subtree` reshape + `build_dispatcher_command`
+    - Task 7: `dispatch.rs` widens path-to-command lookup
+    - Task 8: New E2E test exercising dispatcher outer flags
 
 ---
 
@@ -224,7 +224,6 @@ git commit -m "bootstrap: add should_skip_auto_rebuild argv inspector"
 
 - Modify: `crates/toolr/src/bootstrap.rs`
 - Modify: `crates/toolr/src/main.rs:27-36` (the `run` function)
-
 - [ ] **Step 1: Read the existing seam**
 
 ```bash
@@ -398,7 +397,6 @@ git commit -m "tests: unskip auto-rebuild E2E now that bootstrap is wired in"
 - Modify: `crates/toolr-core/src/manifest/model.rs`
 - Modify: `crates/toolr-core/src/manifest/tests.rs`
 - Modify: every `Command { ... }` literal site (see file map; ~9 files)
-
 - [ ] **Step 1: List the literal sites**
 
 ```bash
@@ -681,7 +679,6 @@ git commit -m "argparse: mark dispatcher commands via GraftResult.dispatchers"
 - Modify: `crates/toolr/src/cli.rs:40` (`build_group_subtree`)
 - Modify: `crates/toolr/src/cli.rs` — add `build_dispatcher_command` helper
 - Modify: `crates/toolr/src/cli.rs` `#[cfg(test)]` — add 3 new tests
-
 - [ ] **Step 1: Write the failing tests**
 
 If `crates/toolr/src/cli.rs` already has a `#[cfg(test)] mod tests {…}` block, extend it. Otherwise add one at the bottom of the file:
