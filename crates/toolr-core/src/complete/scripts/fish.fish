@@ -11,7 +11,11 @@ function __toolr_complete
     set -l current (commandline -ct)
     # Drop the leading `toolr` token.
     set -l args $tokens[2..-1]
-    set -a args -- $current
+    # Append the in-progress word as the trailing token. Do NOT use `--`
+    # before it: fish's `set` builtin treats `--` as a literal value to
+    # append, not an end-of-options marker, which would inject a spurious
+    # `--` token into the call and trip clap's option-terminator logic.
+    set -a args $current
     toolr __complete "$PWD" $args 2>/dev/null
 end
 
