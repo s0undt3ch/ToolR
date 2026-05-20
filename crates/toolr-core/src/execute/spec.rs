@@ -8,7 +8,38 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Schema version. Must match `toolr._runner.SCHEMA_VERSION` exactly.
+/// Schema version of the toolr ↔ toolr-py dispatch protocol.
+///
+/// This constant **must** match `toolr._runner.SCHEMA_VERSION` exactly; a
+/// CI gate enforces the lock-step (see
+/// `crates/toolr-core/tests/schema_version_lockstep.rs`).
+///
+/// # When to bump
+///
+/// Bump this **and** the Python counterpart by `+1` together when the
+/// two sides would no longer understand each other:
+///
+/// - Add, remove, or rename any field on `ExecutionSpec`, `DispatchSpec`,
+///   `ContextSpec`, or any other struct serialised into the spec JSON.
+/// - Change the meaning of any existing field (e.g. string-keyed to
+///   int-keyed, units changed, encoding changed).
+/// - Add, remove, or rename a required field on the manifest JSON that
+///   the runner consumes.
+/// - Change the env-var / stdin / stdout / exit-code conventions between
+///   the toolr binary and the Python runner.
+///
+/// # When *not* to bump
+///
+/// - Adding a new **optional** field on either side with a safe default
+///   (`serde(default)` on Rust, `msgspec` default on Python) — old
+///   spec files still decode and old runners still work against new
+///   binaries.
+/// - Internal Rust refactors that don't change the serialised shape.
+/// - Renaming variables, restructuring code, expanding tests.
+///
+/// Toolr is pre-1.0, so we don't carve out "major" / "minor" — bumps are
+/// monotonic integers tied 1:1 to "the protocol changed in a way an
+/// older peer can't handle".
 pub const RUNNER_SCHEMA_VERSION: u32 = 1;
 
 /// Reduced view of `toolr.Context` reconstructable from JSON.

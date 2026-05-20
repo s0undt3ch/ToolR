@@ -288,6 +288,19 @@ pub fn greet(name: &str) -> String {
 - **Update docs/** when adding features
 - **Keep README.md** up to date
 
+### Runner schema version
+
+The toolr binary and the toolr-py Python package communicate over a
+versioned JSON spec. Two constants must stay in lock-step:
+
+- `RUNNER_SCHEMA_VERSION` in `crates/toolr-core/src/execute/spec.rs`
+- `SCHEMA_VERSION` in `crates/toolr-py/python/toolr/_runner.py`
+
+Both constants carry a doc-comment listing exactly which changes
+require a bump and which don't. Read those before changing either the
+Rust serde structs or the `RunnerSpec` Python class. A CI gate fails
+the build when the two values disagree.
+
 ### Pre-commit Hooks
 
 All formatting and linting is handled automatically by prek:

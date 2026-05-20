@@ -47,6 +47,35 @@ if TYPE_CHECKING:
 warnings.simplefilter("default", ToolrDeprecationWarning)
 
 SCHEMA_VERSION: int = 1
+"""Schema version of the toolr ↔ toolr-py dispatch protocol.
+
+This constant **must** match ``RUNNER_SCHEMA_VERSION`` in
+``crates/toolr-core/src/execute/spec.rs`` exactly; a CI gate enforces
+the lock-step.
+
+**When to bump**: bump this **and** the Rust counterpart by ``+1``
+together when the two sides would no longer understand each other:
+
+* Add, remove, or rename any field on ``RunnerSpec`` (or any struct it
+  nests) on either side.
+* Change the meaning of any existing field (e.g. string-keyed to
+  int-keyed, units changed, encoding changed).
+* Add, remove, or rename a required field on the manifest JSON that the
+  runner consumes.
+* Change the env-var / stdin / stdout / exit-code conventions between
+  the toolr binary and the Python runner.
+
+**When *not* to bump**:
+
+* Adding a new optional field on either side with a safe default
+  (``serde(default)`` on Rust, ``msgspec`` default on Python) — old
+  spec files still decode and old runners still work against new
+  binaries.
+* Internal refactors that don't change the serialised shape.
+
+Toolr is pre-1.0, so bumps are monotonic integers tied 1:1 to "the
+protocol changed in a way an older peer can't handle".
+"""
 
 _SPEC_ENV_VAR = "TOOLR_SPEC_FILE"
 
