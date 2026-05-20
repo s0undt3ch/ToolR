@@ -54,18 +54,20 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
         include_example: !no_example,
     };
 
-    // Non-interactive path: detect conflicts early and surface a hard error
-    // with relative paths so agents can parse the output.
+    // Non-interactive path: detect conflicts early and exit with code 2 so
+    // agents can distinguish "conflicts" from generic failures (exit 1).
     if !force && !yes_all && !std::io::stdin().is_terminal() {
         let analysis = analyze_scaffold(&cwd, &opts)?;
         let conflicts = analysis.conflict_files();
         if !conflicts.is_empty() {
-            return Err(anyhow::Error::new(ScaffoldConflictsError {
+            let err = ScaffoldConflictsError {
                 files: conflicts
                     .into_iter()
                     .map(|p| p.strip_prefix(&cwd).unwrap_or(p).to_path_buf())
                     .collect(),
-            }));
+            };
+            eprintln!("toolr: error: {err}");
+            return Ok(ExitCode::from(2));
         }
     }
 

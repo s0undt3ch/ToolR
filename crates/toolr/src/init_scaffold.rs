@@ -131,6 +131,15 @@ pub fn execute_scaffold(
     analysis: &ScaffoldAnalysis,
     overwrite: &HashSet<PathBuf>,
 ) -> Result<ScaffoldOutcome> {
+    // Refuse to write through a symlink: it could redirect files into an
+    // unintended directory without any visible indication.
+    if analysis.tools_dir.is_symlink() {
+        anyhow::bail!(
+            "{} is a symlink — resolve or remove it before running `toolr project init`",
+            analysis.tools_dir.display()
+        );
+    }
+
     fs::create_dir_all(&analysis.tools_dir)
         .with_context(|| format!("creating {}", analysis.tools_dir.display()))?;
 
@@ -228,6 +237,10 @@ fn with_extension(path: &Path, extra: &str) -> PathBuf {
         .unwrap_or_default();
     name.push(".");
     name.push(extra);
+    // Include the process ID so concurrent `toolr project init` runs in the
+    // same directory don't collide on the same .tmp filename.
+    name.push(".");
+    name.push(std::process::id().to_string());
     path.with_file_name(name)
 }
 
@@ -470,5 +483,33 @@ mod tests {
         assert_eq!(pyproject.status, FileStatus::Conflict);
         assert_eq!(gitignore.status, FileStatus::Identical, "content: {gitignore_content:?}");
         assert_eq!(example.status, FileStatus::New);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn execute_scaffold_rejects_symlinked_tools_dir() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = TempDir::new().unwrap();
+        let real_dir = tmp.path().join("real_tools");
+        let link = tmp.path().join("tools");
+        fs::create_dir(&real_dir).unwrap();
+        symlink(&real_dir, &link).unwrap();
+
+        let analysis = analyze_scaffold(tmp.path(), &opts()).unwrap();
+        let result = execute_scaffold(&analysis, &HashSet::new());
+        assert!(result.is_err(), "expected error for symlinked tools/");
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("symlink"), "error should mention symlink: {msg}");
+    }
+
+    #[test]
+    fn tmp_filename_includes_pid() {
+        let path = std::path::Path::new("/some/dir/pyproject.toml");
+        let tmp = with_extension(path, "tmp");
+        let name = tmp.file_name().unwrap().to_string_lossy();
+        assert!(name.starts_with("pyproject.toml.tmp."), "unexpected name: {name}");
+        let pid_str = name.strip_prefix("pyproject.toml.tmp.").unwrap();
+        assert!(pid_str.parse::<u32>().is_ok(), "suffix must be a PID: {pid_str}");
     }
 }

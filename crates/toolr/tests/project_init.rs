@@ -90,7 +90,8 @@ fn init_fails_on_conflict_non_interactive() {
         .output()
         .unwrap();
 
-    assert!(!output.status.success());
+    // Exit code 2 distinguishes "conflicts" from generic failure (1).
+    assert_eq!(output.status.code(), Some(2), "expected exit code 2");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("overwritten") || stderr.contains("already exists"),
