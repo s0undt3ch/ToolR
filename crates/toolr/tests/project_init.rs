@@ -104,6 +104,25 @@ fn init_fails_on_conflict_non_interactive() {
     );
 }
 
+/// --yes auto-approves all conflict files without interactive prompts.
+#[test]
+fn init_yes_overwrites_conflicts_non_interactive() {
+    let tmp = TempDir::new().unwrap();
+    fs::create_dir(tmp.path().join("tools")).unwrap();
+    fs::write(tmp.path().join("tools/pyproject.toml"), "# stale").unwrap();
+    fs::write(tmp.path().join("tools/.gitignore"), "# stale").unwrap();
+
+    cargo_bin()
+        .current_dir(tmp.path())
+        .args(["project", "init", "--no-sync", "--yes", "--quiet"])
+        .assert()
+        .success();
+
+    let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
+    assert!(pyproject.contains(r#"name = "tools""#));
+    assert!(!fs::read_to_string(tmp.path().join("tools/.gitignore")).unwrap().contains("# stale"));
+}
+
 /// --force overwrites conflict files without prompting.
 #[test]
 fn init_force_overwrites_existing_tools() {

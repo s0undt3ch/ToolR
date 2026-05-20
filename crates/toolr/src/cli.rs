@@ -265,6 +265,13 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             ),
                     )
                     .arg(
+                        Arg::new("yes")
+                            .long("yes")
+                            .short('y')
+                            .action(ArgAction::SetTrue)
+                            .help("Auto-approve overwriting any conflicting scaffold files"),
+                    )
+                    .arg(
                         Arg::new("quiet")
                             .long("quiet")
                             .short('q')

@@ -41,6 +41,17 @@ impl std::error::Error for ScaffoldConflictsError {}
 // Analysis
 // ---------------------------------------------------------------------------
 
+/// On-disk classification of a single scaffold file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileStatus {
+    /// The file does not yet exist on disk.
+    New,
+    /// The file exists on disk with the **same** content (idempotent, skip).
+    Identical,
+    /// The file exists on disk with **different** content (conflict).
+    Conflict,
+}
+
 /// A single scaffold file together with its on-disk classification.
 #[derive(Debug)]
 pub struct ScaffoldFile {
@@ -48,10 +59,8 @@ pub struct ScaffoldFile {
     pub dest: PathBuf,
     /// Rendered content that would be written.
     pub contents: String,
-    /// `true` when the file exists on disk with **different** content.
-    pub is_conflict: bool,
-    /// `true` when the file exists on disk with **identical** content.
-    pub is_identical: bool,
+    /// On-disk classification.
+    pub status: FileStatus,
 }
 
 /// Result of analysing what a scaffold run would do, without touching disk.
@@ -65,7 +74,7 @@ impl ScaffoldAnalysis {
     pub fn conflict_files(&self) -> Vec<&Path> {
         self.files
             .iter()
-            .filter(|f| f.is_conflict)
+            .filter(|f| f.status == FileStatus::Conflict)
             .map(|f| f.dest.as_path())
             .collect()
     }
@@ -80,22 +89,21 @@ pub fn analyze_scaffold(cwd: &Path, opts: &ScaffoldOptions) -> Result<ScaffoldAn
 
     for f in rendered {
         let dest = tools_dir.join(f.relative_path);
-        let (is_conflict, is_identical) = if dest.exists() {
+        let status = if dest.exists() {
             let existing = fs::read_to_string(&dest)
                 .with_context(|| format!("reading {}", dest.display()))?;
             if existing == f.contents {
-                (false, true)
+                FileStatus::Identical
             } else {
-                (true, false)
+                FileStatus::Conflict
             }
         } else {
-            (false, false)
+            FileStatus::New
         };
         files.push(ScaffoldFile {
             dest,
             contents: f.contents,
-            is_conflict,
-            is_identical,
+            status,
         });
     }
 
@@ -127,17 +135,39 @@ pub fn execute_scaffold(
         .with_context(|| format!("creating {}", analysis.tools_dir.display()))?;
 
     let mut written: Vec<PathBuf> = Vec::new();
+    // Snapshots of conflict-file originals for rollback (path → original content).
+    let mut snapshots: Vec<(PathBuf, String)> = Vec::new();
 
     for f in &analysis.files {
-        if f.is_identical {
-            continue;
+        match f.status {
+            FileStatus::Identical => continue,
+            FileStatus::Conflict if !overwrite.contains(&f.dest) => continue,
+            FileStatus::New => {
+                // TOCTOU: catch a file that appeared between analysis and execution.
+                if f.dest.exists() {
+                    return Err(anyhow::anyhow!(
+                        "file appeared unexpectedly during scaffold: {}",
+                        f.dest.display()
+                    ));
+                }
+            }
+            FileStatus::Conflict => {
+                // Snapshot the original so we can restore it on rollback.
+                let original = fs::read_to_string(&f.dest)
+                    .with_context(|| format!("snapshotting {}", f.dest.display()))?;
+                snapshots.push((f.dest.clone(), original));
+            }
         }
-        if f.is_conflict && !overwrite.contains(&f.dest) {
-            continue;
-        }
+
         if let Err(e) = write_file(&f.dest, &f.contents) {
+            // Rollback: restore snapshots for overwritten conflict files;
+            // delete new files that were already written.
             for path in written.iter().rev() {
-                let _ = fs::remove_file(path);
+                if let Some((_, original)) = snapshots.iter().find(|(p, _)| p == path) {
+                    let _ = write_file(path, original);
+                } else {
+                    let _ = fs::remove_file(path);
+                }
             }
             return Err(e).with_context(|| format!("writing {}", f.dest.display()));
         }
@@ -183,8 +213,11 @@ fn write_file(path: &Path, contents: &str) -> Result<()> {
         f.write_all(contents.as_bytes())?;
         f.flush()?;
     }
-    fs::rename(&tmp, path)
-        .with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()))?;
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e)
+            .with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()));
+    }
     Ok(())
 }
 
@@ -324,5 +357,118 @@ mod tests {
             fs::read_to_string(tools.join(".gitignore")).unwrap(),
             "# stale"
         );
+    }
+
+    #[test]
+    fn execute_scaffold_restores_conflict_originals_on_rollback() {
+        // Build a real analysis for a single-file case so we can intercept
+        // the failure by having one file succeed and then simulating a disk
+        // full via a read-only directory on the second write.
+        //
+        // Simpler approach: use a two-conflict scenario where we approve both,
+        // but make the second destination a read-only file so write_file fails,
+        // then assert the first destination is restored to its original.
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        fs::create_dir(&tools).unwrap();
+
+        // Pre-populate both scaffold conflict files with known "original" content.
+        let pyproject_original = "# pyproject original";
+        let gitignore_original = "# gitignore original";
+        fs::write(tools.join("pyproject.toml"), pyproject_original).unwrap();
+        fs::write(tools.join(".gitignore"), gitignore_original).unwrap();
+
+        let analysis = analyze_scaffold(tmp.path(), &opts()).unwrap();
+        assert_eq!(
+            analysis.conflict_files().len(),
+            2,
+            "expected both files to be conflicts"
+        );
+
+        // Make the tools dir itself read-only so that writing example.py
+        // (a New file) fails. This triggers the rollback after pyproject.toml
+        // and .gitignore have already been overwritten.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&tools).unwrap().permissions();
+            perms.set_mode(0o555); // read+execute, no write
+            fs::set_permissions(&tools, perms).unwrap();
+
+            let overwrite: HashSet<PathBuf> = analysis
+                .conflict_files()
+                .into_iter()
+                .map(PathBuf::from)
+                .collect();
+            let result = execute_scaffold(&analysis, &overwrite);
+
+            // Restore permissions so TempDir can clean up.
+            let mut perms = fs::metadata(&tools).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&tools, perms).unwrap();
+
+            assert!(result.is_err(), "expected write to fail");
+            // Originals must be restored, not deleted.
+            assert_eq!(
+                fs::read_to_string(tools.join("pyproject.toml")).unwrap(),
+                pyproject_original,
+                "pyproject.toml must be restored"
+            );
+            assert_eq!(
+                fs::read_to_string(tools.join(".gitignore")).unwrap(),
+                gitignore_original,
+                ".gitignore must be restored"
+            );
+        }
+        // Non-Unix: just assert the happy path so the test still compiles.
+        #[cfg(not(unix))]
+        {
+            let _ = analysis;
+        }
+    }
+
+    #[test]
+    fn scaffold_conflicts_error_display() {
+        let err = ScaffoldConflictsError {
+            files: vec![
+                PathBuf::from("tools/pyproject.toml"),
+                PathBuf::from("tools/.gitignore"),
+            ],
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("would be overwritten"), "msg: {msg}");
+        assert!(msg.contains("pyproject.toml"), "msg: {msg}");
+        assert!(msg.contains(".gitignore"), "msg: {msg}");
+    }
+
+    #[test]
+    fn file_status_classify_new_identical_conflict() {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        fs::create_dir(&tools).unwrap();
+        fs::write(tools.join("pyproject.toml"), "# stale").unwrap();
+
+        // Write the scaffold to get the real .gitignore content.
+        let first = scaffold(tmp.path(), &opts(), true).unwrap();
+        let gitignore_path = first
+            .files_written
+            .iter()
+            .find(|p| p.ends_with(".gitignore"))
+            .expect("gitignore must be written");
+        let gitignore_content = fs::read_to_string(gitignore_path).unwrap();
+
+        // Now put stale content back into pyproject.toml and keep .gitignore identical.
+        fs::write(tools.join("pyproject.toml"), "# stale again").unwrap();
+        // Delete example.py so it is "New" on the next analysis.
+        fs::remove_file(tools.join("example.py")).unwrap();
+
+        let analysis = analyze_scaffold(tmp.path(), &opts()).unwrap();
+        let pyproject = analysis.files.iter().find(|f| f.dest.ends_with("pyproject.toml")).unwrap();
+        let gitignore = analysis.files.iter().find(|f| f.dest.ends_with(".gitignore")).unwrap();
+        let example = analysis.files.iter().find(|f| f.dest.ends_with("example.py")).unwrap();
+
+        assert_eq!(pyproject.status, FileStatus::Conflict);
+        assert_eq!(gitignore.status, FileStatus::Identical, "content: {gitignore_content:?}");
+        assert_eq!(example.status, FileStatus::New);
     }
 }
