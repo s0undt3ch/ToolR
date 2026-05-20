@@ -1,4 +1,5 @@
 mod bootstrap;
+mod builtin_completions;
 mod cli;
 mod dispatch;
 mod execute_build;
