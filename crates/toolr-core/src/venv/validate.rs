@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error(
-        "toolr: tools/pyproject.toml must declare a `toolr>=X.Y` dependency. \
+        "toolr: tools/pyproject.toml must declare a `toolr-py>=X.Y` dependency. \
          Add it and retry."
     )]
     ToolrPackageMissing,
