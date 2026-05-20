@@ -250,6 +250,154 @@ fn nested_command_completion_filters_by_prefix() {
     assert_eq!(out, vec!["start".to_string()]);
 }
 
+fn dispatcher_fixture() -> Manifest {
+    // Mirrors the dashtastic shape: `jenkins job` is a dispatcher with
+    // a couple of its own flags (`--dry-run`, `--cpu`) plus grafted
+    // children at `group = "jenkins.job"`.
+    let str_arg = |name: &str, kind, default: Option<&str>, values: &[&str]| Argument {
+        name: name.into(),
+        kind,
+        help: String::new(),
+        default: default.map(str::to_string),
+        type_annotation: Some("str".into()),
+        resolved_type: None,
+        path_constraints: None,
+        metadata: crate::manifest::ArgMetadata::default(),
+        allowed_values: values.iter().map(|s| (*s).to_string()).collect(),
+    };
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: "h".into(),
+        dynamic_hash: String::new(),
+        groups: vec![Group {
+            name: "jenkins".into(),
+            title: "Jenkins".into(),
+            description: String::new(),
+            parent: None,
+            origin: Origin::Static,
+        }],
+        commands: vec![
+            // The dispatcher itself — its `is_dispatcher` flag is what
+            // tells the completion engine to look for grafted children
+            // at `group == "jenkins.job"`.
+            Command {
+                name: "job".into(),
+                group: "jenkins".into(),
+                module: "tools.job".into(),
+                function: "job".into(),
+                summary: "Trigger Jenkins.".into(),
+                description: String::new(),
+                arguments: vec![
+                    str_arg("cpu", ArgumentKind::Optional, Some("200m"), &[]),
+                    str_arg("dry-run", ArgumentKind::Flag, None, &[]),
+                ],
+                imports: vec![],
+                origin: Origin::Static,
+                dispatched_from: None,
+                is_dispatcher: true,
+            },
+            // Two grafted children under `jenkins.job`. The leaf
+            // command's own argument (a positional with allowed values)
+            // is what we expect to see after the child name is chosen.
+            Command {
+                name: "delete_orphans".into(),
+                group: "jenkins.job".into(),
+                module: "tools.job".into(),
+                function: "job".into(),
+                summary: "Delete orphans.".into(),
+                description: String::new(),
+                arguments: vec![str_arg(
+                    "scope",
+                    ArgumentKind::Positional,
+                    None,
+                    &["all", "stale"],
+                )],
+                imports: vec![],
+                origin: Origin::Static,
+                dispatched_from: Some("argparse:django".into()),
+                is_dispatcher: false,
+            },
+            Command {
+                name: "delete_stale".into(),
+                group: "jenkins.job".into(),
+                module: "tools.job".into(),
+                function: "job".into(),
+                summary: "Delete stale entries.".into(),
+                description: String::new(),
+                arguments: vec![],
+                imports: vec![],
+                origin: Origin::Static,
+                dispatched_from: Some("argparse:django".into()),
+                is_dispatcher: false,
+            },
+        ],
+    }
+}
+
+#[test]
+fn dispatcher_completion_lists_grafted_children() {
+    // Regression for the dashtastic case: `toolr jenkins job <TAB>`
+    // returned nothing even though `--help` showed the children.
+    let out = serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", ""]));
+    assert_eq!(
+        out,
+        vec!["delete_orphans".to_string(), "delete_stale".to_string()]
+    );
+}
+
+#[test]
+fn dispatcher_completion_filters_children_by_prefix() {
+    let out = serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "delete_"]));
+    assert_eq!(
+        out,
+        vec!["delete_orphans".to_string(), "delete_stale".to_string()]
+    );
+}
+
+#[test]
+fn dispatcher_flag_prefix_lists_dispatcher_flags_not_children() {
+    // `toolr jenkins job --<TAB>` must offer the dispatcher's own
+    // flags, not the grafted child names.
+    let out = serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "--"]));
+    assert_eq!(out, vec!["--cpu".to_string(), "--dry-run".to_string()]);
+}
+
+#[test]
+fn dispatcher_completion_offers_children_after_parent_flag() {
+    // `toolr jenkins job --dry-run <TAB>` should still suggest children
+    // — the parent flag was consumed but no child has been picked yet.
+    let out = serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--dry-run", ""]),
+    );
+    assert_eq!(
+        out,
+        vec!["delete_orphans".to_string(), "delete_stale".to_string()]
+    );
+}
+
+#[test]
+fn dispatcher_recurses_into_child_args_once_child_is_chosen() {
+    // `toolr jenkins job delete_orphans <TAB>` — the child has a
+    // positional with allowed values; surface them.
+    let out = serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "delete_orphans", ""]),
+    );
+    assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
+}
+
+#[test]
+fn dispatcher_recurses_through_parent_flag_value_pair() {
+    // `toolr jenkins job --cpu 200m delete_orphans <TAB>` must skip
+    // both `--cpu` and its value when locating the chosen child.
+    let out = serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--cpu", "200m", "delete_orphans", ""]),
+    );
+    assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
+}
+
 use crate::complete::{ResolvedManifest, resolve_manifest_at_tab};
 use crate::manifest::{write_manifest};
 use tempfile::TempDir;
