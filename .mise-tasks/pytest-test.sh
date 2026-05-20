@@ -2,5 +2,5 @@
 
 set -e
 
-uv run maturin develop --manifest-path crates/toolr-py/Cargo.toml
+mise run develop-toolr-py
 uv run pytest -s -ra -v "$@"
