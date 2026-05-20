@@ -75,6 +75,20 @@ pub fn run_for_project(
             out.entry(parent).or_default().extend(children);
         }
     }
+    // Intra-source duplicates (e.g. multiple Django apps each shipping a
+    // `sync.py` swept up by the same glob) get a warning and the first
+    // occurrence wins. Cross-source collisions remain a hard error.
+    let warnings = attach::dedup_intra_source(&mut out);
+    for w in &warnings {
+        eprintln!("toolr: warning: {w}");
+    }
+    // Recompute `dispatchers` to drop any parent whose only child was a
+    // dedup victim (rare in practice but keeps the bookkeeping honest).
+    dispatchers.retain(|p| {
+        out.get(p)
+            .map(|children| !children.is_empty())
+            .unwrap_or(false)
+    });
     attach::validate_no_collisions(&out)?;
     Ok(GraftResult {
         children_by_parent: out,

@@ -422,7 +422,19 @@ pub fn scan_block_paths(
             }
         };
         match scan_source(&stem, &text) {
-            Ok(cmd) => out.push(cmd),
+            Ok(cmd) => {
+                // A file with no `add_argument` calls is almost always a
+                // helper module (`_setup_*.py`, `__init__.py`, shared
+                // utilities) that happens to live inside the scan glob.
+                // Grafting it as a child would either collide on common
+                // stems (e.g. multiple `__init__.py` files under one
+                // parent — a clap startup panic) or surface a no-arg
+                // ghost command the user never wrote. Skip silently.
+                if cmd.arguments.is_empty() {
+                    continue;
+                }
+                out.push(cmd);
+            }
             Err(ScanError::Parse { message, .. }) => {
                 let mut placeholder = ScannedCommand {
                     name: stem,
@@ -623,5 +635,49 @@ def add_arguments(self, parser):
         // failure recorded in its `warnings` field — confirm at least one ScannedCommand
         // carries a warning mentioning "broken".
         assert!(scanned.iter().any(|s| s.warnings.iter().any(|w| w.contains("broken"))));
+    }
+
+    #[test]
+    fn scan_paths_skips_files_with_no_add_argument_calls() {
+        // Regression: helper modules (`__init__.py`, `_setup_*.py`, shared
+        // utilities) parse fine but contain zero `add_argument` calls.
+        // They must not become commands — multiple `__init__.py` files
+        // under one parent would collide on the stem and crash clap with
+        // a "command name is duplicated" panic at startup.
+        let project = tempfile::tempdir().unwrap();
+        let cmds = project.path().join("apps/x/management/commands");
+        std::fs::create_dir_all(&cmds).unwrap();
+
+        std::fs::write(
+            cmds.join("real_command.py"),
+            "def add_arguments(self, parser):\n    parser.add_argument('app_label')\n",
+        )
+        .unwrap();
+        // `__init__.py` parses fine but has no add_argument calls.
+        std::fs::write(cmds.join("__init__.py"), "# package marker\n").unwrap();
+        // `_setup_paddle_utils.py` — a private helper with no add_argument calls.
+        std::fs::write(
+            cmds.join("_setup_paddle_utils.py"),
+            "def configure(parser):\n    pass\n",
+        )
+        .unwrap();
+
+        let scanned = scan_block_paths(
+            project.path(),
+            &["apps/*/management/commands/*.py".to_string()],
+        )
+        .unwrap();
+
+        let names: std::collections::BTreeSet<_> =
+            scanned.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains("real_command"), "real command must scan");
+        assert!(
+            !names.contains("__init__"),
+            "__init__.py has no add_argument calls — must not become a command",
+        );
+        assert!(
+            !names.contains("_setup_paddle_utils"),
+            "helper module has no add_argument calls — must not become a command",
+        );
     }
 }
