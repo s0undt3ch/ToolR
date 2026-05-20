@@ -424,6 +424,20 @@ fn fish_script_invokes_toolr_complete() {
     assert!(script.contains("complete -c toolr"));
 }
 
+#[test]
+fn fish_script_does_not_inject_literal_dash_dash_into_args() {
+    // Regression: an earlier version used `set -a args -- $current` on
+    // the assumption that `--` was an end-of-options marker for fish's
+    // `set` builtin. It is not — fish appends `--` as a literal value,
+    // which then short-circuits clap's option parsing on the binary side
+    // and drops the trailing in-progress token.
+    let script = completion_script(Shell::Fish);
+    assert!(
+        !script.contains("set -a args --"),
+        "fish completion script must not append a literal `--` into args"
+    );
+}
+
 use crate::complete::install::{
     InstallOptions, InstallOutcome, install_path_for, install_script,
 };
