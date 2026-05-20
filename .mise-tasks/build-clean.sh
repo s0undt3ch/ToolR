@@ -5,10 +5,13 @@ set -e
 cargo clean
 rm -rf dist/
 
-# maturin develop drops compiled extension modules into the source tree
-find . -path ./.venv -prune -o \( -name "*.so" -o -name "*.pyd" \) -exec rm -f {} +
+# Remove only the compiled extension modules that maturin drops into the
+# project's own source tree. Scope to crates/ to avoid touching anything
+# in .venv, site-packages, or mise-managed installs.
+find ./crates -name "*.so" -exec rm -f {} +
+find ./crates -name "*.pyd" -exec rm -f {} +
 
-# Python bytecode cache
+# Python bytecode cache (project source only, not .venv)
 find . -path ./.venv -prune -o -type d -name "__pycache__" -exec rm -rf {} +
 
 # egg-info directories left by editable installs / pytest
