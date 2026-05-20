@@ -677,3 +677,47 @@ def _build_aliases(param_name: str, positional: bool, aliases: list[str] | None)
     if default_alias not in aliases:
         aliases.insert(0, default_alias)
     return aliases
+
+
+class DispatcherDetectionError(Exception):
+    """Raised when a function's DispatchCommand usage is malformed."""
+
+
+def detect_dispatch_parameter(func: Callable[..., Any]) -> str | None:
+    """Return the name of the function's `DispatchCommand` parameter, or None.
+
+    A command qualifies as a dispatcher iff exactly one keyword-only
+    parameter is annotated with `toolr.sources.DispatchCommand`. The
+    parameter name itself is free. Subclasses are not supported in v1.
+    Returns `None` when the function isn't a dispatcher; raises
+    `DispatcherDetectionError` on a malformed usage.
+    """
+    # Local import: keep toolr.sources out of the import-time graph of
+    # toolr.utils._signature.
+    from toolr.sources import DispatchCommand  # noqa: PLC0415
+
+    sig = inspect.signature(func)
+    # Resolve string annotations (PEP 563 / ``from __future__ import annotations``)
+    # so the identity check against ``DispatchCommand`` works regardless of
+    # how the caller declared the parameter.
+    try:
+        resolved = get_type_hints(func)
+    except (NameError, AttributeError, TypeError):
+        resolved = {}
+
+    found_kw: list[str] = []
+    for name, param in sig.parameters.items():
+        annotation = resolved.get(name, param.annotation)
+        if annotation is inspect.Parameter.empty:
+            continue
+        if annotation is not DispatchCommand:
+            continue
+        if param.kind != inspect.Parameter.KEYWORD_ONLY:
+            msg = f"DispatchCommand parameter {name!r} on {func.__qualname__!r} must be keyword-only"
+            raise DispatcherDetectionError(msg)
+        found_kw.append(name)
+
+    if len(found_kw) > 1:
+        msg = f"{func.__qualname__!r} declares more than one DispatchCommand parameter: {found_kw}"
+        raise DispatcherDetectionError(msg)
+    return found_kw[0] if found_kw else None

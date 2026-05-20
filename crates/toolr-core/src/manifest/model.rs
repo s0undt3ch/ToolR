@@ -77,6 +77,21 @@ pub struct Command {
     pub imports: Vec<String>,
     /// Where this command entry came from.
     pub origin: Origin,
+    /// Source identifier (e.g. `"argparse:django"`) when this command
+    /// was grafted from an external source. The runtime treats commands
+    /// with this set as dispatched leaves: the parent's `target` is
+    /// invoked with a constructed `DispatchCommand` payload, not as a
+    /// regular command call. `None` for normal commands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatched_from: Option<String>,
+    /// True when this command hosts grafted children as its own
+    /// subcommands. Set by `argparse::run_for_project` on the parent
+    /// dispatcher entry whenever a `[[tool.toolr.argparse.*.attach]]`
+    /// directs children at it. Read by the CLI builder to decide
+    /// whether to build the command as a flat leaf or as a parent
+    /// that owns children.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_dispatcher: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

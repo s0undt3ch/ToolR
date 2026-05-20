@@ -21,6 +21,8 @@ fn sample_payload() -> DynamicPayload {
             arguments: vec![],
             imports: vec![],
             origin: Origin::Dynamic,
+            dispatched_from: None,
+            is_dispatcher: false,
         }],
         warnings: vec![],
     }

@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 
 use crate::hash::hash_tools_dir;
 use crate::manifest::{Manifest, SCHEMA_VERSION};
-use crate::parser::types::{TypeImports, TypeResolutionError};
+use crate::parser::types::{SourcesImports, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::extract_commands,
     groups::extract_groups,
@@ -69,12 +69,14 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         let module_doc = module_docstring(&module);
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
+        let sources_imports = SourcesImports::from_module(&module);
         let commands = extract_commands(
             &module,
             &module_path,
             &bindings,
             &enums,
             &type_imports,
+            &sources_imports,
             &aliases,
             &sections,
             &global_vars,
@@ -132,13 +134,60 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     }
 
     let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
-    Ok(Manifest {
+    let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash,
         dynamic_hash: String::new(),
         groups: all_groups,
         commands: all_commands,
-    })
+    };
+
+    // Run the user's argparse scanner ([tool.toolr.argparse.*] in
+    // tools/pyproject.toml) so its grafted children land in the same
+    // static manifest layer alongside the user's @command-decorated
+    // commands. The dotted-name derivation mirrors the CLI invocation
+    // path: a dispatcher whose name matches its group's leaf segment
+    // (`command_group("django")` + `def django(...)`) is addressable
+    // as `"django"`; any other command is `"<group>.<name>"`.
+    let parents: std::collections::HashMap<String, (String, String)> = manifest
+        .commands
+        .iter()
+        .map(|c| (dotted_name(c), (c.module.clone(), c.function.clone())))
+        .collect();
+
+    let project_root = tools_dir.parent().unwrap_or(tools_dir);
+    let grafted = crate::argparse::run_for_project(project_root, &parents)
+        .map_err(BuildError::Argparse)?;
+
+    // Splice grafted children into the manifest.
+    for (_parent, mut children) in grafted.children_by_parent {
+        manifest.commands.append(&mut children);
+    }
+
+    // Flip the dispatcher flag on each parent that received children.
+    for cmd in manifest.commands.iter_mut() {
+        if grafted.dispatchers.contains(&dotted_name(cmd)) {
+            cmd.is_dispatcher = true;
+        }
+    }
+
+    Ok(manifest)
+}
+
+/// Compute the dotted name a command is addressable by from the CLI
+/// (mirrors the dispatcher's `command_group(name)` + `def <name>(...)`
+/// pattern). A command whose `name` matches the leaf segment of its
+/// `group` is addressable as the group path itself; otherwise it's
+/// `"<group>.<name>"` (or just `name` when the group is empty).
+fn dotted_name(cmd: &crate::manifest::Command) -> String {
+    let leaf = cmd.group.rsplit('.').next().unwrap_or(cmd.group.as_str());
+    if !cmd.group.is_empty() && cmd.name == leaf {
+        cmd.group.clone()
+    } else if cmd.group.is_empty() {
+        cmd.name.clone()
+    } else {
+        format!("{}.{}", cmd.group, cmd.name)
+    }
 }
 
 /// Like `build_static_manifest`, but also globs `tools_venv` for
@@ -162,6 +211,8 @@ pub enum BuildError {
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
     UnknownGroupRefs(Vec<UnknownGroupRef>),
+    #[error("argparse scanner error: {0}")]
+    Argparse(#[from] crate::argparse::ArgparseError),
 }
 
 /// One command whose `group="…"` reference doesn't match any
@@ -455,6 +506,106 @@ def backend(ctx):
         assert!(msg.contains("ci.helm-diff-pre-comment"), "got: {msg}");
         assert!(msg.contains("Did you mean"), "got: {msg}");
         assert!(msg.contains("ci.helm-diff-pr-comment"), "got: {msg}");
+    }
+
+    /// The user's `[tool.toolr.argparse.*]` blocks in
+    /// `tools/pyproject.toml` graft children onto user-decorated
+    /// dispatcher commands inside `build_static_manifest`. Verifies the
+    /// dotted-name derivation that maps a `command_group("django")` +
+    /// `def django(...)` dispatcher onto pyproject's `parent = "django"`.
+    #[test]
+    fn build_static_manifest_grafts_argparse_children() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/dispatcher.py",
+            r#""""Django dispatcher."""
+group = command_group("django", "Django")
+
+@group.command
+def django(ctx):
+    """Dispatch to manage.py."""
+    pass
+"#,
+        );
+        write(
+            tmp.path(),
+            "apps/x/management/commands/migrate.py",
+            "def add_arguments(self, parser):\n    parser.add_argument('--check', action='store_true')\n",
+        );
+        write(
+            tmp.path(),
+            "tools/pyproject.toml",
+            r#"
+[tool.toolr.argparse.django]
+scan_paths = ["apps/*/management/commands/*.py"]
+
+[[tool.toolr.argparse.django.attach]]
+parent = "django"
+"#,
+        );
+
+        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let names: std::collections::BTreeSet<_> =
+            manifest.commands.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains("django"), "names: {names:?}");
+        assert!(names.contains("migrate"), "names: {names:?}");
+        let migrate = manifest
+            .commands
+            .iter()
+            .find(|c| c.name == "migrate")
+            .unwrap();
+        assert_eq!(migrate.group, "django");
+        assert_eq!(
+            migrate.dispatched_from.as_deref(),
+            Some("argparse:django"),
+        );
+        let django = manifest
+            .commands
+            .iter()
+            .find(|c| c.name == "django")
+            .unwrap();
+        assert_eq!(migrate.module, django.module);
+        assert_eq!(migrate.function, django.function);
+        assert!(
+            django.is_dispatcher,
+            "expected dispatcher flag set on django",
+        );
+    }
+
+    /// A dispatcher command with both a real CLI flag (`cpu`) and a
+    /// `DispatchCommand`-annotated injection kwarg builds cleanly: the
+    /// CLI flag lands on the manifest, the injection kwarg is dropped
+    /// rather than rejected as "unsupported type `DispatchCommand`".
+    #[test]
+    fn dispatcher_with_real_flags_and_injection_kwarg_builds() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/dispatcher.py",
+            r#""""Django dispatcher."""
+from toolr.sources import DispatchCommand
+
+group = command_group("django", "Django")
+
+@group.command
+def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
+    """Dispatch."""
+    return 0
+"#,
+        );
+        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let django = manifest
+            .commands
+            .iter()
+            .find(|c| c.name == "django")
+            .expect("django command present");
+        let arg_names: Vec<&str> = django.arguments.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(
+            arg_names,
+            vec!["cpu"],
+            "expected dispatcher arguments to keep `cpu` and drop `dispatched`",
+        );
     }
 
     /// Bare `@command` (no `group=` kwarg) is a build error pointing

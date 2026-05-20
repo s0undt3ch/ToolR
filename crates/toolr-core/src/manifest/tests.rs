@@ -22,6 +22,8 @@ fn sample_manifest() -> Manifest {
             arguments: vec![],
             imports: vec!["packaging".into()],
             origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher: false,
         }],
     }
 }
@@ -79,4 +81,69 @@ fn load_returns_io_error_when_missing() {
     let tmp = TempDir::new().unwrap();
     let err = load_manifest(&tmp.path().join("absent.json")).expect_err("should be missing");
     assert!(matches!(err, ManifestError::Io(_)));
+}
+
+mod dispatched_from_tests {
+    use super::*;
+
+    fn cmd_with(dispatched_from: Option<String>) -> Command {
+        Command {
+            name: "migrate".into(),
+            group: "django".into(),
+            module: "tools.django_dispatcher".into(),
+            function: "django".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from,
+            is_dispatcher: false,
+        }
+    }
+
+    #[test]
+    fn command_serializes_dispatched_from_when_present() {
+        let json = serde_json::to_string(&cmd_with(Some("argparse:django".into()))).unwrap();
+        assert!(json.contains(r#""dispatched_from":"argparse:django""#));
+    }
+
+    #[test]
+    fn command_omits_dispatched_from_when_none() {
+        let json = serde_json::to_string(&cmd_with(None)).unwrap();
+        assert!(!json.contains("dispatched_from"));
+    }
+}
+
+#[cfg(test)]
+mod is_dispatcher_tests {
+    use super::*;
+
+    fn cmd_with(is_dispatcher: bool) -> Command {
+        Command {
+            name: "job".into(),
+            group: "jenkins".into(),
+            module: "tools.jenkins".into(),
+            function: "job".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher,
+        }
+    }
+
+    #[test]
+    fn command_serializes_is_dispatcher_when_true() {
+        let json = serde_json::to_string(&cmd_with(true)).unwrap();
+        assert!(json.contains(r#""is_dispatcher":true"#));
+    }
+
+    #[test]
+    fn command_omits_is_dispatcher_when_false() {
+        let json = serde_json::to_string(&cmd_with(false)).unwrap();
+        assert!(!json.contains("is_dispatcher"));
+    }
 }
