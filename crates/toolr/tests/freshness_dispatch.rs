@@ -78,3 +78,68 @@ fn new_tools_file_appears_in_help_without_explicit_rebuild() {
         "manifest was not persisted with the example group:\n{manifest}"
     );
 }
+
+#[test]
+fn syntax_error_in_tools_warns_and_serves_cached() {
+    let tmp = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+
+    // Overwrite the empty manifest seeded by `write_minimal_project`
+    // with one that has a pre-existing `good` group — proves the
+    // soft-fail path falls back to (not erases) the cached manifest.
+    fs::write(
+        tmp.path().join("tools").join(".toolr-manifest.json"),
+        r#"{
+            "schema_version": 1,
+            "static_hash": "stale",
+            "third_party_hash": "",
+            "groups": [
+                {"name": "good", "title": "Good", "description": "", "parent": null, "origin": "static"}
+            ],
+            "commands": []
+        }"#,
+    )
+    .unwrap();
+
+    // Drop a syntactically broken Python file so the static rebuild
+    // returns BuildError::Build (unclosed parenthesis = parse error).
+    fs::write(
+        tmp.path().join("tools").join("broken.py"),
+        "def not closed(",
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .arg("--help")
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+
+    // toolr --help itself must succeed — we're soft-failing.
+    assert!(
+        output.status.success(),
+        "toolr --help failed unexpectedly: {output:?}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("tools manifest is stale and a fresh build failed"),
+        "expected soft-fail warning in stderr; got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("broken.py"),
+        "expected the offending filename in the warning; got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("toolr project manifest rebuild"),
+        "expected pointer to explicit rebuild command; got:\n{stderr}"
+    );
+
+    // Cached `good` group must still be visible — we fell back, didn't erase.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("good"),
+        "expected cached group in --help; got:\n{stdout}"
+    );
+}
