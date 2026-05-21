@@ -179,9 +179,8 @@ This is appropriate here because the surface we want to
 document is statically declared:
 
 - toolr's decorators (`command_group`, `command`, parameter
-  decorators) are top-level `def` statements in known
-  toolr-py modules.
-- `Ctx` is a regular class with regular methods and
+  decorators) are top-level `def` statements.
+- `Context` is a regular class with regular methods and
   properties.
 - The information we want to render — name, parameter list
   including defaults and annotations, docstring — is exactly
@@ -193,24 +192,49 @@ The dynamic-pattern concern that motivates a runtime
 introspection subprocess for *user* `tools/*.py` does not
 apply to toolr's own API surface.
 
+**The public-surface contract toolr-py provides.** Every
+object intended for use outside toolr-py is re-exported
+from the package root, and `toolr.__all__` is the canonical
+list of those objects. `from toolr import Context`,
+`from toolr import command_group`, and so on are the only
+supported import paths for downstream code. Internal modules
+under `toolr._*` are implementation detail. This convention
+is what makes the AST-only approach robust to internal
+refactoring: the xtask never needs to know where a name
+*lives*, only that it appears in `toolr.__all__`. As long as
+`__all__` is correct, internal reshuffling is invisible to
+the generator.
+
 **The full pipeline.**
 
-1. **Locate source files.** A small constants block in the
-   xtask lists the toolr-py source files that contain the
-   public command-authoring surface (the decorator module,
-   the `Ctx` class module). These are workspace-relative
-   paths like `crates/toolr-py/python/toolr/...`.
-2. **Parse with ruff.** Each file is read as text and parsed
-   into a `ModModule` AST.
-3. **Walk the AST.** Extract: top-level `def`s matching the
-   public decorator names (parameters, defaults, annotations
-   as source text, docstring); the `Ctx` class body's public
-   methods and properties (same fields).
-4. **Read the Rust-side type-resolution table** from xtask's
+1. **Read `crates/toolr-py/python/toolr/__init__.py`.** This
+   is the single entry point. Parse it with
+   `ruff_python_parser`.
+2. **Read `__all__` from `toolr/__init__.py`.** This is the
+   canonical, contractual list of names exposed to outside
+   consumers. The xtask treats `__all__` as the source of
+   truth — not "prefer if present, fall back if not." A
+   missing or malformed `__all__` is a build error in the
+   xtask, not a fallback to import-statement scanning.
+3. **Walk the import graph.** For each public name, follow
+   its top-level `from .submodule import Name` (or relative
+   variants) to locate the source file that defines it.
+   Parse that file with ruff and find the matching `def` or
+   `class` node. The walker is shallow: it follows direct
+   re-exports only, not transitive ones, since toolr-py's
+   convention is to re-export *from* the package root *to*
+   the public, not to chain re-exports across internal
+   modules.
+4. **Extract AST detail.** For each definition: parameter
+   list with defaults and annotations as source text,
+   docstring (first `Expr`/`Constant` statement if present),
+   and — for classes — public methods and properties
+   following the same shape.
+5. **Read the Rust-side type-resolution table** from xtask's
    `toolr-core` dependency. This knows how Python type-hint
    strings (which we have as source text from the AST) map
    to argparse binding behavior.
-5. **Render `references/commands.md`** via a hand-written
+6. **Render `references/commands.md`** via a hand-written
    Rust template (literal `write!` macros, not a general-
    purpose templating library).
 
@@ -221,15 +245,28 @@ which is what we want for documentation — the rendered
 reference matches what a reader of toolr-py would see in the
 source.
 
-**Coupling to toolr-py layout.** The constants block listing
-which source files to scan creates a small coupling: if
-toolr-py renames a file or moves the decorator surface,
-xtask's path list must be updated in the same PR. A CI guard
-asserts every listed path exists; a missing path fails the
-build. This trades a runtime "import the package" approach
-for a static "scan these files" approach, and the trade is
-deliberate — the layout is stable, the failure mode is
-loud, and the coupling lives in one named constant.
+**Coupling to toolr-py layout.** Because the xtask starts
+from `toolr/__init__.py` and follows re-exports, the only
+hard coupling is the path to `__init__.py` itself, which is
+a workspace constant. Internal module renames in toolr-py
+do not affect the generator as long as the re-export at the
+package root continues to expose the name. The failure mode
+when the re-export contract is broken (a name removed from
+the package root, or a public name added to an internal
+module without re-export) is loud: either the public name
+disappears from the generated reference and `--check` reds,
+or the name is silently undocumented and a separate guard
+catches it (see "Public-surface coverage guard" in the
+testing strategy).
+
+**Failure modes the AST-only approach does not catch.**
+Re-exports via `__getattr__` on the package, runtime
+mutation of `globals()`, or wildcard `from .x import *` with
+no `__all__` declaration would all be invisible to the
+walker. These are deliberately excluded from toolr-py's
+conventions; the spec assumes they will not appear. If they
+ever need to, the xtask grows a fallback path, not the
+default path.
 
 **Why not `build.rs`.** A `build.rs` would freeze
 introspection at Rust build time, decoupling from the source
@@ -385,11 +422,20 @@ The foundation everything else rests on. Without this,
   twice against the workspace and asserts
   `references/commands.md` is byte-identical between the
   two runs.
-- **Source-files-exist guard.** A unit test asserts every
-  toolr-py source file listed in the xtask's "files to scan"
-  constants block exists. A rename or move in toolr-py fails
-  this guard before it can produce a stale reference.
-- Both run in CI; both are fast.
+- **Entry-point guard.** A unit test asserts
+  `crates/toolr-py/python/toolr/__init__.py` exists and has
+  a top-level `__all__` list. If the package is restructured
+  in a way that breaks either condition, this guard fails
+  before a stale reference can be produced.
+- **Public-surface coverage guard.** A unit test asserts a
+  bidirectional invariant: every name in `toolr.__all__`
+  produces a section in the generated `references/
+  commands.md`, and `references/commands.md` documents
+  nothing that is not in `toolr.__all__`. This catches both
+  failure modes: a name added to `__all__` without a
+  corresponding definition the AST walker can find, and a
+  documented surface that has been removed from `__all__`.
+- All three run in CI; all are fast.
 
 ### References generation — `cargo xtask build-skill-refs --check`
 
@@ -436,12 +482,16 @@ The foundation everything else rests on. Without this,
    itself targets Claude Code first; the drift-defense
    generators are platform-agnostic and can emit additional
    formats later without re-architecture.
-2. **The "files to scan" constants block.** The xtask needs
-   to name the toolr-py source files that contain the
-   command-authoring surface (decorator module(s), `Ctx`
-   module). The exact paths and how to group them (one
-   constant per surface vs. one big list) is plan-level.
-   The CI guard that asserts each path exists is mandatory.
+2. **Walker behavior for non-trivial re-exports.** The
+   common case is `from .submodule import Name`, which the
+   walker resolves trivially. Edge cases worth nailing in
+   the plan: re-exports through an intermediate alias
+   (`X = _internal.X`), names defined directly in
+   `__init__.py` rather than imported, and names exported
+   from a sub-package's `__init__.py`. The spec's
+   commitment is that the walker handles every shape that
+   appears in `toolr/__init__.py` today; the plan enumerates
+   them.
 3. **`build-skill-refs --check` enforcement points.** CI gate
    is mandatory. Pre-commit hook is recommended for local dev
    loop. The plan will decide whether to ship a prek hook entry
