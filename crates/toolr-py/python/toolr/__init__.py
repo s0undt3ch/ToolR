@@ -27,6 +27,7 @@ from toolr._decorators import command_group
 from toolr.build import BuildManifestError
 from toolr.build import BuildResult
 from toolr.build import build_manifest
+from toolr.sources import DispatchCommand
 from toolr.utils._imports import report_on_import_errors
 from toolr.utils._signature import ArgSection
 from toolr.utils._signature import arg
@@ -38,6 +39,7 @@ __all__ = [
     "BuildManifestError",
     "BuildResult",
     "Context",
+    "DispatchCommand",
     "__version__",
     "arg",
     "arg_section",

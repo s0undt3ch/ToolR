@@ -51,16 +51,21 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
 
 pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
     const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
-    const HELP_FLAGS: &[&str] = &["--help", "--version", "-h", "-V"];
+    const VERSION_FLAGS: &[&str] = &["--version", "-V"];
 
-    // Any help/version flag anywhere in argv → skip.
-    if argv.iter().skip(1).any(|a| HELP_FLAGS.contains(&a.as_str())) {
+    // `--version` prints binary metadata only — never needs the user
+    // manifest, so don't pay the rebuild cost.
+    if argv.iter().skip(1).any(|a| VERSION_FLAGS.contains(&a.as_str())) {
         return true;
     }
     // First positional (= first arg after `toolr` that doesn't start with `-`).
+    // Note: `--help` / bare `toolr` deliberately fall through to the
+    // rebuild — both surfaces render the command tree, and rendering it
+    // without user groups (because the manifest is missing) is the UX
+    // bug this skip exists to avoid.
     let first_positional = argv.iter().skip(1).find(|a| !a.starts_with('-'));
     match first_positional {
-        None => true, // `toolr` alone
+        None => false, // `toolr` alone (with or without `--help`) → rebuild so help shows user groups
         Some(name) => BUILTINS.contains(&name.as_str()),
     }
 }
@@ -77,17 +82,22 @@ mod tests {
     }
 
     #[test]
-    fn skips_for_long_help_flag() {
-        assert!(should_skip_auto_rebuild(&args(&["--help"])));
+    fn fires_for_long_help_flag() {
+        // `toolr --help` must render the user's command tree; that needs
+        // the manifest. Falling through to rebuild beats showing a
+        // partial help that hides every user command.
+        assert!(!should_skip_auto_rebuild(&args(&["--help"])));
     }
 
     #[test]
-    fn skips_for_short_help_flag() {
-        assert!(should_skip_auto_rebuild(&args(&["-h"])));
+    fn fires_for_short_help_flag() {
+        assert!(!should_skip_auto_rebuild(&args(&["-h"])));
     }
 
     #[test]
     fn skips_for_long_version_flag() {
+        // `--version` prints binary metadata — independent of the
+        // manifest, no reason to rebuild.
         assert!(should_skip_auto_rebuild(&args(&["--version"])));
     }
 
@@ -97,8 +107,10 @@ mod tests {
     }
 
     #[test]
-    fn skips_for_bare_toolr() {
-        assert!(should_skip_auto_rebuild(&args(&[])));
+    fn fires_for_bare_toolr() {
+        // Bare `toolr` falls through to clap's auto-generated help,
+        // which is the same surface as `--help`.
+        assert!(!should_skip_auto_rebuild(&args(&[])));
     }
 
     #[test]
