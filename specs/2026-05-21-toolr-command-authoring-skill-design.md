@@ -26,8 +26,8 @@ This is the common case for toolr users and the natural starting
 point for an AI-first authoring story.
 
 A separate, narrower skill for packaging toolr commands as a
-distributable Python plugin is planned but out of scope for this
-spec. See "Related work" below.
+distributable Python plugin is specced alongside this one; see
+"Related work" below.
 
 ## Goals
 
@@ -53,8 +53,9 @@ spec. See "Related work" below.
 ## Non-goals
 
 - Packaging toolr commands as a distributable Python plugin.
-  This is a separate, much smaller skill with its own trigger
-  and its own spec, deferred to follow-up.
+  That is a separate, narrower skill with its own trigger and
+  its own spec
+  (`2026-05-21-toolr-command-packaging-skill-design.md`).
 - Documenting toolr Rust internals or the manifest builder.
   Agents authoring commands do not need this; toolr maintainers
   do not read skills.
@@ -75,7 +76,7 @@ The skill lives in-tree at `skills/toolr-command-authoring/`
 and is distributed via `skillshare` from there. It is loaded as
 a single document. A short pointer at the end of the skill
 ("if you're shipping these as a distributable package, see the
-separate `toolr-command-packaging` skill") links to the planned
+separate `toolr-command-packaging` skill") links to the
 packaging skill but creates no cross-skill dependency in the
 runtime contract.
 
@@ -300,19 +301,20 @@ narrative runs through the checklist before landing.
 
 ## Related work
 
-A separate **`toolr-command-packaging`** skill is planned but
-not specced here. Its scope is deliberately narrow: how to
-ship existing toolr commands as a distributable Python plugin
-(generate `toolr-manifest.json` via `toolr self build-manifest
-<pkg>`, configure the build backend to include it in the wheel,
-wire `toolr self build-manifest --check` as a CI gate). It
-shares the drift-defense infrastructure introduced here
+A separate **`toolr-command-packaging`** skill is specced in
+[`2026-05-21-toolr-command-packaging-skill-design.md`](./
+2026-05-21-toolr-command-packaging-skill-design.md). Its scope
+is deliberately narrow: how to ship existing toolr commands
+as a distributable Python plugin (generate
+`toolr-manifest.json` via `toolr self build-manifest <pkg>`,
+configure the build backend to include it in the wheel, wire
+`toolr self build-manifest --check` as a CI gate). It shares
+the drift-defense infrastructure introduced here
 (`build-skill-refs`, the `examples/` snapshot framework) but
 has independent triggers, independent references, and
-independent ownership. It will get its own spec when we get
-there. The closing pointer in the authoring skill links users
-to it, but the two skills have no runtime dependency on each
-other.
+independent ownership. The closing pointer in the authoring
+skill links users to it, but the two skills have no runtime
+dependency on each other.
 
 ## Removals
 
