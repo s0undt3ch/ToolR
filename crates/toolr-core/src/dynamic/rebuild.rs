@@ -1,5 +1,5 @@
-//! High-level rebuild orchestration for both static-plus-dynamic and
-//! dynamic-only refresh paths.
+//! High-level rebuild orchestration. Exposes [`rebuild_manifest_full`]
+//! for bootstrap and `project manifest rebuild`.
 
 use std::path::{Path, PathBuf};
 
@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use super::hash::compute_third_party_hash;
 use super::merge::merge_dynamic;
 use super::runner::run_introspect;
-use crate::manifest::{load_manifest, write_manifest};
+use crate::manifest::write_manifest;
 use crate::parser::build_static_manifest;
 
 /// Result of a rebuild, returned for diagnostics / CLI output.
@@ -38,42 +38,6 @@ pub fn rebuild_manifest_full(
     let mut merged = merge_dynamic(base, payload);
     merged.third_party_hash = compute_third_party_hash(venv_root)?;
     let manifest_path = tools.join(".toolr-manifest.json");
-    write_manifest(&manifest_path, &merged)?;
-    Ok(RebuildOutcome {
-        manifest_path,
-        group_count: merged.groups.len(),
-        command_count: merged.commands.len(),
-        warnings,
-    })
-}
-
-/// Dynamic-only refresh: reuse the on-disk manifest's static layer,
-/// strip its dynamic entries, run the helper, re-merge, and write.
-///
-/// Cheap relative to a full rebuild — used at execute time when only the
-/// venv has changed.
-pub fn rebuild_dynamic_only(
-    project_root: &Path,
-    python: &Path,
-    venv_root: &Path,
-) -> Result<RebuildOutcome> {
-    use crate::manifest::Origin;
-
-    let tools = project_root.join("tools");
-    let manifest_path = tools.join(".toolr-manifest.json");
-    let mut base = load_manifest(&manifest_path)
-        .with_context(|| format!("loading {}", manifest_path.display()))?;
-    // Drop everything dynamic; keep the static and third-party skeleton intact.
-    base.groups
-        .retain(|g| matches!(g.origin, Origin::Static | Origin::ThirdParty));
-    base.commands
-        .retain(|c| matches!(c.origin, Origin::Static | Origin::ThirdParty));
-
-    let payload =
-        run_introspect(python, &tools).with_context(|| "running dynamic-layer introspect helper")?;
-    let warnings = payload.warnings.clone();
-    let mut merged = merge_dynamic(base, payload);
-    merged.third_party_hash = compute_third_party_hash(venv_root)?;
     write_manifest(&manifest_path, &merged)?;
     Ok(RebuildOutcome {
         manifest_path,
