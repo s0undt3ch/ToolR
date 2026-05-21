@@ -37,6 +37,17 @@ pub fn compute_third_party_hash(venv_root: &Path) -> Result<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+/// The third-party hash value for a venv that contains no
+/// `toolr-manifest.json` files (or no venv at all). Equivalent to
+/// `compute_third_party_hash` on an empty `site-packages` tree.
+///
+/// Callers in `freshness::compare` use this constant when the project
+/// has no venv resolved, so a freshly-bootstrapped manifest doesn't
+/// falsely register third-party drift.
+pub fn empty_third_party_hash() -> String {
+    blake3::Hasher::new().finalize().to_hex().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,6 +102,14 @@ mod tests {
             compute_third_party_hash(a.path()).unwrap(),
             compute_third_party_hash(b.path()).unwrap()
         );
+    }
+
+    #[test]
+    fn empty_helper_matches_empty_venv_hash() {
+        let tmp = TempDir::new().unwrap();
+        let h1 = compute_third_party_hash(tmp.path()).unwrap();
+        let h2 = empty_third_party_hash();
+        assert_eq!(h1, h2);
     }
 
     #[test]
