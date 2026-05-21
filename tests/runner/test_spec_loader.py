@@ -51,8 +51,11 @@ def test_load_spec_rejects_unknown_schema_version(spec_file: Callable[..., Path]
     spec_path = spec_file(schema_version=999)
     with pytest.raises(SpecError) as exc_info:
         load_spec(spec_path)
-    assert "schema_version" in str(exc_info.value)
-    assert "999" in str(exc_info.value)
+    msg = str(exc_info.value)
+    # The error message names both schema numbers ("schema 1, but … schema 999")
+    # and points the user at the fix. Assert on the parts users will grep for.
+    assert "schema" in msg
+    assert "999" in msg
 
 
 def test_load_spec_raises_when_file_missing(tmp_path: Path) -> None:
