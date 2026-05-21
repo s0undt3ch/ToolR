@@ -315,7 +315,7 @@ fn format_type_errors(errors: &[TypeResolutionError]) -> String {
     s
 }
 
-fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
     let mut paths: Vec<_> = WalkDir::new(tools_dir)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -327,7 +327,19 @@ fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
 }
 
 fn module_path_for(tools_dir: &Path, file: &Path) -> String {
-    let rel = file.strip_prefix(tools_dir).unwrap_or(file);
+    module_path_for_prefix(tools_dir, file, "tools")
+}
+
+/// Compute a dotted module path for `file` rooted at `source_dir`, using
+/// `prefix` as the leading namespace segment. `__init__.py` files
+/// collapse to the prefix itself (the package root). Other files become
+/// `<prefix>.<rel_no_ext_with_dots>`.
+pub(crate) fn module_path_for_prefix(
+    source_dir: &Path,
+    file: &Path,
+    prefix: &str,
+) -> String {
+    let rel = file.strip_prefix(source_dir).unwrap_or(file);
     let mut parts: Vec<String> = rel
         .with_extension("")
         .components()
@@ -336,7 +348,7 @@ fn module_path_for(tools_dir: &Path, file: &Path) -> String {
     if parts.last().map(String::as_str) == Some("__init__") {
         parts.pop();
     }
-    let mut out = String::from("tools");
+    let mut out = String::from(prefix);
     for p in parts {
         out.push('.');
         out.push_str(&p);
