@@ -168,45 +168,74 @@ for this spec.
 
 #### Generator architecture
 
-`cargo xtask build-skill-refs` runs in two phases, following
-the same Rust-drives-Python-subprocess pattern that
-`toolr self build-manifest` already uses for end-user builds.
+`cargo xtask build-skill-refs` is a single Rust process. It
+does not spawn a Python subprocess and does not require
+toolr-py to be importable; it reads toolr-py's source files
+lexically and parses them with `ruff_python_parser`, the
+same crate toolr already uses for the static AST scan of
+`tools/*.py`.
 
-**Phase 1 — Python introspection subprocess.** A new module
-`toolr._skill_introspect` exposes a single entry point that
-emits a deterministic JSON dump of the Python-side surface:
+This is appropriate here because the surface we want to
+document is statically declared:
 
-- For each public decorator (`command_group`, `command`,
-  parameter decorators): name, signature (via
-  `inspect.signature`), docstring (via `__doc__`), parameter
-  names and defaults.
-- For `ctx`: class name, public methods and properties with
-  their signatures and docstrings.
+- toolr's decorators (`command_group`, `command`, parameter
+  decorators) are top-level `def` statements in known
+  toolr-py modules.
+- `Ctx` is a regular class with regular methods and
+  properties.
+- The information we want to render — name, parameter list
+  including defaults and annotations, docstring — is exactly
+  what AST gives us. No dynamic dispatch, no runtime-
+  computed members, no need to resolve type annotations to
+  values.
 
-The module is private (`_skill_introspect`) but ships in
-`toolr-py` like the existing `_introspect` does — cheap, no
-extra install needed, end users do not see it in any public
-API. The JSON is the contract between the two phases. Each
-side can be tested in isolation.
+The dynamic-pattern concern that motivates a runtime
+introspection subprocess for *user* `tools/*.py` does not
+apply to toolr's own API surface.
 
-**Phase 2 — Rust driver (`xtask`).** Imports `toolr-core`
-directly to read the Rust-side type-resolution table from
-`crates/toolr-core/src/types/` (which knows how Python type
-hints map to argparse behavior). Deserializes the JSON from
-phase 1. Joins them. Renders `references/commands.md` via a
-hand-written Rust template (literal `write!` macros, not a
-general-purpose templating library).
+**The full pipeline.**
 
-Why two phases: the decorator and `ctx` surface live in the
-Python package; the type-resolution rules live in the Rust
-manifest builder. Each side owns its own truth. The JSON
-contract pins what crosses the boundary.
+1. **Locate source files.** A small constants block in the
+   xtask lists the toolr-py source files that contain the
+   public command-authoring surface (the decorator module,
+   the `Ctx` class module). These are workspace-relative
+   paths like `crates/toolr-py/python/toolr/...`.
+2. **Parse with ruff.** Each file is read as text and parsed
+   into a `ModModule` AST.
+3. **Walk the AST.** Extract: top-level `def`s matching the
+   public decorator names (parameters, defaults, annotations
+   as source text, docstring); the `Ctx` class body's public
+   methods and properties (same fields).
+4. **Read the Rust-side type-resolution table** from xtask's
+   `toolr-core` dependency. This knows how Python type-hint
+   strings (which we have as source text from the AST) map
+   to argparse binding behavior.
+5. **Render `references/commands.md`** via a hand-written
+   Rust template (literal `write!` macros, not a general-
+   purpose templating library).
 
-Why subprocess at run time rather than `build.rs`: a
-`build.rs` would freeze introspection at Rust build time,
-decoupling from whatever Python package is actually installed.
-The subprocess model keeps the reference accurate to the
-running pair, same as `build-manifest`.
+**Why source spelling rather than runtime introspection.**
+`inspect.signature` round-trips through Python objects and
+normalizes formatting. AST gives us the source text directly,
+which is what we want for documentation — the rendered
+reference matches what a reader of toolr-py would see in the
+source.
+
+**Coupling to toolr-py layout.** The constants block listing
+which source files to scan creates a small coupling: if
+toolr-py renames a file or moves the decorator surface,
+xtask's path list must be updated in the same PR. A CI guard
+asserts every listed path exists; a missing path fails the
+build. This trades a runtime "import the package" approach
+for a static "scan these files" approach, and the trade is
+deliberate — the layout is stable, the failure mode is
+loud, and the coupling lives in one named constant.
+
+**Why not `build.rs`.** A `build.rs` would freeze
+introspection at Rust build time, decoupling from the source
+on disk at xtask invocation time. The xtask reads source at
+run time so the reference always matches what is currently
+checked in.
 
 #### Idempotency
 
@@ -353,16 +382,14 @@ The foundation everything else rests on. Without this,
 
 - **Rust-side idempotency.** An integration test in
   `crates/xtask/tests/` runs `cargo xtask build-skill-refs`
-  twice against a fixture toolr project (with a known set of
-  decorators and a non-trivial `ctx` surface) and asserts
+  twice against the workspace and asserts
   `references/commands.md` is byte-identical between the
   two runs.
-- **Python-side idempotency.** A unit test in
-  `crates/toolr-py/tests/` invokes the
-  `toolr._skill_introspect` entry point twice with the same
-  imports and asserts its JSON output is byte-identical.
-- Both run in CI; both are fast (no project mutation needed
-  for the second invocation).
+- **Source-files-exist guard.** A unit test asserts every
+  toolr-py source file listed in the xtask's "files to scan"
+  constants block exists. A rename or move in toolr-py fails
+  this guard before it can produce a stale reference.
+- Both run in CI; both are fast.
 
 ### References generation — `cargo xtask build-skill-refs --check`
 
@@ -409,13 +436,12 @@ The foundation everything else rests on. Without this,
    itself targets Claude Code first; the drift-defense
    generators are platform-agnostic and can emit additional
    formats later without re-architecture.
-2. **Exact JSON contract between `_skill_introspect` and the
-   Rust driver.** The architecture is fixed (two-phase, JSON
-   pipe between them) but the schema of the JSON itself is a
-   plan-level decision. Likely a flat list of decorators
-   keyed by name, plus a `ctx` block, with explicit `kind`
-   tags so the schema can grow without breaking older
-   consumers. Deferred to the plan.
+2. **The "files to scan" constants block.** The xtask needs
+   to name the toolr-py source files that contain the
+   command-authoring surface (decorator module(s), `Ctx`
+   module). The exact paths and how to group them (one
+   constant per surface vs. one big list) is plan-level.
+   The CI guard that asserts each path exists is mandatory.
 3. **`build-skill-refs --check` enforcement points.** CI gate
    is mandatory. Pre-commit hook is recommended for local dev
    loop. The plan will decide whether to ship a prek hook entry

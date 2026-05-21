@@ -161,13 +161,15 @@ from:
   `site-packages/` are scanned, how merging works, what
   happens on collision).
 
-Unlike the authoring skill, **no Python introspection
-subprocess is needed for this skill**. The manifest schema
-and plugin-loader semantics are pure Rust. The xtask reads
-the relevant types and constants directly from its
-`toolr-core` dependency. This is genuinely simpler than the
-authoring skill's two-phase model and the spec calls that out
-as a feature, not an exception.
+The packaging generator reads its source of truth directly
+from xtask's `toolr-core` dependency — no file scan, no AST
+parse. The manifest schema and plugin-loader semantics are
+pure Rust types and constants, so the generator can use
+them in-process. (The authoring skill is also a single
+Rust process, scanning toolr-py source files via
+`ruff_python_parser`; the two generators differ in their
+source of truth — toolr-core types vs. toolr-py source text
+— not in their process model.)
 
 The same `--check` invocation handles both skills:
 `cargo xtask build-skill-refs --check` iterates over every
@@ -300,14 +302,12 @@ Additional or differently-shaped tests for this skill:
 
 ### Generator idempotency
 
-- **Rust-side idempotency.** The `cargo xtask
-  build-skill-refs` integration test in `crates/xtask/tests/`
-  (introduced by the authoring spec) extends its byte-
-  identical assertion to cover `references/packaging.md` as
-  well as `references/commands.md`. Running the xtask twice
-  must produce byte-identical output for both files.
-- No Python-side idempotency test is needed for this skill —
-  the generator is pure Rust.
+- **Idempotency.** The `cargo xtask build-skill-refs`
+  integration test in `crates/xtask/tests/` (introduced by
+  the authoring spec) extends its byte-identical assertion
+  to cover `references/packaging.md` as well as
+  `references/commands.md`. Running the xtask twice must
+  produce byte-identical output for both files.
 
 ### References generation — `cargo xtask build-skill-refs --check`
 
