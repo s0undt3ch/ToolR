@@ -8,21 +8,21 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "3rd-party-pkg",
     "toolr",
+    "toolr-plugin-example",
     "toolr-py",
     "toolr-tools",
 ]
 
 [manifest.dependency-groups]
 dev = [
-    { name = "3rd-party-pkg", editable = "tests/support/3rd-party-pkg" },
     { name = "attrs", specifier = ">=25.3.0" },
     { name = "coverage", specifier = ">=7.14.0" },
     { name = "hypothesis", specifier = ">=6.0.0" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-skip-markers", specifier = ">=1.5.2" },
     { name = "pytest-subtests", specifier = ">=0.14.2" },
+    { name = "toolr-plugin-example", editable = "examples/plugin-package" },
     { name = "toolr-py", editable = "crates/toolr-py" },
 ]
 docs = [
@@ -35,17 +35,6 @@ docs = [
     { name = "toolr-py", editable = "crates/toolr-py" },
 ]
 tools = [{ name = "packaging", specifier = ">=26.2" }]
-
-[[package]]
-name = "3rd-party-pkg"
-version = "1.0.0"
-source = { editable = "tests/support/3rd-party-pkg" }
-dependencies = [
-    { name = "toolr" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "toolr", editable = "crates/toolr" }]
 
 [[package]]
 name = "annotated-types"
@@ -1102,6 +1091,17 @@ wheels = [
 [[package]]
 name = "toolr"
 source = { editable = "crates/toolr" }
+
+[[package]]
+name = "toolr-plugin-example"
+version = "1.0.0"
+source = { editable = "examples/plugin-package" }
+dependencies = [
+    { name = "toolr-py" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "toolr-py", editable = "crates/toolr-py" }]
 
 [[package]]
 name = "toolr-py"

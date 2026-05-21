@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import pkgutil
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -99,6 +100,12 @@ def build_manifest(
         output_path = package_root / "toolr-manifest.json"
     version = schema_version if schema_version is not None else MANIFEST_SCHEMA_VERSION
 
+    # Import every submodule under the package so that `command_group()`
+    # and `@group.command` decorators fire and populate the registry.
+    # This means plugin authors don't have to re-export submodules from
+    # `__init__.py` just to make `toolr self build-manifest` see them.
+    _import_all_submodules(module, package_name)
+
     fragment = _collect_fragment(package_name, version)
     if not fragment["groups"] and not fragment["commands"]:
         err_msg = f"package `{package_name}` declares no toolr commands - nothing to write"
@@ -125,6 +132,30 @@ def _resolve_package_root(module: Any, package_name: str) -> Path:
         )
         raise BuildManifestError(err_msg)
     return Path(file).resolve().parent
+
+
+def _import_all_submodules(module: Any, package_name: str) -> None:
+    """Recursively import every submodule under `module`.
+
+    This is what lets `toolr self build-manifest <pkg>` discover commands
+    declared in `<pkg>.foo`, `<pkg>.bar`, etc. without the plugin having
+    to re-export them from `__init__.py`. Best-effort: a submodule that
+    fails to import is silently skipped so one broken file doesn't poison
+    the whole walk.
+    """
+    search_paths = getattr(module, "__path__", None)
+    if not search_paths:
+        return  # single-file modules have nothing to walk
+    for info in pkgutil.walk_packages(search_paths, prefix=package_name + "."):
+        # Best-effort: a submodule that fails to import is silently
+        # skipped so one broken file doesn't poison the whole walk. We
+        # intentionally swallow every exception because submodule import
+        # errors here are reported elsewhere (the static parser sees the
+        # missing entries and surfaces them as `unknown group ref` etc).
+        try:
+            importlib.import_module(info.name)
+        except Exception:  # noqa: BLE001, S112 - see comment above
+            continue
 
 
 def _collect_fragment(package_name: str, version: int) -> dict[str, Any]:

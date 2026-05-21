@@ -53,11 +53,14 @@ class CommandsTester:
 
     @sys_modules.default
     def _default_sys_modules(self) -> dict[str, ModuleType]:
-        # Copy sys.modules but exclude our testing thirdparty package and any local tools already imported
+        # Copy sys.modules but exclude the example plugin package and any
+        # local tools already imported, so the harness can reload them
+        # cleanly on each test.
         return {
             name: sys.modules[name]
             for name in sys.modules
-            if name not in ("tools", "thirdparty") and not name.startswith(("tools.", "thirdparty."))
+            if name not in ("tools", "toolr_example_plugin")
+            and not name.startswith(("tools.", "toolr_example_plugin."))
         }
 
     @command_group_patcher.default
