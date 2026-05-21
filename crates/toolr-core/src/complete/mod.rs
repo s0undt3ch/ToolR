@@ -7,9 +7,10 @@
 //! 1. [`serve_completions`] — pure prefix-matching against a loaded
 //!    `Manifest`. No I/O.
 //! 2. [`resolve_manifest_at_tab`] — Tab-time freshness check that loads
-//!    the cached manifest, compares its `static_hash` against the live
-//!    `tools/**/*.py` hash, and either returns the cached manifest or a
-//!    fresh one built by [`crate::parser::build_static_manifest`].
+//!    the cached manifest, delegates to [`crate::freshness::compare`],
+//!    and either returns the cached manifest or a fresh one built by
+//!    [`crate::parser::build_static_manifest`]. Tab completion never
+//!    persists and never re-globs the tools venv.
 //! 3. [`scripts`] — embedded shell-completion scripts (bash, zsh, fish).
 
 pub mod engine;
