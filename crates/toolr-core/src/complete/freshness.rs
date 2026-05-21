@@ -32,11 +32,11 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     let cached = load_manifest(&manifest_path).ok();
 
     // Tab completion never globs the venv — too costly on the hot path.
-    // We feed `compare` `venv_dir = None`, so any third-party drift
-    // returns Fresh against the cached `third_party_hash` (which itself
-    // matches "empty venv" when bootstrapped against an empty venv).
-    // Slight inaccuracy is acceptable: the next dispatch invocation will
-    // detect real drift and rebuild.
+    // Passing `venv_dir = None` to `compare` skips the third-party axis
+    // entirely; the cached third_party_hash is treated as canonical and
+    // only static drift triggers a re-parse. Real third-party changes will
+    // be picked up on the next dispatch invocation, which does pass the
+    // venv path.
     let verdict = crate::freshness::compare(cached.as_ref(), &tools_dir, None)?;
 
     if matches!(verdict, crate::freshness::FreshnessVerdict::Fresh) {

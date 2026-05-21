@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::dynamic::{compute_third_party_hash, empty_third_party_hash};
+use crate::dynamic::compute_third_party_hash;
 use crate::hash::hash_tools_dir;
 use crate::manifest::Manifest;
 
@@ -28,11 +28,11 @@ pub enum FreshnessVerdict {
 
 /// Compare cached manifest hashes against the live filesystem.
 ///
-/// `venv_dir` is optional. When `None`, the third-party hash is treated
-/// as `empty_third_party_hash()` — equivalent to running the live
-/// computation against an empty venv. A `None` `cached` always returns
-/// `ThirdPartyDrift` so the caller produces a fresh manifest from
-/// scratch.
+/// `venv_dir` is optional. When `None`, the third-party axis is skipped
+/// entirely — the cache's `third_party_hash` is treated as canonical.
+/// Callers that want to detect third-party drift must pass `Some(venv)`.
+/// A `None` `cached` always returns `ThirdPartyDrift` so the caller
+/// produces a fresh manifest from scratch.
 ///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
 /// third-party and dynamic entries. On `ThirdPartyDrift`, call
@@ -49,14 +49,18 @@ pub fn compare(
 
     let live_static = hash_tools_dir(tools_dir)
         .with_context(|| format!("hashing {}", tools_dir.display()))?;
-    let live_third_party = match venv_dir {
-        Some(v) => compute_third_party_hash(v)?,
-        None => empty_third_party_hash(),
-    };
 
-    if cached.third_party_hash != live_third_party {
-        return Ok(FreshnessVerdict::ThirdPartyDrift);
+    // Third-party axis is only checked when the caller actually has a
+    // venv. When `venv_dir` is `None`, the caller has explicitly opted
+    // out (tab completion's hot path, or dispatch when venv resolution
+    // failed). Skip the third-party check — treat cache as canonical.
+    if let Some(v) = venv_dir {
+        let live_third_party = compute_third_party_hash(v)?;
+        if cached.third_party_hash != live_third_party {
+            return Ok(FreshnessVerdict::ThirdPartyDrift);
+        }
     }
+
     if cached.static_hash != live_static {
         return Ok(FreshnessVerdict::StaticDrift);
     }

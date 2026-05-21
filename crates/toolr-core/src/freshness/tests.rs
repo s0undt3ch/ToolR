@@ -124,13 +124,15 @@ fn no_cache_forces_rebuild_via_third_party_drift() {
 }
 
 #[test]
-fn missing_venv_treated_as_empty_third_party() {
+fn missing_venv_skips_third_party_axis() {
     let tmp = TempDir::new().unwrap();
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    // Cached manifest with an arbitrary non-empty third_party_hash —
+    // under the new semantics this is ignored when venv_dir is None.
     let cached = Manifest {
         schema_version: crate::manifest::SCHEMA_VERSION,
         static_hash: crate::hash::hash_tools_dir(&tmp.path().join("tools")).unwrap(),
-        third_party_hash: crate::dynamic::compute_third_party_hash(tmp.path()).unwrap(),
+        third_party_hash: "arbitrary-non-empty-hash".to_string(),
         groups: vec![],
         commands: vec![],
     };

@@ -14,8 +14,10 @@ pub struct Manifest {
     /// Hash over `tools/**/*.py` contents — used for fast freshness checks.
     pub static_hash: String,
     /// Will hash the sorted list of `site-packages/*/toolr-manifest.json`
-    /// files (path + content) discovered in the tools venv. Empty when
-    /// the venv has no third-party plugin manifests (or no venv at all).
+    /// files (path + content) discovered in the tools venv. Equals
+    /// `empty_third_party_hash()` (BLAKE3 of empty input) when no plugin
+    /// manifests are present or no venv exists. Deserialized as the empty
+    /// string `""` on manifests predating this field (schema v1).
     #[serde(default)]
     pub third_party_hash: String,
     pub groups: Vec<Group>,
