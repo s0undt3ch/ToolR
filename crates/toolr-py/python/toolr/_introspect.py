@@ -2,8 +2,7 @@
 
 Invoked as ``python -m toolr._introspect`` from the Rust side inside the
 project's tools venv. Walks the ``command_group`` registry after
-importing every module under ``tools.*``, enumerates ``importlib.metadata``
-entry points in the ``toolr.commands`` group, and writes a JSON payload
+importing every module under ``tools.*``, and writes a JSON payload
 to stdout.
 
 The wire format is defined in ``specs/rust-front-end/07-plan-6-dynamic-manifest.md``.
@@ -115,43 +114,17 @@ def _command_entry(group_name: str, cmd_name: str, func: Any) -> dict[str, Any]:
         "description": description.strip(),
         # Argument extraction is intentionally omitted here. The static
         # parser already emits these for `tools/*.py` files; the dynamic
-        # layer only adds *missing* commands. Arguments for dynamic-only
-        # commands are filled in by Task 4's entry-point pass for legacy
-        # third-party packages.
+        # layer only adds *missing* commands.
         "arguments": [],
         "imports": [],
         "origin": "dynamic",
     }
 
 
-def _load_entry_points(warnings: list[str]) -> None:
-    """Trigger imports for every package registered under ``toolr.commands``.
-
-    Loading an entry point is enough to run its module's ``command_group``
-    and ``@group.command`` decorators; the actual results land in the
-    toolr registry singleton, which ``_walk_registry`` reads in a single
-    pass after both the tools walk and the entry-point load complete.
-    """
-    import importlib.metadata as md  # noqa: PLC0415
-
-    try:
-        eps = md.entry_points(group="toolr.commands")
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover - extremely defensive
-        warnings.append(f"failed to enumerate entry points: {exc!r}")
-        return
-
-    for ep in eps:
-        try:
-            ep.load()
-        except Exception as exc:  # noqa: BLE001  # see _import_tools_modules
-            warnings.append(f"failed to load entry point `{ep.name}` from `{ep.value}`: {type(exc).__name__}: {exc}")
-
-
 def build_payload(tools_root: str | None) -> dict[str, Any]:
     warnings: list[str] = []
     _ensure_tools_on_syspath(tools_root)
     _import_tools_modules(warnings)
-    _load_entry_points(warnings)
     groups, commands = _walk_registry()
     return {
         "payload_schema_version": PAYLOAD_SCHEMA_VERSION,

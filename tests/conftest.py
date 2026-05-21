@@ -46,15 +46,9 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture
-def skip_loading_entry_points() -> bool:
-    """Skip loading entry points."""
-    return False
-
-
-@pytest.fixture
-def commands_tester(tmp_path: Path, skip_loading_entry_points: bool) -> Iterator[CommandsTester]:
+def commands_tester(tmp_path: Path) -> Iterator[CommandsTester]:
     """Create a commands tester."""
-    commands_tester = CommandsTester(search_path=tmp_path, skip_loading_entry_points=skip_loading_entry_points)
+    commands_tester = CommandsTester(search_path=tmp_path)
     with commands_tester:
         commands_tester.discover()
         yield commands_tester

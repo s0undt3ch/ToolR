@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
 from toolr import Context
 from toolr import command_group
-
-
-@pytest.fixture
-def skip_loading_entry_points() -> bool:
-    """Skip loading entry points."""
-    return True
 
 
 def test_complete_workflow_example(commands_tester):

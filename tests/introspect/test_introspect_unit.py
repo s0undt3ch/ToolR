@@ -1,7 +1,7 @@
 """Unit-level coverage for `toolr._introspect`.
 
 The existing tests in this directory (`test_introspect_empty.py`,
-`test_introspect_entry_points.py`, `test_introspect_tools_walk.py`)
+`test_introspect_tools_walk.py`)
 all spawn `python -m toolr._introspect` as a subprocess, which is a
 faithful test of the wire format but doesn't credit any coverage to
 the in-process test runner. This file calls the module's helpers
@@ -30,7 +30,6 @@ from toolr._introspect import PAYLOAD_SCHEMA_VERSION
 from toolr._introspect import _command_entry
 from toolr._introspect import _ensure_tools_on_syspath
 from toolr._introspect import _import_tools_modules
-from toolr._introspect import _load_entry_points
 from toolr._introspect import _split_leaf
 from toolr._introspect import _walk_registry
 from toolr._introspect import build_payload
@@ -324,46 +323,22 @@ def test_build_payload_with_no_tools_root_returns_empty_state(
     assert payload["commands"] == []
 
 
-# --------------------------------------------------------------------
-# _load_entry_points
-# --------------------------------------------------------------------
-
-
-def test_load_entry_points_is_silent_when_no_entry_points_match(
+def test_build_payload_ignores_registered_entry_points(
+    tools_fixture: Path,
     clean_registry: dict[str, Any],
-) -> None:
-    del clean_registry
-    warnings: list[str] = []
-    # The `toolr.commands` entry-point group is empty in the test venv
-    # (no third-party packages contribute commands). `_load_entry_points`
-    # must return without warnings.
-    _load_entry_points(warnings)
-    assert warnings == []
-
-
-def test_load_entry_points_collects_warnings_when_entry_point_load_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Stub `importlib.metadata.entry_points` to return one EP whose
-    # `load()` raises — exercises the per-EP exception branch.
-    class _BadEP:
-        name = "broken"
-        value = "module:does_not_exist"
+    """Entry-point packages must not be loaded; toolr.commands support is removed."""
+    del clean_registry
+    called: list[str] = []
 
-        def load(self) -> object:
-            msg = "deliberate test failure"
-            raise RuntimeError(msg)
-
-    def fake_entry_points(*, group: str) -> tuple[_BadEP, ...]:
-        assert group == "toolr.commands"
-        return (_BadEP(),)
+    def fake_entry_points(*, group: str) -> list[object]:
+        called.append(group)
+        return []
 
     monkeypatch.setattr("importlib.metadata.entry_points", fake_entry_points)
-    warnings: list[str] = []
-    _load_entry_points(warnings)
-    assert len(warnings) == 1
-    assert "broken" in warnings[0]
-    assert "deliberate test failure" in warnings[0]
+    build_payload(str(tools_fixture))
+    assert called == [], "build_payload must not call importlib.metadata.entry_points"
 
 
 # --------------------------------------------------------------------
