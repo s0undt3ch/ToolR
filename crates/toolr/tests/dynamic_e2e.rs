@@ -49,12 +49,13 @@ fn full_rebuild_merges_static_and_dynamic_entries() {
         r#"{"payload_schema_version":1,"groups":[{"name":"legacy","title":"Legacy","description":"","origin":"static"},{"name":"ci","title":"FROM DYNAMIC","description":"","origin":"static"}],"commands":[{"name":"widget","group":"legacy","module":"third","function":"widget","summary":"Widget.","description":"","arguments":[],"imports":[],"origin":"static"},{"name":"hello","group":"ci","module":"FROM DYNAMIC","function":"hello","summary":"FROM DYNAMIC","description":"","arguments":[],"imports":[],"origin":"static"}],"warnings":["module foo failed: bar"]}"#,
     );
 
-    // ---- Fake venv with a couple of dist-info dirs so third_party_hash is non-empty.
+    // ---- Fake venv with a toolr-manifest.json so compute_third_party_hash
+    //      hashes a non-empty input and third_party_hash is non-empty.
     let venv = project.join("venv");
-    std::fs::create_dir_all(venv.join("lib/python3.13/site-packages/foo-1.0.0.dist-info"))
-        .unwrap();
-    std::fs::create_dir_all(venv.join("lib/python3.13/site-packages/bar-2.0.0.dist-info"))
-        .unwrap();
+    write(
+        &venv.join("lib/python3.13/site-packages/some-pkg/toolr-manifest.json"),
+        "{}",
+    );
 
     let outcome = rebuild_manifest_full(project, &py, &venv).expect("rebuild");
 
