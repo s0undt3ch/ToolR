@@ -181,3 +181,34 @@ fn skip_list_argv_does_not_trigger_freshness() {
         );
     }
 }
+
+#[test]
+fn tab_completion_does_not_persist_manifest() {
+    let tmp = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+    // Force StaticDrift so the freshness machinery would rebuild if not
+    // bypassed: the tools/*.py content differs from the seeded
+    // static_hash, but tab completion handles drift in-memory only.
+    fs::write(tmp.path().join("tools").join("a.py"), "x = 1\n").unwrap();
+
+    let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
+    let before = fs::read_to_string(&manifest_path).unwrap();
+    let mtime_before = fs::metadata(&manifest_path).unwrap().modified().unwrap();
+
+    // Trigger a completion call. The exact tokens after `__complete` don't
+    // matter — completion's only job here is to fire the freshness path
+    // via `resolve_manifest_at_tab`, which is responsible for staying in-memory.
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["__complete", tmp.path().to_str().unwrap(), "toolr", ""])
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "__complete failed: {output:?}");
+
+    // Manifest file must not have been rewritten.
+    let after = fs::read_to_string(&manifest_path).unwrap();
+    let mtime_after = fs::metadata(&manifest_path).unwrap().modified().unwrap();
+    assert_eq!(before, after, "tab completion rewrote the manifest contents");
+    assert_eq!(mtime_before, mtime_after, "tab completion touched mtime");
+}
