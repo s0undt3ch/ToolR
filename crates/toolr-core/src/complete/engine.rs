@@ -118,6 +118,21 @@ fn classify<'a>(manifest: &'a Manifest, tokens: &[String]) -> Slot<'a> {
     // Everything after the command name is the argument zone.
     let arg_tokens = &committed[cursor + 1..];
 
+    if command.is_dispatcher {
+        return classify_dispatcher(manifest, command, &group_full_path, arg_tokens, prefix);
+    }
+
+    classify_leaf_args(command, arg_tokens, prefix)
+}
+
+/// Token-classification for a regular (non-dispatcher) leaf command.
+/// Factored out so the dispatcher branch can reuse it after recursing
+/// into a chosen grafted child.
+fn classify_leaf_args<'a>(
+    command: &'a Command,
+    arg_tokens: &[String],
+    prefix: String,
+) -> Slot<'a> {
     // If the previous committed token was a `--flag`, we're completing
     // that flag's value.
     if let Some(prev) = arg_tokens.last() {
@@ -170,7 +185,134 @@ fn classify<'a>(manifest: &'a Manifest, tokens: &[String]) -> Slot<'a> {
         }
     }
 
+    // No positional candidate to suggest. If the command has any flags,
+    // fall back to flag-name completion so the user has SOMETHING to
+    // Tab into — particularly useful for argparse-style commands whose
+    // entire surface is `--flag value` pairs (no positionals at all),
+    // and for the trailing position past every fixed positional.
+    let has_flags = command.arguments.iter().any(|a| {
+        !matches!(
+            a.kind,
+            ArgumentKind::Positional | ArgumentKind::VarPositional
+        )
+    });
+    if has_flags {
+        return Slot::Flag { command, prefix };
+    }
+
     Slot::None
+}
+
+/// Token-classification for a dispatcher command: the dispatcher's
+/// children are grafted at its dotted path (`<group>.<name>`), so
+/// completing the "next positional" against a dispatcher means
+/// suggesting a child command name. Once a child is chosen, completion
+/// re-enters that child as a regular leaf.
+fn classify_dispatcher<'a>(
+    manifest: &'a Manifest,
+    command: &'a Command,
+    group_full_path: &str,
+    arg_tokens: &[String],
+    prefix: String,
+) -> Slot<'a> {
+    let dispatcher_path = if group_full_path.is_empty() {
+        command.name.clone()
+    } else {
+        format!("{}.{}", group_full_path, command.name)
+    };
+
+    // If the user has already committed a positional value (the child
+    // command name), recurse fully into that child's arg zone — flags,
+    // flag values, and positional completions from here on belong to
+    // the *child*, not the dispatcher. Checking this first prevents
+    // the dispatcher's flag-name fallback from masking the child's.
+    let positional_index = count_positionals_consumed(command, arg_tokens);
+    if positional_index >= 1 {
+        let Some(child_name) = first_positional_value(command, arg_tokens) else {
+            return Slot::None;
+        };
+        let Some(child) = manifest
+            .commands
+            .iter()
+            .find(|c| c.group == dispatcher_path && c.name == child_name)
+        else {
+            return Slot::None;
+        };
+        let child_arg_tokens = drop_through_first_positional(command, arg_tokens);
+        return classify_leaf_args(child, &child_arg_tokens, prefix);
+    }
+
+    // No child chosen yet — completion targets the dispatcher's own
+    // surface (`--flag <TAB>`, `--<TAB>`) or the child-name slot.
+    if let Some(prev) = arg_tokens.last() {
+        if let Some(flag_name) = prev.strip_prefix("--") {
+            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
+                if !matches!(arg.kind, ArgumentKind::Flag) {
+                    return Slot::FlagValue {
+                        argument: arg,
+                        prefix,
+                    };
+                }
+            }
+        }
+    }
+    if prefix.starts_with("--") || prefix == "-" {
+        return Slot::Flag { command, prefix };
+    }
+
+    Slot::Command {
+        group: dispatcher_path,
+        prefix,
+    }
+}
+
+/// Return the first positional value in `arg_tokens`, skipping flags
+/// and their values per the command's argument schema. Mirrors the
+/// counting logic in [`count_positionals_consumed`].
+fn first_positional_value<'a>(command: &Command, arg_tokens: &'a [String]) -> Option<&'a str> {
+    let mut i = 0usize;
+    while i < arg_tokens.len() {
+        let t = &arg_tokens[i];
+        if let Some(flag_name) = t.strip_prefix("--") {
+            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
+                if matches!(arg.kind, ArgumentKind::Flag) {
+                    i += 1;
+                    continue;
+                }
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        return Some(t.as_str());
+    }
+    None
+}
+
+/// Return the slice of `arg_tokens` that comes after the first
+/// positional value (flag/value pairs in between are preserved).
+fn drop_through_first_positional(command: &Command, arg_tokens: &[String]) -> Vec<String> {
+    let mut i = 0usize;
+    while i < arg_tokens.len() {
+        let t = &arg_tokens[i];
+        if let Some(flag_name) = t.strip_prefix("--") {
+            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
+                if matches!(arg.kind, ArgumentKind::Flag) {
+                    i += 1;
+                    continue;
+                }
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        // i points at the first positional; everything after it belongs
+        // to the child's arg zone.
+        return arg_tokens[i + 1..].to_vec();
+    }
+    Vec::new()
 }
 
 fn count_positionals_consumed(command: &Command, arg_tokens: &[String]) -> usize {

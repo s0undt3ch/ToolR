@@ -72,6 +72,47 @@ pub fn validate_no_collisions(
     Ok(())
 }
 
+/// Drop intra-source duplicates from each parent's child list, returning
+/// a warning string per duplicate that was discarded.
+///
+/// Two files matched by the same source can share a stem when an app
+/// layout puts a command of the same name in multiple Django apps, or
+/// when a glob is too broad. The historical behaviour was to silently
+/// pass them through to clap, which then panicked at startup with a
+/// "command name is duplicated" assert. Keeping the first occurrence
+/// and warning preserves the build while telling the user exactly which
+/// child name collided so they can tighten their scan glob or rename
+/// one of the files.
+///
+/// Cross-source collisions remain a hard error — they're a structural
+/// configuration problem that needs the user's resolution before any
+/// build can produce a stable manifest. See [`validate_no_collisions`].
+pub fn dedup_intra_source(
+    children_by_parent: &mut HashMap<String, Vec<Command>>,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for (parent, children) in children_by_parent.iter_mut() {
+        let mut seen: std::collections::HashSet<(String, String)> =
+            std::collections::HashSet::new();
+        let original = std::mem::take(children);
+        for child in original {
+            let source = child.dispatched_from.clone().unwrap_or_default();
+            let key = (child.name.clone(), source.clone());
+            if seen.contains(&key) {
+                warnings.push(format!(
+                    "argparse source {source:?} grafted child {:?} multiple times under {parent:?}; \
+                     keeping the first occurrence — tighten the scan glob or rename one of the files",
+                    child.name
+                ));
+                continue;
+            }
+            seen.insert(key);
+            children.push(child);
+        }
+    }
+    warnings
+}
+
 fn closest_parent_hint(
     target: &str,
     candidates: &std::collections::BTreeSet<&str>,
@@ -202,6 +243,65 @@ mod tests {
             AttachError::Collision { name, .. } => assert_eq!(name, "migrate"),
             other => panic!("unexpected error variant: {other:?}"),
         }
+    }
+
+    #[test]
+    fn dedup_intra_source_keeps_first_and_warns() {
+        // Two files with the same stem (`sync.py` in two Django apps)
+        // both grafted under one parent from the same source. The
+        // pre-fix behaviour would let clap explode at startup. Now we
+        // keep the first and warn loudly.
+        let cmd = |module: &str| Command {
+            name: "sync".into(),
+            group: "django".into(),
+            module: module.into(),
+            function: "django".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: Some("argparse:django".into()),
+            is_dispatcher: false,
+        };
+        let mut children: HashMap<String, Vec<Command>> = HashMap::from([(
+            "django".into(),
+            vec![cmd("apps.billing"), cmd("apps.invoicing"), cmd("apps.subs")],
+        )]);
+        let warnings = dedup_intra_source(&mut children);
+        assert_eq!(children["django"].len(), 1);
+        assert_eq!(children["django"][0].module, "apps.billing", "first wins");
+        assert_eq!(warnings.len(), 2, "one warning per discarded duplicate");
+        for w in &warnings {
+            assert!(w.contains("sync"), "warning {w:?} should name the duplicate");
+            assert!(w.contains("django"), "warning {w:?} should name the parent");
+            assert!(
+                w.contains("argparse:django"),
+                "warning {w:?} should name the source"
+            );
+        }
+    }
+
+    #[test]
+    fn dedup_intra_source_is_a_noop_when_no_duplicates() {
+        let mk = |name: &str| Command {
+            name: name.into(),
+            group: "django".into(),
+            module: format!("apps.{name}"),
+            function: "django".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments: vec![],
+            imports: vec![],
+            origin: Origin::Static,
+            dispatched_from: Some("argparse:django".into()),
+            is_dispatcher: false,
+        };
+        let mut children: HashMap<String, Vec<Command>> =
+            HashMap::from([("django".into(), vec![mk("sync"), mk("migrate")])]);
+        let warnings = dedup_intra_source(&mut children);
+        assert_eq!(children["django"].len(), 2);
+        assert!(warnings.is_empty());
     }
 
     #[test]
