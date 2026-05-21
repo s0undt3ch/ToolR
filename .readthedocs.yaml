@@ -14,7 +14,12 @@ build:
     # PATH. Without this, maturin's puccinialin helper tries to
     # auto-install rustup, collides with the base image's `/usr/bin`
     # Rust, and races to "Text file busy" during `cargo metadata`.
-    rust: "latest"
+    #
+    # Pin >= 1.93: the workspace pulls in ruff's git deps
+    # (ruff_python_parser, ruff_python_ast, ...) which require
+    # rustc 1.93. `tools.rust: "latest"` maps to asdf's "latest" which
+    # currently lags at 1.91.1.
+    rust: "1.93"
   jobs:
       pre_create_environment:
          - asdf plugin add uv
