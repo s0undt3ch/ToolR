@@ -185,6 +185,21 @@ fn classify_leaf_args<'a>(
         }
     }
 
+    // No positional candidate to suggest. If the command has any flags,
+    // fall back to flag-name completion so the user has SOMETHING to
+    // Tab into — particularly useful for argparse-style commands whose
+    // entire surface is `--flag value` pairs (no positionals at all),
+    // and for the trailing position past every fixed positional.
+    let has_flags = command.arguments.iter().any(|a| {
+        !matches!(
+            a.kind,
+            ArgumentKind::Positional | ArgumentKind::VarPositional
+        )
+    });
+    if has_flags {
+        return Slot::Flag { command, prefix };
+    }
+
     Slot::None
 }
 
@@ -206,8 +221,29 @@ fn classify_dispatcher<'a>(
         format!("{}.{}", group_full_path, command.name)
     };
 
-    // Dispatcher-flag completions (`--flag <TAB>`, `--<TAB>`) reuse the
-    // leaf logic against the dispatcher's own arguments.
+    // If the user has already committed a positional value (the child
+    // command name), recurse fully into that child's arg zone — flags,
+    // flag values, and positional completions from here on belong to
+    // the *child*, not the dispatcher. Checking this first prevents
+    // the dispatcher's flag-name fallback from masking the child's.
+    let positional_index = count_positionals_consumed(command, arg_tokens);
+    if positional_index >= 1 {
+        let Some(child_name) = first_positional_value(command, arg_tokens) else {
+            return Slot::None;
+        };
+        let Some(child) = manifest
+            .commands
+            .iter()
+            .find(|c| c.group == dispatcher_path && c.name == child_name)
+        else {
+            return Slot::None;
+        };
+        let child_arg_tokens = drop_through_first_positional(command, arg_tokens);
+        return classify_leaf_args(child, &child_arg_tokens, prefix);
+    }
+
+    // No child chosen yet — completion targets the dispatcher's own
+    // surface (`--flag <TAB>`, `--<TAB>`) or the child-name slot.
     if let Some(prev) = arg_tokens.last() {
         if let Some(flag_name) = prev.strip_prefix("--") {
             if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
@@ -224,29 +260,10 @@ fn classify_dispatcher<'a>(
         return Slot::Flag { command, prefix };
     }
 
-    // Positional slot. Index 0 is occupied by the child command name;
-    // index >= 1 means the user has chosen a child and we recurse into
-    // that child's argument zone.
-    let positional_index = count_positionals_consumed(command, arg_tokens);
-    if positional_index == 0 {
-        return Slot::Command {
-            group: dispatcher_path,
-            prefix,
-        };
+    Slot::Command {
+        group: dispatcher_path,
+        prefix,
     }
-
-    let Some(child_name) = first_positional_value(command, arg_tokens) else {
-        return Slot::None;
-    };
-    let Some(child) = manifest
-        .commands
-        .iter()
-        .find(|c| c.group == dispatcher_path && c.name == child_name)
-    else {
-        return Slot::None;
-    };
-    let child_arg_tokens = drop_through_first_positional(command, arg_tokens);
-    classify_leaf_args(child, &child_arg_tokens, prefix)
 }
 
 /// Return the first positional value in `arg_tokens`, skipping flags

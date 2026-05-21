@@ -398,6 +398,111 @@ fn dispatcher_recurses_through_parent_flag_value_pair() {
     assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
 }
 
+fn flags_only_child_fixture() -> Manifest {
+    // Mirrors the dashtastic `delete_companyuser` shape: every grafted
+    // arg is `--flag value` style (no positionals at all). Tab on an
+    // empty prefix after the child name must surface the available
+    // flag names rather than returning nothing.
+    let opt = |name: &str, help: &str| Argument {
+        name: name.into(),
+        kind: ArgumentKind::Optional,
+        help: help.into(),
+        default: None,
+        type_annotation: Some("int".into()),
+        resolved_type: None,
+        path_constraints: None,
+        metadata: crate::manifest::ArgMetadata::default(),
+        allowed_values: vec![],
+    };
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: "h".into(),
+        dynamic_hash: String::new(),
+        groups: vec![Group {
+            name: "jenkins".into(),
+            title: "Jenkins".into(),
+            description: String::new(),
+            parent: None,
+            origin: Origin::Static,
+        }],
+        commands: vec![
+            Command {
+                name: "job".into(),
+                group: "jenkins".into(),
+                module: "tools.job".into(),
+                function: "job".into(),
+                summary: "Dispatcher.".into(),
+                description: String::new(),
+                arguments: vec![],
+                imports: vec![],
+                origin: Origin::Static,
+                dispatched_from: None,
+                is_dispatcher: true,
+            },
+            Command {
+                name: "delete_companyuser".into(),
+                group: "jenkins.job".into(),
+                module: "tools.job".into(),
+                function: "job".into(),
+                summary: "Delete a CompanyUser.".into(),
+                description: String::new(),
+                arguments: vec![
+                    opt("company-id", "Company ID"),
+                    opt("user-ids", "User IDs"),
+                    opt("user-emails", "User emails"),
+                ],
+                imports: vec![],
+                origin: Origin::Static,
+                dispatched_from: Some("argparse:django".into()),
+                is_dispatcher: false,
+            },
+        ],
+    }
+}
+
+#[test]
+fn child_with_only_optional_flags_offers_flags_on_empty_prefix() {
+    // Regression for dashtastic `toolr jenkins job delete_companyuser <TAB>`:
+    // the child has no positional schema, so the engine used to return
+    // `Slot::None` and the shell saw nothing. Now we fall back to the
+    // child's flag names.
+    let out = serve_completions(
+        &flags_only_child_fixture(),
+        &tokens(&["jenkins", "job", "delete_companyuser", ""]),
+    );
+    assert_eq!(
+        out,
+        vec![
+            "--company-id".to_string(),
+            "--user-emails".to_string(),
+            "--user-ids".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn child_flag_fallback_filters_by_prefix() {
+    // `toolr jenkins job delete_companyuser --user<TAB>` must filter
+    // to flags starting with `--user`.
+    let out = serve_completions(
+        &flags_only_child_fixture(),
+        &tokens(&["jenkins", "job", "delete_companyuser", "--user"]),
+    );
+    assert_eq!(
+        out,
+        vec!["--user-emails".to_string(), "--user-ids".to_string()]
+    );
+}
+
+#[test]
+fn leaf_with_only_flags_offers_flags_on_empty_prefix() {
+    // The fallback should also apply to regular (non-dispatcher) leaf
+    // commands. `toolr ci hello <TAB>` where `hello` has only `--name`
+    // should suggest `--name`, not nothing.
+    let out = serve_completions(&fixture(), &tokens(&["ci", "hello", ""]));
+    assert_eq!(out, vec!["--name".to_string()]);
+}
+
 use crate::complete::{ResolvedManifest, resolve_manifest_at_tab};
 use crate::manifest::{write_manifest};
 use tempfile::TempDir;
