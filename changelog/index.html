@@ -1646,15 +1646,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev401-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev405-2026-05-21" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev401 - 2026-05-20
+        0.11.2-dev405 - 2026-05-21
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev401 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev405 - 2026-05-21">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2146,15 +2146,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev401-2026-05-20" class="md-nav__link">
+  <a href="#0112-dev405-2026-05-21" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev401 - 2026-05-20
+        0.11.2-dev405 - 2026-05-21
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev401 - 2026-05-20">
+    <nav class="md-nav" aria-label="0.11.2-dev405 - 2026-05-21">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2641,7 +2641,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev401-2026-05-20">0.11.2-dev401 - 2026-05-20<a class="headerlink" href="#0112-dev401-2026-05-20" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev405-2026-05-21">0.11.2-dev405 - 2026-05-21<a class="headerlink" href="#0112-dev405-2026-05-21" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3113,6 +3113,8 @@ invisible to end users:</p>
 <li>Add <code>deps upgrade &lt;pkg&gt;</code> for bumping a single dependency (<a href="https://github.com/s0undt3ch/ToolR/commit/b9483b7cf820bd8c8943a0a153b4e002a54381b6"><code>b9483b7</code></a>)</li>
 <li>Replace vague schema-mismatch error with copy-pasteable fix (<a href="https://github.com/s0undt3ch/ToolR/commit/fc3c6ee52cc67e99fe67a0cef316aecff02ae1b3"><code>fc3c6ee</code></a>)</li>
 <li>Document bump policy on both sides (<a href="https://github.com/s0undt3ch/ToolR/commit/62f192e4e1786857d121735afb7cf33b23f9710f"><code>62f192e</code></a>)</li>
+<li>Rebuild manifest on <code>--help</code> and bare <code>toolr</code> (<a href="https://github.com/s0undt3ch/ToolR/commit/f4c7d7ac97d4a5995ece751bcfbb227a89a2373e"><code>f4c7d7a</code></a>)</li>
+<li>Re-export <code>DispatchCommand</code> from package root (<a href="https://github.com/s0undt3ch/ToolR/commit/0ee2079cba18e594634341c8289c78a4277b5635"><code>0ee2079</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3199,6 +3201,7 @@ invisible to end users:</p>
 <li>E2e multi-attach + collision detection (auto-rebuild deferred) (<a href="https://github.com/s0undt3ch/ToolR/commit/ebf4163835dadb645c37fa972700827e0664a0b4"><code>ebf4163</code></a>)</li>
 <li>Unskip auto-rebuild E2E now that bootstrap is wired in (<a href="https://github.com/s0undt3ch/ToolR/commit/d913abf3136d54a0d09a593f3401099ba426eeaa"><code>d913abf</code></a>)</li>
 <li>E2e dispatcher outer flags reachable via grafted child path (<a href="https://github.com/s0undt3ch/ToolR/commit/5bfd5ec956b36aa4c3eb44035f2edb38f9393eae"><code>5bfd5ec</code></a>)</li>
+<li>Update spec-loader assertion to match new schema-mismatch error (<a href="https://github.com/s0undt3ch/ToolR/commit/ed1eb537ea4d8ed690f43d541c03366d2db5dcbf"><code>ed1eb53</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
