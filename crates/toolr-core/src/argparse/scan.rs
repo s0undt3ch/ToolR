@@ -243,6 +243,18 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         metadata.metavar = Some(mv);
     }
 
+    // Preserve the literal long-flag spelling from the source. The
+    // scanner's canonical `name` strips the leading `--` and may pick
+    // between aliases (`add_argument("--user_ids", "--user-ids", ...)`
+    // ties on length and last-wins), so `name` alone isn't enough to
+    // round-trip the source's exact spelling. `long_flag` carries it
+    // verbatim for the dispatch path to emit unchanged.
+    let long_flag = if is_keyword_style {
+        Some(name_for_warning.clone())
+    } else {
+        None
+    };
+
     Argument {
         name,
         kind,
@@ -253,6 +265,7 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         allowed_values: choices,
         path_constraints: None,
         metadata,
+        long_flag,
     }
 }
 
@@ -471,6 +484,10 @@ pub fn with_common_args(mut scanned: ScannedCommand, common: &[CommonArg]) -> Sc
             allowed_values: c.choices.clone().unwrap_or_default(),
             path_constraints: None,
             metadata: Default::default(),
+            // common_args declared in `[tool.toolr.argparse.<name>]`
+            // are toolr-config inputs, not scanned source — there's no
+            // upstream literal to preserve.
+            long_flag: None,
         })
         .collect();
     scanned.arguments.extend(extras);
@@ -586,6 +603,7 @@ def add_arguments(self, parser):
                 allowed_values: vec![],
                 path_constraints: None,
                 metadata: Default::default(),
+                long_flag: Some("--verbosity".into()),
             }],
             warnings: vec![],
         };

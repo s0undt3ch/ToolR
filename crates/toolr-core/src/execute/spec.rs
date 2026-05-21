@@ -147,6 +147,12 @@ pub struct ArgSchemaSpec {
     /// nargs information isn't tracked yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nargs: Option<serde_json::Value>,
+    /// Literal long-flag spelling from the source (e.g. `"--user_ids"`).
+    /// `None` for positionals and for native toolr commands. Used by
+    /// `DispatchCommand.argv` to emit the upstream tool's exact flag
+    /// form even when toolr's CLI normalises display to `--user-ids`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub long_flag: Option<String>,
 }
 
 impl ExecutionSpec {

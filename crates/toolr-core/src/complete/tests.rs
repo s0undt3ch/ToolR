@@ -41,6 +41,7 @@ fn fixture() -> Manifest {
                     resolved_type: None,
                     path_constraints: None,
                     metadata: crate::manifest::ArgMetadata::default(),
+                    long_flag: None,
                     allowed_values: vec![],
                 }],
                 imports: vec![],
@@ -64,6 +65,7 @@ fn fixture() -> Manifest {
                     resolved_type: None,
                     path_constraints: None,
                     metadata: crate::manifest::ArgMetadata::default(),
+                    long_flag: None,
                     allowed_values: vec!["staging".into(), "production".into()],
                 }],
                 imports: vec![],
@@ -87,6 +89,7 @@ fn fixture() -> Manifest {
                     resolved_type: None,
                     path_constraints: None,
                     metadata: crate::manifest::ArgMetadata::default(),
+                    long_flag: None,
                     allowed_values: vec!["wide".into(), "tall".into()],
                 }],
                 imports: vec![],
@@ -263,6 +266,7 @@ fn dispatcher_fixture() -> Manifest {
         resolved_type: None,
         path_constraints: None,
         metadata: crate::manifest::ArgMetadata::default(),
+        long_flag: None,
         allowed_values: values.iter().map(|s| (*s).to_string()).collect(),
     };
     Manifest {
@@ -412,6 +416,7 @@ fn flags_only_child_fixture() -> Manifest {
         resolved_type: None,
         path_constraints: None,
         metadata: crate::manifest::ArgMetadata::default(),
+        long_flag: Some(format!("--{}", name)),
         allowed_values: vec![],
     };
     Manifest {

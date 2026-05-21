@@ -129,6 +129,17 @@ pub struct Argument {
     /// serialisation when empty to keep manifests diffable.
     #[serde(default, skip_serializing_if = "ArgMetadata::is_empty")]
     pub metadata: ArgMetadata,
+    /// Literal long flag string as written in the source — including
+    /// the leading `--` — for arguments harvested from an external
+    /// source (currently the argparse scanner). Used at dispatch time
+    /// to re-emit the upstream tool's exact flag spelling: toolr's
+    /// CLI may normalise `--user_ids` to `--user-ids` for display, but
+    /// when dispatching back to argparse the literal form is required
+    /// unless the source also declared the hyphenated alias.
+    /// `None` for native toolr commands (no scanning involved) and for
+    /// positional args (no flag spelling).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub long_flag: Option<String>,
 }
 
 /// Optional clap-flavoured metadata harvested from `arg(...)`.

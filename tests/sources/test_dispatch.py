@@ -67,11 +67,40 @@ def test_dispatch_command_holds_match():
             [ArgSchema(name="exclude", kind="repeated", help="")],
             ["--exclude", "a", "--exclude", "b"],
         ),
-        # Underscores in the name become dashes on the wire.
+        # Underscores in the name become dashes on the wire when no
+        # source-literal long_flag was recorded (native commands or
+        # legacy manifests).
         (
             {"dry_run": True},
             [ArgSchema(name="dry_run", kind="flag", help="")],
             ["--dry-run"],
+        ),
+        # When `long_flag` IS recorded (argparse scanner picked the
+        # source's literal spelling), emit it verbatim regardless of
+        # whether toolr's CLI display normalised underscores away.
+        (
+            {"user-ids": 7},
+            [
+                ArgSchema(
+                    name="user-ids",
+                    kind="optional",
+                    help="",
+                    long_flag="--user_ids",
+                ),
+            ],
+            ["--user_ids", "7"],
+        ),
+        (
+            {"user-ids": [3, 4]},
+            [
+                ArgSchema(
+                    name="user-ids",
+                    kind="repeated",
+                    help="",
+                    long_flag="--user_ids",
+                ),
+            ],
+            ["--user_ids", "3", "--user_ids", "4"],
         ),
     ],
 )

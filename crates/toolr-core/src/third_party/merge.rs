@@ -113,5 +113,8 @@ fn argument_from_fragment(fa: FragmentArgument) -> Argument {
         path_constraints: None,
         allowed_values: fa.allowed_values,
         metadata: crate::manifest::ArgMetadata::default(),
+        // Third-party manifest fragments aren't argparse-grafted, so
+        // they have no source-literal flag to preserve.
+        long_flag: None,
     }
 }

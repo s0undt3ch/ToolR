@@ -100,6 +100,11 @@ fn build_argument(
         path_constraints: None,
         allowed_values,
         metadata: crate::manifest::ArgMetadata::default(),
+        // Native toolr commands built from Python function signatures
+        // don't have a source-literal flag spelling — the param name
+        // *is* the canonical form; the CLI hyphenates for display and
+        // there is no upstream argparse to dispatch to.
+        long_flag: None,
     }
 }
 
