@@ -26,8 +26,7 @@ pub use types::{
 
 pub mod build;
 pub use build::{BuildError, build_static_manifest, build_static_manifest_with_venv};
-// Re-exported for the upcoming `build_fragment` module within this crate.
-#[allow(unused_imports)]
+// Re-exported for the `build_fragment` module within this crate.
 pub(crate) use build::{list_python_files, module_path_for_prefix};
 
 /// Parse a single Python file and return its module AST.

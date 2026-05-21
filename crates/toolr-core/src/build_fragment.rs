@@ -1,0 +1,222 @@
+//! Build a third-party `ManifestFragment` from a plugin's source tree.
+//!
+//! Pure-Rust replacement for the legacy Python `toolr.build` module.
+//! Walks the package's `.py` files via the same AST pipeline used by
+//! `build_static_manifest`, applies a plugin-aware module-path prefix,
+//! and filters out anything that doesn't belong to the target package.
+
+use std::path::{Path, PathBuf};
+
+use crate::parser::{list_python_files, module_path_for_prefix, parse_python_file};
+use crate::parser::{
+    commands::extract_commands,
+    groups::extract_groups,
+    symbols::{ArgSectionTable, EnumTable, TypeAliasTable},
+    types::{SourcesImports, TypeImports, TypeResolutionError},
+};
+use crate::third_party::{
+    FragmentArgument, FragmentCommand, FragmentGroup, ManifestFragment,
+};
+
+/// Error type for `build_third_party_fragment`.
+#[derive(Debug, thiserror::Error)]
+pub enum BuildFragmentError {
+    #[error("source directory `{path}` is a namespace package (no __init__.py); namespace packages are not supported")]
+    NamespacePackage { path: PathBuf },
+    #[error("source directory `{path}` does not exist or is not a directory")]
+    MissingSourceDir { path: PathBuf },
+    #[error("package `{package}` declares no toolr commands - nothing to write")]
+    EmptyPackage { package: String },
+    #[error("parse error in {path}: {source}")]
+    Parse {
+        path: PathBuf,
+        #[source]
+        source: anyhow::Error,
+    },
+    #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
+    UnsupportedTypes(Vec<TypeResolutionError>),
+}
+
+fn format_type_errors(errors: &[TypeResolutionError]) -> String {
+    let mut s = String::new();
+    for (i, err) in errors.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        use std::fmt::Write as _;
+        let _ = write!(&mut s, "  - {err}");
+    }
+    s
+}
+
+/// Build a `ManifestFragment` for `package_name` by AST-walking
+/// `source_dir`. See spec `specs/2026-05-22-rust-build-manifest-design.md`.
+pub fn build_third_party_fragment(
+    source_dir: &Path,
+    package_name: &str,
+    schema_version: u32,
+) -> Result<ManifestFragment, BuildFragmentError> {
+    // Reject missing dirs and namespace packages up front.
+    if !source_dir.is_dir() {
+        return Err(BuildFragmentError::MissingSourceDir {
+            path: source_dir.to_path_buf(),
+        });
+    }
+    if !source_dir.join("__init__.py").is_file() {
+        return Err(BuildFragmentError::NamespacePackage {
+            path: source_dir.to_path_buf(),
+        });
+    }
+
+    // Pass 1: cross-file enum / alias / arg-section tables.
+    let py_files = list_python_files(source_dir);
+    let mut enums = EnumTable::default();
+    let mut aliases = TypeAliasTable::default();
+    let mut sections = ArgSectionTable::default();
+    for path in &py_files {
+        let module = parse_python_file(path).map_err(|e| BuildFragmentError::Parse {
+            path: path.clone(),
+            source: e,
+        })?;
+        enums.merge(EnumTable::from_module(&module));
+        aliases.merge(TypeAliasTable::from_module(&module));
+        sections.merge(ArgSectionTable::from_module(&module));
+    }
+
+    // Pass 2: groups + commands.
+    let mut all_groups: Vec<crate::manifest::Group> = Vec::new();
+    let mut all_commands: Vec<crate::manifest::Command> = Vec::new();
+    let mut seen_groups: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut global_vars: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let mut type_errors: Vec<TypeResolutionError> = Vec::new();
+
+    for path in &py_files {
+        let module = parse_python_file(path).map_err(|e| BuildFragmentError::Parse {
+            path: path.clone(),
+            source: e,
+        })?;
+        let module_path = module_path_for_prefix(source_dir, path, package_name);
+        let module_doc = module_docstring(&module);
+        let bindings = extract_groups(&module, &module_doc, &global_vars);
+        let type_imports = TypeImports::from_module(&module);
+        let sources_imports = SourcesImports::from_module(&module);
+        let commands = extract_commands(
+            &module,
+            &module_path,
+            &bindings,
+            &enums,
+            &type_imports,
+            &sources_imports,
+            &aliases,
+            &sections,
+            &global_vars,
+            &mut type_errors,
+        );
+        for binding in &bindings {
+            global_vars.insert(binding.var.clone(), binding.group.full_path());
+        }
+        for binding in bindings {
+            if seen_groups.insert(binding.group.full_path()) {
+                all_groups.push(binding.group);
+            }
+        }
+        all_commands.extend(commands);
+    }
+
+    if !type_errors.is_empty() {
+        return Err(BuildFragmentError::UnsupportedTypes(type_errors));
+    }
+
+    // Filter: only keep commands whose `module` belongs to package_name.
+    let prefix_dot = format!("{package_name}.");
+    all_commands.retain(|c| c.module == package_name || c.module.starts_with(&prefix_dot));
+
+    // Derive surviving groups from surviving commands.
+    let surviving_group_names: std::collections::HashSet<&str> =
+        all_commands.iter().map(|c| c.group.as_str()).collect();
+    all_groups.retain(|g| surviving_group_names.contains(g.full_path().as_str()));
+
+    if all_groups.is_empty() && all_commands.is_empty() {
+        return Err(BuildFragmentError::EmptyPackage {
+            package: package_name.to_string(),
+        });
+    }
+
+    // Sort: groups by name, commands by (group, name).
+    all_groups.sort_by_key(|g| g.full_path());
+    all_commands.sort_by(|a, b| (a.group.as_str(), a.name.as_str()).cmp(&(b.group.as_str(), b.name.as_str())));
+
+    Ok(ManifestFragment {
+        toolr_schema_version: schema_version,
+        package: package_name.to_string(),
+        groups: all_groups
+            .into_iter()
+            .map(|g| FragmentGroup {
+                name: g.full_path(),
+                title: g.title,
+                description: g.description,
+            })
+            .collect(),
+        commands: all_commands
+            .into_iter()
+            .map(|c| FragmentCommand {
+                name: c.name,
+                group: c.group,
+                module: c.module,
+                function: c.function,
+                summary: c.summary,
+                description: c.description,
+                arguments: c
+                    .arguments
+                    .into_iter()
+                    .map(|a| FragmentArgument {
+                        name: a.name,
+                        kind: a.kind,
+                        help: a.help,
+                        default: a.default,
+                        type_annotation: a.type_annotation,
+                        allowed_values: a.allowed_values,
+                    })
+                    .collect(),
+                imports: c.imports,
+            })
+            .collect(),
+    })
+}
+
+fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
+    use ruff_python_ast::Stmt;
+    let Some(Stmt::Expr(e)) = module.body.first() else {
+        return String::new();
+    };
+    if let ruff_python_ast::Expr::StringLiteral(s) = e.value.as_ref() {
+        return s.value.to_str().to_string();
+    }
+    String::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[allow(dead_code)] // consumed by later tasks (Task 3+).
+    fn write(tmp: &Path, name: &str, contents: &str) {
+        let path = tmp.join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, contents).unwrap();
+    }
+
+    #[test]
+    fn rejects_namespace_package_without_init() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("pkg")).unwrap();
+        // No __init__.py.
+        let err =
+            build_third_party_fragment(&tmp.path().join("pkg"), "pkg", 1).unwrap_err();
+        assert!(matches!(err, BuildFragmentError::NamespacePackage { .. }));
+    }
+}
