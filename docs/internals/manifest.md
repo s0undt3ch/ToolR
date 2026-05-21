@@ -19,7 +19,7 @@ Python imports involved in the hot path.
 {
   "schema_version": 1,
   "static_hash": "<blake3 hex>",
-  "dynamic_hash": "<blake3 hex>",
+  "third_party_hash": "<blake3 hex>",
   "groups": [...],
   "commands": [...]
 }
@@ -29,7 +29,7 @@ Python imports involved in the hot path.
   manifest with a higher schema than it understands.
 - **`static_hash`** — blake3 over the sorted `(path, contents)` of
   every `tools/**/*.py` file. Drives static-layer rebuilds.
-- **`dynamic_hash`** — blake3 over the tools venv's installed
+- **`third_party_hash`** — blake3 over the tools venv's installed
   package set. Drives dynamic-layer rebuilds.
 - **`groups`** / **`commands`** — the actual command tree. Each
   entry carries an `origin` field (`"static"` or `"dynamic"`)
@@ -157,7 +157,7 @@ packages that haven't shipped a static manifest fragment.
 
 Toolr regenerates the dynamic layer when:
 
-- The venv contents change (`dynamic_hash` drifts) — typically after
+- The venv contents change (`third_party_hash` drifts) — typically after
   `toolr project deps sync`.
 - A command is invoked and the binary detects drift on entry.
 
@@ -181,7 +181,7 @@ Both hashes use blake3, written as lowercase hex.
   `__pycache__`, `.toolr-manifest.json`, and dot-prefixed names),
   sorted by path, each entry hashed as
   `len(path_bytes) || path_bytes || len(contents) || contents`.
-- `dynamic_hash` input: sorted listing of `<venv>/lib/python*/site-
+- `third_party_hash` input: sorted listing of `<venv>/lib/python*/site-
   packages/*` entries, each entry's name + metadata file mtime
   rounded to the nearest second.
 

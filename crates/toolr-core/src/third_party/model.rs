@@ -1,7 +1,7 @@
 //! Serde model for a third-party manifest fragment.
 //!
 //! Distinct from `crate::manifest::Manifest` because fragments lack
-//! `static_hash` / `dynamic_hash` / `origin` and instead carry the
+//! `static_hash` / `third_party_hash` / `origin` and instead carry the
 //! mandatory `toolr_schema_version` discriminator.
 
 use serde::{Deserialize, Serialize};

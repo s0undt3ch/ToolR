@@ -1,6 +1,6 @@
 //! Hash the set of packages installed in the tools venv.
 //!
-//! Used as `Manifest.dynamic_hash` — when this value differs from the
+//! Used as `Manifest.third_party_hash` — when this value differs from the
 //! one stamped into the manifest, the dynamic layer is stale and must be
 //! regenerated before the next command executes.
 
@@ -15,7 +15,7 @@ use blake3::Hasher;
 /// `lib/python*/site-packages/`. Because each `.dist-info` directory is
 /// named `<package>-<version>.dist-info`, any add / remove / version-change
 /// changes the hash.
-pub fn compute_dynamic_hash(venv_root: &Path) -> Result<String> {
+pub fn compute_third_party_hash(venv_root: &Path) -> Result<String> {
     let names = collect_dist_info_names(venv_root)
         .with_context(|| format!("scanning {} for dist-info", venv_root.display()))?;
     let mut hasher = Hasher::new();
@@ -80,8 +80,8 @@ mod tests {
         let a = make_venv(&["foo-1.0.0", "bar-2.0.0"]);
         let b = make_venv(&["bar-2.0.0", "foo-1.0.0"]); // different filesystem order
         assert_eq!(
-            compute_dynamic_hash(a.path()).unwrap(),
-            compute_dynamic_hash(b.path()).unwrap(),
+            compute_third_party_hash(a.path()).unwrap(),
+            compute_third_party_hash(b.path()).unwrap(),
         );
     }
 
@@ -90,8 +90,8 @@ mod tests {
         let a = make_venv(&["foo-1.0.0"]);
         let b = make_venv(&["foo-1.0.1"]);
         assert_ne!(
-            compute_dynamic_hash(a.path()).unwrap(),
-            compute_dynamic_hash(b.path()).unwrap(),
+            compute_third_party_hash(a.path()).unwrap(),
+            compute_third_party_hash(b.path()).unwrap(),
         );
     }
 
@@ -99,7 +99,7 @@ mod tests {
     fn missing_lib_dir_returns_empty_hash() {
         let tmp = TempDir::new().unwrap();
         // Hash is stable: the same value any other "empty" venv produces.
-        let h = compute_dynamic_hash(tmp.path()).unwrap();
+        let h = compute_third_party_hash(tmp.path()).unwrap();
         assert!(!h.is_empty());
     }
 
@@ -119,8 +119,8 @@ mod tests {
         .unwrap();
         let b = make_venv(&["foo-1.0.0"]);
         assert_eq!(
-            compute_dynamic_hash(a.path()).unwrap(),
-            compute_dynamic_hash(b.path()).unwrap(),
+            compute_third_party_hash(a.path()).unwrap(),
+            compute_third_party_hash(b.path()).unwrap(),
         );
     }
 }

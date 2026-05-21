@@ -7,7 +7,7 @@ pub mod payload;
 pub mod rebuild;
 pub mod runner;
 
-pub use hash::compute_dynamic_hash;
+pub use hash::compute_third_party_hash;
 pub use merge::merge_dynamic;
 pub use payload::{DynamicPayload, PAYLOAD_SCHEMA_VERSION};
 pub use rebuild::{RebuildOutcome, rebuild_dynamic_only, rebuild_manifest_full};

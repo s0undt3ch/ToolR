@@ -214,7 +214,7 @@ fn empty_base() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: String::new(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![],
         commands: vec![],
     }

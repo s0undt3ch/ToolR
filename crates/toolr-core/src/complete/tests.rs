@@ -7,7 +7,7 @@ fn fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![
             Group {
                 name: "ci".into(),
@@ -170,7 +170,7 @@ fn nested_fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![
             Group {
                 name: "docker".into(),
@@ -272,7 +272,7 @@ fn dispatcher_fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),
@@ -422,7 +422,7 @@ fn flags_only_child_fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),

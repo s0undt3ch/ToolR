@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use super::hash::compute_dynamic_hash;
+use super::hash::compute_third_party_hash;
 use super::merge::merge_dynamic;
 use super::runner::run_introspect;
 use crate::manifest::{load_manifest, write_manifest};
@@ -24,7 +24,7 @@ pub struct RebuildOutcome {
 ///
 /// `python` is the absolute path to the tools-venv Python interpreter
 /// (resolved by Plan 3's `toolr_core::venv::resolve_venv_path`).
-/// `venv_root` is the venv directory used by [`compute_dynamic_hash`].
+/// `venv_root` is the venv directory used by [`compute_third_party_hash`].
 pub fn rebuild_manifest_full(
     project_root: &Path,
     python: &Path,
@@ -36,7 +36,7 @@ pub fn rebuild_manifest_full(
         run_introspect(python, &tools).with_context(|| "running dynamic-layer introspect helper")?;
     let warnings = payload.warnings.clone();
     let mut merged = merge_dynamic(base, payload);
-    merged.dynamic_hash = compute_dynamic_hash(venv_root)?;
+    merged.third_party_hash = compute_third_party_hash(venv_root)?;
     let manifest_path = tools.join(".toolr-manifest.json");
     write_manifest(&manifest_path, &merged)?;
     Ok(RebuildOutcome {
@@ -71,7 +71,7 @@ pub fn rebuild_dynamic_only(
         run_introspect(python, &tools).with_context(|| "running dynamic-layer introspect helper")?;
     let warnings = payload.warnings.clone();
     let mut merged = merge_dynamic(base, payload);
-    merged.dynamic_hash = compute_dynamic_hash(venv_root)?;
+    merged.third_party_hash = compute_third_party_hash(venv_root)?;
     write_manifest(&manifest_path, &merged)?;
     Ok(RebuildOutcome {
         manifest_path,
@@ -127,6 +127,6 @@ mod tests {
         let group_names: Vec<_> = m.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(group_names.contains(&"ci"));
         assert!(group_names.contains(&"legacy"));
-        assert!(!m.dynamic_hash.is_empty());
+        assert!(!m.third_party_hash.is_empty());
     }
 }

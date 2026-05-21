@@ -13,10 +13,11 @@ pub struct Manifest {
     pub schema_version: u32,
     /// Hash over `tools/**/*.py` contents — used for fast freshness checks.
     pub static_hash: String,
-    /// Hash over the installed package set (versions). Empty until Plan 6
-    /// adds dynamic-layer support.
+    /// Will hash the sorted list of `site-packages/*/toolr-manifest.json`
+    /// files (path + content) discovered in the tools venv. Empty when
+    /// the venv has no third-party plugin manifests (or no venv at all).
     #[serde(default)]
-    pub dynamic_hash: String,
+    pub third_party_hash: String,
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
 }

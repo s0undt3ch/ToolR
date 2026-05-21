@@ -137,7 +137,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash,
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: all_groups,
         commands: all_commands,
     };

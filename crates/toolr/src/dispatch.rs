@@ -378,7 +378,7 @@ fn ensure_dynamic_layer_fresh(
     project_root: &std::path::Path,
     manifest: &Manifest,
 ) -> anyhow::Result<()> {
-    use toolr_core::dynamic::{compute_dynamic_hash, rebuild_dynamic_only};
+    use toolr_core::dynamic::{compute_third_party_hash, rebuild_dynamic_only};
 
     // Skip projects that don't have a tools venv configured.
     if !project_root.join("tools").join("pyproject.toml").is_file() {
@@ -393,8 +393,8 @@ fn ensure_dynamic_layer_fresh(
     if !resolved.python.is_file() {
         return Ok(());
     }
-    let current = compute_dynamic_hash(&resolved.venv_dir)?;
-    if manifest.dynamic_hash == current && !current.is_empty() {
+    let current = compute_third_party_hash(&resolved.venv_dir)?;
+    if manifest.third_party_hash == current && !current.is_empty() {
         return Ok(());
     }
     eprintln!("toolr: dynamic manifest layer stale; regenerating...");
@@ -601,7 +601,7 @@ mod tests {
         Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: Vec::new(),
             commands: Vec::new(),
         }
@@ -708,7 +708,7 @@ mod path_lookup_tests {
         Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: vec![],
             commands,
         }

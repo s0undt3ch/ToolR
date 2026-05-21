@@ -4,7 +4,7 @@ fn sample_manifest() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "abc123".into(),
-        dynamic_hash: "".into(),
+        third_party_hash: "".into(),
         groups: vec![Group {
             name: "ci".into(),
             title: "CI utilities".into(),
@@ -47,7 +47,7 @@ fn missing_optional_fields_default_to_empty() {
     }"#;
     let m: Manifest = serde_json::from_str(json).expect("deserialize minimal");
     assert_eq!(m.schema_version, 1);
-    assert!(m.dynamic_hash.is_empty());
+    assert!(m.third_party_hash.is_empty());
 }
 
 use super::io::{ManifestError, load_manifest, write_manifest};

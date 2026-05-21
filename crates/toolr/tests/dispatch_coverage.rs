@@ -45,7 +45,7 @@ fn fixture_with_manifest(json: &str) -> TempDir {
 const SINGLE_GROUP_MANIFEST: &str = r#"{
     "schema_version": 1,
     "static_hash": "h",
-    "dynamic_hash": "",
+    "third_party_hash": "",
     "groups": [
         {"name": "ci", "title": "CI utilities", "description": "", "origin": "static"}
     ],

@@ -63,7 +63,7 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
                 fresh.commands.push(cmd);
             }
         }
-        fresh.dynamic_hash = cached.dynamic_hash;
+        fresh.third_party_hash = cached.third_party_hash;
     }
 
     Ok(ResolvedManifest {

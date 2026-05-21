@@ -27,7 +27,7 @@ fn help_lists_groups_from_manifest() {
     let json = r#"{
         "schema_version": 1,
         "static_hash": "h",
-        "dynamic_hash": "",
+        "third_party_hash": "",
         "groups": [
             {"name": "ci", "title": "CI utilities", "description": "", "origin": "static"}
         ],
@@ -103,7 +103,7 @@ def hello(ctx, name: str = "world") -> None:
     )
     .unwrap();
     let manifest = r#"{
-        "schema_version": 1, "static_hash": "h", "dynamic_hash": "",
+        "schema_version": 1, "static_hash": "h", "third_party_hash": "",
         "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
         "commands": [{
             "name": "hello", "group": "demo", "module": "tools.demo",
@@ -231,9 +231,9 @@ def hello(ctx):
 "#,
     )
     .unwrap();
-    // Pre-existing manifest with empty dynamic_hash — triggers auto-rebuild.
+    // Pre-existing manifest with empty third_party_hash — triggers auto-rebuild.
     let manifest = r#"{
-        "schema_version": 1, "static_hash": "h", "dynamic_hash": "",
+        "schema_version": 1, "static_hash": "h", "third_party_hash": "",
         "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
         "commands": [{
             "name": "hello", "group": "demo", "module": "tools.demo",
@@ -260,7 +260,7 @@ def hello(ctx):
     let mut perms = std::fs::metadata(&fake_python).unwrap().permissions();
     perms.set_mode(0o755);
     std::fs::set_permissions(&fake_python, perms).unwrap();
-    // Mark venv with a dist-info so compute_dynamic_hash produces a real hash.
+    // Mark venv with a dist-info so compute_third_party_hash produces a real hash.
     std::fs::create_dir_all(
         tools
             .join(".venv")
@@ -329,7 +329,7 @@ fn preflight_fixture(
     let manifest = format!(
         r#"{{
             "schema_version": 1,
-            "static_hash": "h", "dynamic_hash": "",
+            "static_hash": "h", "third_party_hash": "",
             "groups": [{{
                 "name": "ci", "title": "CI", "description": "",
                 "origin": "static"
@@ -439,7 +439,7 @@ fn two_command_fixture(
     let manifest = format!(
         r#"{{
             "schema_version": 1,
-            "static_hash": "h", "dynamic_hash": "",
+            "static_hash": "h", "third_party_hash": "",
             "groups": [{{
                 "name": "ci", "title": "CI", "description": "",
                 "origin": "static"
@@ -667,7 +667,7 @@ def boom(ctx) -> None:
     )
     .unwrap();
     let manifest = r#"{
-        "schema_version": 1, "static_hash": "h", "dynamic_hash": "",
+        "schema_version": 1, "static_hash": "h", "third_party_hash": "",
         "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
         "commands": [{
             "name": "boom", "group": "demo", "module": "tools.demo",
