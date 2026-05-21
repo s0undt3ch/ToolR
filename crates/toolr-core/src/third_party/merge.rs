@@ -73,7 +73,7 @@ fn group_from_fragment(fg: FragmentGroup) -> Group {
         title: fg.title,
         description: fg.description,
         parent: None,
-        origin: Origin::Static,
+        origin: Origin::ThirdParty,
     }
 }
 
@@ -91,7 +91,7 @@ fn command_from_fragment(fc: FragmentCommand) -> Command {
             .map(argument_from_fragment)
             .collect(),
         imports: fc.imports,
-        origin: Origin::Static,
+        origin: Origin::ThirdParty,
         dispatched_from: None,
         is_dispatcher: false,
     }

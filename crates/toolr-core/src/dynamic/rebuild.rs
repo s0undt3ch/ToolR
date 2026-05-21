@@ -63,9 +63,11 @@ pub fn rebuild_dynamic_only(
     let manifest_path = tools.join(".toolr-manifest.json");
     let mut base = load_manifest(&manifest_path)
         .with_context(|| format!("loading {}", manifest_path.display()))?;
-    // Drop everything dynamic; keep the static skeleton intact.
-    base.groups.retain(|g| g.origin == Origin::Static);
-    base.commands.retain(|c| c.origin == Origin::Static);
+    // Drop everything dynamic; keep the static and third-party skeleton intact.
+    base.groups
+        .retain(|g| matches!(g.origin, Origin::Static | Origin::ThirdParty));
+    base.commands
+        .retain(|c| matches!(c.origin, Origin::Static | Origin::ThirdParty));
 
     let payload =
         run_introspect(python, &tools).with_context(|| "running dynamic-layer introspect helper")?;
