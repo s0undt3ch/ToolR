@@ -31,6 +31,15 @@ pub fn load_manifest(path: &Path) -> Result<Manifest, ManifestError> {
     Ok(manifest)
 }
 
+/// Serialize the manifest to JSON and write it to `path`.
+///
+/// NOTE: The write is not atomic. A crash between truncate and close can
+/// leave a zero-length or partial file on disk. The next dispatch reads
+/// this file via `load_manifest`, which returns `Err` on a malformed
+/// file; the freshness check then treats the cache as absent and runs a
+/// full rebuild, so the failure mode is self-healing within one
+/// invocation. If atomicity becomes required, switch to
+/// `tempfile::NamedTempFile::persist`.
 pub fn write_manifest(path: &Path, manifest: &Manifest) -> Result<(), ManifestError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
