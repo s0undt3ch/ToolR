@@ -232,29 +232,8 @@ fn preflight_fixture(
     fs::write(tools.join("__init__.py"), "").unwrap();
     fs::write(tools.join("ci.py"), "def hello(ctx): pass\n").unwrap();
 
-    let imports_json: String = imports
-        .iter()
-        .map(|i| format!("\"{i}\""))
-        .collect::<Vec<_>>()
-        .join(",");
-    let manifest = format!(
-        r#"{{
-            "schema_version": 1,
-            "static_hash": "h", "third_party_hash": "",
-            "groups": [{{
-                "name": "ci", "title": "CI", "description": "",
-                "origin": "static"
-            }}],
-            "commands": [{{
-                "name": "hello", "group": "ci", "module": "tools.ci",
-                "function": "hello", "summary": "", "description": "",
-                "arguments": [], "imports": [{imports_json}],
-                "origin": "static"
-            }}]
-        }}"#
-    );
-    fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
-
+    // Build the venv tree before computing hashes so the third_party_hash
+    // accounts for the final site-packages state.
     let sp = tools
         .join(".venv")
         .join("lib")
@@ -271,6 +250,37 @@ fn preflight_fixture(
     let toolr_pkg = sp.join("toolr");
     fs::create_dir_all(&toolr_pkg).unwrap();
     fs::write(toolr_pkg.join("__init__.py"), "").unwrap();
+
+    // Stamp real hashes so ensure_manifest_fresh treats the manifest as
+    // Fresh and doesn't rebuild it (which would drop the `imports` field
+    // that the pre-flight tests rely on).
+    let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
+    let venv_dir = tools.join(".venv");
+    let third_party_hash =
+        toolr_core::dynamic::compute_third_party_hash(&venv_dir).unwrap();
+
+    let imports_json: String = imports
+        .iter()
+        .map(|i| format!("\"{i}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    let manifest = format!(
+        r#"{{
+            "schema_version": 1,
+            "static_hash": "{static_hash}", "third_party_hash": "{third_party_hash}",
+            "groups": [{{
+                "name": "ci", "title": "CI", "description": "",
+                "origin": "static"
+            }}],
+            "commands": [{{
+                "name": "hello", "group": "ci", "module": "tools.ci",
+                "function": "hello", "summary": "", "description": "",
+                "arguments": [], "imports": [{imports_json}],
+                "origin": "static"
+            }}]
+        }}"#
+    );
+    fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
 
     let bin_dir = tools.join(".venv").join("bin");
     fs::create_dir_all(&bin_dir).unwrap();
@@ -347,10 +357,33 @@ fn two_command_fixture(
     );
     fs::write(tools.join("ci.py"), src).unwrap();
 
+    // Build the venv tree before computing hashes so the third_party_hash
+    // accounts for the final site-packages state.
+    // Empty venv: top-level import missing → pre-flight catches.
+    // Inline import also missing → runner-side ImportError caught by
+    // post-mortem.
+    let sp = tools
+        .join(".venv")
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages");
+    fs::create_dir_all(&sp).unwrap();
+    let toolr_pkg = sp.join("toolr");
+    fs::create_dir_all(&toolr_pkg).unwrap();
+    fs::write(toolr_pkg.join("__init__.py"), "").unwrap();
+
+    // Stamp real hashes so ensure_manifest_fresh treats the manifest as
+    // Fresh and doesn't rebuild it (which would drop the `imports` field
+    // that the pre-flight tests rely on).
+    let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
+    let venv_dir = tools.join(".venv");
+    let third_party_hash =
+        toolr_core::dynamic::compute_third_party_hash(&venv_dir).unwrap();
+
     let manifest = format!(
         r#"{{
             "schema_version": 1,
-            "static_hash": "h", "third_party_hash": "",
+            "static_hash": "{static_hash}", "third_party_hash": "{third_party_hash}",
             "groups": [{{
                 "name": "ci", "title": "CI", "description": "",
                 "origin": "static"
@@ -374,19 +407,6 @@ fn two_command_fixture(
         }}"#
     );
     fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
-
-    // Empty venv: top-level import missing → pre-flight catches.
-    // Inline import also missing → runner-side ImportError caught by
-    // post-mortem.
-    let sp = tools
-        .join(".venv")
-        .join("lib")
-        .join("python3.13")
-        .join("site-packages");
-    fs::create_dir_all(&sp).unwrap();
-    let toolr_pkg = sp.join("toolr");
-    fs::create_dir_all(&toolr_pkg).unwrap();
-    fs::write(toolr_pkg.join("__init__.py"), "").unwrap();
 
     let bin_dir = tools.join(".venv").join("bin");
     fs::create_dir_all(&bin_dir).unwrap();

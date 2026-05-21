@@ -33,6 +33,7 @@ fn run() -> anyhow::Result<ExitCode> {
     // and `--help` (which would otherwise exit inside clap) still see it.
     maybe_emit_cache_hint_from_argv();
     bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv)?;
+    bootstrap::ensure_manifest_fresh(&cwd, &argv)?;
     let manifest = load_or_empty(&cwd);
     let mut command = cli::build_command(&manifest);
     let matches = command.clone().get_matches();

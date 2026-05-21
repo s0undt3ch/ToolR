@@ -82,8 +82,6 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
 /// Returns `Ok(())` on success OR on any non-fatal soft failure
 /// (drift rebuild error, missing venv, etc.). Only I/O errors from
 /// writing the freshly rebuilt manifest propagate.
-// Called from main.rs in Task 9; allow dead_code until then.
-#[allow(dead_code)]
 pub(crate) fn ensure_manifest_fresh(
     cwd: &Path,
     argv: &[String],
@@ -120,7 +118,6 @@ pub(crate) fn ensure_manifest_fresh(
     }
 }
 
-#[allow(dead_code)]
 fn try_rebuild(
     verdict: FreshnessVerdict,
     tools: &Path,
@@ -164,7 +161,6 @@ fn try_rebuild(
 /// Note: this helper is purpose-built for persistent dispatch paths.
 /// It MUST NOT be confused with `complete::freshness::preserve_non_static_entries`,
 /// which is for in-memory tab-completion paths that never write to disk.
-#[allow(dead_code)]
 fn carry_forward_cached_entries(
     fresh: &mut Manifest,
     cached: &Manifest,
@@ -194,7 +190,6 @@ fn carry_forward_cached_entries(
     }
 }
 
-#[allow(dead_code)]
 fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
     eprintln!(
         "toolr: warning: tools manifest is stale and a fresh build failed; \
