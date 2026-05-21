@@ -143,3 +143,41 @@ fn syntax_error_in_tools_warns_and_serves_cached() {
         "expected cached group in --help; got:\n{stdout}"
     );
 }
+
+#[test]
+fn skip_list_argv_does_not_trigger_freshness() {
+    let tmp = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+
+    // Drop a syntax-broken `tools/*.py` that would crash a rebuild —
+    // but skip-list argv must never call into freshness, so the
+    // command should still succeed without any warning.
+    fs::write(
+        tmp.path().join("tools").join("broken.py"),
+        "def not closed(",
+    )
+    .unwrap();
+
+    for argv in [
+        vec!["--version"],
+        vec!["self", "cache", "list"],
+        vec!["project", "manifest", "--help"],
+    ] {
+        let output = Command::cargo_bin("toolr")
+            .unwrap()
+            .args(&argv)
+            .current_dir(tmp.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "argv {argv:?} should bypass freshness, got: {output:?}"
+        );
+        // The soft-fail warning must NOT appear; freshness was bypassed entirely.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("tools manifest is stale"),
+            "unexpected freshness warning for argv {argv:?}:\n{stderr}"
+        );
+    }
+}
