@@ -190,6 +190,7 @@ fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
         metavar: arg.metadata.metavar.clone(),
         type_annotation: arg.type_annotation.clone(),
         nargs: None,
+        long_flag: arg.long_flag.clone(),
     }
 }
 
@@ -357,6 +358,7 @@ mod tests {
                 path_constraints: None,
                 allowed_values: vec![],
                 metadata: toolr_core::manifest::ArgMetadata::default(),
+                long_flag: None,
             }],
             imports: vec![],
             origin: Origin::Static,
@@ -424,6 +426,7 @@ mod tests {
                 path_constraints: None,
                 allowed_values: vec![],
                 metadata: toolr_core::manifest::ArgMetadata::default(),
+                long_flag: None,
             }],
             imports: vec![],
             origin: Origin::Static,
@@ -457,6 +460,7 @@ mod tests {
             path_constraints: None,
             allowed_values: vec![],
             metadata: toolr_core::manifest::ArgMetadata::default(),
+            long_flag: None,
         }
     }
 
@@ -709,6 +713,7 @@ mod dispatched_pack_tests {
                 allowed_values: vec![],
                 path_constraints: None,
                 metadata: Default::default(),
+                long_flag: None,
             }],
             imports: vec![],
             origin: Origin::Static,
@@ -809,6 +814,7 @@ mod dispatched_pack_tests {
                 allowed_values: vec![],
                 path_constraints: None,
                 metadata: Default::default(),
+                long_flag: None,
             }],
             ..migrate_cmd()
         };
@@ -850,6 +856,7 @@ mod dispatched_pack_tests {
                 allowed_values: vec![],
                 path_constraints: None,
                 metadata: Default::default(),
+                long_flag: None,
             }
         }
         let cases = [
@@ -882,6 +889,7 @@ mod dispatched_pack_tests {
             allowed_values: vec!["a".into(), "b".into()],
             path_constraints: None,
             metadata,
+            long_flag: None,
         };
         let schema = argument_to_arg_schema(&arg);
         assert_eq!(schema.name, "out");
@@ -909,6 +917,7 @@ mod dispatched_pack_tests {
                 allowed_values: vec![],
                 path_constraints: None,
                 metadata: Default::default(),
+                long_flag: None,
             }],
             ..migrate_cmd()
         };

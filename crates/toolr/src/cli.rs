@@ -637,6 +637,7 @@ mod cli_tree_tests {
             allowed_values: vec![],
             path_constraints: None,
             metadata: Default::default(),
+            long_flag: None,
         }
     }
 

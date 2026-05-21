@@ -29,6 +29,14 @@ class ArgSchema(Struct, frozen=True):
     metavar: str | None = None
     type_annotation: str | None = None  # "str" / "int" / "float" / "bool"
     nargs: Literal["*", "+", "?"] | int | None = None
+    long_flag: str | None = None
+    """Literal long-flag spelling from the source (e.g. `"--user_ids"`).
+
+    Populated by the argparse scanner for keyword-style args; `None`
+    for positionals. `DispatchCommand.argv` uses this verbatim so the
+    upstream tool's exact spelling is preserved across the round-trip,
+    even when toolr's CLI normalises display to `--user-ids`.
+    """
 
 
 class CommandSchema(Struct, frozen=True):

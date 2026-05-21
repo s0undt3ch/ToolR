@@ -165,6 +165,7 @@ fn arg(name: &str, kind: ArgumentKind, allowed_values: Vec<String>) -> Argument 
         allowed_values,
         path_constraints: None,
         metadata: ArgMetadata::default(),
+        long_flag: None,
     }
 }
 
