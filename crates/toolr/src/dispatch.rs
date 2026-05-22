@@ -238,8 +238,74 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     }
 }
 
-fn run_self_build_manifest(_matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
-    anyhow::bail!("toolr self build-manifest: rewired in Task 11");
+fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches)?;
+
+    let schema_version: u32 = matches
+        .get_one::<u32>("schema-version")
+        .copied()
+        .unwrap_or(toolr_core::third_party::FRAGMENT_SCHEMA_VERSION);
+
+    let output_path = resolve_output_path(matches, &resolved.source_dir);
+
+    let fragment = toolr_core::build_fragment::build_third_party_fragment(
+        &resolved.source_dir,
+        &resolved.package_name,
+        schema_version,
+    )?;
+    let serialised = toolr_core::build_fragment::serialise_fragment(&fragment)?;
+
+    if matches.get_flag("check") {
+        return check_against_disk(&output_path, &serialised);
+    }
+
+    write_atomically(&output_path, &serialised)?;
+    eprintln!(
+        "toolr.build: wrote {} group(s) / {} command(s) to {}",
+        fragment.groups.len(),
+        fragment.commands.len(),
+        output_path.display(),
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn resolve_output_path(matches: &clap::ArgMatches, source_dir: &std::path::Path) -> PathBuf {
+    matches
+        .get_one::<String>("output")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| source_dir.join("toolr-manifest.json"))
+}
+
+fn write_atomically(path: &std::path::Path, contents: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut tmp = tempfile::NamedTempFile::new_in(
+        path.parent().unwrap_or_else(|| std::path::Path::new(".")),
+    )?;
+    tmp.write_all(contents.as_bytes())?;
+    tmp.persist(path).map_err(|e| anyhow::anyhow!("persist: {e}"))?;
+    Ok(())
+}
+
+fn check_against_disk(path: &std::path::Path, serialised: &str) -> anyhow::Result<ExitCode> {
+    let existing = if path.is_file() {
+        std::fs::read_to_string(path)?
+    } else {
+        String::new()
+    };
+    if existing == serialised {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        let diff = similar::TextDiff::from_lines(existing.as_str(), serialised);
+        eprintln!(
+            "toolr.build: {} is out of date - regenerate with `toolr self build-manifest <pkg>`",
+            path.display(),
+        );
+        eprintln!("{}", diff.unified_diff().header("on-disk", "regenerated"));
+        Ok(ExitCode::from(2))
+    }
 }
 
 fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {

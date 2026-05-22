@@ -21,7 +21,7 @@
 //!   indirectly by inspecting the spec the Python runner receives.
 //! - `report_uv_error()` per error variant (392-409).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use assert_cmd::Command;
 use tempfile::TempDir;
@@ -213,38 +213,6 @@ fn self_completion_install_force_overwrites() {
     assert!(
         !written.starts_with("# stale"),
         "expected --force to overwrite stale content"
-    );
-}
-
-// --------------------------------------------------------------------
-// run_self_build_manifest() argument plumbing & resolve_python_for_build.
-// --------------------------------------------------------------------
-
-#[test]
-fn self_build_manifest_rejects_explicit_python_that_is_not_a_file() {
-    // `--python /does/not/exist` hits `resolve_python_for_build`'s
-    // explicit-override branch + the `!p.is_file()` bail.
-    let nonexistent = if cfg!(windows) {
-        PathBuf::from("C:\\definitely\\not\\a\\real\\python.exe")
-    } else {
-        PathBuf::from("/definitely/not/a/real/python")
-    };
-    let assert = Command::cargo_bin("toolr")
-        .unwrap()
-        .args(["self", "build-manifest", "some-package"])
-        .arg("--python")
-        .arg(&nonexistent)
-        .assert()
-        .failure();
-    let output = assert.get_output();
-    let combined = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    assert!(
-        combined.contains("not a file") || combined.contains("not exist"),
-        "expected `--python ... not a file` diagnostic, got:\n{combined}"
     );
 }
 

@@ -5,10 +5,6 @@
 //!    package directory.
 //! 2. `--source-dir PATH` → use the path verbatim; package name comes
 //!    from `--package PKG` or the leaf directory name.
-//
-// Items are wired in by Task 9 (cli) and Task 11 (dispatch); allow
-// dead_code until then so clippy stays clean.
-#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 
