@@ -176,7 +176,10 @@ jobs:
         shell: bash
         run: |
           cargo build --quiet -p toolr
-          ./target/debug/toolr self build-manifest toolr_example_plugin --check
+          ./target/debug/toolr self build-manifest \
+            --source-dir examples/plugin-package/src/toolr_example_plugin \
+            --package toolr_example_plugin \
+            --check
 
       - name: Run Python Tests
         env:
