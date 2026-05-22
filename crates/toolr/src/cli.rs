@@ -327,9 +327,30 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 Command::new("build-manifest")
                     .about("Generate a third-party manifest fragment for a package")
                     .arg(
+                        Arg::new("package_positional")
+                            .value_name("PACKAGE")
+                            .required(false)
+                            .conflicts_with("source-dir")
+                            .help("Dotted Python package name to introspect (looked up in the tools venv)"),
+                    )
+                    .arg(
+                        Arg::new("source-dir")
+                            .long("source-dir")
+                            .value_name("PATH")
+                            .conflicts_with("package_positional")
+                            .help(
+                                "Path to the package's source tree (bypasses the tools-venv lookup)",
+                            ),
+                    )
+                    .arg(
                         Arg::new("package")
-                            .required(true)
-                            .help("Dotted Python package name to introspect"),
+                            .long("package")
+                            .value_name("PKG")
+                            .requires("source-dir")
+                            .help(
+                                "Package name to embed in the fragment when using --source-dir \
+                                 (defaults to the leaf directory name)",
+                            ),
                     )
                     .arg(
                         Arg::new("output")
@@ -338,15 +359,10 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .help("Override the output path"),
                     )
                     .arg(
-                        Arg::new("python")
-                            .long("python")
-                            .value_name("PATH")
-                            .help("Path to a Python interpreter to use"),
-                    )
-                    .arg(
                         Arg::new("schema-version")
                             .long("schema-version")
                             .value_name("N")
+                            .value_parser(clap::value_parser!(u32))
                             .help("Pin the emitted schema version"),
                     )
                     .arg(
