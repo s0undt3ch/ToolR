@@ -211,6 +211,46 @@ jobs:
       wheel-kind: py
       pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 
+  # Universal pure-Python wheel — built once and shared across every
+  # distribution-test matrix entry via the `example-plugin-wheel`
+  # artifact. Mirrors the `build-example-plugin-wheel` job in
+  # `ci.yml`. The `example_plugin_wheel` fixture has an inline-build
+  # fallback, so this job is a CI-time optimisation, not a correctness
+  # gate.
+  build-example-plugin-wheel:
+    name: Build (example plugin wheel)
+    needs:
+      - prepare-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: build-example-plugin-wheel
+          cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+          uv-sync-args: "--no-install-workspace"
+          mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+
+      - name: Build the example-plugin wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build --wheel --out-dir wheelhouse examples/plugin-package
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: example-plugin-wheel
+          path: wheelhouse/toolr_plugin_example-*.whl
+
   # release.yml's distribution-tests defer to the same reusable
   # workflow ci.yml uses, so the test harness, action SHAs, coverage
   # upload, and junit reporting stay in lockstep across both
@@ -223,6 +263,7 @@ jobs:
       - prepare-ci
       - build-binary-wheel-linux
       - build-py-wheel-linux
+      - build-example-plugin-wheel
     uses: ./.github/workflows/_test_distribution.yml
     with:
       os: ubuntu-latest
@@ -240,6 +281,7 @@ jobs:
       - prepare-ci
       - build-binary-wheel-macos
       - build-py-wheel-macos
+      - build-example-plugin-wheel
     uses: ./.github/workflows/_test_distribution.yml
     with:
       os: macos-latest
@@ -257,6 +299,7 @@ jobs:
       - prepare-ci
       - build-binary-wheel-windows
       - build-py-wheel-windows
+      - build-example-plugin-wheel
     uses: ./.github/workflows/_test_distribution.yml
     with:
       os: windows-latest

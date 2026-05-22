@@ -177,6 +177,47 @@ jobs:
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
 
+  # The example plugin is pure Python — one universal wheel covers
+  # every Test matrix entry on every OS. Build it once here and let the
+  # Test jobs download it via the `example-plugin-wheel` artifact (and
+  # the contract test's session-scoped fixture falls back to inline
+  # `uv build` if the artifact is absent, so this job is a CI-time
+  # optimisation, not a correctness gate).
+  build-example-plugin-wheel:
+    name: Build (example plugin wheel)
+    needs:
+      - prepare-ci
+      - prepare-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: build-example-plugin-wheel
+          cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+          uv-sync-args: "--no-install-workspace"
+          mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+
+      - name: Build the example-plugin wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build --wheel --out-dir wheelhouse examples/plugin-package
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: example-plugin-wheel
+          path: wheelhouse/toolr_plugin_example-*.whl
+
   # test-* now CONSUMES the prebuilt artifacts (toolr binary archive + the
   # matching toolr-py wheel for each matrix python) instead of compiling
   # them itself. The DAG is intentionally `prepare-ci → wheels/archive →
@@ -189,6 +230,7 @@ jobs:
       - pre-commit
       - build-py-wheel-linux
       - build-binary-archive
+      - build-example-plugin-wheel
     uses: ./.github/workflows/_test.yml
     with:
       os: ubuntu-latest
@@ -207,6 +249,7 @@ jobs:
       - pre-commit
       - build-py-wheel-windows
       - build-binary-archive
+      - build-example-plugin-wheel
     uses: ./.github/workflows/_test.yml
     with:
       os: windows-latest
@@ -225,6 +268,7 @@ jobs:
       - pre-commit
       - build-py-wheel-macos
       - build-binary-archive
+      - build-example-plugin-wheel
     uses: ./.github/workflows/_test.yml
     with:
       os: macos-latest
