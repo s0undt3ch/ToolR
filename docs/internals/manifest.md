@@ -29,8 +29,13 @@ Python imports involved in the hot path.
   manifest with a higher schema than it understands.
 - **`static_hash`** — blake3 over the sorted `(path, contents)` of
   every `tools/**/*.py` file. Drives static-layer rebuilds.
-- **`third_party_hash`** — blake3 over the tools venv's installed
-  package set. Drives dynamic-layer rebuilds.
+- **`third_party_hash`** — blake3 over the sorted set of
+  `toolr-manifest.json` files found under
+  `<tools-venv>/lib/python*/site-packages/*/`. Each entry's path
+  and content go into the hash. Drives third-party-fragment
+  rebuilds: installing an unrelated package no longer invalidates
+  the manifest, only changes to packages that ship a toolr
+  fragment do.
 - **`groups`** / **`commands`** — the actual command tree. Each
   entry carries an `origin` field (`"static"` or `"dynamic"`)
   recording which layer produced it.
