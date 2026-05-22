@@ -1,4 +1,4 @@
-name: Build Binary Archive
+name: Build Binary
 
 on:
   workflow_call:
@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   build:
-    name: ${{ matrix.target.triple }}
+    name: ${{ matrix.target.display-name }} (${{ matrix.target.triple }})
     runs-on: ${{ matrix.target.runner }}
     permissions:
       id-token: write

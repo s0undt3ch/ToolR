@@ -56,13 +56,55 @@ BINARY_WHEEL_PYTHONS = ["cp311"]
 # (downstream consumers: install.sh, mise plugin); ci.yml only needs the
 # runner-native subset to back the test/docs jobs (see CI_BINARY_TRIPLES).
 _BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
-    {"triple": "x86_64-unknown-linux-gnu", "runner": "ubuntu-latest", "cross": False, "archive": "tar.gz"},
-    {"triple": "aarch64-unknown-linux-gnu", "runner": "ubuntu-24.04-arm", "cross": False, "archive": "tar.gz"},
-    {"triple": "x86_64-unknown-linux-musl", "runner": "ubuntu-latest", "cross": True, "archive": "tar.gz"},
-    {"triple": "aarch64-unknown-linux-musl", "runner": "ubuntu-24.04-arm", "cross": True, "archive": "tar.gz"},
-    {"triple": "aarch64-apple-darwin", "runner": "macos-14", "cross": False, "archive": "tar.gz"},
-    {"triple": "x86_64-apple-darwin", "runner": "macos-15-intel", "cross": False, "archive": "tar.gz"},
-    {"triple": "x86_64-pc-windows-msvc", "runner": "windows-latest", "cross": False, "archive": "zip"},
+    {
+        "triple": "x86_64-unknown-linux-gnu",
+        "runner": "ubuntu-latest",
+        "cross": False,
+        "archive": "tar.gz",
+        "display-name": "Linux",
+    },
+    {
+        "triple": "aarch64-unknown-linux-gnu",
+        "runner": "ubuntu-24.04-arm",
+        "cross": False,
+        "archive": "tar.gz",
+        "display-name": "Linux",
+    },
+    {
+        "triple": "x86_64-unknown-linux-musl",
+        "runner": "ubuntu-latest",
+        "cross": True,
+        "archive": "tar.gz",
+        "display-name": "Linux",
+    },
+    {
+        "triple": "aarch64-unknown-linux-musl",
+        "runner": "ubuntu-24.04-arm",
+        "cross": True,
+        "archive": "tar.gz",
+        "display-name": "Linux",
+    },
+    {
+        "triple": "aarch64-apple-darwin",
+        "runner": "macos-14",
+        "cross": False,
+        "archive": "tar.gz",
+        "display-name": "macOS",
+    },
+    {
+        "triple": "x86_64-apple-darwin",
+        "runner": "macos-15-intel",
+        "cross": False,
+        "archive": "tar.gz",
+        "display-name": "macOS",
+    },
+    {
+        "triple": "x86_64-pc-windows-msvc",
+        "runner": "windows-latest",
+        "cross": False,
+        "archive": "zip",
+        "display-name": "Windows",
+    },
 ]
 
 # Triples that ci.yml builds on every PR — one native triple per OS
