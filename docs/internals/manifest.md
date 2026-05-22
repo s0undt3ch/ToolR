@@ -187,9 +187,12 @@ Both hashes use blake3, written as lowercase hex.
   `__pycache__`, `.toolr-manifest.json`, and dot-prefixed names),
   sorted by path, each entry hashed as
   `len(path_bytes) || path_bytes || len(contents) || contents`.
-- `third_party_hash` input: sorted listing of `<venv>/lib/python*/site-
-  packages/*` entries, each entry's name + metadata file mtime
-  rounded to the nearest second.
+- `third_party_hash` input: every `toolr-manifest.json` under
+  `<tools-venv>/lib/python*/site-packages/*/`, sorted by path,
+  each entry hashed as
+  `len(path_bytes) || path_bytes || len(contents) || contents`.
+  Identical scheme to `static_hash` but over the third-party
+  fragment file set instead of `tools/**/*.py`.
 
 This gives stable, content-addressable rebuild decisions across
 machines and across CI / dev environments.
