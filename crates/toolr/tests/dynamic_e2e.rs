@@ -50,11 +50,14 @@ fn full_rebuild_merges_static_and_dynamic_entries() {
     );
 
     // ---- Fake venv with a toolr-manifest.json so compute_third_party_hash
-    //      hashes a non-empty input and third_party_hash is non-empty.
+    //      hashes a non-empty input AND the static rebuild's glob-merge
+    //      step has something well-formed to parse. The fragment is
+    //      intentionally minimal (no groups/commands) so it doesn't pollute
+    //      the assertions below; it just exists to exercise the glob.
     let venv = project.join("venv");
     write(
         &venv.join("lib/python3.13/site-packages/some-pkg/toolr-manifest.json"),
-        "{}",
+        r#"{"toolr_schema_version":1,"package":"some_pkg","groups":[],"commands":[]}"#,
     );
 
     let outcome = rebuild_manifest_full(project, &py, &venv).expect("rebuild");

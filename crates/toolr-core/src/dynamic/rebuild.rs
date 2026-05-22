@@ -9,7 +9,7 @@ use super::hash::compute_third_party_hash;
 use super::merge::merge_dynamic;
 use super::runner::run_introspect;
 use crate::manifest::write_manifest;
-use crate::parser::build_static_manifest;
+use crate::parser::build_static_manifest_with_venv;
 
 /// Result of a rebuild, returned for diagnostics / CLI output.
 #[derive(Debug)]
@@ -20,18 +20,23 @@ pub struct RebuildOutcome {
     pub warnings: Vec<String>,
 }
 
-/// Full rebuild: static layer + dynamic layer + write.
+/// Full rebuild: static layer (including third-party fragments globbed
+/// from the venv) + dynamic layer + write.
 ///
 /// `python` is the absolute path to the tools-venv Python interpreter
 /// (resolved by Plan 3's `toolr_core::venv::resolve_venv_path`).
-/// `venv_root` is the venv directory used by [`compute_third_party_hash`].
+/// `venv_root` is the venv directory: both globbed for
+/// `site-packages/*/toolr-manifest.json` (via
+/// `build_static_manifest_with_venv`) and hashed via
+/// [`compute_third_party_hash`].
 pub fn rebuild_manifest_full(
     project_root: &Path,
     python: &Path,
     venv_root: &Path,
 ) -> Result<RebuildOutcome> {
     let tools = project_root.join("tools");
-    let base = build_static_manifest(&tools).with_context(|| "building static manifest layer")?;
+    let base = build_static_manifest_with_venv(&tools, venv_root)
+        .with_context(|| "building static manifest layer (incl. third-party glob-merge)")?;
     let payload =
         run_introspect(python, &tools).with_context(|| "running dynamic-layer introspect helper")?;
     let warnings = payload.warnings.clone();
