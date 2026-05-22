@@ -680,11 +680,18 @@ Expected: FAIL with a struct diff. Common deltas:
 - `summary` includes the "Args:" lines (docstring-section parser stripped them or not). Check parser/signatures.rs behaviour.
 - `default` field mismatch (`"1"` vs `1`).
 - Argument ordering or extras.
-- [ ] **Step 3: Debug + fix**
+- [ ] **Step 3: Debug + decide which side is wrong**
 
-The committed JSON is the source of truth. If the assertion diff shows the fragment mapping needs adjustment (e.g. `summary` should be the first docstring line only), fix it in `build_third_party_fragment` or its called helpers. **Do NOT** change the committed JSON — that's what plugin authors are pinned to.
+When the diff appears, follow the spec's own Migration plan rule (`specs/2026-05-22-rust-build-manifest-design.md` lines 359-361): "If the example's regenerated manifest differs from the committed one, that's diagnostic: either the Python implementation had a bug the Rust one fixes, or the Rust one has a bug. Investigate before landing."
 
-If the diff is genuinely a parser bug rather than a mapping bug, file it inline as a `// TODO(toolr-parser): …` comment and adjust the fixture to a case the parser handles correctly. But first try harder — the existing `build_static_manifest` exercises the same parser successfully for `tools/` files.
+For each delta, ask: "Is the Rust output semantically correct, and is the committed JSON the artifact of a Python-side bug?" Two such bugs surfaced during this work and were fixed in the JSON:
+
+- **String defaults** carried Python `repr()` output (`"'World'"`). The Rust parser strips embedded quotes (per `signatures::tests::string_default_has_no_embedded_quotes`). Embedded quotes would leak into CLI help and the Python runtime default. The JSON was updated to drop them.
+- **`description` field** duplicated `summary` for single-line docstrings because Python's `long_description` returns the whole docstring when no blank-line separator exists. The Rust docstring parser correctly leaves `description` empty when no body follows the first line. The JSON was updated to set `description: ""` for the four affected commands.
+
+**Bias toward fixing the Rust path** when the delta is a genuine Rust bug — preserve byte-equivalence whenever the parser/mapping can be made to match. Only update the committed JSON when (a) the Rust output is provably correct by reference to an existing parser convention, *and* (b) the JSON delta is a Python-implementation artifact. Document the rationale in the commit body so future readers see why the canonical JSON was rewritten.
+
+Behavioural note: plugin authors who have shipped a Python-generated `toolr-manifest.json` and run the new Rust `--check` will see these two corrections applied to their on-disk manifest as drift. Call this out in the project CHANGELOG when the dispatch_manifest_freshness PR series lands.
 
 - [ ] **Step 4: Run all toolr-core tests**
 
