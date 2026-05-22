@@ -34,4 +34,4 @@ pub use docstrings::{
     SimpleDocstringParser
 };
 
-pub use build_fragment::{BuildFragmentError, build_third_party_fragment};
+pub use build_fragment::{BuildFragmentError, build_third_party_fragment, serialise_fragment};

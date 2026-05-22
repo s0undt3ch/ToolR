@@ -185,6 +185,18 @@ pub fn build_third_party_fragment(
     })
 }
 
+/// Serialise a fragment to the canonical on-disk form: 2-space indent,
+/// keys sorted at every depth, trailing newline. Round-trips through
+/// `serde_json::Value` so the default BTreeMap-backed `Map` enforces
+/// alphabetical key order — matches Python's
+/// `json.dumps(fragment, indent=2, sort_keys=True) + "\n"`.
+pub fn serialise_fragment(fragment: &ManifestFragment) -> Result<String, serde_json::Error> {
+    let value = serde_json::to_value(fragment)?;
+    let mut out = serde_json::to_string_pretty(&value)?;
+    out.push('\n');
+    Ok(out)
+}
+
 fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
     use ruff_python_ast::Stmt;
     let Some(Stmt::Expr(e)) = module.body.first() else {
@@ -401,5 +413,37 @@ def subcmd(ctx):
         let pkg = tmp.path().join("nope");
         let err = build_third_party_fragment(&pkg, "nope", 1).unwrap_err();
         assert!(matches!(err, BuildFragmentError::MissingSourceDir { .. }));
+    }
+
+    /// Serialised JSON matches the committed example plugin manifest
+    /// byte-for-byte. This is the regression guard that lets `--check`
+    /// in CI catch any drift in field ordering, whitespace, or trailing
+    /// newline handling.
+    #[test]
+    fn serialised_fragment_matches_committed_bytes() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("toolr_example_plugin");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "commands.py",
+            include_str!("../../../examples/plugin-package/src/toolr_example_plugin/commands.py"),
+        );
+
+        let fragment =
+            build_third_party_fragment(&pkg, "toolr_example_plugin", 1).unwrap();
+        let serialised = serialise_fragment(&fragment).expect("serialise");
+
+        let reference = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("examples/plugin-package/src/toolr_example_plugin/toolr-manifest.json"),
+        )
+        .unwrap();
+
+        assert_eq!(serialised, reference, "byte mismatch vs committed manifest");
     }
 }
