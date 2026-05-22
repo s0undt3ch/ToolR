@@ -1945,7 +1945,7 @@ the auto-rebuild doesn't already cover.</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;schema_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">&quot;static_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;blake3 hex&gt;&quot;</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">&quot;dynamic_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;blake3 hex&gt;&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">&quot;third_party_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;blake3 hex&gt;&quot;</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">&quot;groups&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">&quot;commands&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">}</span>
@@ -1955,7 +1955,7 @@ the auto-rebuild doesn't already cover.</p>
   manifest with a higher schema than it understands.</li>
 <li><strong><code>static_hash</code></strong> — blake3 over the sorted <code>(path, contents)</code> of
   every <code>tools/**/*.py</code> file. Drives static-layer rebuilds.</li>
-<li><strong><code>dynamic_hash</code></strong> — blake3 over the tools venv's installed
+<li><strong><code>third_party_hash</code></strong> — blake3 over the tools venv's installed
   package set. Drives dynamic-layer rebuilds.</li>
 <li><strong><code>groups</code></strong> / <strong><code>commands</code></strong> — the actual command tree. Each
   entry carries an <code>origin</code> field (<code>"static"</code> or <code>"dynamic"</code>)
@@ -2070,7 +2070,7 @@ package re-exports, runtime-generated commands, and third-party
 packages that haven't shipped a static manifest fragment.</p>
 <p>Toolr regenerates the dynamic layer when:</p>
 <ul>
-<li>The venv contents change (<code>dynamic_hash</code> drifts) — typically after
+<li>The venv contents change (<code>third_party_hash</code> drifts) — typically after
   <code>toolr project deps sync</code>.</li>
 <li>A command is invoked and the binary detects drift on entry.</li>
 </ul>
@@ -2089,7 +2089,7 @@ includes new commands.</p>
   <code>__pycache__</code>, <code>.toolr-manifest.json</code>, and dot-prefixed names),
   sorted by path, each entry hashed as
   <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.</li>
-<li><code>dynamic_hash</code> input: sorted listing of <code>&lt;venv&gt;/lib/python*/site-
+<li><code>third_party_hash</code> input: sorted listing of <code>&lt;venv&gt;/lib/python*/site-
   packages/*</code> entries, each entry's name + metadata file mtime
   rounded to the nearest second.</li>
 </ul>
