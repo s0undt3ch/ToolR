@@ -261,7 +261,7 @@ fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCod
 
     write_atomically(&output_path, &serialised)?;
     eprintln!(
-        "toolr.build: wrote {} group(s) / {} command(s) to {}",
+        "toolr build-manifest: wrote {} group(s) / {} command(s) to {}",
         fragment.groups.len(),
         fragment.commands.len(),
         output_path.display(),
@@ -300,7 +300,7 @@ fn check_against_disk(path: &std::path::Path, serialised: &str) -> anyhow::Resul
     } else {
         let diff = similar::TextDiff::from_lines(existing.as_str(), serialised);
         eprintln!(
-            "toolr.build: {} is out of date - regenerate with `toolr self build-manifest <pkg>`",
+            "toolr build-manifest: {} is out of date - regenerate with `toolr self build-manifest <pkg>`",
             path.display(),
         );
         eprintln!("{}", diff.unified_diff().header("on-disk", "regenerated"));

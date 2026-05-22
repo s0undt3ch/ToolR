@@ -67,7 +67,6 @@ nav:
     - arg: reference/arg.md
     - arg_section: reference/arg_section.md
     - testing: reference/testing.md
-    - build: reference/build.md
   - Contributing: contributing.md
   - Changelog: changelog.md
 
