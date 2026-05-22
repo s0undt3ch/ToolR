@@ -728,7 +728,7 @@ mod cli_tree_tests {
         let manifest = Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, runserver],
         };
@@ -754,7 +754,7 @@ mod cli_tree_tests {
         let manifest = Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: vec![group("docker")],
             commands: vec![build_cmd, image_cmd, build_child, image_child],
         };
@@ -778,7 +778,7 @@ mod cli_tree_tests {
         let manifest = Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, status],
         };
@@ -809,7 +809,7 @@ mod cli_tree_tests {
         let manifest = Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: vec![group("django")],
             commands: vec![dispatcher_cmd, migrate],
         };

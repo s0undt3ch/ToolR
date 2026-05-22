@@ -9,15 +9,23 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.13"
+  # RTD's `tools.rust` is backed by the asdf-rust plugin, whose
+  # allow-list caps at 1.91 and whose `"latest"` resolves to 1.91.1
+  # at the time of writing. Our workspace pulls in ruff's git deps
+  # (`ruff_python_parser`, `ruff_python_ast`, ...) which require
+  # rustc 1.93. We therefore bypass `tools.rust` and install rustup
+  # directly in the pre-create job, then prefix the install step
+  # with the cargo bin path so maturin can find it.
   jobs:
       pre_create_environment:
          - asdf plugin add uv
          - asdf install uv latest
          - asdf global uv latest
+         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
       create_environment:
          - uv venv "${READTHEDOCS_VIRTUALENV_PATH}"
       install:
-         - UV_PROJECT_ENVIRONMENT="${READTHEDOCS_VIRTUALENV_PATH}" uv sync --frozen --group docs
+         - PATH="$HOME/.cargo/bin:$PATH" UV_PROJECT_ENVIRONMENT="${READTHEDOCS_VIRTUALENV_PATH}" uv sync --frozen --group docs
 
 # Build documentation with Mkdocs
 mkdocs:

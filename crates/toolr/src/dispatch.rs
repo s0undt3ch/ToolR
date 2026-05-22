@@ -96,9 +96,6 @@ pub fn dispatch(
 
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;
-    // Auto-rebuild dynamic layer when the venv has changed since the
-    // manifest was last written. Tab completion never takes this path.
-    ensure_dynamic_layer_fresh(&repo_root, manifest)?;
     let output_opts = output_options_from_matches(matches);
     // Dispatched leaves take a separate spec-shape: the runner sees
     // `dispatch: Some(...)` and routes to `invoke_dispatcher` instead
@@ -276,9 +273,25 @@ fn resolve_python_for_build(override_path: Option<&str>) -> anyhow::Result<PathB
         return Ok(p);
     }
     if let Ok(venv) = std::env::var("VIRTUAL_ENV") {
-        let candidate = PathBuf::from(venv).join("bin").join("python");
-        if candidate.is_file() {
-            return Ok(candidate);
+        // Unix venvs put the interpreter at `<venv>/bin/python(3)`; Windows
+        // venvs put it at `<venv>/Scripts/python.exe`. Falling through to
+        // `which python` on a Windows runner would silently pick up the
+        // host's Python instead of the project's venv, which is then
+        // missing toolr-py.
+        let venv_path = PathBuf::from(venv);
+        let candidates: &[&[&str]] = if cfg!(windows) {
+            &[&["Scripts", "python.exe"], &["Scripts", "python3.exe"]]
+        } else {
+            &[&["bin", "python"], &["bin", "python3"]]
+        };
+        for parts in candidates {
+            let mut candidate = venv_path.clone();
+            for part in *parts {
+                candidate.push(part);
+            }
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
         }
     }
     for name in ["python3", "python"] {
@@ -372,34 +385,6 @@ fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> 
     let shell: CompletionShell = shell_str.parse()?;
     print!("{}", completion_script(shell));
     Ok(ExitCode::SUCCESS)
-}
-
-fn ensure_dynamic_layer_fresh(
-    project_root: &std::path::Path,
-    manifest: &Manifest,
-) -> anyhow::Result<()> {
-    use toolr_core::dynamic::{compute_dynamic_hash, rebuild_dynamic_only};
-
-    // Skip projects that don't have a tools venv configured.
-    if !project_root.join("tools").join("pyproject.toml").is_file() {
-        return Ok(());
-    }
-    let resolved = match resolve_venv_path(project_root) {
-        Ok(r) => r,
-        // Venv not yet set up — let the normal execute path surface the
-        // diagnostic. We don't try to auto-rebuild against a missing venv.
-        Err(_) => return Ok(()),
-    };
-    if !resolved.python.is_file() {
-        return Ok(());
-    }
-    let current = compute_dynamic_hash(&resolved.venv_dir)?;
-    if manifest.dynamic_hash == current && !current.is_empty() {
-        return Ok(());
-    }
-    eprintln!("toolr: dynamic manifest layer stale; regenerating...");
-    rebuild_dynamic_only(project_root, &resolved.python, &resolved.venv_dir)?;
-    Ok(())
 }
 
 fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
@@ -601,7 +586,7 @@ mod tests {
         Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: Vec::new(),
             commands: Vec::new(),
         }
@@ -708,7 +693,7 @@ mod path_lookup_tests {
         Manifest {
             schema_version: 1,
             static_hash: String::new(),
-            dynamic_hash: String::new(),
+            third_party_hash: String::new(),
             groups: vec![],
             commands,
         }

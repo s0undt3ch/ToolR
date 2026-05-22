@@ -214,7 +214,7 @@ fn empty_base() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: String::new(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![],
         commands: vec![],
     }
@@ -253,7 +253,8 @@ fn merge_adds_groups_and_commands_from_fragments() {
     assert_eq!(merged.groups[0].name, "deploy");
     assert_eq!(merged.commands.len(), 1);
     assert_eq!(merged.commands[0].name, "rollout");
-    assert_eq!(merged.commands[0].origin, Origin::Static);
+    assert_eq!(merged.groups[0].origin, Origin::ThirdParty);
+    assert_eq!(merged.commands[0].origin, Origin::ThirdParty);
 }
 
 #[test]

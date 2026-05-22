@@ -10,6 +10,9 @@ that the Rust binary's dynamic manifest layer uses
 
 The API surface remains the same: ``with CommandsTester(search_path=...) as t``
 yields an isolated collector available via ``t.collected_command_groups()``.
+
+Third-party entry-point loading has been removed; plugins must
+ship a static ``toolr-manifest.json`` instead.
 """
 
 from __future__ import annotations
@@ -33,18 +36,15 @@ class CommandsTester:
 
     Patches :func:`toolr._decorators._get_command_group_storage` so each
     test gets a fresh dict, then (in :meth:`discover`) imports modules
-    under the search path's ``tools/`` package and loads ``toolr.commands``
-    entry points to populate that dict. Tests then read it via
-    :meth:`collected_command_groups`.
+    under the search path's ``tools/`` package to populate that dict.
+    Tests then read it via :meth:`collected_command_groups`.
     """
 
     search_path: Path
-    skip_loading_entry_points: bool = field(default=False, repr=False)
     sys_path: list[str] = field(init=False, repr=False)
     sys_modules: dict[str, ModuleType] = field(init=False, repr=False)
     command_group_collector: dict[str, object] = field(init=False, repr=False, factory=dict)
     command_group_patcher: _patch = field(init=False, repr=False)
-    entry_points_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
 
     @sys_path.default
@@ -53,20 +53,19 @@ class CommandsTester:
 
     @sys_modules.default
     def _default_sys_modules(self) -> dict[str, ModuleType]:
-        # Copy sys.modules but exclude our testing thirdparty package and any local tools already imported
+        # Copy sys.modules but exclude the example plugin package and any
+        # local tools already imported, so the harness can reload them
+        # cleanly on each test.
         return {
             name: sys.modules[name]
             for name in sys.modules
-            if name not in ("tools", "thirdparty") and not name.startswith(("tools.", "thirdparty."))
+            if name not in ("tools", "toolr_example_plugin")
+            and not name.startswith(("tools.", "toolr_example_plugin."))
         }
 
     @command_group_patcher.default
     def _default_command_group_patcher(self) -> _patch:
         return patch("toolr._decorators._get_command_group_storage", return_value=self.command_group_collector)
-
-    @entry_points_patcher.default
-    def _default_entry_points_patcher(self) -> _patch:
-        return patch("importlib.metadata.entry_points", return_value=[])
 
     def collected_command_groups(self) -> dict[str, object]:
         """
@@ -79,18 +78,14 @@ class CommandsTester:
 
         Drives the same import-and-walk pipeline that
         ``python -m toolr._introspect`` uses on behalf of the Rust binary.
-        Registers ``tools/*.py`` modules and any installed
-        ``toolr.commands`` entry points (unless the
-        ``skip_loading_entry_points`` flag was set on construction).
+        Registers ``tools/*.py`` modules to populate the command-group
+        collector.
         """
         # Imported lazily to avoid registering modules at testing.py import time.
         from toolr._introspect import _import_tools_modules  # noqa: PLC0415
-        from toolr._introspect import _load_entry_points  # noqa: PLC0415
 
         warnings: list[str] = []
         _import_tools_modules(warnings)
-        if not self.skip_loading_entry_points:
-            _load_entry_points(warnings)
 
     def __enter__(self) -> Self:
         """
@@ -99,8 +94,6 @@ class CommandsTester:
         sys.modules.clear()
         sys.modules.update(self.sys_modules)
         os.chdir(self.search_path)
-        if self.skip_loading_entry_points:
-            self.entry_points_patcher.start()
         self.command_group_patcher.start()
         # Replace sys.path with the search path plus the site-packages
         # entries from the saved sys_path; drop anything that points
@@ -116,7 +109,5 @@ class CommandsTester:
         """
         os.chdir(self.cwd)
         self.command_group_patcher.stop()
-        if self.skip_loading_entry_points:
-            self.entry_points_patcher.stop()
         self.command_group_collector.clear()
         sys.path[:] = self.sys_path

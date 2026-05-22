@@ -238,3 +238,48 @@ invisible to end users:
   `toolr-py` as a workspace dependency — the repo's own
   `tools/*.py` scripts run against the same Python runtime
   users get from PyPI.
+
+### Breaking — entry-point plugins removed
+
+The `toolr.commands` entry-point mechanism for registering third-party
+plugins is removed. Plugin authors must instead ship a static
+`toolr-manifest.json` at the root of their installed Python package.
+toolr's dispatch path is now pure Rust and never spawns Python just to
+discover commands.
+
+Migrating a plugin:
+
+1. From inside the plugin's repo, run `toolr self build-manifest <pkg>`
+   (replace `<pkg>` with the dotted package name). This writes a
+   `toolr-manifest.json` next to your package's `__init__.py`.
+2. Include the file in your built wheel. For hatchling, add this to
+   `pyproject.toml`:
+
+   ```toml
+   [tool.hatch.build.targets.wheel]
+   include = ["src/<pkg>/toolr-manifest.json"]
+   ```
+
+   For setuptools, add `include src/<pkg>/toolr-manifest.json` to
+   `MANIFEST.in`.
+3. Wire `toolr self build-manifest <pkg> --check` into CI and as a
+   pre-commit hook. The `--check` flag exits non-zero when the
+   committed `toolr-manifest.json` no longer matches what would be
+   generated from current sources.
+4. Delete the now-inert `[project.entry-points.'toolr.commands']`
+   section from your plugin's `pyproject.toml`.
+
+If you don't ship the file, your plugin's commands will not appear in
+`toolr --help` or `toolr <group> --help`.
+
+### Improved — dispatch detects stale manifests automatically
+
+Adding, removing, or editing `tools/*.py` is now reflected on the very
+next `toolr <user-cmd>` or `toolr --help` invocation — no
+`toolr project manifest rebuild` needed. Installing or upgrading a
+third-party plugin that ships its own `toolr-manifest.json` is
+similarly picked up automatically. The check is pure Rust and adds
+single-digit milliseconds on a warm cache. When a rebuild fails (for
+example a syntax error in `tools/foo.py`), toolr serves the cached
+manifest with a warning identifying the offending file rather than
+blocking dispatch.

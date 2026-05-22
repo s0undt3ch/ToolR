@@ -72,7 +72,7 @@ jobs:
 
       # `--no-install-package toolr-py` is the key change: uv still sets
       # up dev/all-extras deps and installs the OTHER workspace members
-      # (tools, tests/support/3rd-party-pkg), but skips toolr-py. We then
+      # (tools, examples/plugin-package), but skips toolr-py. We then
       # pip-install the prebuilt wheel matching this matrix entry — same
       # binary CI uploads to PyPI, no per-matrix maturin recompile.
       - uses: ./.github/actions/setup-virtualenv
@@ -163,6 +163,20 @@ jobs:
           path: |
             target/coverage
           key: ${{ inputs.cache-seed }}|${{ runner.os }}|target|coverage|${{ steps.setup-virtualenv.outputs.python-version-checksum }}|${{ steps.rust-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+
+      - name: Verify example-plugin manifest is in sync
+        # Build-time invariant: the canonical example plugin's shipped
+        # `toolr-manifest.json` must match what `toolr self build-manifest`
+        # would regenerate from its current Python source. Drift here means
+        # the plugin-packaging contract advertised in `docs/third-party.md`
+        # would mislead authors who follow it. Lives here (rather than in
+        # pre-commit) because the check requires the workspace toolr binary
+        # to be built, which CI does anyway -- pre-commit would burn a
+        # full Rust compile on every dev's first commit.
+        shell: bash
+        run: |
+          cargo build --quiet -p toolr
+          ./target/debug/toolr self build-manifest toolr_example_plugin --check
 
       - name: Run Python Tests
         env:

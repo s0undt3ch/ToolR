@@ -13,8 +13,8 @@ use crate::manifest::Manifest;
 /// - A command present in `base.commands` with the same `(group, name)`
 ///   as one in the payload keeps the static definition; the dynamic copy
 ///   is dropped.
-/// - The resulting manifest's `dynamic_hash` is **not** touched here —
-///   callers stamp it from `compute_dynamic_hash` after the venv state
+/// - The resulting manifest's `third_party_hash` is **not** touched here —
+///   callers stamp it from `compute_third_party_hash` after the venv state
 ///   they used to produce `payload`.
 pub fn merge_dynamic(mut base: Manifest, payload: DynamicPayload) -> Manifest {
     let existing_groups: HashSet<String> = base.groups.iter().map(|g| g.name.clone()).collect();
@@ -73,7 +73,7 @@ mod tests {
         Manifest {
             schema_version: SCHEMA_VERSION,
             static_hash: "h".into(),
-            dynamic_hash: "".into(),
+            third_party_hash: "".into(),
             groups,
             commands,
         }
@@ -134,9 +134,9 @@ mod tests {
     }
 
     #[test]
-    fn merge_preserves_existing_dynamic_hash() {
+    fn merge_preserves_existing_third_party_hash() {
         let mut base = base_with(vec![], vec![]);
-        base.dynamic_hash = "preserved".into();
+        base.third_party_hash = "preserved".into();
         let merged = merge_dynamic(
             base,
             DynamicPayload {
@@ -146,6 +146,6 @@ mod tests {
                 warnings: vec![],
             },
         );
-        assert_eq!(merged.dynamic_hash, "preserved");
+        assert_eq!(merged.third_party_hash, "preserved");
     }
 }

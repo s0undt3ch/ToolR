@@ -7,7 +7,7 @@ fn fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![
             Group {
                 name: "ci".into(),
@@ -170,7 +170,7 @@ fn nested_fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![
             Group {
                 name: "docker".into(),
@@ -272,7 +272,7 @@ fn dispatcher_fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),
@@ -422,7 +422,7 @@ fn flags_only_child_fixture() -> Manifest {
     Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
-        dynamic_hash: String::new(),
+        third_party_hash: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),
@@ -509,6 +509,7 @@ fn leaf_with_only_flags_offers_flags_on_empty_prefix() {
 }
 
 use crate::complete::{ResolvedManifest, resolve_manifest_at_tab};
+use crate::dynamic::empty_third_party_hash;
 use crate::manifest::{write_manifest};
 use tempfile::TempDir;
 
@@ -548,8 +549,11 @@ fn returns_cached_manifest_when_hash_matches() {
         "ci.py",
         "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    pass\n",
     )]);
-    // Build once and write to disk.
-    let built = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
+    // Build once and write to disk.  Stamp the third_party_hash with the
+    // empty-venv sentinel so `freshness::compare` (venv_dir=None) sees a
+    // matching hash and returns Fresh.
+    let mut built = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
+    built.third_party_hash = empty_third_party_hash();
     let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
     write_manifest(&manifest_path, &built).unwrap();
 

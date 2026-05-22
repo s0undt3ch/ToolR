@@ -4,26 +4,66 @@ Toolr supports **third-party command packages** — installable Python
 packages that contribute commands to the `toolr` CLI when present in
 the tools venv.
 
-There are two registration mechanisms, in order of preference:
+Commands are discovered via a static JSON manifest file
+(`toolr-manifest.json`) that lives at the root of the installed
+package. Toolr's Rust binary globs for these files at startup; no
+Python import is involved.
 
-1. **Static manifest fragment** (recommended) — the package ships a
-   `toolr-manifest.json` next to its source. Toolr's binary discovers
-   it via glob during manifest build; no import required.
-2. **Entry-point fallback** (legacy) — the package declares
-   `[project.entry-points."toolr.tools"]` in its `pyproject.toml`.
-   Toolr discovers it via `importlib.metadata` and imports the named
-   module to collect registrations.
+## Why ship a JSON manifest
 
-## Why ship a static manifest
-
-Tab completion and `--help` need the command tree available **before**
-Python starts. With an entry-point registration, toolr has to spawn
-Python and import every entry-point's module to learn what's there —
-costly on every shell tab press.
+Toolr's CLI is a native Rust binary that boots in under 50 ms. Tab
+completion and `--help` need the full command tree available
+**before** Python starts. With an entry-point registration (the
+approach that was removed in the 2025 rewrite), toolr had to spawn
+Python and import every registered module to learn what commands
+existed — one import per package, on every shell tab press.
 
 A `toolr-manifest.json` is a sub-millisecond `glob()` + JSON parse,
 no Python involved. For interactive use the difference is the
 boundary between "instant" and "noticeable lag".
+
+Command discovery globs
+`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`.
+Any installed package that ships the file is picked up
+automatically; no project-side configuration is needed.
+
+## Generating the manifest
+
+Most packages won't write the JSON by hand. They declare commands
+with the usual `command_group` / `@command` API and let
+`toolr.build` introspect.
+
+The recommended way is to run the CLI wrapper inside the plugin's
+repo:
+
+```sh
+toolr self build-manifest my_pkg
+```
+
+Replace `my_pkg` with the dotted package name (e.g. `my_pkg` or
+`my_pkg.sub`). The file is written to the package root — next to
+`my_pkg/__init__.py`.
+
+Alternatively, call the build helper directly from Python:
+
+```python
+from toolr.build import build_manifest
+
+result = build_manifest("my_pkg")
+print(f"Wrote {result.output_path}")
+```
+
+See [`toolr.build`](reference/build.md) in the API reference for the
+full signature.
+
+Or run it as a module:
+
+```sh
+python -m toolr.build my_pkg
+```
+
+Re-run whenever your `command_group` / `@command` registrations
+change.
 
 ## The `toolr-manifest.json` fragment format
 
@@ -70,80 +110,133 @@ The file lives at `<package_dir>/toolr-manifest.json` — i.e. next to
 `my_pkg/__init__.py`. Toolr's manifest builder finds it via the glob
 `<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`.
 
-## The Python build helper
+## Shipping the manifest
 
-Most packages won't write the JSON by hand — they declare commands
-with the usual `command_group` / `@command` API and let
-`toolr.build` introspect.
+The generated file must be included in the built wheel. The exact
+mechanism depends on your build backend.
 
-```python
-from toolr.build import build_manifest
+**hatchling** — add an `include` entry in `pyproject.toml`:
 
-result = build_manifest("my_pkg")
-print(f"Wrote {result.output_path}")
+```toml
+[tool.hatch.build.targets.wheel]
+include = [
+  "src/my_pkg/toolr-manifest.json",
+]
 ```
 
-See [`toolr.build`](reference/build.md) in the API reference for the
-full signature.
+**setuptools** — add a line to `MANIFEST.in`:
 
-Or via the bundled CLI:
+```text
+include src/my_pkg/toolr-manifest.json
+```
+
+After building, verify the file is present in the wheel before
+publishing:
 
 ```sh
-python -m toolr.build my_pkg
+unzip -l dist/my_pkg-*.whl | grep toolr-manifest
 ```
 
-Re-run whenever your `command_group` / `@command` registrations
-change.
+## Keeping it in sync
 
-### `--check` for CI
-
-In a CI job, pass `--check` to verify the committed manifest matches
-what regeneration would produce:
-
-```sh
-python -m toolr.build my_pkg --check
-```
-
-Exit code 0 if in sync, non-zero (with a diff on stderr) if drifted.
-
-## The rust CLI wrapper
-
-If you're outside the package's own venv, the toolr binary will find
-a working Python and run the build for you:
+Run `toolr self build-manifest <pkg> --check` to detect drift
+between the committed manifest and what regeneration would produce:
 
 ```sh
 toolr self build-manifest my_pkg --check
 ```
 
-Same flags as `python -m toolr.build`. See
-[CLI reference → `self build-manifest`](cli.md#self-build-manifest).
+Exit code 0 if in sync; non-zero (with a diff on stderr) if
+drifted. The equivalent using the Python module:
 
-## Entry-point fallback (legacy)
-
-For packages that haven't migrated to static manifests yet, toolr
-falls back to entry-points:
-
-```toml
-# pyproject.toml in the third-party package
-[project.entry-points."toolr.tools"]
-commands = "my_pkg.commands"
+```sh
+python -m toolr.build my_pkg --check
 ```
 
-When toolr's binary doesn't find a `toolr-manifest.json` next to
-the package, it spawns Python and imports `my_pkg.commands`. The
-module's import-time `command_group` / `@command` calls register
-the commands into the global registry.
+### Pre-commit hook
 
-This works but is **slower at completion time** — every tab press
-pays the import cost. Once a package has any users, ship a static
-manifest instead.
+Add this to `.pre-commit-config.yaml` in your plugin's repo to
+prevent committing a stale manifest:
 
-## Working example in the repo
+```yaml
+- repo: local
+  hooks:
+    - id: toolr-manifest
+      name: toolr manifest in sync
+      language: system
+      entry: toolr self build-manifest my_pkg --check
+      pass_filenames: false
+      files: ^src/my_pkg/.*\.py$
+```
 
-[`tests/support/3rd-party-pkg/`](https://github.com/s0undt3ch/ToolR/tree/main/tests/support/3rd-party-pkg)
-in the toolr repo is a complete third-party package fixture. It uses
-the entry-point mechanism (older style) and is exercised by the
-integration tests; treat it as a copy-pasteable starting point.
+Replace `my_pkg` and the `files` pattern to match your package.
+
+### CI check
+
+Add a step to your workflow to catch drift in pull requests:
+
+```yaml
+- name: Check toolr manifest is up to date
+  run: toolr self build-manifest my_pkg --check
+```
+
+## What happens if you skip it
+
+If `toolr-manifest.json` is not present in the installed package,
+toolr's discovery glob will not find it and your plugin's commands
+will not appear in `toolr --help` or `toolr <group> --help`.
+
+To diagnose a missing manifest after installing a plugin, check
+whether the file is in the installed package directory:
+
+```sh
+python -c "import my_pkg; print(my_pkg.__path__)"
+```
+
+That prints the on-disk path. Verify that a `toolr-manifest.json`
+file is present in that directory:
+
+```sh
+ls "$(python -c 'import my_pkg; print(my_pkg.__path__[0])')"
+```
+
+If the file is absent, regenerate it (`toolr self build-manifest
+my_pkg`) and rebuild the wheel with it included.
+
+## Migration from entry-point plugins
+
+> ⚠ The `toolr.commands` entry-point mechanism is removed.
+> Entry-point declarations are now no-ops and are safe to delete.
+
+If your plugin previously registered commands via
+`[project.entry-points.'toolr.commands']`:
+
+1. **Generate the manifest.** From inside the plugin's repo, run:
+
+   ```sh
+   toolr self build-manifest my_pkg
+   ```
+
+   This writes `toolr-manifest.json` next to `my_pkg/__init__.py`.
+
+2. **Ship the file.** Include it in the built wheel as described
+   in [Shipping the manifest](#shipping-the-manifest) above.
+
+3. **Wire drift detection.** Add the pre-commit hook and CI step
+   from [Keeping it in sync](#keeping-it-in-sync).
+
+4. **Delete the entry-point declaration.** Remove the now-inert
+   section from your `pyproject.toml`:
+
+   ```toml
+   # Delete this:
+   [project.entry-points."toolr.commands"]
+   commands = "my_pkg.commands"
+   ```
+
+After publishing the updated wheel, users who upgrade will have
+their commands discovered automatically on the next `toolr`
+invocation — no project-side changes needed on their end.
 
 ## Command resolution
 
@@ -168,3 +261,9 @@ When multiple sources contribute commands with the same name:
 - Toolr migrates older fragment schemas in-process when a newer
   binary meets an older fragment, but pin defensively if you're
   shipping pre-1.0.
+
+## Working example in the repo
+
+[`tests/support/3rd-party-pkg/`](https://github.com/s0undt3ch/ToolR/tree/main/tests/support/3rd-party-pkg)
+in the toolr repo is a complete third-party package fixture exercised
+by the integration tests. Treat it as a copy-pasteable starting point.

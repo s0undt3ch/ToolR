@@ -19,18 +19,18 @@ addopts = [
 members = [
     "crates/toolr",
     "crates/toolr-py",
-    "tests/support/3rd-party-pkg",
+    "examples/plugin-package",
     "tools",
 ]
 
 [tool.uv.sources]
 toolr = { workspace = true }
 toolr-py = { workspace = true }
-"3rd-party-pkg" = { workspace = true }
+"toolr-plugin-example" = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "3rd-party-pkg",
+    "toolr-plugin-example",
     "toolr-py",
     "attrs>=25.3.0",
     "coverage>=7.14.0",
@@ -194,7 +194,7 @@ mypy_path = "crates/toolr-py/python"
 exclude = [
   "tests/.*/files/.*\\.py",
   "^tests/([^/]*/)*files/.*",
-  "tests/support/3rd-party-pkg/.*"
+  "examples/plugin-package/.*"
 ]
 
 [[tool.mypy.overrides]]

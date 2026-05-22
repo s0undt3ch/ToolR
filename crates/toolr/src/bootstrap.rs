@@ -6,8 +6,13 @@
 
 use std::path::Path;
 
+use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::dynamic::rebuild_manifest_full;
+use toolr_core::dynamic::{compute_third_party_hash, empty_third_party_hash};
+use toolr_core::freshness::{FreshnessVerdict, compare};
+use toolr_core::manifest::{Manifest, Origin, load_manifest, write_manifest};
+use toolr_core::parser::{build_static_manifest, build_static_manifest_with_venv};
 use toolr_core::venv::resolve_venv_path;
 
 /// Bootstrap step that runs before clap parses the user's command.
@@ -68,6 +73,138 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
         None => false, // `toolr` alone (with or without `--help`) → rebuild so help shows user groups
         Some(name) => BUILTINS.contains(&name.as_str()),
     }
+}
+
+/// Dispatch-time freshness step: detect a stale manifest, rebuild it
+/// in-process (pure Rust, no Python), persist the result, and fall
+/// back to the cached manifest with a warning when a rebuild errors.
+///
+/// Returns `Ok(())` on success OR on any non-fatal soft failure
+/// (drift rebuild error, missing venv, etc.). Only I/O errors from
+/// writing the freshly rebuilt manifest propagate.
+pub(crate) fn ensure_manifest_fresh(
+    cwd: &Path,
+    argv: &[String],
+) -> anyhow::Result<()> {
+    let Ok(root) = discover_project_root(cwd) else {
+        return Ok(());
+    };
+    let tools = root.join("tools");
+    if !tools.join("pyproject.toml").is_file() {
+        return Ok(());
+    }
+    if should_skip_auto_rebuild(argv) {
+        return Ok(());
+    }
+
+    let manifest_path = tools.join(".toolr-manifest.json");
+    let cached = load_manifest(&manifest_path).ok();
+    let venv_dir: Option<std::path::PathBuf> =
+        resolve_venv_path(&root).ok().map(|r| r.venv_dir);
+
+    let verdict = compare(cached.as_ref(), &tools, venv_dir.as_deref())?;
+
+    if matches!(verdict, FreshnessVerdict::Fresh) {
+        return Ok(());
+    }
+
+    match try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref()) {
+        Ok(fresh) => write_manifest(&manifest_path, &fresh)
+            .with_context(|| format!("writing {}", manifest_path.display())),
+        Err(e) => {
+            warn_and_keep_cache(&e, cached.is_some());
+            Ok(())
+        }
+    }
+}
+
+fn try_rebuild(
+    verdict: FreshnessVerdict,
+    tools: &Path,
+    venv: Option<&Path>,
+    cached: Option<&Manifest>,
+) -> anyhow::Result<Manifest> {
+    // `build_static_manifest_inner` already stamps `static_hash` on the
+    // returned manifest, so no re-hashing here.
+    let mut fresh = match verdict {
+        FreshnessVerdict::StaticDrift => build_static_manifest(tools)?,
+        FreshnessVerdict::ThirdPartyDrift => match venv {
+            Some(v) => build_static_manifest_with_venv(tools, v).map_err(anyhow::Error::from)?,
+            None => build_static_manifest(tools)?,
+        },
+        FreshnessVerdict::Fresh => unreachable!("Fresh handled by caller"),
+    };
+    if let Some(cached) = cached {
+        carry_forward_cached_entries(&mut fresh, cached, verdict);
+    }
+    // Stamp third_party_hash according to the drift axis.
+    fresh.third_party_hash = match verdict {
+        FreshnessVerdict::StaticDrift => cached
+            .map(|c| c.third_party_hash.clone())
+            .unwrap_or_else(empty_third_party_hash),
+        FreshnessVerdict::ThirdPartyDrift => match venv {
+            Some(v) => compute_third_party_hash(v)
+                .with_context(|| "hashing third-party manifests")?,
+            None => empty_third_party_hash(),
+        },
+        FreshnessVerdict::Fresh => unreachable!(),
+    };
+    Ok(fresh)
+}
+
+/// Copy non-static entries from `cached` into `fresh` when the fresh
+/// rebuild has no entry with the same identity. On `StaticDrift` we
+/// preserve both `Dynamic` and `ThirdParty` origins (we didn't re-glob).
+/// On `ThirdPartyDrift` we only preserve `Dynamic` (third-party comes
+/// from the fresh glob).
+///
+/// Note: this helper is purpose-built for persistent dispatch paths.
+/// It MUST NOT be confused with `complete::freshness::preserve_non_static_entries`,
+/// which is for in-memory tab-completion paths that never write to disk.
+fn carry_forward_cached_entries(
+    fresh: &mut Manifest,
+    cached: &Manifest,
+    verdict: FreshnessVerdict,
+) {
+    let keep = |o: &Origin| {
+        matches!(
+            (verdict, o),
+            (FreshnessVerdict::StaticDrift, Origin::Dynamic | Origin::ThirdParty)
+                | (FreshnessVerdict::ThirdPartyDrift, Origin::Dynamic)
+        )
+    };
+    for group in &cached.groups {
+        if keep(&group.origin) && !fresh.groups.iter().any(|g| g.name == group.name) {
+            fresh.groups.push(group.clone());
+        }
+    }
+    for cmd in &cached.commands {
+        if keep(&cmd.origin)
+            && !fresh
+                .commands
+                .iter()
+                .any(|c| c.group == cmd.group && c.name == cmd.name)
+        {
+            fresh.commands.push(cmd.clone());
+        }
+    }
+}
+
+fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
+    eprintln!(
+        "toolr: warning: tools manifest is stale and a fresh build failed; \
+         falling back to cached manifest"
+    );
+    let s = err.to_string();
+    let first = s.lines().next().unwrap_or(&s);
+    eprintln!("toolr: warning: cause: {first}");
+    if !had_cache {
+        eprintln!(
+            "toolr: warning: no cached manifest available — `toolr <user-cmd>` \
+             will likely fail until you fix the build error"
+        );
+    }
+    eprintln!("toolr: warning: run `toolr project manifest rebuild` to see the full error");
 }
 
 #[cfg(test)]
