@@ -10,10 +10,13 @@ packages need to do three toolr-specific things on top of
 otherwise-normal Python packaging:
 
 1. Generate `toolr-manifest.json` for the package via
-   `toolr self build-manifest <package_name>`.
-2. Include that file in the built wheel so toolr's loader can
-   discover it at install time.
-3. Wire `toolr self build-manifest <pkg> --check` as a CI gate
+   `toolr self build-manifest --source-dir <dir> --package
+   <name>` (the pure-Rust build path that replaced the
+   removed `toolr.build` Python module in PR #235).
+2. Include that file in the built wheel so toolr's loader
+   can discover it under `<venv>/lib/python*/site-packages/
+   <package>/toolr-manifest.json`.
+3. Wire `toolr self build-manifest ... --check` as a CI gate
    to prevent the committed manifest from drifting out of
    sync with the source.
 
@@ -54,9 +57,10 @@ mechanism (`skillshare` from the toolr repo).
   and is installable via `skillshare`.
 - The skill's trigger keeps it inert outside packaging
   contexts and outside toolr projects.
-- The skill anchors on the existing `crates/toolr-django/`
-  plugin as the canonical worked example instead of
-  reproducing scaffold content.
+- The skill anchors on the existing `examples/plugin-package/`
+  (added by PR #235 as the canonical reference plugin —
+  hatchling-built, ships `toolr-manifest.json` in the wheel,
+  exercised by CI) instead of reproducing scaffold content.
 
 ## Non-goals
 
@@ -91,26 +95,34 @@ first") and no runtime dependency on the authoring skill.
 The skill covers, in order:
 
 - The packaging contract: a toolr plugin is a Python package
-  with a static `toolr-manifest.json` at its installed-
-  package root. toolr's loader globs every
-  `site-packages/*/toolr-manifest.json` at install/dispatch
-  time; no entry-point registration is required or
+  with a static `toolr-manifest.json` shipped at its
+  installed-package root. toolr's loader globs every
+  `<venv>/lib/python*/site-packages/<package>/
+  toolr-manifest.json` at dispatch time (freshness work, PR
+  #234); no entry-point registration is required or
   supported.
 - Generating the manifest: `toolr self build-manifest
-  <package_name>` writes `toolr-manifest.json` to the
-  package source root.
+  --source-dir <dir> --package <name>` (pure-Rust path
+  since PR #235; the older `toolr.build` Python module is
+  gone). The command writes `toolr-manifest.json` into the
+  package source tree.
 - Including the manifest in the wheel: build-backend-
-  specific configuration (worked example for at least
-  hatchling, mirroring `crates/toolr-django/`).
+  specific configuration. Hatchling is the canonical worked
+  example because that is what `examples/plugin-package/`
+  uses (`[tool.hatch.build.targets.wheel] packages = [
+  "src/<package>"]` — hatchling ships every file inside the
+  named directory, including non-`.py` files like the
+  committed `toolr-manifest.json`).
 - Keeping the manifest in sync: `toolr self build-manifest
-  <pkg> --check` as a pre-commit hook and a CI gate.
+  --source-dir <dir> --package <name> --check` as a
+  pre-commit hook and a CI gate.
 - Verifying after install: how to confirm the manifest made
   it into the wheel (`python -c "import <pkg>; print(<pkg>
   .__path__)"` should contain `toolr-manifest.json`); how to
   confirm commands appear in `toolr --help`.
 - Migration from entry-point plugins: one-paragraph note for
-  authors of pre-`dispatch_manifest_freshness` plugins,
-  consistent with the `UNRELEASED.md` migration text.
+  authors of pre-PR-#234 plugins, consistent with the
+  `UNRELEASED.md` migration text.
 
 ### Drift defense
 
@@ -176,51 +188,64 @@ The same `--check` invocation handles both skills:
 registered generator, fails CI if any committed
 `references/*.md` is out of date.
 
-#### Layer 3 — `examples/` is runnable and snapshot-tested
+#### Layer 3 — `examples/plugin-package/` is the canonical example, already in tree
 
-`skills/toolr-command-packaging/examples/plugin-package/` is a
-minimal installable Python package: a `pyproject.toml` with
-the hatchling wheel-include configuration, a `tools/` source
-tree with a small set of representative commands, a
-generated `toolr-manifest.json`, and a `noxfile.py` (or
-equivalent) that wires the `--check` invocation.
+The canonical worked example **already exists** at the
+repository root: `examples/plugin-package/` was added by
+PR #235 as the reference third-party plugin. It is
+hatchling-built, ships a committed `toolr-manifest.json`
+under `src/toolr_example_plugin/`, is wired into CI to
+build once and reuse via the wheelhouse, and is the
+fixture the manifest-builder tests already snapshot
+against. The packaging skill does **not** ship a separate
+duplicate; it points agents at this directory by path.
 
-The example is exercised by toolr's existing test harness:
+This collapses the "skill example" and "test fixture"
+into one artifact serving both purposes — the property we
+wanted from the start, now realised. Concretely:
 
-- `toolr self build-manifest` runs against the example
-  package; the result is diffed against a committed
-  `toolr-manifest.json` fixture. Mismatch fails CI.
-- A wheel-build test runs the build backend against the
-  example, then unpacks the resulting wheel and asserts
-  `toolr-manifest.json` is present at the package root in
-  the wheel.
-- A staleness test introduces a known modification to the
-  example's source `tools/` and asserts
-  `toolr self build-manifest --check` exits non-zero.
+- The skill's body references `examples/plugin-package/`
+  as the canonical reference (no `skills/toolr-command-
+  packaging/examples/` of its own).
+- Existing tests that snapshot the manifest against this
+  example are reused as the skill's correctness gate. The
+  same fixture file (`src/toolr_example_plugin/
+  toolr-manifest.json`) is the source of truth.
+- A new wheel-build test (if not already present in CI's
+  example-plugin job) runs the build backend, unpacks the
+  resulting wheel, and asserts `toolr-manifest.json` is at
+  the package root inside the wheel. This catches the
+  "manifest forgotten in build configuration" failure mode
+  the skill is most explicitly designed to prevent.
+- A new staleness test introduces a known modification to
+  the example's source and asserts `toolr self
+  build-manifest ... --check` exits non-zero.
 
-If a refactor breaks the example, the snapshot fails and the
-author must update the example (and fixtures) or back out the
-change. The skill cannot ship a broken example.
+If a refactor breaks the example, the snapshot fails and
+the author must update the example or back out the
+change. The skill cannot ship a broken example because the
+example is not separately maintained.
 
-### Anchoring on existing toolr commands and the toolr-django plugin
+### Anchoring on the canonical example
 
 The skill consistently directs the agent at existing toolr
-UX:
+UX and at the canonical example plugin:
 
-- "Run `toolr self build-manifest <pkg>` in your package
-  source root to generate the manifest" — not a reproduction
-  of manifest internals.
-- "Look at `crates/toolr-django/` for a complete plugin: its
-  `pyproject.toml` shows the canonical hatchling wheel-
-  include configuration; its CI runs `toolr self
-  build-manifest --check`" — not a reproduction of either.
+- "Run `toolr self build-manifest --source-dir <dir>
+  --package <name>` to generate the manifest" — not a
+  reproduction of manifest internals.
+- "Look at `examples/plugin-package/` for a complete
+  worked example: its `pyproject.toml` shows the canonical
+  hatchling wheel-include configuration; CI runs it
+  end-to-end" — not a reproduction of either.
 - "Verify after install: `python -c 'import <pkg>; print
   (<pkg>.__path__)'` should contain `toolr-manifest.json`;
   `toolr --help` should list your commands" — not a
   reproduction of the loader.
 
-This keeps the skill small and makes it self-correcting (if
-`toolr-django` improves, the skill rides along for free).
+This keeps the skill small and makes it self-correcting:
+if `examples/plugin-package/` improves, the skill rides
+along for free.
 
 ### Trigger description
 
@@ -318,28 +343,36 @@ contributes an additional unit test: a fixture change to the
 
 ### Example manifest — `toolr self build-manifest` snapshot diff
 
-`toolr self build-manifest` runs against `skills/toolr-
-command-packaging/examples/plugin-package/`; the result is
-diffed against the committed `toolr-manifest.json` fixture.
-Mismatch fails CI.
+`toolr self build-manifest --source-dir
+examples/plugin-package/src --package toolr_example_plugin`
+runs against the canonical example; the result is diffed
+against the committed
+`examples/plugin-package/src/toolr_example_plugin/
+toolr-manifest.json`. Mismatch fails CI. The
+manifest-builder tests already snapshot against this fixture
+post-PR-#235; the packaging skill simply consumes the same
+guarantee.
 
 ### Example wheel build
 
-The build backend (hatchling, matching `crates/toolr-django/`)
-runs against the example package. The resulting wheel is
-unpacked and asserted to contain `toolr-manifest.json` at the
-package root inside the wheel. This test catches the
+Hatchling runs against `examples/plugin-package/`. The
+resulting wheel is unpacked and asserted to contain
+`toolr-manifest.json` at the package root inside the wheel
+(i.e. under `toolr_example_plugin/`). This test catches the
 "manifest forgotten in build configuration" failure mode
-that the skill is most explicitly designed to prevent.
+that the skill is most explicitly designed to prevent. CI
+already builds the example plugin once per run (the
+`toolr-plugin-example` job added by PR #235); this test
+adds the wheel-contents assertion on top of that existing
+build artifact.
 
 ### Example staleness — `--check` red-path
 
-The example is modified in a known way that should cause
-drift between the source `tools/` and the committed
-`toolr-manifest.json`. `toolr self build-manifest <pkg>
---check` is asserted to exit non-zero. This is the
-guardrail that the prose's "wire `--check` as a CI gate"
-recommendation has teeth.
+The example is modified in a known way (a new command added
+to source without regenerating the manifest) and `toolr
+self build-manifest --source-dir ... --package ... --check`
+is asserted to exit non-zero. This gives the prose's "wire
+`--check` as a CI gate" recommendation teeth.
 
 ### Trigger sanity (best-effort)
 
@@ -351,18 +384,15 @@ arbiter.
 
 ## Open questions
 
-1. **Build backends in the worked example.** The
-   `crates/toolr-django/` plugin uses [one specific build
-   backend — likely hatchling but worth confirming during
-   the plan]. The skill's example mirrors whatever
-   toolr-django uses, so users can copy-paste with
-   confidence. Additional build backends (setuptools,
-   poetry) are not in the example but the skill body can
-   mention them and point at their canonical "include data
-   file in wheel" docs. Defer the breadth question to the
-   plan.
+1. **Additional build backends in the skill body.** The
+   canonical example uses hatchling (confirmed via
+   `examples/plugin-package/pyproject.toml`). The skill
+   body can mention setuptools and poetry with pointers to
+   their canonical "include data file in wheel" docs, but
+   only hatchling is exercised by tests. Defer the breadth
+   question to the plan.
 2. **Pre-commit hook integration.** The skill recommends
-   `toolr self build-manifest <pkg> --check` as a pre-commit
+   `toolr self build-manifest ... --check` as a pre-commit
    hook. Whether toolr ships a `prek` hook entry for this
    (alongside its existing entries) or just documents the
    pattern is a plan-level call. The spec's commitment is
