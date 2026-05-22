@@ -207,16 +207,24 @@ toolr self cache prune --help
 
 ### `toolr self build-manifest <package>` {#self-build-manifest}
 
-Generate a `toolr-manifest.json` fragment for a third-party package.
-Wraps `python -m toolr.build`; locates a working Python automatically.
+Generate a `toolr-manifest.json` fragment for a third-party package by
+AST-walking the installed package source. Pure Rust — no Python
+subprocess, no `pip install -e .` required.
 
 **Flags:**
 
+- `<package>` — looked up in the project's tools venv. Mutually
+  exclusive with `--source-dir`.
+- `--source-dir PATH` — point the tool at a package's source tree
+  directly (bypasses the venv lookup). Requires `--package` if the
+  leaf directory name isn't the desired package name.
+- `--package PKG` — package name to embed in the fragment when using
+  `--source-dir`.
 - `--check` — verify the on-disk manifest matches what regeneration
-  would produce; exit non-zero on drift.
+  would produce; exit `2` with a unified diff on drift.
 - `--output PATH` — write to a specific file instead of the
   package's default location.
-- `--python PATH` — use a specific Python interpreter.
+- `--schema-version N` — pin the emitted `toolr_schema_version`.
 
 ```sh
 toolr self build-manifest --help

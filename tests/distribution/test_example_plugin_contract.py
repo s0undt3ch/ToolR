@@ -28,31 +28,25 @@ from zipfile import ZipFile
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-EXAMPLE_DIR = REPO_ROOT / "examples" / "plugin-package"
-
 
 @pytest.mark.distribution
 def test_example_plugin_wheel_ships_manifest_and_commands(
     toolr_wheel: Path,
     toolr_py_wheel: Path,
+    example_plugin_wheel: Path,
     make_uv_venv,
     tmp_path: Path,
 ) -> None:
     uv = shutil.which("uv")
     if uv is None:
-        pytest.skip("uv required to build + install the example wheel")
+        pytest.skip("uv required to install the example wheel")
 
-    # ---- Build a wheel from examples/plugin-package/.
-    wheel_dir = tmp_path / "dist"
-    subprocess.run(  # noqa: S603
-        [uv, "build", "--wheel", "--out-dir", str(wheel_dir), str(EXAMPLE_DIR)],
-        check=True,
-        cwd=tmp_path,
-    )
-    wheels = sorted(wheel_dir.glob("toolr_plugin_example-*.whl"))
-    assert len(wheels) == 1, f"expected exactly one example wheel, got: {wheels}"
-    example_wheel = wheels[0]
+    # ---- The example wheel is supplied by the session-scoped
+    #      `example_plugin_wheel` fixture: CI builds it once (universal
+    #      `py3-none-any`) and ships it via `wheelhouse/`; locally the
+    #      fixture falls back to an inline `uv build` so a bare
+    #      `pytest tests/distribution/` still works.
+    example_wheel = example_plugin_wheel
 
     # ---- The wheel must actually carry the manifest. If hatchling's
     #      `packages = [...]` rule ever stops including non-`.py` files,

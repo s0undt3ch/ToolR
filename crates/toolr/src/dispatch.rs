@@ -239,70 +239,73 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
 }
 
 fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
-    use std::process::Command;
+    let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches)?;
 
-    let package: &String = matches
-        .get_one("package")
-        .ok_or_else(|| anyhow::anyhow!("missing required argument: package"))?;
-    let python = resolve_python_for_build(matches.get_one::<String>("python").map(String::as_str))?;
-    let mut cmd = Command::new(&python);
-    cmd.args(["-m", "toolr.build", package]);
-    if let Some(out) = matches.get_one::<String>("output") {
-        cmd.args(["--output", out]);
-    }
-    if let Some(ver) = matches.get_one::<String>("schema-version") {
-        cmd.args(["--schema-version", ver]);
-    }
+    let schema_version: u32 = matches
+        .get_one::<u32>("schema-version")
+        .copied()
+        .unwrap_or(toolr_core::third_party::FRAGMENT_SCHEMA_VERSION);
+
+    let output_path = resolve_output_path(matches, &resolved.source_dir);
+
+    let fragment = toolr_core::build_fragment::build_third_party_fragment(
+        &resolved.source_dir,
+        &resolved.package_name,
+        schema_version,
+    )?;
+    let serialised = toolr_core::build_fragment::serialise_fragment(&fragment)?;
+
     if matches.get_flag("check") {
-        cmd.arg("--check");
+        return check_against_disk(&output_path, &serialised);
     }
-    let status = cmd
-        .status()
-        .map_err(|e| anyhow::anyhow!("failed to spawn `{}`: {e}", python.display()))?;
-    let code = status.code().unwrap_or(1);
-    let clamped: u8 = code.clamp(0, 255).try_into().unwrap_or(1);
-    Ok(ExitCode::from(clamped))
+
+    write_atomically(&output_path, &serialised)?;
+    eprintln!(
+        "toolr build-manifest: wrote {} group(s) / {} command(s) to {}",
+        fragment.groups.len(),
+        fragment.commands.len(),
+        output_path.display(),
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
-fn resolve_python_for_build(override_path: Option<&str>) -> anyhow::Result<PathBuf> {
-    if let Some(path) = override_path {
-        let p = PathBuf::from(path);
-        if !p.is_file() {
-            anyhow::bail!("--python `{}`: not a file", p.display());
-        }
-        return Ok(p);
+fn resolve_output_path(matches: &clap::ArgMatches, source_dir: &std::path::Path) -> PathBuf {
+    matches
+        .get_one::<String>("output")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| source_dir.join("toolr-manifest.json"))
+}
+
+fn write_atomically(path: &std::path::Path, contents: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
     }
-    if let Ok(venv) = std::env::var("VIRTUAL_ENV") {
-        // Unix venvs put the interpreter at `<venv>/bin/python(3)`; Windows
-        // venvs put it at `<venv>/Scripts/python.exe`. Falling through to
-        // `which python` on a Windows runner would silently pick up the
-        // host's Python instead of the project's venv, which is then
-        // missing toolr-py.
-        let venv_path = PathBuf::from(venv);
-        let candidates: &[&[&str]] = if cfg!(windows) {
-            &[&["Scripts", "python.exe"], &["Scripts", "python3.exe"]]
-        } else {
-            &[&["bin", "python"], &["bin", "python3"]]
-        };
-        for parts in candidates {
-            let mut candidate = venv_path.clone();
-            for part in *parts {
-                candidate.push(part);
-            }
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
+    let mut tmp = tempfile::NamedTempFile::new_in(
+        path.parent().unwrap_or_else(|| std::path::Path::new(".")),
+    )?;
+    tmp.write_all(contents.as_bytes())?;
+    tmp.persist(path).map_err(|e| anyhow::anyhow!("persist: {e}"))?;
+    Ok(())
+}
+
+fn check_against_disk(path: &std::path::Path, serialised: &str) -> anyhow::Result<ExitCode> {
+    let existing = if path.is_file() {
+        std::fs::read_to_string(path)?
+    } else {
+        String::new()
+    };
+    if existing == serialised {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        let diff = similar::TextDiff::from_lines(existing.as_str(), serialised);
+        eprintln!(
+            "toolr build-manifest: {} is out of date - regenerate with `toolr self build-manifest <pkg>`",
+            path.display(),
+        );
+        eprintln!("{}", diff.unified_diff().header("on-disk", "regenerated"));
+        Ok(ExitCode::from(2))
     }
-    for name in ["python3", "python"] {
-        if let Ok(path) = which::which(name) {
-            return Ok(path);
-        }
-    }
-    anyhow::bail!(
-        "no Python interpreter found. Pass --python <path>, activate a venv, or \
-         ensure `python3` is on PATH."
-    )
 }
 
 fn run_completion_install(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
@@ -538,32 +541,6 @@ mod tests {
         let s = report_uv_error(&UvError::NotAvailable);
         assert!(s.starts_with("toolr:"), "actual: {s}");
     }
-
-    // ----------------------------------------------------------------
-    // resolve_python_for_build: override / VIRTUAL_ENV / PATH fallback.
-    // ----------------------------------------------------------------
-
-    #[test]
-    fn resolve_python_for_build_accepts_existing_override() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let p = tmp.path().join("python");
-        std::fs::write(&p, "").unwrap();
-        let resolved = resolve_python_for_build(Some(p.to_str().unwrap())).unwrap();
-        assert_eq!(resolved, p);
-    }
-
-    #[test]
-    fn resolve_python_for_build_rejects_nonexistent_override() {
-        let err = resolve_python_for_build(Some("/definitely/not/a/python")).unwrap_err();
-        assert!(err.to_string().contains("not a file"), "actual: {err}");
-    }
-
-    // Note: the VIRTUAL_ENV + PATH fallback branches mutate process-wide
-    // env state, which races against any other test in the same binary
-    // that also reads `$VIRTUAL_ENV`. We rely on the integration tests
-    // in `cli_smoke.rs` (which spawn fresh subprocesses) to exercise
-    // those branches. Coverage on lines 196-210 is therefore expected
-    // to remain partial under tarpaulin's in-process metric.
 
     // ----------------------------------------------------------------
     // dirs_home: $HOME present / absent.

@@ -183,24 +183,6 @@ fn self_build_manifest_help_works() {
     );
 }
 
-#[test]
-fn self_build_manifest_errors_when_no_python_available() {
-    // Force resolution failure by stripping PATH and unsetting VIRTUAL_ENV.
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .env_clear()
-        .env("PATH", "")
-        .args(["self", "build-manifest", "any_package"])
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("no Python interpreter found") || stderr.contains("Pass --python"),
-        "unexpected stderr: {stderr}"
-    );
-}
-
 /// Build a fixture project with:
 /// - `tools/pyproject.toml` opting into the in-tree venv layout so
 ///   `resolve_venv_path` lands at `tools/.venv/`.

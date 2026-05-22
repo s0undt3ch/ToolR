@@ -17,7 +17,6 @@ permissions: {}
 env:
   COLUMNS: 190
   FORCE_COLOR: "1"
-  TOOLR_DEBUG_IMPORTS: "1"
   # Bump to invalidate every cache (mise install dirs, .venv, prek hooks,
   # mypy/ruff caches, ...) used by this workflow.
   CACHE_SEED: "3"
@@ -155,7 +154,7 @@ jobs:
       attestations: write
 
   build-binary-archive:
-    name: Build binary archives (per triple)
+    name: Build (binary)
     # `prepare-ci.outputs.binary-archive-triples` (in ci mode) lists the
     # runner-native triples — x86_64-unknown-linux-gnu, aarch64-apple-darwin,
     # x86_64-pc-windows-msvc — so downstream tests + the docs job can
@@ -177,64 +176,46 @@ jobs:
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
 
-  # test-* now CONSUMES the prebuilt artifacts (toolr binary archive + the
-  # matching toolr-py wheel for each matrix python) instead of compiling
-  # them itself. The DAG is intentionally `prepare-ci → wheels/archive →
-  # test-*`; signal lands later than before, but every test exercises the
-  # exact artifact that ships, and there's no per-matrix maturin rebuild.
-  test-linux:
-    name: Test
+  # The example plugin is pure Python — one universal wheel covers
+  # every Test matrix entry on every OS. Build it once here and let the
+  # Test jobs download it via the `example-plugin-wheel` artifact (and
+  # the contract test's session-scoped fixture falls back to inline
+  # `uv build` if the artifact is absent, so this job is a CI-time
+  # optimisation, not a correctness gate).
+  build-example-plugin-wheel:
+    name: Build (example plugin)
     needs:
       - prepare-ci
-      - pre-commit
-      - build-py-wheel-linux
-      - build-binary-archive
-    uses: ./.github/workflows/_test.yml
-    with:
-      os: ubuntu-latest
-      display-name: Linux
-      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
-      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
+      - prepare-release
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: audit
 
-  test-windows:
-    name: Test
-    needs:
-      - prepare-ci
-      - pre-commit
-      - build-py-wheel-windows
-      - build-binary-archive
-    uses: ./.github/workflows/_test.yml
-    with:
-      os: windows-latest
-      display-name: Windows
-      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
-      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
-    permissions:
-      contents: read
-      id-token: write
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-  test-macos:
-    name: Test
-    needs:
-      - prepare-ci
-      - pre-commit
-      - build-py-wheel-macos
-      - build-binary-archive
-    uses: ./.github/workflows/_test.yml
-    with:
-      os: macos-latest
-      display-name: macOS
-      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
-      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
-    permissions:
-      contents: read
-      id-token: write
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: build-example-plugin-wheel
+          cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+          uv-sync-args: "--no-install-workspace"
+          mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+
+      - name: Build the example-plugin wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build --wheel --out-dir wheelhouse examples/plugin-package
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: example-plugin-wheel
+          path: wheelhouse/toolr_plugin_example-*.whl
 
   build-binary-wheel-linux:
     name: Build (binary wheel)
@@ -344,8 +325,70 @@ jobs:
       id-token: write
       attestations: write
 
-  test-distribution-linux:
+  # test-* now CONSUMES the prebuilt artifacts (toolr binary archive + the
+  # matching toolr-py wheel for each matrix python) instead of compiling
+  # them itself. The DAG is intentionally `prepare-ci → wheels/archive →
+  # test-*`; signal lands later than before, but every test exercises the
+  # exact artifact that ships, and there's no per-matrix maturin rebuild.
+  test-linux:
     name: Test
+    needs:
+      - prepare-ci
+      - pre-commit
+      - build-py-wheel-linux
+      - build-binary-archive
+      - build-example-plugin-wheel
+    uses: ./.github/workflows/_test.yml
+    with:
+      os: ubuntu-latest
+      display-name: Linux
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
+    permissions:
+      contents: read
+      id-token: write
+
+  test-windows:
+    name: Test
+    needs:
+      - prepare-ci
+      - pre-commit
+      - build-py-wheel-windows
+      - build-binary-archive
+      - build-example-plugin-wheel
+    uses: ./.github/workflows/_test.yml
+    with:
+      os: windows-latest
+      display-name: Windows
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
+    permissions:
+      contents: read
+      id-token: write
+
+  test-macos:
+    name: Test
+    needs:
+      - prepare-ci
+      - pre-commit
+      - build-py-wheel-macos
+      - build-binary-archive
+      - build-example-plugin-wheel
+    uses: ./.github/workflows/_test.yml
+    with:
+      os: macos-latest
+      display-name: macOS
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
+    permissions:
+      contents: read
+      id-token: write
+
+  test-distribution-linux:
+    name: Test Distribution
     needs:
       - prepare-ci
       - build-py-wheel-linux
@@ -362,7 +405,7 @@ jobs:
       id-token: write
 
   test-distribution-macos:
-    name: Test
+    name: Test Distribution
     needs:
       - prepare-ci
       - build-py-wheel-macos
@@ -379,7 +422,7 @@ jobs:
       id-token: write
 
   test-distribution-windows:
-    name: Test
+    name: Test Distribution
     needs:
       - prepare-ci
       - build-py-wheel-windows
@@ -615,9 +658,6 @@ jobs:
       - prepare-ci
       - pre-commit
       - prepare-release
-      # test-* used to be transitive (publish ← wheels ← test-*); now that
-      # tests are downstream consumers of the wheels, list them explicitly
-      # so a failed test still flips the pipeline status to failure.
       - test-linux
       - test-macos
       - test-windows

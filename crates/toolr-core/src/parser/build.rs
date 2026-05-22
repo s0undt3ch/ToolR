@@ -315,9 +315,29 @@ fn format_type_errors(errors: &[TypeResolutionError]) -> String {
     s
 }
 
-fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
+    // Skip dot-prefixed directories (`.venv`, `.git`, `.tox`,
+    // `.mypy_cache`, `.ruff_cache`, …). Without this, walking
+    // `tools/` after `uv sync` would harvest every installed
+    // package's `.py` files from `tools/.venv/lib/python*/site-packages/`,
+    // producing a manifest with garbage `module` paths like
+    // `tools..venv.lib.site-packages.<pkg>.<mod>` that the runner then
+    // fails to import. The root `tools_dir` itself is never skipped —
+    // a leaf basename starting with `.` is fine if the user pointed
+    // us there directly.
+    let root = tools_dir.to_path_buf();
     let mut paths: Vec<_> = WalkDir::new(tools_dir)
         .into_iter()
+        .filter_entry(|e| {
+            if e.path() == root {
+                return true;
+            }
+            !e.file_type().is_dir()
+                || !e
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|n| n.starts_with('.'))
+        })
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x == "py"))
         .map(|e| e.into_path())
@@ -327,7 +347,19 @@ fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
 }
 
 fn module_path_for(tools_dir: &Path, file: &Path) -> String {
-    let rel = file.strip_prefix(tools_dir).unwrap_or(file);
+    module_path_for_prefix(tools_dir, file, "tools")
+}
+
+/// Compute a dotted module path for `file` rooted at `source_dir`, using
+/// `prefix` as the leading namespace segment. `__init__.py` files
+/// collapse to the prefix itself (the package root). Other files become
+/// `<prefix>.<rel_no_ext_with_dots>`.
+pub(crate) fn module_path_for_prefix(
+    source_dir: &Path,
+    file: &Path,
+    prefix: &str,
+) -> String {
+    let rel = file.strip_prefix(source_dir).unwrap_or(file);
     let mut parts: Vec<String> = rel
         .with_extension("")
         .components()
@@ -336,7 +368,7 @@ fn module_path_for(tools_dir: &Path, file: &Path) -> String {
     if parts.last().map(String::as_str) == Some("__init__") {
         parts.pop();
     }
-    let mut out = String::from("tools");
+    let mut out = String::from(prefix);
     for p in parts {
         out.push('.');
         out.push_str(&p);
@@ -424,6 +456,29 @@ def hello(ctx):
         let cmds: Vec<_> = m.commands.iter().map(|c| c.name.as_str()).collect();
         assert!(cmds.contains(&"hello"));
         assert!(cmds.contains(&"rollout"));
+    }
+
+    /// `list_python_files` must NOT recurse into dot-prefixed
+    /// directories like `tools/.venv/`. Without this, walking `tools/`
+    /// after `uv sync` produces a manifest polluted with the installed
+    /// packages' modules — bare `module_path_for` then yields garbage
+    /// like `tools..venv.lib.site-packages.<pkg>.<mod>` that the runner
+    /// fails to import (`No module named 'tools.'`).
+    #[test]
+    fn list_python_files_skips_dot_prefixed_directories() {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        write(&tools, "ci.py", "x = 1\n");
+        write(&tools, ".venv/lib/python3.13/site-packages/pkg/__init__.py", "");
+        write(&tools, ".venv/lib/python3.13/site-packages/pkg/commands.py", "y = 2\n");
+        write(&tools, ".git/hooks/pre-commit.py", "z = 3\n");
+
+        let files = list_python_files(&tools);
+        let rels: Vec<String> = files
+            .iter()
+            .map(|p| p.strip_prefix(&tools).unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
     }
 
     #[test]

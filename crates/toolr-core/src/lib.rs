@@ -1,6 +1,7 @@
 #![allow(non_local_definitions)]
 
 pub mod argparse;
+pub mod build_fragment;
 pub mod cache;
 mod command;
 pub mod complete;
@@ -32,3 +33,5 @@ pub use docstrings::{
     Docstring, Example, ParseError,
     SimpleDocstringParser
 };
+
+pub use build_fragment::{BuildFragmentError, build_third_party_fragment, serialise_fragment};

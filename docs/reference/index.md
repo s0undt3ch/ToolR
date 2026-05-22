@@ -10,5 +10,3 @@ under [`crates/toolr-py/python/toolr/`](https://github.com/s0undt3ch/ToolR/tree/
   commands to a group without holding its binding.
 - [`arg`](arg.md) — annotation for advanced argument options.
 - [`testing`](testing.md) — helpers for testing your commands.
-- [`build`](build.md) — emit a `toolr-manifest.json` for a
-  third-party package.

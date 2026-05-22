@@ -31,10 +31,9 @@ automatically; no project-side configuration is needed.
 
 Most packages won't write the JSON by hand. They declare commands
 with the usual `command_group` / `@command` API and let
-`toolr.build` introspect.
+`toolr self build-manifest` introspect.
 
-The recommended way is to run the CLI wrapper inside the plugin's
-repo:
+Run the CLI inside the plugin's repo:
 
 ```sh
 toolr self build-manifest my_pkg
@@ -44,26 +43,19 @@ Replace `my_pkg` with the dotted package name (e.g. `my_pkg` or
 `my_pkg.sub`). The file is written to the package root — next to
 `my_pkg/__init__.py`.
 
-Alternatively, call the build helper directly from Python:
-
-```python
-from toolr.build import build_manifest
-
-result = build_manifest("my_pkg")
-print(f"Wrote {result.output_path}")
-```
-
-See [`toolr.build`](reference/build.md) in the API reference for the
-full signature.
-
-Or run it as a module:
-
-```sh
-python -m toolr.build my_pkg
-```
-
 Re-run whenever your `command_group` / `@command` registrations
 change.
+
+### Static-only contract
+
+`toolr self build-manifest` walks your package's source with a Rust AST
+parser. It captures every `command_group(...)` / `@group.command`
+declaration that the parser can see *statically* — same as the project
+manifest builder. Dynamic registration (`for x in X: group.command(...)`)
+is intentionally not supported: a manifest emitted from such patterns
+would not match what the Rust dispatch path can resolve at runtime
+anyway. If you need dynamic patterns, hand-edit the resulting
+`toolr-manifest.json`.
 
 ## The `toolr-manifest.json` fragment format
 
@@ -147,11 +139,7 @@ toolr self build-manifest my_pkg --check
 ```
 
 Exit code 0 if in sync; non-zero (with a diff on stderr) if
-drifted. The equivalent using the Python module:
-
-```sh
-python -m toolr.build my_pkg --check
-```
+drifted.
 
 ### Pre-commit hook
 

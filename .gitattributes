@@ -1,0 +1,9 @@
+# Force LF line endings for files where byte-equivalence matters
+# across platforms (Windows checkouts would otherwise autoconvert to
+# CRLF and break Rust-side byte comparisons).
+#
+# In particular: `toolr-manifest.json` is serialised by
+# `toolr_core::build_fragment::serialise_fragment` with literal `\n`
+# line terminators, and `toolr self build-manifest --check` compares
+# the on-disk file byte-for-byte against the regenerated output.
+*.json text eol=lf

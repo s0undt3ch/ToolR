@@ -37,6 +37,7 @@ from packaging.tags import sys_tags
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WHEELHOUSE_DIR = REPO_ROOT / "wheelhouse"
+EXAMPLE_PLUGIN_DIR = REPO_ROOT / "examples" / "plugin-package"
 
 
 def _supported_tags() -> frozenset[Tag]:
@@ -99,6 +100,41 @@ def toolr_wheel() -> Path:
 def toolr_py_wheel() -> Path:
     """Fallback: same pattern as `toolr_wheel`."""
     pytest.skip(f"no toolr-py (pyo3) wheel in {WHEELHOUSE_DIR}/")
+
+
+@pytest.fixture(scope="session")
+def example_plugin_wheel(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Path to a built wheel of `toolr-plugin-example`.
+
+    `toolr-plugin-example` is pure Python and produces a universal
+    `py3-none-any` wheel that's identical across Python versions, archs
+    and OSes. To save CI time, the workflow builds it once and drops it
+    into `wheelhouse/`; this fixture prefers that prebuilt wheel.
+
+    Falls back to building inline via `uv build` so `pytest
+    tests/distribution/` works locally without a separate build step.
+    Session-scoped so the (single) inline build is shared across every
+    test that uses the fixture.
+    """
+    wheels = sorted(WHEELHOUSE_DIR.glob("toolr_plugin_example-*.whl"))
+    if wheels:
+        return wheels[0]
+
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.skip("uv required to build the example-plugin wheel")
+
+    out_dir = tmp_path_factory.mktemp("example-plugin-wheel")
+    subprocess.run(  # noqa: S603
+        [uv, "build", "--wheel", "--out-dir", str(out_dir), str(EXAMPLE_PLUGIN_DIR)],
+        check=True,
+    )
+    built = sorted(out_dir.glob("toolr_plugin_example-*.whl"))
+    if len(built) != 1:
+        pytest.fail(
+            f"`uv build` produced unexpected wheel set under {out_dir}: {built}",
+        )
+    return built[0]
 
 
 @dataclasses.dataclass(frozen=True)
