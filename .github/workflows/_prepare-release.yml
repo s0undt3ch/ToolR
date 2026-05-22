@@ -1,5 +1,3 @@
-name: Prepare Release
-
 on:
   workflow_call:
     inputs:
