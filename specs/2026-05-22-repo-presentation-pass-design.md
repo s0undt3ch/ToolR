@@ -262,6 +262,15 @@ For projects that already pin tool versions via `.mise.toml`, this
 is the most-natural fit — toolr's version becomes part of your
 project's reproducible tool set. See [installation/mise](docs link).
 
+### pip
+
+pip install toolr      # the Rust CLI binary, installed by pip
+pip install toolr-py   # the Python runtime your tools/*.py import
+
+The `toolr` wheel ships only the binary; the `toolr-py` wheel
+ships the Python `import toolr` surface. Most projects want both,
+in different venvs — see "Two wheels, two roles" above.
+
 ### curl | sh (Linux + macOS)
 
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
@@ -272,15 +281,6 @@ with `sh -s -- --version X.Y.Z`.
 ### PowerShell (Windows)
 
 irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
-
-### pip
-
-pip install toolr      # the Rust CLI binary, installed by pip
-pip install toolr-py   # the Python runtime your tools/*.py import
-
-The `toolr` wheel ships only the binary; the `toolr-py` wheel
-ships the Python `import toolr` surface. Most projects want both,
-in different venvs — see "Two wheels, two roles" above.
 
 ### GitHub release archives
 
