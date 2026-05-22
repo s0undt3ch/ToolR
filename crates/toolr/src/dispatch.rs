@@ -273,9 +273,25 @@ fn resolve_python_for_build(override_path: Option<&str>) -> anyhow::Result<PathB
         return Ok(p);
     }
     if let Ok(venv) = std::env::var("VIRTUAL_ENV") {
-        let candidate = PathBuf::from(venv).join("bin").join("python");
-        if candidate.is_file() {
-            return Ok(candidate);
+        // Unix venvs put the interpreter at `<venv>/bin/python(3)`; Windows
+        // venvs put it at `<venv>/Scripts/python.exe`. Falling through to
+        // `which python` on a Windows runner would silently pick up the
+        // host's Python instead of the project's venv, which is then
+        // missing toolr-py.
+        let venv_path = PathBuf::from(venv);
+        let candidates: &[&[&str]] = if cfg!(windows) {
+            &[&["Scripts", "python.exe"], &["Scripts", "python3.exe"]]
+        } else {
+            &[&["bin", "python"], &["bin", "python3"]]
+        };
+        for parts in candidates {
+            let mut candidate = venv_path.clone();
+            for part in *parts {
+                candidate.push(part);
+            }
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
         }
     }
     for name in ["python3", "python"] {
