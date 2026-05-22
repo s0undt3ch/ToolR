@@ -184,15 +184,15 @@ fn parse_group_call(
         .get(1)
         .and_then(literal_str)
         .unwrap_or_default();
-    let description = call
-        .arguments
-        .keywords
-        .iter()
-        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("docstring"))
-        .and_then(|k| match &k.value {
-            Expr::Name(n) if n.id.as_str() == "__doc__" => Some(module_docstring.to_string()),
-            e => literal_str(e),
-        })
+    // Description precedence (matches the Python decorator's resolution
+    // order in `toolr._decorators.command_group`):
+    //   1. `description=` kwarg (explicit, wins).
+    //   2. Third positional argument.
+    //   3. `docstring=` kwarg (may resolve to module __doc__).
+    //   4. Empty string.
+    let description = description_kwarg(call)
+        .or_else(|| call.arguments.args.get(2).and_then(literal_str))
+        .or_else(|| docstring_kwarg(call, module_docstring))
         .unwrap_or_default();
     Some(GroupBinding {
         var: var.to_string(),
@@ -204,6 +204,29 @@ fn parse_group_call(
             origin: Origin::Static,
         },
     })
+}
+
+/// Extract the `description=` kwarg's string-literal value, if present.
+fn description_kwarg(call: &ExprCall) -> Option<String> {
+    call.arguments
+        .keywords
+        .iter()
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("description"))
+        .and_then(|k| literal_str(&k.value))
+}
+
+/// Extract the `docstring=` kwarg's value. A bare `__doc__` reference
+/// resolves to the supplied module docstring; otherwise it must be a
+/// string literal.
+fn docstring_kwarg(call: &ExprCall, module_docstring: &str) -> Option<String> {
+    call.arguments
+        .keywords
+        .iter()
+        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("docstring"))
+        .and_then(|k| match &k.value {
+            Expr::Name(n) if n.id.as_str() == "__doc__" => Some(module_docstring.to_string()),
+            e => literal_str(e),
+        })
 }
 
 fn literal_str(expr: &Expr) -> Option<String> {
@@ -243,6 +266,24 @@ mod tests {
         let m = parse_src(src);
         let groups = extract_groups(&m, "module-level doc", &HashMap::new());
         assert_eq!(groups[0].group.description, "module-level doc");
+    }
+
+    #[test]
+    fn parses_description_from_third_positional() {
+        let src = r#"group = command_group("n", "t", "desc body")"#;
+        let m = parse_src(src);
+        let groups = extract_groups(&m, "", &HashMap::new());
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].group.description, "desc body");
+    }
+
+    #[test]
+    fn description_kwarg_wins_over_positional() {
+        let src = r#"group = command_group("n", "t", "pos", description="kw")"#;
+        let m = parse_src(src);
+        let groups = extract_groups(&m, "", &HashMap::new());
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].group.description, "kw");
     }
 
     #[test]

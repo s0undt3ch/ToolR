@@ -201,7 +201,6 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[allow(dead_code)] // consumed by later tasks (Task 3+).
     fn write(tmp: &Path, name: &str, contents: &str) {
         let path = tmp.join(name);
         if let Some(parent) = path.parent() {
@@ -218,5 +217,60 @@ mod tests {
         let err =
             build_third_party_fragment(&tmp.path().join("pkg"), "pkg", 1).unwrap_err();
         assert!(matches!(err, BuildFragmentError::NamespacePackage { .. }));
+    }
+
+    #[test]
+    fn builds_single_command_plugin_fragment() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("mypkg");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "commands.py",
+            r#""""Plugin commands."""
+from toolr import Context
+from toolr import command_group
+
+third_party_group = command_group(
+    "third-party",
+    "Third Party Tools",
+    "Tools contributed by a third-party plugin.",
+)
+
+@third_party_group.command("hello")
+def hello_command(ctx: Context, name: str = "World") -> None:
+    """Say hello to someone.
+
+    Args:
+        ctx: The execution context.
+        name: Name to greet (default: World).
+    """
+    ctx.print(f"Hello, {name}")
+"#,
+        );
+
+        let fragment = build_third_party_fragment(&pkg, "mypkg", 1).unwrap();
+        assert_eq!(fragment.toolr_schema_version, 1);
+        assert_eq!(fragment.package, "mypkg");
+        assert_eq!(fragment.groups.len(), 1);
+        assert_eq!(fragment.groups[0].name, "third-party");
+        assert_eq!(fragment.groups[0].title, "Third Party Tools");
+        assert_eq!(
+            fragment.groups[0].description,
+            "Tools contributed by a third-party plugin."
+        );
+        assert_eq!(fragment.commands.len(), 1);
+        let cmd = &fragment.commands[0];
+        assert_eq!(cmd.name, "hello");
+        assert_eq!(cmd.group, "third-party");
+        assert_eq!(cmd.module, "mypkg.commands");
+        assert_eq!(cmd.function, "hello_command");
+        assert_eq!(cmd.summary, "Say hello to someone.");
+        assert_eq!(cmd.arguments.len(), 1);
+        let arg = &cmd.arguments[0];
+        assert_eq!(arg.name, "name");
+        assert_eq!(arg.type_annotation.as_deref(), Some("str"));
+        assert_eq!(arg.default.as_deref(), Some("World"));
+        assert_eq!(arg.help, "Name to greet (default: World).");
     }
 }

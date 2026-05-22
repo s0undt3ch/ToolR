@@ -48,11 +48,11 @@ pub fn extract_commands(
             continue;
         };
         let (group_full_path, override_name) = match target {
-            CommandDecorator::LegacyVar(var) => {
+            CommandDecorator::LegacyVar { var, explicit_name } => {
                 let Some(group_name) = by_var.get(var.as_str()) else {
                     continue;
                 };
-                (group_name.clone(), None)
+                (group_name.clone(), explicit_name)
             }
             CommandDecorator::Direct { explicit_name, group } => {
                 // `group=` is required on the direct form. If it's
@@ -82,9 +82,14 @@ pub fn extract_commands(
 /// Which flavour of `@command` decorator we saw on a function, plus the
 /// metadata pulled out of it.
 enum CommandDecorator {
-    /// Legacy: `@<binding>.command` — `<binding>` is a Python variable
-    /// name that must resolve to a known `CommandGroup`.
-    LegacyVar(String),
+    /// Legacy: `@<binding>.command` or `@<binding>.command("name")` —
+    /// `<binding>` is a Python variable name that must resolve to a
+    /// known `CommandGroup`. The call form allows overriding the CLI
+    /// name via a leading string positional.
+    LegacyVar {
+        var: String,
+        explicit_name: Option<String>,
+    },
     /// Modern: `@command(group="dotted.path")` or `@command("name", group=...)`
     /// or bare `@command` (no group — caught by validator).
     Direct {
@@ -98,23 +103,59 @@ fn command_decorator(decorators: &[Decorator]) -> Option<CommandDecorator> {
         if let Some(meta) = parse_direct_command(&d.expression) {
             return Some(meta);
         }
-        if let Some(var) = parse_legacy_command(&d.expression) {
-            return Some(CommandDecorator::LegacyVar(var));
+        if let Some(meta) = parse_legacy_command(&d.expression) {
+            return Some(meta);
         }
     }
     None
 }
 
-/// Recognise the legacy `@<var>.command` shape.
-fn parse_legacy_command(expr: &Expr) -> Option<String> {
-    let Expr::Attribute(attr) = expr else {
+/// Recognise the legacy `@<var>.command` shape, as well as the call form
+/// `@<var>.command("explicit-name")` which overrides the derived CLI
+/// name. Both shapes resolve `<var>` against the binding tables in
+/// `extract_commands`.
+fn parse_legacy_command(expr: &Expr) -> Option<CommandDecorator> {
+    // Bare attribute: `@<var>.command`.
+    if let Expr::Attribute(attr) = expr {
+        if attr.attr.as_str() != "command" {
+            return None;
+        }
+        let Expr::Name(n) = attr.value.as_ref() else {
+            return None;
+        };
+        return Some(CommandDecorator::LegacyVar {
+            var: n.id.as_str().to_string(),
+            explicit_name: None,
+        });
+    }
+    // Call form: `@<var>.command(...)` — func is an Attribute whose
+    // value is a Name. The first positional, if a string literal, is
+    // the CLI-name override.
+    let Expr::Call(call) = expr else {
+        return None;
+    };
+    let Expr::Attribute(attr) = call.func.as_ref() else {
         return None;
     };
     if attr.attr.as_str() != "command" {
         return None;
     }
-    match attr.value.as_ref() {
-        Expr::Name(n) => Some(n.id.as_str().to_string()),
+    let Expr::Name(n) = attr.value.as_ref() else {
+        return None;
+    };
+    let explicit_name = call.arguments.args.first().and_then(literal_str);
+    Some(CommandDecorator::LegacyVar {
+        var: n.id.as_str().to_string(),
+        explicit_name,
+    })
+}
+
+/// Local copy of the `literal_str` helper used elsewhere in the parser.
+/// Keeps this module self-contained without exposing a parser-wide
+/// helper as public API.
+fn literal_str(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
         _ => None,
     }
 }
@@ -396,6 +437,137 @@ def hello(ctx):
         );
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].group, "ci");
+    }
+
+    #[test]
+    fn legacy_decorator_attribute_form_no_explicit_name() {
+        let src = r#"group = command_group("ci", "CI")
+
+@group.command
+def do_thing(ctx):
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        // Probe the decorator parser directly to assert variant shape.
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let decorated = command_decorator(&func.decorator_list).unwrap();
+        match decorated {
+            CommandDecorator::LegacyVar { var, explicit_name } => {
+                assert_eq!(var, "group");
+                assert_eq!(explicit_name, None);
+            }
+            _ => panic!("expected LegacyVar"),
+        }
+        // And confirm the function's own name is used (kebab-cased).
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].name, "do-thing");
+    }
+
+    #[test]
+    fn legacy_decorator_call_form_with_explicit_name() {
+        let src = r#"group = command_group("ci", "CI")
+
+@group.command("hello")
+def do_thing(ctx):
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let decorated = command_decorator(&func.decorator_list).unwrap();
+        match decorated {
+            CommandDecorator::LegacyVar { var, explicit_name } => {
+                assert_eq!(var, "group");
+                assert_eq!(explicit_name.as_deref(), Some("hello"));
+            }
+            _ => panic!("expected LegacyVar"),
+        }
+        // CLI name comes from the decorator argument, not the function.
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].name, "hello");
+        assert_eq!(commands[0].function, "do_thing");
+    }
+
+    #[test]
+    fn legacy_decorator_call_form_without_name_arg() {
+        let src = r#"group = command_group("ci", "CI")
+
+@group.command()
+def do_thing(ctx):
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let decorated = command_decorator(&func.decorator_list).unwrap();
+        match decorated {
+            CommandDecorator::LegacyVar { var, explicit_name } => {
+                assert_eq!(var, "group");
+                assert_eq!(explicit_name, None);
+            }
+            _ => panic!("expected LegacyVar"),
+        }
+        // Falls back to function name (kebab-cased) when no override.
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].name, "do-thing");
     }
 
     #[test]
