@@ -315,4 +315,91 @@ def hello_command(ctx: Context, name: str = "World") -> None:
 
         assert_eq!(fragment, reference, "regenerated fragment differs from committed manifest");
     }
+
+    /// A file that declares a group via an import path NOT under the
+    /// target package must not appear in the fragment. The Python
+    /// implementation enforces this via `_belongs_to_package`; the Rust
+    /// equivalent filters by module-path prefix.
+    #[test]
+    fn filters_out_commands_from_other_packages() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("mypkg");
+        write(&pkg, "__init__.py", "");
+        // Owned by the target package — should appear.
+        write(
+            &pkg,
+            "own.py",
+            r#""""Own."""
+from toolr import command_group
+g = command_group("own", "Own")
+
+@g.command
+def ours(ctx):
+    """Ours."""
+    pass
+"#,
+        );
+        // A subdirectory whose __init__.py declares a group should be kept
+        // (it's still under mypkg.*).
+        write(
+            &pkg,
+            "sub/__init__.py",
+            r#""""Sub."""
+from toolr import command_group
+g = command_group("subg", "Sub Group")
+
+@g.command
+def subcmd(ctx):
+    """Sub command."""
+    pass
+"#,
+        );
+
+        let fragment = build_third_party_fragment(&pkg, "mypkg", 1).unwrap();
+        let group_names: Vec<&str> = fragment.groups.iter().map(|g| g.name.as_str()).collect();
+        assert!(group_names.contains(&"own"), "missing 'own' group; got {group_names:?}");
+        assert!(group_names.contains(&"subg"), "missing 'subg' group; got {group_names:?}");
+        // Confirm modules are prefixed with the package, not "tools".
+        let modules: Vec<&str> = fragment.commands.iter().map(|c| c.module.as_str()).collect();
+        for m in &modules {
+            assert!(m.starts_with("mypkg"), "unexpected module: {m}");
+        }
+    }
+
+    /// An empty package (init only, no commands) returns EmptyPackage.
+    #[test]
+    fn empty_package_errors() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("empty");
+        write(&pkg, "__init__.py", "");
+        let err = build_third_party_fragment(&pkg, "empty", 1).unwrap_err();
+        assert!(matches!(err, BuildFragmentError::EmptyPackage { .. }));
+    }
+
+    /// A `.py` file with a syntax error surfaces a Parse error naming
+    /// the offending file. Crucial for plugin authors — without the
+    /// path, the diagnostic is useless.
+    #[test]
+    fn parse_error_includes_file_path() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("broken");
+        write(&pkg, "__init__.py", "");
+        write(&pkg, "bad.py", "def broken(\n");
+        let err = build_third_party_fragment(&pkg, "broken", 1).unwrap_err();
+        match err {
+            BuildFragmentError::Parse { path, .. } => {
+                assert!(path.ends_with("bad.py"), "got: {}", path.display());
+            }
+            other => panic!("expected Parse, got {other:?}"),
+        }
+    }
+
+    /// Source dir that does not exist surfaces MissingSourceDir.
+    #[test]
+    fn missing_source_dir_errors() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("nope");
+        let err = build_third_party_fragment(&pkg, "nope", 1).unwrap_err();
+        assert!(matches!(err, BuildFragmentError::MissingSourceDir { .. }));
+    }
 }
