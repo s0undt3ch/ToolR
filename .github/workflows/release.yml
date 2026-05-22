@@ -13,7 +13,6 @@ on:
 env:
   COLUMNS: 190
   FORCE_COLOR: "1"
-  TOOLR_DEBUG_IMPORTS: "1"
   # Bump to invalidate every cache used by this workflow.
   CACHE_SEED: "1"
   # `MISE_VERSION` lives in `.github/env` (loaded per-job by a
@@ -102,6 +101,23 @@ jobs:
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
     secrets:
       github-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+  build-binary-archive:
+    name: Build (binary)
+    needs:
+      - prepare-ci
+      - prepare-release
+    uses: ./.github/workflows/_build-binary-archive.yml
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    with:
+      release-version: ${{ needs.prepare-release.outputs.release-version }}
+      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
 
   build-binary-wheel-linux:
     name: Build (binary wheel)
@@ -218,9 +234,10 @@ jobs:
   # fallback, so this job is a CI-time optimisation, not a correctness
   # gate.
   build-example-plugin-wheel:
-    name: Build (example plugin wheel)
+    name: Build (example plugin)
     needs:
       - prepare-ci
+      - prepare-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -258,7 +275,7 @@ jobs:
   # `strategy.matrix` since `workflow_call` doesn't compose with
   # `strategy.matrix` on the caller side.
   test-distribution-linux:
-    name: Test
+    name: Test Distribution
     needs:
       - prepare-ci
       - build-binary-wheel-linux
@@ -276,7 +293,7 @@ jobs:
       id-token: write
 
   test-distribution-macos:
-    name: Test
+    name: Test Distribution
     needs:
       - prepare-ci
       - build-binary-wheel-macos
@@ -294,7 +311,7 @@ jobs:
       id-token: write
 
   test-distribution-windows:
-    name: Test
+    name: Test Distribution
     needs:
       - prepare-ci
       - build-binary-wheel-windows
@@ -310,23 +327,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-
-  build-binary-archive:
-    name: Build binary archives (per triple)
-    needs:
-      - prepare-ci
-      - prepare-release
-    uses: ./.github/workflows/_build-binary-archive.yml
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-    with:
-      release-version: ${{ needs.prepare-release.outputs.release-version }}
-      release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
-      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
-      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
-      targets: ${{ needs.prepare-ci.outputs.binary-archive-triples }}
 
   publish-release:
     name: Publish Release
