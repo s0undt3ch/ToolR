@@ -1293,8 +1293,6 @@
       
         
       
-        
-      
     
     
     
@@ -1517,34 +1515,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../reference/build/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    build
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1646,15 +1616,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev440-2026-05-22" class="md-nav__link">
+  <a href="#0112-dev468-2026-05-22" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev440 - 2026-05-22
+        0.11.2-dev468 - 2026-05-22
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev440 - 2026-05-22">
+    <nav class="md-nav" aria-label="0.11.2-dev468 - 2026-05-22">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2168,15 +2138,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev440-2026-05-22" class="md-nav__link">
+  <a href="#0112-dev468-2026-05-22" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev440 - 2026-05-22
+        0.11.2-dev468 - 2026-05-22
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev440 - 2026-05-22">
+    <nav class="md-nav" aria-label="0.11.2-dev468 - 2026-05-22">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2685,7 +2655,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev440-2026-05-22">0.11.2-dev440 - 2026-05-22<a class="headerlink" href="#0112-dev440-2026-05-22" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev468-2026-05-22">0.11.2-dev468 - 2026-05-22<a class="headerlink" href="#0112-dev468-2026-05-22" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3096,6 +3066,14 @@ blocking dispatch.</p>
 <li><em>(toolr)</em> Add ensure_manifest_fresh bootstrap step (<a href="https://github.com/s0undt3ch/ToolR/commit/3c94f44fd5bf4d3f0343c63b6874260ffb6535d5"><code>3c94f44</code></a>)</li>
 <li><em>(toolr)</em> Refresh manifest before clap parses argv (<a href="https://github.com/s0undt3ch/ToolR/commit/ffe43610cd9f91d1eae6cb381832c8d97df80d44"><code>ffe4361</code></a>)</li>
 <li><em>(examples)</em> Canonical plugin example shipping toolr-manifest.json (<a href="https://github.com/s0undt3ch/ToolR/commit/1984e3d8a9115b44faea5a31cdacf439b63d3944"><code>1984e3d</code></a>)</li>
+<li><em>(build_fragment)</em> Scaffold pure-Rust manifest fragment builder (<a href="https://github.com/s0undt3ch/ToolR/commit/0f611947525a7a2944ee184a266c221b8066310e"><code>0f61194</code></a>)</li>
+<li><em>(parser)</em> Support call-form @group.command and positional description (<a href="https://github.com/s0undt3ch/ToolR/commit/a3c4c3d348b3e925ceec0d3016498ee00f41ea72"><code>a3c4c3d</code></a>)</li>
+<li><em>(build_fragment)</em> Stable JSON serialisation matching Python output (<a href="https://github.com/s0undt3ch/ToolR/commit/07dc4071b66665baa9437a15738c1db218bf4efa"><code>07dc407</code></a>)</li>
+<li><em>(parser)</em> Backfill allowed_values from Literal aliases via resolved_type (<a href="https://github.com/s0undt3ch/ToolR/commit/95d604cdce380c111f0f2e89d76d8f88b7a4d1a1"><code>95d604c</code></a>)</li>
+<li><em>(toolr/cli)</em> Source+package resolution for build-manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/60b60a1b91f1d2c1ea6541f8e0c6df474ea057a3"><code>60b60a1</code></a>)</li>
+<li><em>(cli)</em> Add --source-dir/--package, remove --python from build-manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/35d432c966c6858e1dc161510d44fe39bd3ba447"><code>35d432c</code></a>)</li>
+<li><em>(dispatch)</em> Rewire self build-manifest to pure-Rust path (<a href="https://github.com/s0undt3ch/ToolR/commit/03ce3183a4e518e94abd50d0f1cb4cbb1ccd0ba3"><code>03ce318</code></a>)</li>
+<li><em>(toolr-py)</em> Remove Python toolr.build module (<a href="https://github.com/s0undt3ch/ToolR/commit/9be85fdb110db850a23cca146d47682d1ce8dc1d"><code>9be85fd</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3135,6 +3113,7 @@ blocking dispatch.</p>
 <li><em>(bootstrap)</em> Merge third-party fragments in rebuild_manifest_full (<a href="https://github.com/s0undt3ch/ToolR/commit/13fc028cf88a57f80237edb197cce401d4a94a82"><code>13fc028</code></a>)</li>
 <li><em>(dispatch)</em> Resolve venv Python on Windows for self build-manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/08c1bdb73a9779ae1300a37ddf3327ed619aebb3"><code>08c1bdb</code></a>)</li>
 <li><em>(third-party)</em> Glob both Lib and lib/python* venv layouts (<a href="https://github.com/s0undt3ch/ToolR/commit/e393c661920bc6d958a563c5b56716595f9558dd"><code>e393c66</code></a>)</li>
+<li><em>(parser)</em> Skip dot-prefixed directories in list_python_files (<a href="https://github.com/s0undt3ch/ToolR/commit/4c7fd883ec294cb8ea0fef8c6a5281eabadaf9ca"><code>4c7fd88</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3214,6 +3193,7 @@ blocking dispatch.</p>
 <li>Walk through dispatchers so grafted children tab-complete (<a href="https://github.com/s0undt3ch/ToolR/commit/f2390c26a5cc6075be3f661122e539d58b448df1"><code>f2390c2</code></a>)</li>
 <li>Fall back to flags when no positional candidates remain (<a href="https://github.com/s0undt3ch/ToolR/commit/b5c1a17831801784eb9e46059c4538f7b795e264"><code>b5c1a17</code></a>)</li>
 <li>Preserve literal long-flag spelling for dispatch round-trip (<a href="https://github.com/s0undt3ch/ToolR/commit/55b1b2e500a9f61eb1e9b6c6050e0701665e97bb"><code>55b1b2e</code></a>)</li>
+<li>Add similar crate for unified-diff output in --check mode (<a href="https://github.com/s0undt3ch/ToolR/commit/4bbb990bdc954eb59416879e0bc5cc8469115006"><code>4bbb990</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3228,6 +3208,7 @@ blocking dispatch.</p>
 <li><em>(manifest)</em> Rename dynamic_hash to third_party_hash (<a href="https://github.com/s0undt3ch/ToolR/commit/0ad7df9998a3b267f15f48c44937fd8d1d970460"><code>0ad7df9</code></a>)</li>
 <li><em>(dispatch)</em> Remove execute-time dynamic-layer freshness (<a href="https://github.com/s0undt3ch/ToolR/commit/504075e97655efd10b087fbb57eff2842503691c"><code>504075e</code></a>)</li>
 <li><em>(complete)</em> Use freshness::compare in resolve_manifest_at_tab (<a href="https://github.com/s0undt3ch/ToolR/commit/305f3bef811c872a65d405a3c9deca9c60b8f7bc"><code>305f3be</code></a>)</li>
+<li><em>(parser)</em> Factor list_python_files + module_path_for_prefix for reuse (<a href="https://github.com/s0undt3ch/ToolR/commit/2e998fa768ef2a3aae44a549d38a5073a7caae69"><code>2e998fa</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3286,6 +3267,10 @@ blocking dispatch.</p>
 <li><em>(unreleased)</em> Note entry-point removal and dispatch freshness (<a href="https://github.com/s0undt3ch/ToolR/commit/15ec310c648dbfc7ffb2140e6a303ce1aec222f5"><code>15ec310</code></a>)</li>
 <li><em>(third-party)</em> Plugin-author guide for shipping toolr-manifest.json (<a href="https://github.com/s0undt3ch/ToolR/commit/2075e4971cf7f06446dcccff0d9370e79cce5f3d"><code>2075e49</code></a>)</li>
 <li><em>(specs)</em> Design for pure-Rust toolr self build-manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/24e74b32175212220660d21d7fb44d29f0bc5acd"><code>24e74b3</code></a>)</li>
+<li><em>(specs)</em> Implementation plan for pure-Rust toolr self build-manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/42349293fdcf24c45d11790cd18de6a6d758f189"><code>4234929</code></a>)</li>
+<li><em>(third-party)</em> Drop Python build references; add static-only contract (<a href="https://github.com/s0undt3ch/ToolR/commit/3cd50e52e8442f027fcff1742336528a22097bdd"><code>3cd50e5</code></a>)</li>
+<li>Clean up stale --python references and refresh CLI help snippets (<a href="https://github.com/s0undt3ch/ToolR/commit/bc46d0721150babdda85e32135b8393ce7096226"><code>bc46d07</code></a>)</li>
+<li><em>(reference)</em> Drop stale build.md link after toolr.build removal (<a href="https://github.com/s0undt3ch/ToolR/commit/908e0c80af767db11e5763c663fc3ea73343ec6f"><code>908e0c8</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3315,6 +3300,12 @@ blocking dispatch.</p>
 <li><em>(toolr)</em> Tab completion never persists the manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/f76836ed27ebb4eb1e9bb39211ac89451bab0a31"><code>f76836e</code></a>)</li>
 <li><em>(distribution)</em> Pull toolr + toolr-py wheels from wheelhouse (<a href="https://github.com/s0undt3ch/ToolR/commit/3cd75b47692e3f85cde97009d02cb0b41ab13c4c"><code>3cd75b4</code></a>)</li>
 <li><em>(distribution)</em> Make_uv_venv fixture for cross-OS venv setup (<a href="https://github.com/s0undt3ch/ToolR/commit/04d7ff39fe47beba7280cbda7a706dc5860d1ae2"><code>04d7ff3</code></a>)</li>
+<li><em>(build_fragment)</em> Equivalence vs committed example plugin manifest (<a href="https://github.com/s0undt3ch/ToolR/commit/5dd9655ad97e4bdf4bcd5a2c4c802c67af21911f"><code>5dd9655</code></a>)</li>
+<li><em>(build_fragment)</em> Use include_str! for example plugin fixture (<a href="https://github.com/s0undt3ch/ToolR/commit/3761674722f8676f27cea9380d4b077dbc173c06"><code>3761674</code></a>)</li>
+<li><em>(build_fragment)</em> Filtering + edge-case coverage (<a href="https://github.com/s0undt3ch/ToolR/commit/9c2d976a3d717b03879ab3624f40f9c0cb505347"><code>9c2d976</code></a>)</li>
+<li><em>(toolr)</em> Drop obsolete --python error-path test from cli_smoke (<a href="https://github.com/s0undt3ch/ToolR/commit/d0ef6c4dc97618ca9d08ef64e873d5b4abed13ab"><code>d0ef6c4</code></a>)</li>
+<li><em>(toolr)</em> Integration coverage for self build-manifest CLI (<a href="https://github.com/s0undt3ch/ToolR/commit/0bca68da84a6ab9167a13fe87e8527498fa0b06e"><code>0bca68d</code></a>)</li>
+<li>Drop Python build_manifest tests superseded by Rust path (<a href="https://github.com/s0undt3ch/ToolR/commit/2bcf2f8c0cd807c3ea51ff5334f53542a8c54199"><code>2bcf2f8</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3333,6 +3324,12 @@ blocking dispatch.</p>
 <li><em>(coverage)</em> Exclude toolr-py from cargo tarpaulin (<a href="https://github.com/s0undt3ch/ToolR/commit/07ef1bf02ebe127483a7ae21f9461e844f920521"><code>07ef1bf</code></a>)</li>
 <li><em>(release)</em> Replace external ToolR bootstrap with local workspace (<a href="https://github.com/s0undt3ch/ToolR/commit/31d447226b3b9c581242a4cc19cab9d08a0ec3ea"><code>31d4472</code></a>)</li>
 <li>Enforce Rust/Python schema-version lock-step via integration test (<a href="https://github.com/s0undt3ch/ToolR/commit/d08f9482f4789d47fa645a6e03c859278f7f3e8b"><code>d08f948</code></a>)</li>
+<li>Use --source-dir for the example-plugin manifest sync check (<a href="https://github.com/s0undt3ch/ToolR/commit/bf3f53e69a884f8337311811574d2f533fdb67f2"><code>bf3f53e</code></a>)</li>
+<li>Skip toolr-plugin-example in test-job uv sync (<a href="https://github.com/s0undt3ch/ToolR/commit/a16ca1af3e90db9258a1e09f80bdb064b1fb5a81"><code>a16ca1a</code></a>)</li>
+<li>Force LF line endings for *.json across all checkouts (<a href="https://github.com/s0undt3ch/ToolR/commit/4ebe9150dfcb11d31cd031621766631f573e7507"><code>4ebe915</code></a>)</li>
+<li>Build toolr-plugin-example once and share via wheelhouse (<a href="https://github.com/s0undt3ch/ToolR/commit/09e7e62e292c2f569bb4962867d53d97e659cac8"><code>09e7e62</code></a>)</li>
+<li>Some workflow organization (<a href="https://github.com/s0undt3ch/ToolR/commit/6fb509d70eb42c4efdaa7c2882fd5b225ec6de72"><code>6fb509d</code></a>)</li>
+<li>Show OS display name (<a href="https://github.com/s0undt3ch/ToolR/commit/8460eba8fd65b74a3ce71b2088129c11722ba363"><code>8460eba</code></a>)</li>
 </ul>
 <h2 id="0111-2026-05-13">0.11.1 - 2026-05-13<a class="headerlink" href="#0111-2026-05-13" title="Permanent link">&para;</a></h2>
 <h3 id="features_1"><!-- 0 -->🚀 Features<a class="headerlink" href="#features_1" title="Permanent link">&para;</a></h3>

@@ -1564,8 +1564,6 @@
       
         
       
-        
-      
     
     
     
@@ -1775,34 +1773,6 @@
     
   
     testing
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../reference/build/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    build
   
 
     
@@ -2401,31 +2371,41 @@ last-used timestamp.</p>
 </span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>  -h, --help                     Print help
 </span></code></pre></div>
 <h3 id="self-build-manifest"><code>toolr self build-manifest &lt;package&gt;</code><a class="headerlink" href="#self-build-manifest" title="Permanent link">&para;</a></h3>
-<p>Generate a <code>toolr-manifest.json</code> fragment for a third-party package.
-Wraps <code>python -m toolr.build</code>; locates a working Python automatically.</p>
+<p>Generate a <code>toolr-manifest.json</code> fragment for a third-party package by
+AST-walking the installed package source. Pure Rust — no Python
+subprocess, no <code>pip install -e .</code> required.</p>
 <p><strong>Flags:</strong></p>
 <ul>
+<li><code>&lt;package&gt;</code> — looked up in the project's tools venv. Mutually
+  exclusive with <code>--source-dir</code>.</li>
+<li><code>--source-dir PATH</code> — point the tool at a package's source tree
+  directly (bypasses the venv lookup). Requires <code>--package</code> if the
+  leaf directory name isn't the desired package name.</li>
+<li><code>--package PKG</code> — package name to embed in the fragment when using
+  <code>--source-dir</code>.</li>
 <li><code>--check</code> — verify the on-disk manifest matches what regeneration
-  would produce; exit non-zero on drift.</li>
+  would produce; exit <code>2</code> with a unified diff on drift.</li>
 <li><code>--output PATH</code> — write to a specific file instead of the
   package's default location.</li>
-<li><code>--python PATH</code> — use a specific Python interpreter.</li>
+<li><code>--schema-version N</code> — pin the emitted <code>toolr_schema_version</code>.</li>
 </ul>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>build-manifest<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>Generate a third-party manifest fragment for a package
 </span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>
-</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>Usage: toolr self build-manifest [OPTIONS] &lt;package&gt;
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>Usage: toolr self build-manifest [OPTIONS] [PACKAGE]
 </span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a>
 </span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>Arguments:
-</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>  &lt;package&gt;  Dotted Python package name to introspect
+</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>  [PACKAGE]  Dotted Python package name to introspect (looked up in the tools venv)
 </span><span id="__span-22-7"><a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>
 </span><span id="__span-22-8"><a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>Options:
-</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>      --output &lt;PATH&gt;       Override the output path
-</span><span id="__span-22-10"><a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a>      --python &lt;PATH&gt;       Path to a Python interpreter to use
-</span><span id="__span-22-11"><a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a>      --schema-version &lt;N&gt;  Pin the emitted schema version
-</span><span id="__span-22-12"><a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a>      --check               Verify the on-disk manifest matches regeneration
-</span><span id="__span-22-13"><a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a>  -h, --help                Print help
+</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>      --source-dir &lt;PATH&gt;   Path to the package&#39;s source tree (bypasses the tools-venv lookup)
+</span><span id="__span-22-10"><a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a>      --package &lt;PKG&gt;       Package name to embed in the fragment when using --source-dir (defaults
+</span><span id="__span-22-11"><a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a>                            to the leaf directory name)
+</span><span id="__span-22-12"><a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a>      --output &lt;PATH&gt;       Override the output path
+</span><span id="__span-22-13"><a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a>      --schema-version &lt;N&gt;  Pin the emitted schema version
+</span><span id="__span-22-14"><a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a>      --check               Verify the on-disk manifest matches regeneration
+</span><span id="__span-22-15"><a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a>  -h, --help                Print help
 </span></code></pre></div>
 <p>See also: <a href="../third-party/">Third-party packages</a>.</p>
 <h2 id="internal-subcommands">Internal subcommands<a class="headerlink" href="#internal-subcommands" title="Permanent link">&para;</a></h2>
