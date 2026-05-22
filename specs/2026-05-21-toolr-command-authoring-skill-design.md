@@ -83,11 +83,25 @@ runtime contract.
 The skill covers:
 
 - `tools/` discovery and the project-root model.
-- The decorator surface: `command_group`, `command`, parameter
-  decorators, type-hint binding rules.
-- `ctx` — what is on it, when mutation is safe, how child
-  commands inherit context.
-- Help text and grouping conventions.
+- The decorator surface: `command_group`, `command`, `arg`,
+  `arg_section`, and the type-hint binding rules.
+- `Context` — what is on it, when mutation is safe, how
+  child commands inherit context.
+- **Docstring conventions** — how command help, command
+  long-description, and per-argument help all come from
+  Google-style docstrings parsed by
+  `crates/toolr-core/src/docstrings.rs`. The first non-empty
+  line of a function's docstring becomes the command's short
+  help. Body text before the first section header becomes
+  the long description. An `Args:` section (also accepts
+  `Arguments:` / `Parameters:`, case-insensitive) provides
+  per-parameter help in the form `name: description`. An
+  `Examples:` section is rendered in the long help. The
+  `command_group("name", "short help", docstring=__doc__)`
+  pattern uses the module's `__doc__` as the group's long
+  description — see `tools/version.py` / `tools/ci.py` in
+  this repo.
+- Grouping conventions and help-text idioms.
 - The manifest from the user's point of view (dispatch auto-
   rebuilds since the freshness work; fall back to
   `toolr project manifest rebuild` on older toolr).
@@ -133,9 +147,26 @@ Effect: a PR that mutates the public command-authoring surface
 without regenerating refs cannot land. There is no path by
 which the skill silently falls out of date.
 
-For this skill the generated reference is `references/
-commands.md` — decorator inventory, `ctx` surface, type-hint
-binding rules.
+For this skill the generated references are two files,
+split by drift cadence:
+
+- `references/commands.md` — decorator inventory, `Context`
+  surface, type-hint binding rules. Sourced from `toolr-py`
+  (via `toolr.__all__` and re-export walk) and from the
+  Rust-side type-resolution table in `toolr-core`.
+- `references/docstrings.md` — the Google-style docstring
+  conventions toolr's parser accepts: which section headers
+  are recognised (with case-insensitive variants), how
+  `Args:` entries are formatted, how short-vs-long
+  description splitting works, how examples are extracted.
+  Sourced directly from `crates/toolr-core/src/docstrings.rs`
+  (specifically `detect_section` for the section name set
+  and each `parse_*_section` function for the per-section
+  contract).
+
+Two files, two drift surfaces. A decorator rename touches
+`commands.md` only; a docstring-parser change touches
+`docstrings.md` only.
 
 The generator is designed so that adding a future skill (e.g.
 packaging) just adds another generator entry; the `--check`
@@ -170,10 +201,25 @@ for this spec.
 
 `cargo xtask build-skill-refs` is a single Rust process. It
 does not spawn a Python subprocess and does not require
-toolr-py to be importable; it reads toolr-py's source files
-lexically and parses them with `ruff_python_parser`, the
-same crate toolr already uses for the static AST scan of
-`tools/*.py`.
+toolr-py to be importable. It reuses two pieces of
+infrastructure that already exist in `toolr-core`:
+
+- **`toolr_core::parser`** — the Python-AST extractor that
+  the `rust_build_manifest` work (PR #235) added to support
+  pure-Rust `toolr self build-manifest`. It already knows
+  how to read Python source via `ruff_python_parser`, walk
+  imports, find decorated functions and classes, and pull
+  out parameter lists, defaults, and annotations as source
+  text.
+- **`toolr_core::docstrings`** — the Google-style docstring
+  parser that drives manifest help-text extraction. The
+  xtask uses it both to extract docstrings from decorator
+  definitions (for `commands.md`) and as the source of truth
+  for `docstrings.md`'s contract documentation.
+
+The xtask is therefore thin: it composes existing toolr-core
+functions, joins their output with a small amount of
+xtask-local rendering logic, and writes the markdown files.
 
 This is appropriate here because the surface we want to
 document is statically declared:
@@ -207,36 +253,36 @@ the generator.
 
 **The full pipeline.**
 
-1. **Read `crates/toolr-py/python/toolr/__init__.py`.** This
-   is the single entry point. Parse it with
-   `ruff_python_parser`.
-2. **Read `__all__` from `toolr/__init__.py`.** This is the
+1. **Read `crates/toolr-py/python/toolr/__init__.py`** via
+   `toolr_core::parser`. Treat `toolr.__all__` as the
    canonical, contractual list of names exposed to outside
-   consumers. The xtask treats `__all__` as the source of
-   truth — not "prefer if present, fall back if not." A
-   missing or malformed `__all__` is a build error in the
-   xtask, not a fallback to import-statement scanning.
-3. **Walk the import graph.** For each public name, follow
-   its top-level `from .submodule import Name` (or relative
-   variants) to locate the source file that defines it.
-   Parse that file with ruff and find the matching `def` or
-   `class` node. The walker is shallow: it follows direct
-   re-exports only, not transitive ones, since toolr-py's
-   convention is to re-export *from* the package root *to*
-   the public, not to chain re-exports across internal
-   modules.
-4. **Extract AST detail.** For each definition: parameter
-   list with defaults and annotations as source text,
-   docstring (first `Expr`/`Constant` statement if present),
-   and — for classes — public methods and properties
-   following the same shape.
-5. **Read the Rust-side type-resolution table** from xtask's
-   `toolr-core` dependency. This knows how Python type-hint
-   strings (which we have as source text from the AST) map
-   to argparse binding behavior.
-6. **Render `references/commands.md`** via a hand-written
+   consumers (a missing or malformed `__all__` is a build
+   error in the xtask, not a fallback to import-statement
+   scanning).
+2. **Walk the import graph** using `toolr_core::parser`'s
+   existing re-export resolution. For each name in
+   `__all__`, locate the source file that defines it and
+   extract the AST node (function signature with defaults
+   and annotations as source text; class body with public
+   methods and properties).
+3. **Parse docstrings** with `toolr_core::docstrings`. The
+   short description, long description, and `Args:` mapping
+   are exactly the same shape the manifest builder already
+   uses to populate command help — no second docstring
+   convention to maintain.
+4. **Join with the type-resolution table** from `toolr-core`
+   — this is what knows how Python type-hint source text
+   maps to argparse binding behavior.
+5. **Render `references/commands.md`** via a hand-written
    Rust template (literal `write!` macros, not a general-
    purpose templating library).
+6. **Render `references/docstrings.md`** from
+   `toolr_core::docstrings`'s public introspection — the set
+   of section header strings `detect_section` accepts, the
+   shape `parse_args_section` expects, the
+   short-description-vs-long-description split rule. This
+   ensures the generated reference can never diverge from
+   what the parser actually does.
 
 **Why source spelling rather than runtime introspection.**
 `inspect.signature` round-trips through Python objects and
@@ -419,9 +465,9 @@ The foundation everything else rests on. Without this,
 
 - **Rust-side idempotency.** An integration test in
   `crates/xtask/tests/` runs `cargo xtask build-skill-refs`
-  twice against the workspace and asserts
-  `references/commands.md` is byte-identical between the
-  two runs.
+  twice against the workspace and asserts both
+  `references/commands.md` and `references/docstrings.md`
+  are byte-identical between the two runs.
 - **Entry-point guard.** A unit test asserts
   `crates/toolr-py/python/toolr/__init__.py` exists and has
   a top-level `__all__` list. If the package is restructured
@@ -449,12 +495,26 @@ The foundation everything else rests on. Without this,
 
 ### Example manifest — `toolr self build-manifest` snapshot diff
 
-- `toolr self build-manifest` runs against `skills/toolr-
-  command-authoring/examples/`; the result is diffed against
-  the committed `toolr-manifest.json` fixture.
+- `toolr self build-manifest --source-dir
+  skills/toolr-command-authoring/examples/`; the result is
+  diffed against the committed `toolr-manifest.json`
+  fixture.
 - Mismatch fails CI.
-- Test lives alongside the existing manifest-builder tests in
-  `crates/toolr-core/`.
+- Test lives alongside the existing manifest-builder tests
+  in `crates/toolr-core/`.
+
+### Docstring-parser contract — `docstrings.md` round-trip
+
+- A unit test asserts that for each section header named in
+  `references/docstrings.md`, the toolr-core parser actually
+  detects it (`detect_section` returns the expected
+  category).
+- A second test asserts the reverse: every category
+  `detect_section` can return is documented in
+  `references/docstrings.md`.
+- Together these prevent `docstrings.md` from drifting
+  ahead of the parser or the parser from growing a category
+  the reference does not name.
 
 ### Example `--help` — text snapshot
 
