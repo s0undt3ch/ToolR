@@ -2454,6 +2454,7 @@ dependencies = [
  "chrono",
  "clap",
  "email_address",
+ "glob",
  "humansize",
  "pep440_rs",
  "serde_json",
