@@ -253,6 +253,15 @@ area is small (two files).
 Five first-class install paths; pick the one that matches how the
 rest of your tooling is installed.
 
+### mise
+
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise use --global toolr@latest
+
+For projects that already pin tool versions via `.mise.toml`, this
+is the most-natural fit — toolr's version becomes part of your
+project's reproducible tool set. See [installation/mise](docs link).
+
 ### curl | sh (Linux + macOS)
 
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
@@ -263,14 +272,6 @@ with `sh -s -- --version X.Y.Z`.
 ### PowerShell (Windows)
 
 irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
-
-### mise
-
-mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
-mise use --global toolr@latest
-
-For projects that already pin tool versions via `.mise.toml`,
-this is the most-natural fit. See [installation/mise](docs link).
 
 ### pip
 
