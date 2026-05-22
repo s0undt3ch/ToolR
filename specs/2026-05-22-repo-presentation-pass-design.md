@@ -248,15 +248,58 @@ area is small (two files).
 | `toolr`    | The CLI binary you run from the shell.                  | On `$PATH`, installed once.       |
 | `toolr-py` | The Python runtime your `tools/*.py` import.            | In your `tools/pyproject.toml`.   |
 
-## Install (recommended path)
+## Install
+
+Five first-class install paths; pick the one that matches how the
+rest of your tooling is installed.
+
+### curl | sh (Linux + macOS)
 
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
-toolr project init
-toolr example hello
 
-[Other install methods (pip, mise, PowerShell, release tarball)
- with one-line each, linking to docs/installation/index.md for
- detail.]
+Verifies the SLSA attestation when `gh` is on PATH. Pin a version
+with `sh -s -- --version X.Y.Z`.
+
+### PowerShell (Windows)
+
+irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
+
+### mise
+
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise use --global toolr@latest
+
+For projects that already pin tool versions via `.mise.toml`,
+this is the most-natural fit. See [installation/mise](docs link).
+
+### pip
+
+pip install toolr      # the Rust CLI binary, installed by pip
+pip install toolr-py   # the Python runtime your tools/*.py import
+
+The `toolr` wheel ships only the binary; the `toolr-py` wheel
+ships the Python `import toolr` surface. Most projects want both,
+in different venvs — see "Two wheels, two roles" above.
+
+### GitHub release archives
+
+Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for
+Windows) from <https://github.com/s0undt3ch/ToolR/releases>, verify
+the `.sha256` sibling and the SLSA attestation, drop the binary
+on `$PATH`. Useful in locked-down environments that audit binaries
+before allowing them on a machine.
+
+### Scaffold your repo
+
+After the binary is on `$PATH`:
+
+toolr project init                   # writes tools/{pyproject.toml,.gitignore,example.py}
+toolr example hello                  # run the generated example
+toolr self completion install bash   # or zsh / fish
+
+For Windows / non-bash shells, swap the completion target. The full
+install matrix (per-OS notes, attestation flags, prefix overrides)
+lives in [docs/installation/](docs link).
 
 ## What you write
 
