@@ -151,20 +151,21 @@ inside the resolved tools venv. The helper:
 
 1. Inserts `<tools>/..` on `sys.path` so `import tools` works.
 2. Imports every `tools.*` module — registering every
-   `command_group` / `@command` call.
-3. Walks `importlib.metadata.entry_points(group="toolr.tools")` for
-   third-party packages without a static manifest fragment.
-4. Dumps a JSON payload to stdout describing the merged registry.
+   `command_group` / `@command` call. Catches dynamically-registered
+   commands the static AST parser can't see (e.g. registrations
+   inside `for` loops or conditionals).
+3. Dumps a JSON payload to stdout describing the merged registry.
 
-The dynamic layer fills in things the static parser can't see: cross-
-package re-exports, runtime-generated commands, and third-party
-packages that haven't shipped a static manifest fragment.
+Third-party packages are **not** discovered through this layer.
+They contribute via static `toolr-manifest.json` fragments shipped
+inside the wheel and merged at static-build time
+(see [Third-party packages](../third-party.md)).
 
 Toolr regenerates the dynamic layer when:
 
-- The venv contents change (`third_party_hash` drifts) — typically after
-  `toolr project deps sync`.
-- A command is invoked and the binary detects drift on entry.
+- A command is invoked and the binary detects `static_hash` drift
+  on entry (the dynamic layer runs alongside the static rebuild).
+- The user explicitly runs `toolr project manifest rebuild`.
 
 ## Manual rebuild
 
