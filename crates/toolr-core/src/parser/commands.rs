@@ -264,6 +264,20 @@ fn build_command(
         module_path,
         errors,
     );
+    // Backfill `allowed_values` from `resolved_type` for arguments whose
+    // type annotation is a `Literal[...]` alias declared in another file.
+    // `extract_arguments` runs before `resolve_arguments` and only consults
+    // `EnumTable` for allowed-value collection, so a bare `Name("Mode")`
+    // where `Mode = Literal["fast", "slow"]` lives in another module
+    // would land here with `allowed_values: []`. After the resolver fills
+    // `resolved_type`, copy the Literal's values across.
+    for arg in &mut arguments {
+        if arg.allowed_values.is_empty() {
+            if let Some(crate::parser::types::SupportedType::Literal(values)) = &arg.resolved_type {
+                arg.allowed_values = values.clone();
+            }
+        }
+    }
     let cli_name = override_name
         .map(str::to_string)
         .unwrap_or_else(|| func.name.as_str().replace('_', "-"));

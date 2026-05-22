@@ -446,4 +446,59 @@ def subcmd(ctx):
 
         assert_eq!(serialised, reference, "byte mismatch vs committed manifest");
     }
+
+    /// An enum or Literal alias declared in module `a.py` and used as
+    /// the type of a command arg in `b.py` resolves correctly. This
+    /// exercises the cross-file `EnumTable` / `TypeAliasTable` merge
+    /// that pass 1 sets up.
+    #[test]
+    fn cross_file_literal_resolves_in_fragment() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("xpkg");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "types.py",
+            r#""""Types shared across the package."""
+from typing import Literal
+
+Mode = Literal["fast", "slow"]
+"#,
+        );
+        write(
+            &pkg,
+            "commands.py",
+            r#""""Commands using cross-file Literal."""
+from toolr import Context
+from toolr import command_group
+
+from .types import Mode
+
+group = command_group("cf", "Cross-file")
+
+@group.command
+def run(ctx: Context, mode: Mode = "fast") -> None:
+    """Run.
+
+    Args:
+        ctx: ctx.
+        mode: mode to run.
+    """
+    pass
+"#,
+        );
+
+        let fragment = build_third_party_fragment(&pkg, "xpkg", 1).unwrap();
+        let cmd = fragment
+            .commands
+            .iter()
+            .find(|c| c.name == "run")
+            .expect("run command");
+        let arg = cmd.arguments.iter().find(|a| a.name == "mode").unwrap();
+        assert_eq!(
+            arg.allowed_values,
+            vec!["fast".to_string(), "slow".to_string()],
+            "expected Literal[fast, slow] to populate allowed_values"
+        );
+    }
 }
