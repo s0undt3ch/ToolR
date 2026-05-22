@@ -21,8 +21,8 @@ list.
 - `dry_run` parameters expose `--dry-run` on the CLI.
 - Enum-typed defaults render their resolved member value
   (`[default: add]`, not `[default: <expr>]`).
-- Nested groups (`docker.command_group("image")`) build a proper
-  subcommand tree at the CLI surface.
+- Nested groups (`command_group("docker.image", ...)`) build a
+  proper subcommand tree at the CLI surface.
 
 If you hit something that doesn't match the documented behaviour,
 file an issue.
