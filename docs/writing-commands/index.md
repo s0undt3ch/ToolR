@@ -22,9 +22,14 @@ Every example on these pages is a real file under
 [`docs/writing-commands/files/`](https://github.com/s0undt3ch/ToolR/tree/main/docs/writing-commands/files)
 that toolr can actually execute against the documentation fixture.
 
-!!! warning "Migrating from the legacy decorators?"
-    If your project still uses the old `group = command_group(...)`
-    + `@group.command` style, see the
-    [migration guide](../migration.md). The legacy decorators are
-    deprecated and will be removed in toolr 1.0; every legacy call
-    emits a runtime warning telling you exactly where to edit.
+!!! warning "Still using `parent.command_group("child", ...)`?"
+    The bound *subgroup-method* form is deprecated and will be
+    removed in toolr 1.0. Every call emits a runtime warning at
+    import time pointing at the offending line. See the
+    [migration guide](../migration.md) for the dotted-string
+    replacement (`command_group("parent.child", ...)`).
+
+    The bound `@group.command` decorator on a captured
+    `CommandGroup` is **not** deprecated — see
+    [Groups & commands](groups.md) for canonical single-file
+    usage.
