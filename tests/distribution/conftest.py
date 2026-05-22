@@ -21,6 +21,12 @@ exercise real install paths.
 
 from __future__ import annotations
 
+import dataclasses
+import os
+import shutil
+import subprocess
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -93,6 +99,52 @@ def toolr_wheel() -> Path:
 def toolr_py_wheel() -> Path:
     """Fallback: same pattern as `toolr_wheel`."""
     pytest.skip(f"no toolr-py (pyo3) wheel in {WHEELHOUSE_DIR}/")
+
+
+@dataclasses.dataclass(frozen=True)
+class VenvPaths:
+    """Paths inside a uv-created venv, with OS-correct layout already resolved."""
+
+    root: Path
+    """The venv directory itself (whatever was passed in)."""
+    binroot: Path
+    """`<venv>/Scripts` on Windows, `<venv>/bin` on Unix."""
+    python: Path
+    """Path to the Python interpreter."""
+    toolr: Path
+    """Path to the `toolr` CLI binary once installed (does not have to exist yet)."""
+
+
+@pytest.fixture
+def make_uv_venv() -> Callable[[Path], VenvPaths]:
+    """Create a `uv venv --seed` at the given directory and return its paths.
+
+    Branches on `os.name` so Windows (`Scripts/python.exe`) and Unix
+    (`bin/python`) layouts both resolve uniformly. The location is
+    caller-supplied because some tests need the venv at a specific path
+    inside a fake project (e.g. `<project>/tools/.venv/` for toolr's
+    in-tree venv discovery).
+    """
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.skip("uv required to create test venvs")
+
+    def _make(venv_dir: Path) -> VenvPaths:
+        subprocess.run(  # noqa: S603
+            [uv, "venv", "--python", sys.executable, "--seed", str(venv_dir)],
+            check=True,
+        )
+        is_windows = os.name == "nt"
+        binroot = venv_dir / ("Scripts" if is_windows else "bin")
+        suffix = ".exe" if is_windows else ""
+        return VenvPaths(
+            root=venv_dir,
+            binroot=binroot,
+            python=binroot / f"python{suffix}",
+            toolr=binroot / f"toolr{suffix}",
+        )
+
+    return _make
 
 
 def wheel_namelist(wheel: Path) -> list[str]:

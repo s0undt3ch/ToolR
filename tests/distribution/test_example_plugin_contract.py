@@ -12,10 +12,10 @@ This proves the third-party plugin contract end-to-end:
    the manifest's `module` + `function` fields resolve correctly.
 
 The test is marked `distribution` (opt-in, slow). It piggybacks on the
-existing `toolr_wheel` + `toolr_py_wheel` fixtures from `conftest.py`,
-which parametrize over the wheels present in `wheelhouse/` (populated
-by CI's cibuildwheel job; locally, drop wheels into `wheelhouse/`
-yourself with `maturin build --out wheelhouse`).
+existing `toolr_wheel` + `toolr_py_wheel` fixtures from `conftest.py`
+(parametrize over wheels in `wheelhouse/`) and on the `make_uv_venv`
+fixture (creates a uv venv at a caller-supplied path and resolves
+OS-correct interpreter / script paths).
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -37,6 +36,7 @@ EXAMPLE_DIR = REPO_ROOT / "examples" / "plugin-package"
 def test_example_plugin_wheel_ships_manifest_and_commands(
     toolr_wheel: Path,
     toolr_py_wheel: Path,
+    make_uv_venv,
     tmp_path: Path,
 ) -> None:
     uv = shutil.which("uv")
@@ -63,32 +63,29 @@ def test_example_plugin_wheel_ships_manifest_and_commands(
         f"wheel does not ship the manifest -- packaging-contract violation. Wheel contents:\n{sorted(names)}"
     )
 
-    # ---- Lay out a minimal project with its own tools venv.
+    # ---- Lay out a minimal project with its own tools venv. The venv
+    #      MUST live at `<project>/tools/.venv/` because toolr's in-tree
+    #      discovery only finds it there.
     project = tmp_path / "project"
     tools = project / "tools"
     tools.mkdir(parents=True)
     (tools / "pyproject.toml").write_text(
         '[project]\nname = "tools"\nversion = "0.0.0"\n[tool.toolr]\nvenv-location = "in-tree"\n',
     )
-    venv_dir = tools / ".venv"
-    subprocess.run(  # noqa: S603
-        [uv, "venv", "--python", sys.executable, "--seed", str(venv_dir)],
-        check=True,
-    )
+    venv = make_uv_venv(tools / ".venv")
 
     # ---- Install the example wheel alongside the pre-built toolr +
     #      toolr-py wheels from `wheelhouse/`. The example's pyproject
     #      declares `toolr-py` as a dep; pip resolves it against the
     #      local wheel we pass explicitly so the test never reaches PyPI
     #      (where toolr-py for this dev version doesn't exist).
-    venv_python = venv_dir / "bin" / "python"
     subprocess.run(  # noqa: S603
         [
             uv,
             "pip",
             "install",
             "--python",
-            str(venv_python),
+            str(venv.python),
             str(example_wheel),
             str(toolr_wheel),
             str(toolr_py_wheel),
@@ -99,12 +96,11 @@ def test_example_plugin_wheel_ships_manifest_and_commands(
     # ---- Run `toolr --help` in the project using the freshly installed
     #      CLI binary from the venv. The dispatch-time glob should pick
     #      up the example plugin's manifest from site-packages.
-    toolr_bin = venv_dir / "bin" / "toolr"
-    assert toolr_bin.is_file(), f"toolr binary not installed at {toolr_bin}"
+    assert venv.toolr.is_file(), f"toolr binary not installed at {venv.toolr}"
     env = os.environ.copy()
     env["TOOLR_NO_CACHE_HINT"] = "1"
     result = subprocess.run(  # noqa: S603
-        [str(toolr_bin), "--help"],
+        [str(venv.toolr), "--help"],
         cwd=project,
         env=env,
         capture_output=True,
@@ -121,7 +117,7 @@ def test_example_plugin_wheel_ships_manifest_and_commands(
     #      manifest's module + function fields resolve to real callables
     #      inside the installed wheel.
     result = subprocess.run(  # noqa: S603
-        [str(toolr_bin), "third-party", "hello", "--name", "ContractTest"],
+        [str(venv.toolr), "third-party", "hello", "--name", "ContractTest"],
         cwd=project,
         env=env,
         capture_output=True,
