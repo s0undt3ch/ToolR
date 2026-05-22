@@ -4,14 +4,14 @@
       "arguments": [
         {
           "allowed_values": [],
-          "default": "'World'",
+          "default": "World",
           "help": "Name to greet (default: World).",
           "kind": "optional",
           "name": "name",
           "type_annotation": "str"
         }
       ],
-      "description": "Say hello to someone.",
+      "description": "",
       "function": "hello_command",
       "group": "third-party",
       "imports": [],
@@ -21,7 +21,7 @@
     },
     {
       "arguments": [],
-      "description": "Show the version of the example plugin.",
+      "description": "",
       "function": "version_command",
       "group": "third-party",
       "imports": [],
@@ -48,7 +48,7 @@
           "type_annotation": "int"
         }
       ],
-      "description": "Echo a message multiple times.",
+      "description": "",
       "function": "echo_command",
       "group": "utils",
       "imports": [],
@@ -58,7 +58,7 @@
     },
     {
       "arguments": [],
-      "description": "Show information about the example plugin.",
+      "description": "",
       "function": "info_command",
       "group": "utils",
       "imports": [],
