@@ -72,9 +72,15 @@ jobs:
 
       # `--no-install-package toolr-py` is the key change: uv still sets
       # up dev/all-extras deps and installs the OTHER workspace members
-      # (tools, examples/plugin-package), but skips toolr-py. We then
-      # pip-install the prebuilt wheel matching this matrix entry — same
-      # binary CI uploads to PyPI, no per-matrix maturin recompile.
+      # (tools), but skips toolr-py. We then pip-install the prebuilt
+      # wheel matching this matrix entry — same binary CI uploads to
+      # PyPI, no per-matrix maturin recompile.
+      #
+      # `--no-install-package toolr-plugin-example`: the example plugin
+      # is only referenced as a fixture by `tests/distribution/...`,
+      # which builds its own wheel and stands up an ephemeral tools
+      # venv. The dev `.venv/` never needs it installed, and skipping
+      # the build saves ~2m of CI time per matrix entry.
       - uses: ./.github/actions/setup-virtualenv
         id: setup-virtualenv
         with:
@@ -83,7 +89,7 @@ jobs:
           cache-prefix: test-prebuilt-toolr-py
           cache-seed: ${{ inputs.cache-seed }}
           python-version: ${{ matrix.python-version }}
-          uv-sync-args: "--no-install-package toolr-py --all-extras --dev"
+          uv-sync-args: "--no-install-package toolr-py --no-install-package toolr-plugin-example --all-extras --dev"
           mise-version: ${{ inputs.mise-version }}
 
       - name: Download toolr-py wheel
