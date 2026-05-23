@@ -3,8 +3,8 @@
 //! Google-style docstrings are markdown-flavoured prose. By passing them
 //! through `termimad` before handing them to clap we get inline-code
 //! highlighting, bullet lists, headings, emphasis, and tables —
-//! something close to the rich rendering the legacy argparse path had
-//! via `rich_argparse`.
+//! something close to a rich-rendered help page — bullet lists,
+//! code spans, tables, headings.
 //!
 //! `termimad` only emits ANSI when stdout (or whatever `is_terminal`
 //! reports) is a TTY; when the output is being captured or piped we

@@ -4,8 +4,7 @@ use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Arg, ArgAction, Command};
 
 /// Palette for `--help` output. Yellow + bold for section headers and
-/// `Usage:`, green for arg names and choice values — closer to the
-/// argparse / rich-argparse look the legacy toolr shipped.
+/// `Usage:`, green for arg names and choice values.
 fn help_styles() -> Styles {
     Styles::styled()
         .header(AnsiColor::Yellow.on_default() | Effects::BOLD)
