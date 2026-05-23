@@ -308,6 +308,52 @@ fn preflight_fails_when_an_import_is_missing_from_venv() {
     assert!(stderr.contains("toolr project deps sync"));
 }
 
+/// Regression: deleting the resolved tools venv's `bin/python` between
+/// invocations used to surface as the bare error
+/// `toolr: No such file or directory (os error 2)` — the user couldn't
+/// tell what was missing or how to recover. Dispatch now pre-checks
+/// `python.is_file()` and emits a message that names the path plus
+/// `toolr project deps sync` as the recovery action.
+#[test]
+#[cfg(unix)]
+fn dispatch_emits_clear_error_when_venv_python_is_missing() {
+    use std::fs;
+
+    let tmp = preflight_fixture(&[], &[]);
+    let py = tmp
+        .path()
+        .join("tools")
+        .join(".venv")
+        .join("bin")
+        .join("python");
+    assert!(py.exists(), "fixture should start with a stub python");
+    fs::remove_file(&py).unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_ne!(output.status.code(), Some(0), "expected failure; stderr:\n{stderr}");
+    assert!(
+        stderr.contains("Python interpreter not found at"),
+        "expected a 'Python interpreter not found at <path>' line; stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("toolr project deps sync"),
+        "expected recovery hint; stderr:\n{stderr}"
+    );
+    // Anti-regression: the old bare `os error 2` line must not be the
+    // entire message.
+    assert!(
+        !stderr.trim().ends_with("No such file or directory (os error 2)")
+            || stderr.contains("Python interpreter not found at"),
+        "stderr should not be just the bare io::Error display; stderr:\n{stderr}"
+    );
+}
+
 /// A two-command fixture exercising pre-flight (top-level import that
 /// the static parser recorded) and post-mortem (inline import the
 /// parser missed) against the same project.
