@@ -13,7 +13,8 @@ pub const PAYLOAD_SCHEMA_VERSION: u32 = 1;
 pub struct DynamicPayload {
     /// Schema version of the payload itself (NOT the manifest version).
     pub payload_schema_version: u32,
-    /// Groups discovered by importing `tools.*` and via entry points.
+    /// Groups discovered by importing `tools.*` modules. Third-party
+    /// packages contribute via the static layer, not via this payload.
     pub groups: Vec<Group>,
     /// Commands discovered the same way.
     pub commands: Vec<Command>,
