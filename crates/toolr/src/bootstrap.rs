@@ -1,7 +1,7 @@
 //! Pre-clap bootstrap: detect missing `tools/.toolr-manifest.json`
 //! and run a full rebuild before clap parses the user's command.
 //!
-//! See `specs/2026-05-19-fill-the-gaps-design.md` (gap 1) for the
+//! See `specs/archive/2026/2026-05-19-fill-the-gaps-design.md` (gap 1) for the
 //! decision logic.
 
 use std::path::Path;

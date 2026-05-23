@@ -50,7 +50,7 @@ fn format_type_errors(errors: &[TypeResolutionError]) -> String {
 }
 
 /// Build a `ManifestFragment` for `package_name` by AST-walking
-/// `source_dir`. See spec `specs/2026-05-22-rust-build-manifest-design.md`.
+/// `source_dir`. See spec `specs/archive/2026/2026-05-22-rust-build-manifest-design.md`.
 pub fn build_third_party_fragment(
     source_dir: &Path,
     package_name: &str,

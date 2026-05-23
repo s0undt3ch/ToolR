@@ -14,5 +14,5 @@ is required reading for writing commands — head to
   `TOOLR_NO_PREFLIGHT_DEPS`.
 
 For the original design specs see
-[`specs/rust-front-end/`](https://github.com/s0undt3ch/ToolR/tree/main/specs/rust-front-end)
+[`specs/archive/2026/rust-front-end/`](https://github.com/s0undt3ch/ToolR/tree/main/specs/archive/2026/rust-front-end)
 in the repo.
