@@ -3,228 +3,137 @@
 </h1>
 
 <h2 align="center">
-  <em>In-project CLI tooling support</em>
+  <em>In-project CLI tooling, with a Rust front-end.</em>
 </h2>
 
 <p align="center">
   <em>Pronounced <tt>/ˈtuːlər/</tt> (tool-er)</em>
 </p>
 
-ToolR is a tool similar to [invoke](https://www.pyinvoke.org/) and the next generation of [python-tools-scripts](https://github.com/saltstack/python-tools-scripts).
+ToolR is a Python task runner that boots in milliseconds because the front-end is a Rust binary. Python only runs when you invoke a command, inside a per-repo `uv`-managed venv.
 
-The goal is to quickly enable projects to write a Python module under the project's `tools/` sub-directory and it automatically becomes a sub command to the `toolr` CLI.
+| Tool runner          | `-h` steady-state | First run | Second run |
+| -------------------- | ----------------: | --------: | ---------: |
+| **toolr**            |       **10.4 ms** |  277.0 ms |    21.8 ms |
+| doit                 |           83.4 ms |  143.0 ms |    88.9 ms |
+| invoke               |           84.6 ms |  101.7 ms |    77.4 ms |
+| nox                  |           91.8 ms |  395.9 ms |   115.3 ms |
+| duty                 |          166.4 ms |  188.5 ms |   252.4 ms |
+| python-tools-scripts |          252.2 ms |  340.3 ms |   189.0 ms |
 
-## Key Features
+`<tool> -h`, 20 runs, steady-state = mean of last 18. Measured on Apple M3 Pro / macOS 26.5 / arm64. Reproduce locally with `toolr bench compare` (add `--markdown` for the table above).
 
-### Automatic Command Discovery
+## Why ToolR
 
-ToolR automatically discovers and registers commands from your project's `tools/` directory, making it easy to organize and maintain your project's CLI tools.
+- **Sub-millisecond discovery.** The CLI is a Rust binary. `--help` and Tab completion read a cached static manifest; Python never boots for non-execute paths.
+- **No system-Python dependency.** Toolr resolves a per-repo Python venv via `uv` on first invocation. The host OS doesn't need Python at all to install toolr — it's a single static binary.
+- **Write Python, not framework boilerplate.** Drop a `tools/*.py` file with a `command_group` and a `@command` decorator. Type hints become CLI arguments; Google-style docstrings become `--help` text.
+- **First-class third-party command packages.** Plugins ship a static `toolr-manifest.json` inside the wheel. Discovery is a glob + JSON parse; no Python import to find them.
+- **Signed releases.** Every release archive ships with a SLSA build-provenance attestation. The install scripts verify it automatically when `gh` is on PATH.
 
-### Simple Command Definition
+## Two wheels, two roles
 
-Define commands using simple Python functions with type hints. ToolR automatically generates argument parsing based on your function signatures.
+| Package    | What it is                                   | Where it lives                  |
+| ---------- | -------------------------------------------- | ------------------------------- |
+| `toolr`    | The Rust CLI binary you run from the shell.  | On `$PATH`, installed once.     |
+| `toolr-py` | The Python runtime your `tools/*.py` import. | In your `tools/pyproject.toml`. |
 
-### Nested Command Groups
+Most projects want both: the CLI installed globally, `toolr-py` declared in the per-repo `tools/pyproject.toml` so `from toolr import Context, command_group` works when your commands run.
 
-Organize commands into logical groups and subgroups using dot notation, providing a clean and intuitive CLI structure.
+## Install
 
-### Rich Help System
+Five first-class install paths.
 
-Built-in support for rich text formatting and automatic help generation from docstrings and type annotations.
+### mise
 
-### Third-Party Command Support
+```sh
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise use --global toolr@latest
+```
 
-Extend ToolR's functionality by installing packages that provide additional commands through Python entry points.
+For projects that already pin tool versions via `.mise.toml`, this is the most-natural fit — toolr's version becomes part of your project's reproducible tool set. See [docs/installation/mise/](https://toolr.readthedocs.io/latest/installation/mise/).
 
-## Installation
+### pip
 
-`toolr` ships in two complementary PyPI packages:
+```sh
+pip install toolr   # Rust CLI binary
+```
 
-- **`toolr`** — the Rust CLI binary you run as `toolr` from the
-  shell. Installs via pip, curl, mise, or a release archive. No
-  Python source, no `import toolr`.
-- **`toolr-py`** — the Python runtime your `tools/*.py` scripts
-  import (`from toolr import Context, command_group`). Provides the
-  `toolr` import name and the `_rust_utils` extension module the
-  framework runs under the hood.
+This installs the `toolr` binary into whatever venv `pip` is pointing at. **Do not `pip install toolr-py`** into that same venv — `toolr-py` is the Python runtime your `tools/*.py` files import, and it belongs in the per-repo tools venv that `toolr project init` scaffolds for you (where it's declared in `tools/pyproject.toml` and materialised via `uv sync`). See "Two wheels, two roles" above for the split.
 
-For a typical project you'll want **both**, in different venvs: the
-CLI installed once on PATH, and `toolr-py` added to your
-`tools/pyproject.toml` so it's resolved into your tools venv.
-
-### Install the CLI binary (`toolr`)
-
-Pick whichever method matches your environment.
-
-#### `curl ... | sh` (Linux + macOS)
+### curl | sh (Linux + macOS)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
-Pass `--version X.Y.Z` after `sh -s --` to pin a specific release, or
-`--prefix /custom/bin` to choose an install directory. Default prefix
-is `$XDG_BIN_HOME` (or `~/.local/bin`).
+Verifies the SLSA attestation when `gh` is on PATH. Pin a version with `sh -s -- --version X.Y.Z`. Custom prefix: `sh -s -- --prefix /opt/toolr/bin`.
 
-#### PowerShell (Windows)
+### PowerShell (Windows)
 
 ```powershell
 irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
 ```
 
-#### mise
+### GitHub release archives
 
-If you use [mise](https://mise.jdx.dev/) for tool version management:
+Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for Windows) from <https://github.com/s0undt3ch/ToolR/releases>, verify the `.sha256` sibling and the SLSA attestation, drop the binary on `$PATH`. Useful in locked-down environments that audit binaries before allowing them on a machine.
 
-```sh
-mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
-mise install toolr@latest
-mise use --global toolr@latest
-```
+### Scaffold your repo
 
-See the [mise installation guide](https://s0undt3ch.github.io/ToolR/installation/mise/)
-for `.mise.toml` integration and project-level pinning.
-
-#### pip
+After the binary is on `$PATH`:
 
 ```sh
-pip install toolr
+toolr project init                  # writes tools/{pyproject.toml,.gitignore,example.py}
+toolr example hello                 # run the generated example
+toolr self completion install bash  # or zsh / fish
 ```
 
-The `toolr` wheel ships only the Rust CLI binary; there's no Python
-source and no `import toolr` inside it. `python -m toolr` was removed
-in the rust front-end rewrite — use the `toolr` executable instead.
+The full install matrix (per-OS notes, attestation flags, prefix overrides) lives in [docs/installation/](https://toolr.readthedocs.io/latest/installation/).
 
-#### GitHub release archives
+## What you write
 
-Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for
-Windows) from <https://github.com/s0undt3ch/ToolR/releases> and
-extract it onto `$PATH` manually. Each archive ships with a `.sha256`
-sibling for verification.
+```python
+# tools/example.py
+"""Example commands."""
+from toolr import Context, command_group
 
-### Enable `import toolr` in your tool scripts (`toolr-py`)
+example = command_group("example", title="Example", description=__doc__)
 
-Add `toolr-py` to your project's `tools/pyproject.toml` so the
-import surface is available when toolr executes your commands:
 
-```toml
-# tools/pyproject.toml
-[project]
-dependencies = ["toolr-py"]
+@example.command
+def hello(ctx: Context, name: str = "world") -> None:
+    """Say hello to <name>.
+
+    Args:
+        name: who to greet.
+    """
+    ctx.print(f"Hello, {name}!")
 ```
-
-`toolr-py` provides the `toolr` package (`Context`, `command_group`,
-helpers in `toolr.utils`, …) and the `_rust_utils` extension module.
-See [docs/installation/index.md](https://s0undt3ch.github.io/ToolR/installation/)
-for the longer write-up.
-
-### Supply-chain verification (SLSA attestations)
-
-Every release archive is signed with a SLSA build-provenance
-attestation produced by the GitHub-hosted release workflow. The
-`install.sh` and `install.ps1` scripts will verify the attestation
-automatically when the `gh` CLI is on PATH. To require verification:
 
 ```sh
-sh installation/install.sh --verify-attestation=require   # POSIX
-./installation/install.ps1 -VerifyAttestation require     # Windows
+$ toolr example hello --name Pedro
+Hello, Pedro!
 ```
 
-You can also verify a downloaded archive manually:
+`toolr project init` writes a richer four-command starter than this two-liner — open it and edit, or delete it and start from scratch.
 
-```sh
-gh attestation verify toolr-1.2.3-aarch64-apple-darwin.tar.gz \
-  --repo s0undt3ch/ToolR
-```
+## Where to go next
 
-## Quick Start
+- [Quickstart](https://toolr.readthedocs.io/latest/quickstart/)
+- [Writing commands](https://toolr.readthedocs.io/latest/writing-commands/)
+- [Third-party packages](https://toolr.readthedocs.io/latest/third-party/)
+- [Internals (manifest, freshness, cache)](https://toolr.readthedocs.io/latest/internals/)
+- [CLI reference](https://toolr.readthedocs.io/latest/cli/)
 
-1. **Install ToolR** (see [Installation](#installation) above).
+## Project status
 
-2. **Create a tools package** in your project root:
-
-   ```bash
-   mkdir tools
-   touch tools/__init__.py
-   ```
-
-3. **Write your first command** in `tools/example.py`:
-
-   ```python
-   from toolr import Context, command_group
-
-   group = command_group("example", "Example Commands", "Example command group")
-
-   @group.command
-   def hello(ctx: Context, name: str = "World"):
-       """Say hello to someone.
-
-       Args:
-         name: The name to say hello to.
-       """
-       ctx.print(f"Hello, {name}!")
-   ```
-
-4. **Run your command**:
-
-   ```bash
-   toolr example hello --name Alice
-   ```
-
-## Advanced Usage
-
-### Third-Party Commands
-
-ToolR supports 3rd-party commands from installable Python packages. Create packages that extend ToolR's functionality by defining commands and registering them as entry points.
-
-See the [Advanced Topics section](https://s0undt3ch.github.io/ToolR/usage/#advanced-topics) in the documentation for detailed information about creating 3rd-party command packages.
-
-## Testing and Security
-
-ToolR includes comprehensive testing with a focus on security and robustness:
-
-### Property-Based Testing (Fuzzing)
-
-ToolR uses [Hypothesis](https://hypothesis.works/) for property-based testing to automatically discover edge cases and potential vulnerabilities.
-Fuzzing tests are integrated into the regular test suite:
-
-```bash
-# Run all tests (including fuzzing tests)
-uv run pytest
-
-# Run only fuzzing tests
-uv run pytest -k "test_fuzz"
-
-# Run with coverage
-uv run coverage run -m pytest -ra -s -v
-```
-
-### Security Testing Features
-
-- **Automated Fuzzing**: Property-based tests that generate thousands of test cases
-- **Unicode Edge Cases**: Comprehensive testing of text processing with various encodings
-- **Malformed Input Handling**: Tests ensure graceful handling of invalid input
-
-The integrated fuzzing tests help ensure ToolR can safely handle malformed input, unusual Unicode sequences, and other edge cases that might cause crashes or security vulnerabilities.
+ToolR is pre-1.0. The on-disk manifest is versioned (`schema_version` in `tools/.toolr-manifest.json`); the binary refuses to load a higher version than it understands. The public Python surface is `toolr.__all__`; anything not listed there is implementation detail. Backwards-incompatible changes will be explicit in the changelog (generated by `git-cliff` on release).
 
 ## Contributing
 
-We welcome contributions from the community! ToolR is an open-source project and we appreciate:
-
-- 🐛 Bug reports and fixes
-- ✨ Feature requests and implementations
-- 📖 Documentation improvements
-- 🧪 Test coverage enhancements
-- 💡 Ideas and suggestions
-
-Please read our [Contributing Guide](CONTRIBUTING.md) for:
-
-- Setting up your development environment
-- Coding standards and best practices
-- Pull request process
-- Commit message conventions
-- Testing guidelines
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-ToolR is licensed under the [Apache License 2.0](LICENSE).
+[Apache-2.0](LICENSE).
