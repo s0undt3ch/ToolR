@@ -15,7 +15,9 @@ section you need:
 5. [Annotations](annotations.md) — `arg()` for aliases, choices,
    mutually exclusive groups.
 6. [Nested groups](nesting.md) — multi-level command hierarchies.
-7. [Known bugs](known-bugs.md) — GA-blocking gaps in the current
+7. [Testing your commands](testing.md) — drive Python-side
+   discovery from pytest via `toolr.testing.CommandsTester`.
+8. [Known bugs](known-bugs.md) — GA-blocking gaps in the current
    rust-front-end build.
 
 Every example on these pages is a real file under
