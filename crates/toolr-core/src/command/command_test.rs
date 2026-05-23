@@ -62,6 +62,46 @@ mod test_suite {
         }
     }
 
+    /// Resolve a usable Python interpreter for the subprocess-based tests
+    /// in this module. Tries `python3` first (the canonical mise / Debian
+    /// install path) and falls back to bare `python` (older systems +
+    /// some Windows installs). Returns `None` when neither is callable
+    /// — callers should skip cleanly instead of hanging on a failed spawn
+    /// (the no-output-timeout pipe-read path used to deadlock in this case).
+    fn resolve_python_for_test() -> Option<String> {
+        let candidates: &[&str] = if cfg!(windows) {
+            &["python3.exe", "python.exe", "python3", "python"]
+        } else {
+            &["python3", "python"]
+        };
+        for candidate in candidates {
+            let ok = Command::new(candidate)
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if ok {
+                return Some((*candidate).to_string());
+            }
+        }
+        None
+    }
+
+    /// Skip-or-bind macro for tests that need Python. Emits a clear
+    /// `skipping <name>` line on stderr when no interpreter resolves and
+    /// returns `Ok(())` so the test counts as passed; binds the resolved
+    /// interpreter path to `$bind` otherwise.
+    macro_rules! require_python {
+        ($bind:ident, $test_name:expr) => {
+            let Some($bind) = resolve_python_for_test() else {
+                eprintln!(concat!("skipping ", $test_name, ": no python on PATH"));
+                return Ok(());
+            };
+        };
+    }
+
     // Helper function for Option wrapping to handle platform differences
     #[cfg(unix)]
     fn wrap_fd(fd: i32) -> Option<i32> {
@@ -247,6 +287,8 @@ mod test_suite {
 
     #[test]
     fn test_environment_variables() -> Result<()> {
+        require_python!(python, "test_environment_variables");
+
         let mut env = HashMap::new();
         env.insert("TEST_VAR".to_string(), "test_value".to_string());
         env.insert("ANOTHER_VAR".to_string(), "another_value".to_string());
@@ -259,13 +301,9 @@ mod test_suite {
         let stdout_fd = get_file_descriptor(stdout_file.as_file());
         let stderr_fd = get_file_descriptor(stderr_file.as_file());
 
-        // Use platform-specific Python executable name
         let config = CommandConfig {
             args: vec![
-                #[cfg(unix)]
-                "python".to_string(),
-                #[cfg(windows)]
-                "python.exe".to_string(),
+                python,
                 "-c".to_string(),
                 "import os; print('TEST_VAR=' + os.environ['TEST_VAR']); print('ANOTHER_VAR=' + os.environ['ANOTHER_VAR'])".to_string(),
             ],
@@ -298,6 +336,8 @@ mod test_suite {
 
     #[test]
     fn test_command_respects_cwd() -> Result<()> {
+        require_python!(python, "test_command_respects_cwd");
+
         // Create a temporary directory to use as our working directory
         let temp_dir = tempfile::tempdir()?;
         let temp_path = temp_dir.path().to_owned();
@@ -312,10 +352,7 @@ mod test_suite {
         // Create a command config that runs 'pwd' with the temp directory as working directory
         let config = CommandConfig {
             args: vec![
-                #[cfg(unix)]
-                "python".to_string(),
-                #[cfg(windows)]
-                "python.exe".to_string(),
+                python.clone(),
                 "-c".to_string(),
                 "import os; print(os.getcwd())".to_string(),
             ],
@@ -364,10 +401,7 @@ mod test_suite {
         // Create a command config that runs 'pwd' without setting the working directory
         let config2 = CommandConfig {
             args: vec![
-                #[cfg(unix)]
-                "python".to_string(),
-                #[cfg(windows)]
-                "python.exe".to_string(),
+                python,
                 "-c".to_string(),
                 "import os; print(os.getcwd())".to_string(),
             ],
@@ -431,6 +465,7 @@ mod test_suite {
 
         #[test]
         fn test_sys_fd_streaming() -> Result<()> {
+            require_python!(python, "test_sys_fd_streaming");
             let rt = Runtime::new()?;
 
             rt.block_on(async {
@@ -439,10 +474,7 @@ mod test_suite {
 
                 let config = CommandConfig {
                     args: vec![
-                        #[cfg(unix)]
-                        "python".to_string(),
-                        #[cfg(windows)]
-                        "python.exe".to_string(),
+                        python,
                         "-c".to_string(),
                         "import sys; sys.stdout.write('to sys stdout'); sys.stdout.flush(); sys.stderr.write('to sys stderr'); sys.stderr.flush()".to_string(),
                     ],
@@ -506,6 +538,7 @@ mod test_suite {
 
         #[test]
         fn test_sys_fd_with_capture() -> Result<()> {
+            require_python!(python, "test_sys_fd_with_capture");
             let rt = Runtime::new()?;
 
             rt.block_on(async {
@@ -520,10 +553,7 @@ mod test_suite {
 
                 let config = CommandConfig {
                     args: vec![
-                        #[cfg(unix)]
-                        "python".to_string(),
-                        #[cfg(windows)]
-                        "python.exe".to_string(),
+                        python,
                         "-c".to_string(),
                         "import sys; sys.stdout.write('captured stdout'); sys.stdout.flush(); sys.stderr.write('captured stderr'); sys.stderr.flush()".to_string(),
                     ],
@@ -596,16 +626,14 @@ mod test_suite {
 
         #[test]
         fn test_timeout_exception() -> Result<()> {
+            require_python!(python, "test_timeout_exception");
             let rt = Runtime::new()?;
 
             rt.block_on(async {
                 // Create a command that will run longer than our timeout
                 let config = CommandConfig {
                     args: vec![
-                        #[cfg(unix)]
-                        "python".to_string(),
-                        #[cfg(windows)]
-                        "python.exe".to_string(),
+                        python,
                         "-c".to_string(),
                         "import time; time.sleep(10)".to_string(),
                     ],
@@ -629,6 +657,7 @@ mod test_suite {
 
         #[test]
         fn test_no_output_timeout() -> Result<()> {
+            require_python!(python, "test_no_output_timeout");
             let rt = Runtime::new()?;
 
             rt.block_on(async {
@@ -639,10 +668,7 @@ mod test_suite {
                 // Create a command that outputs once then waits, triggering no-output timeout
                 let config = CommandConfig {
                     args: vec![
-                        #[cfg(unix)]
-                        "python".to_string(),
-                        #[cfg(windows)]
-                        "python.exe".to_string(),
+                        python,
                         "-c".to_string(),
                         "import sys, time; sys.stdout.write('initial output'); sys.stdout.flush(); time.sleep(10)".to_string(),
                     ],
