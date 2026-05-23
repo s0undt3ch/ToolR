@@ -12,6 +12,7 @@
 //! pass over the file.
 
 mod imports;
+mod literals;
 mod path_constraints;
 mod supported;
 
@@ -19,6 +20,7 @@ pub use imports::{SourcesImports, TypeImports};
 pub use path_constraints::{PathConstraints, extract_path_constraints};
 pub use supported::{SupportedType, TypeResolutionError, UnsupportedType};
 
+use self::literals::{literal_str, literal_str_list, literal_u32};
 use ruff_python_ast::{Expr, ExprCall, StmtFunctionDef};
 
 use super::symbols::{ArgSectionTable, EnumTable, TypeAliasTable};
@@ -309,33 +311,6 @@ fn parse_inline_arg_section(call: &ExprCall) -> Option<HelpSection> {
         .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("description"))
         .and_then(|k| literal_str(&k.value));
     Some(HelpSection { title, description })
-}
-
-fn literal_str(expr: &Expr) -> Option<String> {
-    match expr {
-        Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
-        _ => None,
-    }
-}
-
-fn literal_str_list(expr: &Expr) -> Option<Vec<String>> {
-    let Expr::List(list) = expr else { return None };
-    let out: Vec<String> = list.elts.iter().filter_map(literal_str).collect();
-    if out.len() == list.elts.len() {
-        Some(out)
-    } else {
-        None
-    }
-}
-
-fn literal_u32(expr: &Expr) -> Option<u32> {
-    match expr {
-        Expr::NumberLiteral(n) => match &n.value {
-            ruff_python_ast::Number::Int(i) => i.as_u64().and_then(|v| u32::try_from(v).ok()),
-            _ => None,
-        },
-        _ => None,
-    }
 }
 
 pub(super) fn is_toolr_arg_call(call: &ExprCall) -> bool {
