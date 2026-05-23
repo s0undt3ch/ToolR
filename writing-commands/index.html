@@ -1689,12 +1689,16 @@ section you need:</p>
 <a href="https://github.com/s0undt3ch/ToolR/tree/main/docs/writing-commands/files"><code>docs/writing-commands/files/</code></a>
 that toolr can actually execute against the documentation fixture.</p>
 <div class="admonition warning">
-<p class="admonition-title">Migrating from the legacy decorators?</p>
-<p>If your project still uses the old <code>group = command_group(...)</code>
-+ <code>@group.command</code> style, see the
-<a href="../migration/">migration guide</a>. The legacy decorators are
-deprecated and will be removed in toolr 1.0; every legacy call
-emits a runtime warning telling you exactly where to edit.</p>
+<p class="admonition-title">Still using <code>parent.command_group("child", ...)</code>?</p>
+<p>The bound <em>subgroup-method</em> form is deprecated and will be
+removed in toolr 1.0. Every call emits a runtime warning at
+import time pointing at the offending line. See the
+<a href="../migration/">migration guide</a> for the dotted-string
+replacement (<code>command_group("parent.child", ...)</code>).</p>
+<p>The bound <code>@group.command</code> decorator on a captured
+<code>CommandGroup</code> is <strong>not</strong> deprecated — see
+<a href="groups/">Groups &amp; commands</a> for canonical single-file
+usage.</p>
 </div>
 
 

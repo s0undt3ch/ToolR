@@ -1785,8 +1785,8 @@ list.</p>
 <li><code>dry_run</code> parameters expose <code>--dry-run</code> on the CLI.</li>
 <li>Enum-typed defaults render their resolved member value
   (<code>[default: add]</code>, not <code>[default: &lt;expr&gt;]</code>).</li>
-<li>Nested groups (<code>docker.command_group("image")</code>) build a proper
-  subcommand tree at the CLI surface.</li>
+<li>Nested groups (<code>command_group("docker.image", ...)</code>) build a
+  proper subcommand tree at the CLI surface.</li>
 </ul>
 <p>If you hit something that doesn't match the documented behaviour,
 file an issue.</p>

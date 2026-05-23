@@ -1925,8 +1925,13 @@ the auto-rebuild doesn't already cover.</p>
   manifest with a higher schema than it understands.</li>
 <li><strong><code>static_hash</code></strong> — blake3 over the sorted <code>(path, contents)</code> of
   every <code>tools/**/*.py</code> file. Drives static-layer rebuilds.</li>
-<li><strong><code>third_party_hash</code></strong> — blake3 over the tools venv's installed
-  package set. Drives dynamic-layer rebuilds.</li>
+<li><strong><code>third_party_hash</code></strong> — blake3 over the sorted set of
+  <code>toolr-manifest.json</code> files found under
+  <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>. Each entry's path
+  and content go into the hash. Drives third-party-fragment
+  rebuilds: installing an unrelated package no longer invalidates
+  the manifest, only changes to packages that ship a toolr
+  fragment do.</li>
 <li><strong><code>groups</code></strong> / <strong><code>commands</code></strong> — the actual command tree. Each
   entry carries an <code>origin</code> field (<code>"static"</code> or <code>"dynamic"</code>)
   recording which layer produced it.</li>
@@ -2030,19 +2035,20 @@ inside the resolved tools venv. The helper:</p>
 <ol>
 <li>Inserts <code>&lt;tools&gt;/..</code> on <code>sys.path</code> so <code>import tools</code> works.</li>
 <li>Imports every <code>tools.*</code> module — registering every
-   <code>command_group</code> / <code>@command</code> call.</li>
-<li>Walks <code>importlib.metadata.entry_points(group="toolr.tools")</code> for
-   third-party packages without a static manifest fragment.</li>
+   <code>command_group</code> / <code>@command</code> call. Catches dynamically-registered
+   commands the static AST parser can't see (e.g. registrations
+   inside <code>for</code> loops or conditionals).</li>
 <li>Dumps a JSON payload to stdout describing the merged registry.</li>
 </ol>
-<p>The dynamic layer fills in things the static parser can't see: cross-
-package re-exports, runtime-generated commands, and third-party
-packages that haven't shipped a static manifest fragment.</p>
+<p>Third-party packages are <strong>not</strong> discovered through this layer.
+They contribute via static <code>toolr-manifest.json</code> fragments shipped
+inside the wheel and merged at static-build time
+(see <a href="../../third-party/">Third-party packages</a>).</p>
 <p>Toolr regenerates the dynamic layer when:</p>
 <ul>
-<li>The venv contents change (<code>third_party_hash</code> drifts) — typically after
-  <code>toolr project deps sync</code>.</li>
-<li>A command is invoked and the binary detects drift on entry.</li>
+<li>A command is invoked and the binary detects <code>static_hash</code> drift
+  on entry (the dynamic layer runs alongside the static rebuild).</li>
+<li>The user explicitly runs <code>toolr project manifest rebuild</code>.</li>
 </ul>
 <h2 id="manual-rebuild">Manual rebuild<a class="headerlink" href="#manual-rebuild" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>manifest<span class="w"> </span>rebuild
@@ -2059,9 +2065,12 @@ includes new commands.</p>
   <code>__pycache__</code>, <code>.toolr-manifest.json</code>, and dot-prefixed names),
   sorted by path, each entry hashed as
   <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.</li>
-<li><code>third_party_hash</code> input: sorted listing of <code>&lt;venv&gt;/lib/python*/site-
-  packages/*</code> entries, each entry's name + metadata file mtime
-  rounded to the nearest second.</li>
+<li><code>third_party_hash</code> input: every <code>toolr-manifest.json</code> under
+  <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>, sorted by path,
+  each entry hashed as
+  <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.
+  Identical scheme to <code>static_hash</code> but over the third-party
+  fragment file set instead of <code>tools/**/*.py</code>.</li>
 </ul>
 <p>This gives stable, content-addressable rebuild decisions across
 machines and across CI / dev environments.</p>
