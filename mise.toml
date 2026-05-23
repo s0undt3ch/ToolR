@@ -12,3 +12,19 @@ _.python.venv = { path = ".venv", create = true, uv_create_args = ['--seed'] }
 
 [settings]
 python.uv_venv_auto = true
+
+# --------------------------------------------------------------------
+# `mise run test` is the single entry-point a contributor (or CI)
+# calls to run everything. The pre-existing `cargo-test` and
+# `pytest-test` tasks (in `.mise-tasks/`) remain available for
+# scoping to one language when iterating. The opt-in distribution
+# suite is slow (builds real wheels) and is NOT included here — run
+# `uv run pytest -m distribution` explicitly when changing packaging.
+# --------------------------------------------------------------------
+
+[tasks.test]
+description = "Run the full default test suite (cargo workspace + pytest)."
+run = [
+    "cargo test --workspace",
+    "mise run pytest-test",
+]
