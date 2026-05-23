@@ -29,8 +29,13 @@ Python imports involved in the hot path.
   manifest with a higher schema than it understands.
 - **`static_hash`** — blake3 over the sorted `(path, contents)` of
   every `tools/**/*.py` file. Drives static-layer rebuilds.
-- **`third_party_hash`** — blake3 over the tools venv's installed
-  package set. Drives dynamic-layer rebuilds.
+- **`third_party_hash`** — blake3 over the sorted set of
+  `toolr-manifest.json` files found under
+  `<tools-venv>/lib/python*/site-packages/*/`. Each entry's path
+  and content go into the hash. Drives third-party-fragment
+  rebuilds: installing an unrelated package no longer invalidates
+  the manifest, only changes to packages that ship a toolr
+  fragment do.
 - **`groups`** / **`commands`** — the actual command tree. Each
   entry carries an `origin` field (`"static"` or `"dynamic"`)
   recording which layer produced it.
@@ -146,20 +151,21 @@ inside the resolved tools venv. The helper:
 
 1. Inserts `<tools>/..` on `sys.path` so `import tools` works.
 2. Imports every `tools.*` module — registering every
-   `command_group` / `@command` call.
-3. Walks `importlib.metadata.entry_points(group="toolr.tools")` for
-   third-party packages without a static manifest fragment.
-4. Dumps a JSON payload to stdout describing the merged registry.
+   `command_group` / `@command` call. Catches dynamically-registered
+   commands the static AST parser can't see (e.g. registrations
+   inside `for` loops or conditionals).
+3. Dumps a JSON payload to stdout describing the merged registry.
 
-The dynamic layer fills in things the static parser can't see: cross-
-package re-exports, runtime-generated commands, and third-party
-packages that haven't shipped a static manifest fragment.
+Third-party packages are **not** discovered through this layer.
+They contribute via static `toolr-manifest.json` fragments shipped
+inside the wheel and merged at static-build time
+(see [Third-party packages](../third-party.md)).
 
 Toolr regenerates the dynamic layer when:
 
-- The venv contents change (`third_party_hash` drifts) — typically after
-  `toolr project deps sync`.
-- A command is invoked and the binary detects drift on entry.
+- A command is invoked and the binary detects `static_hash` drift
+  on entry (the dynamic layer runs alongside the static rebuild).
+- The user explicitly runs `toolr project manifest rebuild`.
 
 ## Manual rebuild
 
@@ -181,9 +187,12 @@ Both hashes use blake3, written as lowercase hex.
   `__pycache__`, `.toolr-manifest.json`, and dot-prefixed names),
   sorted by path, each entry hashed as
   `len(path_bytes) || path_bytes || len(contents) || contents`.
-- `third_party_hash` input: sorted listing of `<venv>/lib/python*/site-
-  packages/*` entries, each entry's name + metadata file mtime
-  rounded to the nearest second.
+- `third_party_hash` input: every `toolr-manifest.json` under
+  `<tools-venv>/lib/python*/site-packages/*/`, sorted by path,
+  each entry hashed as
+  `len(path_bytes) || path_bytes || len(contents) || contents`.
+  Identical scheme to `static_hash` but over the third-party
+  fragment file set instead of `tools/**/*.py`.
 
 This gives stable, content-addressable rebuild decisions across
 machines and across CI / dev environments.

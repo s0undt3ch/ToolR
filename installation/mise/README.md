@@ -28,5 +28,5 @@ The plugin follows the asdf plugin layout:
 
 For project pinning (`.mise.toml`, `.tool-versions`), task integration,
 and troubleshooting, see the
-[mise installation guide](https://s0undt3ch.github.io/ToolR/installation/mise/)
+[mise installation guide](https://toolr.readthedocs.io/latest/installation/mise/)
 on the toolr docs site.
