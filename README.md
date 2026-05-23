@@ -1,8 +1,14 @@
 <h1 align="center">
-  <img width="240px" src="https://raw.githubusercontent.com/s0undt3ch/Toolr/main/docs/imgs/toolr.png" alt="ToolR">
+  <img width="240px" src="https://raw.githubusercontent.com/s0undt3ch/Toolr/main/docs/imgs/toolr.png" alt="ToolR - AI Generated Logo">
 </h1>
 
-<h2 align="center"><em>In-project CLI tooling, with a Rust front-end.</em></h2>
+<h2 align="center">
+  <em>In-project CLI tooling, with a Rust front-end.</em>
+</h2>
+
+<p align="center">
+  <em>Pronounced <tt>/ˈtuːlər/</tt> (tool-er)</em>
+</p>
 
 ToolR is a Python task runner that boots in milliseconds because the front-end is a Rust binary. Python only runs when you invoke a command, inside a per-repo `uv`-managed venv.
 
@@ -45,16 +51,15 @@ mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
 mise use --global toolr@latest
 ```
 
-For projects that already pin tool versions via `.mise.toml`, this is the most-natural fit — toolr's version becomes part of your project's reproducible tool set. See [docs/installation/mise/](https://s0undt3ch.github.io/ToolR/installation/mise/).
+For projects that already pin tool versions via `.mise.toml`, this is the most-natural fit — toolr's version becomes part of your project's reproducible tool set. See [docs/installation/mise/](https://toolr.readthedocs.io/latest/installation/mise/).
 
 ### pip
 
 ```sh
-pip install toolr      # Rust CLI binary
-pip install toolr-py   # Python runtime your tools/*.py import
+pip install toolr   # Rust CLI binary
 ```
 
-The `toolr` wheel ships only the binary; the `toolr-py` wheel ships the `import toolr` surface (`Context`, `command_group`, the `_rust_utils` extension module). Most projects want both, in different venvs — see "Two wheels, two roles" above.
+This installs the `toolr` binary into whatever venv `pip` is pointing at. **Do not `pip install toolr-py`** into that same venv — `toolr-py` is the Python runtime your `tools/*.py` files import, and it belongs in the per-repo tools venv that `toolr project init` scaffolds for you (where it's declared in `tools/pyproject.toml` and materialised via `uv sync`). See "Two wheels, two roles" above for the split.
 
 ### curl | sh (Linux + macOS)
 
@@ -84,15 +89,16 @@ toolr example hello                 # run the generated example
 toolr self completion install bash  # or zsh / fish
 ```
 
-The full install matrix (per-OS notes, attestation flags, prefix overrides) lives in [docs/installation/](https://s0undt3ch.github.io/ToolR/installation/).
+The full install matrix (per-OS notes, attestation flags, prefix overrides) lives in [docs/installation/](https://toolr.readthedocs.io/latest/installation/).
 
 ## What you write
 
 ```python
 # tools/example.py
+"""Example commands."""
 from toolr import Context, command_group
 
-example = command_group("example", title="Example", description="Sample commands.")
+example = command_group("example", title="Example", description=__doc__)
 
 
 @example.command
@@ -114,11 +120,11 @@ Hello, Pedro!
 
 ## Where to go next
 
-- [Quickstart](https://s0undt3ch.github.io/ToolR/quickstart/)
-- [Writing commands](https://s0undt3ch.github.io/ToolR/writing-commands/)
-- [Third-party packages](https://s0undt3ch.github.io/ToolR/third-party/)
-- [Internals (manifest, freshness, cache)](https://s0undt3ch.github.io/ToolR/internals/)
-- [CLI reference](https://s0undt3ch.github.io/ToolR/cli/)
+- [Quickstart](https://toolr.readthedocs.io/latest/quickstart/)
+- [Writing commands](https://toolr.readthedocs.io/latest/writing-commands/)
+- [Third-party packages](https://toolr.readthedocs.io/latest/third-party/)
+- [Internals (manifest, freshness, cache)](https://toolr.readthedocs.io/latest/internals/)
+- [CLI reference](https://toolr.readthedocs.io/latest/cli/)
 
 ## Project status
 
