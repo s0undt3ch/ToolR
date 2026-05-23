@@ -19,9 +19,6 @@
 //! - `resolve_python_for_build()` explicit `--python` override + bail (188-211).
 //! - `output_options_from_matches()` flag propagation (366-390) — verified
 //!   indirectly by inspecting the spec the Python runner receives.
-//! - `report_uv_error()` per error variant (392-409).
-
-use std::path::Path;
 
 use assert_cmd::Command;
 use tempfile::TempDir;
@@ -247,27 +244,4 @@ fn root_help_advertises_every_output_option() {
             "expected `{needle}` in --help output, got:\n{stdout}"
         );
     }
-}
-
-// --------------------------------------------------------------------
-// report_uv_error(): pure helper, but only reachable indirectly.
-// We exercise the rendering by injecting a manifest that requires
-// __install-uv-now, which is the only callsite that surfaces a UvError.
-// In practice the function is reachable from the binary's own
-// `report_uv_error` use only when ensure_uv fails — that requires
-// network / filesystem mocking. We rely on the unit tests in toolr-core
-// (where `UvError` is defined) for the error-shape coverage and don't
-// add a parallel rust-binary integration test here.
-// --------------------------------------------------------------------
-
-// (intentionally no test for report_uv_error — see note above)
-
-// --------------------------------------------------------------------
-// Fixture: a Path that exists. Used by the explicit-python tests
-// alongside `nonexistent`.
-// --------------------------------------------------------------------
-
-#[allow(dead_code)]
-fn touch_file(at: &Path) {
-    std::fs::write(at, "").unwrap();
 }
