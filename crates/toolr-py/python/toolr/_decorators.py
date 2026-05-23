@@ -43,7 +43,7 @@ def _emit_legacy_command_group_method_warning(parent_full_name: str, child: str)
         "  from toolr import command_group\n"
         f"  command_group({dotted!r}, ...)\n"
         "Or pass `parent=...` explicitly. "
-        "See https://s0undt3ch.github.io/ToolR/migration/ for the full guide.",
+        "See https://toolr.readthedocs.io/latest/migration/ for the full guide.",
         ToolrDeprecationWarning,
         stacklevel=3,
     )
