@@ -439,7 +439,8 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
         yes_flag: true,
         auto_install_env: true,
     };
-    let uv = toolr_core::uv::ensure_uv(consent)?;
+    let uv = toolr_core::uv::ensure_uv(consent)
+        .map_err(|e| anyhow::anyhow!(e.user_message()))?;
     println!(
         "toolr: uv {}.{}.{} ready at {} (source: {:?})",
         uv.version.0,
@@ -480,25 +481,6 @@ fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {
     opts
 }
 
-#[allow(dead_code)]
-pub(crate) fn report_uv_error(err: &toolr_core::uv::UvError) -> String {
-    use toolr_core::uv::UvError;
-    match err {
-        UvError::UserRefusedInstall => {
-            "toolr: uv is required for this command. Install from \
-             https://docs.astral.sh/uv/getting-started/installation/ \
-             and rerun, or set TOOLR_AUTO_INSTALL_UV=1."
-                .into()
-        }
-        UvError::VersionTooOld { found, required } => format!(
-            "toolr: uv on PATH is {}.{}.{}, but toolr requires \
-             >= {}.{}.{}. Upgrade uv and try again.",
-            found.0, found.1, found.2, required.0, required.1, required.2,
-        ),
-        other => format!("toolr: {other}"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! In-process unit tests for the pure helpers in this module.
@@ -510,37 +492,6 @@ mod tests {
     //! subprocess profraws by default). These unit tests run inside the
     //! test process so the coverage counter actually moves.
     use super::*;
-    use toolr_core::uv::UvError;
-
-    // ----------------------------------------------------------------
-    // report_uv_error: one assertion per variant.
-    // ----------------------------------------------------------------
-
-    #[test]
-    fn report_uv_error_renders_user_refused_install() {
-        let s = report_uv_error(&UvError::UserRefusedInstall);
-        assert!(s.contains("uv is required"));
-        assert!(s.contains("TOOLR_AUTO_INSTALL_UV"));
-    }
-
-    #[test]
-    fn report_uv_error_renders_version_too_old() {
-        let s = report_uv_error(&UvError::VersionTooOld {
-            found: (0, 1, 2),
-            required: (3, 4, 5),
-        });
-        assert!(s.contains("0.1.2"), "actual: {s}");
-        assert!(s.contains("3.4.5"), "actual: {s}");
-        assert!(s.contains("Upgrade uv"), "actual: {s}");
-    }
-
-    #[test]
-    fn report_uv_error_renders_other_variant() {
-        // Any non-(UserRefused|VersionTooOld) variant falls into the
-        // catch-all `format!("toolr: {other}")` arm.
-        let s = report_uv_error(&UvError::NotAvailable);
-        assert!(s.starts_with("toolr:"), "actual: {s}");
-    }
 
     // ----------------------------------------------------------------
     // dirs_home: $HOME present / absent.
