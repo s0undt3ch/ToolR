@@ -5,7 +5,7 @@ project's tools venv. Walks the ``command_group`` registry after
 importing every module under ``tools.*``, and writes a JSON payload
 to stdout.
 
-The wire format is defined in ``specs/rust-front-end/07-plan-6-dynamic-manifest.md``.
+The wire format is defined in ``specs/archive/2026/rust-front-end/07-plan-6-dynamic-manifest.md``.
 Bump ``PAYLOAD_SCHEMA_VERSION`` on every breaking change.
 """
 
