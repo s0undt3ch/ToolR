@@ -40,10 +40,10 @@ if TYPE_CHECKING:
 
 # Promote toolr's own deprecation warnings to visible-by-default. The
 # stdlib silences DeprecationWarning by default for non-__main__ code,
-# which means user `tools/*.py` files would never surface the legacy
-# decorator warnings. Filter is per-location ("default") so each call
-# site fires once per process — keeps output bounded across runs with
-# many legacy decorators.
+# which means user `tools/*.py` files would never surface the
+# `parent.command_group("child", ...)` deprecation. Filter is
+# per-location ("default") so each call site fires once per process —
+# keeps output bounded across runs with many deprecated call sites.
 warnings.simplefilter("default", ToolrDeprecationWarning)
 
 SCHEMA_VERSION: int = 1

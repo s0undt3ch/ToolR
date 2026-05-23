@@ -733,7 +733,7 @@ mod dispatched_pack_tests {
         let packed = pack_child_args(&cmd, &matches);
         assert_eq!(packed.name, "migrate");
         assert_eq!(packed.args.get("check"), Some(&Value::Bool(true)));
-        // Schema round-trips intact (Task 17 reads it on the Python side).
+        // Schema round-trips intact for the Python runner to consume.
         assert_eq!(packed.schema.dispatched_from.as_deref(), Some("argparse:django"));
         assert_eq!(packed.schema.function, "django");
     }

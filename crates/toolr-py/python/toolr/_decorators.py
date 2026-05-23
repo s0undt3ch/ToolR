@@ -1,13 +1,12 @@
 """User-facing decorator surface for declaring toolr command groups and commands.
 
-This module survives the retirement of the Python CLI frontend
-(``_parser.py`` / ``_registry.py``). User tool scripts continue to do::
+User tool scripts import from this module::
 
     from toolr import command, command_group
 
-and the decorators record metadata in a process-local registry. The
-Rust binary's static parser and the manifest builder consume that
-registry; there is no longer an in-process Python argparse driver.
+The decorators record metadata in a process-local registry. The Rust
+binary's static parser and the manifest builder consume that registry;
+the CLI surface itself is a Rust binary, not Python.
 """
 
 from __future__ import annotations
@@ -172,10 +171,10 @@ def command(
 ) -> Callable[..., Any]:
     """Register a function as a toolr CLI command.
 
-    String-path attachment to a group, used as an alternative to the
-    legacy ``@<binding>.command`` decorator. Lets you declare commands
-    in any file without importing a shared ``CommandGroup`` binding —
-    the ``group=`` string is the only contract.
+    String-path attachment to a group, an alternative to the bound
+    ``@<binding>.command`` form. Lets you declare commands in any
+    file without importing a shared ``CommandGroup`` binding — the
+    ``group=`` string is the only contract.
 
     Usage::
 

@@ -1,10 +1,10 @@
 //! Per-cache-entry `meta.json` sidecar.
 //!
-//! Layout (alongside the venv that Plan 3 manages):
+//! Layout (alongside the venv that `toolr_core::venv` manages):
 //!
 //! ```text
 //! $XDG_CACHE_HOME/toolr/<repo-key>/
-//!     venv/         (managed by Plan 3)
+//!     venv/         (managed by `toolr_core::venv`)
 //!     meta.json     (this module)
 //! ```
 

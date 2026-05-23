@@ -139,9 +139,10 @@ pub fn dispatch(
     };
 
     let tempfile = write_spec_to_tempfile(&spec)?;
-    // Prefer the resolved tools-venv python (Plan 3). Fall back to the
-    // PATH/TOOLR_PYTHON lookup only when there is no `tools/pyproject.toml`
-    // — i.e. legacy projects that never opted into the venv layer.
+    // Prefer the resolved tools-venv python. Fall back to the
+    // PATH/TOOLR_PYTHON lookup only when there is no
+    // `tools/pyproject.toml` — i.e. projects that never opted into
+    // the per-repo venv layer.
     let (python, venv_dir, python_version) =
         if repo_root.join("tools").join("pyproject.toml").is_file() {
             let resolved = resolve_venv_path(&repo_root)?;
@@ -154,7 +155,7 @@ pub fn dispatch(
             (resolve_python()?, None, None)
         };
 
-    // Plan 8: touch last_used_at on every invocation against a cached venv.
+    // Touch last_used_at on every invocation against a cached venv.
     // Backfill a fresh `meta.json` for cache entries that predate the
     // sidecar — without this, `toolr self cache list` would silently
     // hide venvs created by older binaries.
@@ -172,8 +173,8 @@ pub fn dispatch(
         }
     }
 
-    // Pre-flight missing-dependency check (Plan 7). Skip when the user
-    // sets `TOOLR_NO_PREFLIGHT_DEPS` to a non-empty, non-`0` value —
+    // Pre-flight missing-dependency check. Skip when the user sets
+    // `TOOLR_NO_PREFLIGHT_DEPS` to a non-empty, non-`0` value —
     // post-mortem interception still catches inline imports.
     let skip_preflight = std::env::var_os("TOOLR_NO_PREFLIGHT_DEPS")
         .is_some_and(|v| !v.is_empty() && v != "0");
@@ -592,9 +593,9 @@ mod tests {
 #[cfg(test)]
 mod path_lookup_tests {
     //! Unit tests for `find_command_for_path`, the pure helper that
-    //! resolves a parsed subcommand path to its manifest entry. After
-    //! Task 6 grafts children under dispatchers, a 3-segment path like
-    //! `toolr jenkins job migrate` must still find `migrate` at
+    //! resolves a parsed subcommand path to its manifest entry.
+    //! Grafted children of a dispatcher live under a 3-segment path
+    //! like `toolr jenkins job migrate`, but `migrate` is stored at
     //! `group == "jenkins"` (the dispatcher hop is invisible to the
     //! manifest). These tests pin the most-specific-first preference
     //! and the one-level fallback.

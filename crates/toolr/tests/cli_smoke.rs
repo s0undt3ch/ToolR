@@ -55,11 +55,12 @@ fn help_lists_groups_from_manifest() {
 /// `toolr` package installed is available, otherwise `None`. We accept
 /// the project's own dev venv (created by `uv sync`) as the runner.
 ///
-/// These smoke tests deliberately exercise the *legacy* fallback path in
-/// `dispatch.rs`: they write a `tools/.toolr-manifest.json` but no
-/// `tools/pyproject.toml`, so the dispatcher resolves Python via
-/// `TOOLR_PYTHON` rather than the tools venv. The full venv-driven path
-/// is covered by the network-dependent `end_to_end_sync` test (Task 17).
+/// These smoke tests deliberately exercise the no-pyproject fallback
+/// path in `dispatch.rs`: they write a `tools/.toolr-manifest.json`
+/// but no `tools/pyproject.toml`, so the dispatcher resolves Python
+/// via `TOOLR_PYTHON` rather than the tools venv. The full
+/// venv-driven path is covered by the network-dependent
+/// `end_to_end_sync` test.
 fn detect_test_python() -> Option<PathBuf> {
     let candidate = std::env::var_os("TOOLR_TEST_PYTHON").map(PathBuf::from);
     let candidate = candidate.or_else(|| {
@@ -227,7 +228,7 @@ fn preflight_fixture(
         fs::create_dir(&pkg).unwrap();
         fs::write(pkg.join("__init__.py"), "").unwrap();
     }
-    // `toolr` itself must appear installed so Plan 3's validate guard
+    // `toolr` itself must appear installed so the venv-validate guard
     // (if any) doesn't trip the dispatcher before pre-flight runs.
     let toolr_pkg = sp.join("toolr");
     fs::create_dir_all(&toolr_pkg).unwrap();
@@ -270,9 +271,9 @@ fn preflight_fixture(
     let mut f = fs::File::create(&py).unwrap();
     writeln!(f, "#!/bin/sh").unwrap();
     // The dispatcher invokes `python -m toolr._introspect ...` during
-    // auto-rebuild (Plan 6) and `python -m toolr._runner` during the
-    // actual command execution. Branch on the argv so both work without
-    // a real Python.
+    // auto-rebuild and `python -m toolr._runner` during the actual
+    // command execution. Branch on the argv so both work without a
+    // real Python.
     writeln!(f, r#"case " $* " in"#).unwrap();
     writeln!(
         f,

@@ -24,7 +24,7 @@ pub struct RebuildOutcome {
 /// from the venv) + dynamic layer + write.
 ///
 /// `python` is the absolute path to the tools-venv Python interpreter
-/// (resolved by Plan 3's `toolr_core::venv::resolve_venv_path`).
+/// (resolved by `toolr_core::venv::resolve_venv_path`).
 /// `venv_root` is the venv directory: both globbed for
 /// `site-packages/*/toolr-manifest.json` (via
 /// `build_static_manifest_with_venv`) and hashed via

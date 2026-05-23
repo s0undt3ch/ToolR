@@ -1,18 +1,13 @@
 """
-Utilities for testing ToolR and supported commands.
+Utilities for testing ToolR commands and command-group discovery.
 
-Survives the retirement of the Python CLI frontend
-(``_parser.py`` / ``_registry.py``). Instead of the legacy in-process
-``CommandRegistry``, this helper patches the registry storage in
+``CommandsTester`` patches the registry storage in
 :mod:`toolr._decorators` and drives the same Python-side discovery
 that the Rust binary's dynamic manifest layer uses
 (``toolr._introspect.build_payload``).
 
-The API surface remains the same: ``with CommandsTester(search_path=...) as t``
-yields an isolated collector available via ``t.collected_command_groups()``.
-
-Third-party entry-point loading has been removed; plugins must
-ship a static ``toolr-manifest.json`` instead.
+Usage: ``with CommandsTester(search_path=...) as t`` yields an
+isolated collector available via ``t.collected_command_groups()``.
 """
 
 from __future__ import annotations

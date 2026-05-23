@@ -45,8 +45,8 @@ pub fn dir_size_bytes(dir: &Path) -> Result<u64> {
 
 /// Enumerate every cache entry directly under `cache_root`. Missing
 /// `cache_root` returns an empty vector. Entries without a `meta.json`
-/// are silently skipped — they predate Plan 8 or were partially
-/// created.
+/// are silently skipped — they predate the sidecar format or were
+/// partially created.
 pub fn enumerate_caches(cache_root: &Path) -> Result<Vec<CachedVenv>> {
     let mut out = Vec::new();
     let read = match std::fs::read_dir(cache_root) {
