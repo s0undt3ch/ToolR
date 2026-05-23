@@ -1717,15 +1717,63 @@
 </h1>
 
 <h2 align="center">
-  <em>In-project CLI tooling support</em>
+  <em>In-project CLI tooling, with a Rust front-end.</em>
 </h2>
 
 <p align="center">
   <em>Pronounced <tt>/ˈtuːlər/</tt> (tool-er)</em>
 </p>
 
-<p>ToolR is a tool similar to <a href="https://www.pyinvoke.org/">invoke</a> and the next generation of <a href="https://github.com/saltstack/python-tools-scripts">python-tools-scripts</a>.</p>
-<p>The goal is to quickly enable projects to write a Python module under the project's <code>tools/</code> sub-directory and it automatically becomes a sub command to the <code>toolr</code> CLI.</p>
+<p>ToolR is a Python task runner that boots in milliseconds because the front-end is a Rust binary. Python only runs when you invoke a command, inside a per-repo <code>uv</code>-managed venv.</p>
+<table>
+<thead>
+<tr>
+<th>Tool runner</th>
+<th style="text-align: right;"><code>-h</code> steady-state</th>
+<th style="text-align: right;">First run</th>
+<th style="text-align: right;">Second run</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>toolr</strong></td>
+<td style="text-align: right;"><strong>10.4 ms</strong></td>
+<td style="text-align: right;">277.0 ms</td>
+<td style="text-align: right;">21.8 ms</td>
+</tr>
+<tr>
+<td>doit</td>
+<td style="text-align: right;">83.4 ms</td>
+<td style="text-align: right;">143.0 ms</td>
+<td style="text-align: right;">88.9 ms</td>
+</tr>
+<tr>
+<td>invoke</td>
+<td style="text-align: right;">84.6 ms</td>
+<td style="text-align: right;">101.7 ms</td>
+<td style="text-align: right;">77.4 ms</td>
+</tr>
+<tr>
+<td>nox</td>
+<td style="text-align: right;">91.8 ms</td>
+<td style="text-align: right;">395.9 ms</td>
+<td style="text-align: right;">115.3 ms</td>
+</tr>
+<tr>
+<td>duty</td>
+<td style="text-align: right;">166.4 ms</td>
+<td style="text-align: right;">188.5 ms</td>
+<td style="text-align: right;">252.4 ms</td>
+</tr>
+<tr>
+<td>python-tools-scripts</td>
+<td style="text-align: right;">252.2 ms</td>
+<td style="text-align: right;">340.3 ms</td>
+<td style="text-align: right;">189.0 ms</td>
+</tr>
+</tbody>
+</table>
+<p><code>&lt;tool&gt; -h</code>, 20 runs, steady-state = mean of last 18. Measured on Apple M3 Pro / macOS 26.5 / arm64. Reproduce locally with <code>toolr bench compare</code> (add <code>--markdown</code> for the table above).</p>
 <h2 id="start-here">Start here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Just want to run commands in a repo that already has <code>tools/</code>?</strong>

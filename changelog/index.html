@@ -1616,15 +1616,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev481-2026-05-23" class="md-nav__link">
+  <a href="#0112-dev493-2026-05-23" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev481 - 2026-05-23
+        0.11.2-dev493 - 2026-05-23
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev481 - 2026-05-23">
+    <nav class="md-nav" aria-label="0.11.2-dev493 - 2026-05-23">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2138,15 +2138,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev481-2026-05-23" class="md-nav__link">
+  <a href="#0112-dev493-2026-05-23" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev481 - 2026-05-23
+        0.11.2-dev493 - 2026-05-23
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev481 - 2026-05-23">
+    <nav class="md-nav" aria-label="0.11.2-dev493 - 2026-05-23">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2655,7 +2655,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev481-2026-05-23">0.11.2-dev481 - 2026-05-23<a class="headerlink" href="#0112-dev481-2026-05-23" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev493-2026-05-23">0.11.2-dev493 - 2026-05-23<a class="headerlink" href="#0112-dev493-2026-05-23" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3194,6 +3194,7 @@ blocking dispatch.</p>
 <li>Fall back to flags when no positional candidates remain (<a href="https://github.com/s0undt3ch/ToolR/commit/b5c1a17831801784eb9e46059c4538f7b795e264"><code>b5c1a17</code></a>)</li>
 <li>Preserve literal long-flag spelling for dispatch round-trip (<a href="https://github.com/s0undt3ch/ToolR/commit/55b1b2e500a9f61eb1e9b6c6050e0701665e97bb"><code>55b1b2e</code></a>)</li>
 <li>Add similar crate for unified-diff output in --check mode (<a href="https://github.com/s0undt3ch/ToolR/commit/4bbb990bdc954eb59416879e0bc5cc8469115006"><code>4bbb990</code></a>)</li>
+<li><em>(bench)</em> Add task-runner startup-time comparison (<a href="https://github.com/s0undt3ch/ToolR/commit/275e27f0bd71b3c257314d5723acf36d25b061a9"><code>275e27f</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3283,6 +3284,9 @@ blocking dispatch.</p>
 <li><em>(internals)</em> Align the hashing-details third_party_hash entry (<a href="https://github.com/s0undt3ch/ToolR/commit/ff659cdd07e86ddea122964175db1b879e831a72"><code>ff659cd</code></a>)</li>
 <li><em>(dynamic)</em> Remove stale entry-points reference in DynamicPayload (<a href="https://github.com/s0undt3ch/ToolR/commit/c7dc16b2859a97c9133dd8130b9d8c35706d6cfc"><code>c7dc16b</code></a>)</li>
 <li><em>(urls)</em> Point at toolr.readthedocs.io/latest for published docs (<a href="https://github.com/s0undt3ch/ToolR/commit/233f7ad232a19d1c8a6c2945099750e882e34bb2"><code>233f7ad</code></a>)</li>
+<li><em>(readme)</em> Rewrite around the Rust front-end value-prop (<a href="https://github.com/s0undt3ch/ToolR/commit/652d1c79ae766cca2c83feef9c8a72b516daad6a"><code>652d1c7</code></a>)</li>
+<li>CONTRIBUTING rewrite + point README links at toolr.readthedocs.io/latest (<a href="https://github.com/s0undt3ch/ToolR/commit/3f707a7993bd9c6967fbc6a8079445055d6461f6"><code>3f707a7</code></a>)</li>
+<li><em>(specs)</em> Document the live-vs-archive split (<a href="https://github.com/s0undt3ch/ToolR/commit/005f2ede009c5350a65853b33ae3bdae153de580"><code>005f2ed</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3342,6 +3346,12 @@ blocking dispatch.</p>
 <li>Build toolr-plugin-example once and share via wheelhouse (<a href="https://github.com/s0undt3ch/ToolR/commit/09e7e62e292c2f569bb4962867d53d97e659cac8"><code>09e7e62</code></a>)</li>
 <li>Some workflow organization (<a href="https://github.com/s0undt3ch/ToolR/commit/6fb509d70eb42c4efdaa7c2882fd5b225ec6de72"><code>6fb509d</code></a>)</li>
 <li>Show OS display name (<a href="https://github.com/s0undt3ch/ToolR/commit/8460eba8fd65b74a3ce71b2088129c11722ba363"><code>8460eba</code></a>)</li>
+<li><em>(specs)</em> Archive shipped rust-front-end design tree (<a href="https://github.com/s0undt3ch/ToolR/commit/870bde9b37e4e953538f7af18fe22edf251ef42b"><code>870bde9</code></a>)</li>
+<li><em>(specs)</em> Archive the nine top-level shipped design and plan files (<a href="https://github.com/s0undt3ch/ToolR/commit/bb77fb0df762020265dc6bafab36f25fb8712bfe"><code>bb77fb0</code></a>)</li>
+<li><em>(specs)</em> Repair in-tree references to moved spec paths (<a href="https://github.com/s0undt3ch/ToolR/commit/db6185b10b7f00708f723a59e712fc207287b856"><code>db6185b</code></a>)</li>
+<li><em>(docs)</em> Delete the dead .nav.yml (<a href="https://github.com/s0undt3ch/ToolR/commit/26a6025fcd426ed92966932525fba6ba751eba4f"><code>26a6025</code></a>)</li>
+<li><em>(tools)</em> Drop tools/<strong>init</strong>.py to match documented PEP 420 model (<a href="https://github.com/s0undt3ch/ToolR/commit/98e6b0c556b0059ab82a6397860c75ee5152390b"><code>98e6b0c</code></a>)</li>
+<li><em>(toolr)</em> Drop rich-argparse comparison comments (<a href="https://github.com/s0undt3ch/ToolR/commit/ba28980244b3a572dfc8c87ca45255357e8bbc4a"><code>ba28980</code></a>)</li>
 </ul>
 <h2 id="0111-2026-05-13">0.11.1 - 2026-05-13<a class="headerlink" href="#0111-2026-05-13" title="Permanent link">&para;</a></h2>
 <h3 id="features_1"><!-- 0 -->🚀 Features<a class="headerlink" href="#features_1" title="Permanent link">&para;</a></h3>
