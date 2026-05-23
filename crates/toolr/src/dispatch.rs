@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use anyhow::Context as _;
 use clap::ArgMatches;
 
 use toolr_core::complete::{
@@ -188,7 +189,21 @@ pub fn dispatch(
         }
     }
 
-    let (mut child, stderr_capture) = spawn_runner_capturing_stderr(&python, tempfile.path())?;
+    // Pre-check that the resolved Python interpreter actually exists.
+    // Without this, a missing tools venv surfaces as a bare
+    // `io::Error::NotFound` from `Command::spawn`, which `main` prints
+    // as `toolr: No such file or directory (os error 2)` — uninformative
+    // and gives no recovery hint. Mirror the same check `run_introspect`
+    // performs (`crates/toolr-core/src/dynamic/runner.rs`).
+    if !python.is_file() {
+        anyhow::bail!(
+            "Python interpreter not found at {}.\n\
+             Run `toolr project deps sync` to materialise the tools venv.",
+            python.display()
+        );
+    }
+    let (mut child, stderr_capture) = spawn_runner_capturing_stderr(&python, tempfile.path())
+        .with_context(|| format!("spawning Python runner at {}", python.display()))?;
     let status = wait_with_signals(&mut child)?;
     let stderr_bytes = stderr_capture.take();
     let stderr_str = String::from_utf8_lossy(&stderr_bytes);
