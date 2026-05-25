@@ -243,6 +243,16 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         metadata.metavar = Some(mv);
     }
 
+    // When the source spells its long flag with underscores
+    // (`--skip_warm_cache`), cli.rs still normalises the canonical CLI
+    // form to dashes for help and shell completion
+    // (`--skip-warm-cache`). Register the underscored spelling as a
+    // hidden alias so users who type the upstream tool's exact flag
+    // still get a match.
+    if is_keyword_style && name.contains('_') {
+        metadata.aliases.push(format!("--{name}"));
+    }
+
     // Preserve the literal long-flag spelling from the source. The
     // scanner's canonical `name` strips the leading `--` and may pick
     // between aliases (`add_argument("--user_ids", "--user-ids", ...)`
@@ -524,6 +534,33 @@ def add_arguments(self, parser):
         assert_eq!(scanned.arguments[1].default.as_deref(), Some("default"));
         assert_eq!(scanned.arguments[2].kind, ArgumentKind::Flag);
         assert_eq!(scanned.arguments[3].kind, ArgumentKind::Repeated);
+    }
+
+    #[test]
+    fn underscored_long_flag_registers_alias_for_both_spellings() {
+        // argparse lets users write `--skip_warm_cache`; cli.rs
+        // normalises that to `--skip-warm-cache` for the canonical CLI
+        // form, but the user-typed underscored spelling must still
+        // resolve. The scanner records the underscored form as an
+        // alias so clap accepts both.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--skip_warm_cache', action='store_true')
+    parser.add_argument('--already-dashed')
+"#;
+        let scanned = scan_source("x", source).unwrap();
+        assert_eq!(scanned.arguments.len(), 2);
+
+        let underscored = &scanned.arguments[0];
+        assert_eq!(underscored.name, "skip_warm_cache");
+        assert_eq!(underscored.metadata.aliases, vec!["--skip_warm_cache"]);
+        assert_eq!(underscored.long_flag.as_deref(), Some("--skip_warm_cache"));
+
+        // A flag that was already dashed in the source needs no alias —
+        // cli.rs emits the same spelling for `.long()`.
+        let dashed = &scanned.arguments[1];
+        assert_eq!(dashed.name, "already-dashed");
+        assert!(dashed.metadata.aliases.is_empty());
     }
 
     #[test]
