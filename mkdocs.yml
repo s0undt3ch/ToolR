@@ -48,6 +48,7 @@ nav:
     - Annotations: writing-commands/annotations.md
     - Scaling across files: writing-commands/across-files.md
     - Nested groups: writing-commands/nesting.md
+    - Testing your commands: writing-commands/testing.md
     - Known bugs: writing-commands/known-bugs.md
   - Migration (nested subgroup form): migration.md
   - Project configuration: project-config.md
