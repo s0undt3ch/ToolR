@@ -1,6 +1,6 @@
 //! `uv` integration: discovery, consent-based install, and sync invocation.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use thiserror::Error;
 
@@ -55,6 +55,33 @@ pub enum UvError {
     SyncFailed(Option<i32>),
 }
 
+impl UvError {
+    /// Render this error as a user-facing message with recovery hints.
+    ///
+    /// `Display` gives a technical one-liner suitable for log lines and
+    /// anyhow chains; `user_message` is the version meant for stderr at
+    /// the CLI surface, with concrete next steps the user can act on.
+    /// Callers should prefer this when they know they're producing the
+    /// final user-visible error (typically wrapped in `anyhow::anyhow!`
+    /// so `main`'s `"toolr: {e:#}"` prefix lands once and only once).
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::UserRefusedInstall => {
+                "uv is required for this command. Install from \
+                 https://docs.astral.sh/uv/getting-started/installation/ \
+                 and rerun, or set TOOLR_AUTO_INSTALL_UV=1."
+                    .into()
+            }
+            Self::VersionTooOld { found, required } => format!(
+                "uv on PATH is {}.{}.{}, but toolr requires \
+                 >= {}.{}.{}. Upgrade uv and try again.",
+                found.0, found.1, found.2, required.0, required.1, required.2,
+            ),
+            other => other.to_string(),
+        }
+    }
+}
+
 /// Where toolr keeps its private state (binaries, etc).
 /// Defaults to `$XDG_DATA_HOME/toolr`, falling back to
 /// `~/.local/share/toolr` if `XDG_DATA_HOME` is unset.
@@ -80,11 +107,6 @@ pub fn managed_uv_path() -> Option<PathBuf> {
 
 fn uv_basename() -> &'static str {
     if cfg!(windows) { "uv.exe" } else { "uv" }
-}
-
-/// Optional binary-resolution helper to be exposed in later tasks.
-pub fn _placeholder(_path: &Path) -> Option<UvBinary> {
-    None
 }
 
 use install::perform_install;
@@ -184,14 +206,6 @@ mod tests {
     }
 
     #[test]
-    fn placeholder_helper_always_returns_none() {
-        // The `_placeholder` symbol is a stub that reserves the
-        // resolution surface for later work. Asserting `None` keeps it
-        // a no-op until someone wires it up.
-        assert!(_placeholder(Path::new("/anywhere")).is_none());
-    }
-
-    #[test]
     fn uv_error_display_strings_remain_descriptive() {
         // We don't want a future refactor to swap these for "error" or
         // an empty message — keep the user-facing text descriptive.
@@ -238,5 +252,38 @@ mod tests {
         let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
         let uv: UvError = io.into();
         assert!(matches!(uv, UvError::Io(_)));
+    }
+
+    #[test]
+    fn user_message_for_refused_install_names_the_install_url_and_env_var() {
+        let s = UvError::UserRefusedInstall.user_message();
+        assert!(s.contains("uv is required"));
+        assert!(s.contains("https://docs.astral.sh/uv/"));
+        assert!(s.contains("TOOLR_AUTO_INSTALL_UV"));
+        // Anti-regression: must not double-prefix `toolr: ` — main.rs
+        // adds that once at the CLI surface.
+        assert!(!s.starts_with("toolr:"), "actual: {s}");
+    }
+
+    #[test]
+    fn user_message_for_version_too_old_names_both_versions() {
+        let s = UvError::VersionTooOld {
+            found: (0, 1, 2),
+            required: (3, 4, 5),
+        }
+        .user_message();
+        assert!(s.contains("0.1.2"), "actual: {s}");
+        assert!(s.contains("3.4.5"), "actual: {s}");
+        assert!(s.contains("Upgrade uv"), "actual: {s}");
+        assert!(!s.starts_with("toolr:"), "actual: {s}");
+    }
+
+    #[test]
+    fn user_message_for_other_variants_falls_through_to_display() {
+        // Variants without bespoke recovery hints fall back to the
+        // technical `Display` string. Still no `toolr:` prefix.
+        let s = UvError::NotAvailable.user_message();
+        assert_eq!(s, UvError::NotAvailable.to_string());
+        assert!(!s.starts_with("toolr:"), "actual: {s}");
     }
 }

@@ -1,7 +1,10 @@
-//! Resolve a Python interpreter to use for `python -m toolr._runner`.
+//! Fallback Python interpreter resolution for projects without a
+//! `tools/pyproject.toml` (i.e. no tools venv). Resolves
+//! `$TOOLR_PYTHON` → `python3` on PATH → `python` on PATH.
 //!
-//! Plan 2 ships the minimal viable lookup. Plan 3 replaces this with a
-//! resolved tools-venv interpreter under `<venv>/bin/python`.
+//! The primary path resolves Python via the tools venv
+//! (`<venv>/bin/python`, see `toolr_core::venv::resolve_venv_path`);
+//! this module is the legacy-shape fallback.
 
 use std::env;
 use std::path::PathBuf;

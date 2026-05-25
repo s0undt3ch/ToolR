@@ -22,7 +22,7 @@ pub fn ensure_venv_ready(
         .context("locating project root for the tools venv")?;
     let resolved = resolve_venv_path(&repo_root)
         .context("resolving the tools venv path")?;
-    let uv = ensure_uv(consent).map_err(anyhow::Error::from)?;
+    let uv = ensure_uv(consent).map_err(|e| anyhow::anyhow!(e.user_message()))?;
     let tools = repo_root.join("tools");
     sync_if_needed(&uv, &tools, &resolved, force_sync)
         .with_context(|| format!("uv sync against {}", tools.display()))?;

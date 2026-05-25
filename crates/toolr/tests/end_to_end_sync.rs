@@ -1,5 +1,5 @@
-//! End-to-end smoke. Requires network access (uv download) and that
-//! Plan 2's runner is already wired. Run explicitly with:
+//! End-to-end smoke. Requires network access (uv download). Run
+//! explicitly with:
 //!
 //!     cargo test --test end_to_end_sync -- --ignored --nocapture
 
@@ -24,7 +24,7 @@ fn deps_sync_then_run_user_command() {
     let tools = tmp.path().join("tools");
     std::fs::create_dir(&tools).unwrap();
     std::fs::write(tools.join("pyproject.toml"), PYPROJECT).unwrap();
-    // A minimal command file so Plan 1 picks up a group.
+    // A minimal command file so the static parser finds a group.
     std::fs::write(
         tools.join("ci.py"),
         r#"
@@ -60,8 +60,8 @@ def hello(ctx):
         .assert()
         .success();
 
-    // 3. Run the user command — Plan 2's runner now executes via the
-    //    venv python.
+    // 3. Run the user command — the runner now executes via the venv
+    //    python.
     let output = Command::cargo_bin("toolr")
         .unwrap()
         .current_dir(tmp.path())

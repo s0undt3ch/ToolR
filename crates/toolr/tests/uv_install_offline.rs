@@ -1,5 +1,6 @@
 //! Offline tests for the install path. The network-touching
-//! `perform_install` is exercised manually by the implementer in Task 4.3.
+//! `perform_install` is not covered here; verify it manually when
+//! changing the install flow.
 
 use toolr_core::uv::install::{asset_url, host_asset};
 

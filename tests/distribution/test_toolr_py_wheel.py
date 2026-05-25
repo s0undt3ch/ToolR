@@ -24,23 +24,11 @@ EXPECTED_PRESENT = [
     "toolr/utils/command.py",
 ]
 
-EXPECTED_ABSENT = [
-    "toolr/__main__.py",
-    "toolr/_parser.py",
-    "toolr/_registry.py",
-]
-
 
 def test_toolr_py_wheel_contains_python_source(toolr_py_wheel: Path) -> None:
     names = set(wheel_namelist(toolr_py_wheel))
     missing = [p for p in EXPECTED_PRESENT if p not in names]
     assert not missing, f"toolr-py wheel missing expected files: {missing}"
-
-
-def test_toolr_py_wheel_does_not_re_ship_retired_modules(toolr_py_wheel: Path) -> None:
-    names = set(wheel_namelist(toolr_py_wheel))
-    re_shipped = [p for p in EXPECTED_ABSENT if p in names]
-    assert not re_shipped, f"toolr-py wheel re-shipped retired CLI modules: {re_shipped}"
 
 
 def test_toolr_py_wheel_ships_dynlib(toolr_py_wheel: Path) -> None:

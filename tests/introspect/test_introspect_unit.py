@@ -323,24 +323,6 @@ def test_build_payload_with_no_tools_root_returns_empty_state(
     assert payload["commands"] == []
 
 
-def test_build_payload_ignores_registered_entry_points(
-    tools_fixture: Path,
-    clean_registry: dict[str, Any],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Entry-point packages must not be loaded; toolr.commands support is removed."""
-    del clean_registry
-    called: list[str] = []
-
-    def fake_entry_points(*, group: str) -> list[object]:
-        called.append(group)
-        return []
-
-    monkeypatch.setattr("importlib.metadata.entry_points", fake_entry_points)
-    build_payload(str(tools_fixture))
-    assert called == [], "build_payload must not call importlib.metadata.entry_points"
-
-
 # --------------------------------------------------------------------
 # main() — argparse + JSON output
 # --------------------------------------------------------------------

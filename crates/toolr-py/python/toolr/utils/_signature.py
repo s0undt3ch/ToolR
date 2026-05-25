@@ -220,9 +220,9 @@ def arg_section(title: str, *, description: str | None = None) -> ArgSection:
 class ArgumentAnnotation(Struct, frozen=True):
     """Metadata harvested from ``Annotated[T, arg(...)]``.
 
-    The python runtime keeps the fields it actually uses (the legacy
-    argparse-era kwargs); the rust static parser independently reads
-    the same call expression and harvests the kwargs *it* uses, so the
+    The python runtime keeps only the fields it actually uses at
+    invocation time; the rust static parser independently reads the
+    same call expression and harvests the kwargs *it* uses, so the
     two sides don't need a serialised representation of this struct.
     """
 

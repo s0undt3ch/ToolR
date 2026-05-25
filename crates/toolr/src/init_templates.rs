@@ -1,11 +1,4 @@
 //! Embedded scaffold templates for `toolr project init`.
-//!
-//! These items are wired into the dispatcher in a later task; until then
-//! the symbols are unused. Suppress `dead_code` here rather than
-//! sprinkling `#[allow]` attributes on every item.
-#![allow(dead_code)]
-
-use std::path::Path;
 
 /// Where the tools venv should live.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,10 +69,6 @@ pub fn parse_venv_location(value: &str) -> anyhow::Result<VenvLocation> {
         other => anyhow::bail!("invalid --venv-location value: {other} (use cache or in-tree)"),
     }
 }
-
-/// Suppress the unused `Path` import warning until Task 4 uses it.
-#[allow(dead_code)]
-fn _path_is_used(_p: &Path) {}
 
 #[cfg(test)]
 mod tests {

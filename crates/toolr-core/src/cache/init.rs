@@ -1,4 +1,4 @@
-//! Hook called by the venv-creation path (Plan 3) to drop a `meta.json`
+//! Hook called by the venv-creation path to drop a `meta.json`
 //! sidecar next to the freshly-built venv.
 
 use std::path::Path;

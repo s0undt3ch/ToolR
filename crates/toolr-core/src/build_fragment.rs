@@ -290,7 +290,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
     /// assert the generated fragment equals the committed JSON byte-for-byte.
     ///
     /// We compare ManifestFragment values (not raw bytes) because byte
-    /// equality is asserted by the CLI golden test in Task 6
+    /// equality is asserted by the CLI golden test
     /// (`serialised_fragment_matches_committed_bytes`). Here we only
     /// need the *value* to match — serialisation ordering is a
     /// separate concern.
