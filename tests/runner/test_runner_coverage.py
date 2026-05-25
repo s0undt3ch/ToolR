@@ -407,6 +407,53 @@ def test_coerce_args_falls_back_when_get_type_hints_raises() -> None:
     assert keyword == {"x": "raw"}
 
 
+def test_coerce_args_fills_none_for_absent_optional_positional() -> None:
+    """`T | None` without a default → runner injects `None` when clap omits the slot.
+
+    The rust front-end accepts `T | None` positionals as zero-or-one, so when
+    the user doesn't pass the trailing arg, the value is absent from `raw`.
+    Without this fill-in, the python function call blows up with
+    "missing 1 required positional argument".
+    """
+
+    def _fn(ctx, new_version: str | None) -> None: ...
+
+    _, keyword = _coerce_args(_fn, {})
+    assert keyword == {"new_version": None}
+
+
+def test_coerce_args_does_not_overwrite_supplied_optional_positional() -> None:
+    """When the value IS in `raw`, the fill-in must not clobber it."""
+
+    def _fn(ctx, new_version: str | None) -> None: ...
+
+    _, keyword = _coerce_args(_fn, {"new_version": "0.20.0"})
+    assert keyword == {"new_version": "0.20.0"}
+
+
+def test_coerce_args_skips_fill_in_when_parameter_has_default() -> None:
+    """`T | None = None` is a flag; missing key means "use the function's own default", not "inject None"."""
+
+    def _fn(ctx, name: str | None = None) -> None: ...
+
+    _, keyword = _coerce_args(_fn, {})
+    # No injection — the function's own default takes over.
+    assert keyword == {}
+
+
+def test_coerce_args_skips_fill_in_for_non_optional_missing_params() -> None:
+    """Plain `str` (no default, not Optional) must NOT be auto-filled.
+
+    The call should still fail with the user's own clearer TypeError,
+    not silently receive `None`.
+    """
+
+    def _fn(ctx, name: str) -> None: ...
+
+    _, keyword = _coerce_args(_fn, {})
+    assert keyword == {}
+
+
 # --------------------------------------------------------------------------
 # run() — non-subprocess exit-code shapes
 # --------------------------------------------------------------------------

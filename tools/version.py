@@ -7,11 +7,9 @@ import tomllib
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
 from typing import Final
 
 from toolr import Context
-from toolr import arg
 from toolr import command_group
 
 # Built-in fallback for when there are no tags (e.g. brand-new repo).
@@ -102,7 +100,7 @@ def current(ctx: Context) -> None:
 @group.command
 def bump(
     ctx: Context,
-    new_version: Annotated[str | None, arg(nargs="?")] = None,
+    new_version: str | None = None,
     check_existing_tag: bool = False,
     write: bool = False,
 ) -> None:

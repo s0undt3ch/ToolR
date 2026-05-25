@@ -7,8 +7,8 @@ use anyhow::Result;
 use walkdir::WalkDir;
 
 use crate::hash::hash_tools_dir;
-use crate::manifest::{Manifest, SCHEMA_VERSION};
-use crate::parser::types::{SourcesImports, TypeImports, TypeResolutionError};
+use crate::manifest::{ArgumentKind, Manifest, SCHEMA_VERSION};
+use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::extract_commands,
     groups::extract_groups,
@@ -99,6 +99,11 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
 
     if !type_errors.is_empty() {
         return Err(BuildError::UnsupportedTypes(type_errors));
+    }
+
+    let arity_errors = validate_positional_arity(&all_commands);
+    if !arity_errors.is_empty() {
+        return Err(BuildError::InvalidPositionalArity(arity_errors));
     }
 
     // Validate that every command points at a registered group. Catches
@@ -211,8 +216,133 @@ pub enum BuildError {
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
     UnknownGroupRefs(Vec<UnknownGroupRef>),
+    #[error("invalid positional arity ({count}):\n{details}", count = .0.len(), details = format_positional_arity_errors(.0))]
+    InvalidPositionalArity(Vec<PositionalArityError>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
+}
+
+/// One command whose positional-argument layout violates the
+/// zero-or-one positional rules. Surfaced as a batch via
+/// [`BuildError::InvalidPositionalArity`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PositionalArityError {
+    pub module: String,
+    pub command: String,
+    pub kind: PositionalArityErrorKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PositionalArityErrorKind {
+    /// Two or more positionals declared `T | None` without a default.
+    /// clap can't disambiguate which trailing arg fills which slot.
+    MultipleZeroOrOne { first: String, second: String },
+    /// A `T | None` positional sits alongside `*args: T` — both compete
+    /// for the trailing slot.
+    OptionalWithVarPositional { optional: String, var_positional: String },
+    /// A required positional (no default, not `T | None`) follows the
+    /// zero-or-one slot. The parser can't backtrack to fill a required
+    /// slot that comes after one we've already accepted as absent.
+    RequiredAfterZeroOrOne { required: String, zero_or_one: String },
+}
+
+impl std::fmt::Display for PositionalArityErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MultipleZeroOrOne { first, second } => write!(
+                f,
+                "two zero-or-one positionals `{first}` and `{second}`. Only one `T | None` positional \
+                 is allowed per command; give one of them a default to make it a `--flag`."
+            ),
+            Self::OptionalWithVarPositional { optional, var_positional } => write!(
+                f,
+                "the zero-or-one positional `{optional}` cannot coexist with the variadic positional \
+                 `*{var_positional}` — both consume the trailing slot."
+            ),
+            Self::RequiredAfterZeroOrOne { required, zero_or_one } => write!(
+                f,
+                "the required positional `{required}` follows the zero-or-one positional `{zero_or_one}`. \
+                 Move required positionals before any `T | None` parameter."
+            ),
+        }
+    }
+}
+
+fn format_positional_arity_errors(errors: &[PositionalArityError]) -> String {
+    let mut s = String::new();
+    for (i, err) in errors.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        use std::fmt::Write as _;
+        let _ = write!(
+            &mut s,
+            "  - {}::{}: {}",
+            err.module, err.command, err.kind,
+        );
+    }
+    s
+}
+
+/// Walk every command and surface any positional-arity violation. Runs
+/// after type resolution because the "zero-or-one" tag lives on
+/// `Argument.resolved_type == Optional(_)`.
+fn validate_positional_arity(commands: &[crate::manifest::Command]) -> Vec<PositionalArityError> {
+    let mut errors = Vec::new();
+    for cmd in commands {
+        let mut zero_or_one: Option<&str> = None;
+        let mut var_positional: Option<&str> = None;
+        for arg in &cmd.arguments {
+            match arg.kind {
+                ArgumentKind::VarPositional => {
+                    var_positional = Some(arg.name.as_str());
+                }
+                ArgumentKind::Positional => {
+                    let is_optional = matches!(
+                        arg.resolved_type,
+                        Some(SupportedType::Optional(_))
+                    );
+                    if is_optional {
+                        if let Some(first) = zero_or_one {
+                            errors.push(PositionalArityError {
+                                module: cmd.module.clone(),
+                                command: cmd.name.clone(),
+                                kind: PositionalArityErrorKind::MultipleZeroOrOne {
+                                    first: first.to_string(),
+                                    second: arg.name.clone(),
+                                },
+                            });
+                        } else {
+                            zero_or_one = Some(arg.name.as_str());
+                        }
+                    } else if let Some(zo) = zero_or_one {
+                        // A non-optional positional after the zero-or-one slot.
+                        errors.push(PositionalArityError {
+                            module: cmd.module.clone(),
+                            command: cmd.name.clone(),
+                            kind: PositionalArityErrorKind::RequiredAfterZeroOrOne {
+                                required: arg.name.clone(),
+                                zero_or_one: zo.to_string(),
+                            },
+                        });
+                    }
+                }
+                // Keyword-like kinds don't compete for positional slots.
+                ArgumentKind::Optional | ArgumentKind::Flag | ArgumentKind::Repeated | ArgumentKind::Count => {}
+            }
+        }
+        if let (Some(zo), Some(vp)) = (zero_or_one, var_positional) {
+            errors.push(PositionalArityError {
+                module: cmd.module.clone(),
+                command: cmd.name.clone(),
+                kind: PositionalArityErrorKind::OptionalWithVarPositional {
+                    optional: zo.to_string(),
+                    var_positional: vp.to_string(),
+                },
+            });
+        }
+    }
+    errors
 }
 
 /// One command whose `group="…"` reference doesn't match any
@@ -683,5 +813,144 @@ def hello(ctx):
         let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("missing a `group=...` kwarg"), "got: {msg}");
+    }
+
+    /// `T | None` (no default) is accepted as a single zero-or-one
+    /// positional. This is the user's primary use case (e.g.
+    /// `def bump(ctx, new_version: str | None)`).
+    #[test]
+    fn accepts_single_zero_or_one_positional() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/v.py",
+            r#""""Version utils."""
+group = command_group("version", "Version", docstring=__doc__)
+
+@group.command
+def bump(ctx, new_version: str | None) -> None:
+    """Bump.
+
+    Args:
+        new_version: Explicit version.
+    """
+"#,
+        );
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let bump = m.commands.iter().find(|c| c.name == "bump").unwrap();
+        assert_eq!(bump.arguments.len(), 1);
+        assert_eq!(bump.arguments[0].kind, ArgumentKind::Positional);
+        assert!(matches!(
+            bump.arguments[0].resolved_type,
+            Some(SupportedType::Optional(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_multiple_zero_or_one_positionals() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/v.py",
+            r#""""Bad."""
+group = command_group("x", "X", docstring=__doc__)
+
+@group.command
+def f(ctx, a: str | None, b: str | None) -> None:
+    """Bad.
+
+    Args:
+        a: first.
+        b: second.
+    """
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("two zero-or-one positionals"), "got: {msg}");
+        assert!(msg.contains("`a`"), "got: {msg}");
+        assert!(msg.contains("`b`"), "got: {msg}");
+    }
+
+    #[test]
+    fn rejects_required_positional_after_zero_or_one() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/v.py",
+            r#""""Bad."""
+group = command_group("x", "X", docstring=__doc__)
+
+@group.command
+def f(ctx, maybe: str | None, name: str) -> None:
+    """Bad ordering.
+
+    Args:
+        maybe: optional.
+        name: required.
+    """
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("required positional `name` follows"),
+            "got: {msg}"
+        );
+    }
+
+    #[test]
+    fn rejects_zero_or_one_combined_with_var_positional() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/v.py",
+            r#""""Bad."""
+group = command_group("x", "X", docstring=__doc__)
+
+@group.command
+def f(ctx, maybe: str | None, *files: str) -> None:
+    """Bad combo.
+
+    Args:
+        maybe: optional.
+        files: trailing.
+    """
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("cannot coexist with the variadic positional"),
+            "got: {msg}"
+        );
+    }
+
+    /// `T | None = None` (with a default) stays a `--flag` and doesn't
+    /// trip the zero-or-one validator. Regression guard.
+    #[test]
+    fn allows_optional_keyword_alongside_required_positional() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/v.py",
+            r#""""OK."""
+group = command_group("x", "X", docstring=__doc__)
+
+@group.command
+def f(ctx, name: str, alias: str | None = None) -> None:
+    """OK.
+
+    Args:
+        name: required.
+        alias: optional flag.
+    """
+"#,
+        );
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let f = m.commands.iter().find(|c| c.name == "f").unwrap();
+        // `alias` should be Optional (flag), not a positional.
+        let kinds: Vec<ArgumentKind> = f.arguments.iter().map(|a| a.kind).collect();
+        assert_eq!(kinds, vec![ArgumentKind::Positional, ArgumentKind::Optional]);
     }
 }

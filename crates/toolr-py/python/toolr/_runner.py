@@ -19,9 +19,11 @@ import inspect
 import os
 import warnings
 from pathlib import Path
+from types import UnionType
 from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
+from typing import Union
 from typing import get_args
 from typing import get_origin
 from typing import get_type_hints
@@ -239,6 +241,17 @@ def _unwrap_annotated(hint: Any) -> Any:
     return hint
 
 
+def _is_optional(hint: Any) -> bool:
+    """True if `hint` is `T | None` (PEP 604) or `Optional[T]`/`Union[T, None]`.
+
+    Handles `Annotated[T | None, ...]` by peeling the wrapper first.
+    """
+    inner = _unwrap_annotated(hint)
+    if get_origin(inner) not in (UnionType, Union):
+        return False
+    return type(None) in get_args(inner)
+
+
 def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
     """Coerce values msgspec doesn't know about natively.
 
@@ -326,6 +339,26 @@ def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[
         except msgspec.ValidationError as exc:
             msg = f"toolr runner: invalid value for `--{name.replace('_', '-')}`: {exc}"
             raise SpecError(msg) from exc
+
+    # Zero-or-one positionals (`new_version: str | None`) are absent from
+    # `raw` when the user didn't pass them — clap accepts the omission
+    # (the type is Optional, so `is_optional_wrapper` flips `required` to
+    # false) but the python function has no default to fall back on. Fill
+    # `None` for each such missing parameter so the call doesn't blow up
+    # with "missing required positional argument".
+    for param_name, param in sig.parameters.items():
+        if param_name == "ctx":
+            continue
+        if param.kind == param.VAR_POSITIONAL:
+            continue
+        if param_name in keyword:
+            continue
+        if param.default is not param.empty:
+            # Function has its own default — let it apply.
+            continue
+        if _is_optional(hints.get(param_name)):
+            keyword[param_name] = None
+
     return positional, keyword
 
 
