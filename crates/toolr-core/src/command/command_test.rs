@@ -433,6 +433,31 @@ mod test_suite {
         use super::*;
         use tokio::runtime::Runtime;
 
+        /// Run `run_command_internal` on a blocking worker thread, bounded by a
+        /// wall-clock timeout. Returns the inner result on completion, or an
+        /// `Err` describing the wall-clock breach.
+        ///
+        /// The bound exists so a future regression that wedges
+        /// `run_command_internal` (a stuck forwarder thread, a missed kill, etc.)
+        /// fails the test fast instead of hanging the entire workspace test run.
+        /// See issue #247 for the original `cargo test --workspace` hang this
+        /// guards against.
+        async fn bounded_run_command(
+            config: CommandConfig,
+            timeout: Duration,
+        ) -> Result<std::result::Result<i32, Box<dyn std::error::Error + Send + Sync>>> {
+            let join_handle =
+                tokio::task::spawn_blocking(move || run_command_internal(config));
+            match tokio::time::timeout(timeout, join_handle).await {
+                Err(_) => Err(anyhow!(
+                    "run_command_internal did not return within {:?}",
+                    timeout
+                )),
+                Ok(Err(e)) => Err(anyhow!("worker task failed: {e}")),
+                Ok(Ok(inner)) => Ok(inner),
+            }
+        }
+
         // Cross-platform pipe creation
         #[cfg(unix)]
         fn create_pipe() -> Result<(i32, i32)> {
@@ -637,12 +662,13 @@ mod test_suite {
                         "-c".to_string(),
                         "import time; time.sleep(10)".to_string(),
                     ],
-                    timeout_secs: Some(0.1), // Very short timeout
+                    timeout_secs: Some(0.5), // Short timeout; 0.5s tolerates workspace contention
                     ..Default::default()
                 };
 
-                // Run the command and expect failure
-                let result = run_command_internal(config);
+                // Wall-clock-bounded so the workspace test run can't hang if the
+                // internal kill+wait path ever wedges. See issue #247.
+                let result = bounded_run_command(config, Duration::from_secs(5)).await?;
 
                 // Should fail with timeout
                 assert!(result.is_err());
@@ -661,51 +687,30 @@ mod test_suite {
             let rt = Runtime::new()?;
 
             rt.block_on(async {
-                // Create pipes for output
-                let (stdout_read, stdout_write) = create_pipe()?;
-                let (_stderr_read, stderr_write) = create_pipe()?;
-
-                // Create a command that outputs once then waits, triggering no-output timeout
+                // Create a command that outputs once then waits, triggering no-output timeout.
+                //
+                // We intentionally do not wire up a `sys_stdout_fd` pipe here: the no-output
+                // watchdog updates `last_output` from the stdout-forwarder thread's read
+                // against `child.stdout` (the parent-owned pipe), which works whether or not
+                // a sys-fd consumer is present. Earlier revisions of this test passed a
+                // test-owned pipe and called `read_pipe` *before* `handle.join()`; under
+                // `cargo test --workspace` contention the watchdog could fire and kill
+                // python before any byte made it to that pipe, leaving the test stuck in a
+                // blocking read on a writer that nobody had closed. See issue #247.
                 let config = CommandConfig {
                     args: vec![
                         python,
                         "-c".to_string(),
                         "import sys, time; sys.stdout.write('initial output'); sys.stdout.flush(); time.sleep(10)".to_string(),
                     ],
-                    sys_stdout_fd: wrap_fd(stdout_write),
-                    sys_stderr_fd: wrap_fd(stderr_write),
-                    no_output_timeout_secs: Some(0.1), // Very short no-output timeout
+                    no_output_timeout_secs: Some(0.5),
                     ..Default::default()
                 };
 
-                // Run the command in a separate thread
-                let handle = std::thread::spawn(move || {
-                    run_command_internal(config)
-                });
-
-                // Read the initial output
-                let mut stdout_buffer = [0u8; 1024];
-                #[cfg(unix)]
-                unsafe { read_pipe(stdout_read, &mut stdout_buffer) };
-                #[cfg(windows)]
-                read_pipe(stdout_read, &mut stdout_buffer);
-
-                // Wait for command to fail
-                let result = handle.join().expect("Thread panicked");
-
-                // Clean up
-                #[cfg(unix)]
-                unsafe {
-                    libc::close(stdout_read);
-                    libc::close(_stderr_read);
-                    libc::close(stdout_write);
-                    libc::close(stderr_write);
-                }
-
-                #[cfg(windows)]
-                {
-                    // On Windows our test files will close automatically
-                }
+                // Bound the call with a wall-clock guard so any future regression that
+                // wedges `run_command_internal` fails fast instead of hanging the
+                // workspace. The watchdog should trip in ~0.5s; 5s is generous headroom.
+                let result = bounded_run_command(config, Duration::from_secs(5)).await?;
 
                 // Should fail with no-output timeout
                 assert!(result.is_err());
