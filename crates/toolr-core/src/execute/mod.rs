@@ -8,7 +8,7 @@ pub mod tempfile;
 
 pub use python::{PythonError, resolve_python};
 pub use signals::wait_with_signals;
-pub use spawn::{StderrCapture, spawn_runner, spawn_runner_capturing_stderr};
+pub use spawn::spawn_runner;
 pub use spec::{
     ArgSchemaSpec, CommandSchemaSpec, ContextSpec, DispatchSpec, ExecutionSpec,
     RUNNER_SCHEMA_VERSION,
