@@ -33,7 +33,7 @@ humansize = "2"
 log = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"] }
 which = "8"
-similar = "2"
+similar = "3"
 clap = { version = "4", features = ["derive", "env", "string", "wrap_help"] }
 termimad = "0.34"
 pyo3 = { version = "0.28", features = ["extension-module"] }
