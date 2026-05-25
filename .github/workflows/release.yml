@@ -71,18 +71,40 @@ jobs:
         id: mise-version
         run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Virtual Environment
-        uses: ./.github/actions/setup-virtualenv
+      - name: Set up mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          cache-prefix: prepare-release
-          cache-seed: ${{ env.CACHE_SEED }}
-          python-version: "3.11"
-          mise-version: ${{ env.MISE_VERSION }}
+          version: ${{ env.MISE_VERSION }}
+          cache: true
+          cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|prepare-release|${{ runner.os }}|${{ runner.arch }}
+
+      - name: Get the Python Binary path from Mise
+        id: mise-python-executable
+        run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate additional ToolR requirements file
+        # `tools/ci.py` (where `toolr ci generate-build-matrix` lives)
+        # imports `packaging`. The published toolr wheel is a single
+        # binary with no Python deps of its own, so we inject the
+        # `tools` group's runtime requirements into toolr's pipx env
+        # via the action's `requirements-file` knob.
+        run: |
+          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
+
+      - name: Setup ToolR
+        # Pulls the prebuilt `bindings = "bin"` wheel from PyPI via pipx
+        # — no Rust/maturin/hatchling build on the matrix-generation
+        # critical path. Same pin as `ci.yml`; bump both together.
+        id: setup-toolr
+        uses: s0undt3ch/ToolR@9a9089ceb281520e57fc6453ef5ec8f44011d0ad # main (python-path support, post-v0.11.1)
+        with:
+          python-path: ${{ steps.mise-python-executable.outputs.python }}
+          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
 
       - name: Generate Build Matrix
         id: generate-build-matrix
         run: |
-          uv run toolr ci generate-build-matrix --workflow release
+          toolr ci generate-build-matrix --workflow release
 
   prepare-release:
     name: Prepare Release
