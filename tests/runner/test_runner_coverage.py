@@ -486,6 +486,83 @@ def test_run_returns_1_on_unhandled_exception(
     err = capsys.readouterr().err
     assert "RuntimeError" in err
     assert "kaboom" in err
+    # Non-import errors must not trigger the missing-dep hint, otherwise
+    # the hint would be noise on every command failure.
+    assert "toolr project deps sync" not in err
+
+
+def test_run_emits_missing_dep_hint_for_function_body_importerror(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bare `ImportError` inside the command body must surface the
+    styled "run `toolr project deps sync`" hint on stderr.
+
+    This is the case the old Rust-side post-mortem used to handle by
+    parsing captured stderr; now the runner emits the hint itself
+    because stderr is inherited and there's no capture path.
+    """
+
+    def fake_target(ctx, **_kw) -> None:
+        # Simulate `import optional_pkg` failing inside the function body.
+        msg = "No module named 'optional_pkg'"
+        raise ImportError(msg, name="optional_pkg")
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert run(_runner_spec(repo_root=tmp_path)) == 1
+    err = capsys.readouterr().err
+    assert "ImportError" in err
+    assert "`optional_pkg`" in err
+    assert "toolr project deps sync" in err
+    assert "tools/pyproject.toml" in err
+
+
+def test_run_emits_missing_dep_hint_for_transitive_importerror_via_spec_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When a top-level import fails (`_import_target` wraps it as
+    SpecError-from-ImportError), the hint must still fire so transitive
+    missing deps get the same affordance as function-body ones.
+    """
+
+    def fake_import_target(_spec):
+        # Mimic `_import_target`'s wrapping: SpecError chained from
+        # an underlying ImportError. The hint lookup uses `__cause__`.
+        inner_msg = "No module named 'transitive_dep'"
+        cause = ImportError(inner_msg, name="transitive_dep")
+        msg = f"failed to import tools.demo: {inner_msg}"
+        raise SpecError(msg) from cause
+
+    monkeypatch.setattr("toolr._runner._import_target", fake_import_target)
+    assert run(_runner_spec(repo_root=tmp_path)) == 2
+    err = capsys.readouterr().err
+    assert "toolr runner: failed to import tools.demo" in err
+    assert "`transitive_dep`" in err
+    assert "toolr project deps sync" in err
+
+
+def test_run_falls_back_to_generic_hint_when_importerror_has_no_name(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`from pkg import thing` raises a bare `ImportError` whose `name`
+    attribute is `None`. The hint must still render with a generic
+    placeholder rather than crashing on a `None` interpolation.
+    """
+
+    def fake_target(ctx, **_kw) -> None:
+        msg = "cannot import name 'thing' from 'pkg'"
+        raise ImportError(msg)
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert run(_runner_spec(repo_root=tmp_path)) == 1
+    err = capsys.readouterr().err
+    assert "this module" in err
+    assert "toolr project deps sync" in err
 
 
 # --------------------------------------------------------------------------

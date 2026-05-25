@@ -11,7 +11,7 @@ use toolr_core::complete::{
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{
-    resolve_python, spawn_runner_capturing_stderr, wait_with_signals, write_spec_to_tempfile,
+    resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
 };
 use toolr_core::manifest::Manifest;
 use toolr_core::venv::resolve_venv_path;
@@ -174,9 +174,11 @@ pub fn dispatch(
         }
     }
 
-    // Pre-flight missing-dependency check. Skip when the user sets
-    // `TOOLR_NO_PREFLIGHT_DEPS` to a non-empty, non-`0` value —
-    // post-mortem interception still catches inline imports.
+    // Pre-flight missing-dependency check against the command's
+    // declared `imports` list. Skip when the user sets
+    // `TOOLR_NO_PREFLIGHT_DEPS` to a non-empty, non-`0` value — at that
+    // point a missing dep surfaces as a raw Python traceback from the
+    // child, the same way it would when running python directly.
     let skip_preflight = std::env::var_os("TOOLR_NO_PREFLIGHT_DEPS")
         .is_some_and(|v| !v.is_empty() && v != "0");
     if !skip_preflight {
@@ -203,21 +205,9 @@ pub fn dispatch(
             python.display()
         );
     }
-    let (mut child, stderr_capture) = spawn_runner_capturing_stderr(&python, tempfile.path())
+    let mut child = spawn_runner(&python, tempfile.path())
         .with_context(|| format!("spawning Python runner at {}", python.display()))?;
     let status = wait_with_signals(&mut child)?;
-    let stderr_bytes = stderr_capture.take();
-    let stderr_str = String::from_utf8_lossy(&stderr_bytes);
-    use std::io::Write;
-    if !status.success() {
-        if let Some(report) = toolr_core::deps_check::intercept_import_error(&stderr_str) {
-            std::io::stderr().write_all(report.render().as_bytes())?;
-        } else {
-            std::io::stderr().write_all(&stderr_bytes)?;
-        }
-    } else {
-        std::io::stderr().write_all(&stderr_bytes)?;
-    }
 
     // Map child status to a process exit code.
     let code = status.code().unwrap_or_else(|| {

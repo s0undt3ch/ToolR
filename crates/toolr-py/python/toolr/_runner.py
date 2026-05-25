@@ -356,7 +356,23 @@ def invoke_dispatcher(
     return func(ctx, **parent_kwargs, **{param: dispatched})
 
 
-def run(spec: RunnerSpec) -> int:
+def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
+    """Append the styled "run `toolr project deps sync`" hint to ``stream``.
+
+    The hint replaces what the Rust-side post-mortem stderr capture used
+    to do — now that the runner inherits stderr (so Rich's TTY detection
+    works), the runner has to emit the hint itself.
+    """
+    missing = getattr(exc, "name", None) or "this module"
+    print(
+        f"\ntoolr: import `{missing}` failed at runtime. "
+        "A dependency may be missing - run `toolr project deps sync` "
+        "and check tools/pyproject.toml.",
+        file=stream,
+    )
+
+
+def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     """Execute the command described by ``spec``. Returns a process exit code.
 
     ``ctx.exit(status, ...)`` raises :class:`SystemExit`; we honor its code.
@@ -398,7 +414,25 @@ def run(spec: RunnerSpec) -> int:
         import sys  # noqa: PLC0415
 
         print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
+        # `_import_target` wraps an ImportError thrown while loading the
+        # user's command module into a SpecError. Surface the missing-dep
+        # hint when that's the case so a top-level or transitive import
+        # failure still gets the styled "run deps sync" guidance.
+        if isinstance(exc.__cause__, ImportError):
+            _print_missing_dep_hint(exc.__cause__, sys.stderr)
         return 2
+    except ImportError as exc:
+        # An ImportError raised from inside the command function body
+        # (e.g. `def cmd(ctx): import yaml; ...` where yaml is missing)
+        # bypasses `_import_target` entirely. Print the traceback and
+        # add the same hint so the user gets the same affordance as a
+        # top-level import failure.
+        import sys  # noqa: PLC0415
+        import traceback  # noqa: PLC0415
+
+        traceback.print_exc(file=sys.stderr)
+        _print_missing_dep_hint(exc, sys.stderr)
+        return 1
     except Exception:  # noqa: BLE001
         import sys  # noqa: PLC0415
         import traceback  # noqa: PLC0415
