@@ -92,7 +92,7 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: s0undt3ch/ToolR@9a9089ceb281520e57fc6453ef5ec8f44011d0ad # main (python-path support, post-v0.11.1)
+        uses: s0undt3ch/ToolR@fc2d6deee5f50b7f43cd1f099f896b09a4415dce # main (python-path support, post-v0.11.1)
         with:
           python-path: ${{ steps.mise-python-executable.outputs.python }}
           requirements-file: ${{ github.workspace }}/toolr-requirements.txt
