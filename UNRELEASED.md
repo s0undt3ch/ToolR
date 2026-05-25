@@ -272,6 +272,15 @@ Migrating a plugin:
 If you don't ship the file, your plugin's commands will not appear in
 `toolr --help` or `toolr <group> --help`.
 
+### Improved — argparse options with underscores accept both spellings
+
+`toolr` normalises the canonical CLI form for argparse-scanned options
+to dashes, so `add_argument('--skip_warm_cache', ...)` shows up in
+`--help` and shell completion as `--skip-warm-cache`. The original
+underscored spelling is now also accepted at parse time, so muscle
+memory from the upstream tool (`--skip_warm_cache`) keeps working
+without the user having to know about the rewrite.
+
 ### Improved — dispatch detects stale manifests automatically
 
 Adding, removing, or editing `tools/*.py` is now reflected on the very

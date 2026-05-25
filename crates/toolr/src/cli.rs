@@ -812,6 +812,37 @@ mod cli_tree_tests {
     }
 
     #[test]
+    fn underscored_alias_lets_clap_accept_both_spellings() {
+        // Mirrors the argparse scanner's output for
+        // `add_argument('--skip_warm_cache', action='store_true')`:
+        // the canonical CLI form is dashed (so help and shell
+        // completion offer the dashed spelling), but the upstream
+        // underscored form is registered as a hidden alias.
+        let mut arg = empty_arg("skip_warm_cache", ArgumentKind::Flag);
+        arg.metadata.aliases.push("--skip_warm_cache".into());
+        arg.long_flag = Some("--skip_warm_cache".into());
+
+        let mut cmd = normal_leaf("wrapup-company", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+
+        // Dashed form parses.
+        let dashed = clap_cmd
+            .clone()
+            .try_get_matches_from(vec!["wrapup-company", "--skip-warm-cache"])
+            .expect("dashed form must parse");
+        assert!(dashed.get_flag("skip_warm_cache"));
+
+        // Underscored form (the upstream argparse spelling) parses too.
+        let underscored = clap_cmd
+            .clone()
+            .try_get_matches_from(vec!["wrapup-company", "--skip_warm_cache"])
+            .expect("underscored form must parse");
+        assert!(underscored.get_flag("skip_warm_cache"));
+    }
+
+    #[test]
     fn dispatcher_with_matching_leaf_name_hoists_children_onto_group() {
         // command_group("django") + def django(...) → dotted_name == "django"
         // (matches the leaf), so the dispatcher's children appear
