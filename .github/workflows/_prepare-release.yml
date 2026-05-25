@@ -180,6 +180,14 @@ jobs:
           # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
           OUTPUT: .release-changes.md
           GITHUB_REPO: ${{ github.repository }}
+          # cliff.toml's `[remote.github]` block makes git-cliff hit
+          # the GitHub API for commit/PR metadata used by the body
+          # template. Without an explicit token it falls through to
+          # unauthenticated requests and the API returns 401 on
+          # private endpoints / once rate-limited. The default
+          # workflow token is sufficient and has read-only repo
+          # scope.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare GH Release changelog
         id: prepare-release-notes
@@ -213,6 +221,9 @@ jobs:
           # TOOLR_RELEASE_NOTES is inherited from the loader step's
           # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
           GITHUB_REPO: ${{ github.repository }}
+          # See the matching step above for why GITHUB_TOKEN is needed
+          # alongside `[remote.github]` in cliff.toml.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Reset UNRELEASED.md
         shell: bash
