@@ -83,6 +83,43 @@ toolr math add --help
 --8<-- "docs/writing-commands/files/calculator-add-help.txt"
 ```
 
+### Zero-or-one positionals (`T | None` without a default)
+
+A `T | None` annotation **without** a default declares a positional
+that takes zero or one value:
+
+```python
+def bump(ctx: Context, new_version: str | None) -> None:
+    """Bump the version.
+
+    Args:
+        new_version: Explicit version to bump to, or omit for auto.
+    """
+```
+
+```sh
+toolr version bump            # new_version is None
+toolr version bump 0.20.0     # new_version is "0.20.0"
+```
+
+This is the type-driven replacement for the deprecated
+`arg(nargs="?")` kwarg.
+
+A few rules apply, all enforced at manifest-build time so you get a
+clear error rather than confusing runtime behavior:
+
+| Rule | Why |
+|---|---|
+| At most **one** `T \| None` positional per command. | clap can't disambiguate two trailing optionals — which arg fills which slot? |
+| Required positionals must appear **before** the `T \| None` slot. | Once the parser accepts "no value here" it can't backtrack to fill a required slot that comes later. |
+| `T \| None` and `*args: T` cannot coexist. | Both compete for the trailing slot. |
+| Fixed-arity `tuple[T1, T2, …]` positionals **may** precede a `T \| None` slot. | Tuples have deterministic arity, so there's no ambiguity. |
+
+`T | None` **with** a default (e.g. `name: str | None = None`) is a
+keyword `--flag` instead — see [Optional arguments](#optional-arguments-with-a-default-value)
+below. The default's presence is what flips the parameter from
+positional to keyword; the annotation alone doesn't.
+
 ## Optional arguments (with a default value)
 
 Parameters with a default value become `--name VALUE` flags. The type

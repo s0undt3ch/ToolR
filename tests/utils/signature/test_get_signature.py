@@ -287,3 +287,108 @@ def test_get_signature_var_positional_with_other_args():
     assert not isinstance(signature.arguments[0], VarArg)
     assert isinstance(signature.arguments[1], VarArg)
     assert signature.arguments[1].nargs == "*"
+
+
+def test_get_signature_optional_without_default_is_zero_or_one_positional():
+    """`T | None` without a default → positional with `nargs="?"`.
+
+    This is the type-driven replacement for `arg(nargs="?")`; argparse
+    stores `None` when the user omits the slot, matching the function's
+    `Optional[T]` hint.
+    """
+
+    def test_func(ctx: Context, new_version: str | None) -> None:
+        """Bump.
+
+        Args:
+            new_version: Explicit version to bump to.
+        """
+
+    signature = get_signature(test_func)
+    assert len(signature.arguments) == 1
+    arg_obj = signature.arguments[0]
+    assert isinstance(arg_obj, Arg)
+    assert not isinstance(arg_obj, KwArg)
+    assert arg_obj.nargs == "?"
+    assert arg_obj.type is str
+
+
+def test_get_signature_optional_with_none_default_stays_a_flag():
+    """`T | None = None` is a keyword flag (existing behavior); zero-or-one only triggers when there's no default."""
+
+    def test_func(ctx: Context, name: str | None = None) -> None:
+        """Greet.
+
+        Args:
+            name: Who to greet.
+        """
+
+    signature = get_signature(test_func)
+    arg_obj = signature.arguments[0]
+    assert isinstance(arg_obj, KwArg)
+    # KwArg means it's a flag, not a positional.
+    assert arg_obj.nargs is None
+
+
+def test_get_signature_rejects_multiple_zero_or_one_positionals():
+    """At most one zero-or-one positional per command — clap/argparse can't disambiguate."""
+
+    def test_func(ctx: Context, a: str | None, b: str | None) -> None:
+        """Bad.
+
+        Args:
+            a: first.
+            b: second.
+        """
+
+    with pytest.raises(SignatureError, match=r"Only one zero-or-one positional"):
+        get_signature(test_func)
+
+
+def test_get_signature_rejects_required_positional_after_zero_or_one():
+    """Required positionals must come before any `T | None` slot."""
+
+    def test_func(ctx: Context, maybe: str | None, name: str) -> None:
+        """Bad ordering.
+
+        Args:
+            maybe: optional.
+            name: required.
+        """
+
+    with pytest.raises(SignatureError, match=r"Required positional 'name' follows"):
+        get_signature(test_func)
+
+
+def test_get_signature_rejects_zero_or_one_with_var_positional():
+    """`T | None` and `*args: T` both compete for the trailing slot."""
+
+    def test_func(ctx: Context, maybe: str | None, *files: str) -> None:
+        """Bad combo.
+
+        Args:
+            maybe: optional.
+            files: trailing.
+        """
+
+    with pytest.raises(SignatureError, match=r"Cannot combine the zero-or-one positional"):
+        get_signature(test_func)
+
+
+def test_get_signature_allows_required_positional_before_zero_or_one():
+    """Required positionals (no default) may precede the zero-or-one slot."""
+
+    def test_func(ctx: Context, name: str, maybe: str | None) -> None:
+        """OK combo.
+
+        Args:
+            name: required.
+            maybe: optional trailing.
+        """
+
+    signature = get_signature(test_func)
+    assert len(signature.arguments) == 2
+    assert isinstance(signature.arguments[0], Arg)
+    assert isinstance(signature.arguments[1], Arg)
+    assert signature.arguments[0].nargs is None
+    assert signature.arguments[1].nargs == "?"

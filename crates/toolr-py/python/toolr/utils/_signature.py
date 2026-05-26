@@ -425,6 +425,8 @@ def get_signature(func: F) -> Signature:
             raise SignatureError(exc.message, func) from None
         arguments.append(parameter)
 
+    _validate_positional_arity(func, arguments)
+
     return Signature(
         func=func,
         short_description=short_description,
@@ -432,6 +434,59 @@ def get_signature(func: F) -> Signature:
         arguments=arguments,
         signature=signature,
     )
+
+
+def _validate_positional_arity(func: F, arguments: list[Arg | KwArg]) -> None:
+    """Enforce the zero-or-one positional rules.
+
+    Three constraints, all checked together because they interact:
+
+    1. At most one zero-or-one positional (`T | None` w/o default,
+       i.e. ``nargs == "?"``). clap / argparse can't disambiguate two
+       trailing optionals.
+    2. Zero-or-one and zero-or-more (`*args: T`) are mutually exclusive
+       — both compete for the same trailing slot.
+    3. Required positionals must come **before** the zero-or-one slot.
+       Once we accept "no value here" the parser can't backtrack and
+       fill a required slot that comes later.
+
+    Fixed-arity tuples are deterministic, so they may freely precede a
+    zero-or-one positional.
+    """
+    optional_positional: Arg | None = None
+    var_positional: VarArg | None = None
+    for argument in arguments:
+        if isinstance(argument, KwArg):
+            continue
+        if isinstance(argument, VarArg):
+            var_positional = argument
+            continue
+        if argument.nargs == "?":
+            if optional_positional is not None:
+                err_msg = (
+                    f"Only one zero-or-one positional argument is allowed per command; "
+                    f"both {optional_positional.name!r} and {argument.name!r} are `T | None` "
+                    "without a default. Drop one or give it a default to make it a `--flag`."
+                )
+                raise SignatureError(err_msg, func)
+            optional_positional = argument
+            continue
+        # Required positional (no default, not `T | None`). Must appear
+        # before any zero-or-one slot.
+        if optional_positional is not None:
+            err_msg = (
+                f"Required positional {argument.name!r} follows the zero-or-one positional "
+                f"{optional_positional.name!r}. Move required positionals before any `T | None` "
+                "parameter."
+            )
+            raise SignatureError(err_msg, func)
+
+    if optional_positional is not None and var_positional is not None:
+        err_msg = (
+            f"Cannot combine the zero-or-one positional {optional_positional.name!r} with the "
+            f"variadic positional `*{var_positional.name}` — both consume the trailing slot."
+        )
+        raise SignatureError(err_msg, func)
 
 
 class EnumAction(Action):
@@ -531,6 +586,7 @@ def _parse_parameter(  # noqa: PLR0915
                 log.debug("Found ArgumentAnnotation config: %s", arg_config)
                 break
 
+    optional_type: bool = False
     if isinstance(actual_type, UnionType):
         if len(actual_type.__args__) > 2:
             err_msg = f"{klass.__name__} {param_name!r} has more than two types: , ".join(
@@ -545,6 +601,7 @@ def _parse_parameter(  # noqa: PLR0915
 
         # Now, the type that we're really interested in is the first one
         actual_type = actual_type.__args__[0]
+        optional_type = True
 
     description: str | None = docstring.params.get(param_name)
     if description is None:
@@ -575,6 +632,14 @@ def _parse_parameter(  # noqa: PLR0915
 
     if nargs is None and param.kind == Parameter.VAR_POSITIONAL:
         nargs = "*"
+
+    # `T | None` without a default is the type-driven replacement for
+    # `arg(nargs="?")` on a positional — argparse stores `None` when the
+    # user omits the value, matching the function's `Optional[T]` hint.
+    # `T | None = <something>` is intentionally NOT positional (line 493
+    # makes it a KwArg), so we only flip `nargs` here.
+    if nargs is None and positional and optional_type and param.kind != Parameter.VAR_POSITIONAL:
+        nargs = "?"
 
     if default is param.empty:
         # Reset default to None if it's empty
