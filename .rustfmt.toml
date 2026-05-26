@@ -1,0 +1,23 @@
+# rustfmt configuration for the toolr workspace.
+#
+# Policy: target 100 columns; tolerate up to 120 when the content
+# (a string literal, a doc comment, a tracing!/format! template,
+# etc.) doesn't fit any other way.
+#
+# rustfmt doesn't model "soft 100, hard 120" directly — it has one
+# `max_width` knob. We pin it to 100 so the formatter wraps code
+# at that width. Anything the formatter can't reach (long string
+# literals, doc-comment prose, embedded code examples) is left
+# alone; rustfmt won't break them. Hard-ceiling enforcement at 120
+# stays at the editor / review layer — there's no Clippy
+# line-length lint, so the 120-char cap is editor-side discipline
+# via `.editorconfig` plus reviewer judgement.
+#
+# The settings that would make this more explicit
+# (`error_on_line_overflow = false`, `wrap_comments = false`,
+# `format_code_in_doc_comments = false`, `error_on_unformatted =
+# false`) are nightly-only on the current toolchain and rustfmt
+# rejects them on stable. The pre-existing defaults already match
+# what we want for those knobs, so leaving them out is harmless.
+
+max_width = 100

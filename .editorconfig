@@ -1,0 +1,42 @@
+# EditorConfig — https://editorconfig.org
+#
+# Policy across the workspace: target 100 columns, tolerate up to
+# 120 when the content really needs it. The 100-column ruler this
+# file sets in IDEs/editors is the soft ceiling; lint tools
+# (`ruff`, `rumdl`) enforce the 120 hard cap.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+max_line_length = 100
+
+# Rust + TOML + Python + YAML — 4-space indent.
+[*.{rs,toml,py,pyi}]
+indent_size = 4
+
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown wraps prose; trailing whitespace is meaningful (hard
+# line break), so don't trim it.
+[*.md]
+indent_size = 2
+trim_trailing_whitespace = false
+
+# Shell + JSON — 2-space indent is the conventional default.
+[*.{sh,bash,zsh,fish,json}]
+indent_size = 2
+
+# Makefiles require literal tabs.
+[Makefile]
+indent_style = tab
+
+# Generated reference files: don't fight whatever the generator
+# emits.
+[skills/*/references/*.md]
+max_line_length = unset
