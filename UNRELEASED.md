@@ -62,3 +62,30 @@ Intended primarily for CI: the `Setup ToolR` action sets it to
 `in-tree` automatically so workflows can cache `tools/.venv`
 directly without forcing every consumer repo's
 `tools/pyproject.toml` to declare `venv-location = "in-tree"`.
+
+### Agent skills
+
+Toolr now ships two in-tree agent skills, installable via
+`skillshare` from this repository:
+
+- **`toolr-command-authoring`** — teaches LLM coding assistants
+  how to author toolr commands in a project's own `tools/*.py`
+  files. Anchored on `toolr project init` and
+  `toolr <group> <cmd> --help`; the API surface and docstring
+  conventions are regenerated from `toolr-py`'s public surface
+  and the parser's section-header table.
+- **`toolr-command-packaging`** — teaches LLM coding assistants
+  how to ship an existing set of toolr commands as a
+  distributable Python plugin. Anchored on the in-tree
+  `examples/plugin-package/`; the manifest fragment schema is
+  regenerated from `toolr-core`'s serde types.
+
+A new maintainer-only `crates/xtask/` workspace crate hosts the
+generator (`cargo xtask build-skill-refs`). The `--check` variant
+runs in CI on every PR (alongside the existing example-plugin
+manifest check) so a public-surface change that forgets to
+regenerate the skill references cannot land. A `prek` hook entry
+gives the same gate locally.
+
+See [docs/skills.md](https://toolr.readthedocs.io/latest/skills/)
+for the user-facing installation flow.
