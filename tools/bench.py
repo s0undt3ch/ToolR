@@ -398,7 +398,9 @@ def compare(
     """
     min_runs = 10
     if runs < min_runs:
-        ctx.error(f"--runs must be >= {min_runs} (got {runs}); steady-state mean needs enough samples")
+        ctx.error(
+            f"--runs must be >= {min_runs} (got {runs}); steady-state mean needs enough samples"
+        )
         ctx.exit(2)
 
     known = {t.name for t in _TOOLS}
@@ -515,7 +517,9 @@ def _row_cells(r: _Row) -> tuple[str, ...]:
 def _render(ctx: Context, rows: list[_Row], *, runs: int) -> None:
     """Render the timing rows as a Rich table sorted by remaining mean ascending."""
     remaining_count = runs - 2
-    table = Table(title=f"`<tool> -h` startup — {runs} runs (remaining = mean of last {remaining_count})")
+    table = Table(
+        title=f"`<tool> -h` startup — {runs} runs (remaining = mean of last {remaining_count})"
+    )
     for header, is_numeric in _COLUMNS:
         table.add_column(header, justify="right" if is_numeric else "left")
     for r in _sorted_rows(rows):
@@ -534,7 +538,10 @@ def _render_markdown(ctx: Context, rows: list[_Row], *, runs: int) -> None:
     cells = [_row_cells(r) for r in _sorted_rows(rows)]
     headers = [h for h, _ in _COLUMNS]
     # Column width = max(header, max-cell-in-column).
-    widths = [max(len(h), *(len(row[i]) for row in cells)) if cells else len(h) for i, h in enumerate(headers)]
+    widths = [
+        max(len(h), *(len(row[i]) for row in cells)) if cells else len(h)
+        for i, h in enumerate(headers)
+    ]
 
     def pad(cell: str, width: int, *, numeric: bool) -> str:
         return cell.rjust(width) if numeric else cell.ljust(width)
@@ -543,7 +550,9 @@ def _render_markdown(ctx: Context, rows: list[_Row], *, runs: int) -> None:
         padded = [pad(v, widths[i], numeric=_COLUMNS[i][1]) for i, v in enumerate(values)]
         return f"| {' | '.join(padded)} |"
 
-    sep_cells = ["-" * widths[i] + (":" if is_numeric else "") for i, (_, is_numeric) in enumerate(_COLUMNS)]
+    sep_cells = [
+        "-" * widths[i] + (":" if is_numeric else "") for i, (_, is_numeric) in enumerate(_COLUMNS)
+    ]
     # The leading position of the colon for right-align is on the right;
     # left-align uses a plain dash run.
 

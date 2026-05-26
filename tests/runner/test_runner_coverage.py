@@ -130,7 +130,9 @@ def test_load_spec_invalid_json_raises_spec_error(make_spec_file: Callable[..., 
         load_spec(spec_path)
 
 
-def test_load_spec_type_mismatch_raises_schema_validation(tmp_path: Path, make_spec_file: Callable[..., Path]) -> None:
+def test_load_spec_type_mismatch_raises_schema_validation(
+    tmp_path: Path, make_spec_file: Callable[..., Path]
+) -> None:
     # `context.verbosity` is required and typed `str`; an int trips msgspec's
     # struct decoder, which surfaces as `msgspec.ValidationError` (the
     # subclass of `DecodeError`). The runner reports it under the more
@@ -276,7 +278,11 @@ def test_unwrap_annotated_returns_bare_type_untouched() -> None:
         (dt.datetime, "2026-01-02T03:04:05", dt.datetime(2026, 1, 2, 3, 4, 5)),  # noqa: DTZ001
         (dt.date, "2026-01-02", dt.date(2026, 1, 2)),
         (dt.time, "03:04:05", dt.time(3, 4, 5)),
-        (uuid.UUID, "12345678-1234-5678-1234-567812345678", uuid.UUID("12345678-1234-5678-1234-567812345678")),
+        (
+            uuid.UUID,
+            "12345678-1234-5678-1234-567812345678",
+            uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        ),
         (ipaddress.IPv4Address, "10.0.0.1", ipaddress.IPv4Address("10.0.0.1")),
         (ipaddress.IPv6Address, "2001:db8::1", ipaddress.IPv6Address("2001:db8::1")),
         (Version, "1.2.3", Version("1.2.3")),
@@ -459,7 +465,9 @@ def test_coerce_args_skips_fill_in_for_non_optional_missing_params() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_run_returns_zero_on_systemexit_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_run_returns_zero_on_systemexit_none(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     captured: dict[str, object] = {}
 
     def fake_target(ctx, **_kw):  # pragma: no cover - executed via run()
@@ -494,7 +502,9 @@ def test_run_returns_2_for_spec_error_from_coercion(
 ) -> None:
     # Force `_coerce_args` to raise `SpecError` via a target that takes a
     # Literal-typed kwarg the spec value can't satisfy.
-    def fake_target(ctx, level: Literal["debug", "info"]) -> None:  # pragma: no cover - run via runner
+    def fake_target(
+        ctx, level: Literal["debug", "info"]
+    ) -> None:  # pragma: no cover - run via runner
         pass
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
@@ -511,7 +521,9 @@ def test_run_returns_0_on_clean_completion(monkeypatch: pytest.MonkeyPatch, tmp_
     assert run(_runner_spec(repo_root=tmp_path)) == 0
 
 
-def test_run_returns_integer_exit_code_from_systemexit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_run_returns_integer_exit_code_from_systemexit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     def fake_target(ctx, **_kw) -> None:
         raise SystemExit(7)
 

@@ -24,7 +24,9 @@ def test_complete_workflow_example(commands_tester):
 
     # Create nested command groups
     build_group = docker_group.command_group("build", "Build Tools", "Docker image building")
-    compose_group = docker_group.command_group("compose", "Compose Tools", "Docker Compose operations")
+    compose_group = docker_group.command_group(
+        "compose", "Compose Tools", "Docker Compose operations"
+    )
 
     # Add commands to build group
     @build_group.command("image")
@@ -49,7 +51,9 @@ def test_complete_workflow_example(commands_tester):
         return "Stopping services"
 
     # Create deeply nested group
-    advanced_group = build_group.command_group("advanced", "Advanced Build", "Advanced build features")
+    advanced_group = build_group.command_group(
+        "advanced", "Advanced Build", "Advanced build features"
+    )
 
     @advanced_group.command("multi-stage")
     def multi_stage_build(ctx: Context):
@@ -140,7 +144,13 @@ def test_real_world_tool_structure(commands_tester):
 
     # Verify the complex structure
     command_groups = commands_tester.collected_command_groups()
-    expected_groups = ["tools.dev", "tools.dev.test", "tools.dev.test.coverage", "tools.ci", "tools.ci.deploy"]
+    expected_groups = [
+        "tools.dev",
+        "tools.dev.test",
+        "tools.dev.test.coverage",
+        "tools.ci",
+        "tools.ci.deploy",
+    ]
 
     for group_name in expected_groups:
         assert group_name in command_groups

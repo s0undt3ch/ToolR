@@ -582,9 +582,8 @@ class EnumAction(Action):
         values: Any,
         option_string: str | None = None,  # noqa: ARG002
     ) -> None:
-        err_msg = (
-            f"Invalid choice: '{values}'. Available choices are {', '.join(repr(c) for c in self.choices_mapping)}."
-        )
+        choices_repr = ", ".join(repr(c) for c in self.choices_mapping)
+        err_msg = f"Invalid choice: '{values}'. Available choices are {choices_repr}."
         if isinstance(values, Enum):
             if values in self.choices_mapping.values():
                 setattr(namespace, self.dest, values)
@@ -642,7 +641,11 @@ def _parse_parameter(  # noqa: PLR0915
         klass = KwArg
 
     log.debug(
-        "Parsing parameter %r, positional=%s, annotation=%s, default=%s", param_name, positional, annotation, default
+        "Parsing parameter %r, positional=%s, annotation=%s, default=%s",
+        param_name,
+        positional,
+        annotation,
+        default,
     )
 
     # Extract Argument config from Annotated if present
@@ -661,7 +664,10 @@ def _parse_parameter(  # noqa: PLR0915
         # Look for ArgumentSpec in metadata
         for metadata in args[1:]:
             log.debug("Checking metadata: %s, type=%s", metadata, type(metadata))
-            log.debug("isinstance(metadata, ArgumentAnnotation): %s", isinstance(metadata, ArgumentAnnotation))
+            log.debug(
+                "isinstance(metadata, ArgumentAnnotation): %s",
+                isinstance(metadata, ArgumentAnnotation),
+            )
             if isinstance(metadata, ArgumentAnnotation):
                 arg_config = metadata
                 log.debug("Found ArgumentAnnotation config: %s", arg_config)
@@ -707,7 +713,9 @@ def _parse_parameter(  # noqa: PLR0915
             nargs = arg_config.nargs
         if arg_config.group is not None:
             if positional:
-                err_msg = f"Positional parameter {param_name!r} cannot be in a mutually exclusive group."
+                err_msg = (
+                    f"Positional parameter {param_name!r} cannot be in a mutually exclusive group."
+                )
                 raise SignatureParameterError(err_msg)
             group = arg_config.group
 
@@ -737,7 +745,8 @@ def _parse_parameter(  # noqa: PLR0915
 
                 if not isinstance(choice, actual_type):
                     err_msg = (
-                        f"{klass.__name__} {param_name!r} has choices and they are not of the same type as the enum."
+                        f"{klass.__name__} {param_name!r} has choices and "
+                        "they are not of the same type as the enum."
                     )
                     raise SignatureParameterError(err_msg)
         choices_mapping = {choice.name.lower(): choice for choice in choices}
@@ -859,7 +868,9 @@ def detect_dispatch_parameter(func: Callable[..., Any]) -> str | None:
         if annotation is not DispatchCommand:
             continue
         if param.kind != inspect.Parameter.KEYWORD_ONLY:
-            msg = f"DispatchCommand parameter {name!r} on {func.__qualname__!r} must be keyword-only"
+            msg = (
+                f"DispatchCommand parameter {name!r} on {func.__qualname__!r} must be keyword-only"
+            )
             raise DispatcherDetectionError(msg)
         found_kw.append(name)
 

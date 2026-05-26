@@ -132,7 +132,9 @@ def test_mutually_exclusive_groups_error_handling():
         """
 
     # This should raise an error because positional arguments can't be in mutually exclusive groups
-    with pytest.raises(SignatureError, match="Positional parameter 'name' cannot be in a mutually exclusive group"):
+    with pytest.raises(
+        SignatureError, match="Positional parameter 'name' cannot be in a mutually exclusive group"
+    ):
         get_signature(func)
 
 

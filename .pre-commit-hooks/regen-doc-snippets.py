@@ -290,7 +290,9 @@ def capture(toolr: Path, fixture: Path, _python: Path, snippet: Snippet) -> str:
     # pre-commit hook can't fight us. clap occasionally emits a stray
     # trailing space on the line above a continuation; not interesting
     # to capture verbatim.
-    return "\n".join(line.rstrip() for line in body.splitlines()) + ("\n" if body.endswith("\n") else "")
+    return "\n".join(line.rstrip() for line in body.splitlines()) + (
+        "\n" if body.endswith("\n") else ""
+    )
 
 
 def regen_one(

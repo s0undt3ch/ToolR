@@ -4,8 +4,12 @@ Design records for toolr — both live work and historical post-mortems.
 
 ## Where work lives
 
-- **Top level (`specs/<date>-<topic>-design.md`)** — active design work and proposed-but-not-shipped features. Each design pairs with a `<date>-<topic>-plan.md` implementation plan once it leaves brainstorming.
-- **`specs/archive/<year>/`** — shipped or abandoned designs. Archived files are immutable post-mortem records; do not edit them in place. If a shipped design needs revising, write a new design that supersedes it.
+- **Top level (`specs/<date>-<topic>-design.md`)** — active design work and proposed-but-not-shipped
+  features. Each design pairs with a `<date>-<topic>-plan.md` implementation plan once it leaves
+  brainstorming.
+- **`specs/archive/<year>/`** — shipped or abandoned designs. Archived files are immutable
+  post-mortem records; do not edit them in place. If a shipped design needs revising, write a new
+  design that supersedes it.
 
 ## How to start a new design
 

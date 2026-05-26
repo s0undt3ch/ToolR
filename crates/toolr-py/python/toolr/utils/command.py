@@ -166,11 +166,15 @@ def run(  # noqa: PLR0915
         if text is True:
             return cast(
                 "CommandResult[str]",
-                CommandResult(args=command_args, stdout=stdout_file, stderr=stderr_file, returncode=returncode),
+                CommandResult(
+                    args=command_args, stdout=stdout_file, stderr=stderr_file, returncode=returncode
+                ),
             )
         return cast(
             "CommandResult[bytes]",
-            CommandResult(args=command_args, stdout=stdout_file, stderr=stderr_file, returncode=returncode),
+            CommandResult(
+                args=command_args, stdout=stdout_file, stderr=stderr_file, returncode=returncode
+            ),
         )
 
     except Exception as exc:

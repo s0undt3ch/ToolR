@@ -33,5 +33,9 @@ def test_toolr_py_wheel_contains_python_source(toolr_py_wheel: Path) -> None:
 
 def test_toolr_py_wheel_ships_dynlib(toolr_py_wheel: Path) -> None:
     names = wheel_namelist(toolr_py_wheel)
-    dynlibs = [n for n in names if n.startswith("toolr/utils/_rust_utils.") and n.endswith((".so", ".pyd", ".dylib"))]
+    dynlibs = [
+        n
+        for n in names
+        if n.startswith("toolr/utils/_rust_utils.") and n.endswith((".so", ".pyd", ".dylib"))
+    ]
     assert dynlibs, f"toolr-py wheel missing _rust_utils dynlib, got: {names}"

@@ -47,7 +47,11 @@ def cat_command():
 
     def _cat_cmd(file_path):
         # Use Python's open() to reliably read files on all platforms
-        return [sys.executable, "-c", f"with open(r'{file_path}', 'r') as f: print(f.read(), end='')"]
+        return [
+            sys.executable,
+            "-c",
+            f"with open(r'{file_path}', 'r') as f: print(f.read(), end='')",
+        ]
 
     return _cat_cmd
 

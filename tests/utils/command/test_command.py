@@ -189,7 +189,9 @@ def test_stream_output_both_fd_required(echo_command):
     """Test that sys_stdout_fd and sys_stderr_fd must both be provided"""
     # Directly access the low-level implementation to test the requirement
 
-    with pytest.raises(CommandError, match="Both sys_stdout_fd and sys_stderr_fd must be provided together"):
+    with pytest.raises(
+        CommandError, match="Both sys_stdout_fd and sys_stderr_fd must be provided together"
+    ):
         # Mock case where only stdout fd is provided
         run_command_impl(
             echo_command("test"),
@@ -197,7 +199,9 @@ def test_stream_output_both_fd_required(echo_command):
             sys_stderr_fd=None,
         )
 
-    with pytest.raises(CommandError, match="Both sys_stdout_fd and sys_stderr_fd must be provided together"):
+    with pytest.raises(
+        CommandError, match="Both sys_stdout_fd and sys_stderr_fd must be provided together"
+    ):
         # Mock case where only stderr fd is provided
         run_command_impl(
             echo_command("test"),

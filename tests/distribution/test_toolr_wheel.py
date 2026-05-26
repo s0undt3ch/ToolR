@@ -10,7 +10,9 @@ from tests.distribution.conftest import wheel_namelist
 def test_toolr_wheel_ships_binary(toolr_wheel: Path) -> None:
     names = wheel_namelist(toolr_wheel)
     binary_entries = [n for n in names if "/scripts/toolr" in n]
-    assert binary_entries, f"binary wheel must ship `toolr` under <wheel>.data/scripts/, got: {names}"
+    assert binary_entries, (
+        f"binary wheel must ship `toolr` under <wheel>.data/scripts/, got: {names}"
+    )
 
 
 def test_toolr_wheel_has_no_python_source(toolr_wheel: Path) -> None:
@@ -27,4 +29,6 @@ def test_toolr_wheel_has_no_dynlib(toolr_wheel: Path) -> None:
 
 def test_toolr_wheel_filename_is_universal_python(toolr_wheel: Path) -> None:
     """Binary wheels don't link Python; tag should be py3-none-*."""
-    assert "py3-none-" in toolr_wheel.name, f"binary wheel filename should carry py3-none- tag, got: {toolr_wheel.name}"
+    assert "py3-none-" in toolr_wheel.name, (
+        f"binary wheel filename should carry py3-none- tag, got: {toolr_wheel.name}"
+    )

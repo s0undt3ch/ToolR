@@ -60,7 +60,10 @@ class CommandsTester:
 
     @command_group_patcher.default
     def _default_command_group_patcher(self) -> _patch:
-        return patch("toolr._decorators._get_command_group_storage", return_value=self.command_group_collector)
+        return patch(
+            "toolr._decorators._get_command_group_storage",
+            return_value=self.command_group_collector,
+        )
 
     def collected_command_groups(self) -> dict[str, object]:
         """
@@ -94,7 +97,9 @@ class CommandsTester:
         # entries from the saved sys_path; drop anything that points
         # back at the host repo (which would shadow the fixture's
         # ``tools/`` tree with the repo's own).
-        site_pkg_entries = [p for p in self.sys_path if "site-packages" in p or "dist-packages" in p]
+        site_pkg_entries = [
+            p for p in self.sys_path if "site-packages" in p or "dist-packages" in p
+        ]
         sys.path[:] = [str(self.search_path), *site_pkg_entries]
         return self
 

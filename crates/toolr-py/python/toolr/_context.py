@@ -264,7 +264,9 @@ class Context(Struct, frozen=True):
             else:
                 os.chdir(cwd)
 
-    def which(self, name: str, mode: int = os.F_OK | os.X_OK, path: str | None = None) -> str | None:
+    def which(
+        self, name: str, mode: int = os.F_OK | os.X_OK, path: str | None = None
+    ) -> str | None:
         """
         Find the path to an executable in the system PATH.
 

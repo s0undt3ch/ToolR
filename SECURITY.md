@@ -59,7 +59,8 @@ When using ToolR:
 
 ### Bug Bounty
 
-While we don't currently offer a formal bug bounty program, we deeply appreciate security researchers who help keep ToolR secure and will acknowledge your contributions.
+While we don't currently offer a formal bug bounty program, we deeply appreciate security
+researchers who help keep ToolR secure and will acknowledge your contributions.
 
 ## Contact
 

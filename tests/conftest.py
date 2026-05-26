@@ -39,7 +39,9 @@ def pytest_configure(config: pytest.Config) -> None:
         entries = existing.split(os.pathsep) if existing else []
         if str(_COVERAGE_SUPPORT_DIR) not in entries:
             os.environ["PYTHONPATH"] = (
-                str(_COVERAGE_SUPPORT_DIR) + os.pathsep + existing if existing else str(_COVERAGE_SUPPORT_DIR)
+                str(_COVERAGE_SUPPORT_DIR) + os.pathsep + existing
+                if existing
+                else str(_COVERAGE_SUPPORT_DIR)
             )
     if _COVERAGERC.is_file():
         os.environ.setdefault("COVERAGE_PROCESS_START", str(_COVERAGERC))
