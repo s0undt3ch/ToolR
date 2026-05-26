@@ -22,8 +22,8 @@ libc = "0.2"
 email_address = "0.2"
 pep440_rs = "0.7"
 walkdir = "2"
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff", tag = "0.15.13" }
-ruff_python_ast    = { git = "https://github.com/astral-sh/ruff", tag = "0.15.13" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff", tag = "0.15.14" }
+ruff_python_ast    = { git = "https://github.com/astral-sh/ruff", tag = "0.15.14" }
 tempfile = "3.20"
 signal-hook = "0.4"
 toml = "1"
@@ -33,7 +33,7 @@ humansize = "2"
 log = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"] }
 which = "8"
-similar = "2"
+similar = "3"
 clap = { version = "4", features = ["derive", "env", "string", "wrap_help"] }
 termimad = "0.34"
 pyo3 = { version = "0.28", features = ["extension-module"] }

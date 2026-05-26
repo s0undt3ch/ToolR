@@ -34,7 +34,7 @@ dev = [
     "toolr-py",
     "attrs>=25.3.0",
     "coverage>=7.14.0",
-    "hypothesis>=6.0.0",
+    "hypothesis>=6.152.9",
     "pytest>=8.3.5",
     "pytest-skip-markers>=1.5.2",
     "pytest-subtests>=0.14.2",
@@ -46,7 +46,7 @@ docs = [
     "mkdocs-awesome-nav>=3.1.2",
     "mkdocs-material>=9.6.16",
     "mkdocstrings[python]>=1.0.4",
-    "ruff>=0.15.13",
+    "ruff>=0.15.14",
 ]
 tools = [
     "packaging>=26.2",
