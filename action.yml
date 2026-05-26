@@ -253,20 +253,14 @@ runs:
       # `[tool.toolr] venv-location` setting in the project's
       # `tools/pyproject.toml`, so caller repos don't need to
       # special-case CI in their config.
+      #
+      # The override is only honoured by toolr >= 0.20.1 (the
+      # release that ships `TOOLR_VENV_LOCATION` support). On
+      # 0.20.0 the env var is read but ignored and the venv falls
+      # back to `~/.cache/toolr/<repo-key>/venv` — which is why the
+      # cache step below grabs both candidate locations.
       run: |
         echo "TOOLR_VENV_LOCATION=in-tree" >> "$GITHUB_ENV"
-
-    - name: Cache tools venv
-      if: inputs.cache-tools-venv == 'true'
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        # Independent cache from the toolr-binary cache: the venv
-        # is invalidated by dependency churn (`tools/uv.lock`) or
-        # project metadata changes (`tools/pyproject.toml`), not by
-        # a toolr release. The triple stays in the key so a runner
-        # OS / arch swap also misses.
-        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock') }}
-        path: tools/.venv
 
     - name: Install toolr binary
       id: install
@@ -310,3 +304,48 @@ runs:
           echo "bin-path=${bin_dir}/${BIN}"
         } >> "$GITHUB_OUTPUT"
         echo "setup-toolr: installed toolr ${VERSION} at ${bin_dir}/${BIN}"
+
+    - name: Resolve tools venv path
+      id: venv-path
+      if: inputs.cache-tools-venv == 'true'
+      shell: bash
+      # Ask the freshly-installed toolr where it would put the
+      # venv. On 0.20.1+ with TOOLR_VENV_LOCATION=in-tree that's
+      # `tools/.venv`; on 0.20.0 it's the cache-dir path even with
+      # the env var set. Capturing the actual resolved path here
+      # means the cache step below targets the right directory
+      # regardless of the toolr version on the runner.
+      env:
+        BIN_PATH: ${{ steps.install.outputs.bin-path }}
+      run: |
+        set -euo pipefail
+        venv_path="$("$BIN_PATH" project venv path)"
+        echo "setup-toolr: resolved tools venv path: $venv_path"
+        echo "path=$venv_path" >> "$GITHUB_OUTPUT"
+
+    - name: Cache tools venv
+      id: venv-cache
+      if: inputs.cache-tools-venv == 'true'
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        # Independent cache from the toolr-binary cache: the venv
+        # is invalidated by dependency churn (`tools/uv.lock`) or
+        # project metadata changes (`tools/pyproject.toml`), not by
+        # a toolr release. The triple stays in the key so a runner
+        # OS / arch swap also misses.
+        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock') }}
+        path: ${{ steps.venv-path.outputs.path }}
+
+    - name: Sync tools venv
+      if: inputs.cache-tools-venv == 'true'
+      shell: bash
+      # Cache-miss path: materialise the venv from
+      # `tools/pyproject.toml` + `tools/uv.lock`. Cache-hit path:
+      # cheap no-op — `toolr project deps sync` skips the heavy
+      # work when the freshness marker matches. Either way the
+      # caller's first `toolr <group> <cmd>` invocation finds a
+      # working venv instead of the "Python interpreter not found"
+      # error the toolr dispatcher would otherwise emit.
+      run: |
+        set -euo pipefail
+        toolr project deps sync
