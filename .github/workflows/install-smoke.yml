@@ -160,8 +160,15 @@ jobs:
           version: ${{ env.MISE_VERSION }}
           install: false
       - name: Install plugin from local staging dir
+        # `mise plugin install <name> <url>` (alias `add`) requires a
+        # git URL; for a local checkout we use the `link` subcommand,
+        # which symlinks the plugin source into mise's plugin
+        # registry under <name>. That's the documented "developing a
+        # plugin" workflow and the only way to test the in-tree
+        # `installation/mise/` plugin without first pushing it to a
+        # standalone repository.
         run: |
-          mise plugin add toolr "$PWD/installation/mise"
+          mise plugin link toolr "$PWD/installation/mise"
           if [ -n "${{ inputs.version }}" ]; then
             mise install "toolr@${{ inputs.version }}"
             mise exec "toolr@${{ inputs.version }}" -- toolr --version
