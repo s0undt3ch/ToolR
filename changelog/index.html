@@ -1646,15 +1646,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0201-dev7-2026-05-26" class="md-nav__link">
+  <a href="#0201-dev14-2026-05-26" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.20.1-dev7 - 2026-05-26
+        0.20.1-dev14 - 2026-05-26
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.20.1-dev7 - 2026-05-26">
+    <nav class="md-nav" aria-label="0.20.1-dev14 - 2026-05-26">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1751,6 +1751,17 @@
     <span class="md-ellipsis">
       
         🐛 Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing
       
     </span>
   </a>
@@ -2007,7 +2018,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
+  <a href="#testing_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -2318,15 +2329,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0201-dev7-2026-05-26" class="md-nav__link">
+  <a href="#0201-dev14-2026-05-26" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.20.1-dev7 - 2026-05-26
+        0.20.1-dev14 - 2026-05-26
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.20.1-dev7 - 2026-05-26">
+    <nav class="md-nav" aria-label="0.20.1-dev14 - 2026-05-26">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2423,6 +2434,17 @@
     <span class="md-ellipsis">
       
         🐛 Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing
       
     </span>
   </a>
@@ -2679,7 +2701,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
+  <a href="#testing_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -2985,7 +3007,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0201-dev7-2026-05-26">0.20.1-dev7 - 2026-05-26<a class="headerlink" href="#0201-dev7-2026-05-26" title="Permanent link">&para;</a></h2>
+<h2 id="0201-dev14-2026-05-26">0.20.1-dev14 - 2026-05-26<a class="headerlink" href="#0201-dev14-2026-05-26" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h2 id="breaking-changes">⚠ Breaking changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h2>
 <h3 id="s0undt3chtoolr-github-action-binary-only-install-no-more-pipx"><code>s0undt3ch/ToolR</code> GitHub Action: binary-only install, no more pipx<a class="headerlink" href="#s0undt3chtoolr-github-action-binary-only-install-no-more-pipx" title="Permanent link">&para;</a></h3>
@@ -3043,15 +3065,24 @@ directly without forcing every consumer repo's
 <li><em>(venv)</em> TOOLR_VENV_LOCATION env var overrides venv-location config (<a href="https://github.com/s0undt3ch/ToolR/commit/5bba1a3e1605ef9cccfbf0fd6780e1d83da9a1bc"><code>5bba1a3</code></a>)</li>
 <li><em>(action)</em> Binary-download + SLSA attest install for setup-toolr (<a href="https://github.com/s0undt3ch/ToolR/commit/ca66e251de4c9648e1db91718ee56da3df7285b3"><code>ca66e25</code></a>)</li>
 <li><em>(mise)</em> Minimum toolr 0.20.0 + verify SLSA build provenance (<a href="https://github.com/s0undt3ch/ToolR/commit/51d38c56185b2dbbf313173e1ce3add50064bc62"><code>51d38c5</code></a>)</li>
+<li><em>(mise)</em> Prefer 'gh' CLI over curl/wget for github.com hits (<a href="https://github.com/s0undt3ch/ToolR/commit/3b2edf0c3b0a66349dfac4d44103e09b1e401d23"><code>3b2edf0</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(action)</em> Run <code>toolr project deps sync</code> + cache the resolved venv path (<a href="https://github.com/s0undt3ch/ToolR/commit/153052a8bc94cedae8a01b79890282694de4ab59"><code>153052a</code></a>)</li>
 <li><em>(action)</em> Drive uv sync directly with --no-default-groups + --frozen (<a href="https://github.com/s0undt3ch/ToolR/commit/08aa7dbf558da93064e8dc063d912b56db4d2fc7"><code>08aa7db</code></a>)</li>
+<li><em>(install-smoke)</em> PS7 latest-version resolver + mise plugin link (<a href="https://github.com/s0undt3ch/ToolR/commit/33810bda27800ec89d196baf0ecad44537a8b7e0"><code>33810bd</code></a>)</li>
+<li><em>(mise)</em> Authenticate list-all against api.github.com when possible (<a href="https://github.com/s0undt3ch/ToolR/commit/a4602ebef79ebaaa36b24f947b626c40dc32e61e"><code>a4602eb</code></a>)</li>
+<li><em>(mise)</em> Also authenticate bin/download against github.com (<a href="https://github.com/s0undt3ch/ToolR/commit/3ede133bdcd3a8e1662e23e0fc1cfdd8969980e1"><code>3ede133</code></a>)</li>
+</ul>
+<h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(install-smoke)</em> Exercise mise plugin via canonical URL form (<a href="https://github.com/s0undt3ch/ToolR/commit/8797fc43474aec6934f1994828d0cbbe851b40e1"><code>8797fc4</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Update workflows + docs for new setup-toolr action shape (<a href="https://github.com/s0undt3ch/ToolR/commit/a6ec0e8dd2dfd6085d826e0965faa2c7dfae69f6"><code>a6ec0e8</code></a>)</li>
+<li><em>(install-smoke)</em> Add pull_request trigger + gate remote-only jobs (<a href="https://github.com/s0undt3ch/ToolR/commit/b1bad021a2eaeb1a75ee5fc7bfcfd9d1de1448d5"><code>b1bad02</code></a>)</li>
 </ul>
 <h2 id="0200-2026-05-26">0.20.0 - 2026-05-26<a class="headerlink" href="#0200-2026-05-26" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
@@ -3716,7 +3747,7 @@ blocking dispatch.</p>
 <li><em>(writing-commands)</em> Document toolr.testing.CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/e6b836260c9af3f00030413a689b349115cbbb12"><code>e6b8362</code></a>)</li>
 <li><em>(installation)</em> Align quickstart + install index with README (<a href="https://github.com/s0undt3ch/ToolR/commit/11d83c67223ad8e061f72661ab9d0defa3d7fe95"><code>11d83c6</code></a>)</li>
 </ul>
-<h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
+<h3 id="testing_1"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(project)</em> Integration tests for venv path resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/8fc400fb5508c8f5bdaf6f9d2e1529dd10b184c3"><code>8fc400f</code></a>)</li>
 <li><em>(project)</em> End-to-end deps-sync + execute smoke (ignored by default) (<a href="https://github.com/s0undt3ch/ToolR/commit/e5ac8ff3711a0bc2d10fd8fe5a1a7506c88e6fff"><code>e5ac8ff</code></a>)</li>
