@@ -12,3 +12,11 @@ rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
 
 [target.aarch64-apple-darwin]
 rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+# `cargo xtask <subcommand>` shorthand for running the maintainer-only
+# `xtask` crate (under `crates/xtask`). The crate is not published and
+# is not built into release artifacts. It hosts tooling like
+# `build-skill-refs` that regenerates content shipped alongside toolr
+# (e.g. `skills/*/references/*.md`) from toolr's own source.
+[alias]
+xtask = "run --quiet --package xtask --release --"
