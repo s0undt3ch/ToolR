@@ -58,6 +58,13 @@ venv-location = "in-tree"
 The default `tools/.gitignore` written by `toolr project init` already
 excludes `.venv/`, so the in-tree venv won't leak into git.
 
+Setting the environment variable `TOOLR_VENV_LOCATION` overrides the
+value in `tools/pyproject.toml`. Accepts the same `in-tree` / `cache`
+spellings the TOML key does. Useful as a CI escape hatch — the
+`s0undt3ch/ToolR` setup-toolr action sets it to `in-tree`
+automatically so workflows can cache `tools/.venv` directly without
+the per-repo config caring.
+
 ### `editable-install` {#editable-install}
 
 A list of paths to `uv pip install -e` after the initial sync.

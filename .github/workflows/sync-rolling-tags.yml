@@ -80,22 +80,16 @@ jobs:
           cache: true
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|sync-rolling-tags|${{ runner.os }}|${{ runner.arch }}
 
-      - name: Get the Python Binary path from Mise
-        id: mise-python-executable
-        shell: bash
-        run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
-
-      - name: Generate additional ToolR requirements file
-        shell: bash
-        run: |
-          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
-
       - name: Setup ToolR
+        # In-repo composite action: downloads the toolr binary from a
+        # GitHub release, verifies the SLSA build provenance, and
+        # caches the in-tree `tools/.venv` for the rolling-tag sync
+        # script.
         id: setup-toolr
-        uses: s0undt3ch/ToolR@fc2d6deee5f50b7f43cd1f099f896b09a4415dce # main (python-path support, post-v0.11.1)
+        uses: ./
         with:
-          python-path: ${{ steps.mise-python-executable.outputs.python }}
-          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
+          version: latest
+          cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|sync-rolling-tags
 
       - name: Setup Prek
         id: setup-pre-commit

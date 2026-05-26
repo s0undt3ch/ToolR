@@ -78,28 +78,18 @@ jobs:
           cache: true
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|prepare-release|${{ runner.os }}|${{ runner.arch }}
 
-      - name: Get the Python Binary path from Mise
-        id: mise-python-executable
-        run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
-
-      - name: Generate additional ToolR requirements file
-        # `tools/ci.py` (where `toolr ci generate-build-matrix` lives)
-        # imports `packaging`. The published toolr wheel is a single
-        # binary with no Python deps of its own, so we inject the
-        # `tools` group's runtime requirements into toolr's pipx env
-        # via the action's `requirements-file` knob.
-        run: |
-          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
-
       - name: Setup ToolR
-        # Pulls the prebuilt `bindings = "bin"` wheel from PyPI via pipx
-        # — no Rust/maturin/hatchling build on the matrix-generation
-        # critical path. Same pin as `ci.yml`; bump both together.
+        # In-repo composite action: downloads the toolr binary from a
+        # GitHub release, verifies the SLSA build provenance, and
+        # caches the in-tree `tools/.venv` so `toolr ci
+        # generate-build-matrix` (which imports `packaging` from the
+        # tools dependency group) doesn't have to rebuild the venv on
+        # every release.
         id: setup-toolr
-        uses: s0undt3ch/ToolR@fc2d6deee5f50b7f43cd1f099f896b09a4415dce # main (python-path support, post-v0.11.1)
+        uses: ./
         with:
-          python-path: ${{ steps.mise-python-executable.outputs.python }}
-          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
+          version: latest
+          cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|prepare-release
 
       - name: Generate Build Matrix
         id: generate-build-matrix
