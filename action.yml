@@ -49,6 +49,15 @@ inputs:
       rebuild the venv on every run.
     default: "true"
 
+  sync-args:
+    description: |
+      Extra arguments appended to the `uv sync` invocation the
+      action runs to materialise the tools venv. Whitespace-split
+      shell-style; do not quote each flag. Useful for opting back
+      into a dependency group the default `--no-default-groups`
+      would skip (e.g. `--group lint`). Defaults to empty.
+    default: ""
+
 outputs:
   version:
     description: Resolved ToolR version installed (no leading `v`).
@@ -329,23 +338,67 @@ runs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         # Independent cache from the toolr-binary cache: the venv
-        # is invalidated by dependency churn (`tools/uv.lock`) or
-        # project metadata changes (`tools/pyproject.toml`), not by
-        # a toolr release. The triple stays in the key so a runner
-        # OS / arch swap also misses.
-        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock') }}
+        # is invalidated by dependency churn (`uv.lock` / its
+        # `tools/`-scoped sibling if it exists) or project metadata
+        # changes (`tools/pyproject.toml`), not by a toolr release.
+        # The triple stays in the key so a runner OS / arch swap
+        # also misses.
+        #
+        # The cache covers BOTH lock-file shapes that exist in the
+        # wild: a single-workspace `uv.lock` at the repo root (this
+        # is what the toolr repo itself uses — `tools/` is a uv
+        # workspace member of the root) and a standalone
+        # `tools/uv.lock` (which a consumer using toolr but no
+        # workspace would have). hashFiles' undefined-file behaviour
+        # is to skip the missing entry, so either layout produces a
+        # stable, deterministic key.
+        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock', 'uv.lock') }}
         path: ${{ steps.venv-path.outputs.path }}
 
     - name: Sync tools venv
       if: inputs.cache-tools-venv == 'true'
       shell: bash
-      # Cache-miss path: materialise the venv from
-      # `tools/pyproject.toml` + `tools/uv.lock`. Cache-hit path:
-      # cheap no-op — `toolr project deps sync` skips the heavy
-      # work when the freshness marker matches. Either way the
-      # caller's first `toolr <group> <cmd>` invocation finds a
-      # working venv instead of the "Python interpreter not found"
-      # error the toolr dispatcher would otherwise emit.
+      env:
+        VENV_PATH: ${{ steps.venv-path.outputs.path }}
+        SYNC_ARGS: ${{ inputs.sync-args }}
+      # The action drives uv directly rather than going through
+      # `toolr project deps sync` so it can scope the install to
+      # what CI actually needs:
+      #
+      # - `--no-default-groups` skips the workspace's `dev` /
+      #   `docs` / etc. groups. Those carry test runners, doc
+      #   tooling, and (in the toolr repo itself) the example
+      #   plugin — none of which are needed for `toolr <group>
+      #   <cmd>` to dispatch a Python command. Users who DO need
+      #   the dev group at action time can pass extra flags via
+      #   the `sync-args` input.
+      # - `--frozen` refuses to re-resolve. CI always installs
+      #   what `uv.lock` says, never silently bumps versions.
+      # - `UV_PROJECT_ENVIRONMENT` pins the venv path that toolr
+      #   resolved above so the install lands where toolr expects.
+      # - `VIRTUAL_ENV` is unset so uv doesn't warn about a
+      #   mismatch with whatever venv mise / setup-virtualenv
+      #   already activated.
+      #
+      # After a successful sync we touch the freshness marker
+      # toolr uses to skip re-syncing. Without this, the next
+      # `toolr <group> <cmd>` invocation sees the lock-newer-than-
+      # marker timestamp and triggers another sync.
       run: |
         set -euo pipefail
-        toolr project deps sync
+        if ! command -v uv >/dev/null 2>&1; then
+          echo "setup-toolr: 'uv' is required on PATH to materialise the tools venv" >&2
+          echo "setup-toolr: install via mise or your platform's uv channel" >&2
+          exit 1
+        fi
+        unset VIRTUAL_ENV
+        # shellcheck disable=SC2086  # we deliberately split SYNC_ARGS on whitespace
+        UV_PROJECT_ENVIRONMENT="$VENV_PATH" uv sync \
+          --project tools \
+          --no-default-groups \
+          --frozen \
+          $SYNC_ARGS
+        # `.toolr-sync-stamp` is the freshness marker toolr writes
+        # when its own `project deps sync` succeeds. Mirror it here
+        # so a subsequent `toolr <cmd>` skips the redundant sync.
+        : > "$VENV_PATH/.toolr-sync-stamp"
