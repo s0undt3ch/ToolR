@@ -4,10 +4,31 @@ set -euo pipefail
 
 REPO="${TOOLR_REPO:-s0undt3ch/ToolR}"
 
+# Pick the first GitHub token mise / the surrounding workflow has
+# already exposed. Unauthenticated `api.github.com` calls share a
+# 60-per-hour quota per source IP, which CI runners blow through
+# routinely — passing an auth header lifts the quota to the
+# per-user (5,000/hour) or per-installation rate-limit bucket.
+# Empty values are skipped so an unset env var on a developer's
+# laptop falls through cleanly.
+auth_token="${MISE_GITHUB_TOKEN:-${GH_TOKEN:-${GITHUB_TOKEN:-}}}"
+
 if command -v curl >/dev/null 2>&1; then
-  fetch() { curl -fsSL "$1"; }
+  fetch() {
+    if [ -n "$auth_token" ]; then
+      curl -fsSL -H "Authorization: Bearer ${auth_token}" "$1"
+    else
+      curl -fsSL "$1"
+    fi
+  }
 elif command -v wget >/dev/null 2>&1; then
-  fetch() { wget -qO- "$1"; }
+  fetch() {
+    if [ -n "$auth_token" ]; then
+      wget -qO- --header="Authorization: Bearer ${auth_token}" "$1"
+    else
+      wget -qO- "$1"
+    fi
+  }
 else
   echo "list-all: neither curl nor wget available" >&2
   exit 1
