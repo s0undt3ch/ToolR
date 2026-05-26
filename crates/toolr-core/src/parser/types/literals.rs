@@ -11,14 +11,24 @@ pub(super) fn literal_str(expr: &Expr) -> Option<String> {
     }
 }
 
+/// Extract a string sequence from a list, tuple, or set literal of
+/// string literals. Mirrors the Python `arg()` helper, which accepts
+/// any non-string `Iterable[str]` — these three are the
+/// statically-recognisable literal forms.
+///
+/// Returns `None` for any other expression shape (name references,
+/// function calls, mixed-type literals). Callers should surface that
+/// as a manifest-build warning rather than silently dropping the
+/// kwarg.
 pub(super) fn literal_str_list(expr: &Expr) -> Option<Vec<String>> {
-    let Expr::List(list) = expr else { return None };
-    let out: Vec<String> = list.elts.iter().filter_map(literal_str).collect();
-    if out.len() == list.elts.len() {
-        Some(out)
-    } else {
-        None
-    }
+    let elts: &[Expr] = match expr {
+        Expr::List(list) => &list.elts,
+        Expr::Tuple(tup) => &tup.elts,
+        Expr::Set(set) => &set.elts,
+        _ => return None,
+    };
+    let out: Vec<String> = elts.iter().filter_map(literal_str).collect();
+    if out.len() == elts.len() { Some(out) } else { None }
 }
 
 pub(super) fn literal_u32(expr: &Expr) -> Option<u32> {

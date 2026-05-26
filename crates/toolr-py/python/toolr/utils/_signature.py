@@ -257,17 +257,95 @@ def _deprecated(name: str, *, replacement: str) -> None:
     )
 
 
+# Order-preserving string collection: ``list`` and ``tuple``. Used
+# for kwargs where declaration order is semantically meaningful (e.g.
+# ``aliases``, whose first short entry becomes clap's ``Arg::short``).
+_StrSequence: TypeAlias = list[str] | tuple[str, ...]
+
+# Order-insensitive string collection: ``list`` / ``tuple`` /
+# ``set`` / ``frozenset``. Used for kwargs whose values are
+# semantically set-like (``conflicts_with``, ``requires``).
+_StrCollection: TypeAlias = list[str] | tuple[str, ...] | set[str] | frozenset[str]
+
+
+def _validate_str_elements(name: str, items: list[str]) -> None:
+    for i, item in enumerate(items):
+        if not isinstance(item, str):
+            msg = f"arg(): `{name}=` element [{i}] must be a string, got {type(item).__name__} ({item!r})."
+            raise TypeError(msg)
+
+
+def _coerce_str_sequence_kwarg(name: str, value: _StrSequence | None) -> list[str] | None:
+    """Order-preserving validator for ``aliases``.
+
+    Accepts ``list`` or ``tuple`` — both preserve declaration order,
+    which matters because the first short entry becomes clap's
+    ``Arg::short``. Sets and frozensets are rejected: they have no
+    observable order and using them here is almost always a mistake.
+
+    Bare strings are rejected because ``str`` is itself iterable —
+    silently iterating yields one character per element, which is
+    never what the caller meant.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        msg = (
+            f"arg(): `{name}=` must be a list or tuple of strings, got a bare "
+            f"`str` ({value!r}). Wrap a single item as `{name}=[{value!r}]`."
+        )
+        raise TypeError(msg)
+    if not isinstance(value, (list, tuple)):
+        msg = f"arg(): `{name}=` must be a list or tuple of strings, got {type(value).__name__}."
+        raise TypeError(msg)
+    items = list(value)
+    _validate_str_elements(name, items)
+    return items
+
+
+def _coerce_str_collection_kwarg(name: str, value: _StrCollection | None) -> list[str] | None:
+    """Order-insensitive validator for ``conflicts_with`` / ``requires``.
+
+    These fields are semantically set-like: "this flag conflicts
+    with these other flags." Accept ``list`` / ``tuple`` / ``set`` /
+    ``frozenset`` and materialise to a ``list[str]`` so the rest of
+    the pipeline sees a uniform shape. The Rust AST parser mirrors
+    this and statically extracts ``[...]`` / ``(...)`` / ``{...}``
+    literals; anything more dynamic (name references, function
+    calls) is runtime-only and will not appear in the static
+    manifest.
+
+    Bare strings are rejected because ``str`` is itself iterable —
+    silently iterating yields one character per element, which is
+    never what the caller meant.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        msg = (
+            f"arg(): `{name}=` must be a list, tuple, or set of strings, got a "
+            f"bare `str` ({value!r}). Wrap a single item as `{name}=[{value!r}]`."
+        )
+        raise TypeError(msg)
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        msg = f"arg(): `{name}=` must be a list, tuple, or set of strings, got {type(value).__name__}."
+        raise TypeError(msg)
+    items = list(value)
+    _validate_str_elements(name, items)
+    return items
+
+
 def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose; each is intentionally distinct.
     *,
     # Active kwargs (plumbed through to clap).
-    aliases: list[str] | None = None,
+    aliases: _StrSequence | None = None,
     metavar: str | None = None,
     env: str | None = None,
     hide: bool = False,
     help_section: ArgSection | None = None,
     display_order: int | None = None,
-    conflicts_with: list[str] | None = None,
-    requires: list[str] | None = None,
+    conflicts_with: _StrCollection | None = None,
+    requires: _StrCollection | None = None,
     must_exist: bool = False,
     must_be_file: bool = False,
     must_be_dir: bool = False,
@@ -320,6 +398,9 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
             ``conflicts_with=[...]`` for mutex relationships and
             ``help_section=`` for display grouping.
     """
+    aliases = _coerce_str_sequence_kwarg("aliases", aliases)
+    conflicts_with = _coerce_str_collection_kwarg("conflicts_with", conflicts_with)
+    requires = _coerce_str_collection_kwarg("requires", requires)
     if required is not None:
         _deprecated(
             "required",
