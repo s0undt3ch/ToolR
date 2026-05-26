@@ -1,6 +1,7 @@
 # Contributing to ToolR
 
-Thanks for considering a contribution. ToolR is a small project with a focused surface; bug reports, doc fixes, and well-scoped feature PRs are all welcome.
+Thanks for considering a contribution. ToolR is a small project with a focused surface; bug
+reports, doc fixes, and well-scoped feature PRs are all welcome.
 
 ## Repo layout
 
@@ -53,7 +54,8 @@ cargo build -p toolr --release
 | Python unit tests                      | `uv run pytest`                   | `tests/**/*.py`                        |
 | Distribution lock-tests (opt-in, slow) | `uv run pytest -m distribution`   | `tests/distribution/`                  |
 
-The Rust integration tests spawn the built `toolr` binary via `assert_cmd`. Don't shadow them with Python-level subprocess tests unless the behaviour can't be exercised in Rust.
+The Rust integration tests spawn the built `toolr` binary via `assert_cmd`. Don't shadow them with
+Python-level subprocess tests unless the behaviour can't be exercised in Rust.
 
 ## RUNNER_SCHEMA_VERSION ↔ SCHEMA_VERSION lock-step
 
@@ -62,7 +64,9 @@ The Rust binary and the `toolr-py` Python runtime communicate over a versioned J
 - `RUNNER_SCHEMA_VERSION` in `crates/toolr-core/src/execute/spec.rs`
 - `SCHEMA_VERSION` in `crates/toolr-py/python/toolr/_runner.py`
 
-Both carry doc comments listing which changes require a bump and which don't. Read those before changing either the Rust serde structs or the Python `RunnerSpec` class. A CI gate fails the build when the two values disagree.
+Both carry doc comments listing which changes require a bump and which don't. Read those before
+changing either the Rust serde structs or the Python `RunnerSpec` class. A CI gate fails the build
+when the two values disagree.
 
 ## Commits
 
@@ -86,17 +90,22 @@ prek run --all-files
 prek run rumdl --files docs/internals/manifest.md
 ```
 
-Hooks include `ruff`, `mypy`, `clippy`, `cargo check`, `rumdl`, `codespell`, `typos`, `actionlint`, `shellcheck`, plus the project-local hooks (`pin-github-actions`, `regen-doc-snippets`).
+Hooks include `ruff`, `mypy`, `clippy`, `cargo check`, `rumdl`, `codespell`, `typos`, `actionlint`,
+`shellcheck`, plus the project-local hooks (`pin-github-actions`, `regen-doc-snippets`).
 
 ## Benchmarking
 
-`toolr bench compare` measures `<tool> -h` startup latency for every task-runner CLI it finds on `$PATH` (`toolr`, `invoke`, `python-tools-scripts`, `duty`, `doit`, `nox`). Add `--install` to let it `uv tool install` missing Python tools on demand, and `--markdown` to render the result as a table:
+`toolr bench compare` measures `<tool> -h` startup latency for every task-runner CLI it finds on
+`$PATH` (`toolr`, `invoke`, `python-tools-scripts`, `duty`, `doit`, `nox`). Add `--install` to let
+it `uv tool install` missing Python tools on demand, and `--markdown` to render the result as a
+table:
 
 ```sh
 toolr bench compare --install --markdown
 ```
 
-The README's headline benchmark table comes from this command. Re-run it on a fresh hardware target before changing the README's numbers.
+The README's headline benchmark table comes from this command. Re-run it on a fresh hardware target
+before changing the README's numbers.
 
 ## Filing bugs
 
@@ -107,7 +116,9 @@ Open a [GitHub issue](https://github.com/s0undt3ch/ToolR/issues/new) with:
 - Minimal `tools/*.py` (or repro repo URL) that triggers the bug
 - Expected vs actual output
 
-For suspected security issues, use [GitHub Security Advisories](https://github.com/s0undt3ch/ToolR/security/advisories/new) instead of a public issue.
+For suspected security issues, use
+[GitHub Security Advisories](https://github.com/s0undt3ch/ToolR/security/advisories/new) instead of
+a public issue.
 
 ## License
 

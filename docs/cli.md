@@ -59,7 +59,12 @@ Operations on the current repo's `tools/` directory.
 
 Scaffold `tools/` in the current directory.
 
-**Usage:** `toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}] [--no-example] [--python <version>] [--quiet]`
+**Usage:**
+
+```text
+toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}]
+                   [--no-example] [--python <version>] [--quiet]
+```
 
 **Flags:**
 

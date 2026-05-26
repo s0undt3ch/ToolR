@@ -3,7 +3,6 @@
 
 [global]
 disable = [
-    "MD013",  # line length — prose wraps freely
     "MD033",  # inline HTML — used in docs (<br>, <details>)
     "MD041",  # first-line H1 — not all docs lead with H1
     "MD052",  # mkdocstrings cross-refs look like reference links to rumdl
@@ -18,10 +17,26 @@ exclude = [
     "site",
     "CHANGELOG.md",
     "docs/reference",  # auto-generated reference stubs
+    # Archived design docs are immutable post-mortem records (see
+    # `specs/README.md`). New rules don't apply retroactively; new
+    # designs in `specs/` at the top level are still linted.
+    "specs/archive",
 ]
 
 respect-gitignore = true
 flavor = "gfm"
+
+[MD013]
+# Hard ceiling matches the language toolchain policy (soft 100 in
+# `.editorconfig` / `.rustfmt.toml` / `tool.ruff.line-length`, hard
+# 120 in `tool.ruff.lint.pycodestyle.max-line-length` and here).
+# Code blocks, tables, and headings are excluded because they
+# legitimately need more room — long shell one-liners, wide
+# tables, and self-explanatory heading titles.
+line_length = 120
+code_blocks = false
+tables = false
+headings = false
 
 [MD007]
 indent = 4
