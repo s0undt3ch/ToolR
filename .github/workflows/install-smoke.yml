@@ -17,6 +17,19 @@ on:
       - 'installation/install.ps1'
       - 'installation/mise/**'
       - '.github/workflows/install-smoke.yml'
+  # PRs that touch the installer entry points get a smoke-test run
+  # so we catch script breakage before it lands on main. The
+  # *remote URL* jobs (`smoke-pip-wheel`, `smoke-mise-plugin-url`)
+  # are gated off below — they exercise the published PyPI wheel
+  # and the public mise-plugin URL respectively, neither of which a
+  # PR can influence; running them here would just retest main's
+  # last release.
+  pull_request:
+    paths:
+      - 'installation/install.sh'
+      - 'installation/install.ps1'
+      - 'installation/mise/**'
+      - '.github/workflows/install-smoke.yml'
 
 permissions:
   contents: read
@@ -86,6 +99,10 @@ jobs:
 
   smoke-pip-wheel:
     name: pip install (${{ matrix.os }})
+    # `pip install toolr` resolves against the published PyPI wheel
+    # — a PR can't influence the result, so we only run this on
+    # main / schedule / dispatch where the test is meaningful.
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -188,12 +205,19 @@ jobs:
   # themselves; this one catches breakage in the user-visible install
   # path — mise dropping support for the `#<subdir>` syntax, the
   # repository being made private, the `installation/mise/` path
-  # moving, and so on. install-smoke only fires on push-to-main,
-  # schedule, and workflow_dispatch (never on PRs), so this job
-  # exercises the public install command against the just-merged
-  # tip of main rather than a stale clone.
+  # moving, and so on.
+  #
+  # Skipped on `pull_request` runs because mise would clone the
+  # `https://github.com/<repo>.git#installation/mise` URL from
+  # main, not from the PR branch — i.e. we'd be re-testing main's
+  # plugin source while the actual changes sit on the PR. The
+  # local-link job above covers the PR-side change; this job
+  # exercises the same install path against the just-merged tip on
+  # push-to-main / schedule / dispatch where the URL form is the
+  # authoritative source.
   smoke-mise-plugin-url:
     name: mise plugin via URL (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
