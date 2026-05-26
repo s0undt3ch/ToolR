@@ -155,6 +155,16 @@ ignore = [
   "INP001",   # File `xyz` is part of an implicit namespace package. Add an `__init__.py`.
   "TRY003",   # Avoid specifying long messages outside the exception class
 ]
+"skills/*/examples/tools/**/*.py" = [
+  # Skill `examples/tools/` trees are toolr command files, not Python
+  # packages. They get parsed by toolr's static parser, not imported by
+  # ruff's package walker — the linter's namespace-package and missing-
+  # `ctx`-docstring complaints are noise here.
+  "D100",     # Missing docstring in public module — example modules may stub
+  "D104",     # Missing docstring in public package
+  "D417",     # `ctx` is the toolr context, intentionally not documented
+  "INP001",   # `tools/` is not an importable namespace package
+]
 
 [tool.ruff.lint.pycodestyle]
 # Hard ceiling for E501. `tool.ruff.line-length` (the formatter

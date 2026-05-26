@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "static_hash": "f782c0d37fa501e7601ed9c852bf257982ff764c20f4ad8fccde29db03dc58e7",
+  "third_party_hash": "",
+  "groups": [
+    {
+      "name": "db",
+      "title": "Database lifecycle",
+      "description": "Database lifecycle commands.\n\nExercise: ``arg_section`` for grouping related flags in ``--help``,\nthe string-attached ``@command(group=...)`` form, mixed positional\nand keyword-only arguments, and a Google-style docstring with\n``Args:`` and ``Examples:`` sections.\n",
+      "parent": null,
+      "origin": "static"
+    },
+    {
+      "name": "greet",
+      "title": "Say hello in various ways",
+      "description": "Greeting commands.\n\nExercise: top-level group, two commands, the bound and the\nstring-attached ``@command`` forms, a ``str`` argument with a\ndefault, a ``bool`` flag, and an ``Annotated[str, arg(...)]``\nmetavar override.\n",
+      "parent": null,
+      "origin": "static"
+    }
+  ],
+  "commands": [
+    {
+      "name": "reset",
+      "group": "db",
+      "module": "tools.db",
+      "function": "reset",
+      "summary": "Drop and recreate the database from scratch.",
+      "description": "",
+      "arguments": [
+        {
+          "name": "yes",
+          "kind": "flag",
+          "help": "Skip the confirmation prompt.",
+          "default": "false",
+          "type_annotation": "Annotated[<expr>]",
+          "resolved_type": {
+            "kind": "bool"
+          },
+          "allowed_values": [],
+          "metadata": {
+            "help_section": {
+              "title": "Destructive options",
+              "description": "These actions modify or drop user data — pair with --yes."
+            }
+          }
+        }
+      ],
+      "imports": [],
+      "origin": "static"
+    },
+    {
+      "name": "hello",
+      "group": "greet",
+      "module": "tools.greet",
+      "function": "hello",
+      "summary": "Print a friendly greeting.",
+      "description": "",
+      "arguments": [
+        {
+          "name": "who",
+          "kind": "optional",
+          "help": "Who to greet. Defaults to ``\"world\"``.",
+          "default": "world",
+          "type_annotation": "str",
+          "resolved_type": {
+            "kind": "str"
+          },
+          "allowed_values": []
+        },
+        {
+          "name": "loud",
+          "kind": "flag",
+          "help": "Shout the greeting instead of speaking it.",
+          "default": "false",
+          "type_annotation": "bool",
+          "resolved_type": {
+            "kind": "bool"
+          },
+          "allowed_values": []
+        }
+      ],
+      "imports": [],
+      "origin": "static"
+    },
+    {
+      "name": "shout",
+      "group": "greet",
+      "module": "tools.greet",
+      "function": "shout",
+      "summary": "Shout a message in all caps.",
+      "description": "",
+      "arguments": [
+        {
+          "name": "message",
+          "kind": "positional",
+          "help": "The message to shout. Becomes ``MSG`` in ``--help``.",
+          "default": null,
+          "type_annotation": "Annotated[<expr>]",
+          "resolved_type": {
+            "kind": "str"
+          },
+          "allowed_values": [],
+          "metadata": {
+            "metavar": "MSG"
+          }
+        }
+      ],
+      "imports": [],
+      "origin": "static"
+    }
+  ]
+}
