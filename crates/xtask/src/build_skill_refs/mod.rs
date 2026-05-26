@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+mod authoring;
+#[allow(dead_code)]
+mod packaging;
+
 /// One regenerated file, ready to either write to disk or compare
 /// against the committed version when `--check` is in effect.
 pub struct Generated {
@@ -21,14 +25,15 @@ pub struct Generated {
 
 /// Entry point invoked by `main`.
 pub fn run(check: bool) -> Result<()> {
-    // `_root` is a deliberate prefix until the first generator is
-    // registered (next task) — flipping back to `root` then keeps the
-    // diff tight.
-    let _root = repo_root()?;
+    let root = repo_root()?;
 
-    // Generators are added in subsequent tasks. This vector defines
-    // the registry — `--check` iterates over every entry.
-    let outputs: Vec<Generated> = Vec::new();
+    // The registry. Each entry contributes one `references/*.md` file.
+    // Order is presentational only — `apply` writes (or compares) each
+    // entry independently.
+    let outputs: Vec<Generated> = vec![
+        authoring::commands(&root)?,
+        authoring::docstrings(&root)?,
+    ];
 
     apply(outputs, check)
 }

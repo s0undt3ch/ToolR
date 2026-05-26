@@ -8,7 +8,7 @@ pub mod complete;
 pub mod deps_check;
 pub mod discovery;
 pub mod dynamic;
-mod docstrings;
+pub mod docstrings;
 pub mod execute;
 pub mod freshness;
 pub mod hash;

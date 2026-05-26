@@ -3232,6 +3232,9 @@ version = "0.20.0"
 dependencies = [
  "anyhow",
  "clap",
+ "ruff_python_ast",
+ "ruff_python_parser",
+ "ruff_text_size",
  "toolr-core",
 ]
 
