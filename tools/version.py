@@ -100,7 +100,7 @@ def current(ctx: Context) -> None:
 @group.command
 def bump(
     ctx: Context,
-    new_version: str | None = None,
+    new_version: str | None,
     check_existing_tag: bool = False,
     write: bool = False,
 ) -> None:
