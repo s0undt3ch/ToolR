@@ -84,7 +84,12 @@ jobs:
 
       - name: Install cross
         if: matrix.target.cross
-        run: cargo install cross --locked --version "^0.2"
+        # `--locked` intentionally absent: cross 0.2.5's bundled Cargo.lock
+        # pins a yanked `dunce v1.0.2`, which makes `--locked` warn (and
+        # in stricter cargo versions, refuse). We don't need lockstep
+        # transitive-dep determinism for a one-off CLI install — cargo
+        # picks the latest non-yanked semver-compatible version itself.
+        run: cargo install cross --version "^0.2"
 
       # `--locked` is intentionally absent: `uv build --sdist --package toolr`
       # rewrites the sdist's workspace `Cargo.toml` to drop `crates/toolr-py`,
