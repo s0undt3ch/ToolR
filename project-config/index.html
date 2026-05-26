@@ -1941,6 +1941,12 @@ informational; toolr doesn't read them.</p>
 </span></code></pre></div>
 <p>The default <code>tools/.gitignore</code> written by <code>toolr project init</code> already
 excludes <code>.venv/</code>, so the in-tree venv won't leak into git.</p>
+<p>Setting the environment variable <code>TOOLR_VENV_LOCATION</code> overrides the
+value in <code>tools/pyproject.toml</code>. Accepts the same <code>in-tree</code> / <code>cache</code>
+spellings the TOML key does. Useful as a CI escape hatch — the
+<code>s0undt3ch/ToolR</code> setup-toolr action sets it to <code>in-tree</code>
+automatically so workflows can cache <code>tools/.venv</code> directly without
+the per-repo config caring.</p>
 <h3 id="editable-install"><code>editable-install</code><a class="headerlink" href="#editable-install" title="Permanent link">&para;</a></h3>
 <p>A list of paths to <code>uv pip install -e</code> after the initial sync.
 Typically used to pick up an editable install of the surrounding
