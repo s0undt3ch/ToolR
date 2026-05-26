@@ -5,23 +5,71 @@ end-to-end. For a full install matrix, see [Installation](installation/index.md)
 
 ## 1. Install the toolr binary
 
-On Linux or macOS:
+toolr ships as two complementary packages:
+
+| Package    | What it is                                   | Where it lives                  |
+| ---------- | -------------------------------------------- | ------------------------------- |
+| `toolr`    | The Rust CLI binary you run from the shell.  | On `$PATH`, installed once.     |
+| `toolr-py` | The Python runtime your `tools/*.py` import. | In your `tools/pyproject.toml`. |
+
+This step installs the CLI binary. `toolr-py` lands automatically in
+step 2 when `toolr project init` scaffolds `tools/pyproject.toml` and
+runs `uv sync`.
+
+Five first-class install paths — pick whichever matches your environment.
+
+### mise
+
+```sh
+mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise use --global toolr@latest
+```
+
+For projects that already pin tool versions via `.mise.toml`, this is
+the most-natural fit. See [installation/mise](installation/mise.md).
+
+### pip
+
+```sh
+pip install toolr   # Rust CLI binary
+```
+
+Installs the `toolr` binary into whatever venv `pip` is pointing at.
+**Do not `pip install toolr-py`** into that same venv — `toolr-py`
+belongs in the per-repo tools venv that `toolr project init`
+scaffolds for you.
+
+### curl | sh (Linux + macOS)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
-On Windows (PowerShell):
+Verifies the SLSA attestation when `gh` is on PATH. Pin a version with
+`sh -s -- --version X.Y.Z`. Custom prefix: `sh -s -- --prefix /opt/toolr/bin`.
+
+### PowerShell (Windows)
 
 ```powershell
 irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
 ```
 
-Verify:
+### GitHub release archives
+
+Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for
+Windows) from <https://github.com/s0undt3ch/ToolR/releases>, verify
+the `.sha256` sibling and the SLSA attestation, drop the binary on
+`$PATH`. Useful in locked-down environments that audit binaries
+before allowing them on a machine.
+
+### Verify
 
 ```sh
 toolr --version
 ```
+
+The full install matrix (per-OS notes, attestation flags, prefix
+overrides) lives in [Installation](installation/index.md).
 
 ## 2. Scaffold `tools/` in your repo
 
