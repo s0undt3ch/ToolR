@@ -341,6 +341,38 @@ def f(x: A): pass
     }
 
     #[test]
+    fn extract_arg_metadata_harvests_conflicts_from_tuple_literal() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[bool, arg(conflicts_with=(\"verbose\", \"silent\"))]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
+        assert_eq!(md.conflicts_with, vec!["verbose", "silent"]);
+    }
+
+    #[test]
+    fn extract_arg_metadata_harvests_conflicts_from_set_literal() {
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[bool, arg(conflicts_with={\"verbose\"})]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
+        assert_eq!(md.conflicts_with, vec!["verbose"]);
+    }
+
+    #[test]
+    fn extract_arg_metadata_drops_conflicts_when_bare_string() {
+        // Python-side `arg()` raises a TypeError on this shape; the
+        // AST parser is the second line of defence and should not
+        // misinterpret a bare string as a single-element list.
+        let (_, ann) = first_annotation(
+            "def f(x: Annotated[bool, arg(conflicts_with=\"verbose\")]): pass\n",
+        );
+        let md = extract_arg_metadata(&ann, &ArgSectionTable::default());
+        // Either the metadata is None (no recognised kwargs) or the
+        // `conflicts_with` field stays empty — both are safe.
+        assert!(md.is_none_or(|m| m.conflicts_with.is_empty()));
+    }
+
+    #[test]
     fn extract_arg_metadata_resolves_help_section_from_table() {
         let src = r#"
 LOGGING = arg_section("Logging Options", description="Control verbosity.")

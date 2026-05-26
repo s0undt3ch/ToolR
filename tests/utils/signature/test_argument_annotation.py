@@ -158,3 +158,81 @@ def test_path_constraint_kwargs_land_on_annotation():
     assert annotation.must_exist is True
     assert annotation.must_be_dir is True
     assert annotation.must_be_file is False
+
+
+@pytest.mark.parametrize("kwarg", ["aliases", "conflicts_with", "requires"])
+def test_arg_rejects_bare_string_for_collection_kwarg(kwarg):
+    """Passing a bare string where a collection is expected raises a TypeError.
+
+    Without this guard, ``arg(conflicts_with="other")`` is silently
+    accepted in Python but then dropped by the AST parser, giving a
+    working-looking command whose mutex never fires.
+    """
+    with pytest.raises(TypeError, match=rf"`{kwarg}=`.*bare `str`.*Wrap"):
+        arg(**{kwarg: "value"})
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (["-n", "--name"], ["-n", "--name"]),
+        (("-n", "--name"), ["-n", "--name"]),
+    ],
+    ids=["list", "tuple"],
+)
+def test_arg_aliases_accepts_list_and_tuple(value, expected):
+    """``aliases`` accepts list and tuple — both preserve declaration order."""
+    annotation = arg(aliases=value)
+    assert annotation.aliases == expected
+
+
+@pytest.mark.parametrize("value", [{"-n", "--name"}, frozenset({"-n", "--name"})])
+def test_arg_aliases_rejects_unordered_collections(value):
+    """Sets are rejected because alias order drives clap short-flag assignment."""
+    with pytest.raises(TypeError, match=r"`aliases=` must be a list or tuple of strings"):
+        arg(aliases=value)
+
+
+def test_arg_aliases_rejects_non_string_elements():
+    with pytest.raises(TypeError, match=r"`aliases=` element \[0\].*got int"):
+        arg(aliases=[1, 2])
+
+
+@pytest.mark.parametrize("kwarg", ["conflicts_with", "requires"])
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (["a", "b"], ["a", "b"]),
+        (("a", "b"), ["a", "b"]),
+        (frozenset(["solo"]), ["solo"]),
+    ],
+    ids=["list", "tuple", "frozenset"],
+)
+def test_arg_setlike_kwargs_accept_list_tuple_set(kwarg, value, expected):
+    """``conflicts_with`` / ``requires`` accept list, tuple, set, or frozenset."""
+    annotation = arg(**{kwarg: value})
+    assert getattr(annotation, kwarg) == expected
+
+
+def test_arg_conflicts_with_accepts_set_literal():
+    annotation = arg(conflicts_with={"solo"})
+    assert annotation.conflicts_with == ["solo"]
+
+
+@pytest.mark.parametrize("kwarg", ["conflicts_with", "requires"])
+def test_arg_setlike_kwargs_reject_other_collections(kwarg):
+    """Generators / dicts / arbitrary iterables are rejected.
+
+    The AST parser only extracts literal ``[...]`` / ``(...)`` /
+    ``{...}`` forms; accepting fancier shapes at the Python layer
+    would create a silent-drop hazard between runtime and the static
+    manifest.
+    """
+    with pytest.raises(TypeError, match=rf"`{kwarg}=`.*got dict"):
+        arg(**{kwarg: {"a": 1}})
+
+
+@pytest.mark.parametrize("kwarg", ["conflicts_with", "requires"])
+def test_arg_setlike_kwargs_reject_non_string_elements(kwarg):
+    with pytest.raises(TypeError, match=rf"`{kwarg}=` element \[0\].*got int"):
+        arg(**{kwarg: [1, 2]})
