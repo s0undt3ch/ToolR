@@ -22,7 +22,7 @@ on:
       targets:
         required: true
         type: string
-        description: 'JSON-encoded array of {triple, runner, cross, archive} objects describing which standalone binaries to build. Produced by `toolr ci generate-build-matrix --workflow {ci,release}` so the matrix stays centralized in tools/ci.py.'
+        description: 'JSON-encoded array of {triple, runner, archive} objects describing which standalone binaries to build. Produced by `toolr ci generate-build-matrix --workflow {ci,release}` so the matrix stays centralized in tools/ci.py.'
 
 permissions:
   contents: read
@@ -38,10 +38,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Each entry: {triple, runner, cross, archive}. Native runners
-        # cover x86_64/arm64 on Linux + macOS + Windows; `cross` is reserved
-        # for the musl targets where GitHub does not provide a matching
-        # native runner. See tools/ci.py:_BINARY_ARCHIVE_TRIPLES for the
+        # Each entry: {triple, runner, archive}. Every triple builds
+        # natively — both gnu and musl Linux variants on architecture-
+        # matched ubuntu runners, plus macOS and Windows. No docker, no
+        # `cross`. See tools/ci.py:_BINARY_ARCHIVE_TRIPLES for the
         # canonical list.
         target: ${{ fromJson(inputs.targets) }}
 
@@ -56,6 +56,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: ./.github/actions/throttle
 
       - name: Download Source Tarball Artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -76,15 +78,16 @@ jobs:
           cache: true
           cache_key_prefix: ${{ inputs.cache-seed }}|mise|${{ inputs.mise-version }}|build-binary|${{ runner.os }}|${{ runner.arch }}|${{ matrix.target.triple }}
 
-      # `cross` runs in a container with its own toolchain, so we only need
-      # to add the matrix target for native builds.
       - name: Add Rust target
-        if: ${{ !matrix.target.cross }}
         run: rustup target add ${{ matrix.target.triple }}
 
-      - name: Install cross
-        if: matrix.target.cross
-        run: cargo install cross --locked --version "^0.2"
+      # musl-tools provides musl-gcc, which rust needs as the linker
+      # when targeting *-linux-musl. Architecture-native: x86_64-musl
+      # runs on ubuntu-latest (x86_64); aarch64-musl on ubuntu-24.04-arm
+      # (aarch64). apt-get installs the matching musl-gcc on each.
+      - name: Install musl-tools
+        if: contains(matrix.target.triple, '-linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
 
       # `--locked` is intentionally absent: `uv build --sdist --package toolr`
       # rewrites the sdist's workspace `Cargo.toml` to drop `crates/toolr-py`,
@@ -93,15 +96,9 @@ jobs:
       # dep-version drift); `--locked` would refuse and fail the build. The
       # sdist itself is the reproducibility artifact — its Cargo.lock is the
       # canonical lock.
-      - name: Build binary (native)
-        if: ${{ !matrix.target.cross }}
+      - name: Build binary
         working-directory: workdir
         run: cargo build --release -p toolr --bin toolr --target ${{ matrix.target.triple }}
-
-      - name: Build binary (cross)
-        if: matrix.target.cross
-        working-directory: workdir
-        run: cross build --release -p toolr --bin toolr --target ${{ matrix.target.triple }}
 
       - name: Stage archive contents
         working-directory: workdir

@@ -9,11 +9,17 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Literal
 
 from packaging.version import Version
 
 from toolr import Context
 from toolr import command_group
+
+# Label name a PR can carry to opt into the full release-shaped build
+# matrix. Without it, PRs run the minimal `ci` subset (native triples
+# only) to keep iteration fast.
+FULL_BUILD_LABEL = "full-build"
 
 # tools/ci.py → repo root (two parents up resolves the `tools/` directory).
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -52,64 +58,63 @@ TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
 BINARY_WHEEL_PYTHONS = ["cp311"]
 
 # Per-triple metadata for the standalone toolr binary archives that
-# `_build-binary-archive.yml` builds. release.yml ships all of them
-# (downstream consumers: install.sh, mise plugin); ci.yml only needs the
-# runner-native subset to back the test/docs jobs (see CI_BINARY_TRIPLES).
+# `_build-binary-archive.yml` builds. release.yml + pushes to main ship
+# all of them; PR builds use the runner-native subset (see
+# `_CI_BINARY_ARCHIVE_TRIPLE_NAMES`).
+#
+# Every triple builds natively now: the matrix uses
+# architecture-matching GitHub runners and `*-linux-musl` works as a
+# native `rustup target add` + `musl-tools` build on `ubuntu-*` runners.
+# No docker, no `cross`.
 _BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
     {
         "triple": "x86_64-unknown-linux-gnu",
         "runner": "ubuntu-latest",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "aarch64-unknown-linux-gnu",
         "runner": "ubuntu-24.04-arm",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "x86_64-unknown-linux-musl",
         "runner": "ubuntu-latest",
-        "cross": True,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "aarch64-unknown-linux-musl",
         "runner": "ubuntu-24.04-arm",
-        "cross": True,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "aarch64-apple-darwin",
         "runner": "macos-14",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "macOS",
     },
     {
         "triple": "x86_64-apple-darwin",
         "runner": "macos-15-intel",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "macOS",
     },
     {
         "triple": "x86_64-pc-windows-msvc",
         "runner": "windows-latest",
-        "cross": False,
         "archive": "zip",
         "display-name": "Windows",
     },
 ]
 
-# Triples that ci.yml builds on every PR — one native triple per OS
-# in the test matrix. musl + cross-compiled aarch64 only build in
-# release.yml.
+# Triples that ci.yml builds on every PR — one native triple per OS in
+# the test matrix. Pushes to main build the full set (every triple
+# release.yml would build) so main is always as close to release as
+# possible.
 _CI_BINARY_ARCHIVE_TRIPLE_NAMES = frozenset(
     {
         "x86_64-unknown-linux-gnu",
@@ -137,16 +142,73 @@ _WHEEL_PLATFORM_MATRIX: dict[str, list[dict[str, str]]] = {
 }
 
 
+def _pr_labels() -> set[str]:
+    """Return the label names attached to the PR in the current GitHub event payload.
+
+    Reads `$GITHUB_EVENT_PATH` (the action payload JSON). Returns an
+    empty set when the env var is unset, the file is missing, the JSON
+    is malformed, or the event isn't a `pull_request`-shaped payload.
+    """
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        return set()
+    try:
+        with open(event_path) as f:
+            event = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return set()
+    labels = event.get("pull_request", {}).get("labels", []) or []
+    return {label.get("name", "") for label in labels if isinstance(label, dict)}
+
+
+def _select_workflow_mode() -> tuple[Literal["ci", "release"], str]:
+    """Pick `ci` vs `release` from the GitHub event context.
+
+    Returns ``(mode, reason)``. The reason is a human-readable string
+    rendered into the GitHub job step summary so reviewers can see at
+    a glance *why* this run got the matrix it got.
+
+    Rules (first match wins):
+
+    1. ``push`` to ``refs/heads/main`` → ``release``. Main is always
+       kept as close to a real release as possible so musl + cross-arch
+       regressions get caught before tag-time.
+    2. ``pull_request`` carrying the ``full-build`` label → ``release``.
+       Opt-in escape hatch for PRs that need to exercise the full
+       matrix (e.g. dependency bumps, build-system changes).
+    3. Everything else → ``ci`` (the minimal native-triple subset).
+    """
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    ref = os.environ.get("GITHUB_REF", "")
+
+    if event_name == "push" and ref == "refs/heads/main":
+        return "release", "push to `main` — full matrix mirrors the release surface."
+
+    if event_name == "pull_request":
+        labels = _pr_labels()
+        if FULL_BUILD_LABEL in labels:
+            return "release", f"PR carries the `{FULL_BUILD_LABEL}` label — running the full release matrix on opt-in."
+        return "ci", (
+            f"PR (no `{FULL_BUILD_LABEL}` label) — native-triple subset to keep PR builds snappy. "
+            f"Apply the `{FULL_BUILD_LABEL}` label and re-run to opt into the full release matrix."
+        )
+
+    return "ci", f"event=`{event_name or '(unset)'}`, ref=`{ref or '(unset)'}` — default to the minimal CI matrix."
+
+
 @group.command
-def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
+def generate_build_matrix(
+    ctx: Context,
+    workflow: Literal["ci", "release"] | None = None,
+) -> None:
     """
     Emit the CI matrix configuration consumed by `prepare-ci` jobs.
 
     Writes five GITHUB_OUTPUT keys:
 
       - `platform-matrix` — wheel platform map per OS (used by _build.yml).
-      - `binary-archive-triples` — list of triple+runner+cross+archive
-        objects (used by _build-binary-archive.yml's matrix).
+      - `binary-archive-triples` — list of triple+runner+archive objects
+        (used by _build-binary-archive.yml's matrix).
       - `pythons-binary` — CPython ABI tags for the toolr binary wheel.
       - `pythons-py` — CPython ABI tags for the toolr-py (pyo3) wheel.
       - `test-pythons` — dotted-form CPython versions for the test matrix
@@ -157,13 +219,17 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
     in sync and lets workflow files stay declarative.
 
     Args:
-        workflow: Which workflow is asking. `"ci"` emits the native-triple
-            subset (fast PR builds against linux-gnu + darwin-arm + win-msvc);
-            `"release"` emits the full 7-triple matrix that ships to users.
+        workflow: Which matrix shape to emit. When omitted, auto-detect
+            from the GitHub event context (push-to-main → release; PR
+            with `full-build` label → release; otherwise → ci). Pass
+            ``release`` explicitly to force the full matrix regardless
+            of context — release.yml does this so tag-time builds are
+            always the complete set.
     """
-    if workflow not in ("ci", "release"):
-        ctx.error(f"unknown workflow: {workflow!r} (expected 'ci' or 'release')")
-        ctx.exit(1)
+    if workflow is None:
+        workflow, reason = _select_workflow_mode()
+    else:
+        reason = f"caller forced `--workflow {workflow}`."
 
     if workflow == "release":
         binary_archive_triples: list[dict[str, object]] = list(_BINARY_ARCHIVE_TRIPLES)
@@ -189,6 +255,7 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
 
     with open(github_step_summary, "a") as wfh:
         wfh.write(f"## Build matrix ({workflow})\n\n")
+        wfh.write(f"_{reason}_\n\n")
         wfh.write("### Wheels\n\n")
         wfh.write("| Platform | cibuildwheel platform | GH runner |\n")
         wfh.write("|----------|----------------------|-----------|\n")
@@ -197,16 +264,14 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
                 label = platform.title() if idx == 0 else ""
                 wfh.write(f"| {label} | {item['name']} | {item['os']} |\n")
         wfh.write("\n### Standalone binary archives\n\n")
-        wfh.write("| Triple | GH runner | Build mode | Archive |\n")
-        wfh.write("|--------|-----------|------------|---------|\n")
-        for t in binary_archive_triples:
-            mode = "cross" if t["cross"] else "native"
-            wfh.write(f"| `{t['triple']}` | {t['runner']} | {mode} | `{t['archive']}` |\n")
+        wfh.write("| Triple | GH runner | Archive |\n")
+        wfh.write("|--------|-----------|---------|\n")
+        wfh.writelines(f"| `{t['triple']}` | {t['runner']} | `{t['archive']}` |\n" for t in binary_archive_triples)
         wfh.write("\n### Python ABIs\n\n")
         wfh.write(f"- Binary wheel: `{', '.join(BINARY_WHEEL_PYTHONS)}`\n")
         wfh.write(f"- toolr-py wheel: `{', '.join(ALL_CPYTHONS)}`\n\n")
 
-    ctx.info(f"Emitting build matrix outputs for workflow={workflow!r}")
+    ctx.info(f"Emitting build matrix outputs for workflow={workflow!r} (reason: {reason})")
     ctx.print(outputs)
     with open(github_output, "a") as f:
         f.writelines(f"{key}={json.dumps(value)}\n" for key, value in outputs.items())
