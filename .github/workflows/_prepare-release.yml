@@ -140,14 +140,6 @@ jobs:
         id: bump-version
         shell: bash
         run: |
-          # Pass the version as `--new-version` (a keyword flag) rather
-          # than positionally so the invocation works against both the
-          # previously-released toolr (used to *prepare* the next
-          # release) and the post-release toolr — the `bump` parameter
-          # is `new_version: str | None = None`, which classifies as a
-          # `--new-version` flag under both old and new runtime parsers.
-          # When `release-version` is empty, omit the flag entirely so
-          # the dev-version path (`new_version=None`) kicks in.
           toolr version bump --write --check-existing-tag ${{ inputs.release-version != '' && format('--new-version={0}', inputs.release-version) || '' }}
 
       - name: Load UNRELEASED.md into TOOLR_RELEASE_NOTES env var

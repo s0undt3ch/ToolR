@@ -1,0 +1,17 @@
+name: Throttle Build
+description: Throttle the build to avoid thundering herd effects.
+
+inputs:
+  max-sleep-seconds:
+    description: The maximum number of seconds to sleep.
+    required: true
+    default: '5'
+
+runs:
+  using: composite
+
+  steps:
+    - name: Configure Git
+      shell: bash
+      run: |
+        t=$(python3 -c 'import random, sys; sys.stdout.write(str(random.randint(1, ${{ inputs.max-sleep-seconds }})))'); echo "Sleeping $t seconds"; sleep "$t"
