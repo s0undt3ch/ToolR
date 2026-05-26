@@ -289,7 +289,9 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
     raise TypeError(msg)
 
 
-def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[Any], dict[str, Any]]:
+def _coerce_args(
+    target: Callable[..., Any], raw: dict[str, Any]
+) -> tuple[list[Any], dict[str, Any]]:
     """Coerce `raw` against `target`'s actual type hints.
 
     Returns a ``(positional_args, keyword_args)`` pair. Positional args come
@@ -324,7 +326,10 @@ def _coerce_args(target: Callable[..., Any], raw: dict[str, Any]) -> tuple[list[
                 raise SpecError(msg)
             if hint is not None:
                 try:
-                    positional = [msgspec.convert(elem, type=hint, strict=False, dec_hook=_dec_hook) for elem in value]
+                    positional = [
+                        msgspec.convert(elem, type=hint, strict=False, dec_hook=_dec_hook)
+                        for elem in value
+                    ]
                 except msgspec.ValidationError as exc:
                     msg = f"toolr runner: invalid value for `{name}`: {exc}"
                     raise SpecError(msg) from exc

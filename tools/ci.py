@@ -188,13 +188,19 @@ def _select_workflow_mode() -> tuple[Literal["ci", "release"], str]:
     if event_name == "pull_request":
         labels = _pr_labels()
         if FULL_BUILD_LABEL in labels:
-            return "release", f"PR carries the `{FULL_BUILD_LABEL}` label — running the full release matrix on opt-in."
+            return (
+                "release",
+                f"PR carries the `{FULL_BUILD_LABEL}` label — running the full release matrix on opt-in.",
+            )
         return "ci", (
             f"PR (no `{FULL_BUILD_LABEL}` label) — native-triple subset to keep PR builds snappy. "
             f"Apply the `{FULL_BUILD_LABEL}` label and re-run to opt into the full release matrix."
         )
 
-    return "ci", f"event=`{event_name or '(unset)'}`, ref=`{ref or '(unset)'}` — default to the minimal CI matrix."
+    return (
+        "ci",
+        f"event=`{event_name or '(unset)'}`, ref=`{ref or '(unset)'}` — default to the minimal CI matrix.",
+    )
 
 
 class Workflow(StrEnum):
@@ -242,7 +248,9 @@ def generate_build_matrix(
     if workflow == Workflow.RELEASE:
         binary_archive_triples: list[dict[str, object]] = list(_BINARY_ARCHIVE_TRIPLES)
     else:
-        binary_archive_triples = [t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES]
+        binary_archive_triples = [
+            t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES
+        ]
 
     outputs: dict[str, object] = {
         "platform-matrix": _WHEEL_PLATFORM_MATRIX,
@@ -274,7 +282,10 @@ def generate_build_matrix(
         wfh.write("\n### Standalone binary archives\n\n")
         wfh.write("| Triple | GH runner | Archive |\n")
         wfh.write("|--------|-----------|---------|\n")
-        wfh.writelines(f"| `{t['triple']}` | {t['runner']} | `{t['archive']}` |\n" for t in binary_archive_triples)
+        wfh.writelines(
+            f"| `{t['triple']}` | {t['runner']} | `{t['archive']}` |\n"
+            for t in binary_archive_triples
+        )
         wfh.write("\n### Python ABIs\n\n")
         wfh.write(f"- Binary wheel: `{', '.join(BINARY_WHEEL_PYTHONS)}`\n")
         wfh.write(f"- toolr-py wheel: `{', '.join(ALL_CPYTHONS)}`\n\n")
@@ -410,7 +421,9 @@ def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
         ctx.exit(0)
 
     pr_number = prs_list[0]["number"]
-    ctx.info(f"Builds for branch/tag {branch!r} should not run since they will be built on PR #{pr_number}.")
+    ctx.info(
+        f"Builds for branch/tag {branch!r} should not run since they will be built on PR #{pr_number}."
+    )
     if github_step_summary is not None:
         github_repository = os.environ.get("GITHUB_REPOSITORY")
         if github_repository is None:
@@ -429,7 +442,15 @@ def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
 
 
 def _update_action_version(ctx: Context, version: Version) -> int:
-    ret = ctx.run("git", "grep", "-l", "uses: s0undt3ch/ToolR@", ".github/", capture_output=True, stream_output=False)
+    ret = ctx.run(
+        "git",
+        "grep",
+        "-l",
+        "uses: s0undt3ch/ToolR@",
+        ".github/",
+        capture_output=True,
+        stream_output=False,
+    )
     if ret.returncode != 0:
         ctx.error("Failed to grep for 'uses: s0undt3ch/ToolR@' in .github/")
         return 1
@@ -532,7 +553,9 @@ def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
     Args:
         dry_run: Whether to dry run the command.
     """
-    ret = ctx.run("git", "tag", "--list", "--sort=-version:refname", capture_output=True, stream_output=False)
+    ret = ctx.run(
+        "git", "tag", "--list", "--sort=-version:refname", capture_output=True, stream_output=False
+    )
     if ret.returncode != 0:
         ctx.error("Failed to get the list of tags")
         ctx.exit(1)

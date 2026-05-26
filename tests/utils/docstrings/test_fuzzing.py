@@ -21,7 +21,9 @@ def docstring_content(draw):
     # Start with basic text that could be a docstring
     content = draw(
         text(
-            alphabet=st.characters(whitelist_categories=("Lu", "Ll", "N", "Pc", "Pd", "Ps", "Pe", "Po", "Sm", "Zs")),
+            alphabet=st.characters(
+                whitelist_categories=("Lu", "Ll", "N", "Pc", "Pd", "Ps", "Pe", "Po", "Sm", "Zs")
+            ),
             min_size=0,
             max_size=1000,
         )
@@ -127,7 +129,9 @@ def test_fuzz_malformed_docstrings(content: str):
         # Some malformed input might legitimately cause parsing errors
         # but it should be well-defined exceptions, not crashes
         if not isinstance(e, EXPECTED_EXCEPTIONS):
-            pytest.fail(f"Unexpected exception type on malformed input: {content!r}\nError: {type(e).__name__}: {e}")
+            pytest.fail(
+                f"Unexpected exception type on malformed input: {content!r}\nError: {type(e).__name__}: {e}"
+            )
 
 
 @given(content=text(min_size=0, max_size=10000), repeat=integers(min_value=1, max_value=10))

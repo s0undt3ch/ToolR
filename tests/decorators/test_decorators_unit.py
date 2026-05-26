@@ -179,7 +179,9 @@ def test_command_group_dotted_name_overrides_explicit_parent_with_warning(
 ):
     del clean_registry
     with caplog.at_level(logging.WARNING, logger="toolr._decorators"):
-        g = command_group("docker.diff", "Docker Diff", description="Docker diff group", parent="wrong")
+        g = command_group(
+            "docker.diff", "Docker Diff", description="Docker diff group", parent="wrong"
+        )
     assert g.parent == "tools.docker"
     assert any("dotted path" in r.message for r in caplog.records)
 

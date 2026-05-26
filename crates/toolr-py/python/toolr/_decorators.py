@@ -108,7 +108,9 @@ class CommandGroup(Struct, frozen=True):
 
         def register(func: F) -> F:
             if name in self.__commands:
-                log.debug("Command '%s' already exists in group '%s', overriding", name, self.full_name)
+                log.debug(
+                    "Command '%s' already exists in group '%s', overriding", name, self.full_name
+                )
             self.__commands[name] = func
             return func
 

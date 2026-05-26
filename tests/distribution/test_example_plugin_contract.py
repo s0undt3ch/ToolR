@@ -104,7 +104,9 @@ def test_example_plugin_wheel_ships_manifest_and_commands(
     assert result.returncode == 0, (
         f"toolr --help failed: returncode={result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
-    assert "third-party" in result.stdout, f"expected `third-party` group in --help; got:\n{result.stdout}"
+    assert "third-party" in result.stdout, (
+        f"expected `third-party` group in --help; got:\n{result.stdout}"
+    )
     assert "utils" in result.stdout, f"expected `utils` group in --help; got:\n{result.stdout}"
 
     # ---- Run one of the example commands end-to-end. This proves the

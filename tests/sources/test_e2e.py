@@ -138,7 +138,9 @@ def test_e2e_dispatch_through_argparse_scanner(
     assert "primary" in captured["argv"]
 
 
-def _make_project(tmp_path: Path, name: str, tools_py: str, pyproject_toml: str, command_files: dict[str, str]) -> Path:
+def _make_project(
+    tmp_path: Path, name: str, tools_py: str, pyproject_toml: str, command_files: dict[str, str]
+) -> Path:
     project = tmp_path / name
     project.mkdir()
     tools = project / "tools"
@@ -282,7 +284,9 @@ def test_e2e_collision_across_sources_fails_build(tmp_path: Path, toolr_bin: Pat
         ).strip()
         + "\n"
     )
-    cmd_body = 'def add_arguments(self, parser):\n    parser.add_argument("--flag", action="store_true")\n'
+    cmd_body = (
+        'def add_arguments(self, parser):\n    parser.add_argument("--flag", action="store_true")\n'
+    )
     project = _make_project(
         tmp_path,
         "collision",

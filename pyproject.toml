@@ -53,7 +53,13 @@ tools = [
 ]
 
 [tool.ruff]
-line-length = 120
+# Formatter target. `ruff format` wraps to 100 columns; the
+# pycodestyle override below raises the E501 lint threshold to
+# 120 so the formatter can land at 100 without lint failures and
+# longer-but-still-readable lines aren't rejected outright. See
+# `.editorconfig` for the matching editor ruler and CONTRIBUTING
+# for the policy summary.
+line-length = 100
 show-fixes = true
 target-version = "py311"
 respect-gitignore = true
@@ -149,6 +155,13 @@ ignore = [
   "INP001",   # File `xyz` is part of an implicit namespace package. Add an `__init__.py`.
   "TRY003",   # Avoid specifying long messages outside the exception class
 ]
+
+[tool.ruff.lint.pycodestyle]
+# Hard ceiling for E501. `tool.ruff.line-length` (the formatter
+# target) stays at 100; this raises the lint threshold to 120 so
+# lines the formatter can't reduce (long string literals, error
+# messages, etc.) still pass lint up to 120 columns.
+max-line-length = 120
 
 [tool.ruff.lint.pydocstyle]
 # Use Google-style docstrings.

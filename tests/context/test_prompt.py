@@ -30,7 +30,11 @@ def test_prompt_string_default(ctx: Context, capfd: pytest.CaptureFixture[str]):
     ],
 )
 def test_prompt_string_with_choices(
-    ctx: Context, capfd: pytest.CaptureFixture[str], stream_input: str, expected_value: str, case_sensitive: bool
+    ctx: Context,
+    capfd: pytest.CaptureFixture[str],
+    stream_input: str,
+    expected_value: str,
+    case_sensitive: bool,
 ):
     """Test prompt with string type and choices."""
     result = ctx._prompt(

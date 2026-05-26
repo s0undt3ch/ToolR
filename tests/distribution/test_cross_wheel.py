@@ -77,12 +77,16 @@ def test_install_both_wheels_and_run_subcommand(
     # filename uses the PEP 440 dot-form, the binary may emit either,
     # so compare on the normalized PEP 440 form.
     binary_version = _version_from_wheel(toolr_wheel)
-    assert binary_version.replace(".dev", "-dev") in result.stdout or binary_version in result.stdout, (
-        f"unexpected --version output: {result.stdout!r} (expected to contain {binary_version!r})"
-    )
+    assert (
+        binary_version.replace(".dev", "-dev") in result.stdout or binary_version in result.stdout
+    ), f"unexpected --version output: {result.stdout!r} (expected to contain {binary_version!r})"
 
     result = subprocess.run(  # noqa: S603
-        [str(python), "-c", "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"],
+        [
+            str(python),
+            "-c",
+            "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)",
+        ],
         capture_output=True,
         text=True,
         check=True,

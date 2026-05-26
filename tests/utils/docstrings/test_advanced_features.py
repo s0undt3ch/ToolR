@@ -258,7 +258,9 @@ def test_large_docstring_complete():  # noqa: PLR0915
     result = Docstring.parse(LONG_DOCSTRING)
 
     # Check short description
-    assert result.short_description == "Generate comprehensive test data for Stripe sandbox accounts."
+    assert (
+        result.short_description == "Generate comprehensive test data for Stripe sandbox accounts."
+    )
 
     # Check long description
     long_desc = result.long_description
@@ -293,7 +295,10 @@ def test_large_docstring_complete():  # noqa: PLR0915
     # Check examples - Rust parser doesn't parse examples the same way
     examples = result.examples
     assert len(examples) == 3
-    assert examples[0].description == "Basic usage - creates 5 products, 20 customers, 1 subscription each:"
+    assert (
+        examples[0].description
+        == "Basic usage - creates 5 products, 20 customers, 1 subscription each:"
+    )
     assert examples[0].snippet is not None
     assert examples[1].description == "Custom quantities:"
     assert examples[1].snippet is not None

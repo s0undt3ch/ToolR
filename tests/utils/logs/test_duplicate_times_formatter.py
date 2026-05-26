@@ -13,7 +13,13 @@ def test_format_time_duplicate():
 
     # First call should set the timestamp
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     formatted_time = formatter.formatTime(record)
     assert formatted_time != " " * len(formatted_time)
@@ -28,7 +34,13 @@ def test_format_single_line():
     formatter = DuplicateTimesFormatter(fmt="%(asctime)s%(message)s", datefmt="[%H:%M:%S] ")
 
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
 
     result = formatter.format(record)
@@ -40,7 +52,13 @@ def test_format_multiline_with_lf():
     formatter = DuplicateTimesFormatter(fmt="%(asctime)s%(message)s", datefmt="[%H:%M:%S] ")
 
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="line1\nline2\nline3", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="line1\nline2\nline3",
+        args=(),
+        exc_info=None,
     )
 
     result = formatter.format(record)
@@ -58,7 +76,13 @@ def test_format_multiline_with_crlf():
     formatter = DuplicateTimesFormatter(fmt="%(asctime)s%(message)s", datefmt="[%H:%M:%S] ")
 
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="line1\r\nline2\r\nline3", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="line1\r\nline2\r\nline3",
+        args=(),
+        exc_info=None,
     )
 
     result = formatter.format(record)

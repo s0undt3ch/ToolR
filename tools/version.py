@@ -79,7 +79,9 @@ def _compute_dev_version(ctx: Context) -> str:
     if not describe:
         # No matching tag in history — use the fallback base. ``TODAY_VERSION``
         # already ends in ``.0`` so the patch-bump yields ``.1``.
-        ret = ctx.run("git", "rev-list", "--count", "HEAD", capture_output=True, stream_output=False)
+        ret = ctx.run(
+            "git", "rev-list", "--count", "HEAD", capture_output=True, stream_output=False
+        )
         count: str = ret.stdout.read().rstrip() or "0"  # type: ignore[assignment]
         return f"{_bump_patch(TODAY_VERSION)}-dev{count}"
     # Format: vX.Y.Z-N-gSHA  →  base=X.Y.Z, count=N, sha=gSHA

@@ -70,7 +70,9 @@ def isolated_sys_path() -> Iterator[None]:
     """
     saved_path = list(sys.path)
     saved_modules = {
-        name: sys.modules[name] for name in list(sys.modules) if name == "tools" or name.startswith("tools.")
+        name: sys.modules[name]
+        for name in list(sys.modules)
+        if name == "tools" or name.startswith("tools.")
     }
     for name in saved_modules:
         del sys.modules[name]
@@ -127,7 +129,9 @@ def test_ensure_tools_on_syspath_noop_when_path_is_empty(isolated_sys_path: None
     assert sys.path == before
 
 
-def test_ensure_tools_on_syspath_inserts_parent_of_tools_root(tmp_path: Path, isolated_sys_path: None) -> None:
+def test_ensure_tools_on_syspath_inserts_parent_of_tools_root(
+    tmp_path: Path, isolated_sys_path: None
+) -> None:
     del isolated_sys_path
     tools_root = tmp_path / "tools"
     tools_root.mkdir()

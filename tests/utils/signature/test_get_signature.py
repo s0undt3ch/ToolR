@@ -172,7 +172,9 @@ def test_get_signature_no_parameters():
     def test_func() -> None:
         """Test function."""
 
-    with pytest.raises(SignatureError, match=r"Function test_func must have at least one parameter"):
+    with pytest.raises(
+        SignatureError, match=r"Function test_func must have at least one parameter"
+    ):
         get_signature(test_func)
 
 
@@ -186,7 +188,9 @@ def test_get_signature_wrong_first_parameter_name():
             name: The name parameter.
         """
 
-    with pytest.raises(SignatureError, match=r"Function test_func must have 'ctx: Context' as the first parameter"):
+    with pytest.raises(
+        SignatureError, match=r"Function test_func must have 'ctx: Context' as the first parameter"
+    ):
         get_signature(test_func)
 
 

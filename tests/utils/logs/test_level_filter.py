@@ -13,13 +13,25 @@ def test_level_filter_with_level():
 
     # Create a record with INFO level
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is True
 
     # Create a record with DEBUG level
     record = logging.LogRecord(
-        name="test", level=logging.DEBUG, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.DEBUG,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is False
 
@@ -30,13 +42,25 @@ def test_level_filter_with_not_levels():
 
     # Create a record with ERROR level
     record = logging.LogRecord(
-        name="test", level=logging.ERROR, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.ERROR,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is False
 
     # Create a record with INFO level
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is True
 
@@ -47,13 +71,25 @@ def test_level_filter_with_both_level_and_not_levels():
 
     # Create a record with INFO level
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is True
 
     # Create a record with WARNING level
     record = logging.LogRecord(
-        name="test", level=logging.WARNING, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.WARNING,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is False
 
@@ -64,11 +100,23 @@ def test_level_filter_with_no_constraints():
 
     # Any record should pass
     record = logging.LogRecord(
-        name="test", level=logging.DEBUG, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.DEBUG,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is True
 
     record = logging.LogRecord(
-        name="test", level=logging.WARNING, pathname="", lineno=0, msg="test message", args=(), exc_info=None
+        name="test",
+        level=logging.WARNING,
+        pathname="",
+        lineno=0,
+        msg="test message",
+        args=(),
+        exc_info=None,
     )
     assert filter_obj.filter(record) is True
