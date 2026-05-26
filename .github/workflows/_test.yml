@@ -202,6 +202,17 @@ jobs:
             --package toolr_example_plugin \
             --check
 
+      - name: Verify skills/*/references/*.md are in sync
+        # Drift gate for the two in-tree agent skills
+        # (`toolr-command-authoring`, `toolr-command-packaging`).
+        # `cargo xtask build-skill-refs --check` regenerates every
+        # `references/*.md` from toolr-py/toolr-core source and exits
+        # non-zero on diff. Hosted here so a single workspace build
+        # covers both the example-plugin gate above and this one.
+        shell: bash
+        run: |
+          cargo xtask build-skill-refs --check
+
       - name: Run Python Tests
         env:
           PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
