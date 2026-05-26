@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 mod authoring;
-#[allow(dead_code)]
 mod packaging;
 
 /// One regenerated file, ready to either write to disk or compare
@@ -33,6 +32,7 @@ pub fn run(check: bool) -> Result<()> {
     let outputs: Vec<Generated> = vec![
         authoring::commands(&root)?,
         authoring::docstrings(&root)?,
+        packaging::packaging(&root)?,
     ];
 
     apply(outputs, check)
