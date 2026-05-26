@@ -8,7 +8,6 @@ prebuilt `toolr` binary releases from GitHub.
 
 ```sh
 mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
-mise install toolr@latest
 mise use --global toolr@latest
 ```
 

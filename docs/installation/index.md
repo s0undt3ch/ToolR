@@ -1,50 +1,26 @@
 # Installation
 
-`toolr` is distributed as **two complementary PyPI packages** that
-live in different venvs:
+`toolr` ships as **two complementary PyPI packages** that live in
+different venvs. Install the CLI binary once, globally, and let
+`toolr project init` scaffold the per-repo tools venv that pulls in
+the Python runtime.
 
-| Package    | What it is                                            | How you use it |
-|------------|-------------------------------------------------------|----------------|
-| `toolr`    | The Rust CLI binary — `toolr ...` on the shell.       | Install once, globally, on PATH (pip, install.sh, mise, release archive). |
-| `toolr-py` | The Python runtime: `import toolr`, `Context`, `command_group`, `_rust_utils`. | Add to your project's `tools/pyproject.toml` so it resolves into the tools venv. |
+## Two wheels, two roles
 
-A typical project setup uses **both**:
+| Package    | What it is                                   | Where it lives                  |
+| ---------- | -------------------------------------------- | ------------------------------- |
+| `toolr`    | The Rust CLI binary you run from the shell.  | On `$PATH`, installed once.     |
+| `toolr-py` | The Python runtime your `tools/*.py` import. | In your `tools/pyproject.toml`. |
 
-1. Install the `toolr` CLI on PATH once (any method below).
-2. Add `toolr-py` to `tools/pyproject.toml` so `tools/*.py` scripts can
-   `from toolr import Context, command_group`.
-
-The CLI shells out into a per-project tools venv at execute time; it
+Most projects want both: the CLI installed globally, `toolr-py`
+declared in the per-repo `tools/pyproject.toml` so
+`from toolr import Context, command_group` works when your commands
+run. The CLI shells out into the tools venv at execute time; it
 doesn't share its own venv with your tool scripts.
 
-## Requirements
+## Install
 
-- **Python 3.11 or later** is needed at execute time. The toolr binary
-  itself is standalone, but every user command runs inside a Python
-  subprocess.
-- **[uv](https://docs.astral.sh/uv/)** is needed to materialise the
-  tools venv (`uv sync`). If you don't have it on PATH, toolr can
-  install a managed copy on first use.
-
-## Install the CLI binary (`toolr`)
-
-Pick whichever method matches your environment.
-
-### `curl ... | sh` (Linux + macOS)
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
-```
-
-Pass `--version X.Y.Z` after `sh -s --` to pin a specific release, or
-`--prefix /custom/bin` to choose an install directory. Default prefix
-is `$XDG_BIN_HOME` (or `~/.local/bin`).
-
-### PowerShell (Windows)
-
-```powershell
-irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
-```
+Five first-class install paths.
 
 ### mise
 
@@ -53,36 +29,81 @@ mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
 mise use --global toolr@latest
 ```
 
-The plugin source ships in this repo under `installation/mise/`. See
-the dedicated [mise](mise.md) page for `.mise.toml` / `.tool-versions`
-integration and task-runner examples.
+For projects that already pin tool versions via `.mise.toml`, this
+is the most-natural fit — toolr's version becomes part of your
+project's reproducible tool set. See the dedicated [mise](mise.md)
+page for `.mise.toml` / `.tool-versions` integration and
+task-runner examples.
 
 ### pip
 
 ```sh
-pip install toolr
+pip install toolr   # Rust CLI binary
 ```
 
-This installs **only** the Rust CLI binary. The wheel has no Python
-source and no `import toolr` — that's what `toolr-py` is for (see
-below). `python -m toolr` was removed in the rust front-end rewrite;
-use the `toolr` executable instead.
+This installs the `toolr` binary into whatever venv `pip` is
+pointing at. The wheel has no Python source and no `import toolr` —
+that's what `toolr-py` is for (see "Two wheels, two roles" above).
+**Do not `pip install toolr-py`** into that same venv — `toolr-py`
+belongs in the per-repo tools venv that `toolr project init`
+scaffolds for you. `python -m toolr` was removed in the rust
+front-end rewrite; use the `toolr` executable instead.
+
+### curl | sh (Linux + macOS)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
+```
+
+Verifies the SLSA attestation when `gh` is on PATH. Pin a version
+with `sh -s -- --version X.Y.Z`. Custom prefix:
+`sh -s -- --prefix /opt/toolr/bin`. Default prefix is
+`$XDG_BIN_HOME` (or `~/.local/bin`).
+
+### PowerShell (Windows)
+
+```powershell
+irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
+```
 
 ### GitHub release archives
 
 Download `toolr-<version>-<target-triple>.tar.gz` (or `.zip` for
-Windows) from <https://github.com/s0undt3ch/ToolR/releases> and
-extract it onto `$PATH` manually. Each archive ships with a `.sha256`
-sibling for verification.
+Windows) from <https://github.com/s0undt3ch/ToolR/releases>, verify
+the `.sha256` sibling and the SLSA attestation, drop the binary on
+`$PATH`. Useful in locked-down environments that audit binaries
+before allowing them on a machine.
 
-## Enable `import toolr` in your tool scripts (`toolr-py`)
+## Scaffold your repo
 
-The `toolr-py` wheel provides the Python runtime your `tools/*.py`
-scripts use — the `toolr` package (`Context`, `command_group`,
-helpers under `toolr.utils`) and the `_rust_utils` extension module
-the framework calls internally.
+After the binary is on `$PATH`:
 
-Add it as a dependency of your project's tools venv:
+```sh
+toolr project init                  # writes tools/{pyproject.toml,.gitignore,example.py}
+toolr example hello                 # run the generated example
+toolr self completion install bash  # or zsh / fish
+```
+
+`toolr project init` writes a `tools/pyproject.toml` with
+`toolr-py` already declared and runs `uv sync` to materialise the
+venv. From here, [Quickstart](../quickstart.md) walks through your
+first command edit.
+
+## Requirements
+
+- **Python 3.11 or later** at execute time. The toolr binary itself
+  is standalone, but every user command runs inside a Python
+  subprocess.
+- **[uv](https://docs.astral.sh/uv/)** to materialise the tools
+  venv (`uv sync`). If it isn't on PATH, toolr installs a managed
+  copy on first use.
+
+## Adding `toolr-py` manually
+
+`toolr project init` is the fast path — it declares `toolr-py` for
+you. If you'd rather wire it by hand (e.g. you're slotting toolr
+into an existing `tools/pyproject.toml`), add it to your project's
+tools venv:
 
 ```toml title="tools/pyproject.toml"
 [project]
@@ -101,9 +122,9 @@ your tools venv when it executes commands.
     The CLI is a Rust binary built with `maturin --bindings bin`,
     which produces a Python-version-independent wheel that ships
     only the executable. The runtime users `import` is a separate
-    pyo3-extension wheel built for each (CPython, ABI) pair. Splitting
-    them lets the CLI be one global install while the runtime tracks
-    each project's tools venv.
+    pyo3-extension wheel built for each (CPython, ABI) pair.
+    Splitting them lets the CLI be one global install while the
+    runtime tracks each project's tools venv.
 
 ## Supply-chain verification (SLSA attestations)
 
@@ -148,5 +169,5 @@ cargo build --release --bin toolr
 ```
 
 The `target/release/toolr` binary is what you'll exercise during
-development; put `target/release/` on your PATH (or alias `toolr` to
-it) while iterating.
+development; put `target/release/` on your PATH (or alias `toolr`
+to it) while iterating.

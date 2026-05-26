@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -196,10 +197,17 @@ def _select_workflow_mode() -> tuple[Literal["ci", "release"], str]:
     return "ci", f"event=`{event_name or '(unset)'}`, ref=`{ref or '(unset)'}` — default to the minimal CI matrix."
 
 
+class Workflow(StrEnum):
+    """The workflow to run, either `ci` or `release`."""
+
+    CI = "ci"
+    RELEASE = "release"
+
+
 @group.command
 def generate_build_matrix(
     ctx: Context,
-    workflow: Literal["ci", "release"] | None = None,
+    workflow: Workflow | None = None,
 ) -> None:
     """
     Emit the CI matrix configuration consumed by `prepare-ci` jobs.
@@ -231,7 +239,7 @@ def generate_build_matrix(
     else:
         reason = f"caller forced `--workflow {workflow}`."
 
-    if workflow == "release":
+    if workflow == Workflow.RELEASE:
         binary_archive_triples: list[dict[str, object]] = list(_BINARY_ARCHIVE_TRIPLES)
     else:
         binary_archive_triples = [t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES]
