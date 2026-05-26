@@ -1646,15 +1646,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev538-2026-05-26" class="md-nav__link">
+  <a href="#0112-dev550-2026-05-26" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev538 - 2026-05-26
+        0.11.2-dev550 - 2026-05-26
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev538 - 2026-05-26">
+    <nav class="md-nav" aria-label="0.11.2-dev550 - 2026-05-26">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2190,15 +2190,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0112-dev538-2026-05-26" class="md-nav__link">
+  <a href="#0112-dev550-2026-05-26" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.11.2-dev538 - 2026-05-26
+        0.11.2-dev550 - 2026-05-26
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.11.2-dev538 - 2026-05-26">
+    <nav class="md-nav" aria-label="0.11.2-dev550 - 2026-05-26">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2729,7 +2729,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0112-dev538-2026-05-26">0.11.2-dev538 - 2026-05-26<a class="headerlink" href="#0112-dev538-2026-05-26" title="Permanent link">&para;</a></h2>
+<h2 id="0112-dev550-2026-05-26">0.11.2-dev550 - 2026-05-26<a class="headerlink" href="#0112-dev550-2026-05-26" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>This release lands the <strong>Rust front-end rewrite</strong> together with a
 <strong>workspace split</strong> and a <strong>distribution-channel reshuffle</strong>. The
@@ -3158,6 +3158,7 @@ blocking dispatch.</p>
 <li><em>(dispatch)</em> Inherit child stderr to preserve TTY; move missing-dep hint into the runner (<a href="https://github.com/s0undt3ch/ToolR/commit/401eb1734d8213757711deca9d2c1d6a83fadd0c"><code>401eb17</code></a>)</li>
 <li><em>(argparse)</em> Accept underscored long-flag spelling as hidden alias (<a href="https://github.com/s0undt3ch/ToolR/commit/6663d39eaa1716bf0ea3945a6240bc2bcfa5d3ce"><code>6663d39</code></a>)</li>
 <li><em>(argparse)</em> <code>T | None</code> without default → zero-or-one positional (<a href="https://github.com/s0undt3ch/ToolR/commit/22c7768e8991d399c8af07936cbdae78292e8b70"><code>22c7768</code></a>)</li>
+<li><em>(arg)</em> Validate aliases / conflicts_with / requires kwargs (<a href="https://github.com/s0undt3ch/ToolR/commit/3e288061c7b937647b2a8ff370cc5c431f56c3a8"><code>3e28806</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3200,6 +3201,8 @@ blocking dispatch.</p>
 <li><em>(parser)</em> Skip dot-prefixed directories in list_python_files (<a href="https://github.com/s0undt3ch/ToolR/commit/4c7fd883ec294cb8ea0fef8c6a5281eabadaf9ca"><code>4c7fd88</code></a>)</li>
 <li><em>(dispatch)</em> Emit clear error when tools venv python is missing (<a href="https://github.com/s0undt3ch/ToolR/commit/fed50517c0fb477940e0be5fc5fef0f6b80e218d"><code>fed5051</code></a>)</li>
 <li><em>(dispatch)</em> Wire UvError::user_message into production error paths (<a href="https://github.com/s0undt3ch/ToolR/commit/0034e92b8abec53f9146e0c471dd5d4ed3833ac3"><code>0034e92</code></a>)</li>
+<li><em>(version)</em> Drop spurious <code>= None</code> default on bump's positional (<a href="https://github.com/s0undt3ch/ToolR/commit/2676213dcffdccfb668bdd7797a65ac9679a90f4"><code>2676213</code></a>)</li>
+<li><em>(release)</em> Pass --new-version as a flag, restore bump's <code>= None</code> default (<a href="https://github.com/s0undt3ch/ToolR/commit/27c4c4e3ffbeb66b5c94235e95aec8bd88a9be3b"><code>27c4c4e</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3387,6 +3390,7 @@ blocking dispatch.</p>
 <li><em>(specs)</em> Document the live-vs-archive split (<a href="https://github.com/s0undt3ch/ToolR/commit/005f2ede009c5350a65853b33ae3bdae153de580"><code>005f2ed</code></a>)</li>
 <li><em>(specs)</em> Codebase audit snapshot (2026-05-23) (<a href="https://github.com/s0undt3ch/ToolR/commit/018ab63a892a42dbd489942630bf783d29c1230e"><code>018ab63</code></a>)</li>
 <li><em>(writing-commands)</em> Document toolr.testing.CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/e6b836260c9af3f00030413a689b349115cbbb12"><code>e6b8362</code></a>)</li>
+<li><em>(installation)</em> Align quickstart + install index with README (<a href="https://github.com/s0undt3ch/ToolR/commit/11d83c67223ad8e061f72661ab9d0defa3d7fe95"><code>11d83c6</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3460,6 +3464,10 @@ blocking dispatch.</p>
 <li><em>(specs)</em> Archive the repo-presentation-pass design + plan (<a href="https://github.com/s0undt3ch/ToolR/commit/6e4d9667f6db1f484ce368e1098389c56942feae"><code>6e4d966</code></a>)</li>
 <li><em>(specs)</em> Archive the 2026-05-23 codebase audit (<a href="https://github.com/s0undt3ch/ToolR/commit/a3ab98ac567724e5ce4b2ec4919e3d1f4afeeb22"><code>a3ab98a</code></a>)</li>
 <li><em>(release)</em> Use setup-toolr action for matrix generation, drop the workspace build (<a href="https://github.com/s0undt3ch/ToolR/commit/79b76da9c9444b9399c089a5ce27904350f9c5bb"><code>79b76da</code></a>)</li>
+<li><em>(build)</em> Drop <code>cross</code>, build musl natively, run full matrix on main (<a href="https://github.com/s0undt3ch/ToolR/commit/c65dd095ad79dd272e2df57657172c77ffece2ea"><code>c65dd09</code></a>)</li>
+<li><em>(matrix)</em> Label-driven opt-in + write the <em>why</em> to job summary (<a href="https://github.com/s0undt3ch/ToolR/commit/4ed277aa28c18d72d2d6614e75cf99c3db6e6170"><code>4ed277a</code></a>)</li>
+<li><em>(throttle)</em> Add a GitHub Action to throttle workflow run builds (<a href="https://github.com/s0undt3ch/ToolR/commit/a8b0a87317576cd8e7d60d5adaed07ecb5782b3f"><code>a8b0a87</code></a>)</li>
+<li>Switch from <code>Literal</code> to <code>StrEnum</code> (<a href="https://github.com/s0undt3ch/ToolR/commit/046e654c83f8210efd4ba0924997043dae893f25"><code>046e654</code></a>)</li>
 </ul>
 <h3 id="security"><!-- 8 -->🛡️ Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h3>
 <ul>

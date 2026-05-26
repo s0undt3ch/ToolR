@@ -1640,10 +1640,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
+  <a href="#two-wheels-two-roles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Requirements
+        Two wheels, two roles
       
     </span>
   </a>
@@ -1651,38 +1651,16 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-the-cli-binary-toolr" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install the CLI binary (toolr)
+        Install
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Install the CLI binary (toolr)">
+    <nav class="md-nav" aria-label="Install">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#curl-sh-linux-macos" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        curl ... | sh (Linux + macOS)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#powershell-windows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PowerShell (Windows)
-      
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#mise" class="md-nav__link">
@@ -1707,6 +1685,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#curl-sh-linux-macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        curl | sh (Linux + macOS)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#powershell-windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PowerShell (Windows)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#github-release-archives" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1723,10 +1723,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#enable-import-toolr-in-your-tool-scripts-toolr-py" class="md-nav__link">
+  <a href="#scaffold-your-repo" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Enable import toolr in your tool scripts (toolr-py)
+        Scaffold your repo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-toolr-py-manually" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding toolr-py manually
       
     </span>
   </a>
@@ -1832,88 +1854,104 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<p><code>toolr</code> is distributed as <strong>two complementary PyPI packages</strong> that
-live in different venvs:</p>
+<p><code>toolr</code> ships as <strong>two complementary PyPI packages</strong> that live in
+different venvs. Install the CLI binary once, globally, and let
+<code>toolr project init</code> scaffold the per-repo tools venv that pulls in
+the Python runtime.</p>
+<h2 id="two-wheels-two-roles">Two wheels, two roles<a class="headerlink" href="#two-wheels-two-roles" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Package</th>
 <th>What it is</th>
-<th>How you use it</th>
+<th>Where it lives</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>toolr</code></td>
-<td>The Rust CLI binary — <code>toolr ...</code> on the shell.</td>
-<td>Install once, globally, on PATH (pip, install.sh, mise, release archive).</td>
+<td>The Rust CLI binary you run from the shell.</td>
+<td>On <code>$PATH</code>, installed once.</td>
 </tr>
 <tr>
 <td><code>toolr-py</code></td>
-<td>The Python runtime: <code>import toolr</code>, <code>Context</code>, <code>command_group</code>, <code>_rust_utils</code>.</td>
-<td>Add to your project's <code>tools/pyproject.toml</code> so it resolves into the tools venv.</td>
+<td>The Python runtime your <code>tools/*.py</code> import.</td>
+<td>In your <code>tools/pyproject.toml</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>A typical project setup uses <strong>both</strong>:</p>
-<ol>
-<li>Install the <code>toolr</code> CLI on PATH once (any method below).</li>
-<li>Add <code>toolr-py</code> to <code>tools/pyproject.toml</code> so <code>tools/*.py</code> scripts can
-   <code>from toolr import Context, command_group</code>.</li>
-</ol>
-<p>The CLI shells out into a per-project tools venv at execute time; it
+<p>Most projects want both: the CLI installed globally, <code>toolr-py</code>
+declared in the per-repo <code>tools/pyproject.toml</code> so
+<code>from toolr import Context, command_group</code> works when your commands
+run. The CLI shells out into the tools venv at execute time; it
 doesn't share its own venv with your tool scripts.</p>
-<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Python 3.11 or later</strong> is needed at execute time. The toolr binary
-  itself is standalone, but every user command runs inside a Python
-  subprocess.</li>
-<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> is needed to materialise the
-  tools venv (<code>uv sync</code>). If you don't have it on PATH, toolr can
-  install a managed copy on first use.</li>
-</ul>
-<h2 id="install-the-cli-binary-toolr">Install the CLI binary (<code>toolr</code>)<a class="headerlink" href="#install-the-cli-binary-toolr" title="Permanent link">&para;</a></h2>
-<p>Pick whichever method matches your environment.</p>
-<h3 id="curl-sh-linux-macos"><code>curl ... | sh</code> (Linux + macOS)<a class="headerlink" href="#curl-sh-linux-macos" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-</span></code></pre></div>
-<p>Pass <code>--version X.Y.Z</code> after <code>sh -s --</code> to pin a specific release, or
-<code>--prefix /custom/bin</code> to choose an install directory. Default prefix
-is <code>$XDG_BIN_HOME</code> (or <code>~/.local/bin</code>).</p>
-<h3 id="powershell-windows">PowerShell (Windows)<a class="headerlink" href="#powershell-windows" title="Permanent link">&para;</a></h3>
-<div class="language-powershell highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">irm </span><span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">s0undt3ch</span><span class="p">/</span><span class="n">ToolR</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">installation</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="p">|</span> <span class="nb">iex</span>
-</span></code></pre></div>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<p>Five first-class install paths.</p>
 <h3 id="mise">mise<a class="headerlink" href="#mise" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git#installation/mise
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>toolr@latest
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git#installation/mise
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>toolr@latest
 </span></code></pre></div>
-<p>The plugin source ships in this repo under <code>installation/mise/</code>. See
-the dedicated <a href="mise/">mise</a> page for <code>.mise.toml</code> / <code>.tool-versions</code>
-integration and task-runner examples.</p>
+<p>For projects that already pin tool versions via <code>.mise.toml</code>, this
+is the most-natural fit — toolr's version becomes part of your
+project's reproducible tool set. See the dedicated <a href="mise/">mise</a>
+page for <code>.mise.toml</code> / <code>.tool-versions</code> integration and
+task-runner examples.</p>
 <h3 id="pip">pip<a class="headerlink" href="#pip" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>toolr
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>toolr<span class="w">   </span><span class="c1"># Rust CLI binary</span>
 </span></code></pre></div>
-<p>This installs <strong>only</strong> the Rust CLI binary. The wheel has no Python
-source and no <code>import toolr</code> — that's what <code>toolr-py</code> is for (see
-below). <code>python -m toolr</code> was removed in the rust front-end rewrite;
-use the <code>toolr</code> executable instead.</p>
+<p>This installs the <code>toolr</code> binary into whatever venv <code>pip</code> is
+pointing at. The wheel has no Python source and no <code>import toolr</code> —
+that's what <code>toolr-py</code> is for (see "Two wheels, two roles" above).
+<strong>Do not <code>pip install toolr-py</code></strong> into that same venv — <code>toolr-py</code>
+belongs in the per-repo tools venv that <code>toolr project init</code>
+scaffolds for you. <code>python -m toolr</code> was removed in the rust
+front-end rewrite; use the <code>toolr</code> executable instead.</p>
+<h3 id="curl-sh-linux-macos">curl | sh (Linux + macOS)<a class="headerlink" href="#curl-sh-linux-macos" title="Permanent link">&para;</a></h3>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+</span></code></pre></div>
+<p>Verifies the SLSA attestation when <code>gh</code> is on PATH. Pin a version
+with <code>sh -s -- --version X.Y.Z</code>. Custom prefix:
+<code>sh -s -- --prefix /opt/toolr/bin</code>. Default prefix is
+<code>$XDG_BIN_HOME</code> (or <code>~/.local/bin</code>).</p>
+<h3 id="powershell-windows">PowerShell (Windows)<a class="headerlink" href="#powershell-windows" title="Permanent link">&para;</a></h3>
+<div class="language-powershell highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">irm </span><span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">s0undt3ch</span><span class="p">/</span><span class="n">ToolR</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">installation</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="p">|</span> <span class="nb">iex</span>
+</span></code></pre></div>
 <h3 id="github-release-archives">GitHub release archives<a class="headerlink" href="#github-release-archives" title="Permanent link">&para;</a></h3>
 <p>Download <code>toolr-&lt;version&gt;-&lt;target-triple&gt;.tar.gz</code> (or <code>.zip</code> for
-Windows) from <a href="https://github.com/s0undt3ch/ToolR/releases">https://github.com/s0undt3ch/ToolR/releases</a> and
-extract it onto <code>$PATH</code> manually. Each archive ships with a <code>.sha256</code>
-sibling for verification.</p>
-<h2 id="enable-import-toolr-in-your-tool-scripts-toolr-py">Enable <code>import toolr</code> in your tool scripts (<code>toolr-py</code>)<a class="headerlink" href="#enable-import-toolr-in-your-tool-scripts-toolr-py" title="Permanent link">&para;</a></h2>
-<p>The <code>toolr-py</code> wheel provides the Python runtime your <code>tools/*.py</code>
-scripts use — the <code>toolr</code> package (<code>Context</code>, <code>command_group</code>,
-helpers under <code>toolr.utils</code>) and the <code>_rust_utils</code> extension module
-the framework calls internally.</p>
-<p>Add it as a dependency of your project's tools venv:</p>
-<div class="language-toml highlight"><span class="filename">tools/pyproject.toml</span><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">[project]</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;my-project-tools&quot;</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.11&quot;</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="s2">&quot;toolr-py&quot;</span><span class="p">,</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">]</span>
+Windows) from <a href="https://github.com/s0undt3ch/ToolR/releases">https://github.com/s0undt3ch/ToolR/releases</a>, verify
+the <code>.sha256</code> sibling and the SLSA attestation, drop the binary on
+<code>$PATH</code>. Useful in locked-down environments that audit binaries
+before allowing them on a machine.</p>
+<h2 id="scaffold-your-repo">Scaffold your repo<a class="headerlink" href="#scaffold-your-repo" title="Permanent link">&para;</a></h2>
+<p>After the binary is on <code>$PATH</code>:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>init<span class="w">                  </span><span class="c1"># writes tools/{pyproject.toml,.gitignore,example.py}</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>toolr<span class="w"> </span>example<span class="w"> </span>hello<span class="w">                 </span><span class="c1"># run the generated example</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>install<span class="w"> </span>bash<span class="w">  </span><span class="c1"># or zsh / fish</span>
+</span></code></pre></div>
+<p><code>toolr project init</code> writes a <code>tools/pyproject.toml</code> with
+<code>toolr-py</code> already declared and runs <code>uv sync</code> to materialise the
+venv. From here, <a href="../quickstart/">Quickstart</a> walks through your
+first command edit.</p>
+<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Python 3.11 or later</strong> at execute time. The toolr binary itself
+  is standalone, but every user command runs inside a Python
+  subprocess.</li>
+<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> to materialise the tools
+  venv (<code>uv sync</code>). If it isn't on PATH, toolr installs a managed
+  copy on first use.</li>
+</ul>
+<h2 id="adding-toolr-py-manually">Adding <code>toolr-py</code> manually<a class="headerlink" href="#adding-toolr-py-manually" title="Permanent link">&para;</a></h2>
+<p><code>toolr project init</code> is the fast path — it declares <code>toolr-py</code> for
+you. If you'd rather wire it by hand (e.g. you're slotting toolr
+into an existing <code>tools/pyproject.toml</code>), add it to your project's
+tools venv:</p>
+<div class="language-toml highlight"><span class="filename">tools/pyproject.toml</span><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[project]</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;my-project-tools&quot;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.11&quot;</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="s2">&quot;toolr-py&quot;</span><span class="p">,</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">]</span>
 </span></code></pre></div>
 <p><code>uv sync</code> (or whatever resolver you use for <code>tools/</code>) will pull it
 in. The <code>toolr</code> CLI on PATH will then find <code>import toolr</code> inside
@@ -1923,65 +1961,65 @@ your tools venv when it executes commands.</p>
 <p>The CLI is a Rust binary built with <code>maturin --bindings bin</code>,
 which produces a Python-version-independent wheel that ships
 only the executable. The runtime users <code>import</code> is a separate
-pyo3-extension wheel built for each (CPython, ABI) pair. Splitting
-them lets the CLI be one global install while the runtime tracks
-each project's tools venv.</p>
+pyo3-extension wheel built for each (CPython, ABI) pair.
+Splitting them lets the CLI be one global install while the
+runtime tracks each project's tools venv.</p>
 </div>
 <h2 id="supply-chain-verification-slsa-attestations">Supply-chain verification (SLSA attestations)<a class="headerlink" href="#supply-chain-verification-slsa-attestations" title="Permanent link">&para;</a></h2>
 <p>Every release archive is signed with a SLSA build-provenance
 attestation produced by the GitHub-hosted release workflow. The
 <code>install.sh</code> and <code>install.ps1</code> scripts verify the attestation
 automatically when the <code>gh</code> CLI is on PATH. To require verification:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>sh<span class="w"> </span>installation/install.sh<span class="w"> </span>--verify-attestation<span class="o">=</span>require<span class="w">   </span><span class="c1"># POSIX</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>./installation/install.ps1<span class="w"> </span>-VerifyAttestation<span class="w"> </span>require<span class="w">     </span><span class="c1"># Windows</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>sh<span class="w"> </span>installation/install.sh<span class="w"> </span>--verify-attestation<span class="o">=</span>require<span class="w">   </span><span class="c1"># POSIX</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>./installation/install.ps1<span class="w"> </span>-VerifyAttestation<span class="w"> </span>require<span class="w">     </span><span class="c1"># Windows</span>
 </span></code></pre></div>
 <p>Or verify a downloaded archive manually:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>gh<span class="w"> </span>attestation<span class="w"> </span>verify<span class="w"> </span>toolr-1.2.3-aarch64-apple-darwin.tar.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--repo<span class="w"> </span>s0undt3ch/ToolR
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gh<span class="w"> </span>attestation<span class="w"> </span>verify<span class="w"> </span>toolr-1.2.3-aarch64-apple-darwin.tar.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--repo<span class="w"> </span>s0undt3ch/ToolR
 </span></code></pre></div>
 <h2 id="verifying-the-install">Verifying the install<a class="headerlink" href="#verifying-the-install" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>toolr<span class="w"> </span>--version
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>toolr<span class="w"> </span>--version
 </span></code></pre></div>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>toolr<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>toolr<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>In-project CLI tooling support
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Usage: toolr [OPTIONS] [COMMAND]
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>Commands:
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>  example  Example commands
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>  project  Operations on the current repo&#39;s tools/ directory
-</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>  self     Operations on toolr itself
-</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
-</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>Options:
-</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>  -h, --help     Print help
-</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>  -V, --version  Print version
-</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>
-</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>Output Options:
-</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>  -d, --debug
-</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>          Increase verbosity (also enables `DEBUG` logging).
-</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>  -q, --quiet
-</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>          Suppress non-error output.
-</span><span id="__span-9-19"><a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>      --timestamps
-</span><span id="__span-9-20"><a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>          Prepend ISO-8601 timestamps to log lines.
-</span><span id="__span-9-21"><a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>      --no-timestamps
-</span><span id="__span-9-22"><a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>          Suppress log-line timestamps (default; overrides `--timestamps`).
-</span><span id="__span-9-23"><a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>      --timeout-secs &lt;SECONDS&gt;
-</span><span id="__span-9-24"><a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>          Default timeout applied to every `ctx.run(...)` subprocess (per-call `timeout_secs=` wins
-</span><span id="__span-9-25"><a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a>          when set).
-</span><span id="__span-9-26"><a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a>      --no-output-timeout-secs &lt;SECONDS&gt;
-</span><span id="__span-9-27"><a id="__codelineno-9-27" name="__codelineno-9-27" href="#__codelineno-9-27"></a>          Default no-output watchdog applied to every `ctx.run(...)` subprocess — abort if no
-</span><span id="__span-9-28"><a id="__codelineno-9-28" name="__codelineno-9-28" href="#__codelineno-9-28"></a>          stdout/stderr for this many seconds. Per-call `no_output_timeout_secs=` wins when set.
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>In-project CLI tooling support
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>Usage: toolr [OPTIONS] [COMMAND]
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>Commands:
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>  example  Example commands
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>  project  Operations on the current repo&#39;s tools/ directory
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>  self     Operations on toolr itself
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>Options:
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>  -h, --help     Print help
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>  -V, --version  Print version
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>Output Options:
+</span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>  -d, --debug
+</span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>          Increase verbosity (also enables `DEBUG` logging).
+</span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>  -q, --quiet
+</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a>          Suppress non-error output.
+</span><span id="__span-10-19"><a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a>      --timestamps
+</span><span id="__span-10-20"><a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a>          Prepend ISO-8601 timestamps to log lines.
+</span><span id="__span-10-21"><a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a>      --no-timestamps
+</span><span id="__span-10-22"><a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a>          Suppress log-line timestamps (default; overrides `--timestamps`).
+</span><span id="__span-10-23"><a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a>      --timeout-secs &lt;SECONDS&gt;
+</span><span id="__span-10-24"><a id="__codelineno-10-24" name="__codelineno-10-24" href="#__codelineno-10-24"></a>          Default timeout applied to every `ctx.run(...)` subprocess (per-call `timeout_secs=` wins
+</span><span id="__span-10-25"><a id="__codelineno-10-25" name="__codelineno-10-25" href="#__codelineno-10-25"></a>          when set).
+</span><span id="__span-10-26"><a id="__codelineno-10-26" name="__codelineno-10-26" href="#__codelineno-10-26"></a>      --no-output-timeout-secs &lt;SECONDS&gt;
+</span><span id="__span-10-27"><a id="__codelineno-10-27" name="__codelineno-10-27" href="#__codelineno-10-27"></a>          Default no-output watchdog applied to every `ctx.run(...)` subprocess — abort if no
+</span><span id="__span-10-28"><a id="__codelineno-10-28" name="__codelineno-10-28" href="#__codelineno-10-28"></a>          stdout/stderr for this many seconds. Per-call `no_output_timeout_secs=` wins when set.
 </span></code></pre></div>
 <h2 id="development-install">Development install<a class="headerlink" href="#development-install" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nb">cd</span><span class="w"> </span>ToolR
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>uv<span class="w"> </span>sync<span class="w"> </span>--dev
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release<span class="w"> </span>--bin<span class="w"> </span>toolr
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nb">cd</span><span class="w"> </span>ToolR
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>uv<span class="w"> </span>sync<span class="w"> </span>--dev
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release<span class="w"> </span>--bin<span class="w"> </span>toolr
 </span></code></pre></div>
 <p>The <code>target/release/toolr</code> binary is what you'll exercise during
-development; put <code>target/release/</code> on your PATH (or alias <code>toolr</code> to
-it) while iterating.</p>
+development; put <code>target/release/</code> on your PATH (or alias <code>toolr</code>
+to it) while iterating.</p>
 
 
 

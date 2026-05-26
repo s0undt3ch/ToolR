@@ -571,6 +571,78 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="1. Install the toolr binary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mise" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mise
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pip
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#curl-sh-linux-macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        curl | sh (Linux + macOS)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#powershell-windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PowerShell (Windows)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-release-archives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub release archives
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1745,6 +1817,78 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="1. Install the toolr binary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mise" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mise
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pip
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#curl-sh-linux-macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        curl | sh (Linux + macOS)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#powershell-windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PowerShell (Windows)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-release-archives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub release archives
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1820,18 +1964,67 @@
 <p>The fastest path from zero to a running command. About two minutes
 end-to-end. For a full install matrix, see <a href="../installation/">Installation</a>.</p>
 <h2 id="1-install-the-toolr-binary">1. Install the toolr binary<a class="headerlink" href="#1-install-the-toolr-binary" title="Permanent link">&para;</a></h2>
-<p>On Linux or macOS:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+<p>toolr ships as two complementary packages:</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>What it is</th>
+<th>Where it lives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>toolr</code></td>
+<td>The Rust CLI binary you run from the shell.</td>
+<td>On <code>$PATH</code>, installed once.</td>
+</tr>
+<tr>
+<td><code>toolr-py</code></td>
+<td>The Python runtime your <code>tools/*.py</code> import.</td>
+<td>In your <code>tools/pyproject.toml</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>This step installs the CLI binary. <code>toolr-py</code> lands automatically in
+step 2 when <code>toolr project init</code> scaffolds <code>tools/pyproject.toml</code> and
+runs <code>uv sync</code>.</p>
+<p>Five first-class install paths — pick whichever matches your environment.</p>
+<h3 id="mise">mise<a class="headerlink" href="#mise" title="Permanent link">&para;</a></h3>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git#installation/mise
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>toolr@latest
 </span></code></pre></div>
-<p>On Windows (PowerShell):</p>
-<div class="language-powershell highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">irm </span><span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">s0undt3ch</span><span class="p">/</span><span class="n">ToolR</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">installation</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="p">|</span> <span class="nb">iex</span>
+<p>For projects that already pin tool versions via <code>.mise.toml</code>, this is
+the most-natural fit. See <a href="../installation/mise/">installation/mise</a>.</p>
+<h3 id="pip">pip<a class="headerlink" href="#pip" title="Permanent link">&para;</a></h3>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>toolr<span class="w">   </span><span class="c1"># Rust CLI binary</span>
 </span></code></pre></div>
-<p>Verify:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>toolr<span class="w"> </span>--version
+<p>Installs the <code>toolr</code> binary into whatever venv <code>pip</code> is pointing at.
+<strong>Do not <code>pip install toolr-py</code></strong> into that same venv — <code>toolr-py</code>
+belongs in the per-repo tools venv that <code>toolr project init</code>
+scaffolds for you.</p>
+<h3 id="curl-sh-linux-macos">curl | sh (Linux + macOS)<a class="headerlink" href="#curl-sh-linux-macos" title="Permanent link">&para;</a></h3>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </span></code></pre></div>
+<p>Verifies the SLSA attestation when <code>gh</code> is on PATH. Pin a version with
+<code>sh -s -- --version X.Y.Z</code>. Custom prefix: <code>sh -s -- --prefix /opt/toolr/bin</code>.</p>
+<h3 id="powershell-windows">PowerShell (Windows)<a class="headerlink" href="#powershell-windows" title="Permanent link">&para;</a></h3>
+<div class="language-powershell highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">irm </span><span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">s0undt3ch</span><span class="p">/</span><span class="n">ToolR</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">installation</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="p">|</span> <span class="nb">iex</span>
+</span></code></pre></div>
+<h3 id="github-release-archives">GitHub release archives<a class="headerlink" href="#github-release-archives" title="Permanent link">&para;</a></h3>
+<p>Download <code>toolr-&lt;version&gt;-&lt;target-triple&gt;.tar.gz</code> (or <code>.zip</code> for
+Windows) from <a href="https://github.com/s0undt3ch/ToolR/releases">https://github.com/s0undt3ch/ToolR/releases</a>, verify
+the <code>.sha256</code> sibling and the SLSA attestation, drop the binary on
+<code>$PATH</code>. Useful in locked-down environments that audit binaries
+before allowing them on a machine.</p>
+<h3 id="verify">Verify<a class="headerlink" href="#verify" title="Permanent link">&para;</a></h3>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>--version
+</span></code></pre></div>
+<p>The full install matrix (per-OS notes, attestation flags, prefix
+overrides) lives in <a href="../installation/">Installation</a>.</p>
 <h2 id="2-scaffold-tools-in-your-repo">2. Scaffold <code>tools/</code> in your repo<a class="headerlink" href="#2-scaffold-tools-in-your-repo" title="Permanent link">&para;</a></h2>
 <p>From your repo root:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>init
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>init
 </span></code></pre></div>
 <p>This writes three files under <code>tools/</code>:</p>
 <ul>
@@ -1842,26 +2035,26 @@ end-to-end. For a full install matrix, see <a href="../installation/">Installati
 <p>It then runs <code>uv sync</code> to materialise the tools venv. The next command
 you run uses that venv automatically.</p>
 <h2 id="3-run-your-first-command">3. Run your first command<a class="headerlink" href="#3-run-your-first-command" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>example<span class="w"> </span>hello<span class="w"> </span>--name<span class="w"> </span>you
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>example<span class="w"> </span>hello<span class="w"> </span>--name<span class="w"> </span>you
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>hello, world
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>hello, world
 </span></code></pre></div>
 <p>Inspect the help to see what else the example file gives you:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>example<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>toolr<span class="w"> </span>example<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Generated by `toolr project init` — edit or delete as you build out your own.
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Usage: toolr example [COMMAND]
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>Commands:
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  hello    Greet someone.
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>  commit   Print the short SHA of the current git HEAD.
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  confirm  Prompt for confirmation before doing something destructive.
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>  setlog   Set a log level (for demonstration only — does nothing).
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>Options:
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>  -h, --help
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>          Print help (see a summary with &#39;-h&#39;)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>Generated by `toolr project init` — edit or delete as you build out your own.
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Usage: toolr example [COMMAND]
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>Commands:
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>  hello    Greet someone.
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>  commit   Print the short SHA of the current git HEAD.
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>  confirm  Prompt for confirmation before doing something destructive.
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>  setlog   Set a log level (for demonstration only — does nothing).
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>Options:
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>  -h, --help
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>          Print help (see a summary with &#39;-h&#39;)
 </span></code></pre></div>
 <h2 id="4-edit-toolsexamplepy-or-replace-it">4. Edit <code>tools/example.py</code> (or replace it)<a class="headerlink" href="#4-edit-toolsexamplepy-or-replace-it" title="Permanent link">&para;</a></h2>
 <p>Open the generated file. The scaffold declares a group with
