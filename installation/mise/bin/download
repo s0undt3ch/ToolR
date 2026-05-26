@@ -6,6 +6,17 @@ REPO="${TOOLR_REPO:-s0undt3ch/ToolR}"
 VERSION="${ASDF_INSTALL_VERSION:?ASDF_INSTALL_VERSION required}"
 DOWNLOAD_PATH="${ASDF_DOWNLOAD_PATH:?ASDF_DOWNLOAD_PATH required}"
 
+# Minimum supported version, matched to `bin/install`. Catch the
+# unsupported case before we hit the network so users see a clear
+# message instead of a 404 on the release asset URL.
+minimum="0.20.0"
+if [ "$(printf '%s\n%s\n' "$minimum" "$VERSION" | sort -V | head -n 1)" != "$minimum" ]; then
+  echo "download: refusing to install toolr ${VERSION}; minimum supported is ${minimum}" >&2
+  echo "download: earlier toolr releases used a Python source distribution and" >&2
+  echo "download: cannot be installed via this mise plugin." >&2
+  exit 1
+fi
+
 detect_triple() {
   uname_s="$(uname -s)"
   uname_m="$(uname -m)"

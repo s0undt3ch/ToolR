@@ -5,6 +5,19 @@ set -euo pipefail
 VERSION="${ASDF_INSTALL_VERSION:?ASDF_INSTALL_VERSION required}"
 INSTALL_PATH="${ASDF_INSTALL_PATH:?ASDF_INSTALL_PATH required}"
 DOWNLOAD_PATH="${ASDF_DOWNLOAD_PATH:?ASDF_DOWNLOAD_PATH required}"
+REPO="${TOOLR_REPO:-s0undt3ch/ToolR}"
+
+# Toolr 0.20.0 is the first release shape this installer supports —
+# earlier versions shipped as a Python package via PyPI and were
+# installed via pipx, not as a binary archive. Surface a loud error
+# rather than 404-ing on a missing release asset.
+minimum="0.20.0"
+if [ "$(printf '%s\n%s\n' "$minimum" "$VERSION" | sort -V | head -n 1)" != "$minimum" ]; then
+  echo "install: refusing to install toolr ${VERSION}; minimum supported is ${minimum}" >&2
+  echo "install: earlier toolr releases used a Python source distribution and" >&2
+  echo "install: cannot be installed via this mise plugin." >&2
+  exit 1
+fi
 
 detect_triple() {
   uname_s="$(uname -s)"
@@ -47,6 +60,24 @@ if [ -f "$sha_file" ]; then
     echo "install: checksum mismatch for $archive" >&2
     exit 1
   }
+fi
+
+# SLSA build-provenance check via `gh attestation verify`. Set
+# `TOOLR_SKIP_ATTESTATION=1` (or any non-empty value) to bypass —
+# useful in environments that don't carry the `gh` CLI or that need
+# to install offline. Defaults to verifying.
+if [ -z "${TOOLR_SKIP_ATTESTATION:-}" ]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "install: 'gh' CLI is required to verify the toolr archive's SLSA build provenance." >&2
+    echo "install: install gh (https://cli.github.com/) or set TOOLR_SKIP_ATTESTATION=1 to bypass." >&2
+    exit 1
+  fi
+  echo "install: verifying SLSA build provenance for ${filename}" >&2
+  if ! gh attestation verify "$archive" --repo "$REPO" >&2; then
+    echo "install: attestation verification failed for ${filename}" >&2
+    echo "install: set TOOLR_SKIP_ATTESTATION=1 to bypass (not recommended)." >&2
+    exit 1
+  fi
 fi
 
 bin_dir="${INSTALL_PATH}/bin"
