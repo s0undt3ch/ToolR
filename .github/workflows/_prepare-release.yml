@@ -101,22 +101,24 @@ jobs:
           cache: true
           cache_key_prefix: ${{ inputs.cache-seed }}|mise|${{ inputs.mise-version }}|prepare-release|${{ runner.os }}|${{ runner.arch }}
 
+      # The Python binary is still resolved here because the
+      # UNRELEASED.md regex strip a few steps down needs a Python
+      # interpreter. Setup ToolR no longer consumes it.
       - name: Get the Python Binary path from Mise
         id: mise-python-executable
         shell: bash
         run: echo "python=$(mise which python)" >> "$GITHUB_OUTPUT"
 
-      - name: Generate additional ToolR requirements file
-        shell: bash
-        run: |
-          uv export --frozen --no-hashes --only-group tools --output-file ${{ github.workspace }}/toolr-requirements.txt
-
       - name: Setup ToolR
+        # In-repo composite action: downloads the toolr binary from a
+        # GitHub release, verifies the SLSA build provenance, and
+        # caches the in-tree `tools/.venv` for the prepare-release
+        # job's `toolr` invocations.
         id: setup-toolr
-        uses: s0undt3ch/ToolR@fc2d6deee5f50b7f43cd1f099f896b09a4415dce # main (python-path support, post-v0.11.1)
+        uses: ./
         with:
-          python-path: ${{ steps.mise-python-executable.outputs.python }}
-          requirements-file: ${{ github.workspace }}/toolr-requirements.txt
+          version: latest
+          cache-prefix: ${{ inputs.cache-seed }}|setup-toolr|prepare-release
 
       - name: Setup Prek
         id: setup-pre-commit

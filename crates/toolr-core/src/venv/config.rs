@@ -1,9 +1,16 @@
 //! Parse the `[tool.toolr]` table out of `tools/pyproject.toml`.
 
 use std::path::Path;
+use std::str::FromStr;
 
 use serde::Deserialize;
 use thiserror::Error;
+
+/// Environment variable that overrides `[tool.toolr] venv-location`
+/// in `tools/pyproject.toml`. Accepts the same kebab-case spellings
+/// the TOML key does (`in-tree` / `cache`). Primarily a CI escape
+/// hatch — the per-project default belongs in `pyproject.toml`.
+pub const VENV_LOCATION_ENV: &str = "TOOLR_VENV_LOCATION";
 
 /// Where the tools venv should be materialised.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
@@ -14,6 +21,20 @@ pub enum VenvLocation {
     Cache,
     /// Opt-in: `tools/.venv/`.
     InTree,
+}
+
+impl FromStr for VenvLocation {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "in-tree" | "intree" => Ok(VenvLocation::InTree),
+            "cache" => Ok(VenvLocation::Cache),
+            other => Err(format!(
+                "expected `in-tree` or `cache` for VenvLocation, got `{other}`",
+            )),
+        }
+    }
 }
 
 /// Strongly-typed view of the `[tool.toolr]` table.

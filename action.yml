@@ -1,163 +1,404 @@
 name: "Setup ToolR"
-description: "Install ToolR via uvx and cache it"
+description: "Install the ToolR Rust binary from a GitHub release and verify its SLSA build provenance"
 author: "Pedro Algarvio"
 
 inputs:
   version:
-    description: ToolR version to install (defaults to the action's git ref version, or 'latest' if not a tag)
+    description: |
+      ToolR version to install, with or without a leading `v`
+      (e.g. `0.20.0` or `v0.20.0`). The special value `latest`
+      resolves to the most recent release tag. When empty, the
+      action falls back to the git ref it was invoked with
+      (`github.action_ref`), and then to `latest`.
+
+      Versions below `0.20.0` are not accepted — the binary-only
+      release format started with that version.
     default: ""
 
-  python-path:
-    description: Path to the Python executable that shall be used
-    default: "python"
+  skip-attestation:
+    description: |
+      Set to `true` to skip `gh attestation verify` on the
+      downloaded archive. Defaults to `false`; the action
+      cryptographically verifies the SLSA build provenance the
+      release workflow attaches to every archive.
+    default: "false"
 
-  requirements-file:
-    description: Additional requirements file to install
+  github-token:
+    description: |
+      Token used by `gh release download` and `gh attestation
+      verify`. Defaults to the workflow's GITHUB_TOKEN. The token
+      needs the `contents: read` permission scope.
+    default: ${{ github.token }}
+
+  cache-prefix:
+    description: |
+      Prefix prepended to the actions/cache keys this action
+      manages — both the toolr-binary cache and the in-tree
+      `tools/.venv` cache. Defaults to `setup-toolr`. Bump the
+      prefix in the caller workflow to force a cache miss without
+      changing the toolr version or the pinned dependencies —
+      useful when invalidating after a runner image upgrade or a
+      corrupted cache entry.
+    default: "setup-toolr"
+
+  cache-tools-venv:
+    description: |
+      When `true` (the default), cache the in-tree
+      `tools/.venv` keyed on `tools/pyproject.toml` and
+      `tools/uv.lock`. Set to `false` if you want toolr to
+      rebuild the venv on every run.
+    default: "true"
+
+  sync-args:
+    description: |
+      Extra arguments appended to the `uv sync` invocation the
+      action runs to materialise the tools venv. Whitespace-split
+      shell-style; do not quote each flag. Useful for opting back
+      into a dependency group the default `--no-default-groups`
+      would skip (e.g. `--group lint`). Defaults to empty.
     default: ""
 
 outputs:
   version:
-    description: ToolR version installed
-    value: ${{ steps.toolr-version.outputs.version }}
-  pipx-home-dir:
-    description: Pipx home directory
-    value: ${{ steps.setup-pipx.outputs.cache-home-dir }}
-  pipx-bin-dir:
-    description: Pipx bin directory
-    value: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
-  pipx-python-path:
-    description: Pipx python path
-    value: ${{ steps.python-version-checksum.outputs.python-path }}
-
-# pipx caching work was taken from https://generalreasoning.com/blog/cicd/python/software/2025/02/18/github-actions-caching-pipx.html
+    description: Resolved ToolR version installed (no leading `v`).
+    value: ${{ steps.resolve-version.outputs.version }}
+  bin-dir:
+    description: Directory containing the `toolr` binary (already on PATH).
+    value: ${{ steps.install.outputs.bin-dir }}
+  bin-path:
+    description: Absolute path to the installed `toolr` binary.
+    value: ${{ steps.install.outputs.bin-path }}
 
 runs:
   using: "composite"
   steps:
-    - name: Define ToolR version
+    - name: Resolve toolr version
+      id: resolve-version
       shell: bash
-      id: parse-version
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
       run: |
-        ACTION_VERSION_TAG="${{ inputs.version }}"
+        set -euo pipefail
 
-        # If no version specified, auto-detect from git ref
-        if [ -z "$ACTION_VERSION_TAG" ]; then
-          # GITHUB_ACTION_REF is the ref/tag that the action was referenced with
-          # e.g., "v0.11.0" if used as s0undt3ch/ToolR@v0.11.0
-          if [ -n "${{ github.action_ref }}" ]; then
-            ACTION_VERSION_TAG="${{ github.action_ref }}"
-            echo "Auto-detected version from action ref: $ACTION_VERSION_TAG"
-          else
-            # Fallback to latest if we can't detect
-            ACTION_VERSION_TAG="latest"
-            echo "No version specified and no action ref found, using latest"
+        raw="${INPUT_VERSION}"
+        if [ -z "$raw" ] && [ -n "${ACTION_REF}" ]; then
+          raw="${ACTION_REF}"
+          echo "setup-toolr: no version input; using action ref '$raw'"
+        fi
+        if [ -z "$raw" ]; then
+          raw="latest"
+          echo "setup-toolr: no version input or action ref; defaulting to 'latest'"
+        fi
+
+        # Strip the leading `v` so the rest of the action sees a bare
+        # semver string. Release artifacts are named without it; the
+        # release tag carries it. Normalising here means every
+        # downstream consumer (download URLs, output value) sees the
+        # same shape.
+        version="${raw#v}"
+
+        if [ "$version" = "latest" ]; then
+          # `gh release view --json tagName` returns `vX.Y.Z` for our
+          # release tags; strip the leading `v` for consistency.
+          version=$(gh release view --repo "${GITHUB_REPOSITORY:-s0undt3ch/ToolR}" --json tagName --jq '.tagName' 2>/dev/null | sed 's/^v//')
+          if [ -z "$version" ]; then
+            # Fallback for forks or downstream consumers: the action's
+            # canonical repo, not the calling workflow's.
+            version=$(gh release view --repo s0undt3ch/ToolR --json tagName --jq '.tagName' | sed 's/^v//')
           fi
-        fi
-
-        echo "THE ACTION_VERSION_TAG=$ACTION_VERSION_TAG"
-        VERSION_FROM_TAG=${ACTION_VERSION_TAG#v}
-        if [ "${VERSION_FROM_TAG}" = "latest" ]; then
-          VERSION_FROM_TAG=$(curl -s https://pypi.org/pypi/toolr/json | jq -r '.info.version' 2>/dev/null)
-        fi
-        if [ "${VERSION_FROM_TAG}" = "local" ]; then
-          if [ "${{ github.repository }}" != "s0undt3ch/ToolR" ]; then
-            echo "Local version is only supported for the ToolR repository"
+          if [ -z "$version" ]; then
+            echo "setup-toolr: could not resolve 'latest' to a release tag" >&2
             exit 1
           fi
-          VERSION_FROM_TAG=$(git describe --tags --match "v[0-9]*.[0-9]*.[0-9]*" --long || git rev-parse --short HEAD)
+          echo "setup-toolr: resolved 'latest' to $version"
         fi
-        # Generate a requirements file so that the setup-uv action can properly invalidate the cache when necessary
-        if [ -n "${{ inputs.requirements-file }}" ] && [ -f "${{ inputs.requirements-file }}" ]; then
-          REQUIREMENTS_FILE=${{ github.workspace }}/.toolr-action-requirements.txt
-          # Pipx only supports requirements files with one package per line, no even comments are allowed
-          grep -v '^#' "${{ inputs.requirements-file }}" > "$REQUIREMENTS_FILE"
+
+        # ToolR 0.20.0 is the first binary-only release shape. Earlier
+        # versions shipped via pipx + PyPI source; this action no
+        # longer supports them. Surface a loud error rather than
+        # silently downloading an asset that does not exist.
+        minimum="0.20.0"
+        if [ "$(printf '%s\n%s\n' "$minimum" "$version" | sort -V | head -n 1)" != "$minimum" ]; then
+          echo "setup-toolr: refusing to install toolr $version — minimum supported version is $minimum" >&2
+          echo "setup-toolr: earlier releases shipped as a Python package and are no longer compatible with this action." >&2
+          exit 1
         fi
-        echo "version=${VERSION_FROM_TAG}" >> "$GITHUB_OUTPUT"
-        echo "requirements-file=${REQUIREMENTS_FILE}" >> "$GITHUB_OUTPUT"
 
-    - name: Get Python version checksum
-      id: python-version-checksum
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Compute archive identifiers
+      id: archive
       shell: bash
+      env:
+        VERSION: ${{ steps.resolve-version.outputs.version }}
       run: |
-        PYTHON_PATH=${{ inputs.python-path || 'python' }}
-        echo "PYTHON_PATH=$PYTHON_PATH"
-        echo "python-path=$PYTHON_PATH" >> "$GITHUB_OUTPUT"
-        PYTHON_VERSION=$("$PYTHON_PATH" --version --version)
-        echo "PYTHON_VERSION=$PYTHON_VERSION"
-        VERSION_SHA256SUM=$(echo "$PYTHON_VERSION" | sha256sum | cut -d ' ' -f 1)
-        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
-        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+        set -euo pipefail
+        case "$RUNNER_OS" in
+          Linux)
+            arch=$(uname -m)
+            libc=gnu
+            [ -f /etc/alpine-release ] && libc=musl
+            case "$arch" in
+              x86_64|amd64)  triple="x86_64-unknown-linux-${libc}" ;;
+              aarch64|arm64) triple="aarch64-unknown-linux-${libc}" ;;
+              *) echo "setup-toolr: unsupported Linux arch '$arch'" >&2; exit 1 ;;
+            esac
+            ext=tar.gz
+            bin=toolr
+            ;;
+          macOS)
+            arch=$(uname -m)
+            case "$arch" in
+              x86_64) triple="x86_64-apple-darwin" ;;
+              arm64|aarch64) triple="aarch64-apple-darwin" ;;
+              *) echo "setup-toolr: unsupported macOS arch '$arch'" >&2; exit 1 ;;
+            esac
+            ext=tar.gz
+            bin=toolr
+            ;;
+          Windows)
+            triple="x86_64-pc-windows-msvc"
+            ext=zip
+            bin=toolr.exe
+            ;;
+          *)
+            echo "setup-toolr: unsupported RUNNER_OS '$RUNNER_OS'" >&2
+            exit 1
+            ;;
+        esac
 
-    - name: Get pipx version checksum
-      id: pipx-version-checksum
-      shell: bash
-      run: |
-        PIPX_PATH=$(which pipx)
-        echo "PIPX_PATH=$PIPX_PATH"
-        echo "pipx-path=$PIPX_PATH" >> "$GITHUB_OUTPUT"
-        VERSION_SHA256SUM=$("$PIPX_PATH" --version | sha256sum | cut -d ' ' -f 1)
-        echo "VERSION_SHA256SUM=$VERSION_SHA256SUM"
-        echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
+        archive="toolr-${VERSION}-${triple}.${ext}"
+        {
+          echo "triple=$triple"
+          echo "ext=$ext"
+          echo "bin=$bin"
+          echo "archive=$archive"
+        } >> "$GITHUB_OUTPUT"
 
-    - name: Setup pipx
-      id: setup-pipx
-      shell: bash
-      run: |
-        # Custom cache dir for pipx
-        # custom cached dir
-        cache_home_dir="$HOME/.local/pipx"
-        cache_bin_dir="$HOME/.local/pipx_bin"
-
-        # add cached dir to PATH
-        echo "$cache_bin_dir" >> "$GITHUB_PATH"
-
-        echo "cache-home-dir=$cache_home_dir" >> "$GITHUB_OUTPUT"
-        echo "cache-bin-dir=$cache_bin_dir" >> "$GITHUB_OUTPUT"
-
-    - id: cache-pipx
-      uses: actions/cache@v5
-      if: ${{ inputs.version }} != 'local'
+    - name: Cache toolr install
+      id: cache
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        key: >-
-          pipx|toolr|${{ steps.parse-version.outputs.version}}|${{
-            steps.python-version-checksum.outputs.version-sha256sum }}|${{
-            steps.pipx-version-checksum.outputs.version-sha256sum }}|${{
-            hashFiles(inputs.requirements-file, steps.parse-version.outputs.requirements-file) }}
-        path: |
-          ${{ steps.setup-pipx.outputs.cache-home-dir }}
-          ${{ steps.setup-pipx.outputs.cache-bin-dir }}
+        # `cache-prefix` lets callers force-invalidate without
+        # bumping the toolr version (e.g. after a runner image swap
+        # that needs a fresh binary, or to recover from a corrupted
+        # cache entry).
+        key: ${{ inputs.cache-prefix }}|${{ steps.resolve-version.outputs.version }}|${{ steps.archive.outputs.triple }}
+        path: ${{ runner.tool_cache }}/toolr/${{ steps.resolve-version.outputs.version }}
 
-    - name: Install ToolR
-      if: ${{ inputs.version }} == 'local' || ${{ steps.cache-pipx.outputs.cache-hit != 'true' }}
+    - name: Download archive
+      if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
-        # Install in our custom cached dir
-        PIPX_HOME: ${{ steps.setup-pipx.outputs.cache-home-dir }}
-        PIPX_BIN_DIR: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
-        # Use correct python
-        PIPX_DEFAULT_PYTHON: ${{ steps.python-version-checksum.outputs.python-path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        VERSION: ${{ steps.resolve-version.outputs.version }}
+        ARCHIVE: ${{ steps.archive.outputs.archive }}
       run: |
-        if [ "${{ inputs.version }}" = "local" ]; then
-          pipx install .
+        set -euo pipefail
+        work="$RUNNER_TEMP/setup-toolr"
+        rm -rf "$work"
+        mkdir -p "$work"
+
+        # `gh release download` is the preferred path: authenticated,
+        # rate-limit-friendly, no need to construct release URLs by
+        # hand. Falls back to `curl` when `gh` is unavailable for any
+        # reason (custom runners, self-hosted images without gh).
+        if command -v gh >/dev/null 2>&1; then
+          gh release download "v${VERSION}" \
+            --repo s0undt3ch/ToolR \
+            --pattern "${ARCHIVE}" \
+            --pattern "${ARCHIVE}.sha256" \
+            --dir "$work"
+        elif command -v curl >/dev/null 2>&1; then
+          base="https://github.com/s0undt3ch/ToolR/releases/download/v${VERSION}"
+          curl --fail --location --silent --show-error --output "${work}/${ARCHIVE}" "${base}/${ARCHIVE}"
+          curl --fail --location --silent --show-error --output "${work}/${ARCHIVE}.sha256" "${base}/${ARCHIVE}.sha256"
         else
-          pipx install toolr==${{ steps.parse-version.outputs.version }}
+          echo "setup-toolr: neither 'gh' nor 'curl' is available on PATH" >&2
+          exit 1
         fi
 
-    - name: Install additional requirements
-      if: ${{ inputs.version }} == 'local' || ${{ steps.cache-pipx.outputs.cache-hit != 'true' }}
+        # Verify the checksum the release pipeline shipped alongside
+        # the archive. Mismatch means the file is corrupt or has been
+        # tampered with — abort before unpacking.
+        cd "$work"
+        if command -v sha256sum >/dev/null 2>&1; then
+          sha256sum --check "${ARCHIVE}.sha256"
+        else
+          # macOS lacks sha256sum; fall back to shasum.
+          expected=$(awk '{print $1}' "${ARCHIVE}.sha256")
+          actual=$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')
+          if [ "$expected" != "$actual" ]; then
+            echo "setup-toolr: sha256 mismatch for ${ARCHIVE} (expected $expected, got $actual)" >&2
+            exit 1
+          fi
+        fi
+
+        echo "ARCHIVE_PATH=${work}/${ARCHIVE}" >> "$GITHUB_ENV"
+
+    - name: Verify SLSA build provenance
+      if: steps.cache.outputs.cache-hit != 'true' && inputs.skip-attestation != 'true'
       shell: bash
       env:
-        # Install in our custom cached dir
-        PIPX_HOME: ${{ steps.setup-pipx.outputs.cache-home-dir }}
-        PIPX_BIN_DIR: ${{ steps.setup-pipx.outputs.cache-bin-dir }}
-        # Use correct python
-        PIPX_DEFAULT_PYTHON: ${{ steps.python-version-checksum.outputs.python-path }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
-        pipx inject toolr -r ${{ steps.parse-version.outputs.requirements-file }}
+        set -euo pipefail
+        if ! command -v gh >/dev/null 2>&1; then
+          echo "setup-toolr: attestation verification requires the 'gh' CLI" >&2
+          echo "setup-toolr: install gh or pass 'skip-attestation: true' to bypass" >&2
+          exit 1
+        fi
+        gh attestation verify "$ARCHIVE_PATH" --repo s0undt3ch/ToolR
 
-    - name: Get ToolR version
-      id: toolr-version
+    - name: Force in-tree tools venv
       shell: bash
+      # Toolr supports two venv layouts (`in-tree` / `cache`); CI
+      # works much better with in-tree because GitHub Actions can
+      # cache `tools/.venv` directly while the global cache dir
+      # lives under `$XDG_CACHE_HOME`, which differs per runner and
+      # is harder to scope. The env var overrides any
+      # `[tool.toolr] venv-location` setting in the project's
+      # `tools/pyproject.toml`, so caller repos don't need to
+      # special-case CI in their config.
+      #
+      # The override is only honoured by toolr >= 0.20.1 (the
+      # release that ships `TOOLR_VENV_LOCATION` support). On
+      # 0.20.0 the env var is read but ignored and the venv falls
+      # back to `~/.cache/toolr/<repo-key>/venv` — which is why the
+      # cache step below grabs both candidate locations.
       run: |
-        TOOLR_VERSION=$(toolr --version)
-        echo "version=$TOOLR_VERSION" >> "$GITHUB_OUTPUT"
+        echo "TOOLR_VENV_LOCATION=in-tree" >> "$GITHUB_ENV"
+
+    - name: Install toolr binary
+      id: install
+      shell: bash
+      env:
+        VERSION: ${{ steps.resolve-version.outputs.version }}
+        EXT: ${{ steps.archive.outputs.ext }}
+        BIN: ${{ steps.archive.outputs.bin }}
+        TRIPLE: ${{ steps.archive.outputs.triple }}
+      run: |
+        set -euo pipefail
+        bin_dir="$RUNNER_TOOL_CACHE/toolr/${VERSION}"
+        mkdir -p "$bin_dir"
+
+        if [ ! -x "${bin_dir}/${BIN}" ]; then
+          tmp="$(mktemp -d)"
+          case "$EXT" in
+            tar.gz) tar -xzf "$ARCHIVE_PATH" -C "$tmp" ;;
+            zip)    unzip -q "$ARCHIVE_PATH" -d "$tmp" ;;
+          esac
+
+          # The release archives unpack into a single
+          # `toolr-<version>-<triple>/` directory containing the
+          # binary. Locate it explicitly rather than relying on
+          # `--strip-components` so the zip and tar paths share the
+          # same logic.
+          src_dir="${tmp}/toolr-${VERSION}-${TRIPLE}"
+          if [ ! -d "$src_dir" ]; then
+            echo "setup-toolr: archive layout changed — '$src_dir' missing" >&2
+            ls -la "$tmp" >&2
+            exit 1
+          fi
+          cp "${src_dir}/${BIN}" "${bin_dir}/${BIN}"
+          chmod +x "${bin_dir}/${BIN}"
+          rm -rf "$tmp"
+        fi
+
+        echo "$bin_dir" >> "$GITHUB_PATH"
+        {
+          echo "bin-dir=$bin_dir"
+          echo "bin-path=${bin_dir}/${BIN}"
+        } >> "$GITHUB_OUTPUT"
+        echo "setup-toolr: installed toolr ${VERSION} at ${bin_dir}/${BIN}"
+
+    - name: Resolve tools venv path
+      id: venv-path
+      if: inputs.cache-tools-venv == 'true'
+      shell: bash
+      # Ask the freshly-installed toolr where it would put the
+      # venv. On 0.20.1+ with TOOLR_VENV_LOCATION=in-tree that's
+      # `tools/.venv`; on 0.20.0 it's the cache-dir path even with
+      # the env var set. Capturing the actual resolved path here
+      # means the cache step below targets the right directory
+      # regardless of the toolr version on the runner.
+      env:
+        BIN_PATH: ${{ steps.install.outputs.bin-path }}
+      run: |
+        set -euo pipefail
+        venv_path="$("$BIN_PATH" project venv path)"
+        echo "setup-toolr: resolved tools venv path: $venv_path"
+        echo "path=$venv_path" >> "$GITHUB_OUTPUT"
+
+    - name: Cache tools venv
+      id: venv-cache
+      if: inputs.cache-tools-venv == 'true'
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        # Independent cache from the toolr-binary cache: the venv
+        # is invalidated by dependency churn (`uv.lock` / its
+        # `tools/`-scoped sibling if it exists) or project metadata
+        # changes (`tools/pyproject.toml`), not by a toolr release.
+        # The triple stays in the key so a runner OS / arch swap
+        # also misses.
+        #
+        # The cache covers BOTH lock-file shapes that exist in the
+        # wild: a single-workspace `uv.lock` at the repo root (this
+        # is what the toolr repo itself uses — `tools/` is a uv
+        # workspace member of the root) and a standalone
+        # `tools/uv.lock` (which a consumer using toolr but no
+        # workspace would have). hashFiles' undefined-file behaviour
+        # is to skip the missing entry, so either layout produces a
+        # stable, deterministic key.
+        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock', 'uv.lock') }}
+        path: ${{ steps.venv-path.outputs.path }}
+
+    - name: Sync tools venv
+      if: inputs.cache-tools-venv == 'true'
+      shell: bash
+      env:
+        VENV_PATH: ${{ steps.venv-path.outputs.path }}
+        SYNC_ARGS: ${{ inputs.sync-args }}
+      # The action drives uv directly rather than going through
+      # `toolr project deps sync` so it can scope the install to
+      # what CI actually needs:
+      #
+      # - `--no-default-groups` skips the workspace's `dev` /
+      #   `docs` / etc. groups. Those carry test runners, doc
+      #   tooling, and (in the toolr repo itself) the example
+      #   plugin — none of which are needed for `toolr <group>
+      #   <cmd>` to dispatch a Python command. Users who DO need
+      #   the dev group at action time can pass extra flags via
+      #   the `sync-args` input.
+      # - `--frozen` refuses to re-resolve. CI always installs
+      #   what `uv.lock` says, never silently bumps versions.
+      # - `UV_PROJECT_ENVIRONMENT` pins the venv path that toolr
+      #   resolved above so the install lands where toolr expects.
+      # - `VIRTUAL_ENV` is unset so uv doesn't warn about a
+      #   mismatch with whatever venv mise / setup-virtualenv
+      #   already activated.
+      #
+      # After a successful sync we touch the freshness marker
+      # toolr uses to skip re-syncing. Without this, the next
+      # `toolr <group> <cmd>` invocation sees the lock-newer-than-
+      # marker timestamp and triggers another sync.
+      run: |
+        set -euo pipefail
+        if ! command -v uv >/dev/null 2>&1; then
+          echo "setup-toolr: 'uv' is required on PATH to materialise the tools venv" >&2
+          echo "setup-toolr: install via mise or your platform's uv channel" >&2
+          exit 1
+        fi
+        unset VIRTUAL_ENV
+        # shellcheck disable=SC2086  # we deliberately split SYNC_ARGS on whitespace
+        UV_PROJECT_ENVIRONMENT="$VENV_PATH" uv sync \
+          --project tools \
+          --no-default-groups \
+          --frozen \
+          $SYNC_ARGS
+        # `.toolr-sync-stamp` is the freshness marker toolr writes
+        # when its own `project deps sync` succeeds. Mirror it here
+        # so a subsequent `toolr <cmd>` skips the redundant sync.
+        : > "$VENV_PATH/.toolr-sync-stamp"
