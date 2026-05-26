@@ -4,6 +4,12 @@ run-name: "CI (${{ github.event_name == 'pull_request' && format('pr: #{0}', git
 on:
   push:
   pull_request:
+    # Default PR triggers PLUS labeled/unlabeled: applying or removing
+    # the `full-build` label re-runs CI so the new matrix shape takes
+    # effect without needing a dummy commit. Other label changes also
+    # trigger a re-run (cheap and self-correcting); the matrix selector
+    # in `tools/ci.py` ignores labels other than `full-build`.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
   # Concurrency is defined in a way that concurrent builds against the main branch do not not cancel previous builds.
@@ -101,15 +107,15 @@ jobs:
       - name: Generate Build Matrix
         id: generate-build-matrix
         if: fromJSON(steps.check-build.outputs.should-run-build)
-        # Pushes to `main` run the full release-shaped matrix so main is
-        # always as close to a real release as possible — every triple
-        # release.yml would build, every CPython ABI for the toolr-py
-        # wheel. Pull requests keep the cheaper `ci` subset (native
-        # triples only) to stay snappy.
-        env:
-          MATRIX_WORKFLOW: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'release' || 'ci' }}
+        # `--workflow` is intentionally omitted: `generate-build-matrix`
+        # auto-detects from the GitHub event context (push to main →
+        # release; PR with `full-build` label → release; otherwise ci)
+        # and writes a one-line _reason_ to the job step summary so
+        # reviewers can see at a glance why this run got the matrix it
+        # got. The decision logic lives in `tools/ci.py` next to the
+        # matrix data, not split across the workflow YAML.
         run: |
-          toolr ci generate-build-matrix --workflow "$MATRIX_WORKFLOW"
+          toolr ci generate-build-matrix
 
   pre-commit:
     name: Pre-commit
