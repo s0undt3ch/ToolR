@@ -52,64 +52,63 @@ TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
 BINARY_WHEEL_PYTHONS = ["cp311"]
 
 # Per-triple metadata for the standalone toolr binary archives that
-# `_build-binary-archive.yml` builds. release.yml ships all of them
-# (downstream consumers: install.sh, mise plugin); ci.yml only needs the
-# runner-native subset to back the test/docs jobs (see CI_BINARY_TRIPLES).
+# `_build-binary-archive.yml` builds. release.yml + pushes to main ship
+# all of them; PR builds use the runner-native subset (see
+# `_CI_BINARY_ARCHIVE_TRIPLE_NAMES`).
+#
+# Every triple builds natively now: the matrix uses
+# architecture-matching GitHub runners and `*-linux-musl` works as a
+# native `rustup target add` + `musl-tools` build on `ubuntu-*` runners.
+# No docker, no `cross`.
 _BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
     {
         "triple": "x86_64-unknown-linux-gnu",
         "runner": "ubuntu-latest",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "aarch64-unknown-linux-gnu",
         "runner": "ubuntu-24.04-arm",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "x86_64-unknown-linux-musl",
         "runner": "ubuntu-latest",
-        "cross": True,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "aarch64-unknown-linux-musl",
         "runner": "ubuntu-24.04-arm",
-        "cross": True,
         "archive": "tar.gz",
         "display-name": "Linux",
     },
     {
         "triple": "aarch64-apple-darwin",
         "runner": "macos-14",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "macOS",
     },
     {
         "triple": "x86_64-apple-darwin",
         "runner": "macos-15-intel",
-        "cross": False,
         "archive": "tar.gz",
         "display-name": "macOS",
     },
     {
         "triple": "x86_64-pc-windows-msvc",
         "runner": "windows-latest",
-        "cross": False,
         "archive": "zip",
         "display-name": "Windows",
     },
 ]
 
-# Triples that ci.yml builds on every PR — one native triple per OS
-# in the test matrix. musl + cross-compiled aarch64 only build in
-# release.yml.
+# Triples that ci.yml builds on every PR — one native triple per OS in
+# the test matrix. Pushes to main build the full set (every triple
+# release.yml would build) so main is always as close to release as
+# possible.
 _CI_BINARY_ARCHIVE_TRIPLE_NAMES = frozenset(
     {
         "x86_64-unknown-linux-gnu",
@@ -145,8 +144,8 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
     Writes five GITHUB_OUTPUT keys:
 
       - `platform-matrix` — wheel platform map per OS (used by _build.yml).
-      - `binary-archive-triples` — list of triple+runner+cross+archive
-        objects (used by _build-binary-archive.yml's matrix).
+      - `binary-archive-triples` — list of triple+runner+archive objects
+        (used by _build-binary-archive.yml's matrix).
       - `pythons-binary` — CPython ABI tags for the toolr binary wheel.
       - `pythons-py` — CPython ABI tags for the toolr-py (pyo3) wheel.
       - `test-pythons` — dotted-form CPython versions for the test matrix
@@ -197,11 +196,9 @@ def generate_build_matrix(ctx: Context, workflow: str = "ci") -> None:
                 label = platform.title() if idx == 0 else ""
                 wfh.write(f"| {label} | {item['name']} | {item['os']} |\n")
         wfh.write("\n### Standalone binary archives\n\n")
-        wfh.write("| Triple | GH runner | Build mode | Archive |\n")
-        wfh.write("|--------|-----------|------------|---------|\n")
-        for t in binary_archive_triples:
-            mode = "cross" if t["cross"] else "native"
-            wfh.write(f"| `{t['triple']}` | {t['runner']} | {mode} | `{t['archive']}` |\n")
+        wfh.write("| Triple | GH runner | Archive |\n")
+        wfh.write("|--------|-----------|---------|\n")
+        wfh.writelines(f"| `{t['triple']}` | {t['runner']} | `{t['archive']}` |\n" for t in binary_archive_triples)
         wfh.write("\n### Python ABIs\n\n")
         wfh.write(f"- Binary wheel: `{', '.join(BINARY_WHEEL_PYTHONS)}`\n")
         wfh.write(f"- toolr-py wheel: `{', '.join(ALL_CPYTHONS)}`\n\n")

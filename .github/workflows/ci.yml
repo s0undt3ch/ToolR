@@ -101,8 +101,15 @@ jobs:
       - name: Generate Build Matrix
         id: generate-build-matrix
         if: fromJSON(steps.check-build.outputs.should-run-build)
+        # Pushes to `main` run the full release-shaped matrix so main is
+        # always as close to a real release as possible — every triple
+        # release.yml would build, every CPython ABI for the toolr-py
+        # wheel. Pull requests keep the cheaper `ci` subset (native
+        # triples only) to stay snappy.
+        env:
+          MATRIX_WORKFLOW: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'release' || 'ci' }}
         run: |
-          toolr ci generate-build-matrix --workflow ci
+          toolr ci generate-build-matrix --workflow "$MATRIX_WORKFLOW"
 
   pre-commit:
     name: Pre-commit
