@@ -20,11 +20,22 @@ param(
 $ErrorActionPreference = "Stop"
 
 function Resolve-LatestVersion {
-  $resp = Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue `
-    -Uri "https://github.com/$Repo/releases/latest"
-  $loc = $resp.Headers["Location"]
-  if (-not $loc) { throw "Could not resolve latest version" }
-  $tag = ($loc -split "/tag/")[-1].TrimEnd('/')
+  # The /releases/latest endpoint returns a 302 redirect to the
+  # actual tag page. PowerShell 7's Invoke-WebRequest treats the
+  # 302 as an error and throws even with `-ErrorAction
+  # SilentlyContinue` when `-MaximumRedirection 0` is set, so we
+  # ask the GitHub REST API instead — it returns the tag name in
+  # JSON with no redirect dance. Auth is optional but honoured
+  # when GH_TOKEN is set so the request doesn't hit unauthenticated
+  # rate limits in CI smoke runs.
+  $headers = @{ "Accept" = "application/vnd.github+json" }
+  if ($env:GH_TOKEN) {
+    $headers["Authorization"] = "Bearer $env:GH_TOKEN"
+  }
+  $resp = Invoke-RestMethod -UseBasicParsing -Headers $headers `
+    -Uri "https://api.github.com/repos/$Repo/releases/latest"
+  if (-not $resp.tag_name) { throw "Could not resolve latest version (no tag_name in API response)" }
+  $tag = $resp.tag_name
   if ($tag -notmatch '^v(.+)$') { throw "Unexpected tag format: $tag" }
   return $matches[1]
 }

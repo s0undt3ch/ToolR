@@ -17,6 +17,19 @@ on:
       - 'installation/install.ps1'
       - 'installation/mise/**'
       - '.github/workflows/install-smoke.yml'
+  # PRs that touch the installer entry points get a smoke-test run
+  # so we catch script breakage before it lands on main. The
+  # *remote URL* jobs (`smoke-pip-wheel`, `smoke-mise-plugin-url`)
+  # are gated off below — they exercise the published PyPI wheel
+  # and the public mise-plugin URL respectively, neither of which a
+  # PR can influence; running them here would just retest main's
+  # last release.
+  pull_request:
+    paths:
+      - 'installation/install.sh'
+      - 'installation/install.ps1'
+      - 'installation/mise/**'
+      - '.github/workflows/install-smoke.yml'
 
 permissions:
   contents: read
@@ -86,6 +99,10 @@ jobs:
 
   smoke-pip-wheel:
     name: pip install (${{ matrix.os }})
+    # `pip install toolr` resolves against the published PyPI wheel
+    # — a PR can't influence the result, so we only run this on
+    # main / schedule / dispatch where the test is meaningful.
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -160,8 +177,76 @@ jobs:
           version: ${{ env.MISE_VERSION }}
           install: false
       - name: Install plugin from local staging dir
+        # `mise plugin install <name> <url>` (alias `add`) requires a
+        # git URL; for a local checkout we use the `link` subcommand,
+        # which symlinks the plugin source into mise's plugin
+        # registry under <name>. That's the documented "developing a
+        # plugin" workflow and the only way to test the in-tree
+        # `installation/mise/` plugin without first pushing it to a
+        # standalone repository.
         run: |
-          mise plugin add toolr "$PWD/installation/mise"
+          mise plugin link toolr "$PWD/installation/mise"
+          if [ -n "${{ inputs.version }}" ]; then
+            mise install "toolr@${{ inputs.version }}"
+            mise exec "toolr@${{ inputs.version }}" -- toolr --version
+          else
+            latest=$(mise ls-remote toolr | tail -1)
+            mise install "toolr@${latest}"
+            mise exec "toolr@${latest}" -- toolr --version
+          fi
+
+  # Same matrix as `smoke-mise-plugin` but installs via the canonical
+  # user-facing URL form documented in `installation/mise/README.md`,
+  # `docs/quickstart.md`, and `docs/installation/mise.md`:
+  #
+  #     mise plugin add toolr https://github.com/<repo>.git#installation/mise
+  #
+  # The local-link job above catches breakage in the plugin scripts
+  # themselves; this one catches breakage in the user-visible install
+  # path — mise dropping support for the `#<subdir>` syntax, the
+  # repository being made private, the `installation/mise/` path
+  # moving, and so on.
+  #
+  # Skipped on `pull_request` runs because mise would clone the
+  # `https://github.com/<repo>.git#installation/mise` URL from
+  # main, not from the PR branch — i.e. we'd be re-testing main's
+  # plugin source while the actual changes sit on the PR. The
+  # local-link job above covers the PR-side change; this job
+  # exercises the same install path against the just-merged tip on
+  # push-to-main / schedule / dispatch where the URL form is the
+  # authoritative source.
+  smoke-mise-plugin-url:
+    name: mise plugin via URL (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-14
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+      - name: Load shared env vars
+        # MISE_VERSION lives in `.github/env`; checkout isn't strictly
+        # required for this job, but we need the file. Same sed-filter
+        # trick the other jobs use.
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/.github/env" \
+            | sed -n '/^[A-Z]/p' >> "$GITHUB_ENV"
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          version: ${{ env.MISE_VERSION }}
+          install: false
+      - name: Install plugin from git URL with subdir
+        # `<git-url>#<subdir>` is mise's documented syntax for
+        # plugins that live below the repository root. The plugin
+        # source we want is at `installation/mise` in this repo.
+        run: |
+          mise plugin add toolr "https://github.com/${{ github.repository }}.git#installation/mise"
           if [ -n "${{ inputs.version }}" ]; then
             mise install "toolr@${{ inputs.version }}"
             mise exec "toolr@${{ inputs.version }}" -- toolr --version
@@ -180,6 +265,7 @@ jobs:
       - smoke-install-ps1
       - smoke-pip-wheel
       - smoke-mise-plugin
+      - smoke-mise-plugin-url
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4

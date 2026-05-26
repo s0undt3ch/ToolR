@@ -52,15 +52,46 @@ filename="toolr-${VERSION}-${triple}.${ext}"
 url="https://github.com/${REPO}/releases/download/v${VERSION}/${filename}"
 sha_url="${url}.sha256"
 
+# Preference order: `gh` (handles auth, retries, and local
+# credentials transparently) → authenticated curl/wget →
+# unauthenticated curl/wget. The release-asset endpoint redirects
+# to a signed `objects.githubusercontent.com` URL — much more
+# lenient than `api.github.com`, but the initial redirect IS
+# rate-limited and HAS thrown 403s on heavy CI runners in the
+# past. Letting `gh` (or a Bearer-header curl) handle the request
+# preempts the same class of failure `list-all` hit on PR #274.
+auth_token="${MISE_GITHUB_TOKEN:-${GH_TOKEN:-${GITHUB_TOKEN:-}}}"
+
 echo "Downloading ${url}" >&2
 mkdir -p "$DOWNLOAD_PATH"
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$url" -o "${DOWNLOAD_PATH}/${filename}"
-  curl -fsSL "$sha_url" -o "${DOWNLOAD_PATH}/${filename}.sha256"
+if command -v gh >/dev/null 2>&1; then
+  # `gh release download` resolves the asset URL via the API
+  # (authenticated), retries on transient failures, and writes to
+  # `--dir`. The `--pattern` flag glob-matches against asset
+  # names; passing both the archive and its `.sha256` sidecar in
+  # one invocation halves the round-trips compared to curl.
+  gh release download "v${VERSION}" \
+    --repo "${REPO}" \
+    --pattern "${filename}" \
+    --pattern "${filename}.sha256" \
+    --dir "${DOWNLOAD_PATH}"
+elif command -v curl >/dev/null 2>&1; then
+  if [ -n "$auth_token" ]; then
+    curl -fsSL -H "Authorization: Bearer ${auth_token}" "$url" -o "${DOWNLOAD_PATH}/${filename}"
+    curl -fsSL -H "Authorization: Bearer ${auth_token}" "$sha_url" -o "${DOWNLOAD_PATH}/${filename}.sha256"
+  else
+    curl -fsSL "$url" -o "${DOWNLOAD_PATH}/${filename}"
+    curl -fsSL "$sha_url" -o "${DOWNLOAD_PATH}/${filename}.sha256"
+  fi
 elif command -v wget >/dev/null 2>&1; then
-  wget -qO "${DOWNLOAD_PATH}/${filename}" "$url"
-  wget -qO "${DOWNLOAD_PATH}/${filename}.sha256" "$sha_url"
+  if [ -n "$auth_token" ]; then
+    wget -qO "${DOWNLOAD_PATH}/${filename}" --header="Authorization: Bearer ${auth_token}" "$url"
+    wget -qO "${DOWNLOAD_PATH}/${filename}.sha256" --header="Authorization: Bearer ${auth_token}" "$sha_url"
+  else
+    wget -qO "${DOWNLOAD_PATH}/${filename}" "$url"
+    wget -qO "${DOWNLOAD_PATH}/${filename}.sha256" "$sha_url"
+  fi
 else
-  echo "download: neither curl nor wget available" >&2
+  echo "download: none of 'gh', 'curl', 'wget' available" >&2
   exit 1
 fi
