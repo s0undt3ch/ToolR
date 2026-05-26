@@ -1,0 +1,36 @@
+# Trigger fixtures for the toolr-command-packaging skill.
+#
+# Advisory: the host skill harness's intent matcher is the final
+# arbiter. The "should activate" entries capture the canonical
+# phrases an agent reading the description must continue to match;
+# the "should not activate" entries cover plausible-but-out-of-scope
+# requests where the trigger would be wrong.
+
+should_activate:
+  - "Ship our internal toolr commands as a pip-installable plugin"
+  - "Publish a toolr plugin to PyPI"
+  - "Configure hatchling to include `toolr-manifest.json` in the wheel"
+  - "Wire `toolr self build-manifest --check` as a CI gate for our plugin"
+  - "I have a `tools/` directory I want to turn into a distributable package"
+  - "Migrate our old toolr entry-points plugin to the static manifest"
+  - "Setuptools/poetry equivalent of the hatchling `packages = [...]` data-file inclusion"
+  - "Why does my installed toolr plugin fail to expose its commands?"
+
+should_not_activate:
+  # Authoring is a separate skill.
+  - "Add a toolr command for running migrations"
+  - "Extend toolr with a new `db reset` subcommand"
+  - "Wire a @command_group for our deployment scripts"
+  - "Help me write the docstring for this toolr command"
+
+  # Generic Python packaging, unrelated to toolr.
+  - "How do I publish my Django app to PyPI?"
+  - "What's the difference between hatchling and setuptools?"
+  - "Set up a fresh Python project with uv and ruff"
+
+  # Operating an installed plugin (out of scope).
+  - "My toolr plugin's command crashes with a TypeError — debug it"
+  - "Why is `toolr ci pytest` exiting with code 137?"
+
+  # Project-internal manifest, not a plugin.
+  - "How does the static `tools/.toolr-manifest.json` rebuild work?"
