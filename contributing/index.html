@@ -1905,7 +1905,8 @@
 
 
 <h1 id="contributing-to-toolr">Contributing to ToolR<a class="headerlink" href="#contributing-to-toolr" title="Permanent link">&para;</a></h1>
-<p>Thanks for considering a contribution. ToolR is a small project with a focused surface; bug reports, doc fixes, and well-scoped feature PRs are all welcome.</p>
+<p>Thanks for considering a contribution. ToolR is a small project with a focused surface; bug
+reports, doc fixes, and well-scoped feature PRs are all welcome.</p>
 <h2 id="repo-layout">Repo layout<a class="headerlink" href="#repo-layout" title="Permanent link">&para;</a></h2>
 <p>A Cargo workspace with three crates plus the Python source:</p>
 <table>
@@ -1983,14 +1984,17 @@
 </tr>
 </tbody>
 </table>
-<p>The Rust integration tests spawn the built <code>toolr</code> binary via <code>assert_cmd</code>. Don't shadow them with Python-level subprocess tests unless the behaviour can't be exercised in Rust.</p>
+<p>The Rust integration tests spawn the built <code>toolr</code> binary via <code>assert_cmd</code>. Don't shadow them with
+Python-level subprocess tests unless the behaviour can't be exercised in Rust.</p>
 <h2 id="runner_schema_version-schema_version-lock-step">RUNNER_SCHEMA_VERSION ↔ SCHEMA_VERSION lock-step<a class="headerlink" href="#runner_schema_version-schema_version-lock-step" title="Permanent link">&para;</a></h2>
 <p>The Rust binary and the <code>toolr-py</code> Python runtime communicate over a versioned JSON spec. Two constants must stay in lock-step:</p>
 <ul>
 <li><code>RUNNER_SCHEMA_VERSION</code> in <code>crates/toolr-core/src/execute/spec.rs</code></li>
 <li><code>SCHEMA_VERSION</code> in <code>crates/toolr-py/python/toolr/_runner.py</code></li>
 </ul>
-<p>Both carry doc comments listing which changes require a bump and which don't. Read those before changing either the Rust serde structs or the Python <code>RunnerSpec</code> class. A CI gate fails the build when the two values disagree.</p>
+<p>Both carry doc comments listing which changes require a bump and which don't. Read those before
+changing either the Rust serde structs or the Python <code>RunnerSpec</code> class. A CI gate fails the build
+when the two values disagree.</p>
 <h2 id="commits">Commits<a class="headerlink" href="#commits" title="Permanent link">&para;</a></h2>
 <p><a href="https://www.conventionalcommits.org/">Conventional Commits</a>. Examples:</p>
 <ul>
@@ -2008,12 +2012,17 @@
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>prek<span class="w"> </span>run<span class="w"> </span>rumdl<span class="w"> </span>--files<span class="w"> </span>docs/internals/manifest.md
 </span></code></pre></div>
-<p>Hooks include <code>ruff</code>, <code>mypy</code>, <code>clippy</code>, <code>cargo check</code>, <code>rumdl</code>, <code>codespell</code>, <code>typos</code>, <code>actionlint</code>, <code>shellcheck</code>, plus the project-local hooks (<code>pin-github-actions</code>, <code>regen-doc-snippets</code>).</p>
+<p>Hooks include <code>ruff</code>, <code>mypy</code>, <code>clippy</code>, <code>cargo check</code>, <code>rumdl</code>, <code>codespell</code>, <code>typos</code>, <code>actionlint</code>,
+<code>shellcheck</code>, plus the project-local hooks (<code>pin-github-actions</code>, <code>regen-doc-snippets</code>).</p>
 <h2 id="benchmarking">Benchmarking<a class="headerlink" href="#benchmarking" title="Permanent link">&para;</a></h2>
-<p><code>toolr bench compare</code> measures <code>&lt;tool&gt; -h</code> startup latency for every task-runner CLI it finds on <code>$PATH</code> (<code>toolr</code>, <code>invoke</code>, <code>python-tools-scripts</code>, <code>duty</code>, <code>doit</code>, <code>nox</code>). Add <code>--install</code> to let it <code>uv tool install</code> missing Python tools on demand, and <code>--markdown</code> to render the result as a table:</p>
+<p><code>toolr bench compare</code> measures <code>&lt;tool&gt; -h</code> startup latency for every task-runner CLI it finds on
+<code>$PATH</code> (<code>toolr</code>, <code>invoke</code>, <code>python-tools-scripts</code>, <code>duty</code>, <code>doit</code>, <code>nox</code>). Add <code>--install</code> to let
+it <code>uv tool install</code> missing Python tools on demand, and <code>--markdown</code> to render the result as a
+table:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>bench<span class="w"> </span>compare<span class="w"> </span>--install<span class="w"> </span>--markdown
 </span></code></pre></div>
-<p>The README's headline benchmark table comes from this command. Re-run it on a fresh hardware target before changing the README's numbers.</p>
+<p>The README's headline benchmark table comes from this command. Re-run it on a fresh hardware target
+before changing the README's numbers.</p>
 <h2 id="filing-bugs">Filing bugs<a class="headerlink" href="#filing-bugs" title="Permanent link">&para;</a></h2>
 <p>Open a <a href="https://github.com/s0undt3ch/ToolR/issues/new">GitHub issue</a> with:</p>
 <ul>
@@ -2022,7 +2031,9 @@
 <li>Minimal <code>tools/*.py</code> (or repro repo URL) that triggers the bug</li>
 <li>Expected vs actual output</li>
 </ul>
-<p>For suspected security issues, use <a href="https://github.com/s0undt3ch/ToolR/security/advisories/new">GitHub Security Advisories</a> instead of a public issue.</p>
+<p>For suspected security issues, use
+<a href="https://github.com/s0undt3ch/ToolR/security/advisories/new">GitHub Security Advisories</a> instead of
+a public issue.</p>
 <h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/s0undt3ch/ToolR/blob/main/LICENSE">Apache-2.0</a>. No sign-off required.</p>
 

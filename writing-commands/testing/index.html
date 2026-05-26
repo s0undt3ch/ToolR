@@ -1862,16 +1862,24 @@
 
 
 <h1 id="testing-your-commands">Testing your commands<a class="headerlink" href="#testing-your-commands" title="Permanent link">&para;</a></h1>
-<p>ToolR ships a small testing helper in the <code>toolr-py</code> wheel — <code>toolr.testing.CommandsTester</code> — that lets you write pytest assertions against your <code>tools/*.py</code> discovery without invoking the <code>toolr</code> binary as a subprocess.</p>
-<p>It's designed for the case where you want to test <em>your own</em> command modules: "does my decorator land in the registry?", "do my command groups collect the right commands?", "does my dispatcher pick up the right children?". For end-to-end behaviour (Tab completion, <code>--help</code> output, real subprocess execution) you'll still want to drive the binary directly.</p>
+<p>ToolR ships a small testing helper in the <code>toolr-py</code> wheel — <code>toolr.testing.CommandsTester</code> —
+that lets you write pytest assertions against your <code>tools/*.py</code> discovery without invoking the
+<code>toolr</code> binary as a subprocess.</p>
+<p>It's designed for the case where you want to test <em>your own</em> command modules: "does my decorator
+land in the registry?", "do my command groups collect the right commands?", "does my dispatcher
+pick up the right children?". For end-to-end behaviour (Tab completion, <code>--help</code> output, real
+subprocess execution) you'll still want to drive the binary directly.</p>
 <h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
 <p><code>CommandsTester(search_path=tmp_path)</code> is a context manager that:</p>
 <ol>
-<li>Saves and replaces <code>sys.path</code> so only <code>search_path</code> and the host's <code>site-packages</code> are visible — your fixture's <code>tools/</code> tree wins.</li>
+<li>Saves and replaces <code>sys.path</code> so only <code>search_path</code> and the host's <code>site-packages</code> are visible
+   — your fixture's <code>tools/</code> tree wins.</li>
 <li>Patches <code>toolr._decorators._get_command_group_storage</code> with a fresh <code>dict</code> so the test gets an isolated registry.</li>
 <li>Restores everything on exit (<code>sys.path</code>, <code>sys.modules</code>, <code>cwd</code>).</li>
 </ol>
-<p>Calling <code>.discover()</code> inside the context runs the same <code>tools/</code>-import pass that <code>python -m toolr._introspect</code> runs for the Rust binary's dynamic manifest layer. After it returns, <code>.collected_command_groups()</code> gives you a <code>{full_name: CommandGroup}</code> dict you can assert against.</p>
+<p>Calling <code>.discover()</code> inside the context runs the same <code>tools/</code>-import pass that
+<code>python -m toolr._introspect</code> runs for the Rust binary's dynamic manifest layer. After it returns,
+<code>.collected_command_groups()</code> gives you a <code>{full_name: CommandGroup}</code> dict you can assert against.</p>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
@@ -1914,7 +1922,8 @@
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="k">yield</span> <span class="n">tester</span>
 </span></code></pre></div>
 <h2 id="what-you-can-assert">What you can assert<a class="headerlink" href="#what-you-can-assert" title="Permanent link">&para;</a></h2>
-<p><code>collected_command_groups()</code> returns a dict keyed by the dotted full name (e.g. <code>tools.ci</code>, <code>tools.docker.image</code>). Each value is a <code>toolr._decorators.CommandGroup</code> instance, which exposes:</p>
+<p><code>collected_command_groups()</code> returns a dict keyed by the dotted full name (e.g. <code>tools.ci</code>,
+<code>tools.docker.image</code>). Each value is a <code>toolr._decorators.CommandGroup</code> instance, which exposes:</p>
 <ul>
 <li><code>name</code>, <code>title</code>, <code>description</code>, <code>parent</code> — what you passed to <code>command_group(...)</code>.</li>
 <li><code>full_name</code> — same key the dict uses.</li>
@@ -1945,10 +1954,16 @@
 <li>Spawn <code>toolr</code> as a subprocess.</li>
 <li>Run the static AST parser (which is the <em>Rust</em> path; this helper drives only the <em>dynamic</em> / runtime-import path).</li>
 </ul>
-<p>If you need any of those, drive the <code>toolr</code> binary directly via <code>subprocess</code> (<code>shutil.which("toolr")</code> works under <code>mise</code> / <code>pip install toolr</code> / the install scripts), or use <code>assert_cmd</code> from a Rust integration test.</p>
+<p>If you need any of those, drive the <code>toolr</code> binary directly via <code>subprocess</code>
+(<code>shutil.which("toolr")</code> works under <code>mise</code> / <code>pip install toolr</code> / the install scripts), or use
+<code>assert_cmd</code> from a Rust integration test.</p>
 <h2 id="stability">Stability<a class="headerlink" href="#stability" title="Permanent link">&para;</a></h2>
-<p><code>toolr.testing.CommandsTester</code> is part of toolr-py's public API and is tested in toolr's own suite. Its surface — the constructor, the context-manager protocol, <code>.discover()</code>, and <code>.collected_command_groups()</code> — is stable across the pre-1.0 series; any change is called out in the changelog.</p>
-<p>Internal attributes (<code>sys_path</code>, <code>sys_modules</code>, <code>command_group_patcher</code>, <code>cwd</code>) are implementation detail and may change without notice.</p>
+<p><code>toolr.testing.CommandsTester</code> is part of toolr-py's public API and is tested in toolr's own suite.
+Its surface — the constructor, the context-manager protocol, <code>.discover()</code>, and
+<code>.collected_command_groups()</code> — is stable across the pre-1.0 series; any change is called out in
+the changelog.</p>
+<p>Internal attributes (<code>sys_path</code>, <code>sys_modules</code>, <code>command_group_patcher</code>, <code>cwd</code>) are implementation
+detail and may change without notice.</p>
 
 
 
