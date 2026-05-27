@@ -18,5 +18,13 @@ rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
 # is not built into release artifacts. It hosts tooling like
 # `build-skill-refs` that regenerates content shipped alongside toolr
 # (e.g. `skills/*/references/*.md`) from toolr's own source.
+#
+# Debug profile, intentionally. Every invoker pays the build cost
+# (the prek hook fires on every edit to a generator input; CI runs
+# it once per workflow), and the xtask binary's wall-clock runtime
+# is dominated by ~1s of AST work — so `--release` only adds compile
+# time without affecting how long the actual run takes. Debug
+# compiles roughly 3× faster than release for the same toolr-core
+# transitive deps.
 [alias]
-xtask = "run --quiet --package xtask --release --"
+xtask = "run --quiet --package xtask --"
