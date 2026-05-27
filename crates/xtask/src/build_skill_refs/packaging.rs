@@ -100,9 +100,9 @@ pub fn packaging(repo_root: &Path) -> Result<Generated> {
         "This reference is generated from `toolr-core`'s own types. The \
         struct definitions below are extracted verbatim from \
         `crates/toolr-core/src/manifest/model.rs` and \
-        `crates/toolr-core/src/third_party/model.rs`. If you ship a \
+        `crates/toolr-core/src/third_party/model.rs`.\nIf you ship a \
         plugin whose `toolr-manifest.json` matches the schema below, \
-        toolr's loader will accept it. If you ship one that doesn't, \
+        toolr's loader will accept it.\nIf you ship one that doesn't, \
         the load will fail with a clear error from \
         `parse_fragment`.\n\n",
     );
@@ -110,7 +110,7 @@ pub fn packaging(repo_root: &Path) -> Result<Generated> {
     body.push_str("## Discovery\n\n");
     body.push_str(
         "Toolr discovers your plugin by globbing every installed \
-        wheel's package root for a file named `toolr-manifest.json`. \
+        wheel's package root for a file named `toolr-manifest.json`.\n\
         The exact globbing pattern is in \
         `crates/toolr-core/src/third_party/glob.rs`:\n\n",
     );

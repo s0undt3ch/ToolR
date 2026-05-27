@@ -74,7 +74,7 @@ pub fn docstrings(repo_root: &Path) -> Result<Generated> {
     body.push_str(
         "Toolr parses Google-style docstrings on every command and group. The \
         parser lives in `crates/toolr-core/src/docstrings.rs` and drives the \
-        `--help` output your users see. This reference is generated from the \
+        `--help` output your users see.\nThis reference is generated from the \
         same `KNOWN_SECTION_HEADERS` table the parser reads at runtime, so \
         the conventions documented here are the conventions the parser \
         recognises — they cannot drift.\n\n",
