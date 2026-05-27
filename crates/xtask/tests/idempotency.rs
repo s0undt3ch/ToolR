@@ -8,14 +8,21 @@
 //!
 //! This test runs the generator twice against the live workspace and
 //! asserts each file the second pass produces matches the first
-//! pass's bytes exactly. It is intentionally close to the user's
-//! invocation: it shells out to `cargo xtask build-skill-refs` rather
-//! than calling the generator's library entry-point so the test
-//! covers the actual `--release` build path users (and CI) take.
+//! pass's bytes exactly.
+//!
+//! The invocation uses `assert_cmd::Command::cargo_bin("xtask")` to
+//! point at the test-instrumented binary cargo builds alongside the
+//! test runner. That binary carries `-Cinstrument-coverage` and
+//! writes a profraw on every run, so `cargo llvm-cov` merges its
+//! coverage into the rest of the workspace's profile. (An earlier
+//! version of this test shelled out to `cargo run --package xtask
+//! --release`; that rebuilds the binary without coverage flags and
+//! contributes nothing to codecov — see PR #233 review notes.)
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::{fs, io};
+
+use assert_cmd::Command;
 
 #[test]
 fn build_skill_refs_is_byte_stable_across_runs() {
@@ -40,8 +47,8 @@ fn build_skill_refs_is_byte_stable_across_runs() {
     // Restore the committed bytes regardless of outcome.
     restore(&originals);
 
-    assert!(run1, "first `cargo xtask build-skill-refs` failed");
-    assert!(run2, "second `cargo xtask build-skill-refs` failed");
+    assert!(run1, "first `xtask build-skill-refs` invocation failed");
+    assert!(run2, "second `xtask build-skill-refs` invocation failed");
 
     for (path, before) in &first {
         let after = second
@@ -52,7 +59,7 @@ fn build_skill_refs_is_byte_stable_across_runs() {
         assert_eq!(
             before,
             after,
-            "two successive `cargo xtask build-skill-refs` runs produced \
+            "two successive `xtask build-skill-refs` runs produced \
              different bytes for {}. The generator is not idempotent, \
              which would make --check unreliable.",
             path.display(),
@@ -61,27 +68,22 @@ fn build_skill_refs_is_byte_stable_across_runs() {
 }
 
 fn run_generator(workspace: &PathBuf) -> bool {
-    Command::new(env!("CARGO"))
-        .args([
-            "run",
-            "--quiet",
-            "--package",
-            "xtask",
-            "--release",
-            "--",
-            "build-skill-refs",
-        ])
+    // `cargo_bin("xtask")` resolves to the test-instrumented binary
+    // built alongside this integration test (`target/debug/xtask`
+    // under `cargo test`). Invoking it directly — rather than via
+    // `cargo run` — keeps coverage instrumentation active in the
+    // spawned process so `cargo llvm-cov` picks up the profraws.
+    Command::cargo_bin("xtask")
+        .expect("xtask binary present in cargo's bin output dir")
+        .args(["build-skill-refs"])
         .current_dir(workspace)
-        .status()
-        .expect("invoking cargo xtask build-skill-refs")
-        .success()
+        .assert()
+        .try_success()
+        .is_ok()
 }
 
 fn snapshot(paths: &[PathBuf]) -> Vec<(PathBuf, Option<String>)> {
-    paths
-        .iter()
-        .map(|p| (p.clone(), read_or_none(p)))
-        .collect()
+    paths.iter().map(|p| (p.clone(), read_or_none(p))).collect()
 }
 
 fn restore(snapshot: &[(PathBuf, Option<String>)]) {

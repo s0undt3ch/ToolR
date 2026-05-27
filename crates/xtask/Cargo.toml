@@ -15,3 +15,6 @@ ruff_python_ast.workspace = true
 ruff_python_parser.workspace = true
 ruff_text_size.workspace = true
 toolr-core = { path = "../toolr-core" }
+
+[dev-dependencies]
+assert_cmd.workspace = true
