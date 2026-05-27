@@ -1,0 +1,45 @@
+# Trigger fixtures for the toolr-ci-setup skill.
+#
+# These are advisory: the host skill harness's intent matcher is
+# the final arbiter. The "should activate" entries capture the
+# canonical phrases an agent reading the description must continue
+# to match; the "should not activate" entries cover plausible-
+# but-out-of-scope requests where the trigger would be wrong.
+#
+# When the trigger description in SKILL.md changes, the
+# should-activate set must still feel correct; the
+# should-not-activate set must still feel safe.
+
+should_activate:
+  - "Set up toolr in our CI pipeline"
+  - "Add a GitHub Actions workflow that runs `toolr ci pytest`"
+  - "Use the `s0undt3ch/ToolR` action to install toolr"
+  - "How do I pin `uses: s0undt3ch/ToolR@` in our workflow?"
+  - "Cache toolr's tools venv between CI runs"
+  - "Verify the SLSA attestation when installing toolr in CI"
+  - "Wire `toolr self build-manifest --check` as a CI gate"
+  - "The toolr action is failing with a minimum-version error"
+
+should_not_activate:
+  # Authoring is a separate skill.
+  - "Add a toolr command for running migrations"
+  - "Extend toolr with a `db reset` subcommand"
+  - "Help me write the docstring for this toolr command"
+
+  # Plugin generation (outside the --check gate) is packaging.
+  - "Generate `toolr-manifest.json` for our plugin"
+  - "Configure hatchling to include the manifest in the wheel"
+  - "Publish our toolr plugin to PyPI"
+
+  # Generic GitHub Actions work, unrelated to toolr.
+  - "Add a workflow that runs ruff on every PR"
+  - "Cache `node_modules` in CI"
+  - "Set up a Docker build matrix in Actions"
+
+  # Toolr's own internal sub-actions are not a consumer surface.
+  - "Configure `setup-virtualenv` inside toolr's own CI"
+  - "Modify `apply-release-patch` for toolr's release workflow"
+
+  # Non-action install paths.
+  - "Install toolr on a self-hosted runner via `curl | sh`"
+  - "Use the mise-action to set up toolr in CI"
