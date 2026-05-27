@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 mod authoring;
+mod ci_setup;
 mod packaging;
 
 /// One regenerated file, ready to either write to disk or compare
