@@ -51,6 +51,25 @@ no scaffolding. Just write whatever should appear in the notes.
   `TOOLR_SKIP_ATTESTATION=1` to bypass — the plugin tells you so
   loudly if `gh` is missing from `PATH`.
 
+### `installation/mise/` plugin: install URL requires mise `v2026.5.11+`
+
+- **What changed:** the documented install command moved from
+  `mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise`
+  to
+  `mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise`.
+
+  The `#<subdir>` form was never a valid mise syntax — mise has
+  always interpreted `#` as a git ref selector. The correct
+  subdirectory syntax (`git::<git-url>//<subdir>`) only landed in
+  mise [v2026.5.11](https://github.com/jdx/mise/pull/9893)
+  (May 17, 2026). Workflows pinning `MISE_VERSION` below that
+  cutoff need to bump.
+
+- **Migration:** swap the install command everywhere it appears
+  (READMEs, CI workflows, internal runbooks) and ensure your mise
+  installation is `v2026.5.11` or newer. The plugin source itself
+  is unchanged.
+
 ## New features
 
 ### `TOOLR_VENV_LOCATION` environment variable

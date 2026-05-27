@@ -20,11 +20,13 @@ that lets mise install and manage `toolr` binaries.
 ## Install the plugin
 
 ```sh
-mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise
 ```
 
-The `#installation/mise` suffix tells mise to use the asdf-plugin layout
-inside the `installation/mise/` subdirectory of the toolr repo.
+The `git::` prefix and the `//installation/mise` suffix together tell
+mise to clone the toolr repository and use the asdf-plugin layout
+inside its `installation/mise/` subdirectory. Requires mise
+`v2026.5.11` or newer ([jdx/mise#9893](https://github.com/jdx/mise/pull/9893)).
 
 ## Install toolr
 

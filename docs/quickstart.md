@@ -21,7 +21,7 @@ Five first-class install paths — pick whichever matches your environment.
 ### mise
 
 ```sh
-mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise
+mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise
 mise use --global toolr@latest
 ```
 
