@@ -17,6 +17,7 @@ intent.
 | --- | --- | --- |
 | **`toolr-command-authoring`** | Adding, editing, refactoring a toolr command in a project's own `tools/*.py` files. | The `@command` / `@command_group` decorator surface, the `Context` object, docstring-driven `--help`, the local feedback loop. |
 | **`toolr-command-packaging`** | Shipping an already-written set of toolr commands as a distributable Python plugin. | Generating `toolr-manifest.json` via `toolr self build-manifest`, including it in the wheel, wiring `--check` as a CI gate. |
+| **`toolr-ci-setup`** | Wiring `s0undt3ch/ToolR` into a caller repo's GitHub Actions workflow. | The action's inputs and outputs, recommended pin form, two canonical recipes (run a command; gate `--check`), common failure modes. |
 
 The two triggers are scoped so authoring requests never fire the
 packaging skill and vice versa. If you're unsure which one you need,
@@ -26,10 +27,19 @@ install them.**
 
 ## Installation
 
+Skillshare lets you install from the parent path and pick what
+you want, so the install command does not grow as the skill set
+evolves:
+
 ```sh
-# from any directory
-skillshare install s0undt3ch/toolr/skills/toolr-command-authoring
-skillshare install s0undt3ch/toolr/skills/toolr-command-packaging
+# Pick which skills to install (interactive)
+skillshare install s0undt3ch/toolr/skills
+
+# Or install everything non-interactively
+skillshare install s0undt3ch/toolr/skills --all
+
+# Or pick by name (e.g. just CI setup)
+skillshare install s0undt3ch/toolr/skills -s toolr-ci-setup
 ```
 
 Substitute your platform's skill-install command if you're not on
@@ -60,6 +70,10 @@ toolr's own source by `cargo xtask build-skill-refs`:
   by extracting marker-delimited Rust regions from
   `crates/toolr-core/src/manifest/model.rs` and
   `crates/toolr-core/src/third_party/model.rs`.
+- `toolr-ci-setup/references/action.md` is rebuilt from the
+  repository-root `action.yml`, so the inputs/outputs surface the
+  skill points agents at cannot drift from what the action
+  actually accepts.
 
 A `cargo xtask build-skill-refs --check` gate runs in CI on every
 PR; a public-surface change that forgets to regenerate the
