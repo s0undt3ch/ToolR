@@ -101,3 +101,94 @@ fn workspace_root() -> PathBuf {
         .map(Path::to_path_buf)
         .expect("workspace root two levels above CARGO_MANIFEST_DIR")
 }
+
+#[test]
+fn references_action_md_covers_every_input_and_output() {
+    let workspace = workspace_root();
+    let action_yml = workspace.join("action.yml");
+    let reference =
+        workspace.join("skills/toolr-ci-setup/references/action.md");
+
+    let yaml_source = fs::read_to_string(&action_yml)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", action_yml.display()));
+    let reference_body = fs::read_to_string(&reference)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", reference.display()));
+
+    let declared_inputs = extract_top_level_keys_under(&yaml_source, "inputs");
+    let declared_outputs = extract_top_level_keys_under(&yaml_source, "outputs");
+
+    for name in &declared_inputs {
+        let needle = format!("| `{name}` |");
+        assert!(
+            reference_body.contains(&needle),
+            "input '{name}' declared in action.yml but missing from references/action.md",
+        );
+    }
+    for name in &declared_outputs {
+        let needle = format!("| `{name}` |");
+        assert!(
+            reference_body.contains(&needle),
+            "output '{name}' declared in action.yml but missing from references/action.md",
+        );
+    }
+
+    let documented = extract_backticked_names_in_tables(&reference_body);
+    let declared: BTreeSet<&String> = declared_inputs
+        .iter()
+        .chain(declared_outputs.iter())
+        .collect();
+    let documented_set: BTreeSet<&String> = documented.iter().collect();
+    let extra: Vec<&&String> = documented_set.difference(&declared).collect();
+    assert!(
+        extra.is_empty(),
+        "names documented in references/action.md but not in action.yml: {extra:?}\n\
+         Regenerate with `cargo xtask build-skill-refs` after editing action.yml.",
+    );
+}
+
+// Lift the top-level keys under a YAML section like `inputs:` or
+// `outputs:`. Avoids a full YAML parse in the test crate; the
+// generator already parses YAML, this is just a check.
+fn extract_top_level_keys_under(source: &str, section: &str) -> Vec<String> {
+    let mut keys = Vec::new();
+    let mut in_section = false;
+    let header = format!("{section}:");
+    for line in source.lines() {
+        if line.trim_end() == header {
+            in_section = true;
+            continue;
+        }
+        if in_section {
+            // A non-indented non-empty line ends the section.
+            if !line.starts_with(char::is_whitespace) && !line.is_empty() {
+                in_section = false;
+                continue;
+            }
+            // Indented `<name>:` with exactly two leading spaces is a
+            // key declaration; deeper indents are nested fields.
+            if let Some(rest) = line.strip_prefix("  ") {
+                if !rest.starts_with(char::is_whitespace) {
+                    if let Some(key) = rest.strip_suffix(':') {
+                        keys.push(key.to_string());
+                    }
+                }
+            }
+        }
+    }
+    keys
+}
+
+// Pull every `name` token that appears in the leftmost column of
+// a markdown table row. The renderer uses the form
+// `| \`<name>\` | ... |` for every input/output row.
+fn extract_backticked_names_in_tables(body: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in body.lines() {
+        if let Some(rest) = line.strip_prefix("| `") {
+            if let Some(end) = rest.find('`') {
+                names.push(rest[..end].to_string());
+            }
+        }
+    }
+    names
+}
