@@ -4,9 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::parser::{PathConstraints, SupportedType};
 
+// region: SkillRefSchemaVersion
 /// Current manifest schema version. Bump on breaking format changes.
 pub const SCHEMA_VERSION: u32 = 1;
+// endregion: SkillRefSchemaVersion
 
+// region: SkillRefManifest
 /// Top-level manifest document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
@@ -23,6 +26,7 @@ pub struct Manifest {
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
 }
+// endregion: SkillRefManifest
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {
@@ -229,6 +233,7 @@ pub enum ArgumentKind {
     Count,
 }
 
+// region: SkillRefOrigin
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Origin {
@@ -243,3 +248,4 @@ pub enum Origin {
     /// Regenerated on every glob-merge.
     ThirdParty,
 }
+// endregion: SkillRefOrigin

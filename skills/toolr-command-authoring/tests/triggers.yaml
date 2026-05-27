@@ -1,0 +1,39 @@
+# Trigger fixtures for the toolr-command-authoring skill.
+#
+# These are advisory: the host skill harness's intent matcher is the
+# final arbiter. The "should activate" entries capture the canonical
+# phrases an agent reading the description must continue to match;
+# the "should not activate" entries cover plausible-but-out-of-scope
+# requests where the trigger would be wrong.
+#
+# When the trigger description in SKILL.md changes, the
+# should-activate set must still feel correct; the
+# should-not-activate set must still feel safe.
+
+should_activate:
+  - "Add a toolr command for running migrations in our CI"
+  - "Extend toolr with a new `db reset` subcommand"
+  - "Wire a @command_group for our deployment scripts"
+  - "I want to add a `tools/release.py` file with a couple of toolr commands"
+  - "Help me write the docstring for this toolr command so --help looks right"
+  - "Debug why my new toolr command isn't showing up in --help"
+  - "How do I declare an arg_section so my logging flags group together?"
+  - "Convert this argparse script into a toolr command"
+
+should_not_activate:
+  # Packaging is a separate skill.
+  - "Ship our internal toolr commands as a pip-installable plugin"
+  - "Configure hatchling to include `toolr-manifest.json` in the wheel"
+  - "Publish a toolr plugin to PyPI"
+
+  # Generic Python CLI work, unrelated to toolr.
+  - "Write a click CLI that wraps `kubectl`"
+  - "Add an argparse subparser for the deploy script"
+  - "Use Typer to expose this script as a CLI"
+
+  # Operating, not authoring.
+  - "Why is `toolr ci pytest` exiting with code 137?"
+  - "Debug the Rust dispatch in toolr's binary"
+
+  # Outside a toolr project.
+  - "Set up a new Python project with pyproject.toml and uv"

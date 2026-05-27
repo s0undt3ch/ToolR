@@ -3227,6 +3227,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
+name = "xtask"
+version = "0.20.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "ruff_python_ast",
+ "ruff_python_parser",
+ "ruff_text_size",
+ "toolr-core",
+]
+
+[[package]]
 name = "yoke"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

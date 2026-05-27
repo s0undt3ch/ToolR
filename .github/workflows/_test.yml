@@ -194,13 +194,41 @@ jobs:
         # pre-commit) because the check requires the workspace toolr binary
         # to be built, which CI does anyway -- pre-commit would burn a
         # full Rust compile on every dev's first commit.
+        #
+        # Regen-and-diff pattern (same as the skills/*/references step
+        # below): build the binary, regenerate the manifest in place,
+        # then `git diff --exit-code` to surface the exact bytes that
+        # changed in the CI log. The previous `--check` variant just
+        # exited non-zero with no visible diff.
         shell: bash
         run: |
           cargo build --quiet -p toolr
           ./target/debug/toolr self build-manifest \
             --source-dir examples/plugin-package/src/toolr_example_plugin \
-            --package toolr_example_plugin \
-            --check
+            --package toolr_example_plugin
+          if ! git diff --exit-code -- examples/plugin-package/src/toolr_example_plugin/toolr-manifest.json; then
+            echo "::error::examples/plugin-package/.../toolr-manifest.json drifted from generator output (see diff above)" >&2
+            echo "::error::run 'toolr self build-manifest --source-dir examples/plugin-package/src/toolr_example_plugin --package toolr_example_plugin' locally and commit the result" >&2
+            exit 1
+          fi
+
+      - name: Verify skills/*/references/*.md are in sync
+        # Drift gate for the two in-tree agent skills
+        # (`toolr-command-authoring`, `toolr-command-packaging`).
+        # Runs the same regenerator the prek hook uses, then uses
+        # `git diff --exit-code` to fail-and-show on drift. The
+        # printed diff makes it obvious WHAT regenerated differently
+        # — much clearer in the CI log than the `--check` path's
+        # bare exit-1. Hosted here so a single workspace build
+        # covers both the example-plugin gate above and this one.
+        shell: bash
+        run: |
+          cargo xtask build-skill-refs
+          if ! git diff --exit-code -- skills; then
+            echo "::error::skills/*/references/*.md drifted from generator output (see diff above)" >&2
+            echo "::error::run 'cargo xtask build-skill-refs' locally and commit the result" >&2
+            exit 1
+          fi
 
       - name: Run Python Tests
         env:

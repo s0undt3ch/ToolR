@@ -54,6 +54,7 @@ nav:
   - Project configuration: project-config.md
   - CLI reference: cli.md
   - Third-party packages: third-party.md
+  - Agent skills: skills.md
   - Internals:
     - Overview: internals/index.md
     - Manifest layers: internals/manifest.md

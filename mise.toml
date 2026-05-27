@@ -25,6 +25,12 @@ python.uv_venv_auto = true
 [tasks.test]
 description = "Run the full default test suite (cargo workspace + pytest)."
 run = [
+    # Drift gate for `skills/*/references/*.md`. Cheap (single
+    # `cargo xtask` invocation in release mode) and catches the
+    # most common skill regression — a public-surface change that
+    # forgets to regenerate the docs — before the workspace tests
+    # even start.
+    "cargo xtask build-skill-refs --check",
     "cargo test --workspace",
     "mise run pytest-test",
 ]

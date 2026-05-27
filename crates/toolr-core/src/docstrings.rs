@@ -85,6 +85,53 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+/// Google-style docstring section headers toolr's parser recognises,
+/// paired with the canonical category each header maps to.
+///
+/// Each entry is a `(prefix, category)` pair. The `prefix` is matched
+/// case-insensitively against the trimmed start of a docstring line.
+/// Headers ending in `:` (e.g. `"args:"`) only match the section-
+/// header form `Args:`; headers ending in a space (e.g. `"attr "`)
+/// match the inline-attribute form `attr <name>`.
+///
+/// Sorted ASCII by prefix so iteration is stable, which the
+/// `xtask build-skill-refs` generator relies on when emitting
+/// `skills/toolr-command-authoring/references/docstrings.md` from
+/// this table. Whenever you add, remove, or rename a section header,
+/// edit this table — [`SimpleDocstringParser::detect_section`] reads
+/// it directly, so the parser and the published reference cannot
+/// drift apart.
+pub const KNOWN_SECTION_HEADERS: &[(&str, &str)] = &[
+    ("args:", "args"),
+    ("arguments:", "args"),
+    ("attr ", "attr"),
+    ("attribute ", "attr"),
+    ("attributes:", "attributes"),
+    ("attrs:", "attributes"),
+    ("deprecated:", "deprecated"),
+    ("example:", "examples"),
+    ("examples:", "examples"),
+    ("except:", "raises"),
+    ("note:", "notes"),
+    ("notes:", "notes"),
+    ("parameters:", "args"),
+    ("raise:", "raises"),
+    ("raises:", "raises"),
+    ("references:", "references"),
+    ("refs:", "references"),
+    ("return:", "returns"),
+    ("returns:", "returns"),
+    ("see also:", "see_also"),
+    ("see:", "see_also"),
+    ("todo:", "todo"),
+    ("version added:", "version_added"),
+    ("version changed:", "version_changed"),
+    ("warning:", "warnings"),
+    ("warnings:", "warnings"),
+    ("yield:", "yields"),
+    ("yields:", "yields"),
+];
+
 /// Simple but robust parser for Google-style docstrings
 pub struct SimpleDocstringParser;
 
@@ -256,43 +303,14 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn detect_section(&self, line: &str) -> Option<&str> {
-        let trimmed = line.trim();
-        let lower = trimmed.to_lowercase();
-
-        if lower.starts_with("args:") || lower.starts_with("arguments:") || lower.starts_with("parameters:") {
-            Some("args")
-        } else if lower.starts_with("returns:") || lower.starts_with("return:") {
-            Some("returns")
-        } else if lower.starts_with("yields:") || lower.starts_with("yield:") {
-            Some("yields")
-        } else if lower.starts_with("raises:") || lower.starts_with("raise:") || lower.starts_with("except:") {
-            Some("raises")
-        } else if lower.starts_with("attributes:") || lower.starts_with("attrs:") {
-            Some("attributes")
-        } else if lower.starts_with("attr ") || lower.starts_with("attribute ") {
-            Some("attr")
-        } else if lower.starts_with("examples:") || lower.starts_with("example:") {
-            Some("examples")
-        } else if lower.starts_with("notes:") || lower.starts_with("note:") {
-            Some("notes")
-        } else if lower.starts_with("warnings:") || lower.starts_with("warning:") {
-            Some("warnings")
-        } else if lower.starts_with("see also:") || lower.starts_with("see:") {
-            Some("see_also")
-        } else if lower.starts_with("references:") || lower.starts_with("refs:") {
-            Some("references")
-        } else if lower.starts_with("todo:") {
-            Some("todo")
-        } else if lower.starts_with("deprecated:") {
-            Some("deprecated")
-        } else if lower.starts_with("version added:") {
-            Some("version_added")
-        } else if lower.starts_with("version changed:") {
-            Some("version_changed")
-        } else {
-            None
+    pub(crate) fn detect_section(&self, line: &str) -> Option<&'static str> {
+        let lower = line.trim().to_lowercase();
+        for (prefix, category) in KNOWN_SECTION_HEADERS {
+            if lower.starts_with(prefix) {
+                return Some(category);
+            }
         }
+        None
     }
 
     fn process_section(&self, section: &str, content: &[&str], result: &mut Docstring, line_num: usize) -> Result<(), ParseError> {

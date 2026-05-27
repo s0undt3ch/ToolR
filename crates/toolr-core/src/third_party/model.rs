@@ -6,11 +6,14 @@
 
 use serde::{Deserialize, Serialize};
 
+// region: SkillRefFragmentVersion
 /// Current fragment schema version. The Rust binary accepts fragments at
 /// version `<= FRAGMENT_SCHEMA_VERSION`, applying migrations as needed.
 /// Fragments at a higher version are rejected.
 pub const FRAGMENT_SCHEMA_VERSION: u32 = 1;
+// endregion: SkillRefFragmentVersion
 
+// region: SkillRefManifestFragment
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestFragment {
     pub toolr_schema_version: u32,
@@ -60,3 +63,4 @@ pub struct FragmentArgument {
     #[serde(default)]
     pub allowed_values: Vec<String>,
 }
+// endregion: SkillRefManifestFragment

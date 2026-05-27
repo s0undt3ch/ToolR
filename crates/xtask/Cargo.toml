@@ -1,0 +1,20 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Maintainer-only tooling for the toolr workspace (skill ref generation, etc.)"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ruff_python_ast.workspace = true
+ruff_python_parser.workspace = true
+ruff_text_size.workspace = true
+toolr-core = { path = "../toolr-core" }
+
+[dev-dependencies]
+assert_cmd.workspace = true

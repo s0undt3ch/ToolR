@@ -32,6 +32,30 @@ repos:
         # the manifest/parser layer in toolr-core).
         files: ^(docs/|\.pre-commit-hooks/regen-doc-snippets\.py$|crates/toolr/src/.*\.rs$|crates/toolr/src/init_templates/|crates/toolr-core/src/.*\.rs$)
 
+      - id: build-skill-refs
+        name: Regenerate skills/*/references/*.md
+        # Auto-fix style: the hook *regenerates* the references
+        # files rather than running `--check`. If the generator
+        # produces different bytes than what's on disk, prek sees
+        # the modification and fails the commit; the user re-stages
+        # the now-fresh references and commits again. This mirrors
+        # how `ruff format` and `trim trailing whitespace` already
+        # work in this config — drift gets fixed locally instead of
+        # bouncing the commit with a confusing diff.
+        #
+        # The actual drift gate lives in CI (`_test.yml` runs
+        # `cargo xtask build-skill-refs --check`) — even contributors
+        # who skip prek hooks can't land regenerator drift.
+        entry: cargo xtask build-skill-refs
+        language: system
+        pass_filenames: false
+        # Fire on sources that drive any generated skill reference:
+        # the xtask crate itself, the toolr-py public surface the
+        # authoring generator walks, the toolr-core docstrings table
+        # and manifest models the packaging generator embeds, and the
+        # committed references themselves (so hand-edits are caught).
+        files: ^(crates/xtask/.*\.rs$|crates/toolr-py/python/toolr/.*\.py$|crates/toolr-core/src/docstrings\.rs$|crates/toolr-core/src/manifest/model\.rs$|crates/toolr-core/src/third_party/(model|glob)\.rs$|skills/.*/references/.*\.md$)
+
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
