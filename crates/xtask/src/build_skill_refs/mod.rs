@@ -34,6 +34,7 @@ pub fn run(check: bool) -> Result<()> {
         authoring::commands(&root)?,
         authoring::docstrings(&root)?,
         packaging::packaging(&root)?,
+        ci_setup::action(&root)?,
     ];
 
     apply(outputs, check)

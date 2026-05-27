@@ -22,6 +22,7 @@ exclude = [
     # source dictates — line-length policy doesn't apply.
     "skills/toolr-command-authoring/references",
     "skills/toolr-command-packaging/references",
+    "skills/toolr-ci-setup/references",
     # Archived design docs are immutable post-mortem records (see
     # `specs/README.md`). New rules don't apply retroactively; new
     # designs in `specs/` at the top level are still linted.

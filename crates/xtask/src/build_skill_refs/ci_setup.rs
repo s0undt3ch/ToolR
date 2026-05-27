@@ -40,7 +40,6 @@ struct Output {
     description: String,
 }
 
-#[allow(dead_code)] // wired into run() in Task 3
 pub fn action(repo_root: &Path) -> Result<Generated> {
     let yaml_path = repo_root.join("action.yml");
     let yaml = std::fs::read_to_string(&yaml_path)
@@ -95,7 +94,7 @@ fn render(yaml: &str) -> Result<String> {
 
     writeln!(body, "## Outputs\n").unwrap();
     if action.outputs.is_empty() {
-        writeln!(body, "_(none declared)_\n").unwrap();
+        writeln!(body, "_(none declared)_").unwrap();
     } else {
         writeln!(body, "| Name | Description |").unwrap();
         writeln!(body, "| ---- | ----------- |").unwrap();
@@ -107,7 +106,6 @@ fn render(yaml: &str) -> Result<String> {
             )
             .unwrap();
         }
-        body.push('\n');
     }
 
     Ok(body)
@@ -173,7 +171,7 @@ outputs:
             ## Outputs\n\n\
             | Name | Description |\n\
             | ---- | ----------- |\n\
-            | `version` | Resolved ToolR version installed (no leading `v`). |\n\n";
+            | `version` | Resolved ToolR version installed (no leading `v`). |\n";
         assert_eq!(out, expected);
     }
 
