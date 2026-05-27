@@ -205,13 +205,20 @@ jobs:
       - name: Verify skills/*/references/*.md are in sync
         # Drift gate for the two in-tree agent skills
         # (`toolr-command-authoring`, `toolr-command-packaging`).
-        # `cargo xtask build-skill-refs --check` regenerates every
-        # `references/*.md` from toolr-py/toolr-core source and exits
-        # non-zero on diff. Hosted here so a single workspace build
+        # Runs the same regenerator the prek hook uses, then uses
+        # `git diff --exit-code` to fail-and-show on drift. The
+        # printed diff makes it obvious WHAT regenerated differently
+        # — much clearer in the CI log than the `--check` path's
+        # bare exit-1. Hosted here so a single workspace build
         # covers both the example-plugin gate above and this one.
         shell: bash
         run: |
-          cargo xtask build-skill-refs --check
+          cargo xtask build-skill-refs
+          if ! git diff --exit-code -- skills; then
+            echo "::error::skills/*/references/*.md drifted from generator output (see diff above)" >&2
+            echo "::error::run 'cargo xtask build-skill-refs' locally and commit the result" >&2
+            exit 1
+          fi
 
       - name: Run Python Tests
         env:
