@@ -143,6 +143,7 @@ or delete it and start from scratch.
 - [Quickstart](https://toolr.readthedocs.io/latest/quickstart/)
 - [Writing commands](https://toolr.readthedocs.io/latest/writing-commands/)
 - [Third-party packages](https://toolr.readthedocs.io/latest/third-party/)
+- [Agent skills (for LLM coding assistants)](https://toolr.readthedocs.io/latest/skills/)
 - [Internals (manifest, freshness, cache)](https://toolr.readthedocs.io/latest/internals/)
 - [CLI reference](https://toolr.readthedocs.io/latest/cli/)
 

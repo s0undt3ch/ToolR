@@ -12,6 +12,8 @@
   Head to the [Quickstart](quickstart.md).
 - **Curious about how it works?**
   Read [How toolr is laid out](concepts.md).
+- **Using an LLM coding assistant?**
+  Install the [agent skills](skills.md).
 
 ## Need help?
 
