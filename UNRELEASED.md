@@ -98,6 +98,13 @@ Toolr now ships two in-tree agent skills, installable via
   distributable Python plugin. Anchored on the in-tree
   `examples/plugin-package/`; the manifest fragment schema is
   regenerated from `toolr-core`'s serde types.
+- **`toolr-ci-setup`** — teaches LLM coding assistants how to
+  integrate toolr into a project's GitHub Actions CI. Covers the
+  `s0undt3ch/ToolR` GitHub Action: pinning policy, two canonical
+  recipes (run a toolr command; gate
+  `toolr self build-manifest --check`), and the common failure
+  modes a caller hits first. Installable via `skillshare` from
+  `skills/toolr-ci-setup/`.
 
 A new maintainer-only `crates/xtask/` workspace crate hosts the
 generator (`cargo xtask build-skill-refs`). The `--check` variant
@@ -105,6 +112,18 @@ runs in CI on every PR (alongside the existing example-plugin
 manifest check) so a public-surface change that forgets to
 regenerate the skill references cannot land. A `prek` hook entry
 gives the same gate locally.
+
+`cargo xtask build-skill-refs` gains a third generator
+(`ci_setup::action`) that rebuilds
+`skills/toolr-ci-setup/references/action.md` from the
+repository-root `action.yml`. The existing `--check` CI gate
+automatically covers the new file.
+
+`docs/skills.md` install instructions now use the `skillshare`
+parent-path picker pattern
+(`skillshare install s0undt3ch/toolr/skills`) instead of one
+command per skill, so the install block does not grow with each
+new skill.
 
 See [docs/skills.md](https://toolr.readthedocs.io/latest/skills/)
 for the user-facing installation flow.
