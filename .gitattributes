@@ -14,3 +14,11 @@
 # checkouts with `core.autocrlf=true` would otherwise rewrite the
 # committed files to CRLF and fail the check.
 skills/*/references/*.md text eol=lf
+
+# `skills/*/examples/**/*.py` are read by the manifest snapshot test
+# (`crates/toolr-core/tests/skill_authoring_examples.rs`). The toolr
+# docstring parser preserves source newlines verbatim in the group
+# `description` field, so a CRLF checkout on Windows produces a
+# manifest whose JSON values contain `\r\n` and no longer match the
+# LF-canonical committed snapshot.
+skills/*/examples/**/*.py text eol=lf
