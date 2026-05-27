@@ -37,6 +37,14 @@ Substitute your platform's skill-install command if you're not on
 Claude Code-compatible and the references files are plain Markdown
 that any platform can ingest.
 
+## Managing installed skills
+
+Listing, updating, pinning, and removing installed skills is
+`skillshare`'s job — see the
+[`skillshare` documentation](https://github.com/skillsharehub/skillshare)
+for the full command surface. Toolr ships the skills; how you
+manage them on your machine is owned upstream.
+
 ## How the references stay correct
 
 Each skill ships a `references/` directory with files generated from
