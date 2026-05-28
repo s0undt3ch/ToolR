@@ -441,45 +441,6 @@ def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
     ctx.exit(0)
 
 
-def _update_action_version(ctx: Context, version: Version) -> int:
-    ret = ctx.run(
-        "git",
-        "grep",
-        "-l",
-        "uses: s0undt3ch/ToolR@",
-        ".github/",
-        capture_output=True,
-        stream_output=False,
-    )
-    if ret.returncode != 0:
-        ctx.error("Failed to grep for 'uses: s0undt3ch/ToolR@' in .github/")
-        return 1
-
-    # Store the list of files before we reuse the ret variable
-    files_to_update = ret.stdout.read().rstrip().splitlines()
-
-    # Get the commit SHA for the version tag
-    tag_name = f"v{version}"
-    ret = ctx.run("git", "rev-parse", tag_name, capture_output=True, stream_output=False)
-    if ret.returncode != 0:
-        ctx.error(f"Failed to get commit SHA for tag {tag_name}")
-        return 1
-    commit_sha = ret.stdout.read().rstrip()
-
-    usage_version = f"{commit_sha} # {tag_name}"
-    for fpath in files_to_update:
-        new_uses_string = f"uses: s0undt3ch/ToolR@{usage_version}"
-        with open(fpath) as rfh:
-            in_contents = rfh.read()
-        out_contents = re.sub(r"uses: s0undt3ch/ToolR@(.*)", new_uses_string, in_contents)
-        if out_contents != in_contents:
-            ctx.info(f"Updating {fpath} version to '{new_uses_string}'")
-            with open(fpath, "w") as wfh:
-                wfh.write(out_contents)
-
-    return 0
-
-
 def _build_rolling_tags_list(tags: list[Version]) -> list[tuple[str, Version]]:
     """
     Build the list of rolling tags that should be created/updated.
@@ -598,10 +559,6 @@ def sync_rolling_tags(ctx: Context, dry_run: bool = False) -> None:
 
     latest_tag = tags[0]
     ctx.info("latest_tag:", latest_tag)
-    exitcode = _update_action_version(ctx, latest_tag)
-    if exitcode != 0:
-        ctx.error(f"Failed to update to Toolr@v{latest_tag} action version")
-        ctx.exit(exitcode)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output is not None:
