@@ -74,6 +74,16 @@ repos:
     rev: 0.11.15
     hooks:
       - id: uv-lock
+        alias: uv-lock-project
+        name: Lock project dependencies
+        files: ^(uv\.lock|pyproject\.toml)$
+
+      - id: uv-lock
+        alias: uv-lock-tools
+        name: Lock tools dependencies
+        args:
+          - --project=tools
+        files: ^tools/(uv\.lock|pyproject\.toml)$
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: "v0.15.13"

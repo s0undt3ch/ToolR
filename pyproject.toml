@@ -20,13 +20,12 @@ members = [
     "crates/toolr",
     "crates/toolr-py",
     "examples/plugin-package",
-    "tools",
 ]
 
 [tool.uv.sources]
 toolr = { workspace = true }
 toolr-py = { workspace = true }
-"toolr-plugin-example" = { workspace = true }
+toolr-plugin-example = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -47,9 +46,6 @@ docs = [
     "mkdocs-material>=9.6.16",
     "mkdocstrings[python]>=1.0.4",
     "ruff>=0.15.14",
-]
-tools = [
-    "packaging>=26.2",
 ]
 
 [tool.ruff]
