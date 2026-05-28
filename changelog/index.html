@@ -1692,15 +1692,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0201-dev45-2026-05-27" class="md-nav__link">
+  <a href="#0202-dev0-2026-05-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.20.1-dev45 - 2026-05-27
+        0.20.2-dev0 - 2026-05-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.20.1-dev45 - 2026-05-27">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0201-2026-05-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.20.1 - 2026-05-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.20.1 - 2026-05-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1747,6 +1758,17 @@
     <span class="md-ellipsis">
       
         installation/mise/ plugin: minimum toolr 0.20.0, attests by default
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#installationmise-plugin-install-url-requires-mise-v2026511" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        installation/mise/ plugin: install URL requires mise v2026.5.11+
       
     </span>
   </a>
@@ -2419,15 +2441,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0201-dev45-2026-05-27" class="md-nav__link">
+  <a href="#0202-dev0-2026-05-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.20.1-dev45 - 2026-05-27
+        0.20.2-dev0 - 2026-05-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.20.1-dev45 - 2026-05-27">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0201-2026-05-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.20.1 - 2026-05-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.20.1 - 2026-05-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2474,6 +2507,17 @@
     <span class="md-ellipsis">
       
         installation/mise/ plugin: minimum toolr 0.20.0, attests by default
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#installationmise-plugin-install-url-requires-mise-v2026511" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        installation/mise/ plugin: install URL requires mise v2026.5.11+
       
     </span>
   </a>
@@ -3141,7 +3185,8 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0201-dev45-2026-05-27">0.20.1-dev45 - 2026-05-27<a class="headerlink" href="#0201-dev45-2026-05-27" title="Permanent link">&para;</a></h2>
+<h2 id="0202-dev0-2026-05-28">0.20.2-dev0 - 2026-05-28<a class="headerlink" href="#0202-dev0-2026-05-28" title="Permanent link">&para;</a></h2>
+<h2 id="0201-2026-05-28">0.20.1 - 2026-05-28<a class="headerlink" href="#0201-2026-05-28" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h2 id="breaking-changes">⚠ Breaking changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h2>
 <h3 id="s0undt3chtoolr-github-action-binary-only-install-no-more-pipx"><code>s0undt3ch/ToolR</code> GitHub Action: binary-only install, no more pipx<a class="headerlink" href="#s0undt3chtoolr-github-action-binary-only-install-no-more-pipx" title="Permanent link">&para;</a></h3>
@@ -3185,6 +3230,25 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
   <code>TOOLR_SKIP_ATTESTATION=1</code> to bypass — the plugin tells you so
   loudly if <code>gh</code> is missing from <code>PATH</code>.</li>
 </ul>
+<h3 id="installationmise-plugin-install-url-requires-mise-v2026511"><code>installation/mise/</code> plugin: install URL requires mise <code>v2026.5.11+</code><a class="headerlink" href="#installationmise-plugin-install-url-requires-mise-v2026511" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>What changed:</strong> the documented install command moved from
+  <code>mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise</code>
+  to
+  <code>mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise</code>.</li>
+</ul>
+<p>The <code>#&lt;subdir&gt;</code> form was never a valid mise syntax — mise has
+  always interpreted <code>#</code> as a git ref selector. The correct
+  subdirectory syntax (<code>git::&lt;git-url&gt;//&lt;subdir&gt;</code>) only landed in
+  mise <a href="https://github.com/jdx/mise/pull/9893">v2026.5.11</a>
+  (May 17, 2026). Workflows pinning <code>MISE_VERSION</code> below that
+  cutoff need to bump.</p>
+<ul>
+<li><strong>Migration:</strong> swap the install command everywhere it appears
+  (READMEs, CI workflows, internal runbooks) and ensure your mise
+  installation is <code>v2026.5.11</code> or newer. The plugin source itself
+  is unchanged.</li>
+</ul>
 <h2 id="new-features">New features<a class="headerlink" href="#new-features" title="Permanent link">&para;</a></h2>
 <h3 id="toolr_venv_location-environment-variable"><code>TOOLR_VENV_LOCATION</code> environment variable<a class="headerlink" href="#toolr_venv_location-environment-variable" title="Permanent link">&para;</a></h3>
 <p>The new <code>TOOLR_VENV_LOCATION</code> env var overrides the
@@ -3209,6 +3273,13 @@ directly without forcing every consumer repo's
   distributable Python plugin. Anchored on the in-tree
   <code>examples/plugin-package/</code>; the manifest fragment schema is
   regenerated from <code>toolr-core</code>'s serde types.</li>
+<li><strong><code>toolr-ci-setup</code></strong> — teaches LLM coding assistants how to
+  integrate toolr into a project's GitHub Actions CI. Covers the
+  <code>s0undt3ch/ToolR</code> GitHub Action: pinning policy, two canonical
+  recipes (run a toolr command; gate
+  <code>toolr self build-manifest --check</code>), and the common failure
+  modes a caller hits first. Installable via <code>skillshare</code> from
+  <code>skills/toolr-ci-setup/</code>.</li>
 </ul>
 <p>A new maintainer-only <code>crates/xtask/</code> workspace crate hosts the
 generator (<code>cargo xtask build-skill-refs</code>). The <code>--check</code> variant
@@ -3216,6 +3287,16 @@ runs in CI on every PR (alongside the existing example-plugin
 manifest check) so a public-surface change that forgets to
 regenerate the skill references cannot land. A <code>prek</code> hook entry
 gives the same gate locally.</p>
+<p><code>cargo xtask build-skill-refs</code> gains a third generator
+(<code>ci_setup::action</code>) that rebuilds
+<code>skills/toolr-ci-setup/references/action.md</code> from the
+repository-root <code>action.yml</code>. The existing <code>--check</code> CI gate
+automatically covers the new file.</p>
+<p><code>docs/skills.md</code> install instructions now use the <code>skillshare</code>
+parent-path picker pattern
+(<code>skillshare install s0undt3ch/toolr/skills</code>) instead of one
+command per skill, so the install block does not grow with each
+new skill.</p>
 <p>See <a href="https://toolr.readthedocs.io/latest/skills/">docs/skills.md</a>
 for the user-facing installation flow.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
@@ -3243,10 +3324,25 @@ for the user-facing installation flow.</p>
 <li><em>(lint)</em> Exclude generated skills/*/references from rumdl (<a href="https://github.com/s0undt3ch/ToolR/commit/0d03a351d70e036c830e0b5b1c7dc0bc8e0108d5"><code>0d03a35</code></a>)</li>
 <li><em>(skill-refs)</em> LF line endings on Windows + show diff in CI on drift (<a href="https://github.com/s0undt3ch/ToolR/commit/42866c8d09a00596ef0431c2c1dfb71ddee872e1"><code>42866c8</code></a>)</li>
 <li><em>(skill-refs)</em> LF line endings on skill example .py files (<a href="https://github.com/s0undt3ch/ToolR/commit/528c8c742b7eb54990b2566331752f87a11f322b"><code>528c8c7</code></a>)</li>
+<li><em>(mise)</em> Correct plugin URL syntax + bump MISE_VERSION (<a href="https://github.com/s0undt3ch/ToolR/commit/eb52b859ad1c9c83abaca4faa0ad78f33df25dd1"><code>eb52b85</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(xtask)</em> Collapse to single debug alias + prek hook regenerates (<a href="https://github.com/s0undt3ch/ToolR/commit/b7f32abe27b808c223b443ae1de62db9d77dc51d"><code>b7f32ab</code></a>)</li>
+<li>Add design for toolr-ci-setup agent skill (<a href="https://github.com/s0undt3ch/ToolR/commit/3e0d9b7383fff66152bdb5d118628e58308560ea"><code>3e0d9b7</code></a>)</li>
+<li>Add implementation plan for toolr-ci-setup skill (<a href="https://github.com/s0undt3ch/ToolR/commit/b8a21f443e98d889bb33cca5d8b6b3b8629bc14a"><code>b8a21f4</code></a>)</li>
+<li>Add serde_yml + indexmap for upcoming action.yml generator (<a href="https://github.com/s0undt3ch/ToolR/commit/701a546f5a890b72e844c989cdd3a61a5242b0f4"><code>701a546</code></a>)</li>
+<li>Add ci_setup generator (renders action.md from action.yml) (<a href="https://github.com/s0undt3ch/ToolR/commit/54234dfb6f6c1d20b91bd99b13fad5e4a5296079"><code>54234df</code></a>)</li>
+<li>Register ci_setup generator; commit generated action.md (<a href="https://github.com/s0undt3ch/ToolR/commit/71795479fd214a2ee014a884d298cd1602022f63"><code>7179547</code></a>)</li>
+<li>Assert action.yml inputs/outputs match references/action.md (<a href="https://github.com/s0undt3ch/ToolR/commit/5c5b722db02d00dccd9c70618ee3955e20177480"><code>5c5b722</code></a>)</li>
+<li>Author SKILL.md body and trigger (<a href="https://github.com/s0undt3ch/ToolR/commit/f9d3c6ce65f3669bbb27680039645abe62b800fa"><code>f9d3c6c</code></a>)</li>
+<li>Add README (<a href="https://github.com/s0undt3ch/ToolR/commit/9e45ac6a35230d48250fb68e6e39baf745c9e6a7"><code>9e45ac6</code></a>)</li>
+<li>Add REVIEW checklist (<a href="https://github.com/s0undt3ch/ToolR/commit/ac6e9d4d0b07fd27c3e85bf4ff8df68da3e03186"><code>ac6e9d4</code></a>)</li>
+<li>Add trigger fixture (<a href="https://github.com/s0undt3ch/ToolR/commit/d6b4e51902bf9f3ab9213216f4d1ecdd7d07c3ee"><code>d6b4e51</code></a>)</li>
+<li>Cross-link to toolr-ci-setup (<a href="https://github.com/s0undt3ch/ToolR/commit/498fa9bdb2dbaea66e16aa2e354d533cb1d020e1"><code>498fa9b</code></a>)</li>
+<li>Cross-link to toolr-ci-setup from rule 3 (<a href="https://github.com/s0undt3ch/ToolR/commit/bb884cbdfdc281b73aa0de190a0564c7bb0cca74"><code>bb884cb</code></a>)</li>
+<li>Note toolr-ci-setup skill and install-pattern change (<a href="https://github.com/s0undt3ch/ToolR/commit/77265bd6fa0d808e14dbbcf7e71e21b03fb516f1"><code>77265bd</code></a>)</li>
+<li>Swap serde_yml for serde_yaml_ng to drop unsound libyml dep (<a href="https://github.com/s0undt3ch/ToolR/commit/e0615def09bed9f62e296469742f907b858ad8c9"><code>e0615de</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3259,6 +3355,7 @@ for the user-facing installation flow.</p>
 <li><em>(specs)</em> Consolidated plan for authoring + packaging skills (<a href="https://github.com/s0undt3ch/ToolR/commit/d92167bf97712554cd2fa891ec2a0b4d0cbf568b"><code>d92167b</code></a>)</li>
 <li><em>(skills)</em> Add docs landing page, queue release notes, archive designs (<a href="https://github.com/s0undt3ch/ToolR/commit/5b3427837bfb06c8fb9f28a501986374f79fe96c"><code>5b34278</code></a>)</li>
 <li><em>(skills)</em> Link agent skills from README and docs landing (<a href="https://github.com/s0undt3ch/ToolR/commit/d72bec8b5ada26d124446c275b635dc7e5498da0"><code>d72bec8</code></a>)</li>
+<li>List toolr-ci-setup and consolidate install block (<a href="https://github.com/s0undt3ch/ToolR/commit/b6086fbfee1a152cffe740fd3a569ab7f28270f4"><code>b6086fb</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>

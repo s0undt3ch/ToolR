@@ -2125,10 +2125,12 @@ that lets mise install and manage <code>toolr</code> binaries.</p>
   on every release, so the version you install is the version we tested.</li>
 </ul>
 <h2 id="install-the-plugin">Install the plugin<a class="headerlink" href="#install-the-plugin" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>https://github.com/s0undt3ch/ToolR.git#installation/mise
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>git::https://github.com/s0undt3ch/ToolR.git//installation/mise
 </span></code></pre></div>
-<p>The <code>#installation/mise</code> suffix tells mise to use the asdf-plugin layout
-inside the <code>installation/mise/</code> subdirectory of the toolr repo.</p>
+<p>The <code>git::</code> prefix and the <code>//installation/mise</code> suffix together tell
+mise to clone the toolr repository and use the asdf-plugin layout
+inside its <code>installation/mise/</code> subdirectory. Requires mise
+<code>v2026.5.11</code> or newer (<a href="https://github.com/jdx/mise/pull/9893">jdx/mise#9893</a>).</p>
 <h2 id="install-toolr">Install toolr<a class="headerlink" href="#install-toolr" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Install a specific version</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>mise<span class="w"> </span>install<span class="w"> </span>toolr@0.11.0

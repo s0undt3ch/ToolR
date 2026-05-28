@@ -1892,6 +1892,11 @@ intent.</p>
 <td>Shipping an already-written set of toolr commands as a distributable Python plugin.</td>
 <td>Generating <code>toolr-manifest.json</code> via <code>toolr self build-manifest</code>, including it in the wheel, wiring <code>--check</code> as a CI gate.</td>
 </tr>
+<tr>
+<td><strong><code>toolr-ci-setup</code></strong></td>
+<td>Wiring <code>s0undt3ch/ToolR</code> into a caller repo's GitHub Actions workflow.</td>
+<td>The action's inputs and outputs, recommended pin form, two canonical recipes (run a command; gate <code>--check</code>), common failure modes.</td>
+</tr>
 </tbody>
 </table>
 <p>The two triggers are scoped so authoring requests never fire the
@@ -1900,9 +1905,17 @@ the rule of thumb is: <strong>authoring is about extending toolr in your
 own repo; packaging is about shipping commands so other repos can
 install them.</strong></p>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># from any directory</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>skillshare<span class="w"> </span>install<span class="w"> </span>s0undt3ch/toolr/skills/toolr-command-authoring
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>skillshare<span class="w"> </span>install<span class="w"> </span>s0undt3ch/toolr/skills/toolr-command-packaging
+<p>Skillshare lets you install from the parent path and pick what
+you want, so the install command does not grow as the skill set
+evolves:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Pick which skills to install (interactive)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>skillshare<span class="w"> </span>install<span class="w"> </span>s0undt3ch/toolr/skills
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Or install everything non-interactively</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>skillshare<span class="w"> </span>install<span class="w"> </span>s0undt3ch/toolr/skills<span class="w"> </span>--all
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Or pick by name (e.g. just CI setup)</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>skillshare<span class="w"> </span>install<span class="w"> </span>s0undt3ch/toolr/skills<span class="w"> </span>-s<span class="w"> </span>toolr-ci-setup
 </span></code></pre></div>
 <p>Substitute your platform's skill-install command if you're not on
 <code>skillshare</code>; the layout (<code>SKILL.md</code> + sibling <code>references/</code>) is
@@ -1928,6 +1941,10 @@ toolr's own source by <code>cargo xtask build-skill-refs</code>:</p>
   by extracting marker-delimited Rust regions from
   <code>crates/toolr-core/src/manifest/model.rs</code> and
   <code>crates/toolr-core/src/third_party/model.rs</code>.</li>
+<li><code>toolr-ci-setup/references/action.md</code> is rebuilt from the
+  repository-root <code>action.yml</code>, so the inputs/outputs surface the
+  skill points agents at cannot drift from what the action
+  actually accepts.</li>
 </ul>
 <p>A <code>cargo xtask build-skill-refs --check</code> gate runs in CI on every
 PR; a public-surface change that forgets to regenerate the
