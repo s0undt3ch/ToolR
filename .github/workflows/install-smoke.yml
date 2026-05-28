@@ -15,20 +15,18 @@ on:
     paths:
       - 'installation/install.sh'
       - 'installation/install.ps1'
-      - 'installation/mise/**'
       - '.github/workflows/install-smoke.yml'
   # PRs that touch the installer entry points get a smoke-test run
   # so we catch script breakage before it lands on main. The
-  # *remote URL* jobs (`smoke-pip-wheel`, `smoke-mise-plugin-url`)
-  # are gated off below — they exercise the published PyPI wheel
-  # and the public mise-plugin URL respectively, neither of which a
-  # PR can influence; running them here would just retest main's
-  # last release.
+  # *remote* jobs (`smoke-pip-wheel`, `smoke-mise-aqua`) are gated
+  # off below — they exercise the published PyPI wheel and the
+  # public aqua-registry entry respectively, neither of which a PR
+  # can influence; running them here would just retest main's last
+  # release.
   pull_request:
     paths:
       - 'installation/install.sh'
       - 'installation/install.ps1'
-      - 'installation/mise/**'
       - '.github/workflows/install-smoke.yml'
 
 permissions:
@@ -154,68 +152,21 @@ jobs:
             .venv-py/bin/python -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
           fi
 
-  smoke-mise-plugin:
-    name: mise plugin (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-14
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Load shared env vars
-        # See ci.yml's matching step for why we sed-filter instead of cat.
-        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
-      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-        with:
-          version: ${{ env.MISE_VERSION }}
-          install: false
-      - name: Install plugin from local staging dir
-        # `mise plugin install <name> <url>` (alias `add`) requires a
-        # git URL; for a local checkout we use the `link` subcommand,
-        # which symlinks the plugin source into mise's plugin
-        # registry under <name>. That's the documented "developing a
-        # plugin" workflow and the only way to test the in-tree
-        # `installation/mise/` plugin without first pushing it to a
-        # standalone repository.
-        run: |
-          mise plugin link toolr "$PWD/installation/mise"
-          if [ -n "${{ inputs.version }}" ]; then
-            mise install "toolr@${{ inputs.version }}"
-            mise exec "toolr@${{ inputs.version }}" -- toolr --version
-          else
-            latest=$(mise ls-remote toolr | tail -1)
-            mise install "toolr@${latest}"
-            mise exec "toolr@${latest}" -- toolr --version
-          fi
-
-  # Same matrix as `smoke-mise-plugin` but installs via the canonical
-  # user-facing URL form documented in `installation/mise/README.md`,
-  # `docs/quickstart.md`, and `docs/installation/mise.md`:
+  # The canonical user-facing mise install path is
   #
-  #     mise plugin add toolr git::https://github.com/<repo>.git//installation/mise
+  #     mise use --global aqua:s0undt3ch/ToolR@<version>
   #
-  # The local-link job above catches breakage in the plugin scripts
-  # themselves; this one catches breakage in the user-visible install
-  # path — mise dropping support for the `git::<url>//<subdir>` form
-  # (added in jdx/mise#9893, released in v2026.5.11), the repository
-  # being made private, the `installation/mise/` path moving, and so on.
+  # which resolves against the published aqua-registry release that
+  # contains `pkgs/s0undt3ch/ToolR/registry.yaml`. This job catches
+  # breakage in that path: aqua-registry dropping the entry, mise's
+  # aqua backend changing semantics, the published GitHub release
+  # archive layout drifting from what aqua expects, and so on.
   #
-  # Skipped on `pull_request` runs because mise would clone the URL
-  # from main, not from the PR branch — i.e. we'd be re-testing main's
-  # plugin source while the actual changes sit on the PR. The
-  # local-link job above covers the PR-side change; this job
-  # exercises the same install path against the just-merged tip on
-  # push-to-main / schedule / dispatch where the URL form is the
-  # authoritative source.
-  smoke-mise-plugin-url:
-    name: mise plugin via URL (${{ matrix.os }})
+  # Skipped on `pull_request` runs because the aqua-registry entry
+  # is external to this repo — a PR can't change what's published
+  # upstream, so the test would just retest main's last release.
+  smoke-mise-aqua:
+    name: mise aqua (${{ matrix.os }})
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -240,20 +191,14 @@ jobs:
         with:
           version: ${{ env.MISE_VERSION }}
           install: false
-      - name: Install plugin from git URL with subdir
-        # `git::<git-url>//<subdir>` is mise's syntax for plugins that
-        # live below the repository root (jdx/mise#9893, v2026.5.11+).
-        # The plugin source we want is at `installation/mise` in this
-        # repo.
+      - name: Install toolr via the aqua backend
         run: |
-          mise plugin add toolr "git::https://github.com/${{ github.repository }}.git//installation/mise"
           if [ -n "${{ inputs.version }}" ]; then
-            mise install "toolr@${{ inputs.version }}"
-            mise exec "toolr@${{ inputs.version }}" -- toolr --version
+            mise use --global "aqua:s0undt3ch/ToolR@${{ inputs.version }}"
+            mise exec "aqua:s0undt3ch/ToolR@${{ inputs.version }}" -- toolr --version
           else
-            latest=$(mise ls-remote toolr | tail -1)
-            mise install "toolr@${latest}"
-            mise exec "toolr@${latest}" -- toolr --version
+            mise use --global aqua:s0undt3ch/ToolR@latest
+            mise exec aqua:s0undt3ch/ToolR@latest -- toolr --version
           fi
 
   report:
@@ -264,8 +209,7 @@ jobs:
       - smoke-install-sh
       - smoke-install-ps1
       - smoke-pip-wheel
-      - smoke-mise-plugin
-      - smoke-mise-plugin-url
+      - smoke-mise-aqua
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4

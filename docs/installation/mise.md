@@ -1,8 +1,10 @@
 # mise
 
-[mise](https://mise.jdx.dev/) is a polyglot tool-version manager. The
-`toolr` repository ships an asdf-style plugin under `installation/mise/`
-that lets mise install and manage `toolr` binaries.
+[mise](https://mise.jdx.dev/) is a polyglot tool-version manager.
+`toolr` is published in the
+[aqua registry](https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR)
+and mise installs it directly via its built-in aqua backend — no
+plugin to register, no repository to clone.
 
 ## Why
 
@@ -13,35 +15,20 @@ that lets mise install and manage `toolr` binaries.
   `toolr` release.
 - **Multi-version side-by-side.** Install several releases at once;
   switch with `mise use toolr@X.Y.Z`.
-- **CI-tested.** The plugin is exercised by
-  [`install-smoke.yml`](https://github.com/s0undt3ch/ToolR/blob/main/.github/workflows/install-smoke.yml)
-  on every release, so the version you install is the version we tested.
-
-## Install the plugin
-
-```sh
-mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise
-```
-
-The `git::` prefix and the `//installation/mise` suffix together tell
-mise to clone the toolr repository and use the asdf-plugin layout
-inside its `installation/mise/` subdirectory. Requires mise
-`v2026.5.11` or newer ([jdx/mise#9893](https://github.com/jdx/mise/pull/9893)).
+- **Supply-chain verified.** The aqua registry entry pulls the
+  signed GitHub release archives with SHA-256 verification built in.
 
 ## Install toolr
 
 ```sh
-# Install a specific version
-mise install toolr@0.11.0
-
 # Install whatever the latest GitHub release is
-mise install toolr@latest
+mise use --global aqua:s0undt3ch/ToolR@latest
 
-# Use a version globally
-mise use --global toolr@0.11.0
+# Install (and pin) a specific version
+mise use --global aqua:s0undt3ch/ToolR@0.20.0
 
 # Pin a version to the current directory
-mise use toolr@0.11.0
+mise use aqua:s0undt3ch/ToolR@0.20.0
 ```
 
 Verify:
@@ -56,29 +43,29 @@ toolr --version
 
 ```toml
 [tools]
-toolr = "0.11.0"
+"aqua:s0undt3ch/ToolR" = "0.20.0"
 ```
 
-Then run `mise install` from the project root. mise resolves the version
-from `.mise.toml` and installs it on demand.
+Then run `mise install` from the project root. mise resolves the
+version from `.mise.toml` and installs it on demand.
 
 ### `.tool-versions` (asdf-style, legacy)
 
 ```text
-toolr 0.11.0
+aqua:s0undt3ch/ToolR 0.20.0
 ```
 
-mise also reads asdf's `.tool-versions` files, so existing asdf users
-can keep their pin format unchanged.
+mise also reads asdf's `.tool-versions` files, so existing asdf
+users can keep their pin format unchanged.
 
 ## Combining with mise tasks
 
 `mise` can run repo-scoped tasks. Once `toolr` is on PATH via the
-plugin, wire it into tasks like any other binary:
+aqua backend, wire it into tasks like any other binary:
 
 ```toml
 [tools]
-toolr = "0.11.0"
+"aqua:s0undt3ch/ToolR" = "0.20.0"
 
 [tasks.test]
 description = "Run tests"
@@ -103,19 +90,19 @@ mise run ci
 
 ```sh
 # List all upstream versions
-mise list-all toolr
+mise ls-remote aqua:s0undt3ch/ToolR
 
 # List locally installed versions
-mise list toolr
+mise ls aqua:s0undt3ch/ToolR
 
 # Show the active version in the current directory
-mise current toolr
+mise current aqua:s0undt3ch/ToolR
 
 # Show the install dir for a version
-mise where toolr
+mise where aqua:s0undt3ch/ToolR
 
 # Uninstall a version
-mise uninstall toolr@0.11.0
+mise uninstall aqua:s0undt3ch/ToolR@0.20.0
 ```
 
 ## Troubleshooting
@@ -131,35 +118,44 @@ eval "$(mise activate bash)"   # or zsh / fish
 Or invoke through mise directly:
 
 ```sh
-mise exec toolr -- toolr --help
+mise exec aqua:s0undt3ch/ToolR -- toolr --help
 ```
+
+### `no aqua-registry found for s0undt3ch/ToolR`
+
+mise's aqua backend resolves entries against the latest published
+aqua-registry release, not against `main`. If the entry was added
+recently it may not yet be in a release tag. Check
+[aqua-registry releases](https://github.com/aquaproj/aqua-registry/releases)
+and bump mise (or wait for its registry cache to refresh) once a
+release containing the entry has shipped.
 
 ### Debug an install
 
 ```sh
-MISE_DEBUG=1 mise install toolr@0.11.0
+mise --verbose use aqua:s0undt3ch/ToolR
 ```
 
 ### Reinstall
 
 ```sh
-mise uninstall toolr@0.11.0
-mise install toolr@0.11.0
+mise uninstall aqua:s0undt3ch/ToolR@0.20.0
+mise install aqua:s0undt3ch/ToolR@0.20.0
 ```
 
-## Plugin internals
+## Migrating from the in-tree plugin
 
-The plugin's source is in
-[`installation/mise/`](https://github.com/s0undt3ch/ToolR/tree/main/installation/mise)
-inside the toolr repo. The `bin/` directory contains the asdf-style
-hooks (`list-all`, `download`, `install`) that mise invokes:
+Earlier toolr revisions shipped an asdf-style plugin at
+`installation/mise/` that was installed via
+`mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise`.
+That plugin has been **removed** in favour of the aqua-backed install
+described above. Migrate with:
 
-1. **`list-all`** queries the GitHub releases API for available
-   `toolr` versions.
-2. **`download`** fetches the archive for the host's target triple.
-3. **`install`** extracts the binary into the mise-managed install
-   directory.
+```sh
+mise plugin uninstall toolr
+mise use --global aqua:s0undt3ch/ToolR@latest
+```
 
-The plugin installs the standalone `toolr` binary — the same artifact
-shipped by [`installation/install.sh`](https://github.com/s0undt3ch/ToolR/blob/main/installation/install.sh)
-and the GitHub release archives.
+The aqua backend installs the **same standalone binary** the
+in-tree plugin used to fetch (the GitHub release archives), so the
+runtime behaviour is identical.

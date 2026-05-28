@@ -55,12 +55,12 @@ Five first-class install paths.
 ### mise
 
 ```sh
-mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise
-mise use --global toolr@latest
+mise use --global aqua:s0undt3ch/ToolR@latest
 ```
 
-For projects that already pin tool versions via `.mise.toml`, this is the most-natural fit —
-toolr's version becomes part of your project's reproducible tool set.
+Pulls toolr from the [aqua registry](https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR)
+via mise's built-in aqua backend — no plugin to register. For projects that already pin tool versions via
+`.mise.toml`, toolr's version becomes part of your project's reproducible tool set.
 See [docs/installation/mise/](https://toolr.readthedocs.io/latest/installation/mise/).
 
 ### pip
