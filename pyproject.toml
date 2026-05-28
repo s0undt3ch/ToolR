@@ -37,6 +37,7 @@ dev = [
     "pytest>=8.3.5",
     "pytest-skip-markers>=1.5.2",
     "pytest-subtests>=0.14.2",
+    "pyyaml",
 ]
 docs = [
     "toolr-py",

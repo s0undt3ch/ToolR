@@ -21,6 +21,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-skip-markers", specifier = ">=1.5.2" },
     { name = "pytest-subtests", specifier = ">=0.14.2" },
+    { name = "pyyaml" },
     { name = "toolr-plugin-example", editable = "examples/plugin-package" },
     { name = "toolr-py", editable = "crates/toolr-py" },
 ]
