@@ -111,22 +111,14 @@ jobs:
 
       - name: Setup ToolR
         # In-repo composite action: downloads the toolr binary from a
-        # GitHub release and verifies the SLSA build provenance.
-        #
-        # `cache-tools-venv: false` skips the in-tree `tools/.venv`
-        # sync — this job's sole toolr invocation is
-        # `toolr version bump` (built-in Rust command), which has
-        # no need for `tools/*.py`-defined commands and therefore
-        # no need for the tools venv. Inside this repo, `tools/`
-        # declares `toolr-py` as a workspace member, so syncing
-        # would rebuild the pyo3 extension from source on every
-        # run — wasted time for a job that never touches it.
+        # GitHub release, verifies the SLSA build provenance, and
+        # caches the in-tree `tools/.venv` for the prepare-release
+        # job's `toolr` invocations.
         id: setup-toolr
         uses: ./
         with:
           version: latest
           cache-prefix: ${{ inputs.cache-seed }}|setup-toolr|prepare-release
-          cache-tools-venv: false
 
       - name: Setup Prek
         id: setup-pre-commit
