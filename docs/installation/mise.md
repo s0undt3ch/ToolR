@@ -20,18 +20,40 @@ plugin to register, no repository to clone.
 
 ## Install toolr
 
+### Pin per project (recommended)
+
+`mise use` without a scope flag writes to the current directory's
+`.mise.toml`. Run it inside the repo you're scaffolding toolr for:
+
 ```sh
-# Install whatever the latest GitHub release is
-mise use --global aqua:s0undt3ch/ToolR@latest
+# Latest release
+mise use aqua:s0undt3ch/ToolR@latest
 
-# Install (and pin) a specific version
-mise use --global aqua:s0undt3ch/ToolR@0.20.0
-
-# Pin a version to the current directory
+# Pin a specific version
 mise use aqua:s0undt3ch/ToolR@0.20.0
 ```
 
-Verify:
+This is the form the README and quickstart show. It matches
+toolr's design as a project-level tool — every repo declares its
+own `toolr` version, so `.mise.toml` is the single source of truth
+for "which toolr does this project run with?".
+
+### Install machine-wide
+
+If you'd rather have one `toolr` available across every directory
+without per-project pinning, add `--global`:
+
+```sh
+mise use --global aqua:s0undt3ch/ToolR@latest
+```
+
+`--global` writes to `~/.config/mise/config.toml` (or whatever
+mise resolves for your platform). Per-project `.mise.toml` pins
+still override the global entry when present, so this is a safe
+"have toolr on PATH everywhere" knob — it just clutters the
+global config with a tool you mostly use inside specific repos.
+
+### Verify
 
 ```sh
 toolr --version
@@ -153,7 +175,9 @@ described above. Migrate with:
 
 ```sh
 mise plugin uninstall toolr
-mise use --global aqua:s0undt3ch/ToolR@latest
+mise use aqua:s0undt3ch/ToolR@latest         # per-project
+# or:
+mise use --global aqua:s0undt3ch/ToolR@latest   # machine-wide
 ```
 
 The aqua backend installs the **same standalone binary** the

@@ -55,7 +55,7 @@ Five first-class install paths.
 ### mise
 
 ```sh
-mise use --global aqua:s0undt3ch/ToolR@latest
+mise use aqua:s0undt3ch/ToolR@latest
 ```
 
 Pulls toolr from the [aqua registry](https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR)

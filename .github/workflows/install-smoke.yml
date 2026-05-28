@@ -154,13 +154,18 @@ jobs:
 
   # The canonical user-facing mise install path is
   #
-  #     mise use --global aqua:s0undt3ch/ToolR@<version>
+  #     mise use aqua:s0undt3ch/ToolR@<version>
   #
   # which resolves against the published aqua-registry release that
   # contains `pkgs/s0undt3ch/ToolR/registry.yaml`. This job catches
   # breakage in that path: aqua-registry dropping the entry, mise's
   # aqua backend changing semantics, the published GitHub release
   # archive layout drifting from what aqua expects, and so on.
+  #
+  # We use `mise install` + `mise exec` here rather than `mise use`
+  # because the runner has no project context to pin to — the goal
+  # is to fetch the binary and verify it runs, not to write a
+  # `.mise.toml` we throw away at the end of the job.
   #
   # Skipped on `pull_request` runs because the aqua-registry entry
   # is external to this repo — a PR can't change what's published
@@ -194,10 +199,10 @@ jobs:
       - name: Install toolr via the aqua backend
         run: |
           if [ -n "${{ inputs.version }}" ]; then
-            mise use --global "aqua:s0undt3ch/ToolR@${{ inputs.version }}"
+            mise install "aqua:s0undt3ch/ToolR@${{ inputs.version }}"
             mise exec "aqua:s0undt3ch/ToolR@${{ inputs.version }}" -- toolr --version
           else
-            mise use --global aqua:s0undt3ch/ToolR@latest
+            mise install aqua:s0undt3ch/ToolR@latest
             mise exec aqua:s0undt3ch/ToolR@latest -- toolr --version
           fi
 

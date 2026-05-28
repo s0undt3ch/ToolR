@@ -21,7 +21,7 @@ Five first-class install paths — pick whichever matches your environment.
 ### mise
 
 ```sh
-mise use --global aqua:s0undt3ch/ToolR@latest
+mise use aqua:s0undt3ch/ToolR@latest
 ```
 
 Pulls toolr from the
