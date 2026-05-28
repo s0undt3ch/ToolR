@@ -68,14 +68,17 @@ def _set_action_yml_default_version(
     no `version:` input needed, no SHA → tag API lookup required at
     action-run time.
 
-    Dev versions (anything containing ``-``, e.g. ``X.Y.Z-devN``) are
-    skipped — those don't correspond to a real release, and writing one
-    into action.yml would cause downstream callers to try to install a
-    nonexistent binary.
+    The helper writes whatever version it's given — including dev
+    versions like ``X.Y.Z-devN+SHA``. The release-prep flow runs on
+    every push (PRs included) via ``ci.yml``'s ``prepare-release``
+    job, and exercising the bake-in regex on those runs is the
+    point: catch regressions to the regex in regular CI, not only
+    at real release time. The dev version never escapes the CI
+    runner because PR jobs use a read-only ``GITHUB_TOKEN`` and
+    cannot push the bumped action.yml back; ``release.yml`` invokes
+    the same code path with an explicit ``--new-version=X.Y.Z`` so
+    action.yml lands with a real tag on real releases.
     """
-    if "-" in new_version:
-        # Dev versions are not real releases; leave action.yml alone.
-        return
     text = action_yml_path.read_text(encoding="utf-8")
     new_text, count = _ACTION_YML_VERSION_DEFAULT_RE.subn(rf'\1"{new_version}"', text, count=1)
     if count != 1:

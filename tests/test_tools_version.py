@@ -224,20 +224,24 @@ def test_set_action_yml_default_version_bumps_only_version_input(
     assert 'default: "setup-toolr"' in body
 
 
-def test_set_action_yml_default_version_skips_dev_versions(
+def test_set_action_yml_default_version_writes_dev_versions(
     action_yml: Callable[[str], Path],
 ) -> None:
-    """Dev versions (containing a hyphen) must not land in action.yml.
+    """Dev versions (containing a hyphen) must land in action.yml.
 
-    `toolr version bump` runs on every push (computing dev versions
-    like ``0.21.1-dev42``). Writing those to action.yml would set the
-    SHA-pin fallback to a nonexistent release.
+    `toolr version bump --include-action` runs on every push (PRs
+    included) via ci.yml's `prepare-release` job. Exercising the
+    bake-in regex against a real dev version on each of those runs
+    is the point: regressions to the regex surface in regular CI,
+    not only when a real release is cut. The dev version never
+    escapes the runner because PR jobs cannot push.
     """
     path = action_yml(ACTION_YML_BASE)
-    original = path.read_text(encoding="utf-8")
     ctx = mock.Mock()
-    _set_action_yml_default_version(ctx, "0.21.1-dev42", action_yml_path=path)
-    assert path.read_text(encoding="utf-8") == original
+    _set_action_yml_default_version(ctx, "0.21.1-dev42+gabc1234", action_yml_path=path)
+    body = path.read_text(encoding="utf-8")
+    assert 'default: "0.21.1-dev42+gabc1234"' in body
+    assert 'default: "0.20.0"' not in body
 
 
 def test_set_action_yml_default_version_hard_fails_on_missing_block(
