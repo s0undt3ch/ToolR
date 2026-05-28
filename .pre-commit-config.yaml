@@ -52,9 +52,11 @@ repos:
         # Fire on sources that drive any generated skill reference:
         # the xtask crate itself, the toolr-py public surface the
         # authoring generator walks, the toolr-core docstrings table
-        # and manifest models the packaging generator embeds, and the
-        # committed references themselves (so hand-edits are caught).
-        files: ^(crates/xtask/.*\.rs$|crates/toolr-py/python/toolr/.*\.py$|crates/toolr-core/src/docstrings\.rs$|crates/toolr-core/src/manifest/model\.rs$|crates/toolr-core/src/third_party/(model|glob)\.rs$|skills/.*/references/.*\.md$)
+        # and manifest models the packaging generator embeds, the
+        # root `action.yml` that drives the toolr-ci-setup reference,
+        # and the committed references themselves (so hand-edits are
+        # caught).
+        files: ^(crates/xtask/.*\.rs$|crates/toolr-py/python/toolr/.*\.py$|crates/toolr-core/src/docstrings\.rs$|crates/toolr-core/src/manifest/model\.rs$|crates/toolr-core/src/third_party/(model|glob)\.rs$|action\.yml$|skills/.*/references/.*\.md$)
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
