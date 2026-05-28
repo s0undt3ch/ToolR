@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 mod authoring;
+mod ci_setup;
 mod packaging;
 
 /// One regenerated file, ready to either write to disk or compare
@@ -33,6 +34,7 @@ pub fn run(check: bool) -> Result<()> {
         authoring::commands(&root)?,
         authoring::docstrings(&root)?,
         packaging::packaging(&root)?,
+        ci_setup::action(&root)?,
     ];
 
     apply(outputs, check)

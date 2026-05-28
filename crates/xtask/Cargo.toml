@@ -11,9 +11,12 @@ description = "Maintainer-only tooling for the toolr workspace (skill ref genera
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+indexmap = { version = "2", features = ["serde"] }
 ruff_python_ast.workspace = true
 ruff_python_parser.workspace = true
 ruff_text_size.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
 toolr-core = { path = "../toolr-core" }
 
 [dev-dependencies]

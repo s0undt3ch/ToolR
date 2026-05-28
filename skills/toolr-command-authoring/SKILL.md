@@ -144,3 +144,13 @@ get the commands), that is the
 skill's job. This skill does not cover wheel-building, manifest
 embedding, or PyPI publishing — invoke the packaging skill for that
 work.
+
+## CI is a different problem
+
+If the user wants to **run** these commands in GitHub Actions
+(a caller workflow that installs toolr, sets up the venv, and
+runs `toolr <group> <cmd>`), that is the
+[`toolr-ci-setup`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-ci-setup)
+skill's job. This skill does not cover the `s0undt3ch/ToolR`
+action, pinning policy, or CI cache shapes — invoke the
+CI-setup skill for that work.

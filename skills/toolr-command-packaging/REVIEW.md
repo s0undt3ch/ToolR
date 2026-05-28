@@ -18,6 +18,7 @@ checklist before landing edits to any of them.
 6. Cross-references from `SKILL.md` to `references/packaging.md`.
 7. `README.md` — human-facing intro.
 8. `tests/triggers.yaml` — should-fire / shouldn't-fire fixtures.
+9. The inline pointer to the `toolr-ci-setup` skill inside rule 3.
 
 ## Checklist
 
@@ -46,6 +47,9 @@ When editing any of the surfaces above:
 - [ ] **Closing authoring pointer.** Does the closing section
       still send authoring-flavored intent back to the authoring
       skill, and is the link still valid?
+- [ ] **CI-setup pointer in rule 3.** Does rule 3 still link out
+      to the CI-setup skill alongside the prek-hook mention, and
+      is the link still valid?
 - [ ] **`tests/triggers.yaml`.** Are the shouldn't-fire entries
       scoped to plausible-but-out-of-scope requests (authoring,
       generic packaging, runtime debugging) rather than nonsense

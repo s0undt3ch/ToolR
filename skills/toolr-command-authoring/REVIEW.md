@@ -12,9 +12,10 @@ Use this checklist before landing edits to any of them.
 2. `SKILL.md` body — the conceptual narrative.
 3. Cross-references from `SKILL.md` to `references/*.md`.
 4. The closing pointer to the `toolr-command-packaging` skill.
-5. `README.md` — human-facing intro (lower stakes but still
+5. The closing pointer to the `toolr-ci-setup` skill.
+6. `README.md` — human-facing intro (lower stakes but still
    hand-written).
-6. `tests/triggers.yaml` — should-fire / shouldn't-fire fixtures.
+7. `tests/triggers.yaml` — should-fire / shouldn't-fire fixtures.
 
 ## Checklist
 
@@ -45,6 +46,9 @@ When editing any of the surfaces above:
 - [ ] **Closing packaging pointer.** Does the closing section still
       send packaging-flavored intent to the packaging skill, and is
       the link still valid?
+- [ ] **Closing CI-setup pointer.** Does the closing section still
+      send CI-flavored intent to the CI-setup skill, and is the
+      link still valid?
 - [ ] **`tests/triggers.yaml`.** When adding a fixture, did you
       cover both the should-fire and shouldn't-fire sides? Are the
       shouldn't-fire entries scoped to plausible-but-out-of-scope

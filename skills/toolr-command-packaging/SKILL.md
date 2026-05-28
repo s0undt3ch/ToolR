@@ -52,7 +52,9 @@ unchanged. It tells you exactly three things on top of that.
    --source-dir <pkg-src> --package <pkg-name> --check` exits
    non-zero when the committed manifest doesn't match what the
    builder would produce from the current source. Run it on every
-   PR. A prek hook is a good local complement.
+   PR. A prek hook is a good local complement. The
+   [`toolr-ci-setup`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-ci-setup)
+   skill shows the canonical workflow.
 
 ## The canonical worked example
 
