@@ -6,6 +6,202 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.20.1 - 2026-05-28
+
+### Notes
+
+## ⚠ Breaking changes
+
+### `s0undt3ch/ToolR` GitHub Action: binary-only install, no more pipx
+
+- **What changed:** the `Setup ToolR` composite action no longer
+  installs toolr via `pipx install toolr==<version>`. The 0.20.0
+  release shipped toolr as a binary-only PyPI wheel (no Python
+  source), which pipx cannot install — so the old action path was
+  already broken at the point this change landed.
+
+  The rewritten action downloads the toolr binary archive directly
+  from a GitHub release (`gh release download` with a `curl`
+  fallback), cryptographically verifies the SLSA build provenance
+  via `gh attestation verify`, caches the result, and puts the
+  binary on `PATH`. It also caches `tools/.venv` keyed on
+  `tools/pyproject.toml` + `tools/uv.lock` and sets
+  `TOOLR_VENV_LOCATION=in-tree` so the cache works out of the box.
+
+- **Minimum version:** the action refuses to install toolr below
+  `0.20.0`. Earlier releases used the Python source distribution
+  and are not compatible with the binary-only flow.
+
+- **Migration:** remove the deprecated `python-path` and
+  `requirements-file` inputs from your workflow's `Setup ToolR`
+  step; the action has no use for them now that toolr is a
+  standalone binary with its Python deps in the per-project
+  `tools/.venv`. New optional inputs: `version` (defaults to the
+  action ref, falling back to `latest`), `skip-attestation`
+  (defaults to `false`), `cache-prefix` (defaults to `setup-toolr`),
+  and `cache-tools-venv` (defaults to `true`).
+
+### `installation/mise/` plugin: minimum toolr `0.20.0`, attests by default
+
+- **What changed:** the bundled mise plugin under
+  `installation/mise/` now rejects toolr versions below `0.20.0`
+  (matching the action's cutoff) and verifies the SLSA build
+  provenance via `gh attestation verify` on every install. Set
+  `TOOLR_SKIP_ATTESTATION=1` to bypass — the plugin tells you so
+  loudly if `gh` is missing from `PATH`.
+
+### `installation/mise/` plugin: install URL requires mise `v2026.5.11+`
+
+- **What changed:** the documented install command moved from
+  `mise plugin add toolr https://github.com/s0undt3ch/ToolR.git#installation/mise`
+  to
+  `mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise`.
+
+  The `#<subdir>` form was never a valid mise syntax — mise has
+  always interpreted `#` as a git ref selector. The correct
+  subdirectory syntax (`git::<git-url>//<subdir>`) only landed in
+  mise [v2026.5.11](https://github.com/jdx/mise/pull/9893)
+  (May 17, 2026). Workflows pinning `MISE_VERSION` below that
+  cutoff need to bump.
+
+- **Migration:** swap the install command everywhere it appears
+  (READMEs, CI workflows, internal runbooks) and ensure your mise
+  installation is `v2026.5.11` or newer. The plugin source itself
+  is unchanged.
+
+## New features
+
+### `TOOLR_VENV_LOCATION` environment variable
+
+The new `TOOLR_VENV_LOCATION` env var overrides the
+`[tool.toolr] venv-location` setting in `tools/pyproject.toml`.
+Accepts the same `in-tree` / `cache` spellings the TOML key does.
+Intended primarily for CI: the `Setup ToolR` action sets it to
+`in-tree` automatically so workflows can cache `tools/.venv`
+directly without forcing every consumer repo's
+`tools/pyproject.toml` to declare `venv-location = "in-tree"`.
+
+### Agent skills
+
+Toolr now ships two in-tree agent skills, installable via
+`skillshare` from this repository:
+
+- **`toolr-command-authoring`** — teaches LLM coding assistants
+  how to author toolr commands in a project's own `tools/*.py`
+  files. Anchored on `toolr project init` and
+  `toolr <group> <cmd> --help`; the API surface and docstring
+  conventions are regenerated from `toolr-py`'s public surface
+  and the parser's section-header table.
+- **`toolr-command-packaging`** — teaches LLM coding assistants
+  how to ship an existing set of toolr commands as a
+  distributable Python plugin. Anchored on the in-tree
+  `examples/plugin-package/`; the manifest fragment schema is
+  regenerated from `toolr-core`'s serde types.
+- **`toolr-ci-setup`** — teaches LLM coding assistants how to
+  integrate toolr into a project's GitHub Actions CI. Covers the
+  `s0undt3ch/ToolR` GitHub Action: pinning policy, two canonical
+  recipes (run a toolr command; gate
+  `toolr self build-manifest --check`), and the common failure
+  modes a caller hits first. Installable via `skillshare` from
+  `skills/toolr-ci-setup/`.
+
+A new maintainer-only `crates/xtask/` workspace crate hosts the
+generator (`cargo xtask build-skill-refs`). The `--check` variant
+runs in CI on every PR (alongside the existing example-plugin
+manifest check) so a public-surface change that forgets to
+regenerate the skill references cannot land. A `prek` hook entry
+gives the same gate locally.
+
+`cargo xtask build-skill-refs` gains a third generator
+(`ci_setup::action`) that rebuilds
+`skills/toolr-ci-setup/references/action.md` from the
+repository-root `action.yml`. The existing `--check` CI gate
+automatically covers the new file.
+
+`docs/skills.md` install instructions now use the `skillshare`
+parent-path picker pattern
+(`skillshare install s0undt3ch/toolr/skills`) instead of one
+command per skill, so the install block does not grow with each
+new skill.
+
+See [docs/skills.md](https://toolr.readthedocs.io/latest/skills/)
+for the user-facing installation flow.
+
+### <!-- 0 -->🚀 Features
+
+- *(venv)* TOOLR_VENV_LOCATION env var overrides venv-location config ([`5bba1a3`](https://github.com/s0undt3ch/ToolR/commit/5bba1a3e1605ef9cccfbf0fd6780e1d83da9a1bc))
+- *(action)* Binary-download + SLSA attest install for setup-toolr ([`ca66e25`](https://github.com/s0undt3ch/ToolR/commit/ca66e251de4c9648e1db91718ee56da3df7285b3))
+- *(mise)* Minimum toolr 0.20.0 + verify SLSA build provenance ([`51d38c5`](https://github.com/s0undt3ch/ToolR/commit/51d38c56185b2dbbf313173e1ce3add50064bc62))
+- *(mise)* Prefer 'gh' CLI over curl/wget for github.com hits ([`3b2edf0`](https://github.com/s0undt3ch/ToolR/commit/3b2edf0c3b0a66349dfac4d44103e09b1e401d23))
+- *(config)* Add .rustfmt.toml + .editorconfig with 100-col policy ([`261e5ea`](https://github.com/s0undt3ch/ToolR/commit/261e5ea6a287be4823768ccc3489ae14ccd8b9eb))
+- *(xtask)* Scaffold maintainer-only crates/xtask/ workspace crate ([`b53ebbd`](https://github.com/s0undt3ch/ToolR/commit/b53ebbdfcbc3f1e69a5b8e9d4ff936abeb577c04))
+- *(docstrings)* Expose KNOWN_SECTION_HEADERS as introspectable table ([`b8248e3`](https://github.com/s0undt3ch/ToolR/commit/b8248e306b5f9e22521d26ad853051a8e68526d0))
+- *(xtask)* Generate authoring skill references from toolr-py source ([`aeef5d2`](https://github.com/s0undt3ch/ToolR/commit/aeef5d284aa1b5e5aaae375156b6433d631f6f3c))
+- *(skills)* Author skill prose for toolr-command-authoring ([`1bcb0a3`](https://github.com/s0undt3ch/ToolR/commit/1bcb0a381174607b0b0678629d47910a3d85acee))
+- *(xtask)* Generate packaging skill references from toolr-core types ([`fb440b4`](https://github.com/s0undt3ch/ToolR/commit/fb440b4380303f72f461b5c18b9f7f95a4f6b619))
+- *(skills)* Author skill prose for toolr-command-packaging ([`41d5a4d`](https://github.com/s0undt3ch/ToolR/commit/41d5a4dc82536af0c9b6873267b8246c1d9ac0ff))
+- *(xtask)* Break generator prose at sentence boundaries ([`b85c464`](https://github.com/s0undt3ch/ToolR/commit/b85c464ae99a3a0dff62eb44ec6be9a0d52cd471))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(action)* Run `toolr project deps sync` + cache the resolved venv path ([`153052a`](https://github.com/s0undt3ch/ToolR/commit/153052a8bc94cedae8a01b79890282694de4ab59))
+- *(action)* Drive uv sync directly with --no-default-groups + --frozen ([`08aa7db`](https://github.com/s0undt3ch/ToolR/commit/08aa7dbf558da93064e8dc063d912b56db4d2fc7))
+- *(install-smoke)* PS7 latest-version resolver + mise plugin link ([`33810bd`](https://github.com/s0undt3ch/ToolR/commit/33810bda27800ec89d196baf0ecad44537a8b7e0))
+- *(mise)* Authenticate list-all against api.github.com when possible ([`a4602eb`](https://github.com/s0undt3ch/ToolR/commit/a4602ebef79ebaaa36b24f947b626c40dc32e61e))
+- *(mise)* Also authenticate bin/download against github.com ([`3ede133`](https://github.com/s0undt3ch/ToolR/commit/3ede133bdcd3a8e1662e23e0fc1cfdd8969980e1))
+- *(lint)* Exclude generated skills/*/references from rumdl ([`0d03a35`](https://github.com/s0undt3ch/ToolR/commit/0d03a351d70e036c830e0b5b1c7dc0bc8e0108d5))
+- *(skill-refs)* LF line endings on Windows + show diff in CI on drift ([`42866c8`](https://github.com/s0undt3ch/ToolR/commit/42866c8d09a00596ef0431c2c1dfb71ddee872e1))
+- *(skill-refs)* LF line endings on skill example .py files ([`528c8c7`](https://github.com/s0undt3ch/ToolR/commit/528c8c742b7eb54990b2566331752f87a11f322b))
+- *(mise)* Correct plugin URL syntax + bump MISE_VERSION ([`eb52b85`](https://github.com/s0undt3ch/ToolR/commit/eb52b859ad1c9c83abaca4faa0ad78f33df25dd1))
+
+### <!-- 10 -->💼 Other
+
+- *(xtask)* Collapse to single debug alias + prek hook regenerates ([`b7f32ab`](https://github.com/s0undt3ch/ToolR/commit/b7f32abe27b808c223b443ae1de62db9d77dc51d))
+- Add design for toolr-ci-setup agent skill ([`3e0d9b7`](https://github.com/s0undt3ch/ToolR/commit/3e0d9b7383fff66152bdb5d118628e58308560ea))
+- Add implementation plan for toolr-ci-setup skill ([`b8a21f4`](https://github.com/s0undt3ch/ToolR/commit/b8a21f443e98d889bb33cca5d8b6b3b8629bc14a))
+- Add serde_yml + indexmap for upcoming action.yml generator ([`701a546`](https://github.com/s0undt3ch/ToolR/commit/701a546f5a890b72e844c989cdd3a61a5242b0f4))
+- Add ci_setup generator (renders action.md from action.yml) ([`54234df`](https://github.com/s0undt3ch/ToolR/commit/54234dfb6f6c1d20b91bd99b13fad5e4a5296079))
+- Register ci_setup generator; commit generated action.md ([`7179547`](https://github.com/s0undt3ch/ToolR/commit/71795479fd214a2ee014a884d298cd1602022f63))
+- Assert action.yml inputs/outputs match references/action.md ([`5c5b722`](https://github.com/s0undt3ch/ToolR/commit/5c5b722db02d00dccd9c70618ee3955e20177480))
+- Author SKILL.md body and trigger ([`f9d3c6c`](https://github.com/s0undt3ch/ToolR/commit/f9d3c6ce65f3669bbb27680039645abe62b800fa))
+- Add README ([`9e45ac6`](https://github.com/s0undt3ch/ToolR/commit/9e45ac6a35230d48250fb68e6e39baf745c9e6a7))
+- Add REVIEW checklist ([`ac6e9d4`](https://github.com/s0undt3ch/ToolR/commit/ac6e9d4d0b07fd27c3e85bf4ff8df68da3e03186))
+- Add trigger fixture ([`d6b4e51`](https://github.com/s0undt3ch/ToolR/commit/d6b4e51902bf9f3ab9213216f4d1ecdd7d07c3ee))
+- Cross-link to toolr-ci-setup ([`498fa9b`](https://github.com/s0undt3ch/ToolR/commit/498fa9bdb2dbaea66e16aa2e354d533cb1d020e1))
+- Cross-link to toolr-ci-setup from rule 3 ([`bb884cb`](https://github.com/s0undt3ch/ToolR/commit/bb884cbdfdc281b73aa0de190a0564c7bb0cca74))
+- Note toolr-ci-setup skill and install-pattern change ([`77265bd`](https://github.com/s0undt3ch/ToolR/commit/77265bd6fa0d808e14dbbcf7e71e21b03fb516f1))
+- Swap serde_yml for serde_yaml_ng to drop unsound libyml dep ([`e0615de`](https://github.com/s0undt3ch/ToolR/commit/e0615def09bed9f62e296469742f907b858ad8c9))
+
+### <!-- 3 -->📚 Documentation
+
+- *(specs)* Add toolr command-authoring skill design ([`e5e095b`](https://github.com/s0undt3ch/ToolR/commit/e5e095b548fcf79618965eabbd494e66ed61c13f))
+- *(specs)* Add toolr command-packaging skill design ([`91ef08e`](https://github.com/s0undt3ch/ToolR/commit/91ef08e49d1088e41c2fb898d8672d3a7cd0ea38))
+- *(specs)* Drop python introspection subprocess from skill-refs generator ([`7a5154b`](https://github.com/s0undt3ch/ToolR/commit/7a5154be85f7b1fc609b545c3ae69d371c09f66f))
+- *(specs)* Use toolr.__all__ as the public-surface contract for skill-refs ([`273bf9d`](https://github.com/s0undt3ch/ToolR/commit/273bf9d09753f0f002b9b22fb746fdf04d22a72a))
+- *(specs)* Add docstring conventions; reuse toolr-core parser/docstrings ([`b90d7c3`](https://github.com/s0undt3ch/ToolR/commit/b90d7c3d4cd2d94869d3fc63494a4dd409ffdb97))
+- *(specs)* Packaging skill anchors on examples/plugin-package and new CLI surface ([`5dccaf9`](https://github.com/s0undt3ch/ToolR/commit/5dccaf967eaf6ee4f2f208822219d710a11d880d))
+- *(specs)* Consolidated plan for authoring + packaging skills ([`d92167b`](https://github.com/s0undt3ch/ToolR/commit/d92167bf97712554cd2fa891ec2a0b4d0cbf568b))
+- *(skills)* Add docs landing page, queue release notes, archive designs ([`5b34278`](https://github.com/s0undt3ch/ToolR/commit/5b3427837bfb06c8fb9f28a501986374f79fe96c))
+- *(skills)* Link agent skills from README and docs landing ([`d72bec8`](https://github.com/s0undt3ch/ToolR/commit/d72bec8b5ada26d124446c275b635dc7e5498da0))
+- List toolr-ci-setup and consolidate install block ([`b6086fb`](https://github.com/s0undt3ch/ToolR/commit/b6086fbfee1a152cffe740fd3a569ab7f28270f4))
+
+### <!-- 5 -->🎨 Styling
+
+- *(python)* Split ruff line-length (format 100, lint 120) + reformat ([`85dbecc`](https://github.com/s0undt3ch/ToolR/commit/85dbeccc15abe2b9497eca2449fb57442bfcc0f2))
+- *(docs)* Enable MD013 with 120-char ceiling + reflow long lines ([`350c88f`](https://github.com/s0undt3ch/ToolR/commit/350c88fcc0ad5d313a1563102dbfcf375cf8d02f))
+
+### <!-- 6 -->🧪 Testing
+
+- *(install-smoke)* Exercise mise plugin via canonical URL form ([`8797fc4`](https://github.com/s0undt3ch/ToolR/commit/8797fc43474aec6934f1994828d0cbbe851b40e1))
+- *(skills)* Snapshot manifest over the authoring skill's examples tree ([`f347410`](https://github.com/s0undt3ch/ToolR/commit/f347410e71f7c16c1a6788a8ea04130e34b3852f))
+- *(skills)* Refresh authoring-skill manifest snapshot after ruff reformat ([`9a709ba`](https://github.com/s0undt3ch/ToolR/commit/9a709ba0eab746e1505a98fb041ee8d321bc8b23))
+- *(xtask)* Use assert_cmd::cargo_bin so subprocess coverage counts ([`2b5e351`](https://github.com/s0undt3ch/ToolR/commit/2b5e35135f6dbe7f181c7293a6036b226963e448))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Update workflows + docs for new setup-toolr action shape ([`a6ec0e8`](https://github.com/s0undt3ch/ToolR/commit/a6ec0e8dd2dfd6085d826e0965faa2c7dfae69f6))
+- *(install-smoke)* Add pull_request trigger + gate remote-only jobs ([`b1bad02`](https://github.com/s0undt3ch/ToolR/commit/b1bad021a2eaeb1a75ee5fc7bfcfd9d1de1448d5))
+- *(_test)* Regen-and-diff the example-plugin manifest gate too ([`dcf470c`](https://github.com/s0undt3ch/ToolR/commit/dcf470ce7f7199f21e81d6d565cf956d34fa9399))
 ## 0.20.0 - 2026-05-26
 
 ### Notes
