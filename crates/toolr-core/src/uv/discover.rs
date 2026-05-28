@@ -29,7 +29,15 @@ pub fn find_managed_uv() -> Result<Option<UvBinary>, UvError> {
 
 /// Run `<path> --version`, parse output, validate against the minimum.
 pub fn probe(path: &Path, source: UvSource) -> Result<UvBinary, UvError> {
-    let output = Command::new(path).arg("--version").output()?;
+    // `Command::output()` returns `ErrorKind::NotFound` when the binary
+    // exists on disk but `execve` reports ENOENT — almost always a libc
+    // mismatch (missing dynamic loader). Tag that distinctly so the
+    // user-facing error spells out the recovery path instead of
+    // bottoming out as "I/O error: No such file or directory".
+    let output = Command::new(path)
+        .arg("--version")
+        .output()
+        .map_err(|e| UvError::exec_failed(path, e))?;
     if !output.status.success() {
         return Err(UvError::UnparsableVersion(
             String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -252,12 +260,78 @@ mod tests {
     }
 
     #[test]
-    fn probe_returns_io_when_binary_is_missing() {
+    fn probe_returns_exec_failed_when_binary_is_missing() {
         let tmp = tempfile::tempdir().unwrap();
-        let err = probe(&tmp.path().join("does-not-exist"), UvSource::Path).unwrap_err();
-        // Command::output() returns Err for ENOENT, which maps via
-        // #[from std::io::Error] to UvError::Io.
-        assert!(matches!(err, UvError::Io(_)));
+        let candidate = tmp.path().join("does-not-exist");
+        let err = probe(&candidate, UvSource::Path).unwrap_err();
+        // `Command::output()` returns ENOENT, which now maps to
+        // `ExecFailed` rather than the bare `Io` variant — so
+        // `user_message()` can render a libc-mismatch hint.
+        match err {
+            UvError::ExecFailed { path, source } => {
+                assert_eq!(path, candidate);
+                assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+            }
+            other => panic!("expected ExecFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn exec_failed_user_message_is_a_libc_hint_without_path_duplication() {
+        let err = UvError::exec_failed(
+            std::path::Path::new("/managed/uv"),
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+        );
+        let hint = err.user_message();
+        // The hint mentions both the env override and the OS package
+        // fallback so the user has at least two paths forward.
+        assert!(hint.contains("TOOLR_UV_LIBC"), "missing env override hint in: {hint}");
+        assert!(hint.contains("musl"), "missing musl/gnu mention in: {hint}");
+        // Path and io error are intentionally NOT duplicated in the hint
+        // — they reach the user via the wrapped ExecFailed's Display,
+        // which `into_anyhow()` keeps in the chain.
+        assert!(!hint.contains("/managed/uv"), "path leaked into hint: {hint}");
+    }
+
+    #[test]
+    fn exec_failed_into_anyhow_chain_contains_both_hint_and_path() {
+        let err = UvError::exec_failed(
+            std::path::Path::new("/managed/uv"),
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+        );
+        let formatted = format!("{:#}", err.into_anyhow());
+        // `{:#}` joins the whole chain with `: ` — the hint should
+        // appear first (outermost context) and the technical detail
+        // (path + io error) should follow.
+        assert!(formatted.contains("TOOLR_UV_LIBC"), "hint missing in chain: {formatted}");
+        assert!(formatted.contains("/managed/uv"), "path missing in chain: {formatted}");
+        // The io::Error display varies across platforms / kinds — the
+        // synthetic `Error::from(NotFound)` here renders as "entity not
+        // found" while a real ENOENT from execve renders as "No such
+        // file or directory". Either way, the chain ends with the
+        // ExecFailed Display followed by the source io::Error, so the
+        // path appears twice (in ExecFailed display + already asserted)
+        // and the io::Error tail follows.
+        assert!(
+            formatted.matches("entity not found").count() >= 1
+                || formatted.contains("No such file"),
+            "io error missing in chain: {formatted}"
+        );
+    }
+
+    #[test]
+    fn exec_failed_non_notfound_falls_back_to_display() {
+        // For non-ENOENT exec failures (permission denied, etc.) we
+        // still want SOMETHING actionable, but the libc-mismatch hint
+        // would be misleading. Confirm we fall through to the plain
+        // Display formatting in that case.
+        let err = UvError::exec_failed(
+            std::path::Path::new("/forbidden/uv"),
+            std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        );
+        let msg = err.user_message();
+        assert!(msg.contains("/forbidden/uv"));
+        assert!(!msg.contains("TOOLR_UV_LIBC"));
     }
 
     #[test]

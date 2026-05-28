@@ -1,6 +1,6 @@
 //! `uv` integration: discovery, consent-based install, and sync invocation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -49,10 +49,33 @@ pub enum UvError {
     UserRefusedInstall,
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    /// `Command::output()` failed even though the candidate binary was
+    /// on disk and looked executable. Almost always a libc / dynamic-
+    /// loader mismatch (a glibc-linked uv on a musl host, or vice
+    /// versa). Distinct from `Io` so `user_message` can render an
+    /// actionable hint instead of the bare `os error 2`.
+    #[error("failed to execute uv at {path}: {source}")]
+    ExecFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("HTTP error during uv install: {0}")]
     Http(String),
     #[error("uv sync failed with exit code {0:?}")]
     SyncFailed(Option<i32>),
+}
+
+impl UvError {
+    /// Construct an [`UvError::ExecFailed`] carrying the path that
+    /// failed to exec. Tiny helper so call sites don't repeat the
+    /// `path.to_path_buf()` boilerplate.
+    pub(crate) fn exec_failed(path: &Path, source: std::io::Error) -> Self {
+        Self::ExecFailed {
+            path: path.to_path_buf(),
+            source,
+        }
+    }
 }
 
 impl UvError {
@@ -77,7 +100,48 @@ impl UvError {
                  >= {}.{}.{}. Upgrade uv and try again.",
                 found.0, found.1, found.2, required.0, required.1, required.2,
             ),
+            // ENOENT from `execve` on a binary that demonstrably exists
+            // on disk almost always means the dynamic loader the binary
+            // needs is missing — typically a glibc-linked uv on a musl
+            // host (or vice versa). Spell that out instead of leaving
+            // the user with a bare "No such file or directory". The
+            // path + io::Error live in the wrapped `ExecFailed` Display
+            // and reach the user via the anyhow chain (see
+            // [`Self::into_anyhow`]); the hint here is purely the
+            // recovery advice.
+            Self::ExecFailed { source, .. }
+                if source.kind() == std::io::ErrorKind::NotFound =>
+            {
+                "uv exists on disk but couldn't be executed. This \
+                 usually means the binary's dynamic loader is missing \
+                 — for example a glibc-linked uv on a musl host, or \
+                 vice versa. Set TOOLR_UV_LIBC=musl (or =gnu) to \
+                 override toolr's libc detection, or install uv via \
+                 your OS package manager."
+                    .into()
+            }
             other => other.to_string(),
+        }
+    }
+
+    /// Convert into an `anyhow::Error` while preserving the underlying
+    /// chain. When [`Self::user_message`] adds recovery advice on top
+    /// of the technical Display string, attach it as a context layer
+    /// so it surfaces first; otherwise just wrap the error so callers
+    /// don't double-print the same line.
+    ///
+    /// Use this at the toolr-binary boundary in place of
+    /// `anyhow::anyhow!(e.user_message())` — that pattern collapses
+    /// the entire chain and obscures which io::Error / which path was
+    /// the actual cause.
+    pub fn into_anyhow(self) -> anyhow::Error {
+        let hint = self.user_message();
+        let display = self.to_string();
+        let err = anyhow::Error::new(self);
+        if hint == display {
+            err
+        } else {
+            err.context(hint)
         }
     }
 }

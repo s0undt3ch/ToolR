@@ -446,7 +446,7 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
         auto_install_env: true,
     };
     let uv = toolr_core::uv::ensure_uv(consent)
-        .map_err(|e| anyhow::anyhow!(e.user_message()))?;
+        .map_err(toolr_core::uv::UvError::into_anyhow)?;
     println!(
         "toolr: uv {}.{}.{} ready at {} (source: {:?})",
         uv.version.0,

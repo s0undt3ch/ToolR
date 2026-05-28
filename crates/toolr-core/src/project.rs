@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::discovery::discover_project_root;
-use crate::uv::{UvBinary, ensure_uv, install::ConsentMode};
+use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode};
 use crate::venv::{
     ResolvedVenv, perform_editable_installs, resolve_venv_path,
     sync::sync_if_needed, validate::validate_venv, warn_failures,
@@ -22,7 +22,7 @@ pub fn ensure_venv_ready(
         .context("locating project root for the tools venv")?;
     let resolved = resolve_venv_path(&repo_root)
         .context("resolving the tools venv path")?;
-    let uv = ensure_uv(consent).map_err(|e| anyhow::anyhow!(e.user_message()))?;
+    let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
     sync_if_needed(&uv, &tools, &resolved, force_sync)
         .with_context(|| format!("uv sync against {}", tools.display()))?;
