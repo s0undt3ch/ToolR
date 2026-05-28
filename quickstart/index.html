@@ -2037,10 +2037,12 @@ step 2 when <code>toolr project init</code> scaffolds <code>tools/pyproject.toml
 runs <code>uv sync</code>.</p>
 <p>Five first-class install paths — pick whichever matches your environment.</p>
 <h3 id="mise">mise<a class="headerlink" href="#mise" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>git::https://github.com/s0undt3ch/ToolR.git//installation/mise
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>toolr@latest
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@latest
 </span></code></pre></div>
-<p>For projects that already pin tool versions via <code>.mise.toml</code>, this is
+<p>Pulls toolr from the
+<a href="https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR">aqua registry</a>
+via mise's built-in aqua backend — no plugin to register. For
+projects that already pin tool versions via <code>.mise.toml</code>, this is
 the most-natural fit. See <a href="../installation/mise/">installation/mise</a>.</p>
 <h3 id="pip">pip<a class="headerlink" href="#pip" title="Permanent link">&para;</a></h3>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>toolr<span class="w">   </span><span class="c1"># Rust CLI binary</span>

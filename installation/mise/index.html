@@ -694,17 +694,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-the-plugin" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Install the plugin
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#install-toolr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -712,6 +701,45 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Install toolr">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pin-per-project-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin per project (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-machine-wide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install machine-wide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -800,6 +828,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#no-aqua-registry-found-for-s0undt3chtoolr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        no aqua-registry found for s0undt3ch/ToolR
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#debug-an-install" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -827,10 +866,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#plugin-internals" class="md-nav__link">
+  <a href="#migrating-from-the-in-tree-plugin" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Plugin internals
+        Migrating from the in-tree plugin
       
     </span>
   </a>
@@ -1899,17 +1938,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-the-plugin" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Install the plugin
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#install-toolr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1917,6 +1945,45 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Install toolr">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pin-per-project-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin per project (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-machine-wide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install machine-wide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2005,6 +2072,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#no-aqua-registry-found-for-s0undt3chtoolr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        no aqua-registry found for s0undt3ch/ToolR
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#debug-an-install" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2032,10 +2110,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#plugin-internals" class="md-nav__link">
+  <a href="#migrating-from-the-in-tree-plugin" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Plugin internals
+        Migrating from the in-tree plugin
       
     </span>
   </a>
@@ -2108,9 +2186,11 @@
 
 
 <h1 id="mise">mise<a class="headerlink" href="#mise" title="Permanent link">&para;</a></h1>
-<p><a href="https://mise.jdx.dev/">mise</a> is a polyglot tool-version manager. The
-<code>toolr</code> repository ships an asdf-style plugin under <code>installation/mise/</code>
-that lets mise install and manage <code>toolr</code> binaries.</p>
+<p><a href="https://mise.jdx.dev/">mise</a> is a polyglot tool-version manager.
+<code>toolr</code> is published in the
+<a href="https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR">aqua registry</a>
+and mise installs it directly via its built-in aqua backend — no
+plugin to register, no repository to clone.</p>
 <h2 id="why">Why<a class="headerlink" href="#why" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Version pinning per project.</strong> Different repos can use different
@@ -2120,50 +2200,53 @@ that lets mise install and manage <code>toolr</code> binaries.</p>
   <code>toolr</code> release.</li>
 <li><strong>Multi-version side-by-side.</strong> Install several releases at once;
   switch with <code>mise use toolr@X.Y.Z</code>.</li>
-<li><strong>CI-tested.</strong> The plugin is exercised by
-  <a href="https://github.com/s0undt3ch/ToolR/blob/main/.github/workflows/install-smoke.yml"><code>install-smoke.yml</code></a>
-  on every release, so the version you install is the version we tested.</li>
+<li><strong>Supply-chain verified.</strong> The aqua registry entry pulls the
+  signed GitHub release archives with SHA-256 verification built in.</li>
 </ul>
-<h2 id="install-the-plugin">Install the plugin<a class="headerlink" href="#install-the-plugin" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>add<span class="w"> </span>toolr<span class="w"> </span>git::https://github.com/s0undt3ch/ToolR.git//installation/mise
-</span></code></pre></div>
-<p>The <code>git::</code> prefix and the <code>//installation/mise</code> suffix together tell
-mise to clone the toolr repository and use the asdf-plugin layout
-inside its <code>installation/mise/</code> subdirectory. Requires mise
-<code>v2026.5.11</code> or newer (<a href="https://github.com/jdx/mise/pull/9893">jdx/mise#9893</a>).</p>
 <h2 id="install-toolr">Install toolr<a class="headerlink" href="#install-toolr" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Install a specific version</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>mise<span class="w"> </span>install<span class="w"> </span>toolr@0.11.0
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Install whatever the latest GitHub release is</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>mise<span class="w"> </span>install<span class="w"> </span>toolr@latest
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Use a version globally</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>toolr@0.11.0
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># Pin a version to the current directory</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>mise<span class="w"> </span>use<span class="w"> </span>toolr@0.11.0
+<h3 id="pin-per-project-recommended">Pin per project (recommended)<a class="headerlink" href="#pin-per-project-recommended" title="Permanent link">&para;</a></h3>
+<p><code>mise use</code> without a scope flag writes to the current directory's
+<code>.mise.toml</code>. Run it inside the repo you're scaffolding toolr for:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Latest release</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@latest
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Pin a specific version</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@0.20.0
 </span></code></pre></div>
-<p>Verify:</p>
+<p>This is the form the README and quickstart show. It matches
+toolr's design as a project-level tool — every repo declares its
+own <code>toolr</code> version, so <code>.mise.toml</code> is the single source of truth
+for "which toolr does this project run with?".</p>
+<h3 id="install-machine-wide">Install machine-wide<a class="headerlink" href="#install-machine-wide" title="Permanent link">&para;</a></h3>
+<p>If you'd rather have one <code>toolr</code> available across every directory
+without per-project pinning, add <code>--global</code>:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>aqua:s0undt3ch/ToolR@latest
+</span></code></pre></div>
+<p><code>--global</code> writes to <code>~/.config/mise/config.toml</code> (or whatever
+mise resolves for your platform). Per-project <code>.mise.toml</code> pins
+still override the global entry when present, so this is a safe
+"have toolr on PATH everywhere" knob — it just clutters the
+global config with a tool you mostly use inside specific repos.</p>
+<h3 id="verify">Verify<a class="headerlink" href="#verify" title="Permanent link">&para;</a></h3>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>toolr<span class="w"> </span>--version
 </span></code></pre></div>
 <h2 id="project-configuration">Project configuration<a class="headerlink" href="#project-configuration" title="Permanent link">&para;</a></h2>
 <h3 id="misetoml-recommended"><code>.mise.toml</code> (recommended)<a class="headerlink" href="#misetoml-recommended" title="Permanent link">&para;</a></h3>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[tools]</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">toolr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.11.0&quot;</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="s2">&quot;aqua:s0undt3ch/ToolR&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.20.0&quot;</span>
 </span></code></pre></div>
-<p>Then run <code>mise install</code> from the project root. mise resolves the version
-from <code>.mise.toml</code> and installs it on demand.</p>
+<p>Then run <code>mise install</code> from the project root. mise resolves the
+version from <code>.mise.toml</code> and installs it on demand.</p>
 <h3 id="tool-versions-asdf-style-legacy"><code>.tool-versions</code> (asdf-style, legacy)<a class="headerlink" href="#tool-versions-asdf-style-legacy" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr 0.11.0
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>aqua:s0undt3ch/ToolR 0.20.0
 </span></code></pre></div>
-<p>mise also reads asdf's <code>.tool-versions</code> files, so existing asdf users
-can keep their pin format unchanged.</p>
+<p>mise also reads asdf's <code>.tool-versions</code> files, so existing asdf
+users can keep their pin format unchanged.</p>
 <h2 id="combining-with-mise-tasks">Combining with mise tasks<a class="headerlink" href="#combining-with-mise-tasks" title="Permanent link">&para;</a></h2>
 <p><code>mise</code> can run repo-scoped tasks. Once <code>toolr</code> is on PATH via the
-plugin, wire it into tasks like any other binary:</p>
+aqua backend, wire it into tasks like any other binary:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[tools]</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">toolr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.11.0&quot;</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="s2">&quot;aqua:s0undt3ch/ToolR&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.20.0&quot;</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">[tasks.test]</span>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Run tests&quot;</span>
@@ -2182,19 +2265,19 @@ plugin, wire it into tasks like any other binary:</p>
 </span></code></pre></div>
 <h2 id="common-commands">Common commands<a class="headerlink" href="#common-commands" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># List all upstream versions</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mise<span class="w"> </span>list-all<span class="w"> </span>toolr
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mise<span class="w"> </span>ls-remote<span class="w"> </span>aqua:s0undt3ch/ToolR
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># List locally installed versions</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>mise<span class="w"> </span>list<span class="w"> </span>toolr
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>mise<span class="w"> </span>ls<span class="w"> </span>aqua:s0undt3ch/ToolR
 </span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
 </span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Show the active version in the current directory</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>mise<span class="w"> </span>current<span class="w"> </span>toolr
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>mise<span class="w"> </span>current<span class="w"> </span>aqua:s0undt3ch/ToolR
 </span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
 </span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Show the install dir for a version</span>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>mise<span class="w"> </span>where<span class="w"> </span>toolr
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>mise<span class="w"> </span>where<span class="w"> </span>aqua:s0undt3ch/ToolR
 </span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>
 </span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="c1"># Uninstall a version</span>
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>toolr@0.11.0
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>aqua:s0undt3ch/ToolR@0.20.0
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="toolr-command-not-found"><code>toolr: command not found</code><a class="headerlink" href="#toolr-command-not-found" title="Permanent link">&para;</a></h3>
@@ -2202,30 +2285,36 @@ plugin, wire it into tasks like any other binary:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">eval</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>mise<span class="w"> </span>activate<span class="w"> </span>bash<span class="k">)</span><span class="s2">&quot;</span><span class="w">   </span><span class="c1"># or zsh / fish</span>
 </span></code></pre></div>
 <p>Or invoke through mise directly:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mise<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>toolr<span class="w"> </span>--<span class="w"> </span>toolr<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mise<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>aqua:s0undt3ch/ToolR<span class="w"> </span>--<span class="w"> </span>toolr<span class="w"> </span>--help
 </span></code></pre></div>
+<h3 id="no-aqua-registry-found-for-s0undt3chtoolr"><code>no aqua-registry found for s0undt3ch/ToolR</code><a class="headerlink" href="#no-aqua-registry-found-for-s0undt3chtoolr" title="Permanent link">&para;</a></h3>
+<p>mise's aqua backend resolves entries against the latest published
+aqua-registry release, not against <code>main</code>. If the entry was added
+recently it may not yet be in a release tag. Check
+<a href="https://github.com/aquaproj/aqua-registry/releases">aqua-registry releases</a>
+and bump mise (or wait for its registry cache to refresh) once a
+release containing the entry has shipped.</p>
 <h3 id="debug-an-install">Debug an install<a class="headerlink" href="#debug-an-install" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nv">MISE_DEBUG</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>mise<span class="w"> </span>install<span class="w"> </span>toolr@0.11.0
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mise<span class="w"> </span>--verbose<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR
 </span></code></pre></div>
 <h3 id="reinstall">Reinstall<a class="headerlink" href="#reinstall" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>toolr@0.11.0
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mise<span class="w"> </span>install<span class="w"> </span>toolr@0.11.0
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>aqua:s0undt3ch/ToolR@0.20.0
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mise<span class="w"> </span>install<span class="w"> </span>aqua:s0undt3ch/ToolR@0.20.0
 </span></code></pre></div>
-<h2 id="plugin-internals">Plugin internals<a class="headerlink" href="#plugin-internals" title="Permanent link">&para;</a></h2>
-<p>The plugin's source is in
-<a href="https://github.com/s0undt3ch/ToolR/tree/main/installation/mise"><code>installation/mise/</code></a>
-inside the toolr repo. The <code>bin/</code> directory contains the asdf-style
-hooks (<code>list-all</code>, <code>download</code>, <code>install</code>) that mise invokes:</p>
-<ol>
-<li><strong><code>list-all</code></strong> queries the GitHub releases API for available
-   <code>toolr</code> versions.</li>
-<li><strong><code>download</code></strong> fetches the archive for the host's target triple.</li>
-<li><strong><code>install</code></strong> extracts the binary into the mise-managed install
-   directory.</li>
-</ol>
-<p>The plugin installs the standalone <code>toolr</code> binary — the same artifact
-shipped by <a href="https://github.com/s0undt3ch/ToolR/blob/main/installation/install.sh"><code>installation/install.sh</code></a>
-and the GitHub release archives.</p>
+<h2 id="migrating-from-the-in-tree-plugin">Migrating from the in-tree plugin<a class="headerlink" href="#migrating-from-the-in-tree-plugin" title="Permanent link">&para;</a></h2>
+<p>Earlier toolr revisions shipped an asdf-style plugin at
+<code>installation/mise/</code> that was installed via
+<code>mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise</code>.
+That plugin has been <strong>removed</strong> in favour of the aqua-backed install
+described above. Migrate with:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>uninstall<span class="w"> </span>toolr
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@latest<span class="w">         </span><span class="c1"># per-project</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="c1"># or:</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>mise<span class="w"> </span>use<span class="w"> </span>--global<span class="w"> </span>aqua:s0undt3ch/ToolR@latest<span class="w">   </span><span class="c1"># machine-wide</span>
+</span></code></pre></div>
+<p>The aqua backend installs the <strong>same standalone binary</strong> the
+in-tree plugin used to fetch (the GitHub release archives), so the
+runtime behaviour is identical.</p>
 
 
 
