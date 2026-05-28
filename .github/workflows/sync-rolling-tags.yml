@@ -3,6 +3,8 @@ run-name: "Sync Rolling Tags (branch: ${{ github.ref_name }})"
 
 on:
   workflow_dispatch:
+  release:
+    types: [published, deleted]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}
@@ -37,6 +39,7 @@ jobs:
           egress-policy: audit
 
       - name: Check For Admin Permission
+        if: github.event_name == 'workflow_dispatch'
         uses: actions-cool/check-user-permission@c21884f3dda18dafc2f8b402fe807ccc9ec1aa5e # v2.4.0
         with:
           require: admin
