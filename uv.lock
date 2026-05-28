@@ -11,7 +11,6 @@ members = [
     "toolr",
     "toolr-plugin-example",
     "toolr-py",
-    "toolr-tools",
 ]
 
 [manifest.dependency-groups]
@@ -34,7 +33,6 @@ docs = [
     { name = "ruff", specifier = ">=0.15.14" },
     { name = "toolr-py", editable = "crates/toolr-py" },
 ]
-tools = [{ name = "packaging", specifier = ">=26.2" }]
 
 [[package]]
 name = "annotated-types"
@@ -1118,17 +1116,6 @@ requires-dist = [
     { name = "packaging", specifier = ">=26.2" },
     { name = "rich", specifier = ">=13.0.0" },
 ]
-
-[[package]]
-name = "toolr-tools"
-version = "0.0.0"
-source = { virtual = "tools" }
-dependencies = [
-    { name = "toolr-py" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "toolr-py", editable = "crates/toolr-py" }]
 
 [[package]]
 name = "typing-extensions"

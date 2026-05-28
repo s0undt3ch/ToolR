@@ -7,5 +7,12 @@ dependencies = [
     "toolr-py",
 ]
 
-[tool.uv.sources]
-toolr-py = { workspace = true }
+# `tools/` is intentionally NOT part of the root uv workspace, so
+# `toolr-py` resolves from PyPI by default (matching the experience
+# of external consumers of the Setup ToolR action). For local
+# iteration against an unreleased `crates/toolr-py/`, uncomment the
+# block below and run `uv sync --refresh-package toolr-py` to
+# install the editable build instead. Don't commit the uncommented
+# form — CI relies on PyPI resolution.
+#[tool.uv.sources]
+#toolr-py = { path = "../crates/toolr-py", editable = true }
