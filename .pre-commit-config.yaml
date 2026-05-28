@@ -30,7 +30,14 @@ repos:
         # Rust crates whose source determines clap's --help output
         # (binary main.rs, the project-init scaffold templates, and
         # the manifest/parser layer in toolr-core).
-        files: ^(docs/|\.pre-commit-hooks/regen-doc-snippets\.py$|crates/toolr/src/.*\.rs$|crates/toolr/src/init_templates/|crates/toolr-core/src/.*\.rs$)
+        files: >
+          (?x)^(
+            docs/|
+            \.pre-commit-hooks/regen-doc-snippets\.py$|
+            crates/toolr/src/.*\.rs$|
+            crates/toolr/src/init_templates/|
+            crates/toolr-core/src/.*\.rs$
+          )
 
       - id: build-skill-refs
         name: Regenerate skills/*/references/*.md
@@ -56,7 +63,16 @@ repos:
         # root `action.yml` that drives the toolr-ci-setup reference,
         # and the committed references themselves (so hand-edits are
         # caught).
-        files: ^(crates/xtask/.*\.rs$|crates/toolr-py/python/toolr/.*\.py$|crates/toolr-core/src/docstrings\.rs$|crates/toolr-core/src/manifest/model\.rs$|crates/toolr-core/src/third_party/(model|glob)\.rs$|action\.yml$|skills/.*/references/.*\.md$)
+        files: >
+          (?x)^(
+            crates/xtask/.*\.rs$|
+            crates/toolr-py/python/toolr/.*\.py$|
+            crates/toolr-core/src/docstrings\.rs$|
+            crates/toolr-core/src/manifest/model\.rs$|
+            crates/toolr-core/src/third_party/(model|glob)\.rs$|
+            action\.yml$|
+            skills/.*/references/.*\.md$
+          )
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
