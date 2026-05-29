@@ -6,6 +6,90 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.21.0 - 2026-05-29
+
+### Notes
+
+## ⚠ Breaking changes
+
+### `installation/mise/` plugin removed in favour of the aqua backend
+
+- **What changed:** the bundled asdf-style mise plugin under
+  `installation/mise/` has been deleted. mise users now install
+  toolr through mise's built-in
+  [aqua backend](https://mise.jdx.dev/dev-tools/backends/aqua.html)
+  against the
+  [aqua-registry entry](https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR):
+
+  ```sh
+  mise use aqua:s0undt3ch/ToolR@latest
+  ```
+
+  No plugin to register, no repository to clone, no `git::<url>//<subdir>`
+  syntax to maintain. The aqua-registry entry pulls the same signed
+  GitHub release archive the in-tree plugin used to fetch, so the
+  installed binary is identical.
+
+- **Why:** the in-tree plugin duplicated logic that mise already
+  provides through the aqua backend (release-asset selection,
+  SHA-256 verification, archive extraction). Owning that surface
+  meant keeping the asdf-protocol hooks in sync with mise's
+  evolving subdir-URL semantics and shipping our own attestation
+  logic — work that aqua does once for everyone.
+
+- **Migration:** replace the install command everywhere it appears
+  (README, quickstart, mise docs page, internal runbooks, CI
+  workflows). The old form
+
+  ```sh
+  mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise
+  mise use --global toolr@latest
+  ```
+
+  becomes
+
+  ```sh
+  mise plugin uninstall toolr   # if previously installed
+  mise use aqua:s0undt3ch/ToolR@latest
+  ```
+
+  (Add `--global` if you want toolr available across every
+  directory; the project-scoped form above is the default we
+  show in the headline docs.)
+
+  The aqua-registry entry requires aqua-registry `v4.518.0` or
+  newer (the first release that contains
+  `pkgs/s0undt3ch/ToolR/registry.yaml`) and mise's aqua backend,
+  which is built in and needs no extra configuration.
+
+### <!-- 0 -->🚀 Features
+
+- *(action)* Install uv via astral-sh/setup-uv when missing or version-pinned ([`8eb6906`](https://github.com/s0undt3ch/ToolR/commit/8eb69066471d8b3d6816f11d9f462e4e87944604))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(uv)* Detect musl libc in auto-installer and add actionable exec-failure hint ([`5af1ca0`](https://github.com/s0undt3ch/ToolR/commit/5af1ca056d8444b53c2c75f31d0c361af02380ca))
+- *(action)* Bake released version into action.yml so SHA pins resolve correctly ([`180b3d1`](https://github.com/s0undt3ch/ToolR/commit/180b3d197f6da599c10485eb22b7256b6c430aee))
+- Regenerate toolr-ci-setup action.md and widen build-skill-refs trigger ([`71b1830`](https://github.com/s0undt3ch/ToolR/commit/71b183025a0a6157b6a95a1db8f603840064f2bc))
+- Regenerate toolr-ci-setup action.md for new `uv-version` input ([`62ae52c`](https://github.com/s0undt3ch/ToolR/commit/62ae52c48a63c1bd01dee03445112a33667c0b95))
+
+### <!-- 10 -->💼 Other
+
+- Drop in-tree asdf plugin, install via aqua backend ([`5f60df4`](https://github.com/s0undt3ch/ToolR/commit/5f60df48949a0f07d8ac5c51025d1ca02dc12330))
+- Drop --global from headline install snippets ([`52e7357`](https://github.com/s0undt3ch/ToolR/commit/52e73572ec7834d8a3f1cf0c6649ac8e85690371))
+- Leave the uv workspace, resolve toolr-py from PyPI ([`fa9fa20`](https://github.com/s0undt3ch/ToolR/commit/fa9fa20329539bd2374c2ee6cbae6f7a2eeb10d6))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(version)* Write dev versions to action.yml on every push so the bake-in is exercised in CI ([`7995fb0`](https://github.com/s0undt3ch/ToolR/commit/7995fb0bc2cde905448e35cb5c08fe678c029d4f))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Drop self action-version pin and auto-sync rolling tags on release ([`e46c19c`](https://github.com/s0undt3ch/ToolR/commit/e46c19c826d414a828471bbf79775eef3ce01a35))
+- *(prepare-release)* Skip tools venv sync (built-in toolr only) ([`c5ef129`](https://github.com/s0undt3ch/ToolR/commit/c5ef129fbd1659e1c149b08a3ce586af12773b2e))
+- Format `build-skill-refs` and `regen-doc-snippets` `files:` regexes as verbose multi-line ([`44649d2`](https://github.com/s0undt3ch/ToolR/commit/44649d2e50989e4d73b3075fad946007698d1527))
+- Collapse per-alt `$` anchors in `build-skill-refs` regex to a single trailing `)$` ([`563467d`](https://github.com/s0undt3ch/ToolR/commit/563467d3aa046d9e4838d8f19b2192740e50a2fc))
+- *(_test)* Pass `--no-sync` to `uv run` so prebuilt toolr-py wheel survives ([`c901231`](https://github.com/s0undt3ch/ToolR/commit/c901231a4a42d2bf84b1f1a8f984e3e7fcb67d90))
 ## 0.20.1 - 2026-05-28
 
 ### Notes
