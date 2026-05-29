@@ -27,6 +27,7 @@ from tools.version import TODAY_VERSION
 from tools.version import _bump_patch
 from tools.version import _compute_dev_version
 from tools.version import _read_workspace_version
+from tools.version import _set_action_yml_default_version
 
 
 @pytest.fixture
@@ -162,3 +163,122 @@ def test_compute_dev_version_no_tags_and_no_commits(
     run = _FakeRun(["\n", "\n"])
     ctx = _ctx_with_run(run)
     assert _compute_dev_version(ctx) == f"{_bump_patch(TODAY_VERSION)}-dev0"
+
+
+# --------------------------------------------------------------------
+# `_set_action_yml_default_version`
+# --------------------------------------------------------------------
+
+
+@pytest.fixture
+def action_yml(tmp_path: Path) -> Callable[[str], Path]:
+    """Factory: write an action.yml with the given body. Returns its path."""
+
+    def _make(body: str) -> Path:
+        path = tmp_path / "action.yml"
+        path.write_text(textwrap.dedent(body), encoding="utf-8")
+        return path
+
+    return _make
+
+
+ACTION_YML_BASE = """\
+name: "Setup ToolR"
+description: "test action"
+
+inputs:
+  version:
+    description: |
+      ToolR version to install.
+      Multi-line description body.
+    default: "0.20.0"
+
+  skip-attestation:
+    description: "skip attestation"
+    default: "false"
+
+  cache-prefix:
+    description: "cache prefix"
+    default: "setup-toolr"
+"""
+
+
+def test_set_action_yml_default_version_bumps_only_version_input(
+    action_yml: Callable[[str], Path],
+) -> None:
+    """The bake-in must rewrite ONLY the `version:` input's default.
+
+    Sibling inputs (`skip-attestation`, `cache-prefix`) have their own
+    `default:` lines at the same indent — those must not be touched.
+    """
+    path = action_yml(ACTION_YML_BASE)
+    ctx = mock.Mock()
+    _set_action_yml_default_version(ctx, "0.21.5", action_yml_path=path)
+
+    body = path.read_text(encoding="utf-8")
+    # version default updated
+    assert 'default: "0.21.5"' in body
+    assert 'default: "0.20.0"' not in body
+    # sibling defaults preserved
+    assert 'default: "false"' in body
+    assert 'default: "setup-toolr"' in body
+
+
+def test_set_action_yml_default_version_writes_dev_versions(
+    action_yml: Callable[[str], Path],
+) -> None:
+    """Dev versions (containing a hyphen) must land in action.yml.
+
+    `toolr version bump --include-action` runs on every push (PRs
+    included) via ci.yml's `prepare-release` job. Exercising the
+    bake-in regex against a real dev version on each of those runs
+    is the point: regressions to the regex surface in regular CI,
+    not only when a real release is cut. The dev version never
+    escapes the runner because PR jobs cannot push.
+    """
+    path = action_yml(ACTION_YML_BASE)
+    ctx = mock.Mock()
+    _set_action_yml_default_version(ctx, "0.21.1-dev42+gabc1234", action_yml_path=path)
+    body = path.read_text(encoding="utf-8")
+    assert 'default: "0.21.1-dev42+gabc1234"' in body
+    assert 'default: "0.20.0"' not in body
+
+
+def test_set_action_yml_default_version_hard_fails_on_missing_block(
+    action_yml: Callable[[str], Path],
+) -> None:
+    """If the `version:` input vanishes from action.yml, fail loudly.
+
+    Silently skipping would let the bake-in regress whenever the
+    file's structure changes — defeating the whole point of the
+    release-prep automation. Bail with a non-zero exit instead so the
+    release workflow halts.
+    """
+    path = action_yml("""\
+name: "Setup ToolR"
+description: "no version input here"
+
+inputs:
+  cache-prefix:
+    default: "setup-toolr"
+""")
+    ctx = mock.Mock()
+    _set_action_yml_default_version(ctx, "0.21.0", action_yml_path=path)
+    # ctx.exit must have been called with a non-zero code.
+    ctx.error.assert_called()
+    ctx.exit.assert_called_once()
+    exit_code = ctx.exit.call_args.args[0]
+    assert exit_code != 0
+
+
+def test_set_action_yml_default_version_round_trip(
+    action_yml: Callable[[str], Path],
+) -> None:
+    """Re-running with the same version is a no-op (idempotent)."""
+    path = action_yml(ACTION_YML_BASE)
+    ctx = mock.Mock()
+    _set_action_yml_default_version(ctx, "0.20.0", action_yml_path=path)
+    # The body should be identical apart from the (unchanged) default.
+    # We assert byte-for-byte equivalence here as a strong idempotency
+    # check; if the regex starts to over-match, this test will catch it.
+    assert path.read_text(encoding="utf-8") == textwrap.dedent(ACTION_YML_BASE)

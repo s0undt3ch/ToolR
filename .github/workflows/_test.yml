@@ -89,7 +89,7 @@ jobs:
           cache-prefix: test-prebuilt-toolr-py
           cache-seed: ${{ inputs.cache-seed }}
           python-version: ${{ matrix.python-version }}
-          uv-sync-args: "--no-install-package toolr-py --no-install-package toolr-plugin-example --all-extras --dev"
+          uv-sync-args: "--no-install-package toolr --no-install-package toolr-py --no-install-package toolr-plugin-example --all-extras --dev"
           mise-version: ${{ inputs.mise-version }}
 
       - name: Download toolr-py wheel
@@ -234,14 +234,23 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
           COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
+        # `--no-sync`: the .venv is already provisioned by the
+        # setup-virtualenv step above (workspace deps + dev group,
+        # excluding toolr-py and toolr-plugin-example) and the
+        # prebuilt toolr-py wheel was force-installed in
+        # "Install toolr-py from prebuilt wheel". Without --no-sync,
+        # `uv run` re-syncs against the lockfile, uninstalls the
+        # wheel-installed toolr-py, and rebuilds toolr-py +
+        # toolr-plugin-example from source — undoing the whole
+        # point of downloading the prebuilt wheel.
         run: |
-          uv run coverage run -m pytest -ra -s -v --color=yes --junitxml=junit-${{ matrix.python-version }}-${{ inputs.os }}.xml
+          uv run --no-sync coverage run -m pytest -ra -s -v --color=yes --junitxml=junit-${{ matrix.python-version }}-${{ inputs.os }}.xml
 
       - name: Report Python Coverage
         run: |
-          uv run coverage combine || true
-          uv run coverage xml
-          uv run coverage report
+          uv run --no-sync coverage combine || true
+          uv run --no-sync coverage xml
+          uv run --no-sync coverage report
 
       - name: Install cargo-llvm-cov
         # Replaces cargo-tarpaulin. tarpaulin's ptrace engine segfaulted

@@ -7,13 +7,18 @@ inputs:
     description: |
       ToolR version to install, with or without a leading `v`
       (e.g. `0.20.0` or `v0.20.0`). The special value `latest`
-      resolves to the most recent release tag. When empty, the
-      action falls back to the git ref it was invoked with
-      (`github.action_ref`), and then to `latest`.
+      resolves to the most recent release tag.
+
+      The default is bumped to the current release version by
+      `toolr version bump` during release prep — so callers who pin
+      the action (by tag OR by SHA) without passing `version:` get
+      the matching binary for the action.yml they checked out. That
+      makes Renovate / Dependabot SHA pins "just work" without any
+      `version:` input.
 
       Versions below `0.20.0` are not accepted — the binary-only
       release format started with that version.
-    default: ""
+    default: "0.20.1"
 
   skip-attestation:
     description: |
@@ -78,19 +83,17 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         INPUT_VERSION: ${{ inputs.version }}
-        ACTION_REF: ${{ github.action_ref }}
       run: |
         set -euo pipefail
 
-        raw="${INPUT_VERSION}"
-        if [ -z "$raw" ] && [ -n "${ACTION_REF}" ]; then
-          raw="${ACTION_REF}"
-          echo "setup-toolr: no version input; using action ref '$raw'"
-        fi
-        if [ -z "$raw" ]; then
-          raw="latest"
-          echo "setup-toolr: no version input or action ref; defaulting to 'latest'"
-        fi
+        # `INPUT_VERSION` defaults to the release version baked into
+        # this file by `toolr version bump` during release prep — see
+        # `inputs.version.default` above. That means callers who pin
+        # the action (by tag OR by SHA) without passing `version:` get
+        # the binary that matches the action.yml they checked out, with
+        # no SHA → tag lookup needed at action-run time. Explicit
+        # `version: latest` still works via the gh-CLI lookup below.
+        raw="${INPUT_VERSION:-latest}"
 
         # Strip the leading `v` so the rest of the action sees a bare
         # semver string. Release artifacts are named without it; the

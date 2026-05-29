@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from datetime import UTC
 from datetime import datetime
@@ -19,6 +20,17 @@ _NOW: Final[datetime] = datetime.now(UTC)
 TODAY_VERSION: Final[str] = f"{_NOW.year % 100}.{_NOW.month}.0"
 
 CARGO_TOML_PATH: Final[Path] = Path("Cargo.toml")
+ACTION_YML_PATH: Final[Path] = Path("action.yml")
+
+# Surgical match for the `version:` input's `default:` line in
+# action.yml. Anchors on the 2-space-indented `version:` key, then the
+# *next* `default:` line at 4-or-more space indent. The non-greedy
+# block in between tolerates whatever description body shape the
+# action documentation grows into. See `_set_action_yml_default_version`.
+_ACTION_YML_VERSION_DEFAULT_RE: Final[re.Pattern[str]] = re.compile(
+    r'(\n  version:\n(?:[^\n]*\n)*?  +default: )"[^"]*"',
+    re.MULTILINE,
+)
 
 group = command_group("version", "Versioning utilities", docstring=__doc__)
 
@@ -40,6 +52,47 @@ def _set_workspace_version(ctx: Context, new_version: str) -> None:
     if ret.returncode != 0:
         ctx.error(f"cargo set-version failed with exit code {ret.returncode}")
         ctx.exit(ret.returncode)
+
+
+def _set_action_yml_default_version(
+    ctx: Context,
+    new_version: str,
+    action_yml_path: Path = ACTION_YML_PATH,
+) -> None:
+    """Bake ``new_version`` into action.yml's ``inputs.version.default``.
+
+    The composite action's ``inputs.version.default`` doubles as the
+    release-pin fallback when a caller pins by SHA without passing
+    ``version:``. Setting it during release prep means anyone who pins
+    at a release SHA gets the matching binary version automatically —
+    no `version:` input needed, no SHA → tag API lookup required at
+    action-run time.
+
+    The helper writes whatever version it's given — including dev
+    versions like ``X.Y.Z-devN+SHA``. The release-prep flow runs on
+    every push (PRs included) via ``ci.yml``'s ``prepare-release``
+    job, and exercising the bake-in regex on those runs is the
+    point: catch regressions to the regex in regular CI, not only
+    at real release time. The dev version never escapes the CI
+    runner because PR jobs use a read-only ``GITHUB_TOKEN`` and
+    cannot push the bumped action.yml back; ``release.yml`` invokes
+    the same code path with an explicit ``--new-version=X.Y.Z`` so
+    action.yml lands with a real tag on real releases.
+    """
+    text = action_yml_path.read_text(encoding="utf-8")
+    new_text, count = _ACTION_YML_VERSION_DEFAULT_RE.subn(rf'\1"{new_version}"', text, count=1)
+    if count != 1:
+        # The release-prep workflow runs this and then commits the
+        # result; a silent miss would let the bake-in regress without
+        # anyone noticing. Hard-fail instead.
+        ctx.error(
+            f"could not locate `version:` input default in "
+            f"{action_yml_path} (matched {count} times — has the "
+            f"file's structure changed?)"
+        )
+        ctx.exit(1)
+    action_yml_path.write_text(new_text, encoding="utf-8")
+    ctx.info(f"Set {action_yml_path} `version` input default to '{new_version}'")
 
 
 def _bump_patch(base: str) -> str:
@@ -104,6 +157,7 @@ def bump(
     ctx: Context,
     new_version: str | None = None,
     check_existing_tag: bool = False,
+    include_action: bool = False,
     write: bool = False,
 ) -> None:
     """Bump the workspace version.
@@ -113,6 +167,7 @@ def bump(
             derived from ``git describe`` (``X.Y.Z-devN``).
         check_existing_tag: Refuse to write if a tag ``v<version>`` already
             exists (release safety net).
+        include_action: Also update the action.yml `version` input default.
         write: Actually apply the bump via ``cargo set-version --workspace``;
             otherwise this is a dry-run that only prints the resolved version.
     """
@@ -146,5 +201,8 @@ def bump(
     if write:
         ctx.info(f"Setting [workspace.package] version to {version} via cargo set-version ...")
         _set_workspace_version(ctx, version)
+        if include_action:
+            ctx.info(f"Updating action.yml `version` input default to '{version}' ...")
+            _set_action_yml_default_version(ctx, version)
 
     ctx.print(version)
