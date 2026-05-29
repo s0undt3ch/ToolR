@@ -18,6 +18,7 @@ Generated from the repository-root `action.yml`.
 | `cache-prefix` | `setup-toolr` | Prefix prepended to the actions/cache keys this action manages — both the toolr-binary cache and the in-tree `tools/.venv` cache. Defaults to `setup-toolr`. Bump the prefix in the caller workflow to force a cache miss without changing the toolr version or the pinned dependencies — useful when invalidating after a runner image upgrade or a corrupted cache entry. |
 | `cache-tools-venv` | `true` | When `true` (the default), cache the in-tree `tools/.venv` keyed on `tools/pyproject.toml` and `tools/uv.lock`. Set to `false` if you want toolr to rebuild the venv on every run. |
 | `sync-args` | _(empty)_ | Extra arguments appended to the `uv sync` invocation the action runs to materialise the tools venv. Whitespace-split shell-style; do not quote each flag. Useful for opting back into a dependency group the default `--no-default-groups` would skip (e.g. `--group lint`). Defaults to empty. |
+| `uv-version` | _(empty)_ | uv version to install via `astral-sh/setup-uv` when uv isn't already on PATH (or when this input is non-empty, in which case setup-uv runs regardless and overrides whatever's on PATH). Accepts anything `astral-sh/setup-uv` accepts — bare semver (`0.5.1`), with leading `v` (`v0.5.1`), or `latest`. Empty (the default) means "no version pin": if uv is missing setup-uv installs its own default; if uv is already on PATH the action leaves it alone. |
 
 ## Outputs
 
