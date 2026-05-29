@@ -63,6 +63,18 @@ inputs:
       would skip (e.g. `--group lint`). Defaults to empty.
     default: ""
 
+  uv-version:
+    description: |
+      uv version to install via `astral-sh/setup-uv` when uv isn't
+      already on PATH (or when this input is non-empty, in which
+      case setup-uv runs regardless and overrides whatever's on
+      PATH). Accepts anything `astral-sh/setup-uv` accepts —
+      bare semver (`0.5.1`), with leading `v` (`v0.5.1`), or
+      `latest`. Empty (the default) means "no version pin": if uv
+      is missing setup-uv installs its own default; if uv is
+      already on PATH the action leaves it alone.
+    default: ""
+
 outputs:
   version:
     description: Resolved ToolR version installed (no leading `v`).
@@ -317,6 +329,35 @@ runs:
         } >> "$GITHUB_OUTPUT"
         echo "setup-toolr: installed toolr ${VERSION} at ${bin_dir}/${BIN}"
 
+    # uv is required for the "Sync tools venv" step further below.
+    # Detect it first so we only invoke `astral-sh/setup-uv` when
+    # necessary — when the caller's environment already provides uv
+    # (mise, a prior setup-uv step, an OS package), respect that.
+    # The exception is `inputs.uv-version`: a non-empty value means
+    # "give me exactly this uv version", so we run setup-uv to
+    # install it regardless of what's already on PATH.
+    - name: Detect uv on PATH
+      id: uv-check
+      shell: bash
+      run: |
+        if command -v uv >/dev/null 2>&1; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "setup-toolr: found uv on PATH at $(command -v uv)"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+          echo "setup-toolr: uv not found on PATH"
+        fi
+
+    - name: Install uv via astral-sh/setup-uv
+      if: steps.uv-check.outputs.found == 'false' || inputs.uv-version != ''
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      with:
+        # Empty `version` lets setup-uv pick its own default — that's
+        # exactly the behaviour we want for "uv is just missing, install
+        # something sensible". Callers wanting a specific version pass
+        # it via setup-toolr's `uv-version` input.
+        version: ${{ inputs.uv-version }}
+
     - name: Resolve tools venv path
       id: venv-path
       if: inputs.cache-tools-venv == 'true'
@@ -390,8 +431,16 @@ runs:
       run: |
         set -euo pipefail
         if ! command -v uv >/dev/null 2>&1; then
-          echo "setup-toolr: 'uv' is required on PATH to materialise the tools venv" >&2
-          echo "setup-toolr: install via mise or your platform's uv channel" >&2
+          # The "Install uv via astral-sh/setup-uv" step earlier in
+          # this action should have ensured uv is on PATH. Reaching
+          # this branch means that step skipped (uv was claimed to be
+          # on PATH already) AND uv has since disappeared — which is
+          # almost certainly a bug in the setup-uv detection or the
+          # caller's environment.
+          echo "setup-toolr: 'uv' is required on PATH but is no longer available" >&2
+          echo "setup-toolr: this should not happen — the earlier setup-uv step" >&2
+          echo "setup-toolr: should have installed uv. Pass an explicit uv-version" >&2
+          echo "setup-toolr: input to force a fresh install, or file a bug." >&2
           exit 1
         fi
         unset VIRTUAL_ENV
