@@ -23,7 +23,7 @@ impl fmt::Display for MissingDeps {
                 f,
                 "import `{one}` not found in tools venv. \
                  A dependency may be missing - run \
-                 `toolr project deps sync` and check tools/pyproject.toml."
+                 `toolr project venv sync` and check tools/pyproject.toml."
             ),
             many => {
                 let joined = many
@@ -35,7 +35,7 @@ impl fmt::Display for MissingDeps {
                     f,
                     "imports {joined} not found in tools venv. \
                      Dependencies may be missing - run \
-                     `toolr project deps sync` and check tools/pyproject.toml."
+                     `toolr project venv sync` and check tools/pyproject.toml."
                 )
             }
         }

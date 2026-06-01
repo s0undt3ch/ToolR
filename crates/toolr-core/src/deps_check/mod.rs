@@ -9,7 +9,7 @@
 //! (`name.so` / `name.pyd` / `name.<abi-tag>.so`), or a PEP 420
 //! namespace package (a bare `name/` directory). No subprocess; a
 //! missing dep is caught in milliseconds with a styled error and an
-//! actionable "run `toolr project deps sync`" hint instead of a raw
+//! actionable "run `toolr project venv sync`" hint instead of a raw
 //! Python `ModuleNotFoundError` traceback.
 //!
 //! Caveat — the pre-flight only checks the `imports` list the static

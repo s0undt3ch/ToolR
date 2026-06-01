@@ -79,7 +79,7 @@ pub fn run_uv_sync(
 }
 
 /// Run `uv lock --upgrade-package <package> --project <tools>` synchronously,
-/// inheriting stdio. Used by `toolr project deps upgrade` to bump a single
+/// inheriting stdio. Used by `toolr project venv upgrade` to bump a single
 /// package's pin in `tools/uv.lock` before re-syncing.
 pub fn run_uv_lock_upgrade(
     uv: &UvBinary,
