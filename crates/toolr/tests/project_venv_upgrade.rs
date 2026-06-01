@@ -1,4 +1,4 @@
-//! Integration tests for `toolr project deps upgrade <pkg>`.
+//! Integration tests for `toolr project venv upgrade <pkg>`.
 //!
 //! These tests don't actually run uv — they exercise the input-validation
 //! and discovery paths that fire before the uv invocation, where the
@@ -37,7 +37,7 @@ venv-location = "cache"
 
     let output = cargo_bin()
         .current_dir(tmp.path())
-        .args(["project", "deps", "upgrade", "nonexistent-package"])
+        .args(["project", "venv", "upgrade", "nonexistent-package"])
         .output()
         .unwrap();
 
@@ -53,7 +53,7 @@ venv-location = "cache"
     );
 }
 
-/// `toolr project deps upgrade` with no package name fails clap arg parsing
+/// `toolr project venv upgrade` with no package name fails clap arg parsing
 /// (not a runtime error).
 #[test]
 fn upgrade_requires_a_package_argument() {
@@ -63,7 +63,7 @@ fn upgrade_requires_a_package_argument() {
 
     let output = cargo_bin()
         .current_dir(tmp.path())
-        .args(["project", "deps", "upgrade"])
+        .args(["project", "venv", "upgrade"])
         .output()
         .unwrap();
 
@@ -75,12 +75,12 @@ fn upgrade_requires_a_package_argument() {
     );
 }
 
-/// `toolr project deps upgrade --help` lists the command and the PACKAGE
+/// `toolr project venv upgrade --help` lists the command and the PACKAGE
 /// positional, with a meaningful one-liner.
 #[test]
 fn upgrade_help_lists_package_positional() {
     let output = cargo_bin()
-        .args(["project", "deps", "upgrade", "--help"])
+        .args(["project", "venv", "upgrade", "--help"])
         .output()
         .unwrap();
     assert!(output.status.success(), "help should exit 0");
