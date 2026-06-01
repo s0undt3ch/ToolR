@@ -306,7 +306,7 @@ fn preflight_fails_when_an_import_is_missing_from_venv() {
         stderr.contains("import `yaml` not found"),
         "stderr:\n{stderr}"
     );
-    assert!(stderr.contains("toolr project deps sync"));
+    assert!(stderr.contains("toolr project venv sync"));
 }
 
 /// Regression: deleting the resolved tools venv's `bin/python` between
@@ -314,7 +314,7 @@ fn preflight_fails_when_an_import_is_missing_from_venv() {
 /// `toolr: No such file or directory (os error 2)` — the user couldn't
 /// tell what was missing or how to recover. Dispatch now pre-checks
 /// `python.is_file()` and emits a message that names the path plus
-/// `toolr project deps sync` as the recovery action.
+/// `toolr project venv sync` as the recovery action.
 #[test]
 #[cfg(unix)]
 fn dispatch_emits_clear_error_when_venv_python_is_missing() {
@@ -343,7 +343,7 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
         "expected a 'Python interpreter not found at <path>' line; stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("toolr project deps sync"),
+        stderr.contains("toolr project venv sync"),
         "expected recovery hint; stderr:\n{stderr}"
     );
     // Anti-regression: the old bare `os error 2` line must not be the
@@ -358,7 +358,7 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
 /// Regression: when the pre-flight is disabled and the runner emits a
 /// traceback, the Rust side must pass that traceback through to the
 /// terminal *unaltered* — no capture, no rewriting. The styled
-/// "run `toolr project deps sync`" hint on `ImportError` is the
+/// "run `toolr project venv sync`" hint on `ImportError` is the
 /// runner's responsibility (see `toolr._runner.run()` in toolr-py),
 /// and is covered by Python-side runner tests. Here we just guard
 /// against a future regression that re-introduces a capture path.
@@ -515,7 +515,7 @@ fn project_venv_sync_help_lists_force_and_quiet() {
     assert!(stdout.contains("--quiet"), "missing --quiet in help:\n{stdout}");
 }
 
-/// `toolr project deps sync` (removed) prints the migration hint and exits non-zero.
+/// `toolr project venv sync` (removed) prints the migration hint and exits non-zero.
 #[test]
 fn project_deps_removed_prints_migration_hint() {
     let tmp = TempDir::new().unwrap();
