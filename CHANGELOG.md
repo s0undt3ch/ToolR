@@ -6,6 +6,15 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.21.1 - 2026-06-01
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(dispatch)* Surface arg() metadata TypeError from dispatcher detection ([`415435d`](https://github.com/s0undt3ch/ToolR/commit/415435d41c2cdfa90d2bd5f96781c559df6b0410))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(ci)* Bump GitHub Action pin SHAs and MISE_VERSION ([`8b1ae08`](https://github.com/s0undt3ch/ToolR/commit/8b1ae08f256c185b05d35eb1b578af786b26126f))
 ## 0.21.0 - 2026-05-29
 
 ### Notes
