@@ -254,7 +254,7 @@ fn deps_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
         );
     }
 
-    let sync_status = toolr_core::venv::run_uv_sync(&uv, &tools_dir, &resolved)?;
+    let sync_status = toolr_core::venv::run_uv_sync(&uv, &tools_dir, &resolved, /*quiet=*/ false)?;
     if !sync_status.success() {
         anyhow::bail!(
             "`uv sync` after upgrade failed with exit code {:?}",

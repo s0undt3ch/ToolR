@@ -43,10 +43,13 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
 }
 
 /// Run `uv sync --project <tools>` synchronously, inheriting stdio.
+/// When `quiet` is true, passes `--quiet` to uv so the subprocess
+/// produces no informational output on success.
 pub fn run_uv_sync(
     uv: &UvBinary,
     tools_dir: &Path,
     resolved: &ResolvedVenv,
+    quiet: bool,
 ) -> Result<ExitStatus> {
     // Ensure the parent of an off-tree venv exists so uv can write into it.
     if let Some(parent) = resolved.venv_dir.parent() {
@@ -60,6 +63,9 @@ pub fn run_uv_sync(
         // Unset any outer VIRTUAL_ENV so uv doesn't warn about a mismatch
         // with the tools venv (e.g. when invoked inside a mise-managed .venv).
         .env_remove("VIRTUAL_ENV");
+    if quiet {
+        cmd.arg("--quiet");
+    }
     if let Some(version) = resolved.config.python_version.as_ref() {
         cmd.arg("--python").arg(version);
     }
@@ -97,16 +103,19 @@ pub fn run_uv_lock_upgrade(
 }
 
 /// Convenience wrapper that maps a failure to `UvError::SyncFailed`.
+/// `quiet` is forwarded to `run_uv_sync` so the inner uv subprocess
+/// inherits the same output discipline.
 pub fn sync_if_needed(
     uv: &UvBinary,
     tools_dir: &Path,
     resolved: &ResolvedVenv,
     force: bool,
+    quiet: bool,
 ) -> Result<(), UvError> {
     if !force && matches!(check_freshness(resolved, tools_dir), Freshness::Fresh) {
         return Ok(());
     }
-    let status = run_uv_sync(uv, tools_dir, resolved)
+    let status = run_uv_sync(uv, tools_dir, resolved, quiet)
         .map_err(|e| UvError::Http(e.to_string()))?;
     if !status.success() {
         return Err(UvError::SyncFailed(status.code()));
@@ -212,7 +221,7 @@ mod tests {
 
         let uv = stub_uv(tmp.path(), 99);
         let resolved = dummy_resolved(venv);
-        sync_if_needed(&uv, tmp.path(), &resolved, false).expect("fresh should short-circuit");
+        sync_if_needed(&uv, tmp.path(), &resolved, false, false).expect("fresh should short-circuit");
     }
 
     #[cfg(unix)]
@@ -228,7 +237,7 @@ mod tests {
         // Stub exits 0 — success path. Marker should get re-stamped.
         let uv = stub_uv(tmp.path(), 0);
         let resolved = dummy_resolved(venv.clone());
-        sync_if_needed(&uv, tmp.path(), &resolved, true)
+        sync_if_needed(&uv, tmp.path(), &resolved, true, false)
             .expect("force=true should run and succeed");
         assert!(venv.join(FRESHNESS_MARKER).exists());
     }
@@ -241,7 +250,7 @@ mod tests {
         // No prior marker → check_freshness returns Missing → uv runs.
         let uv = stub_uv(tmp.path(), 17);
         let resolved = dummy_resolved(venv);
-        let err = sync_if_needed(&uv, tmp.path(), &resolved, false)
+        let err = sync_if_needed(&uv, tmp.path(), &resolved, false, false)
             .expect_err("non-zero exit must surface as SyncFailed");
         assert!(matches!(err, UvError::SyncFailed(Some(17))));
     }
@@ -260,9 +269,85 @@ mod tests {
             source: crate::uv::UvSource::Path,
         };
         let resolved = dummy_resolved(venv);
-        let err = sync_if_needed(&uv, tmp.path(), &resolved, true)
+        let err = sync_if_needed(&uv, tmp.path(), &resolved, true, false)
             .expect_err("spawn failure should surface");
         assert!(matches!(err, UvError::Http(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_uv_sync_passes_quiet_when_requested() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let argv_log = tmp.path().join("argv.log");
+        let stub = tmp.path().join("uv");
+        let mut f = fs::File::create(&stub).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nexit 0",
+            argv_log.display(),
+        )
+        .unwrap();
+        drop(f);
+        let mut perms = fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&stub, perms).unwrap();
+        let uv = UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        };
+        let venv = tmp.path().join("venv");
+        fs::create_dir_all(&venv).unwrap();
+        let resolved = dummy_resolved(venv);
+
+        run_uv_sync(&uv, tmp.path(), &resolved, /*quiet=*/ true)
+            .expect("stub uv must exit 0");
+
+        let captured = fs::read_to_string(&argv_log).unwrap();
+        assert!(
+            captured.lines().any(|l| l == "--quiet"),
+            "expected `--quiet` in uv argv, got: {captured}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_uv_sync_omits_quiet_by_default() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let argv_log = tmp.path().join("argv.log");
+        let stub = tmp.path().join("uv");
+        let mut f = fs::File::create(&stub).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nexit 0",
+            argv_log.display(),
+        )
+        .unwrap();
+        drop(f);
+        let mut perms = fs::metadata(&stub).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&stub, perms).unwrap();
+        let uv = UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        };
+        let venv = tmp.path().join("venv");
+        fs::create_dir_all(&venv).unwrap();
+        let resolved = dummy_resolved(venv);
+
+        run_uv_sync(&uv, tmp.path(), &resolved, /*quiet=*/ false)
+            .expect("stub uv must exit 0");
+
+        let captured = fs::read_to_string(&argv_log).unwrap();
+        assert!(
+            !captured.lines().any(|l| l == "--quiet"),
+            "did not expect `--quiet` in uv argv, got: {captured}"
+        );
     }
 
     #[cfg(unix)]
@@ -288,7 +373,7 @@ mod tests {
         let mut resolved = dummy_resolved(venv);
         resolved.config.python_version = Some("3.13".into());
 
-        run_uv_sync(&uv, tmp.path(), &resolved).expect("stub uv should succeed");
+        run_uv_sync(&uv, tmp.path(), &resolved, /*quiet=*/ false).expect("stub uv should succeed");
         let dump = fs::read_to_string(&argdump).unwrap();
         assert!(dump.contains("sync"));
         assert!(dump.contains("--python"));
