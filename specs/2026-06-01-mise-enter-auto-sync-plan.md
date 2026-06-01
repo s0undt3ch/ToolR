@@ -21,6 +21,10 @@ runner), MkDocs (docs), pre-commit/prek (lint + snippet regen).
 **Design doc:** `specs/2026-06-01-mise-enter-auto-sync-design.md` (read first; this plan implements
 that spec verbatim).
 
+**Follow-up issue:** [s0undt3ch/ToolR#288](https://github.com/s0undt3ch/ToolR/issues/288) — broader
+`toolr project venv` uv-wrapper expansion (`add`, `remove`, `lock`, …); out of scope for this plan
+but the command-tree reshape here makes that future work cheap.
+
 ---
 
 ## File Map
@@ -1954,7 +1958,7 @@ Verifying every spec requirement is implemented by some task:
 | Breaking-change CHANGELOG note | Task 13 |
 | End-to-end verification | Task 14 |
 | Archive design + plan into `specs/archive/2026/` | Task 15 |
-| Separate `add`/`remove`/`lock` ticket (Follow-ups) | **Out of scope** — file the issue after the plan ships |
+| Separate `add`/`remove`/`lock` ticket (Follow-ups) | **Out of scope** — tracked as [#288](https://github.com/s0undt3ch/ToolR/issues/288) |
 
 No gaps; no placeholders in the task bodies.
 

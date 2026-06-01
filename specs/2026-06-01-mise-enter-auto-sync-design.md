@@ -2,7 +2,7 @@
 
 **Status:** design — pending implementation plan
 **Target release:** 0.22 (breaking)
-**Related ticket:** TBD — broader `toolr project venv` uv-wrapper expansion (filed separately; see "Follow-ups")
+**Related ticket:** [#288](https://github.com/s0undt3ch/ToolR/issues/288) — broader `toolr project venv` uv-wrapper expansion (separate spec)
 
 ## Problem
 
@@ -378,11 +378,11 @@ and revisit auto-scaffolding once the recipe has miles on it.
 
 ## Follow-ups
 
-- File a separate GitHub issue capturing the broader vision the rename
-  enables: wrap remaining uv operations under `toolr project venv` —
-  `add`, `remove`, `lock`, and others as we discover them. Skip
-  operations already implemented (`sync`, `upgrade`). The ticket is a
-  placeholder; this design does not commit to that scope.
+- Tracked as [#288](https://github.com/s0undt3ch/ToolR/issues/288):
+  wrap remaining uv operations under `toolr project venv` — `add`,
+  `remove`, `lock`, and others as we discover them. Skip operations
+  already implemented (`sync`, `upgrade`). The ticket is a holder for
+  the broader vision; this design does not commit to that scope.
 - Reconsider auto-scaffolding once the manual recipe has shipped and we
   have real usage data on what users get wrong about it.
 - Once `venv add` / `venv remove` exist, revisit whether the enter-hook
