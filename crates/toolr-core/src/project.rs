@@ -11,12 +11,35 @@ use crate::venv::{
     sync::sync_if_needed, validate::validate_venv, warn_failures,
 };
 
+/// Options for [`ensure_venv_ready`]. Constructed via `Default::default()`
+/// plus the builder setters; new fields can be added without breaking
+/// callers that took an `EnsureOpts::default()`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EnsureOpts {
+    /// Run `uv sync` even when the freshness stamp says the venv is fresh.
+    pub force_sync: bool,
+    /// Forward `--quiet` to the uv subprocess. Has no effect when the
+    /// stamp short-circuits sync (no uv invocation happens).
+    pub quiet: bool,
+}
+
+impl EnsureOpts {
+    pub fn with_force_sync(mut self, v: bool) -> Self {
+        self.force_sync = v;
+        self
+    }
+    pub fn with_quiet(mut self, v: bool) -> Self {
+        self.quiet = v;
+        self
+    }
+}
+
 /// One-stop "make the venv ready" entrypoint. Returns the resolved venv
 /// + the chosen uv binary on success.
 pub fn ensure_venv_ready(
     cwd: &Path,
     consent: ConsentMode,
-    force_sync: bool,
+    opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
     let repo_root = discover_project_root(cwd)
         .context("locating project root for the tools venv")?;
@@ -24,7 +47,7 @@ pub fn ensure_venv_ready(
         .context("resolving the tools venv path")?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
-    sync_if_needed(&uv, &tools, &resolved, force_sync, /*quiet=*/ false)
+    sync_if_needed(&uv, &tools, &resolved, opts.force_sync, opts.quiet)
         .with_context(|| format!("uv sync against {}", tools.display()))?;
     validate_venv(&resolved.venv_dir, &resolved.python)
         .context("validating the synced venv")?;
@@ -75,6 +98,20 @@ mod tests {
     }
 
     #[test]
+    fn ensure_opts_default_means_no_force_no_quiet() {
+        let opts = EnsureOpts::default();
+        assert!(!opts.force_sync);
+        assert!(!opts.quiet);
+    }
+
+    #[test]
+    fn ensure_opts_builder_setters_work() {
+        let opts = EnsureOpts::default().with_force_sync(true).with_quiet(true);
+        assert!(opts.force_sync);
+        assert!(opts.quiet);
+    }
+
+    #[test]
     fn ensure_venv_ready_reports_missing_project_root() {
         // No pyproject.toml or marker - `ensure_venv_ready` must fail and
         // surface a clear error. On most hosts we hit "locating project
@@ -85,7 +122,7 @@ mod tests {
         // is missing). Either error proves the orchestration aborts before
         // any uv interaction - which is what the test is really asserting.
         let tmp = tempfile::tempdir().unwrap();
-        let err = ensure_venv_ready(tmp.path(), ConsentMode::default(), false)
+        let err = ensure_venv_ready(tmp.path(), ConsentMode::default(), EnsureOpts::default())
             .expect_err("expected ensure_venv_ready to fail without a project");
         let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
         let expected_one_of = ["locating project root", "resolving the tools venv path"];

@@ -139,7 +139,11 @@ pub(crate) fn run_project_init(
     // Auto-sync — same path as `toolr project deps sync`.
     let consent = toolr_core::uv::install::ConsentMode::from_env();
     let (resolved, uv) =
-        toolr_core::project::ensure_venv_ready(cwd, consent, /*force_sync=*/ true)?;
+        toolr_core::project::ensure_venv_ready(
+            cwd,
+            consent,
+            toolr_core::project::EnsureOpts::default().with_force_sync(true),
+        )?;
     if !quiet {
         println!(
             "toolr: synced venv at {} using uv {}.{}.{}",
@@ -211,7 +215,9 @@ fn deps_sync() -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let consent = toolr_core::uv::install::ConsentMode::from_env();
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
-        &cwd, consent, /*force_sync=*/ true,
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_force_sync(true),
     )?;
     println!(
         "toolr: synced venv at {} using uv {}.{}.{}",
@@ -244,7 +250,7 @@ fn deps_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
 
     let consent = toolr_core::uv::install::ConsentMode::from_env();
     let (resolved, uv) =
-        toolr_core::project::ensure_venv_ready(&cwd, consent, /*force_sync=*/ false)?;
+        toolr_core::project::ensure_venv_ready(&cwd, consent, toolr_core::project::EnsureOpts::default())?;
 
     let lock_status = toolr_core::venv::run_uv_lock_upgrade(&uv, &tools_dir, &resolved, package)?;
     if !lock_status.success() {
@@ -340,7 +346,9 @@ fn venv_shell() -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let consent = toolr_core::uv::install::ConsentMode::from_env();
     let (resolved, _) = toolr_core::project::ensure_venv_ready(
-        &cwd, consent, /*force_sync=*/ false,
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default(),
     )?;
 
     let shell = default_shell_path();
