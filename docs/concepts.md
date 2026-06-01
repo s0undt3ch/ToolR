@@ -32,7 +32,7 @@ A Python virtualenv managed by [uv](https://docs.astral.sh/uv/),
 materialised from `tools/pyproject.toml`. By default lives in
 `$XDG_CACHE_HOME/toolr/<repo-key>/venv/` (one per repo); opt into
 in-tree `tools/.venv/` via `[tool.toolr] venv-location = "in-tree"`.
-Created by `toolr project deps sync` (or automatically by
+Created by `toolr project venv sync` (or automatically by
 `toolr project init`). See [Project configuration](project-config.md).
 
 ## The manifest
