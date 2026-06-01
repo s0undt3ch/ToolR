@@ -6,4 +6,4 @@
 #
 # Bump `MISE_VERSION` here to upgrade every workflow's mise install in
 # a single edit. Lockstep with `mise.toml`'s tooling pins.
-MISE_VERSION=v2026.5.15
+MISE_VERSION=v2026.5.18
