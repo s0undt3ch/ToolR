@@ -279,10 +279,44 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     ),
             )
             .subcommand(
+                // Migration shim: parses `toolr project deps <anything>` so we
+                // can emit a tailored "removed in 0.22; use `project venv`"
+                // error from `dispatch_project`. Hidden from `--help`. Drop
+                // this subcommand after 0.23 once users have migrated.
                 Command::new("deps")
-                    .about("Tools-venv dependency management")
+                    .hide(true)
+                    .allow_external_subcommands(true)
+                    .about("(removed in 0.22) use `toolr project venv` instead"),
+            )
+            .subcommand(
+                Command::new("venv")
+                    .about("Inspect, sync, and operate on the tools venv")
                     .subcommand_required(true)
-                    .subcommand(Command::new("sync").about("Run `uv sync` against tools/"))
+                    .subcommand(
+                        Command::new("path").about("Print the absolute path to the tools venv"),
+                    )
+                    .subcommand(
+                        Command::new("shell")
+                            .about("Spawn a subshell with the tools venv activated"),
+                    )
+                    .subcommand(
+                        Command::new("sync")
+                            .about("Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)")
+                            .arg(
+                                Arg::new("force")
+                                    .long("force")
+                                    .short('f')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Re-run `uv sync` even when the freshness stamp says the venv is up to date"),
+                            )
+                            .arg(
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .short('q')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Silent on success and on benign unattended-mode exits (no toolr/uv output)"),
+                            ),
+                    )
                     .subcommand(
                         Command::new("upgrade")
                             .about("Bump a single package's pin via `uv lock --upgrade-package` + `uv sync`")
@@ -292,18 +326,6 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .required(true)
                                     .help("Name of the package to upgrade (must already appear in tools/pyproject.toml)"),
                             ),
-                    ),
-            )
-            .subcommand(
-                Command::new("venv")
-                    .about("Inspect or activate the tools venv")
-                    .subcommand_required(true)
-                    .subcommand(
-                        Command::new("path").about("Print the absolute path to the tools venv"),
-                    )
-                    .subcommand(
-                        Command::new("shell")
-                            .about("Spawn a subshell with the tools venv activated"),
                     ),
             )
             .subcommand(

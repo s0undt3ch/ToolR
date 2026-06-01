@@ -498,3 +498,41 @@ def boom(ctx) -> None:
         .unwrap();
     assert_eq!(output.status.code(), Some(7));
 }
+
+/// `toolr project venv sync --help` exists and mentions `--force` / `--quiet`.
+#[test]
+fn project_venv_sync_help_lists_force_and_quiet() {
+    let tmp = TempDir::new().unwrap();
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["project", "venv", "sync", "--help"])
+        .output()
+        .expect("running toolr should succeed");
+    assert!(output.status.success(), "exit: {:?}", output.status.code());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--force"), "missing --force in help:\n{stdout}");
+    assert!(stdout.contains("--quiet"), "missing --quiet in help:\n{stdout}");
+}
+
+/// `toolr project deps sync` (removed) prints the migration hint and exits non-zero.
+#[test]
+fn project_deps_removed_prints_migration_hint() {
+    let tmp = TempDir::new().unwrap();
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["project", "deps", "sync"])
+        .output()
+        .expect("running toolr should succeed");
+    assert!(!output.status.success(), "expected non-zero exit");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("`project deps` was removed in 0.22"),
+        "stderr missing removal notice:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("toolr project venv"),
+        "stderr missing pointer to new path:\n{stderr}"
+    );
+}

@@ -14,14 +14,12 @@ use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
     match matches.subcommand() {
         Some(("init", init_m)) => project_init(init_m),
-        Some(("deps", deps_m)) => match deps_m.subcommand() {
-            Some(("sync", _)) => deps_sync(),
-            Some(("upgrade", upgrade_m)) => deps_upgrade(upgrade_m),
-            _ => unreachable!("clap enforces subcommand_required"),
-        },
+        Some(("deps", _)) => deps_migration_hint(),
         Some(("venv", venv_m)) => match venv_m.subcommand() {
             Some(("path", _)) => venv_path(),
             Some(("shell", _)) => venv_shell(),
+            Some(("sync", sync_m)) => venv_sync(sync_m),
+            Some(("upgrade", upgrade_m)) => venv_upgrade(upgrade_m),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
@@ -30,6 +28,19 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
         },
         _ => unreachable!("clap enforces subcommand_required"),
     }
+}
+
+/// Emit the migration hint for `toolr project deps <…>`. Returns exit
+/// code 2 (same code we use for "your inputs were valid but you're
+/// pointing at the wrong target" — see `project_init`'s scaffold-
+/// conflict path).
+fn deps_migration_hint() -> Result<ExitCode> {
+    eprintln!("error: `project deps` was removed in 0.22");
+    eprintln!("hint: use `toolr project venv` instead");
+    eprintln!("       project deps sync       →  toolr project venv sync");
+    eprintln!("       project deps upgrade …  →  toolr project venv upgrade …");
+    eprintln!("see CHANGELOG.md (0.22 BREAKING) for the rename");
+    Ok(ExitCode::from(2))
 }
 
 fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
@@ -131,12 +142,12 @@ pub(crate) fn run_project_init(
     if no_sync {
         if !quiet {
             println!("toolr: skipping `uv sync` (--no-sync)");
-            println!("toolr: run `toolr project deps sync` when you are ready");
+            println!("toolr: run `toolr project venv sync` when you are ready");
         }
         return Ok(ExitCode::SUCCESS);
     }
 
-    // Auto-sync — same path as `toolr project deps sync`.
+    // Auto-sync — same path as `toolr project venv sync --force`.
     let consent = toolr_core::uv::install::ConsentMode::from_env();
     let (resolved, uv) =
         toolr_core::project::ensure_venv_ready(
@@ -211,27 +222,81 @@ fn manifest_rebuild() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn deps_sync() -> Result<ExitCode> {
+fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
+    let force = matches.get_flag("force");
+    let quiet = matches.get_flag("quiet");
+
     let cwd = std::env::current_dir()?;
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
-    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
-        &cwd,
-        consent,
-        toolr_core::project::EnsureOpts::default().with_force_sync(true),
-    )?;
-    println!(
-        "toolr: synced venv at {} using uv {}.{}.{}",
-        resolved.venv_dir.display(),
-        uv.version.0, uv.version.1, uv.version.2,
-    );
+    let mut consent = toolr_core::uv::install::ConsentMode::from_env();
+    if quiet {
+        // Unattended path: never prompt. If uv is missing and we have
+        // no env-level consent, return Refuse silently and the guards
+        // in venv_sync_unattended_quiet_exit convert that into a
+        // benign exit 0.
+        consent.silent_refuse = true;
+    }
+
+    let opts = toolr_core::project::EnsureOpts::default()
+        .with_force_sync(force)
+        .with_quiet(quiet);
+
+    let result = toolr_core::project::ensure_venv_ready(&cwd, consent, opts);
+
+    if quiet {
+        if let Some(code) = venv_sync_unattended_quiet_exit(&result) {
+            return Ok(code);
+        }
+    }
+
+    let (resolved, uv) = result?;
+
+    if !quiet {
+        println!(
+            "toolr: synced venv at {} using uv {}.{}.{}",
+            resolved.venv_dir.display(),
+            uv.version.0, uv.version.1, uv.version.2,
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
-fn deps_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
+/// Unattended-mode guard table for `venv_sync --quiet`. Returns
+/// `Some(ExitCode::SUCCESS)` when the failure is one of the benign rows
+/// that `--quiet` swallows (not-a-toolr-repo, missing tools/, uv-consent
+/// absent). Returns `None` to let the error propagate normally (lock
+/// unparsable, uv sync failed, etc).
+fn venv_sync_unattended_quiet_exit(
+    result: &Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)>,
+) -> Option<ExitCode> {
+    let err = result.as_ref().err()?;
+    let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
+    let joined = chain.join(" :: ");
+
+    // Benign markers from error contexts emitted by `ensure_venv_ready`
+    // and the `uv` install path. We match substrings the error chain
+    // already produces — keep this list aligned with:
+    //   - discover_project_root NotFound        → "locating project root"
+    //   - resolve_venv_path missing pyproject   → "resolving the tools venv path"
+    //   - ensure_uv with silent_refuse=true     → UvError::UserRefusedInstall
+    //     whose Display is "user declined uv install; ..."
+    let benign_markers = [
+        "locating project root",
+        "resolving the tools venv path",
+        "user declined uv install",
+    ];
+
+    if benign_markers.iter().any(|m| joined.contains(m)) {
+        return Some(ExitCode::SUCCESS);
+    }
+    None
+}
+
+fn venv_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
     let package = matches
         .get_one::<String>("package")
         .expect("clap marks this required")
         .as_str();
+    // Reuse the existing flow; this function used to be named deps_upgrade.
 
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
