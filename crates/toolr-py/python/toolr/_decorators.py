@@ -246,14 +246,19 @@ def command_group(
     before the final dot is the parent's full path; explicit
     ``parent=`` is ignored in that case.
 
-    If you pass ``docstring``, you won't be allowed to pass ``description`` or ``long_description``.
-    Those will be parsed by [docstring-parser](https://pypi.org/project/docstring-parser/).
-    The first line of the docstring will be used as the description, the rest will be used as the long description.
+    If you pass ``docstring``, you won't be allowed to pass ``description`` or
+    ``long_description``. The docstring is parsed with the same parser used for
+    ``@command`` function docstrings: the first paragraph becomes the group's
+    ``title`` (clap's ``about``, shown next to the group name in the parent's
+    command listing) and the remainder becomes the ``description`` (clap's
+    ``long_about``, shown when the user runs ``toolr <group> --help``). Pass an
+    explicit ``title=`` or ``description=`` to override either side.
 
     Args:
         name: Name of the command group; may include dotted parent path.
-        title: Optional short title shown in --help. Defaults to the
-            leaf name when omitted.
+        title: Optional short title shown next to the group name in the
+            parent ``--help`` listing. Defaults to the docstring's first
+            paragraph when ``docstring=`` is supplied, otherwise empty.
         description: Description for the command group
         long_description: Long description for the command group
         docstring: Docstring for the command group
@@ -281,8 +286,6 @@ def command_group(
         parent = f"tools.{parent}"
     elif parent is None:
         parent = "tools"
-    if not title:
-        title = name
 
     collector = _get_command_group_storage()
 
@@ -296,9 +299,16 @@ def command_group(
         if description is not None or long_description is not None:
             err_msg = "You can't pass both docstring and description or long_description"
             raise ValueError(err_msg)
+        # Mirror the static parser (parser/groups.rs) and the `@command`
+        # path (parser/commands.rs): the docstring's first paragraph
+        # populates `title` (clap's `about`); the rest populates
+        # `description` (clap's `long_about`). An explicit `title=`
+        # always wins for the short slot.
         parsed_docstring = Docstring.parse(docstring)
-        description = parsed_docstring.short_description
-        long_description = parsed_docstring.long_description
+        if not title:
+            title = parsed_docstring.short_description
+        description = parsed_docstring.long_description or ""
+        long_description = None
     elif description is None:
         err_msg = "You must at least pass either the 'docstring' or 'description' argument"
         raise ValueError(err_msg)

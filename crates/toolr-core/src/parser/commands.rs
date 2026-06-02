@@ -5,12 +5,12 @@ use std::collections::HashMap;
 use ruff_python_ast::{Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
+use super::parse_docstring;
 use super::signatures::extract_arguments;
 use super::symbols::ArgSectionTable;
 use super::symbols::EnumTable;
 use super::symbols::TypeAliasTable;
 use super::types::{SourcesImports, TypeImports, TypeResolutionError, resolve_arguments};
-use crate::SimpleDocstringParser;
 use crate::manifest::{Command, Origin};
 
 type GlobalVars = HashMap<String, String>;
@@ -236,7 +236,7 @@ fn build_command(
     errors: &mut Vec<TypeResolutionError>,
 ) -> Command {
     let raw_doc = function_docstring(func);
-    let parsed = SimpleDocstringParser::new().parse(&raw_doc).ok();
+    let parsed = parse_docstring(&raw_doc);
     let summary = parsed
         .as_ref()
         .map(|d| d.short_description.clone())
