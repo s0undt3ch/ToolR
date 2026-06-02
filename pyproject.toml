@@ -46,7 +46,7 @@ docs = [
     "mkdocs-awesome-nav>=3.1.2",
     "mkdocs-material>=9.6.16",
     "mkdocstrings[python]>=1.0.4",
-    "ruff>=0.15.14",
+    "ruff>=0.15.15",
 ]
 
 [tool.ruff]
