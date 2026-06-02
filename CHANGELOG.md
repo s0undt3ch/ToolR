@@ -6,6 +6,40 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.22.1 - 2026-06-02
+
+### Notes
+
+## Bug fixes
+
+### `command_group(docstring=...)` now splits the docstring into title + description
+
+`command_group("name", docstring=__doc__)` previously stuffed the entire
+docstring into the group's `description` field and left `title` empty,
+so the blurb never appeared next to the group in the parent `--help`
+listing (clap shows `about`, which is what `title` populates). The
+parser now mirrors how `@command` function docstrings are handled — the
+first paragraph becomes the group's `title` (clap's `about`) and the
+remainder becomes the `description` (clap's `long_about`). An explicit
+positional `title=` / `description=` still wins for either side.
+
+Both the static parser (`parser/groups.rs`) and the runtime decorator
+(`toolr._decorators.command_group`) now go through the same shared
+`parse_docstring` helper, so static-manifest output and runtime
+introspection agree. The runtime's old `title = name` fallback —
+which would have produced a redundant `dbt-config  dbt-config` in
+the parent listing — has been removed; an unset title now stays
+empty, matching the static parser.
+
+See [#292](https://github.com/s0undt3ch/ToolR/issues/292).
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(parser)* Split command_group docstring into title + description ([`f09fc6c`](https://github.com/s0undt3ch/ToolR/commit/f09fc6c147cf35e3b2c02f23af197e05046b543c))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(tests)* Drop `del fixture` pattern via autouse / usefixtures ([`5589c6f`](https://github.com/s0undt3ch/ToolR/commit/5589c6f05c5877ca3687fa0f4a5b868f7573b266))
 ## 0.22.0 - 2026-06-02
 
 ### Notes
