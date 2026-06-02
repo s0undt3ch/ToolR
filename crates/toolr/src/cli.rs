@@ -359,6 +359,42 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             ),
                     )
                     .subcommand(
+                        Command::new("add")
+                            .about("Add one or more packages to tools/pyproject.toml (wraps `uv add`)")
+                            .arg(
+                                Arg::new("packages")
+                                    .value_name("PACKAGE")
+                                    .num_args(1..)
+                                    .required(true)
+                                    .help("Package spec (`name`, `name@version`, `name>=1.2`, …) — passed through to uv"),
+                            )
+                            .arg(
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .short('q')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Pass --quiet to uv"),
+                            ),
+                    )
+                    .subcommand(
+                        Command::new("remove")
+                            .about("Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)")
+                            .arg(
+                                Arg::new("packages")
+                                    .value_name("PACKAGE")
+                                    .num_args(1..)
+                                    .required(true)
+                                    .help("Package name to remove (must already appear in tools/pyproject.toml)"),
+                            )
+                            .arg(
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .short('q')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Pass --quiet to uv"),
+                            ),
+                    )
+                    .subcommand(
                         Command::new("upgrade")
                             .about("Bump a single package's pin via `uv lock --upgrade-package` + `uv sync`")
                             .arg(

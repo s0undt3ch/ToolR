@@ -20,6 +20,8 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
             Some(("shell", _)) => venv_shell(),
             Some(("sync", sync_m)) => venv_sync(sync_m),
             Some(("lock", lock_m)) => venv_lock(lock_m),
+            Some(("add", add_m)) => venv_add(add_m),
+            Some(("remove", remove_m)) => venv_remove(remove_m),
             Some(("upgrade", upgrade_m)) => venv_upgrade(upgrade_m),
             _ => unreachable!("clap enforces subcommand_required"),
         },
@@ -341,6 +343,79 @@ fn venv_lock(matches: &ArgMatches) -> Result<ExitCode> {
 
     if !quiet {
         println!("toolr: refreshed {}", tools_dir.join("uv.lock").display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn venv_add(matches: &ArgMatches) -> Result<ExitCode> {
+    let quiet = matches.get_flag("quiet");
+    let specs: Vec<String> = matches
+        .get_many::<String>("packages")
+        .expect("clap marks this required")
+        .cloned()
+        .collect();
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
+        .context("locating project root for the tools venv")?;
+    let tools_dir = repo_root.join("tools");
+
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+    )?;
+
+    let status = toolr_core::venv::run_uv_add(&uv, &tools_dir, &resolved, &specs, quiet)?;
+    if !status.success() {
+        anyhow::bail!("`uv add` failed with exit code {:?}", status.code());
+    }
+
+    if !quiet {
+        println!("toolr: added {} to {}", specs.join(", "), tools_dir.join("pyproject.toml").display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn venv_remove(matches: &ArgMatches) -> Result<ExitCode> {
+    let quiet = matches.get_flag("quiet");
+    let packages: Vec<String> = matches
+        .get_many::<String>("packages")
+        .expect("clap marks this required")
+        .cloned()
+        .collect();
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
+        .context("locating project root for the tools venv")?;
+    let tools_dir = repo_root.join("tools");
+
+    // Pre-flight: every named package must already be declared.
+    let pyproject = tools_dir.join("pyproject.toml");
+    for pkg in &packages {
+        if !pyproject_declares_dependency(&pyproject, pkg)? {
+            anyhow::bail!(
+                "package `{pkg}` is not declared in {} — nothing to remove",
+                pyproject.display(),
+            );
+        }
+    }
+
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+    )?;
+
+    let status = toolr_core::venv::run_uv_remove(&uv, &tools_dir, &resolved, &packages, quiet)?;
+    if !status.success() {
+        anyhow::bail!("`uv remove` failed with exit code {:?}", status.code());
+    }
+
+    if !quiet {
+        println!("toolr: removed {} from {}", packages.join(", "), pyproject.display());
     }
     Ok(ExitCode::SUCCESS)
 }
