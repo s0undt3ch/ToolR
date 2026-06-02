@@ -173,6 +173,10 @@ fn touch_marker(venv_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn touch_marker_after_success(venv_dir: &Path) -> Result<()> {
+    touch_marker(venv_dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
