@@ -32,7 +32,7 @@ dev = [
     "toolr-plugin-example",
     "toolr-py",
     "attrs>=25.3.0",
-    "coverage>=7.14.0",
+    "coverage>=7.14.1",
     "hypothesis>=6.152.9",
     "pytest>=8.3.5",
     "pytest-skip-markers>=1.5.2",
