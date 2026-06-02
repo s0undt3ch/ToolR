@@ -333,6 +333,32 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             ),
                     )
                     .subcommand(
+                        Command::new("lock")
+                            .about("Refresh tools/uv.lock without applying (wraps `uv lock`)")
+                            .arg(
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .short('q')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Pass --quiet to uv"),
+                            )
+                            .arg(
+                                Arg::new("upgrade")
+                                    .long("upgrade")
+                                    .short('U')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Re-resolve every package (--upgrade)"),
+                            )
+                            .arg(
+                                Arg::new("upgrade-package")
+                                    .long("upgrade-package")
+                                    .short('P')
+                                    .value_name("PACKAGE")
+                                    .action(ArgAction::Append)
+                                    .help("Re-resolve a single package; pass repeatedly for multiple"),
+                            ),
+                    )
+                    .subcommand(
                         Command::new("upgrade")
                             .about("Bump a single package's pin via `uv lock --upgrade-package` + `uv sync`")
                             .arg(

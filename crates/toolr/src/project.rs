@@ -5,7 +5,7 @@ use std::io::{IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
@@ -19,6 +19,7 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
             Some(("path", _)) => venv_path(),
             Some(("shell", _)) => venv_shell(),
             Some(("sync", sync_m)) => venv_sync(sync_m),
+            Some(("lock", lock_m)) => venv_lock(lock_m),
             Some(("upgrade", upgrade_m)) => venv_upgrade(upgrade_m),
             _ => unreachable!("clap enforces subcommand_required"),
         },
@@ -293,6 +294,55 @@ fn build_upgrade_mode(all: bool, pkgs: Vec<String>) -> toolr_core::venv::Upgrade
     } else {
         toolr_core::venv::UpgradeMode::Packages(pkgs)
     }
+}
+
+fn venv_lock(matches: &ArgMatches) -> Result<ExitCode> {
+    let quiet = matches.get_flag("quiet");
+    let upgrade_all = matches.get_flag("upgrade");
+    let upgrade_pkgs: Vec<String> = matches
+        .get_many::<String>("upgrade-package")
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
+        .context("locating project root for the tools venv")?;
+    let tools_dir = repo_root.join("tools");
+
+    // -P pre-flight guard — same as venv sync.
+    if !upgrade_pkgs.is_empty() {
+        let pyproject = tools_dir.join("pyproject.toml");
+        for pkg in &upgrade_pkgs {
+            if !pyproject_declares_dependency(&pyproject, pkg)? {
+                anyhow::bail!(
+                    "package `{pkg}` is not declared in {} — add it to `[project] dependencies` first",
+                    pyproject.display(),
+                );
+            }
+        }
+    }
+
+    let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
+
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+    )?;
+
+    let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
+    if !status.success() {
+        anyhow::bail!(
+            "`uv lock` failed with exit code {:?}",
+            status.code(),
+        );
+    }
+
+    if !quiet {
+        println!("toolr: refreshed {}", tools_dir.join("uv.lock").display());
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Unattended-mode guard table for `venv_sync --quiet`. Returns
