@@ -28,7 +28,7 @@ no scaffolding. Just write whatever should appear in the notes.
   benign unattended-mode exits ("not a toolr repo", "lock missing",
   "uv install needs consent"). Designed for use from a mise
   `[hooks].enter` recipe — see
-  [Auto-sync the tools venv on shell-enter](docs/installation/mise.md#auto-sync-the-tools-venv-on-shell-enter).
+  [Auto-sync the tools venv on shell-enter](https://toolr.readthedocs.io/latest/installation/mise/#auto-sync-the-tools-venv-on-shell-enter).
 - **Migration:** running `toolr project deps <anything>` at 0.22
   prints a tailored error pointing at the new path and exits with
   code 2.
