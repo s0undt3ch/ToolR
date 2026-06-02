@@ -47,7 +47,7 @@ pub fn ensure_venv_ready(
         .context("resolving the tools venv path")?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
-    sync_if_needed(&uv, &tools, &resolved, opts.force_sync, opts.quiet)
+    sync_if_needed(&uv, &tools, &resolved, opts.force_sync, opts.quiet, &crate::venv::UpgradeMode::None)
         .with_context(|| format!("uv sync against {}", tools.display()))?;
     validate_venv(&resolved.venv_dir, &resolved.python)
         .context("validating the synced venv")?;

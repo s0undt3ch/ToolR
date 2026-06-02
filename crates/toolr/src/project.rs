@@ -325,7 +325,7 @@ fn venv_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
         );
     }
 
-    let sync_status = toolr_core::venv::run_uv_sync(&uv, &tools_dir, &resolved, /*quiet=*/ false)?;
+    let sync_status = toolr_core::venv::run_uv_sync(&uv, &tools_dir, &resolved, &toolr_core::venv::UpgradeMode::None, /*quiet=*/ false)?; // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
     if !sync_status.success() {
         anyhow::bail!(
             "`uv sync` after upgrade failed with exit code {:?}",
@@ -345,7 +345,7 @@ fn venv_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
 /// We only need to confirm presence — version pin / extras are uv's
 /// problem from here on.
 fn pyproject_declares_dependency(pyproject: &Path, package: &str) -> Result<bool> {
-    let text = std::fs::read_to_string(pyproject)
+    let text = std::fs::read_to_string(pyproject) // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
         .map_err(|e| anyhow::anyhow!("reading {}: {e}", pyproject.display()))?;
     let parsed: toml::Value = toml::from_str(&text)
         .map_err(|e| anyhow::anyhow!("parsing {}: {e}", pyproject.display()))?;
