@@ -8,8 +8,8 @@ the in-process test runner. This file calls the module's helpers
 directly so the coverage counter actually moves.
 
 Tests run against a clean copy of the command-group registry per
-test, restored via `_with_clean_registry` so user-defined tools
-fixtures from one test don't leak into another.
+test (opt in via ``@pytest.mark.usefixtures("clean_registry")``) so
+user-defined tools fixtures from one test don't leak into another.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ import sys
 import textwrap
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -41,17 +40,21 @@ from toolr._introspect import main
 
 
 @pytest.fixture
-def clean_registry() -> Iterator[dict[str, Any]]:
+def clean_registry() -> Iterator[None]:
     """Snapshot + restore the command-group registry across each test.
 
     `command_group(...)` calls inside test fixtures register into a
     process-wide dict. Without this fixture, registrations leak into
     later tests and `_walk_registry` produces non-deterministic output.
+
+    Apply via ``@pytest.mark.usefixtures("clean_registry")`` — the
+    fixture has no value to inject so consumers don't need to name it
+    as a parameter.
     """
     storage = _get_command_group_storage()
     saved = dict(storage)
     storage.clear()
-    yield storage
+    yield
     storage.clear()
     storage.update(saved)
 
@@ -121,18 +124,16 @@ def tools_fixture(tmp_path: Path, isolated_sys_path: None) -> Path:
 # --------------------------------------------------------------------
 
 
-def test_ensure_tools_on_syspath_noop_when_path_is_empty(isolated_sys_path: None) -> None:
-    del isolated_sys_path
+@pytest.mark.usefixtures("isolated_sys_path")
+def test_ensure_tools_on_syspath_noop_when_path_is_empty() -> None:
     before = list(sys.path)
     _ensure_tools_on_syspath(None)
     _ensure_tools_on_syspath("")
     assert sys.path == before
 
 
-def test_ensure_tools_on_syspath_inserts_parent_of_tools_root(
-    tmp_path: Path, isolated_sys_path: None
-) -> None:
-    del isolated_sys_path
+@pytest.mark.usefixtures("isolated_sys_path")
+def test_ensure_tools_on_syspath_inserts_parent_of_tools_root(tmp_path: Path) -> None:
     tools_root = tmp_path / "tools"
     tools_root.mkdir()
     _ensure_tools_on_syspath(str(tools_root))
@@ -219,11 +220,8 @@ def test_command_entry_falls_back_to_empty_string_when_module_is_falsy() -> None
 # --------------------------------------------------------------------
 
 
-def test_import_tools_modules_returns_silently_when_no_tools_package(
-    tmp_path: Path,
-    isolated_sys_path: None,
-) -> None:
-    del isolated_sys_path
+@pytest.mark.usefixtures("isolated_sys_path")
+def test_import_tools_modules_returns_silently_when_no_tools_package(tmp_path: Path) -> None:
     # Place a directory that is NOT named `tools` on sys.path — import
     # of `tools` will hit ModuleNotFoundError and bail without errors.
     sys.path.insert(0, str(tmp_path))
@@ -232,11 +230,8 @@ def test_import_tools_modules_returns_silently_when_no_tools_package(
     assert warnings == []
 
 
-def test_import_tools_modules_walks_user_tools(
-    tools_fixture: Path,
-    clean_registry: dict[str, Any],
-) -> None:
-    del clean_registry
+@pytest.mark.usefixtures("clean_registry")
+def test_import_tools_modules_walks_user_tools(tools_fixture: Path) -> None:
     _ensure_tools_on_syspath(str(tools_fixture))
     warnings: list[str] = []
     _import_tools_modules(warnings)
@@ -246,12 +241,8 @@ def test_import_tools_modules_walks_user_tools(
     assert any(name.endswith(".demo") or name == "tools.demo" for name in storage)
 
 
-def test_import_tools_modules_collects_warnings_for_broken_modules(
-    tmp_path: Path,
-    isolated_sys_path: None,
-    clean_registry: dict[str, Any],
-) -> None:
-    del isolated_sys_path, clean_registry
+@pytest.mark.usefixtures("isolated_sys_path", "clean_registry")
+def test_import_tools_modules_collects_warnings_for_broken_modules(tmp_path: Path) -> None:
     tools = tmp_path / "tools"
     tools.mkdir()
     (tools / "__init__.py").write_text("")
@@ -267,20 +258,15 @@ def test_import_tools_modules_collects_warnings_for_broken_modules(
 # --------------------------------------------------------------------
 
 
-def test_walk_registry_returns_empty_for_unpopulated_registry(
-    clean_registry: dict[str, Any],
-) -> None:
-    del clean_registry
+@pytest.mark.usefixtures("clean_registry")
+def test_walk_registry_returns_empty_for_unpopulated_registry() -> None:
     groups, commands = _walk_registry()
     assert groups == []
     assert commands == []
 
 
-def test_walk_registry_yields_groups_and_commands(
-    tools_fixture: Path,
-    clean_registry: dict[str, Any],
-) -> None:
-    del clean_registry
+@pytest.mark.usefixtures("clean_registry")
+def test_walk_registry_yields_groups_and_commands(tools_fixture: Path) -> None:
     _ensure_tools_on_syspath(str(tools_fixture))
     _import_tools_modules([])
     groups, commands = _walk_registry()
@@ -292,11 +278,8 @@ def test_walk_registry_yields_groups_and_commands(
     assert demo["origin"] == "dynamic"
 
 
-def test_build_payload_returns_schema_and_collected_state(
-    tools_fixture: Path,
-    clean_registry: dict[str, Any],
-) -> None:
-    del clean_registry
+@pytest.mark.usefixtures("clean_registry")
+def test_build_payload_returns_schema_and_collected_state(tools_fixture: Path) -> None:
     payload = build_payload(str(tools_fixture))
     assert payload["payload_schema_version"] == PAYLOAD_SCHEMA_VERSION
     assert any(g["name"] == "demo" for g in payload["groups"])
@@ -304,12 +287,10 @@ def test_build_payload_returns_schema_and_collected_state(
     assert payload["warnings"] == []
 
 
+@pytest.mark.usefixtures("clean_registry", "isolated_sys_path")
 def test_build_payload_with_no_tools_root_returns_empty_state(
-    clean_registry: dict[str, Any],
-    isolated_sys_path: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    del clean_registry, isolated_sys_path
     # `build_payload(None)` still tries to import `tools`. The dev workspace
     # has a real `tools` package on sys.path that would register groups and
     # invalidate the "empty state" assertion — stub the import out.
@@ -332,12 +313,11 @@ def test_build_payload_with_no_tools_root_returns_empty_state(
 # --------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("clean_registry")
 def test_main_emits_json_payload_to_stdout(
     capsys: pytest.CaptureFixture[str],
     tools_fixture: Path,
-    clean_registry: dict[str, Any],
 ) -> None:
-    del clean_registry
     rc = main(["--tools-root", str(tools_fixture)])
     assert rc == 0
     captured = capsys.readouterr()
@@ -346,13 +326,11 @@ def test_main_emits_json_payload_to_stdout(
     assert any(g["name"] == "demo" for g in payload["groups"])
 
 
+@pytest.mark.usefixtures("clean_registry", "isolated_sys_path")
 def test_main_emits_empty_payload_when_no_tools_root(
     capsys: pytest.CaptureFixture[str],
-    clean_registry: dict[str, Any],
-    isolated_sys_path: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    del clean_registry, isolated_sys_path
     real_import_module = importlib.import_module
 
     def fake_import_module(name: str, package: str | None = None) -> object:
