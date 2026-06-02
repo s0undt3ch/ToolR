@@ -185,7 +185,8 @@ fn parse_group_call(
     // When `docstring=` is supplied, split it the same way `parser/commands.rs`
     // splits function docstrings: the first paragraph becomes the short
     // `title` (clap's `about`, shown in the parent's command listing) and
-    // the remainder becomes the long `description` (clap's `long_about`).
+    // the full rendered docstring (short + long + Examples/Notes/…) becomes
+    // the long `description` (clap's `long_about`, shown on `--help`).
     // Either explicit positional title / `description=` still wins so callers
     // can override one side without losing the other.
     let parsed_doc =
@@ -194,7 +195,7 @@ fn parse_group_call(
         .or_else(|| parsed_doc.as_ref().map(|d| d.short_description.clone()))
         .unwrap_or_default();
     let description = explicit_description
-        .or_else(|| parsed_doc.and_then(|d| d.long_description))
+        .or_else(|| parsed_doc.as_ref().map(|d| d.full_description()))
         .unwrap_or_default();
     Some(GroupBinding {
         var: var.to_string(),
@@ -263,10 +264,11 @@ mod tests {
     }
 
     #[test]
-    fn explicit_title_keeps_docstring_long_description() {
+    fn explicit_title_keeps_docstring_full_description() {
         // When the caller passes both a positional title and a docstring,
-        // the title wins for the short slot but the docstring's long
-        // paragraph still populates `description` (clap's `long_about`).
+        // the title wins for the short slot but the docstring's rendered
+        // ``full_description`` (short + long + sections) still populates
+        // `description` (clap's `long_about`).
         let src = r#"group = command_group("ci", "CI utilities", docstring=__doc__)"#;
         let m = parse_src(src);
         let groups = extract_groups(
@@ -275,13 +277,17 @@ mod tests {
             &HashMap::new(),
         );
         assert_eq!(groups[0].group.title, "CI utilities");
-        assert_eq!(groups[0].group.description, "Long paragraph body.");
+        assert_eq!(
+            groups[0].group.description,
+            "First paragraph short.\n\nLong paragraph body.\n"
+        );
     }
 
     #[test]
     fn docstring_first_paragraph_becomes_title() {
         // Single-line docstring: short_description fills `title`,
-        // `description` ends up empty (no long paragraph).
+        // `description` ends up the same single paragraph (no long
+        // body, no sections to append).
         let src = r#"group = command_group("dbt-config", docstring=__doc__)"#;
         let m = parse_src(src);
         let groups = extract_groups(
@@ -290,13 +296,17 @@ mod tests {
             &HashMap::new(),
         );
         assert_eq!(groups[0].group.title, "Paddle's dbt config and setup routines.");
-        assert_eq!(groups[0].group.description, "");
+        assert_eq!(
+            groups[0].group.description,
+            "Paddle's dbt config and setup routines."
+        );
     }
 
     #[test]
     fn docstring_long_paragraph_becomes_description() {
-        // Two-paragraph docstring: first paragraph → title,
-        // remainder → description.
+        // Two-paragraph docstring: first paragraph → title.
+        // `description` is the full render (short + long), so
+        // `--help` re-states the blurb plus the long body.
         let src = r#"group = command_group("ci", docstring=__doc__)"#;
         let m = parse_src(src);
         let groups = extract_groups(
@@ -307,15 +317,15 @@ mod tests {
         assert_eq!(groups[0].group.title, "Short blurb for parent listing.");
         assert_eq!(
             groups[0].group.description,
-            "Longer prose shown by --help only."
+            "Short blurb for parent listing.\n\nLonger prose shown by --help only.\n"
         );
     }
 
     #[test]
-    fn explicit_description_kwarg_wins_over_docstring_long() {
+    fn explicit_description_kwarg_wins_over_docstring_full() {
         // `description=` is the explicit-override slot — when both it
         // and a docstring are present, the kwarg keeps `description`
-        // but the docstring's first line still fills `title`.
+        // verbatim but the docstring's first line still fills `title`.
         let src = r#"group = command_group("ci", description="kw-desc", docstring=__doc__)"#;
         let m = parse_src(src);
         let groups = extract_groups(

@@ -215,18 +215,27 @@ def test_command_group_blank_title_stays_empty_when_no_docstring():
 
 
 def test_command_group_docstring_first_paragraph_becomes_title():
+    # Single-paragraph docstring: title takes the short_description,
+    # description renders to the same paragraph (no body / sections).
     g = command_group("ci", docstring="Short title for parent listing.")
     assert g.title == "Short title for parent listing."
-    assert g.description == ""
+    assert g.description == "Short title for parent listing."
 
 
 def test_command_group_docstring_long_paragraph_becomes_description():
+    # `description` is the Rust-rendered ``full_description`` — short
+    # paragraph + long body + a trailing newline (the same shape clap
+    # gets handed for ``--help``). The leading short paragraph repeats
+    # the title on purpose so ``--help`` re-states the blurb the parent
+    # listing already shows.
     g = command_group(
         "ci",
         docstring="Short title for parent listing.\n\nLonger prose shown by --help only.",
     )
     assert g.title == "Short title for parent listing."
-    assert g.description == "Longer prose shown by --help only."
+    assert g.description == (
+        "Short title for parent listing.\n\nLonger prose shown by --help only.\n"
+    )
 
 
 def test_command_group_explicit_title_overrides_docstring_short():
@@ -236,7 +245,30 @@ def test_command_group_explicit_title_overrides_docstring_short():
         docstring="Short title from docstring.\n\nLong paragraph kept as description.",
     )
     assert g.title == "Explicit Title"
-    assert g.description == "Long paragraph kept as description."
+    assert g.description == ("Short title from docstring.\n\nLong paragraph kept as description.\n")
+
+
+def test_command_group_docstring_with_notes_section_renders_into_description():
+    # Section headers (Notes/Examples/Warnings/…) feed clap's
+    # `long_about` via the same Rust-rendered ``full_description``
+    # string. This is the user-visible payoff: ``toolr <group> --help``
+    # now shows everything the docstring carries, not just the long
+    # paragraph.
+    g = command_group(
+        "ci",
+        docstring=(
+            "Short title.\n\n"
+            "Long body explaining the group.\n\n"
+            "Notes:\n"
+            "    Heads-up about something subtle.\n"
+            "    Second note.\n"
+        ),
+    )
+    assert g.title == "Short title."
+    assert "Long body explaining the group." in g.description
+    assert "Notes:" in g.description
+    assert "Heads-up about something subtle." in g.description
+    assert "Second note." in g.description
 
 
 def test_command_group_returns_existing_instance_on_second_call(

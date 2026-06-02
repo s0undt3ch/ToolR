@@ -26,11 +26,14 @@ def test_command_group_with_both_docstring_and_description():
 def test_command_group_with_docstring_parsing():
     """Test command_group with docstring parsing.
 
-    The docstring's first paragraph populates ``title`` (clap's ``about``)
-    and the remainder populates ``description`` (clap's ``long_about``),
-    mirroring how ``@command`` function docstrings are parsed by
-    ``crates/toolr-core/src/parser/commands.rs``. An explicit positional
-    title overrides the short slot.
+    The docstring's first paragraph populates ``title`` (clap's ``about``,
+    shown in the parent's command listing and on ``-h``). The Rust-rendered
+    multi-section ``full_description`` (short + long + Examples/Notes/…)
+    populates ``description`` (clap's ``long_about``, shown on ``--help``).
+    The leading short paragraph in the long form repeats the title on
+    purpose so ``--help`` re-states the blurb readers also see in the
+    parent listing. An explicit positional title still overrides the short
+    slot.
     """
     group = command_group(
         "docstring_test",
@@ -39,7 +42,7 @@ def test_command_group_with_docstring_parsing():
     )
 
     assert group.title == "Docstring Test"
-    assert group.description == "Long description with more details."
+    assert group.description == ("Short description.\n\nLong description with more details.\n")
     assert group.long_description is None
 
 

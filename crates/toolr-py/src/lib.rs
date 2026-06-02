@@ -150,6 +150,10 @@ impl DocstringParser {
     fn parse(&self, docstring: &str) -> PyResult<Py<PyAny>> {
         let result = self.parser.parse(docstring)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Parse error: {}", e.message)))?;
+        // Compute the rendered full-description while `result` still
+        // owns all its fields — the per-field `set_item` calls below
+        // move them into the Python dict.
+        let full_description = result.full_description();
 
         Python::attach(|py| {
             let dict = PyDict::new(py);
@@ -223,6 +227,12 @@ impl DocstringParser {
                 version_changed_list.append(version_dict_py)?;
             }
             dict.set_item("version_changed", version_changed_list)?;
+
+            // Pre-rendered multi-section text suitable for clap's
+            // `long_about` slot. Computed in Rust so Python doesn't
+            // re-implement the same join logic — see
+            // `toolr_core::docstrings::Docstring::full_description`.
+            dict.set_item("full_description", full_description)?;
 
             Ok(dict.into())
         })

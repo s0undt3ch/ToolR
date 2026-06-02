@@ -241,9 +241,12 @@ fn build_command(
         .as_ref()
         .map(|d| d.short_description.clone())
         .unwrap_or_default();
+    // Hand clap a multi-section render (short + long + Examples/Notes/…)
+    // for `--help` so users see more than the first paragraph there.
+    // The `summary` field separately drives `-h`'s shorter `about` slot.
     let description = parsed
         .as_ref()
-        .and_then(|d| d.long_description.clone())
+        .map(|d| d.full_description())
         .unwrap_or_default();
     let mut arguments = extract_arguments(func, enums, sources);
     if let Some(d) = parsed.as_ref() {

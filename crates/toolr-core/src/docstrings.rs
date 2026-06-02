@@ -30,6 +30,93 @@ pub struct Docstring {
     pub version_changed: Vec<VersionChanged>,
 }
 
+impl Docstring {
+    /// Render the parsed docstring back into a single multi-section
+    /// string suitable for clap's `long_about` slot. The output starts
+    /// with the short description (so `toolr <group> --help` repeats
+    /// the blurb readers also see in the parent listing) and appends
+    /// each populated section in source order. Mirrors the Python
+    /// `Docstring.full_description` property in
+    /// `crates/toolr-py/python/toolr/utils/_docstrings.py`.
+    pub fn full_description(&self) -> String {
+        let mut out = self.short_description.clone();
+
+        if let Some(long) = &self.long_description {
+            if !long.is_empty() {
+                out.push_str("\n\n");
+                out.push_str(long);
+                out.push('\n');
+            }
+        }
+
+        if !self.examples.is_empty() {
+            out.push_str("\nExamples:");
+            for example in &self.examples {
+                let mut description = example.description.clone();
+                if !description.starts_with("- ") && !description.starts_with("* ") {
+                    description = format!("- {description}");
+                }
+                out.push_str("\n\n");
+                out.push_str(&description);
+                if !example.snippet.is_empty() {
+                    out.push_str("\n\n```\n");
+                    out.push_str(&example.snippet);
+                    out.push_str("\n```");
+                }
+            }
+        }
+
+        append_bullet_section(&mut out, "Notes", &self.notes);
+        append_bullet_section(&mut out, "Warnings", &self.warnings);
+        append_bullet_section(&mut out, "See Also", &self.see_also);
+        append_bullet_section(&mut out, "References", &self.references);
+        append_bullet_section(&mut out, "Todo", &self.todo);
+
+        if let Some(deprecated) = &self.deprecated {
+            out.push_str("\n\nDeprecated:\n");
+            out.push_str(deprecated);
+        }
+
+        if let Some(version_added) = &self.version_added {
+            out.push_str("\n\nVersion Added: ");
+            out.push_str(version_added);
+        }
+
+        if !self.version_changed.is_empty() {
+            out.push_str("\n\nVersion Changed:\n");
+            for vc in &self.version_changed {
+                out.push_str("- ");
+                out.push_str(&vc.version);
+                out.push_str(": ");
+                out.push_str(&vc.description);
+                out.push('\n');
+            }
+        }
+
+        out
+    }
+}
+
+/// Append a bulleted ``Section:\n- a\n- b`` block to ``out`` when
+/// ``items`` is non-empty. Existing leading ``- ``/``* `` bullets are
+/// preserved verbatim; otherwise we prefix each line with ``- ``.
+fn append_bullet_section(out: &mut String, title: &str, items: &[String]) {
+    if items.is_empty() {
+        return;
+    }
+    out.push_str("\n\n");
+    out.push_str(title);
+    out.push_str(":\n");
+    for item in items {
+        let prefixed = if item.starts_with("- ") || item.starts_with("* ") {
+            item.clone()
+        } else {
+            format!("- {item}")
+        };
+        out.push('\n');
+        out.push_str(&prefixed);
+    }
+}
 
 /// Represents an example in the docstring
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

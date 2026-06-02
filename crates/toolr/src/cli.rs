@@ -581,35 +581,23 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
     // text) the renderer returns plain text, so doc-snippet captures
     // remain stable.
     //
-    // The split between `about` (short, used in the parent's
-    // subcommand listing) and `long_about` (full body, used on the
-    // command's own `--help`) is deliberately preserved so parent
-    // listings stay compact. The `-h` flag is then re-bound below to
-    // trigger the long form so users get the full prose on either
-    // flavour of help — matches the argparse-era expectation that
-    // `-h` and `--help` show the same thing.
+    // ``cmd.summary`` is the docstring's first paragraph (clap's
+    // ``about``, shown in the parent listing and on ``-h``).
+    // ``cmd.description`` is the Rust-rendered ``full_description``
+    // (clap's ``long_about``, shown on ``--help``) — already includes
+    // the leading summary plus the long body plus any Examples /
+    // Notes / Warnings sections, so we hand it to clap as-is. The
+    // ``Args:`` section never appears here because the parser folds
+    // it into per-argument help instead.
     let summary = crate::markdown::render(&cmd.summary);
     let long_about = if cmd.description.is_empty() {
         summary.clone()
-    } else if cmd.summary.is_empty() {
-        crate::markdown::render(&cmd.description)
     } else {
-        crate::markdown::render(&format!("{}\n\n{}", cmd.summary, cmd.description))
+        crate::markdown::render(&cmd.description)
     };
     let mut c = Command::new(cmd.name.clone())
         .about(summary)
-        .long_about(long_about)
-        .disable_help_flag(true)
-        .arg(
-            // Both `-h` and `--help` print the long form, since our
-            // user-facing docstrings are usually short enough that
-            // the "long form" is the right default everywhere.
-            Arg::new("help")
-                .short('h')
-                .long("help")
-                .action(ArgAction::HelpLong)
-                .help("Print help"),
-        );
+        .long_about(long_about);
     for arg in &cmd.arguments {
         let long_flag = arg.name.replace('_', "-");
         let mut a = Arg::new(arg.name.clone()).help(crate::markdown::render(&arg.help));
