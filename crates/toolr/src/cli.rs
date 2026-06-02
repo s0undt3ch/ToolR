@@ -393,16 +393,6 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .action(ArgAction::SetTrue)
                                     .help("Pass --quiet to uv"),
                             ),
-                    )
-                    .subcommand(
-                        Command::new("upgrade")
-                            .about("Bump a single package's pin via `uv lock --upgrade-package` + `uv sync`")
-                            .arg(
-                                Arg::new("package")
-                                    .value_name("PACKAGE")
-                                    .required(true)
-                                    .help("Name of the package to upgrade (must already appear in tools/pyproject.toml)"),
-                            ),
                     ),
             )
             .subcommand(

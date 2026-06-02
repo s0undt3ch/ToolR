@@ -22,7 +22,6 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
             Some(("lock", lock_m)) => venv_lock(lock_m),
             Some(("add", add_m)) => venv_add(add_m),
             Some(("remove", remove_m)) => venv_remove(remove_m),
-            Some(("upgrade", upgrade_m)) => venv_upgrade(upgrade_m),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
@@ -41,7 +40,7 @@ fn deps_migration_hint() -> Result<ExitCode> {
     eprintln!("error: `project deps` was removed in 0.22");
     eprintln!("hint: use `toolr project venv` instead");
     eprintln!("       project deps sync       →  toolr project venv sync");
-    eprintln!("       project deps upgrade …  →  toolr project venv upgrade …");
+    eprintln!("       project deps upgrade …  →  toolr project venv sync -U <pkg>");
     eprintln!("see CHANGELOG.md (0.22 BREAKING) for the rename");
     Ok(ExitCode::from(2))
 }
@@ -449,61 +448,6 @@ fn venv_sync_unattended_quiet_exit(
         return Some(ExitCode::SUCCESS);
     }
     None
-}
-
-fn venv_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
-    let package = matches
-        .get_one::<String>("package")
-        .expect("clap marks this required")
-        .as_str();
-    // Reuse the existing flow; this function used to be named deps_upgrade.
-
-    let cwd = std::env::current_dir()?;
-    let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
-    let tools_dir = repo_root.join("tools");
-
-    // Guard: `uv lock --upgrade-package` silently no-ops if the package
-    // isn't part of the dependency graph. Catch typos and "I thought I
-    // had this declared" cases up front so the user sees a real error.
-    let pyproject = tools_dir.join("pyproject.toml");
-    if !pyproject_declares_dependency(&pyproject, package)? {
-        anyhow::bail!(
-            "package `{package}` is not declared in {} — add it to `[project] dependencies` first",
-            pyproject.display(),
-        );
-    }
-
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
-    let (resolved, uv) =
-        toolr_core::project::ensure_venv_ready(&cwd, consent, toolr_core::project::EnsureOpts::default())?;
-
-    let lock_status = toolr_core::venv::run_uv_lock(
-        &uv,
-        &tools_dir,
-        &resolved,
-        &toolr_core::venv::UpgradeMode::Packages(vec![package.to_string()]),
-        /*quiet=*/ false,
-    )?;
-    if !lock_status.success() {
-        anyhow::bail!(
-            "`uv lock --upgrade-package {package}` failed with exit code {:?}",
-            lock_status.code(),
-        );
-    }
-
-    let sync_status = toolr_core::venv::run_uv_sync(&uv, &tools_dir, &resolved, &toolr_core::venv::UpgradeMode::None, /*quiet=*/ false)?; // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
-    if !sync_status.success() {
-        anyhow::bail!(
-            "`uv sync` after upgrade failed with exit code {:?}",
-            sync_status.code(),
-        );
-    }
-
-    println!(
-        "toolr: upgraded `{package}` in {}",
-        resolved.venv_dir.display(),
-    );
-    Ok(ExitCode::SUCCESS)
 }
 
 /// Light TOML inspection: does `[project].dependencies` (or any

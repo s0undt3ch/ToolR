@@ -61,13 +61,25 @@ pub fn built_in_completion_entries() -> (Vec<Group>, Vec<Command>) {
             "sync",
             "project.venv",
             "Sync the tools venv (no-op when fresh)",
-            vec![flag("force"), flag("quiet")],
+            vec![flag("force"), flag("quiet"), flag("upgrade"), repeated("upgrade-package")],
         ),
         leaf(
-            "upgrade",
+            "lock",
             "project.venv",
-            "Bump a single package's pin via `uv lock --upgrade-package` + `uv sync`",
-            vec![positional("package")],
+            "Refresh tools/uv.lock without applying (wraps `uv lock`)",
+            vec![flag("quiet"), flag("upgrade"), repeated("upgrade-package")],
+        ),
+        leaf(
+            "add",
+            "project.venv",
+            "Add one or more packages to tools/pyproject.toml (wraps `uv add`)",
+            vec![positional("packages"), flag("quiet")],
+        ),
+        leaf(
+            "remove",
+            "project.venv",
+            "Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)",
+            vec![positional("packages"), flag("quiet")],
         ),
         leaf(
             "rebuild",
@@ -199,6 +211,10 @@ fn positional(name: &str) -> Argument {
     arg(name, ArgumentKind::Positional, Vec::new())
 }
 
+fn repeated(name: &str) -> Argument {
+    arg(name, ArgumentKind::Repeated, Vec::new())
+}
+
 fn positional_enum(name: &str, values: &[&str]) -> Argument {
     arg(
         name,
@@ -267,15 +283,19 @@ mod tests {
     }
 
     #[test]
-    fn project_venv_offers_path_shell_sync_upgrade() {
+    fn project_venv_offers_path_shell_sync_lock_add_remove() {
         let m = merged_empty_manifest();
         let out = serve_completions(&m, &tokens(&["project", "venv", ""]));
-        for expected in ["path", "shell", "sync", "upgrade"] {
+        for expected in ["path", "shell", "sync", "lock", "add", "remove"] {
             assert!(
                 out.contains(&expected.to_string()),
                 "missing {expected} under project venv, got: {out:?}"
             );
         }
+        assert!(
+            !out.contains(&"upgrade".to_string()),
+            "`upgrade` should no longer be a completion candidate, got: {out:?}"
+        );
     }
 
     #[test]
