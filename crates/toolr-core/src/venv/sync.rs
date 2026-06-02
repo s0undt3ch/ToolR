@@ -114,26 +114,31 @@ pub fn run_uv_sync(
     Ok(status)
 }
 
-/// Run `uv lock --upgrade-package <package> --project <tools>` synchronously,
-/// inheriting stdio. Used by `toolr project venv upgrade` to bump a single
-/// package's pin in `tools/uv.lock` before re-syncing.
-pub fn run_uv_lock_upgrade(
+/// Run `uv lock --project <tools>` synchronously, inheriting stdio.
+/// Used by `toolr project venv lock` to refresh `tools/uv.lock` without
+/// applying the new pins to the venv. The `upgrade` arg controls
+/// whether `uv` is asked to re-resolve some or all dependencies; see
+/// [`UpgradeMode`].
+pub fn run_uv_lock(
     uv: &UvBinary,
     tools_dir: &Path,
     resolved: &ResolvedVenv,
-    package: &str,
+    upgrade: &UpgradeMode,
+    quiet: bool,
 ) -> Result<ExitStatus> {
     let mut cmd = Command::new(&uv.path); // nosemgrep: rust.actix.command-injection.rust-actix-command-injection.rust-actix-command-injection
     cmd.arg("lock")
-        .arg("--upgrade-package")
-        .arg(package)
         .arg("--project")
         .arg(tools_dir)
         .env("UV_PROJECT_ENVIRONMENT", &resolved.venv_dir)
         .env_remove("VIRTUAL_ENV");
+    if quiet {
+        cmd.arg("--quiet");
+    }
     if let Some(version) = resolved.config.python_version.as_ref() {
         cmd.arg("--python").arg(version);
     }
+    upgrade.append_args(&mut cmd);
     cmd.status()
         .with_context(|| format!("spawning uv at {}", uv.path.display()))
 }
@@ -494,7 +499,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn run_uv_lock_upgrade_passes_package_and_project_args() {
+    fn run_uv_lock_with_none_mode_calls_uv_lock_with_no_upgrade_args() {
         use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
         let tmp = TempDir::new().unwrap();
@@ -509,17 +514,74 @@ mod tests {
             version: (0, 4, 0),
             source: crate::uv::UvSource::Path,
         };
-
         let venv = tmp.path().join("venv");
         let resolved = dummy_resolved(venv);
-        run_uv_lock_upgrade(&uv, tmp.path(), &resolved, "toolr-py")
+
+        run_uv_lock(&uv, tmp.path(), &resolved, &UpgradeMode::None, /*quiet=*/ false)
             .expect("stub uv should succeed");
 
         let dump = fs::read_to_string(&argdump).unwrap();
         assert!(dump.contains("lock"), "args: {dump}");
-        assert!(dump.contains("--upgrade-package"), "args: {dump}");
-        assert!(dump.contains("toolr-py"), "args: {dump}");
         assert!(dump.contains("--project"), "args: {dump}");
+        assert!(!dump.contains("--upgrade"), "args should not contain --upgrade: {dump}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_uv_lock_with_all_mode_passes_upgrade() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let argdump = tmp.path().join("argdump");
+        let stub = tmp.path().join("uv");
+        let mut f = fs::File::create(&stub).unwrap();
+        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        drop(f);
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+        let uv = UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        };
+        let venv = tmp.path().join("venv");
+        let resolved = dummy_resolved(venv);
+
+        run_uv_lock(&uv, tmp.path(), &resolved, &UpgradeMode::All, /*quiet=*/ false)
+            .expect("stub uv should succeed");
+
+        let dump = fs::read_to_string(&argdump).unwrap();
+        assert!(dump.lines().any(|l| l == "--upgrade"), "args: {dump}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_uv_lock_with_packages_mode_passes_each_upgrade_package() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let argdump = tmp.path().join("argdump");
+        let stub = tmp.path().join("uv");
+        let mut f = fs::File::create(&stub).unwrap();
+        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        drop(f);
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+        let uv = UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: crate::uv::UvSource::Path,
+        };
+        let venv = tmp.path().join("venv");
+        let resolved = dummy_resolved(venv);
+
+        let mode = UpgradeMode::Packages(vec!["foo".into(), "bar".into()]);
+        run_uv_lock(&uv, tmp.path(), &resolved, &mode, /*quiet=*/ false)
+            .expect("stub uv should succeed");
+
+        let dump = fs::read_to_string(&argdump).unwrap();
+        let occurrences = dump.lines().filter(|l| *l == "--upgrade-package").count();
+        assert_eq!(occurrences, 2, "expected 2 --upgrade-package tokens: {dump}");
+        assert!(dump.contains("foo"));
+        assert!(dump.contains("bar"));
     }
 
     #[test]

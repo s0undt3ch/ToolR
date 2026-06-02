@@ -317,7 +317,13 @@ fn venv_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
     let (resolved, uv) =
         toolr_core::project::ensure_venv_ready(&cwd, consent, toolr_core::project::EnsureOpts::default())?;
 
-    let lock_status = toolr_core::venv::run_uv_lock_upgrade(&uv, &tools_dir, &resolved, package)?;
+    let lock_status = toolr_core::venv::run_uv_lock(
+        &uv,
+        &tools_dir,
+        &resolved,
+        &toolr_core::venv::UpgradeMode::Packages(vec![package.to_string()]),
+        /*quiet=*/ false,
+    )?;
     if !lock_status.success() {
         anyhow::bail!(
             "`uv lock --upgrade-package {package}` failed with exit code {:?}",
