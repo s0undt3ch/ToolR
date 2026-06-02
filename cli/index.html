@@ -1200,6 +1200,39 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#project-venv-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        toolr project venv lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#project-venv-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        toolr project venv add
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#project-venv-remove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        toolr project venv remove
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#project-venv-path" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2012,6 +2045,39 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#project-venv-lock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        toolr project venv lock
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#project-venv-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        toolr project venv add
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#project-venv-remove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        toolr project venv remove
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#project-venv-path" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2336,6 +2402,9 @@ unattended-safe path (silent on success, silent on benign exits like
 "not a toolr repo" or "uv install needs consent"); see
 <a href="../installation/mise/#auto-sync-the-tools-venv-on-shell-enter">Auto-sync the tools venv on shell-enter</a>
 for the mise enter-hook recipe that builds on <code>--quiet</code>.</p>
+<p>Pass <code>-U</code> to re-resolve every package to its latest allowed version
+before syncing, or <code>-P &lt;pkg&gt;</code> (repeatable) to re-resolve specific
+packages only.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>sync<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)
@@ -2343,49 +2412,107 @@ for the mise enter-hook recipe that builds on <code>--quiet</code>.</p>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Usage: toolr project venv sync [OPTIONS]
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
 </span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>Options:
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  -f, --force  Re-run `uv sync` even when the freshness stamp says the venv is up to date
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>  -q, --quiet  Silent on success and on benign unattended-mode exits (no toolr/uv output)
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  -h, --help   Print help
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  -f, --force                      Re-run `uv sync` even when the freshness stamp says the venv is
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>                                   up to date
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  -q, --quiet                      Silent on success and on benign unattended-mode exits (no
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>                                   toolr/uv output)
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>  -U, --upgrade                    Re-resolve every package (passes --upgrade to uv). Combine with
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>                                   -P to also force specific packages.
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>  -P, --upgrade-package &lt;PACKAGE&gt;  Re-resolve a single package; pass repeatedly for multiple. Each
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>                                   &lt;PACKAGE&gt; must be declared in tools/pyproject.toml.
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>  -h, --help                       Print help
 </span></code></pre></div>
 <p>Runs the full sync flow (see <a href="../project-config/#interaction-with-toolr-project-venv-sync">Project configuration → sync
 interaction</a>).</p>
+<h3 id="project-venv-lock"><code>toolr project venv lock</code><a class="headerlink" href="#project-venv-lock" title="Permanent link">&para;</a></h3>
+<p>Refresh <code>tools/uv.lock</code> without touching the venv (wraps <code>uv lock</code>).
+Use this when you want to record updated resolutions in the lock file
+before deciding whether to apply them.</p>
+<p>Pass <code>-U</code> to re-resolve every package, or <code>-P &lt;pkg&gt;</code> (repeatable) to
+re-resolve specific packages only.</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>lock<span class="w"> </span>--help
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>Refresh tools/uv.lock without applying (wraps `uv lock`)
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Usage: toolr project venv lock [OPTIONS]
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>Options:
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>  -q, --quiet                      Pass --quiet to uv
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>  -U, --upgrade                    Re-resolve every package (--upgrade)
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>  -P, --upgrade-package &lt;PACKAGE&gt;  Re-resolve a single package; pass repeatedly for multiple
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>  -h, --help                       Print help
+</span></code></pre></div>
+<h3 id="project-venv-add"><code>toolr project venv add</code><a class="headerlink" href="#project-venv-add" title="Permanent link">&para;</a></h3>
+<p>Add one or more packages to <code>tools/pyproject.toml</code> and sync the venv
+(wraps <code>uv add</code>). Package specs follow uv's format:
+<code>name</code>, <code>name@version</code>, <code>name&gt;=1.2</code>, etc.</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>add<span class="w"> </span>--help
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Add one or more packages to tools/pyproject.toml (wraps `uv add`)
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>Usage: toolr project venv add [OPTIONS] &lt;PACKAGE&gt;...
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>Arguments:
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>  &lt;PACKAGE&gt;...  Package spec (`name`, `name@version`, `name&gt;=1.2`, …) — passed through to uv
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>Options:
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>  -q, --quiet  Pass --quiet to uv
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>  -h, --help   Print help
+</span></code></pre></div>
+<h3 id="project-venv-remove"><code>toolr project venv remove</code><a class="headerlink" href="#project-venv-remove" title="Permanent link">&para;</a></h3>
+<p>Remove one or more packages from <code>tools/pyproject.toml</code> and sync the
+venv (wraps <code>uv remove</code>). The package must already appear in
+<code>tools/pyproject.toml</code> — passing an undeclared name is an error.</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>remove<span class="w"> </span>--help
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>Usage: toolr project venv remove [OPTIONS] &lt;PACKAGE&gt;...
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>Arguments:
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>  &lt;PACKAGE&gt;...  Package name to remove (must already appear in tools/pyproject.toml)
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>Options:
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>  -q, --quiet  Pass --quiet to uv
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>  -h, --help   Print help
+</span></code></pre></div>
 <h3 id="project-venv-path"><code>toolr project venv path</code><a class="headerlink" href="#project-venv-path" title="Permanent link">&para;</a></h3>
 <p>Print the absolute path to the resolved tools venv. Useful for
 shell-scripting or sanity-checking <code>venv-location</code>.</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>path<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>path<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>Print the absolute path to the tools venv
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Usage: toolr project venv path
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>Options:
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>  -h, --help  Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>Print the absolute path to the tools venv
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>Usage: toolr project venv path
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>Options:
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>  -h, --help  Print help
 </span></code></pre></div>
 <h3 id="project-venv-shell"><code>toolr project venv shell</code><a class="headerlink" href="#project-venv-shell" title="Permanent link">&para;</a></h3>
 <p>Spawn a subshell with the tools venv activated. <code>$VIRTUAL_ENV</code> is set,
 <code>$PATH</code> is prepended with the venv's <code>bin/</code>, and <code>$TOOLR_VENV</code> carries
 the venv path for prompt customisation.</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>shell<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>shell<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Spawn a subshell with the tools venv activated
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>Usage: toolr project venv shell
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>Options:
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>  -h, --help  Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>Spawn a subshell with the tools venv activated
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>Usage: toolr project venv shell
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>Options:
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>  -h, --help  Print help
 </span></code></pre></div>
 <h3 id="project-manifest-rebuild"><code>toolr project manifest rebuild</code><a class="headerlink" href="#project-manifest-rebuild" title="Permanent link">&para;</a></h3>
 <p>Regenerate the static + dynamic manifest in place. Equivalent to what
 toolr does automatically when it detects drift, but explicit and
 reportable.</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>manifest<span class="w"> </span>rebuild<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>manifest<span class="w"> </span>rebuild<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>Regenerate the static + dynamic manifest in place
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>Usage: toolr project manifest rebuild
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>Options:
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>  -h, --help  Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>Regenerate the static + dynamic manifest in place
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>Usage: toolr project manifest rebuild
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>Options:
+</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>  -h, --help  Print help
 </span></code></pre></div>
 <h2 id="toolr-self"><code>toolr self ...</code><a class="headerlink" href="#toolr-self" title="Permanent link">&para;</a></h2>
 <p>Operations on toolr itself (not on the project).</p>
@@ -2393,47 +2520,47 @@ reportable.</p>
 <p>Print the completion script for <code>&lt;shell&gt;</code> to stdout. Useful for piping
 into your own dotfiles management.</p>
 <p><strong><code>&lt;shell&gt;</code>:</strong> <code>bash</code>, <code>zsh</code>, or <code>fish</code>.</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>print<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>print<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>Print the completion script for a shell to stdout
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>Usage: toolr self completion print &lt;shell&gt;
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>Arguments:
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>  &lt;shell&gt;  Shell to emit a completion script for [possible values: bash, zsh, fish]
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>Options:
-</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>  -h, --help  Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>Print the completion script for a shell to stdout
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>Usage: toolr self completion print &lt;shell&gt;
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>Arguments:
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>  &lt;shell&gt;  Shell to emit a completion script for [possible values: bash, zsh, fish]
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>
+</span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>Options:
+</span><span id="__span-21-9"><a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>  -h, --help  Print help
 </span></code></pre></div>
 <h3 id="self-completion-install"><code>toolr self completion install &lt;shell&gt; [--force]</code><a class="headerlink" href="#self-completion-install" title="Permanent link">&para;</a></h3>
 <p>Write the completion script for <code>&lt;shell&gt;</code> into its standard location
 (<code>~/.bash_completion.d/</code>, <code>~/.zsh/completions/</code>, or
 <code>~/.config/fish/completions/</code>). <code>--force</code> overwrites an existing file
 without prompting.</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>install<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>completion<span class="w"> </span>install<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>Install the completion script for a shell into its standard location
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>Usage: toolr self completion install [OPTIONS] &lt;shell&gt;
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>
-</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>Arguments:
-</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>  &lt;shell&gt;  Shell to install the completion script for [possible values: bash, zsh, fish]
-</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>
-</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>Options:
-</span><span id="__span-17-9"><a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>      --force  Overwrite an existing differing file without prompting
-</span><span id="__span-17-10"><a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>  -h, --help   Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>Install the completion script for a shell into its standard location
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>Usage: toolr self completion install [OPTIONS] &lt;shell&gt;
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>Arguments:
+</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a>  &lt;shell&gt;  Shell to install the completion script for [possible values: bash, zsh, fish]
+</span><span id="__span-23-7"><a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a>
+</span><span id="__span-23-8"><a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a>Options:
+</span><span id="__span-23-9"><a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a>      --force  Overwrite an existing differing file without prompting
+</span><span id="__span-23-10"><a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>  -h, --help   Print help
 </span></code></pre></div>
 <h3 id="self-cache-list"><code>toolr self cache list</code><a class="headerlink" href="#self-cache-list" title="Permanent link">&para;</a></h3>
 <p>Tabular listing of every cached per-repo venv: source repo, size,
 last-used timestamp.</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>cache<span class="w"> </span>list<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>cache<span class="w"> </span>list<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>List every cached virtualenv with size and last-use timestamp
-</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
-</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>Usage: toolr self cache list
-</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>
-</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>Options:
-</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>  -h, --help  Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>List every cached virtualenv with size and last-use timestamp
+</span><span id="__span-25-2"><a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>
+</span><span id="__span-25-3"><a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>Usage: toolr self cache list
+</span><span id="__span-25-4"><a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>
+</span><span id="__span-25-5"><a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>Options:
+</span><span id="__span-25-6"><a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a>  -h, --help  Print help
 </span></code></pre></div>
 <h3 id="self-cache-prune"><code>toolr self cache prune</code><a class="headerlink" href="#self-cache-prune" title="Permanent link">&para;</a></h3>
 <p>Remove orphan and stale cache entries.</p>
@@ -2445,18 +2572,18 @@ last-used timestamp.</p>
 <li><code>--stale-after-days &lt;DAYS&gt;</code> — override the default staleness
   threshold (30 days).</li>
 </ul>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>cache<span class="w"> </span>prune<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>cache<span class="w"> </span>prune<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>Remove orphan and stale cache entries
-</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>
-</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>Usage: toolr self cache prune [OPTIONS]
-</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>
-</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>Options:
-</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>      --all                      Remove every cache entry
-</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>      --stale-after-days &lt;DAYS&gt;  Override the staleness threshold [default: 30]
-</span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>      --dry-run                  Show what would be deleted without deleting
-</span><span id="__span-21-9"><a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>  -y, --yes                      Skip confirmation when used with --all
-</span><span id="__span-21-10"><a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a>  -h, --help                     Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>Remove orphan and stale cache entries
+</span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>
+</span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a>Usage: toolr self cache prune [OPTIONS]
+</span><span id="__span-27-4"><a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>
+</span><span id="__span-27-5"><a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a>Options:
+</span><span id="__span-27-6"><a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a>      --all                      Remove every cache entry
+</span><span id="__span-27-7"><a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a>      --stale-after-days &lt;DAYS&gt;  Override the staleness threshold [default: 30]
+</span><span id="__span-27-8"><a id="__codelineno-27-8" name="__codelineno-27-8" href="#__codelineno-27-8"></a>      --dry-run                  Show what would be deleted without deleting
+</span><span id="__span-27-9"><a id="__codelineno-27-9" name="__codelineno-27-9" href="#__codelineno-27-9"></a>  -y, --yes                      Skip confirmation when used with --all
+</span><span id="__span-27-10"><a id="__codelineno-27-10" name="__codelineno-27-10" href="#__codelineno-27-10"></a>  -h, --help                     Print help
 </span></code></pre></div>
 <h3 id="self-build-manifest"><code>toolr self build-manifest &lt;package&gt;</code><a class="headerlink" href="#self-build-manifest" title="Permanent link">&para;</a></h3>
 <p>Generate a <code>toolr-manifest.json</code> fragment for a third-party package by
@@ -2477,23 +2604,23 @@ subprocess, no <code>pip install -e .</code> required.</p>
   package's default location.</li>
 <li><code>--schema-version N</code> — pin the emitted <code>toolr_schema_version</code>.</li>
 </ul>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>build-manifest<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>build-manifest<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>Generate a third-party manifest fragment for a package
-</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>
-</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>Usage: toolr self build-manifest [OPTIONS] [PACKAGE]
-</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>
-</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>Arguments:
-</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a>  [PACKAGE]  Dotted Python package name to introspect (looked up in the tools venv)
-</span><span id="__span-23-7"><a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a>
-</span><span id="__span-23-8"><a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a>Options:
-</span><span id="__span-23-9"><a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a>      --source-dir &lt;PATH&gt;   Path to the package&#39;s source tree (bypasses the tools-venv lookup)
-</span><span id="__span-23-10"><a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>      --package &lt;PKG&gt;       Package name to embed in the fragment when using --source-dir (defaults
-</span><span id="__span-23-11"><a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a>                            to the leaf directory name)
-</span><span id="__span-23-12"><a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a>      --output &lt;PATH&gt;       Override the output path
-</span><span id="__span-23-13"><a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a>      --schema-version &lt;N&gt;  Pin the emitted schema version
-</span><span id="__span-23-14"><a id="__codelineno-23-14" name="__codelineno-23-14" href="#__codelineno-23-14"></a>      --check               Verify the on-disk manifest matches regeneration
-</span><span id="__span-23-15"><a id="__codelineno-23-15" name="__codelineno-23-15" href="#__codelineno-23-15"></a>  -h, --help                Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>Generate a third-party manifest fragment for a package
+</span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>
+</span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a>Usage: toolr self build-manifest [OPTIONS] [PACKAGE]
+</span><span id="__span-29-4"><a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a>
+</span><span id="__span-29-5"><a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a>Arguments:
+</span><span id="__span-29-6"><a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a>  [PACKAGE]  Dotted Python package name to introspect (looked up in the tools venv)
+</span><span id="__span-29-7"><a id="__codelineno-29-7" name="__codelineno-29-7" href="#__codelineno-29-7"></a>
+</span><span id="__span-29-8"><a id="__codelineno-29-8" name="__codelineno-29-8" href="#__codelineno-29-8"></a>Options:
+</span><span id="__span-29-9"><a id="__codelineno-29-9" name="__codelineno-29-9" href="#__codelineno-29-9"></a>      --source-dir &lt;PATH&gt;   Path to the package&#39;s source tree (bypasses the tools-venv lookup)
+</span><span id="__span-29-10"><a id="__codelineno-29-10" name="__codelineno-29-10" href="#__codelineno-29-10"></a>      --package &lt;PKG&gt;       Package name to embed in the fragment when using --source-dir (defaults
+</span><span id="__span-29-11"><a id="__codelineno-29-11" name="__codelineno-29-11" href="#__codelineno-29-11"></a>                            to the leaf directory name)
+</span><span id="__span-29-12"><a id="__codelineno-29-12" name="__codelineno-29-12" href="#__codelineno-29-12"></a>      --output &lt;PATH&gt;       Override the output path
+</span><span id="__span-29-13"><a id="__codelineno-29-13" name="__codelineno-29-13" href="#__codelineno-29-13"></a>      --schema-version &lt;N&gt;  Pin the emitted schema version
+</span><span id="__span-29-14"><a id="__codelineno-29-14" name="__codelineno-29-14" href="#__codelineno-29-14"></a>      --check               Verify the on-disk manifest matches regeneration
+</span><span id="__span-29-15"><a id="__codelineno-29-15" name="__codelineno-29-15" href="#__codelineno-29-15"></a>  -h, --help                Print help
 </span></code></pre></div>
 <p>See also: <a href="../third-party/">Third-party packages</a>.</p>
 <h2 id="internal-subcommands">Internal subcommands<a class="headerlink" href="#internal-subcommands" title="Permanent link">&para;</a></h2>
