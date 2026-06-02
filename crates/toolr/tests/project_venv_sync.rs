@@ -11,6 +11,10 @@ use std::fs;
 use assert_cmd::Command;
 use tempfile::TempDir;
 
+#[path = "common/mod.rs"]
+mod common;
+use common::VenvFixture;
+
 fn cargo_bin() -> Command {
     Command::cargo_bin("toolr").unwrap()
 }
@@ -99,4 +103,78 @@ fn sync_help_lists_force_and_quiet() {
         stdout.contains("no-op when fresh") || stdout.contains("freshness stamp"),
         "help should describe the new no-op-when-fresh default: {stdout}"
     );
+}
+
+/// `venv sync --help` lists the new -U / -P flags.
+#[test]
+fn sync_help_lists_upgrade_flags() {
+    let output = cargo_bin()
+        .args(["project", "venv", "sync", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "help should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--upgrade"), "help missing --upgrade: {stdout}");
+    assert!(stdout.contains("--upgrade-package"), "help missing --upgrade-package: {stdout}");
+}
+
+/// `venv sync -P` with an unknown package fails the pyproject pre-flight
+/// guard the same way `venv upgrade` used to.
+#[test]
+fn sync_dash_p_errors_when_package_not_declared() {
+    let tmp = TempDir::new().unwrap();
+    fs::create_dir(tmp.path().join("tools")).unwrap();
+    fs::write(
+        tmp.path().join("tools/pyproject.toml"),
+        r#"[project]
+name = "tools"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+]
+
+[tool.toolr]
+venv-location = "cache"
+"#,
+    )
+    .unwrap();
+
+    let output = cargo_bin()
+        .current_dir(tmp.path())
+        .args(["project", "venv", "sync", "-P", "nonexistent-package"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not declared"),
+        "expected validation error, stderr was:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("nonexistent-package"),
+        "stderr should name the package, stderr was:\n{stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_dash_p_success_path_invokes_uv_sync_with_upgrade_package() {
+    let fx = VenvFixture::new();
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env("PATH", &fx.bin_dir)
+        .current_dir(&fx.root)
+        .args(["project", "venv", "sync", "-P", "requests"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    let argv = fx.uv_argv();
+    assert!(argv.lines().any(|l| l == "sync"), "uv argv should contain `sync`; got:\n{argv}");
+    assert!(
+        argv.lines().any(|l| l == "--upgrade-package"),
+        "uv argv should contain `--upgrade-package`; got:\n{argv}"
+    );
+    assert!(argv.contains("requests"), "uv argv should contain `requests`; got:\n{argv}");
 }

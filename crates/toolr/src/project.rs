@@ -5,7 +5,7 @@ use std::io::{IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
@@ -19,7 +19,9 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
             Some(("path", _)) => venv_path(),
             Some(("shell", _)) => venv_shell(),
             Some(("sync", sync_m)) => venv_sync(sync_m),
-            Some(("upgrade", upgrade_m)) => venv_upgrade(upgrade_m),
+            Some(("lock", lock_m)) => venv_lock(lock_m),
+            Some(("add", add_m)) => venv_add(add_m),
+            Some(("remove", remove_m)) => venv_remove(remove_m),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
@@ -38,7 +40,7 @@ fn deps_migration_hint() -> Result<ExitCode> {
     eprintln!("error: `project deps` was removed in 0.22");
     eprintln!("hint: use `toolr project venv` instead");
     eprintln!("       project deps sync       →  toolr project venv sync");
-    eprintln!("       project deps upgrade …  →  toolr project venv upgrade …");
+    eprintln!("       project deps upgrade …  →  toolr project venv sync -U <pkg>");
     eprintln!("see CHANGELOG.md (0.22 BREAKING) for the rename");
     Ok(ExitCode::from(2))
 }
@@ -225,20 +227,40 @@ fn manifest_rebuild() -> Result<ExitCode> {
 fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
     let force = matches.get_flag("force");
     let quiet = matches.get_flag("quiet");
+    let upgrade_all = matches.get_flag("upgrade");
+    let upgrade_pkgs: Vec<String> = matches
+        .get_many::<String>("upgrade-package")
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
 
+    let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs.clone());
+
+    // Pre-flight pyproject guard for -P entries (matches the old
+    // `venv upgrade` behavior). -U on its own skips the check because
+    // uv re-locks everything.
     let cwd = std::env::current_dir()?;
+    if !upgrade_pkgs.is_empty() {
+        let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+        let pyproject = repo_root.join("tools/pyproject.toml");
+        for pkg in &upgrade_pkgs {
+            if !pyproject_declares_dependency(&pyproject, pkg)? {
+                anyhow::bail!(
+                    "package `{pkg}` is not declared in {} — add it to `[project] dependencies` first",
+                    pyproject.display(),
+                );
+            }
+        }
+    }
+
     let mut consent = toolr_core::uv::install::ConsentMode::from_env();
     if quiet {
-        // Unattended path: never prompt. If uv is missing and we have
-        // no env-level consent, return Refuse silently and the guards
-        // in venv_sync_unattended_quiet_exit convert that into a
-        // benign exit 0.
         consent.silent_refuse = true;
     }
 
     let opts = toolr_core::project::EnsureOpts::default()
         .with_force_sync(force)
-        .with_quiet(quiet);
+        .with_quiet(quiet)
+        .with_upgrade(upgrade);
 
     let result = toolr_core::project::ensure_venv_ready(&cwd, consent, opts);
 
@@ -256,6 +278,143 @@ fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
             resolved.venv_dir.display(),
             uv.version.0, uv.version.1, uv.version.2,
         );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Convert (`--upgrade`, `--upgrade-package ...`) flags into the
+/// `UpgradeMode` the core layer wants. `All` wins if both are present —
+/// uv accepts the combo, but the lock-side semantics are the same as
+/// passing `-U` alone.
+fn build_upgrade_mode(all: bool, pkgs: Vec<String>) -> toolr_core::venv::UpgradeMode {
+    if all {
+        return toolr_core::venv::UpgradeMode::All;
+    }
+    if pkgs.is_empty() {
+        toolr_core::venv::UpgradeMode::None
+    } else {
+        toolr_core::venv::UpgradeMode::Packages(pkgs)
+    }
+}
+
+fn venv_lock(matches: &ArgMatches) -> Result<ExitCode> {
+    let quiet = matches.get_flag("quiet");
+    let upgrade_all = matches.get_flag("upgrade");
+    let upgrade_pkgs: Vec<String> = matches
+        .get_many::<String>("upgrade-package")
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
+        .context("locating project root for the tools venv")?;
+    let tools_dir = repo_root.join("tools");
+
+    // -P pre-flight guard — same as venv sync.
+    if !upgrade_pkgs.is_empty() {
+        let pyproject = tools_dir.join("pyproject.toml");
+        for pkg in &upgrade_pkgs {
+            if !pyproject_declares_dependency(&pyproject, pkg)? {
+                anyhow::bail!(
+                    "package `{pkg}` is not declared in {} — add it to `[project] dependencies` first",
+                    pyproject.display(),
+                );
+            }
+        }
+    }
+
+    let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
+
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+    )?;
+
+    let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
+    if !status.success() {
+        anyhow::bail!(
+            "`uv lock` failed with exit code {:?}",
+            status.code(),
+        );
+    }
+
+    if !quiet {
+        println!("toolr: refreshed {}", tools_dir.join("uv.lock").display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn venv_add(matches: &ArgMatches) -> Result<ExitCode> {
+    let quiet = matches.get_flag("quiet");
+    let specs: Vec<String> = matches
+        .get_many::<String>("packages")
+        .expect("clap marks this required")
+        .cloned()
+        .collect();
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
+        .context("locating project root for the tools venv")?;
+    let tools_dir = repo_root.join("tools");
+
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+    )?;
+
+    let status = toolr_core::venv::run_uv_add(&uv, &tools_dir, &resolved, &specs, quiet)?;
+    if !status.success() {
+        anyhow::bail!("`uv add` failed with exit code {:?}", status.code());
+    }
+
+    if !quiet {
+        println!("toolr: added {} to {}", specs.join(", "), tools_dir.join("pyproject.toml").display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn venv_remove(matches: &ArgMatches) -> Result<ExitCode> {
+    let quiet = matches.get_flag("quiet");
+    let packages: Vec<String> = matches
+        .get_many::<String>("packages")
+        .expect("clap marks this required")
+        .cloned()
+        .collect();
+
+    let cwd = std::env::current_dir()?;
+    let repo_root = toolr_core::discovery::discover_project_root(&cwd)
+        .context("locating project root for the tools venv")?;
+    let tools_dir = repo_root.join("tools");
+
+    // Pre-flight: every named package must already be declared.
+    let pyproject = tools_dir.join("pyproject.toml");
+    for pkg in &packages {
+        if !pyproject_declares_dependency(&pyproject, pkg)? {
+            anyhow::bail!(
+                "package `{pkg}` is not declared in {} — nothing to remove",
+                pyproject.display(),
+            );
+        }
+    }
+
+    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
+        &cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+    )?;
+
+    let status = toolr_core::venv::run_uv_remove(&uv, &tools_dir, &resolved, &packages, quiet)?;
+    if !status.success() {
+        anyhow::bail!("`uv remove` failed with exit code {:?}", status.code());
+    }
+
+    if !quiet {
+        println!("toolr: removed {} from {}", packages.join(", "), pyproject.display());
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -291,61 +450,12 @@ fn venv_sync_unattended_quiet_exit(
     None
 }
 
-fn venv_upgrade(matches: &ArgMatches) -> Result<ExitCode> {
-    let package = matches
-        .get_one::<String>("package")
-        .expect("clap marks this required")
-        .as_str();
-    // Reuse the existing flow; this function used to be named deps_upgrade.
-
-    let cwd = std::env::current_dir()?;
-    let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
-    let tools_dir = repo_root.join("tools");
-
-    // Guard: `uv lock --upgrade-package` silently no-ops if the package
-    // isn't part of the dependency graph. Catch typos and "I thought I
-    // had this declared" cases up front so the user sees a real error.
-    let pyproject = tools_dir.join("pyproject.toml");
-    if !pyproject_declares_dependency(&pyproject, package)? {
-        anyhow::bail!(
-            "package `{package}` is not declared in {} — add it to `[project] dependencies` first",
-            pyproject.display(),
-        );
-    }
-
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
-    let (resolved, uv) =
-        toolr_core::project::ensure_venv_ready(&cwd, consent, toolr_core::project::EnsureOpts::default())?;
-
-    let lock_status = toolr_core::venv::run_uv_lock_upgrade(&uv, &tools_dir, &resolved, package)?;
-    if !lock_status.success() {
-        anyhow::bail!(
-            "`uv lock --upgrade-package {package}` failed with exit code {:?}",
-            lock_status.code(),
-        );
-    }
-
-    let sync_status = toolr_core::venv::run_uv_sync(&uv, &tools_dir, &resolved, /*quiet=*/ false)?;
-    if !sync_status.success() {
-        anyhow::bail!(
-            "`uv sync` after upgrade failed with exit code {:?}",
-            sync_status.code(),
-        );
-    }
-
-    println!(
-        "toolr: upgraded `{package}` in {}",
-        resolved.venv_dir.display(),
-    );
-    Ok(ExitCode::SUCCESS)
-}
-
 /// Light TOML inspection: does `[project].dependencies` (or any
 /// `[project.optional-dependencies.*]` list) name `package`?
 /// We only need to confirm presence — version pin / extras are uv's
 /// problem from here on.
 fn pyproject_declares_dependency(pyproject: &Path, package: &str) -> Result<bool> {
-    let text = std::fs::read_to_string(pyproject)
+    let text = std::fs::read_to_string(pyproject) // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
         .map_err(|e| anyhow::anyhow!("reading {}: {e}", pyproject.display()))?;
     let parsed: toml::Value = toml::from_str(&text)
         .map_err(|e| anyhow::anyhow!("parsing {}: {e}", pyproject.display()))?;
@@ -708,5 +818,36 @@ dev = ["pytest", "ruff"]
             s.starts_with(">="),
             "expected >= prefix, got: {s}",
         );
+    }
+
+    #[test]
+    fn build_upgrade_mode_none_when_nothing_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(false, vec![]);
+        assert!(matches!(m, UpgradeMode::None));
+    }
+
+    #[test]
+    fn build_upgrade_mode_all_when_upgrade_flag_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(true, vec![]);
+        assert!(matches!(m, UpgradeMode::All));
+    }
+
+    #[test]
+    fn build_upgrade_mode_all_wins_over_packages_when_both_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(true, vec!["foo".into()]);
+        assert!(matches!(m, UpgradeMode::All));
+    }
+
+    #[test]
+    fn build_upgrade_mode_packages_when_only_dash_p_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(false, vec!["foo".into(), "bar".into()]);
+        match m {
+            UpgradeMode::Packages(p) => assert_eq!(p, vec!["foo".to_string(), "bar".to_string()]),
+            other => panic!("expected Packages, got {other:?}"),
+        }
     }
 }

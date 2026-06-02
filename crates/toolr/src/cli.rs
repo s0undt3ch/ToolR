@@ -315,16 +315,83 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .short('q')
                                     .action(ArgAction::SetTrue)
                                     .help("Silent on success and on benign unattended-mode exits (no toolr/uv output)"),
+                            )
+                            .arg(
+                                Arg::new("upgrade")
+                                    .long("upgrade")
+                                    .short('U')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific packages."),
+                            )
+                            .arg(
+                                Arg::new("upgrade-package")
+                                    .long("upgrade-package")
+                                    .short('P')
+                                    .value_name("PACKAGE")
+                                    .action(ArgAction::Append)
+                                    .help("Re-resolve a single package; pass repeatedly for multiple. Each <PACKAGE> must be declared in tools/pyproject.toml."),
                             ),
                     )
                     .subcommand(
-                        Command::new("upgrade")
-                            .about("Bump a single package's pin via `uv lock --upgrade-package` + `uv sync`")
+                        Command::new("lock")
+                            .about("Refresh tools/uv.lock without applying (wraps `uv lock`)")
                             .arg(
-                                Arg::new("package")
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .short('q')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Pass --quiet to uv"),
+                            )
+                            .arg(
+                                Arg::new("upgrade")
+                                    .long("upgrade")
+                                    .short('U')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Re-resolve every package (--upgrade)"),
+                            )
+                            .arg(
+                                Arg::new("upgrade-package")
+                                    .long("upgrade-package")
+                                    .short('P')
                                     .value_name("PACKAGE")
+                                    .action(ArgAction::Append)
+                                    .help("Re-resolve a single package; pass repeatedly for multiple"),
+                            ),
+                    )
+                    .subcommand(
+                        Command::new("add")
+                            .about("Add one or more packages to tools/pyproject.toml (wraps `uv add`)")
+                            .arg(
+                                Arg::new("packages")
+                                    .value_name("PACKAGE")
+                                    .num_args(1..)
                                     .required(true)
-                                    .help("Name of the package to upgrade (must already appear in tools/pyproject.toml)"),
+                                    .help("Package spec (`name`, `name@version`, `name>=1.2`, …) — passed through to uv"),
+                            )
+                            .arg(
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .short('q')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Pass --quiet to uv"),
+                            ),
+                    )
+                    .subcommand(
+                        Command::new("remove")
+                            .about("Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)")
+                            .arg(
+                                Arg::new("packages")
+                                    .value_name("PACKAGE")
+                                    .num_args(1..)
+                                    .required(true)
+                                    .help("Package name to remove (must already appear in tools/pyproject.toml)"),
+                            )
+                            .arg(
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .short('q')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Pass --quiet to uv"),
                             ),
                     ),
             )

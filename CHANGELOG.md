@@ -6,6 +6,34 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Notes
+
+## ⚠ Breaking changes
+
+### `project venv upgrade` removed in favour of `venv sync -U / -P`
+
+- **What changed:** `toolr project venv upgrade <pkg>` is gone.
+  Use `toolr project venv sync -U <pkg>` to upgrade a single package
+  (or `-P <pkg>` repeatedly), or `toolr project venv sync -U` to
+  re-resolve all packages.
+- **Why:** uv expresses upgrades as flags on `lock` and `sync`, not as
+  a standalone verb. Aligning toolr with uv's surface removes a
+  toolr-specific verb that didn't pull its weight.
+- **Migration:** mechanical rename. `venv upgrade foo` → `venv sync -P foo`.
+
+## 🚀 New features
+
+- *(project venv)* `lock` — wrap `uv lock` for refreshing
+  `tools/uv.lock` without applying ([#288](https://github.com/s0undt3ch/ToolR/issues/288))
+- *(project venv)* `add <package>[@<version>]…` — wrap `uv add` against
+  `tools/` ([#288](https://github.com/s0undt3ch/ToolR/issues/288))
+- *(project venv)* `remove <package>…` — wrap `uv remove` against
+  `tools/` ([#288](https://github.com/s0undt3ch/ToolR/issues/288))
+- *(project venv sync)* `-U` / `--upgrade` and `-P` / `--upgrade-package`
+  flags mirroring uv ([#288](https://github.com/s0undt3ch/ToolR/issues/288))
+
 ## 0.21.1 - 2026-06-01
 
 ### <!-- 1 -->🐛 Bug Fixes
