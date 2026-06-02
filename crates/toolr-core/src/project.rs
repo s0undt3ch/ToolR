@@ -7,20 +7,22 @@ use anyhow::{Context, Result};
 use crate::discovery::discover_project_root;
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode};
 use crate::venv::{
-    ResolvedVenv, perform_editable_installs, resolve_venv_path,
+    ResolvedVenv, UpgradeMode, perform_editable_installs, resolve_venv_path,
     sync::sync_if_needed, validate::validate_venv, warn_failures,
 };
 
 /// Options for [`ensure_venv_ready`]. Constructed via `Default::default()`
 /// plus the builder setters; new fields can be added without breaking
 /// callers that took an `EnsureOpts::default()`.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EnsureOpts {
     /// Run `uv sync` even when the freshness stamp says the venv is fresh.
     pub force_sync: bool,
     /// Forward `--quiet` to the uv subprocess. Has no effect when the
     /// stamp short-circuits sync (no uv invocation happens).
     pub quiet: bool,
+    /// Whether to pass `-U` / `-P` flags through to uv.
+    pub upgrade: UpgradeMode,
 }
 
 impl EnsureOpts {
@@ -30,6 +32,10 @@ impl EnsureOpts {
     }
     pub fn with_quiet(mut self, v: bool) -> Self {
         self.quiet = v;
+        self
+    }
+    pub fn with_upgrade(mut self, mode: UpgradeMode) -> Self {
+        self.upgrade = mode;
         self
     }
 }
@@ -47,7 +53,7 @@ pub fn ensure_venv_ready(
         .context("resolving the tools venv path")?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
-    sync_if_needed(&uv, &tools, &resolved, opts.force_sync, opts.quiet, &crate::venv::UpgradeMode::None)
+    sync_if_needed(&uv, &tools, &resolved, opts.force_sync, opts.quiet, &opts.upgrade)
         .with_context(|| format!("uv sync against {}", tools.display()))?;
     validate_venv(&resolved.venv_dir, &resolved.python)
         .context("validating the synced venv")?;
@@ -139,6 +145,17 @@ mod tests {
         let resolved = make_resolved(PathBuf::from("/"));
         let repo_root = PathBuf::from("/tmp");
         write_cache_meta_best_effort(&resolved, &repo_root);
+    }
+
+    #[test]
+    fn ensure_opts_with_upgrade_sets_mode() {
+        use crate::venv::UpgradeMode;
+        let opts = EnsureOpts::default()
+            .with_upgrade(UpgradeMode::Packages(vec!["foo".into()]));
+        match opts.upgrade {
+            UpgradeMode::Packages(ref p) => assert_eq!(p, &vec!["foo".to_string()]),
+            other => panic!("expected Packages, got {other:?}"),
+        }
     }
 
     #[test]
