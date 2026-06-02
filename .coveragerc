@@ -4,12 +4,35 @@ cover_pylib = False
 parallel = True
 concurrency = multiprocessing
 
+# `source` is a *package name* for toolr (not a path) so coverage
+# instruments every file reachable via the `toolr.*` import
+# hierarchy, regardless of whether it lives in the source tree
+# (`crates/toolr-py/python/toolr/...` — local editable install) or
+# the venv (`.venv/lib/python*/site-packages/toolr/...` — CI's wheel
+# install). The path-based form previously here dropped every hit on
+# the wheel-installed copy because the file paths didn't match the
+# configured source root, so `_decorators.py`, `_introspect.py`, and
+# `_runner.py` reported 0% in CI despite the tests actually exercising
+# them.
 source =
-  crates/toolr-py/python/
-  tests/
+  toolr
+  tests
 
 omit =
   setup.py
+
+# Map the venv install location back onto the canonical source tree
+# so `coverage combine` and the codecov upload show a single
+# normalized path (the one a developer would `git grep` for) instead
+# of one row per matrix entry / install location.
+[paths]
+toolr_py =
+  crates/toolr-py/python/toolr
+  */site-packages/toolr
+  */.venv/lib/python*/site-packages/toolr
+tests =
+  tests
+  */tests
 
 [report]
 # Regexes for lines to exclude from consideration
