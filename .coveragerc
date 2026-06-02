@@ -11,6 +11,24 @@ source =
 omit =
   setup.py
 
+# Path aliases so `coverage combine` rewrites venv-installed
+# `site-packages/toolr/...` hits back onto the canonical source tree
+# at `crates/toolr-py/python/toolr/...`. Without this, CI's
+# wheel-install of `toolr-py` (which lands in
+# `.venv/lib/python*/site-packages/toolr/`) makes coverage drop every
+# hit as "not in source" — so `_decorators.py`, `_introspect.py`, and
+# `_runner.py` report 0% even though the tests actually exercise them.
+# Local `maturin develop` is unaffected because the editable install
+# already points back at `crates/toolr-py/python/`.
+[paths]
+toolr_py =
+  crates/toolr-py/python/toolr
+  */site-packages/toolr
+  */.venv/lib/python*/site-packages/toolr
+tests =
+  tests
+  */tests
+
 [report]
 # Regexes for lines to exclude from consideration
 exclude_lines =
