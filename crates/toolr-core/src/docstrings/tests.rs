@@ -9,3 +9,7 @@ include!("error_handling_test.rs");
 
 // Round-trip guard between KNOWN_SECTION_HEADERS and detect_section.
 include!("known_headers_test.rs");
+
+// Per-section coverage for ``Docstring::full_description`` (the
+// renderer fed to clap's ``long_about`` slot).
+include!("full_description_test.rs");
