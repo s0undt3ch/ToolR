@@ -315,6 +315,21 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .short('q')
                                     .action(ArgAction::SetTrue)
                                     .help("Silent on success and on benign unattended-mode exits (no toolr/uv output)"),
+                            )
+                            .arg(
+                                Arg::new("upgrade")
+                                    .long("upgrade")
+                                    .short('U')
+                                    .action(ArgAction::SetTrue)
+                                    .help("Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific packages."),
+                            )
+                            .arg(
+                                Arg::new("upgrade-package")
+                                    .long("upgrade-package")
+                                    .short('P')
+                                    .value_name("PACKAGE")
+                                    .action(ArgAction::Append)
+                                    .help("Re-resolve a single package; pass repeatedly for multiple. Each <PACKAGE> must be declared in tools/pyproject.toml."),
                             ),
                     )
                     .subcommand(

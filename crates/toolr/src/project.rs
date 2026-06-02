@@ -225,20 +225,40 @@ fn manifest_rebuild() -> Result<ExitCode> {
 fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
     let force = matches.get_flag("force");
     let quiet = matches.get_flag("quiet");
+    let upgrade_all = matches.get_flag("upgrade");
+    let upgrade_pkgs: Vec<String> = matches
+        .get_many::<String>("upgrade-package")
+        .map(|vals| vals.cloned().collect())
+        .unwrap_or_default();
 
+    let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs.clone());
+
+    // Pre-flight pyproject guard for -P entries (matches the old
+    // `venv upgrade` behavior). -U on its own skips the check because
+    // uv re-locks everything.
     let cwd = std::env::current_dir()?;
+    if !upgrade_pkgs.is_empty() {
+        let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
+        let pyproject = repo_root.join("tools/pyproject.toml");
+        for pkg in &upgrade_pkgs {
+            if !pyproject_declares_dependency(&pyproject, pkg)? {
+                anyhow::bail!(
+                    "package `{pkg}` is not declared in {} — add it to `[project] dependencies` first",
+                    pyproject.display(),
+                );
+            }
+        }
+    }
+
     let mut consent = toolr_core::uv::install::ConsentMode::from_env();
     if quiet {
-        // Unattended path: never prompt. If uv is missing and we have
-        // no env-level consent, return Refuse silently and the guards
-        // in venv_sync_unattended_quiet_exit convert that into a
-        // benign exit 0.
         consent.silent_refuse = true;
     }
 
     let opts = toolr_core::project::EnsureOpts::default()
         .with_force_sync(force)
-        .with_quiet(quiet);
+        .with_quiet(quiet)
+        .with_upgrade(upgrade);
 
     let result = toolr_core::project::ensure_venv_ready(&cwd, consent, opts);
 
@@ -258,6 +278,21 @@ fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
         );
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Convert (`--upgrade`, `--upgrade-package ...`) flags into the
+/// `UpgradeMode` the core layer wants. `All` wins if both are present —
+/// uv accepts the combo, but the lock-side semantics are the same as
+/// passing `-U` alone.
+fn build_upgrade_mode(all: bool, pkgs: Vec<String>) -> toolr_core::venv::UpgradeMode {
+    if all {
+        return toolr_core::venv::UpgradeMode::All;
+    }
+    if pkgs.is_empty() {
+        toolr_core::venv::UpgradeMode::None
+    } else {
+        toolr_core::venv::UpgradeMode::Packages(pkgs)
+    }
 }
 
 /// Unattended-mode guard table for `venv_sync --quiet`. Returns
