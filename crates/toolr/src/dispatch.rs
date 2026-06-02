@@ -201,7 +201,7 @@ pub fn dispatch(
     if !python.is_file() {
         anyhow::bail!(
             "Python interpreter not found at {}.\n\
-             Run `toolr project deps sync` to materialise the tools venv.",
+             Run `toolr project venv sync` to materialise the tools venv.",
             python.display()
         );
     }
@@ -444,6 +444,7 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
     let consent = toolr_core::uv::install::ConsentMode {
         yes_flag: true,
         auto_install_env: true,
+        silent_refuse: false,
     };
     let uv = toolr_core::uv::ensure_uv(consent)
         .map_err(toolr_core::uv::UvError::into_anyhow)?;

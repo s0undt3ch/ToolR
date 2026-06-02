@@ -241,7 +241,7 @@ fn missing_deps_message_quotes_module_and_suggests_sync() {
     };
     let rendered = err.to_string();
     assert!(rendered.contains("`yaml`"));
-    assert!(rendered.contains("toolr project deps sync"));
+    assert!(rendered.contains("toolr project venv sync"));
     assert!(rendered.contains("tools/pyproject.toml"));
 }
 

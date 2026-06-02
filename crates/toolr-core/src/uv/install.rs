@@ -25,6 +25,10 @@ pub struct ConsentMode {
     pub yes_flag: bool,
     /// `TOOLR_AUTO_INSTALL_UV=1` is set in the environment.
     pub auto_install_env: bool,
+    /// Caller is running unattended (e.g. a shell-enter hook) and must
+    /// never prompt; if uv isn't available and `yes_flag`/`auto_install_env`
+    /// haven't pre-authorised an install, return `Refuse` silently.
+    pub silent_refuse: bool,
 }
 
 impl ConsentMode {
@@ -33,6 +37,7 @@ impl ConsentMode {
             yes_flag: false,
             auto_install_env: std::env::var_os("TOOLR_AUTO_INSTALL_UV")
                 .is_some_and(|v| v == "1"),
+            silent_refuse: false,
         }
     }
 }
@@ -52,6 +57,9 @@ pub fn decide_install(
     }
     if consent.yes_flag || consent.auto_install_env {
         return InstallDecision::Install;
+    }
+    if consent.silent_refuse {
+        return InstallDecision::Refuse;
     }
     if !stdin_tty {
         return InstallDecision::Refuse;
@@ -371,6 +379,42 @@ mod tests {
         assert_eq!(
             decide_install(false, false, ConsentMode::default(), false),
             InstallDecision::Refuse
+        );
+    }
+
+    #[test]
+    fn silent_refuse_returns_refuse_without_consent_or_tty() {
+        let consent = ConsentMode { silent_refuse: true, ..Default::default() };
+        // No path/managed uv, stdin is a TTY → without silent_refuse we'd prompt.
+        // With silent_refuse we must Refuse immediately.
+        assert_eq!(
+            decide_install(false, false, consent, true),
+            InstallDecision::Refuse,
+        );
+    }
+
+    #[test]
+    fn silent_refuse_does_not_override_already_available() {
+        let consent = ConsentMode { silent_refuse: true, ..Default::default() };
+        // uv is on PATH: silent_refuse must NOT pretend it's missing.
+        assert_eq!(
+            decide_install(true, false, consent, false),
+            InstallDecision::AlreadyAvailable,
+        );
+    }
+
+    #[test]
+    fn silent_refuse_does_not_override_explicit_consent() {
+        let consent = ConsentMode {
+            silent_refuse: true,
+            yes_flag: true,
+            ..Default::default()
+        };
+        // Caller explicitly asked for unattended install via --yes;
+        // silent_refuse must not contradict that. Explicit consent wins.
+        assert_eq!(
+            decide_install(false, false, consent, false),
+            InstallDecision::Install,
         );
     }
 

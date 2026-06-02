@@ -23,7 +23,7 @@ Python and prints:
 toolr: pre-flight check failed: `requests` is not installed in the tools venv.
 toolr:   command: my-group fetch
 toolr:   venv:    /Users/you/.cache/toolr/<repo-key>/venv
-toolr:   fix:     toolr project deps sync
+toolr:   fix:     toolr project venv sync
 toolr: (exit 78)
 ```
 
@@ -36,14 +36,14 @@ on this code to surface configuration vs application failures.
 For imports that the static parser couldn't see (deferred imports
 inside function bodies, conditional imports, etc.), toolr also
 intercepts `ImportError` from the Python subprocess. When detected,
-it appends the same `toolr project deps sync` suggestion to the
+it appends the same `toolr project venv sync` suggestion to the
 captured traceback before re-emitting it:
 
 ```text
 ModuleNotFoundError: No module named 'foo'
 
 toolr: hint: the import above failed. If `foo` should be in the tools
-toolr:       venv, run `toolr project deps sync`.
+toolr:       venv, run `toolr project venv sync`.
 ```
 
 The original traceback is preserved — toolr only adds a hint

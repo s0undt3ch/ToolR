@@ -72,7 +72,7 @@ when the two values disagree.
 
 [Conventional Commits](https://www.conventionalcommits.org/). Examples:
 
-- `feat(cli): add --quiet flag to project deps sync`
+- `feat(cli): add --quiet flag to project venv sync`
 - `fix(parser): skip dot-prefixed dirs in list_python_files`
 - `docs(internals): correct the third_party_hash File-shape bullet`
 

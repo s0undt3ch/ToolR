@@ -1,0 +1,8 @@
+Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)
+
+Usage: toolr project venv sync [OPTIONS]
+
+Options:
+  -f, --force  Re-run `uv sync` even when the freshness stamp says the venv is up to date
+  -q, --quiet  Silent on success and on benign unattended-mode exits (no toolr/uv output)
+  -h, --help   Print help

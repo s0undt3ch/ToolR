@@ -108,6 +108,79 @@ Then:
 mise run ci
 ```
 
+## Auto-sync the tools venv on shell-enter
+
+When `tools/pyproject.toml` or `tools/uv.lock` changes — say you've
+pulled a branch that bumped a dependency — `toolr`'s next invocation
+re-syncs the tools venv before doing its real work. That sync only
+happens when you actually run a `toolr` command, so the latency
+shows up at an awkward moment, on a command you ran for a different
+reason.
+
+mise's `[hooks].enter` lets you run a command every time the shell
+enters this project's directory, before you've typed anything else.
+Wiring it to `toolr project venv sync --quiet` gives you a tools
+venv that's already fresh by the time your prompt returns:
+
+```toml
+# In this project's mise.toml
+[hooks]
+enter = "toolr project venv sync --quiet"
+```
+
+That's the entire recipe. No `[tasks]` block, no
+`sources`/`outputs` configuration — `toolr project venv sync`
+honours its own freshness stamp internally, so when nothing has
+changed it exits in tens of milliseconds without spawning uv. When
+the lock file has moved, it runs `uv sync --quiet` exactly once and
+updates the stamp.
+
+The recipe works identically for every project, regardless of
+whether `[tool.toolr] venv-location` is `cache` (the default, under
+`$XDG_CACHE_HOME/toolr/<repo-key>/venv/`) or `in-tree`
+(`tools/.venv/`) — the freshness stamp lives inside the venv either
+way, and the recipe never hard-codes a venv path.
+
+### Unattended-mode guards
+
+`--quiet` does more than suppress output: it also tells `toolr` that
+it's running in an unattended context where blocking on a TTY prompt
+would freeze the shell. To honour that, `--quiet` exits 0 silently
+in three benign situations:
+
+- The current directory isn't a toolr-using repo (no
+  `tools/pyproject.toml`). The hook fires on every `cd` even into
+  non-toolr directories; this is normal, not an error.
+- `tools/uv.lock` is missing. The user probably hasn't run
+  `toolr project init` yet — that's their next step, not something
+  the hook should report.
+- `uv` isn't installed and `TOOLR_AUTO_INSTALL_UV=1` isn't set.
+  The hook can't reasonably prompt for consent on every shell
+  enter, so it stays out of the way.
+
+Genuine failures — an unparsable lock file, a `uv sync` that exits
+non-zero — still print their error to stderr and exit non-zero, so
+they aren't silently masked.
+
+### First-time bootstrap
+
+The first time you set up a project, run `toolr project venv sync`
+once **without** `--quiet`. That's the run that will install uv if
+needed (with a normal consent prompt) and materialise the venv. From
+then on the enter-hook keeps it fresh:
+
+```sh
+toolr project venv sync     # one-time, interactive
+cd ..; cd back              # enter-hook now keeps it fresh
+```
+
+### Project- vs. machine-scoped
+
+The hook lives in the project's own `mise.toml`. It is **not** a
+global setting — every project that wants this behaviour opts in by
+adding the line. That keeps non-toolr projects free of unexpected
+post-`cd` work.
+
 ## Common commands
 
 ```sh

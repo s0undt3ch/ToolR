@@ -87,20 +87,28 @@ toolr project init --help
 
 See also: [Quickstart](quickstart.md), [Project configuration](project-config.md).
 
-### `toolr project deps sync` {#project-deps-sync}
+### `toolr project venv sync` {#project-venv-sync}
 
-Materialise (or refresh) the tools venv via `uv sync`.
+Sync the tools venv against `tools/pyproject.toml` and `tools/uv.lock`.
+
+Default behaviour is idempotent — when the freshness stamp says the
+venv is up to date, `sync` exits immediately without spawning `uv`.
+Pass `--force` to re-run unconditionally. Pass `--quiet` for an
+unattended-safe path (silent on success, silent on benign exits like
+"not a toolr repo" or "uv install needs consent"); see
+[Auto-sync the tools venv on shell-enter](installation/mise.md#auto-sync-the-tools-venv-on-shell-enter)
+for the mise enter-hook recipe that builds on `--quiet`.
 
 ```sh
-toolr project deps sync --help
+toolr project venv sync --help
 ```
 
 ```text
---8<-- "docs/cli-files/project-deps-sync-help.txt"
+--8<-- "docs/cli-files/project-venv-sync-help.txt"
 ```
 
 Runs the full sync flow (see [Project configuration → sync
-interaction](project-config.md#interaction-with-toolr-project-deps-sync)).
+interaction](project-config.md#interaction-with-toolr-project-venv-sync)).
 
 ### `toolr project venv path` {#project-venv-path}
 
@@ -262,4 +270,4 @@ won't pick up dynamically-registered commands.
 
 Force-install a managed copy of uv into `$XDG_DATA_HOME/toolr/bin/`,
 bypassing the usual consent prompt. Used by the install scripts and
-by `toolr project deps sync` after a consent flow.
+by `toolr project venv sync` after a consent flow.

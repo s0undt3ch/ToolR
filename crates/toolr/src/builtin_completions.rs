@@ -28,8 +28,7 @@ use toolr_core::manifest::{
 pub fn built_in_completion_entries() -> (Vec<Group>, Vec<Command>) {
     let groups = vec![
         top_group("project", "Operations on the current repo's tools/ directory"),
-        child_group("deps", "project", "Tools-venv dependency management"),
-        child_group("venv", "project", "Inspect or activate the tools venv"),
+        child_group("venv", "project", "Inspect, sync, and operate on the tools venv"),
         child_group("manifest", "project", "Manage the project's toolr manifest"),
         top_group("self", "Operations on toolr itself"),
         child_group("cache", "self", "Manage the cache of per-repo virtualenvs"),
@@ -51,13 +50,24 @@ pub fn built_in_completion_entries() -> (Vec<Group>, Vec<Command>) {
                 flag("quiet"),
             ],
         ),
-        leaf("sync", "project.deps", "Run `uv sync` against tools/", vec![]),
         leaf("path", "project.venv", "Print the absolute path to the tools venv", vec![]),
         leaf(
             "shell",
             "project.venv",
             "Spawn a subshell with the tools venv activated",
             vec![],
+        ),
+        leaf(
+            "sync",
+            "project.venv",
+            "Sync the tools venv (no-op when fresh)",
+            vec![flag("force"), flag("quiet")],
+        ),
+        leaf(
+            "upgrade",
+            "project.venv",
+            "Bump a single package's pin via `uv lock --upgrade-package` + `uv sync`",
+            vec![positional("package")],
         ),
         leaf(
             "rebuild",
@@ -242,10 +252,40 @@ mod tests {
     fn project_offers_known_subcommands() {
         let m = merged_empty_manifest();
         let out = serve_completions(&m, &tokens(&["project", ""]));
-        for expected in ["init", "deps", "venv", "manifest"] {
+        for expected in ["init", "venv", "manifest"] {
             assert!(
                 out.contains(&expected.to_string()),
                 "missing {expected} in {out:?}"
+            );
+        }
+        // `deps` was removed in 0.22 and must NOT appear as a completion
+        // candidate (it would mislead users into trying the old path).
+        assert!(
+            !out.contains(&"deps".to_string()),
+            "`deps` should not be a completion candidate, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn project_venv_offers_path_shell_sync_upgrade() {
+        let m = merged_empty_manifest();
+        let out = serve_completions(&m, &tokens(&["project", "venv", ""]));
+        for expected in ["path", "shell", "sync", "upgrade"] {
+            assert!(
+                out.contains(&expected.to_string()),
+                "missing {expected} under project venv, got: {out:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn project_venv_sync_offers_force_and_quiet_flags() {
+        let m = merged_empty_manifest();
+        let out = serve_completions(&m, &tokens(&["project", "venv", "sync", "--"]));
+        for expected in ["--force", "--quiet"] {
+            assert!(
+                out.contains(&expected.to_string()),
+                "missing {expected} in project venv sync flags, got: {out:?}"
             );
         }
     }

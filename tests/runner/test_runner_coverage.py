@@ -166,7 +166,7 @@ def test_load_spec_rejects_unknown_schema_version(make_spec_file: Callable[..., 
     msg = str(exc_info.value)
     # The error must tell the user exactly which command to run, and must
     # name both schema versions so they understand which side is stale.
-    assert "toolr project deps upgrade toolr-py" in msg, msg
+    assert "toolr project venv upgrade toolr-py" in msg, msg
     assert f"schema {SCHEMA_VERSION}" in msg, msg
     assert f"schema {SCHEMA_VERSION + 99}" in msg, msg
 
@@ -547,7 +547,7 @@ def test_run_returns_1_on_unhandled_exception(
     assert "kaboom" in err
     # Non-import errors must not trigger the missing-dep hint, otherwise
     # the hint would be noise on every command failure.
-    assert "toolr project deps sync" not in err
+    assert "toolr project venv sync" not in err
 
 
 def test_run_emits_missing_dep_hint_for_function_body_importerror(
@@ -556,7 +556,7 @@ def test_run_emits_missing_dep_hint_for_function_body_importerror(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A bare `ImportError` inside the command body must surface the
-    styled "run `toolr project deps sync`" hint on stderr.
+    styled "run `toolr project venv sync`" hint on stderr.
 
     This is the case the old Rust-side post-mortem used to handle by
     parsing captured stderr; now the runner emits the hint itself
@@ -573,7 +573,7 @@ def test_run_emits_missing_dep_hint_for_function_body_importerror(
     err = capsys.readouterr().err
     assert "ImportError" in err
     assert "`optional_pkg`" in err
-    assert "toolr project deps sync" in err
+    assert "toolr project venv sync" in err
     assert "tools/pyproject.toml" in err
 
 
@@ -600,7 +600,7 @@ def test_run_emits_missing_dep_hint_for_transitive_importerror_via_spec_error(
     err = capsys.readouterr().err
     assert "toolr runner: failed to import tools.demo" in err
     assert "`transitive_dep`" in err
-    assert "toolr project deps sync" in err
+    assert "toolr project venv sync" in err
 
 
 def test_run_falls_back_to_generic_hint_when_importerror_has_no_name(
@@ -621,7 +621,7 @@ def test_run_falls_back_to_generic_hint_when_importerror_has_no_name(
     assert run(_runner_spec(repo_root=tmp_path)) == 1
     err = capsys.readouterr().err
     assert "this module" in err
-    assert "toolr project deps sync" in err
+    assert "toolr project venv sync" in err
 
 
 # --------------------------------------------------------------------------

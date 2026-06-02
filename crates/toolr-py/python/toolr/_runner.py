@@ -164,7 +164,7 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
             f"but the toolr binary emitted schema {spec.schema_version}. "
             "The venv is out of sync with the binary.\n\n"
             "Run:\n"
-            "  toolr project deps upgrade toolr-py\n\n"
+            "  toolr project venv upgrade toolr-py\n\n"
             "Or pin the toolr binary to a version compatible with "
             f"toolr-py schema {SCHEMA_VERSION}."
         )
@@ -395,7 +395,7 @@ def invoke_dispatcher(
 
 
 def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
-    """Append the styled "run `toolr project deps sync`" hint to ``stream``.
+    """Append the styled "run `toolr project venv sync`" hint to ``stream``.
 
     The hint replaces what the Rust-side post-mortem stderr capture used
     to do — now that the runner inherits stderr (so Rich's TTY detection
@@ -404,7 +404,7 @@ def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
     missing = getattr(exc, "name", None) or "this module"
     print(
         f"\ntoolr: import `{missing}` failed at runtime. "
-        "A dependency may be missing - run `toolr project deps sync` "
+        "A dependency may be missing - run `toolr project venv sync` "
         "and check tools/pyproject.toml.",
         file=stream,
     )
@@ -455,7 +455,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # `_import_target` wraps an ImportError thrown while loading the
         # user's command module into a SpecError. Surface the missing-dep
         # hint when that's the case so a top-level or transitive import
-        # failure still gets the styled "run deps sync" guidance.
+        # failure still gets the styled "run venv sync" guidance.
         if isinstance(exc.__cause__, ImportError):
             _print_missing_dep_hint(exc.__cause__, sys.stderr)
         return 2

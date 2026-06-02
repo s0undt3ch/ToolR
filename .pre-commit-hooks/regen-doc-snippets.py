@@ -96,7 +96,7 @@ SNIPPETS: tuple[Snippet, ...] = (
     # CLI reference page — every public subcommand's --help output.
     Snippet(CLI_FILES / "toolr-help.txt", ("--help",)),
     Snippet(CLI_FILES / "project-init-help.txt", ("project", "init", "--help")),
-    Snippet(CLI_FILES / "project-deps-sync-help.txt", ("project", "deps", "sync", "--help")),
+    Snippet(CLI_FILES / "project-venv-sync-help.txt", ("project", "venv", "sync", "--help")),
     Snippet(CLI_FILES / "project-venv-path-help.txt", ("project", "venv", "path", "--help")),
     Snippet(CLI_FILES / "project-venv-shell-help.txt", ("project", "venv", "shell", "--help")),
     Snippet(
