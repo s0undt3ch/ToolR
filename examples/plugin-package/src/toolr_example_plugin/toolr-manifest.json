@@ -11,7 +11,7 @@
           "type_annotation": "str"
         }
       ],
-      "description": "",
+      "description": "Say hello to someone.",
       "function": "hello_command",
       "group": "third-party",
       "imports": [],
@@ -21,7 +21,7 @@
     },
     {
       "arguments": [],
-      "description": "",
+      "description": "Show the version of the example plugin.",
       "function": "version_command",
       "group": "third-party",
       "imports": [],
@@ -48,7 +48,7 @@
           "type_annotation": "int"
         }
       ],
-      "description": "",
+      "description": "Echo a message multiple times.",
       "function": "echo_command",
       "group": "utils",
       "imports": [],
@@ -58,7 +58,7 @@
     },
     {
       "arguments": [],
-      "description": "",
+      "description": "Show information about the example plugin.",
       "function": "info_command",
       "group": "utils",
       "imports": [],

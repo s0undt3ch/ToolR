@@ -301,13 +301,14 @@ def command_group(
             raise ValueError(err_msg)
         # Mirror the static parser (parser/groups.rs) and the `@command`
         # path (parser/commands.rs): the docstring's first paragraph
-        # populates `title` (clap's `about`); the rest populates
-        # `description` (clap's `long_about`). An explicit `title=`
-        # always wins for the short slot.
+        # populates `title` (clap's `about`); the Rust-rendered
+        # ``full_description`` (short + long + Examples/Notes/…)
+        # populates `description` (clap's `long_about`). An explicit
+        # `title=` always wins for the short slot.
         parsed_docstring = Docstring.parse(docstring)
         if not title:
             title = parsed_docstring.short_description
-        description = parsed_docstring.long_description or ""
+        description = parsed_docstring.full_description
         long_description = None
     elif description is None:
         err_msg = "You must at least pass either the 'docstring' or 'description' argument"
