@@ -1902,7 +1902,7 @@ Python and prints:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>toolr: pre-flight check failed: `requests` is not installed in the tools venv.
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>toolr:   command: my-group fetch
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>toolr:   venv:    /Users/you/.cache/toolr/&lt;repo-key&gt;/venv
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>toolr:   fix:     toolr project deps sync
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>toolr:   fix:     toolr project venv sync
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>toolr: (exit 78)
 </span></code></pre></div>
 <p>Exit code <strong>78</strong> distinguishes pre-flight failures from runtime
@@ -1912,12 +1912,12 @@ on this code to surface configuration vs application failures.</p>
 <p>For imports that the static parser couldn't see (deferred imports
 inside function bodies, conditional imports, etc.), toolr also
 intercepts <code>ImportError</code> from the Python subprocess. When detected,
-it appends the same <code>toolr project deps sync</code> suggestion to the
+it appends the same <code>toolr project venv sync</code> suggestion to the
 captured traceback before re-emitting it:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ModuleNotFoundError: No module named &#39;foo&#39;
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>toolr: hint: the import above failed. If `foo` should be in the tools
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>toolr:       venv, run `toolr project deps sync`.
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>toolr:       venv, run `toolr project venv sync`.
 </span></code></pre></div>
 <p>The original traceback is preserved — toolr only adds a hint
 underneath.</p>
