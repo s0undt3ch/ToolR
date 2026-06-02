@@ -283,14 +283,19 @@ path (``"ci.helm-diff-pr-comment"``). When dotted, everything
 before the final dot is the parent's full path; explicit
 ``parent=`` is ignored in that case.
 
-If you pass ``docstring``, you won't be allowed to pass ``description`` or ``long_description``.
-Those will be parsed by [docstring-parser](https://pypi.org/project/docstring-parser/).
-The first line of the docstring will be used as the description, the rest will be used as the long description.
+If you pass ``docstring``, you won't be allowed to pass ``description`` or
+``long_description``. The docstring is parsed with the same parser used for
+``@command`` function docstrings: the first paragraph becomes the group's
+``title`` (clap's ``about``, shown next to the group name in the parent's
+command listing) and the remainder becomes the ``description`` (clap's
+``long_about``, shown when the user runs ``toolr <group> --help``). Pass an
+explicit ``title=`` or ``description=`` to override either side.
 
 Args:
     name: Name of the command group; may include dotted parent path.
-    title: Optional short title shown in --help. Defaults to the
-        leaf name when omitted.
+    title: Optional short title shown next to the group name in the
+        parent ``--help`` listing. Defaults to the docstring's first
+        paragraph when ``docstring=`` is supplied, otherwise empty.
     description: Description for the command group
     long_description: Long description for the command group
     docstring: Docstring for the command group

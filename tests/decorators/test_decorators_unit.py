@@ -28,13 +28,16 @@ from toolr._decorators import command_group
 from toolr._exc import ToolrDeprecationWarning
 
 
-@pytest.fixture
-def clean_registry() -> Iterator[None]:
+@pytest.fixture(autouse=True)
+def _clean_registry() -> Iterator[None]:
     """Snapshot + restore the process-wide command-group storage.
 
-    Without this, registrations from one test leak into another and
-    `command_group(name, ...)` returns the cached instance instead of
-    walking the freshly-exercised code paths.
+    Autouse: every test in this module exercises ``command_group``
+    registration, and without isolation a registration from one test
+    leaks into the next so ``command_group(name, ...)`` returns the
+    cached instance instead of walking the freshly-exercised code
+    paths. The fixture has no value to inject, so consumers don't need
+    to name it as a parameter.
     """
     storage = _get_command_group_storage()
     saved = dict(storage)
@@ -70,8 +73,7 @@ def test_command_group_full_name_for_nested_returns_dotted_path():
 # --------------------------------------------------------------------
 
 
-def test_group_command_decorator_returns_callable_unchanged(clean_registry: None):
-    del clean_registry
+def test_group_command_decorator_returns_callable_unchanged():
     g = command_group("legacy", "Legacy", description="Legacy group for tests")
 
     with warnings.catch_warnings():
@@ -86,8 +88,7 @@ def test_group_command_decorator_returns_callable_unchanged(clean_registry: None
     assert f.__name__ == "f"
 
 
-def test_group_command_with_explicit_name_returns_decorator(clean_registry: None):
-    del clean_registry
+def test_group_command_with_explicit_name_returns_decorator():
     g = command_group("legacy", "Legacy", description="Legacy group for tests")
     with warnings.catch_warnings():
         warnings.simplefilter("error", ToolrDeprecationWarning)
@@ -99,10 +100,9 @@ def test_group_command_with_explicit_name_returns_decorator(clean_registry: None
     assert decorator(f) is f
 
 
-def test_parent_command_group_method_still_emits_deprecation(clean_registry: None):
+def test_parent_command_group_method_still_emits_deprecation():
     """The bound-subgroup form (`parent.command_group("child", ...)`) is
     still on track for removal in toolr 1.0 — guard the warning stays."""
-    del clean_registry
     parent = command_group("legacy_parent", "Parent", description="Parent group")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", ToolrDeprecationWarning)
@@ -163,10 +163,7 @@ def test_command_parameterised_form_with_string_first_arg():
 # --------------------------------------------------------------------
 
 
-def test_command_group_with_dotted_name_splits_into_parent_and_leaf(
-    clean_registry: None,
-):
-    del clean_registry
+def test_command_group_with_dotted_name_splits_into_parent_and_leaf():
     g = command_group("docker.diff", "Docker Diff", description="Docker diff group")
     assert g.name == "diff"
     assert g.parent == "tools.docker"
@@ -174,10 +171,8 @@ def test_command_group_with_dotted_name_splits_into_parent_and_leaf(
 
 
 def test_command_group_dotted_name_overrides_explicit_parent_with_warning(
-    clean_registry: None,
     caplog: pytest.LogCaptureFixture,
 ):
-    del clean_registry
     with caplog.at_level(logging.WARNING, logger="toolr._decorators"):
         g = command_group(
             "docker.diff", "Docker Diff", description="Docker diff group", parent="wrong"
@@ -187,10 +182,8 @@ def test_command_group_dotted_name_overrides_explicit_parent_with_warning(
 
 
 def test_command_group_dotted_name_explicit_parent_matches_no_warning(
-    clean_registry: None,
     caplog: pytest.LogCaptureFixture,
 ):
-    del clean_registry
     with caplog.at_level(logging.WARNING, logger="toolr._decorators"):
         g = command_group("docker.diff", "Docker Diff", description="Docker diff", parent="docker")
     assert g.parent == "tools.docker"
@@ -198,35 +191,57 @@ def test_command_group_dotted_name_explicit_parent_matches_no_warning(
     assert not any("dotted path" in r.message for r in caplog.records)
 
 
-def test_command_group_parent_kwarg_gets_tools_prefix(clean_registry: None):
-    del clean_registry
+def test_command_group_parent_kwarg_gets_tools_prefix():
     g = command_group("diff", description="Diff", parent="docker")
     assert g.parent == "tools.docker"
 
 
-def test_command_group_parent_already_prefixed_left_alone(clean_registry: None):
-    del clean_registry
+def test_command_group_parent_already_prefixed_left_alone():
     g = command_group("diff", description="Diff", parent="tools.docker")
     assert g.parent == "tools.docker"
 
 
-def test_command_group_with_no_parent_defaults_to_tools(clean_registry: None):
-    del clean_registry
+def test_command_group_with_no_parent_defaults_to_tools():
     g = command_group("ci", description="CI")
     assert g.parent == "tools"
 
 
-def test_command_group_blank_title_defaults_to_leaf_name(clean_registry: None):
-    del clean_registry
+def test_command_group_blank_title_stays_empty_when_no_docstring():
+    # With no `docstring=` to populate it, an unset title stays empty —
+    # clap renders the group name on its own in the parent listing rather
+    # than duplicating the leaf name as a redundant "about" string.
     g = command_group("ci", description="CI")
-    assert g.title == "ci"
+    assert g.title == ""
+
+
+def test_command_group_docstring_first_paragraph_becomes_title():
+    g = command_group("ci", docstring="Short title for parent listing.")
+    assert g.title == "Short title for parent listing."
+    assert g.description == ""
+
+
+def test_command_group_docstring_long_paragraph_becomes_description():
+    g = command_group(
+        "ci",
+        docstring="Short title for parent listing.\n\nLonger prose shown by --help only.",
+    )
+    assert g.title == "Short title for parent listing."
+    assert g.description == "Longer prose shown by --help only."
+
+
+def test_command_group_explicit_title_overrides_docstring_short():
+    g = command_group(
+        "ci",
+        "Explicit Title",
+        docstring="Short title from docstring.\n\nLong paragraph kept as description.",
+    )
+    assert g.title == "Explicit Title"
+    assert g.description == "Long paragraph kept as description."
 
 
 def test_command_group_returns_existing_instance_on_second_call(
-    clean_registry: None,
     caplog: pytest.LogCaptureFixture,
 ):
-    del clean_registry
     first = command_group("ci", "CI", description="CI")
     with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
         second = command_group("ci", "CI", description="CI")

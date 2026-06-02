@@ -6,14 +6,14 @@
     {
       "name": "db",
       "title": "Database lifecycle",
-      "description": "Database lifecycle commands.\n\nExercise: ``arg_section`` for grouping related flags in ``--help``,\nthe string-attached ``@command(group=...)`` form, mixed positional\nand keyword-only arguments, and a Google-style docstring with\n``Args:`` and ``Examples:`` sections.\n",
+      "description": "Exercise: ``arg_section`` for grouping related flags in ``--help``,\nthe string-attached ``@command(group=...)`` form, mixed positional\nand keyword-only arguments, and a Google-style docstring with\n``Args:`` and ``Examples:`` sections.",
       "parent": null,
       "origin": "static"
     },
     {
       "name": "greet",
       "title": "Say hello in various ways",
-      "description": "Greeting commands.\n\nExercise: top-level group, two commands, the bound and the\nstring-attached ``@command`` forms, a ``str`` argument with a\ndefault, a ``bool`` flag, and an ``Annotated[str, arg(...)]``\nmetavar override.\n",
+      "description": "Exercise: top-level group, two commands, the bound and the\nstring-attached ``@command`` forms, a ``str`` argument with a\ndefault, a ``bool`` flag, and an ``Annotated[str, arg(...)]``\nmetavar override.",
       "parent": null,
       "origin": "static"
     }

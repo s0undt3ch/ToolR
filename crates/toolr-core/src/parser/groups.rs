@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use ruff_python_ast::{Expr, ExprCall, ModModule, Stmt, StmtAssign};
 
+use super::parse_docstring;
 use crate::manifest::{Group, Origin};
 
 /// A group binding extracted from source. The `var` is the Python local name
@@ -178,21 +179,22 @@ fn parse_group_call(
     } else {
         (raw_name, parent)
     };
-    let title = call
-        .arguments
-        .args
-        .get(1)
-        .and_then(literal_str)
+    let positional_title = call.arguments.args.get(1).and_then(literal_str);
+    let explicit_description =
+        description_kwarg(call).or_else(|| call.arguments.args.get(2).and_then(literal_str));
+    // When `docstring=` is supplied, split it the same way `parser/commands.rs`
+    // splits function docstrings: the first paragraph becomes the short
+    // `title` (clap's `about`, shown in the parent's command listing) and
+    // the remainder becomes the long `description` (clap's `long_about`).
+    // Either explicit positional title / `description=` still wins so callers
+    // can override one side without losing the other.
+    let parsed_doc =
+        docstring_kwarg(call, module_docstring).and_then(|raw| parse_docstring(&raw));
+    let title = positional_title
+        .or_else(|| parsed_doc.as_ref().map(|d| d.short_description.clone()))
         .unwrap_or_default();
-    // Description precedence (matches the Python decorator's resolution
-    // order in `toolr._decorators.command_group`):
-    //   1. `description=` kwarg (explicit, wins).
-    //   2. Third positional argument.
-    //   3. `docstring=` kwarg (may resolve to module __doc__).
-    //   4. Empty string.
-    let description = description_kwarg(call)
-        .or_else(|| call.arguments.args.get(2).and_then(literal_str))
-        .or_else(|| docstring_kwarg(call, module_docstring))
+    let description = explicit_description
+        .or_else(|| parsed_doc.and_then(|d| d.long_description))
         .unwrap_or_default();
     Some(GroupBinding {
         var: var.to_string(),
@@ -261,11 +263,68 @@ mod tests {
     }
 
     #[test]
-    fn resolves_docstring_keyword_to_module_doc() {
+    fn explicit_title_keeps_docstring_long_description() {
+        // When the caller passes both a positional title and a docstring,
+        // the title wins for the short slot but the docstring's long
+        // paragraph still populates `description` (clap's `long_about`).
         let src = r#"group = command_group("ci", "CI utilities", docstring=__doc__)"#;
         let m = parse_src(src);
-        let groups = extract_groups(&m, "module-level doc", &HashMap::new());
-        assert_eq!(groups[0].group.description, "module-level doc");
+        let groups = extract_groups(
+            &m,
+            "First paragraph short.\n\nLong paragraph body.",
+            &HashMap::new(),
+        );
+        assert_eq!(groups[0].group.title, "CI utilities");
+        assert_eq!(groups[0].group.description, "Long paragraph body.");
+    }
+
+    #[test]
+    fn docstring_first_paragraph_becomes_title() {
+        // Single-line docstring: short_description fills `title`,
+        // `description` ends up empty (no long paragraph).
+        let src = r#"group = command_group("dbt-config", docstring=__doc__)"#;
+        let m = parse_src(src);
+        let groups = extract_groups(
+            &m,
+            "Paddle's dbt config and setup routines.",
+            &HashMap::new(),
+        );
+        assert_eq!(groups[0].group.title, "Paddle's dbt config and setup routines.");
+        assert_eq!(groups[0].group.description, "");
+    }
+
+    #[test]
+    fn docstring_long_paragraph_becomes_description() {
+        // Two-paragraph docstring: first paragraph → title,
+        // remainder → description.
+        let src = r#"group = command_group("ci", docstring=__doc__)"#;
+        let m = parse_src(src);
+        let groups = extract_groups(
+            &m,
+            "Short blurb for parent listing.\n\nLonger prose shown by --help only.",
+            &HashMap::new(),
+        );
+        assert_eq!(groups[0].group.title, "Short blurb for parent listing.");
+        assert_eq!(
+            groups[0].group.description,
+            "Longer prose shown by --help only."
+        );
+    }
+
+    #[test]
+    fn explicit_description_kwarg_wins_over_docstring_long() {
+        // `description=` is the explicit-override slot — when both it
+        // and a docstring are present, the kwarg keeps `description`
+        // but the docstring's first line still fills `title`.
+        let src = r#"group = command_group("ci", description="kw-desc", docstring=__doc__)"#;
+        let m = parse_src(src);
+        let groups = extract_groups(
+            &m,
+            "Short title from docstring.\n\nLong paragraph ignored.",
+            &HashMap::new(),
+        );
+        assert_eq!(groups[0].group.title, "Short title from docstring.");
+        assert_eq!(groups[0].group.description, "kw-desc");
     }
 
     #[test]

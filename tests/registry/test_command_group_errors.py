@@ -24,15 +24,23 @@ def test_command_group_with_both_docstring_and_description():
 
 
 def test_command_group_with_docstring_parsing():
-    """Test command_group with docstring parsing."""
+    """Test command_group with docstring parsing.
+
+    The docstring's first paragraph populates ``title`` (clap's ``about``)
+    and the remainder populates ``description`` (clap's ``long_about``),
+    mirroring how ``@command`` function docstrings are parsed by
+    ``crates/toolr-core/src/parser/commands.rs``. An explicit positional
+    title overrides the short slot.
+    """
     group = command_group(
         "docstring_test",
         "Docstring Test",
         docstring="Short description.\n\nLong description with more details.",
     )
 
-    assert group.description == "Short description."
-    assert group.long_description == "Long description with more details."
+    assert group.title == "Docstring Test"
+    assert group.description == "Long description with more details."
+    assert group.long_description is None
 
 
 def test_command_group_full_name_with_parent():

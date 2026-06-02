@@ -6,6 +6,16 @@ use anyhow::{Context, Result};
 use ruff_python_ast::ModModule;
 use ruff_python_parser::parse_module;
 
+/// Parse a raw docstring into the project's `Docstring` struct via the
+/// shared `SimpleDocstringParser`. Returns `None` only if the parser
+/// rejects the input (very unusual — in practice it accepts every
+/// docstring shape). Used by both `@command` function docstrings and
+/// `command_group(docstring=...)` so the "first paragraph → short,
+/// remainder → long" contract is enforced in one place.
+pub(crate) fn parse_docstring(raw: &str) -> Option<crate::Docstring> {
+    crate::SimpleDocstringParser::new().parse(raw).ok()
+}
+
 pub mod groups;
 pub use groups::{GroupBinding, extract_groups};
 
