@@ -99,6 +99,10 @@ unattended-safe path (silent on success, silent on benign exits like
 [Auto-sync the tools venv on shell-enter](installation/mise.md#auto-sync-the-tools-venv-on-shell-enter)
 for the mise enter-hook recipe that builds on `--quiet`.
 
+Pass `-U` to re-resolve every package to its latest allowed version
+before syncing, or `-P <pkg>` (repeatable) to re-resolve specific
+packages only.
+
 ```sh
 toolr project venv sync --help
 ```
@@ -109,6 +113,51 @@ toolr project venv sync --help
 
 Runs the full sync flow (see [Project configuration → sync
 interaction](project-config.md#interaction-with-toolr-project-venv-sync)).
+
+### `toolr project venv lock` {#project-venv-lock}
+
+Refresh `tools/uv.lock` without touching the venv (wraps `uv lock`).
+Use this when you want to record updated resolutions in the lock file
+before deciding whether to apply them.
+
+Pass `-U` to re-resolve every package, or `-P <pkg>` (repeatable) to
+re-resolve specific packages only.
+
+```sh
+toolr project venv lock --help
+```
+
+```text
+--8<-- "docs/cli-files/project-venv-lock-help.txt"
+```
+
+### `toolr project venv add` {#project-venv-add}
+
+Add one or more packages to `tools/pyproject.toml` and sync the venv
+(wraps `uv add`). Package specs follow uv's format:
+`name`, `name@version`, `name>=1.2`, etc.
+
+```sh
+toolr project venv add --help
+```
+
+```text
+--8<-- "docs/cli-files/project-venv-add-help.txt"
+```
+
+### `toolr project venv remove` {#project-venv-remove}
+
+Remove one or more packages from `tools/pyproject.toml` and sync the
+venv (wraps `uv remove`). The package must already appear in
+`tools/pyproject.toml` — passing an undeclared name is an error.
+
+```sh
+toolr project venv remove --help
+```
+
+```text
+--8<-- "docs/cli-files/project-venv-remove-help.txt"
+```
 
 ### `toolr project venv path` {#project-venv-path}
 
