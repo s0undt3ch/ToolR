@@ -6,6 +6,91 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.22.0 - 2026-06-02
+
+### Notes
+
+## ⚠ Breaking changes
+
+### `toolr project deps` removed; replaced by `toolr project venv`
+
+- **What changed:** the `toolr project deps` subcommand group has
+  been removed. Its two commands moved under `toolr project venv`:
+    - `toolr project deps sync` → `toolr project venv sync`
+    - `toolr project deps upgrade <pkg>` → `toolr project venv upgrade <pkg>`
+- **Behavior change on `sync`:** the new `toolr project venv sync`
+  honours the tools venv's freshness stamp by default and no-ops
+  (exit 0, no `uv sync`) when the venv is already up to date.
+  Use `--force` to re-run unconditionally — that matches what
+  `toolr project deps sync` did before.
+- **New `--quiet` flag on `sync`:** silent on success and on
+  benign unattended-mode exits ("not a toolr repo", "lock missing",
+  "uv install needs consent"). Designed for use from a mise
+  `[hooks].enter` recipe — see
+  [Auto-sync the tools venv on shell-enter](https://toolr.readthedocs.io/latest/installation/mise/#auto-sync-the-tools-venv-on-shell-enter).
+- **Migration:** running `toolr project deps <anything>` at 0.22
+  prints a tailored error pointing at the new path and exits with
+  code 2.
+- **Why:** the `deps` group only ever held venv-touching operations;
+  collapsing it under `venv` puts every tools-venv operation in one
+  place and makes room for future uv-wrapper subcommands (`add`,
+  `remove`, `lock`, …) — see
+  [#288](https://github.com/s0undt3ch/ToolR/issues/288) — to land in
+  the obvious location.
+
+### <!-- 0 -->🚀 Features
+
+- *(venv)* Thread --quiet through run_uv_sync and sync_if_needed ([`114e3bd`](https://github.com/s0undt3ch/ToolR/commit/114e3bd355232582c6b9f40c81fcbe8d99c78af8))
+- *(uv)* Add silent_refuse to ConsentMode for unattended callers ([`964921e`](https://github.com/s0undt3ch/ToolR/commit/964921e471b6242d925295ed381d16dce0b71943))
+- *(cli)* Move project deps to project venv; flip sync default ([`6d93be1`](https://github.com/s0undt3ch/ToolR/commit/6d93be1e69e9769d103dd6339a082031dd3cb7be))
+- *(completions)* Move project venv sync/upgrade; drop deps ([`6617956`](https://github.com/s0undt3ch/ToolR/commit/661795643abecdd01f5cd85c80605ee797cbe5cb))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(hints)* Point users to project venv sync, not project deps sync ([`7053a6b`](https://github.com/s0undt3ch/ToolR/commit/7053a6b8b4325724a8d5a56a25243000c9315fe2))
+- *(ci)* Update Python test assertions and changelog link for venv rename ([`699a30b`](https://github.com/s0undt3ch/ToolR/commit/699a30bcb4250827300afa71e155623b15f2c87e))
+
+### <!-- 10 -->💼 Other
+
+- Add design for mise enter-hook auto-sync of tools venv ([`ede2108`](https://github.com/s0undt3ch/ToolR/commit/ede2108af24fce0638154779e2b7c2756826adf2))
+- Add implementation plan for mise-enter-hook auto-sync ([`fdb0fb2`](https://github.com/s0undt3ch/ToolR/commit/fdb0fb20384b297dde3414187f6c51c7e90edc1d))
+- Link design + plan to follow-up issue #288 ([`c5a8fea`](https://github.com/s0undt3ch/ToolR/commit/c5a8feaaad63a333dd01639e58effe8604e4b699))
+- Archive mise-enter-auto-sync design + plan (implemented) ([`e7833a2`](https://github.com/s0undt3ch/ToolR/commit/e7833a2b3b35fc65a892b5728fc11a3fce6e921f))
+- Design venv ↔ uv parity (drop venv upgrade, add lock/add/remove) ([`0f4676d`](https://github.com/s0undt3ch/ToolR/commit/0f4676d42fcdc237c645d10c9a0a7cc9daa29dd9))
+- Implementation plan for venv ↔ uv parity ([`6eeb250`](https://github.com/s0undt3ch/ToolR/commit/6eeb25093ad42e9912d7a719eb60168d4f785246))
+- Introduce UpgradeMode enum ([`051b382`](https://github.com/s0undt3ch/ToolR/commit/051b3829f9f1c728fb4ec47ce92c385e8ac0326e))
+- Thread UpgradeMode through run_uv_sync + sync_if_needed ([`2916619`](https://github.com/s0undt3ch/ToolR/commit/291661908992b1a06b86e441065ffe4ae10f5bf9))
+- Replace run_uv_lock_upgrade with general run_uv_lock ([`9015bbf`](https://github.com/s0undt3ch/ToolR/commit/9015bbf5b973951ab717d721f27f2395716dfe90))
+- Add edit module with run_uv_add + run_uv_remove ([`485f41c`](https://github.com/s0undt3ch/ToolR/commit/485f41c63411f9be6daa2d594a15bcd22d50ee79))
+- Thread UpgradeMode through EnsureOpts ([`a8c3322`](https://github.com/s0undt3ch/ToolR/commit/a8c332270e460591c2e78d4fb3dab35ed39f965f))
+- Document venv upgrade removal + new lock/add/remove + sync -U/-P ([`5949d96`](https://github.com/s0undt3ch/ToolR/commit/5949d96cdd30892e29648347692f702b0c262657))
+- Archive venv-uv-parity design + plan (implemented) ([`1503e53`](https://github.com/s0undt3ch/ToolR/commit/1503e535083bcf4e56302a9fc94a5070ab1c383a))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(venv)* Replace ensure_venv_ready force flag with EnsureOpts ([`af7c111`](https://github.com/s0undt3ch/ToolR/commit/af7c1117f7ef23a7fdcd6aa546b2a680456655e3))
+
+### <!-- 3 -->📚 Documentation
+
+- *(snippets)* Regenerate project venv sync --help capture ([`18561a3`](https://github.com/s0undt3ch/ToolR/commit/18561a3155c2d3ecb33b1eebfe98ec0eae42efc1))
+- *(snippets)* Remove obsolete project-deps-sync help capture ([`7bf6aea`](https://github.com/s0undt3ch/ToolR/commit/7bf6aea4464e2c8df0ac302ea38249a10ef50444))
+- Rename toolr project deps references to project venv ([`5aa4c42`](https://github.com/s0undt3ch/ToolR/commit/5aa4c42d72c7a42fc4e199c5e298811085c47252))
+- *(mise)* Document the enter-hook auto-sync recipe ([`bbce59e`](https://github.com/s0undt3ch/ToolR/commit/bbce59e738bcfd13917523df550254d5832248fd))
+- *(unreleased)* Note the project deps → project venv rename ([`c5489b1`](https://github.com/s0undt3ch/ToolR/commit/c5489b10bb8f9da525a74693201672b13e02e33f))
+- Regenerate cli-files snippets for venv lock/add/remove + sync -U/-P ([`6c49bd2`](https://github.com/s0undt3ch/ToolR/commit/6c49bd2b443594c93eed862ea99e04e29687cdc9))
+- Cover venv lock/add/remove and migrate venv upgrade references ([`fcdbb97`](https://github.com/s0undt3ch/ToolR/commit/fcdbb977b34b76e6319f2ff51d3f285cbb23d1a7))
+
+### <!-- 6 -->🧪 Testing
+
+- *(cli)* Update smoke assertions to project venv sync ([`ea462ce`](https://github.com/s0undt3ch/ToolR/commit/ea462ceae140a17346751dab91b7a1d39a75677d))
+- *(cli)* Rename project_deps_upgrade to project_venv_upgrade ([`35405fb`](https://github.com/s0undt3ch/ToolR/commit/35405fb524115ca80b45dfa885dbc888987d9c79))
+- *(cli)* Integration coverage for project venv sync flag matrix ([`fb1574f`](https://github.com/s0undt3ch/ToolR/commit/fb1574f451611cb3030d94c675f116ddee08a1d0))
+- *(deps-check)* Update missing-deps hint assertion to project venv sync ([`ffb4ca1`](https://github.com/s0undt3ch/ToolR/commit/ffb4ca173d8ca67d9459d809f67609290612832d))
+- Cover venv handler success paths via stub-uv + fake-venv fixture ([`6f4fed6`](https://github.com/s0undt3ch/ToolR/commit/6f4fed6e45960b3e1f453b1435bd86fa8ac61459))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Bump throttle action max-sleep default to 15s ([`6c40d5a`](https://github.com/s0undt3ch/ToolR/commit/6c40d5a1139bf73b7e4f783c629d30a63240b4b5))
 ## Unreleased
 
 ### Notes
