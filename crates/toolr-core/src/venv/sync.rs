@@ -27,6 +27,41 @@ pub enum Freshness {
     Fresh,
 }
 
+/// Argument shape for `uv lock` / `uv sync` upgrade behavior.
+///
+/// Mirrors uv's two flags exactly:
+/// - `--upgrade` / `-U` → re-resolve every package (`All`).
+/// - `--upgrade-package <pkg>` / `-P <pkg>` (repeatable) → re-resolve
+///   the listed packages (`Packages`).
+///
+/// `None` is the default and produces no extra args.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum UpgradeMode {
+    #[default]
+    None,
+    All,
+    Packages(Vec<String>),
+}
+
+impl UpgradeMode {
+    /// Append the matching uv argv tokens (`--upgrade` / repeated
+    /// `--upgrade-package <pkg>`) onto `cmd`. No-op for `None`.
+    #[allow(dead_code)] // wired up in Task 2 of the venv-uv-parity plan
+    pub(crate) fn append_args(&self, cmd: &mut std::process::Command) {
+        match self {
+            UpgradeMode::None => {}
+            UpgradeMode::All => {
+                cmd.arg("--upgrade");
+            }
+            UpgradeMode::Packages(pkgs) => {
+                for p in pkgs {
+                    cmd.arg("--upgrade-package").arg(p);
+                }
+            }
+        }
+    }
+}
+
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
     let lock = tools_dir.join("uv.lock");
@@ -418,5 +453,20 @@ mod tests {
         // Parent missing — create_dir_all should materialise it.
         touch_marker(&venv).unwrap();
         assert!(venv.join(FRESHNESS_MARKER).exists());
+    }
+
+    #[test]
+    fn upgrade_mode_default_is_none() {
+        assert!(matches!(UpgradeMode::default(), UpgradeMode::None));
+    }
+
+    #[test]
+    fn upgrade_mode_packages_preserves_order() {
+        let m = UpgradeMode::Packages(vec!["foo".into(), "bar".into()]);
+        if let UpgradeMode::Packages(p) = m {
+            assert_eq!(p, vec!["foo".to_string(), "bar".to_string()]);
+        } else {
+            panic!("expected Packages variant");
+        }
     }
 }
