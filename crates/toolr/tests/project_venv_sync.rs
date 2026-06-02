@@ -11,6 +11,10 @@ use std::fs;
 use assert_cmd::Command;
 use tempfile::TempDir;
 
+#[path = "common/mod.rs"]
+mod common;
+use common::VenvFixture;
+
 fn cargo_bin() -> Command {
     Command::cargo_bin("toolr").unwrap()
 }
@@ -152,4 +156,25 @@ venv-location = "cache"
         stderr.contains("nonexistent-package"),
         "stderr should name the package, stderr was:\n{stderr}"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_dash_p_success_path_invokes_uv_sync_with_upgrade_package() {
+    let fx = VenvFixture::new();
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env("PATH", &fx.bin_dir)
+        .current_dir(&fx.root)
+        .args(["project", "venv", "sync", "-P", "requests"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    let argv = fx.uv_argv();
+    assert!(argv.lines().any(|l| l == "sync"), "uv argv should contain `sync`; got:\n{argv}");
+    assert!(
+        argv.lines().any(|l| l == "--upgrade-package"),
+        "uv argv should contain `--upgrade-package`; got:\n{argv}"
+    );
+    assert!(argv.contains("requests"), "uv argv should contain `requests`; got:\n{argv}");
 }

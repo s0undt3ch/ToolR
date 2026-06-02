@@ -819,4 +819,35 @@ dev = ["pytest", "ruff"]
             "expected >= prefix, got: {s}",
         );
     }
+
+    #[test]
+    fn build_upgrade_mode_none_when_nothing_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(false, vec![]);
+        assert!(matches!(m, UpgradeMode::None));
+    }
+
+    #[test]
+    fn build_upgrade_mode_all_when_upgrade_flag_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(true, vec![]);
+        assert!(matches!(m, UpgradeMode::All));
+    }
+
+    #[test]
+    fn build_upgrade_mode_all_wins_over_packages_when_both_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(true, vec!["foo".into()]);
+        assert!(matches!(m, UpgradeMode::All));
+    }
+
+    #[test]
+    fn build_upgrade_mode_packages_when_only_dash_p_set() {
+        use toolr_core::venv::UpgradeMode;
+        let m = build_upgrade_mode(false, vec!["foo".into(), "bar".into()]);
+        match m {
+            UpgradeMode::Packages(p) => assert_eq!(p, vec!["foo".to_string(), "bar".to_string()]),
+            other => panic!("expected Packages, got {other:?}"),
+        }
+    }
 }

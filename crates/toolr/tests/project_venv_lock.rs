@@ -7,6 +7,10 @@ use std::fs;
 use assert_cmd::Command;
 use tempfile::TempDir;
 
+#[path = "common/mod.rs"]
+mod common;
+use common::VenvFixture;
+
 fn cargo_bin() -> Command {
     Command::cargo_bin("toolr").unwrap()
 }
@@ -76,4 +80,42 @@ venv-location = "cache"
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("not declared"), "stderr: {stderr}");
     assert!(stderr.contains("nonexistent-package"), "stderr: {stderr}");
+}
+
+#[cfg(unix)]
+#[test]
+fn lock_success_path_invokes_uv_lock() {
+    let fx = VenvFixture::new();
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env("PATH", &fx.bin_dir)
+        .current_dir(&fx.root)
+        .args(["project", "venv", "lock"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "venv lock should succeed; stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let argv = fx.uv_argv();
+    assert!(argv.contains("lock"), "uv argv should include `lock`; got:\n{argv}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("refreshed"), "expected `refreshed` in stdout, got: {stdout}");
+}
+
+#[cfg(unix)]
+#[test]
+fn lock_with_dash_u_passes_upgrade_to_uv() {
+    let fx = VenvFixture::new();
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env("PATH", &fx.bin_dir)
+        .current_dir(&fx.root)
+        .args(["project", "venv", "lock", "-U"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    let argv = fx.uv_argv();
+    assert!(argv.lines().any(|l| l == "--upgrade"), "missing --upgrade; got:\n{argv}");
 }
