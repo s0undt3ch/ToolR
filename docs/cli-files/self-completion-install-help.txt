@@ -1,10 +1,9 @@
+toolr self completion install
 Install the completion script for a shell into its standard location
-
-Usage: toolr self completion install [OPTIONS] <shell>
-
-Arguments:
-  <shell>  Shell to install the completion script for [possible values: bash, zsh, fish]
-
+Usage: toolr self completion install [OPTIONS]
 Options:
-      --force  Overwrite an existing differing file without prompting
-  -h, --help   Print help
+•  --force
+  Overwrite an existing differing file without prompting
+
+
+Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

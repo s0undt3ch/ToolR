@@ -1,10 +1,10 @@
+toolr project venv add
 Add one or more packages to tools/pyproject.toml (wraps `uv add`)
-
-Usage: toolr project venv add [OPTIONS] <PACKAGE>...
-
-Arguments:
-  <PACKAGE>...  Package spec (`name`, `name@version`, `name>=1.2`, …) — passed through to uv
-
+Usage: toolr project venv add [OPTIONS] PACKAGE
+• PACKAGE Package spec (`name`, `name@version`, `name>=1.2`, …) — passed through to uv
 Options:
-  -q, --quiet  Pass --quiet to uv
-  -h, --help   Print help
+• -q --quiet
+  Pass --quiet to uv
+
+
+Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

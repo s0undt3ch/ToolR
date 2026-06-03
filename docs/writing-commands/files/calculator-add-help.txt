@@ -1,14 +1,5 @@
+toolr math add
 Add two numbers together.
-
-Usage: toolr math add <a> <b>
-
-Arguments:
-  <a>
-          First number.
-
-  <b>
-          Second number.
-
+Usage: toolr math add [OPTIONS]
 Options:
-  -h, --help
-          Print help (see a summary with '-h')
+Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

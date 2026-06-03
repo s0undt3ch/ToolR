@@ -1,6 +1,5 @@
+toolr project venv path
 Print the absolute path to the tools venv
-
-Usage: toolr project venv path
-
+Usage: toolr project venv path [OPTIONS]
 Options:
-  -h, --help  Print help
+Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

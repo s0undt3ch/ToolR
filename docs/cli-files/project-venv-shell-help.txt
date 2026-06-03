@@ -1,6 +1,5 @@
+toolr project venv shell
 Spawn a subshell with the tools venv activated
-
-Usage: toolr project venv shell
-
+Usage: toolr project venv shell [OPTIONS]
 Options:
-  -h, --help  Print help
+Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

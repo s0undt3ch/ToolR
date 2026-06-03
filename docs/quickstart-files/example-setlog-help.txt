@@ -1,16 +1,21 @@
+toolr example setlog
 Set a log level (for demonstration only — does nothing).
 
-Demonstrates `Literal[...]` rendering as a `--level
-{debug,info,warning}` choice in the generated `--help` output.
-
+Demonstrates ``Literal[...]`` rendering as a
+``--level
+{debug,info,warning}`` choice in the generated ``--help`` output.
 Usage: toolr example setlog [OPTIONS]
-
 Options:
-      --level <level>
-          Which log level to use.
+•  --level
+  Which log level to use.
 
-          [default: info]
-          [possible values: debug, info, warning]
 
-  -h, --help
-          Print help (see a summary with '-h')
+•
+
+   Possible values: [debug, info, warning]
+
+•
+
+
+   Default: info
+Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>
