@@ -6,6 +6,68 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.23.0 - 2026-06-03
+
+### Notes
+
+## Enhancements
+
+### `--help` now renders the full docstring (Examples, Notes, …); `-h` stays short
+
+Building on the title/description split shipped in 0.22.1, both
+`command_group(docstring=__doc__)` and `@command`-decorated function
+docstrings now feed clap a multi-section render for `long_about`. The
+first paragraph still drives the short `about` slot (shown next to the
+name in the parent listing and on `-h`), but `--help` now shows the
+short summary plus the long body plus any `Examples` / `Notes` /
+`Warnings` / `See Also` / `References` / `Todo` / `Deprecated` /
+`Version Added` sections from the docstring. `Args:` / `Arguments:`
+stay out of the prose — they already appear as per-argument help
+blocks.
+
+Side-effects:
+
+- `toolr <group> <cmd> -h` and `toolr <group> <cmd> --help` now differ:
+  short form is just the summary, long form is the full render. The
+  previous behaviour of always printing the long form on both was a
+  paper-over from when `description` carried only the body paragraph.
+- The shared rendering logic now lives exclusively in Rust
+  (`toolr_core::docstrings::Docstring::full_description`), exposed to
+  Python via PyO3. The parallel Python re-implementation in
+  `toolr.utils._docstrings.Docstring.full_description` has been removed
+  so the two surfaces can't drift.
+
+See [#292](https://github.com/s0undt3ch/ToolR/issues/292).
+
+## Bug fixes
+
+### Tab completion offers `self` / `project` even outside a toolr project
+
+Running `toolr <TAB>` from a directory with no `tools/` ancestor used to
+return nothing and exit 1, so the shell fell back to filename
+completion. The binary's own `self` / `project` subtree doesn't depend
+on a project root, so it should always complete — only user-defined
+groups need a discoverable `tools/`. `run_complete` now falls back to
+an empty manifest when project discovery fails, then merges in the
+built-in completion entries so `self`, `project`, and their children
+are offered everywhere.
+
+See [#306](https://github.com/s0undt3ch/ToolR/issues/306).
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(parser)* Route description through full_description; --help shows Examples/Notes ([`d86c2bd`](https://github.com/s0undt3ch/ToolR/commit/d86c2bd9ff00cbe7980c8fa0c441cd3e0a45e32f))
+- *(coverage)* Rewrite venv paths back to source; ratchet codecov per-crate ([`61a66ea`](https://github.com/s0undt3ch/ToolR/commit/61a66ea1c0f1bca1ef0018c1c9c3d71a6dbda385))
+- *(coverage)* Switch source to package name so wheel-installed hits count ([`518b7bb`](https://github.com/s0undt3ch/ToolR/commit/518b7bb510d100530e7e678f470ac2f97ccdaf5f))
+- *(complete)* Always offer self/project built-ins, even outside a toolr project ([`e964b0c`](https://github.com/s0undt3ch/ToolR/commit/e964b0cf205714379b231ba07adcedfbf848247a))
+
+### <!-- 3 -->📚 Documentation
+
+- *(agent)* Add CLAUDE.md with workspace facts and agent behavior rules ([`95272c7`](https://github.com/s0undt3ch/ToolR/commit/95272c7f964f039d4818e3e4a526f973a419441d))
+
+### <!-- 6 -->🧪 Testing
+
+- *(docstrings)* Direct coverage for full_description sections ([`88c6811`](https://github.com/s0undt3ch/ToolR/commit/88c68118c647d64a6cf5b160bae9156ad4ef2268))
 ## 0.22.1 - 2026-06-02
 
 ### Notes
