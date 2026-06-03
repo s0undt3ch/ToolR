@@ -45,7 +45,6 @@ impl Docstring {
             if !long.is_empty() {
                 out.push_str("\n\n");
                 out.push_str(long);
-                out.push('\n');
             }
         }
 

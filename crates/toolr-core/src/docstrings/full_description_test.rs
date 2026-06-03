@@ -32,12 +32,13 @@ mod full_description_test {
     }
 
     #[test]
-    fn short_plus_long_separates_with_blank_line_and_trailing_newline() {
-        // The renderer appends ``\n\n<long>\n`` so the resulting
-        // ``long_about`` string is markdown-friendly and lets the
-        // section blocks that follow start on their own line.
+    fn short_plus_long_separates_with_blank_line() {
+        // The renderer appends ``\n\n<long>`` (no trailing newline).
+        // Each section block that follows contributes its own ``\n\n``
+        // prefix so there is always exactly one blank line of separation
+        // — whether a section follows or not.
         let out = render("Short paragraph.\n\nLong body paragraph.");
-        assert_eq!(out, "Short paragraph.\n\nLong body paragraph.\n");
+        assert_eq!(out, "Short paragraph.\n\nLong body paragraph.");
     }
 
     #[test]
@@ -188,7 +189,7 @@ Examples:
         let docstring = "Short paragraph.\n\nNotes:\n    A note.\n";
         let out = render(docstring);
         // The short paragraph is followed by either ``\n\n## Notes`` or
-        // ``\n\n<long>\n## Notes`` — never ``\n\n\n## Notes``.
+        // ``\n\n<long>\n\n## Notes`` — never ``\n\n\n## Notes``.
         assert!(
             !out.contains("\n\n\n"),
             "empty long_description produced a triple newline: {out:?}"

@@ -17,7 +17,6 @@ This is a random example.
 result = process_data("input.txt")
 ```
 
-
 ## Examples
 
 

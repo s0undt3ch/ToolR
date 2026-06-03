@@ -279,7 +279,7 @@ mod tests {
         assert_eq!(groups[0].group.title, "CI utilities");
         assert_eq!(
             groups[0].group.description,
-            "First paragraph short.\n\nLong paragraph body.\n"
+            "First paragraph short.\n\nLong paragraph body."
         );
     }
 
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(groups[0].group.title, "Short blurb for parent listing.");
         assert_eq!(
             groups[0].group.description,
-            "Short blurb for parent listing.\n\nLonger prose shown by --help only.\n"
+            "Short blurb for parent listing.\n\nLonger prose shown by --help only."
         );
     }
 
