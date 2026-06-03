@@ -39,3 +39,18 @@ Side-effects:
   so the two surfaces can't drift.
 
 See [#292](https://github.com/s0undt3ch/ToolR/issues/292).
+
+## Bug fixes
+
+### Tab completion offers `self` / `project` even outside a toolr project
+
+Running `toolr <TAB>` from a directory with no `tools/` ancestor used to
+return nothing and exit 1, so the shell fell back to filename
+completion. The binary's own `self` / `project` subtree doesn't depend
+on a project root, so it should always complete — only user-defined
+groups need a discoverable `tools/`. `run_complete` now falls back to
+an empty manifest when project discovery fails, then merges in the
+built-in completion entries so `self`, `project`, and their children
+are offered everywhere.
+
+See [#306](https://github.com/s0undt3ch/ToolR/issues/306).

@@ -130,7 +130,7 @@ def shiny(ctx):
 }
 
 #[test]
-fn silent_failure_when_no_tools_dir_anywhere() {
+fn completes_builtins_when_no_tools_dir_anywhere() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().to_path_buf();
     // GHA Windows runners ship with `C:\tools\` populated, so the
@@ -161,10 +161,24 @@ fn silent_failure_when_no_tools_dir_anywhere() {
         .args(["__complete", &cwd.to_string_lossy(), ""])
         .output()
         .unwrap();
-    // Exit code 1 with empty stderr — the shell falls back silently.
-    assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty());
-    assert!(output.stderr.is_empty(), "expected silent failure");
+    // Built-in `self` / `project` subtree doesn't depend on a project
+    // root, so completion must still offer them outside any toolr project.
+    // Only user-defined commands need a tools/ ancestor.
+    assert!(
+        output.status.success(),
+        "expected success, got {:?}, stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    for expected in ["self", "project"] {
+        assert!(
+            lines.contains(&expected),
+            "missing built-in {expected} outside a toolr project; got: {stdout}",
+        );
+    }
+    assert!(output.stderr.is_empty(), "expected silent stderr");
 }
 
 #[test]
