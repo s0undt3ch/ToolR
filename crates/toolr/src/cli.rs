@@ -60,7 +60,9 @@ fn build_group_subtree(
     children: &HashMap<Option<String>, Vec<&Group>>,
 ) -> Command {
     let full_path = group.full_path();
-    let mut g = Command::new(group.name.clone()).about(group.title.clone());
+    let mut g = Command::new(group.name.clone())
+        .disable_help_flag(true)
+        .about(group.title.clone());
     if !group.description.is_empty() {
         g = g.long_about(group.description.clone());
     }
@@ -136,6 +138,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
         .version(env!("CARGO_PKG_VERSION"))
         .about("In-project CLI tooling support")
         .styles(help_styles())
+        .disable_help_flag(true)
         .disable_help_subcommand(true)
         // `--debug` / `--quiet` and the new timing flags are root-level
         // options — they go before the subcommand (`toolr --debug ci
@@ -206,6 +209,20 @@ pub fn build_command(manifest: &Manifest) -> Command {
                      subprocess — abort if no stdout/stderr for this many \
                      seconds. Per-call `no_output_timeout_secs=` wins when set.",
                 )),
+        )
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .action(ArgAction::SetTrue)
+                .global(true)
+                .help("Print help"),
+        )
+        .arg(
+            Arg::new("help_short")
+                .short('h')
+                .action(ArgAction::SetTrue)
+                .global(true)
+                .help("Print short help"),
         );
 
     let children = children_by_parent(manifest);
@@ -223,10 +240,12 @@ pub fn build_command(manifest: &Manifest) -> Command {
 
     root = root.subcommand(
         Command::new("project")
+            .disable_help_flag(true)
             .about("Operations on the current repo's tools/ directory")
             .subcommand_required(true)
             .subcommand(
                 Command::new("init")
+                    .disable_help_flag(true)
                     .about("Scaffold tools/ in the current directory")
                     .arg(
                         Arg::new("force")
@@ -284,23 +303,29 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 // error from `dispatch_project`. Hidden from `--help`. Drop
                 // this subcommand after 0.23 once users have migrated.
                 Command::new("deps")
+                    .disable_help_flag(true)
                     .hide(true)
                     .allow_external_subcommands(true)
                     .about("(removed in 0.22) use `toolr project venv` instead"),
             )
             .subcommand(
                 Command::new("venv")
+                    .disable_help_flag(true)
                     .about("Inspect, sync, and operate on the tools venv")
                     .subcommand_required(true)
                     .subcommand(
-                        Command::new("path").about("Print the absolute path to the tools venv"),
+                        Command::new("path")
+                            .disable_help_flag(true)
+                            .about("Print the absolute path to the tools venv"),
                     )
                     .subcommand(
                         Command::new("shell")
+                            .disable_help_flag(true)
                             .about("Spawn a subshell with the tools venv activated"),
                     )
                     .subcommand(
                         Command::new("sync")
+                            .disable_help_flag(true)
                             .about("Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)")
                             .arg(
                                 Arg::new("force")
@@ -334,6 +359,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     )
                     .subcommand(
                         Command::new("lock")
+                            .disable_help_flag(true)
                             .about("Refresh tools/uv.lock without applying (wraps `uv lock`)")
                             .arg(
                                 Arg::new("quiet")
@@ -360,6 +386,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     )
                     .subcommand(
                         Command::new("add")
+                            .disable_help_flag(true)
                             .about("Add one or more packages to tools/pyproject.toml (wraps `uv add`)")
                             .arg(
                                 Arg::new("packages")
@@ -378,6 +405,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     )
                     .subcommand(
                         Command::new("remove")
+                            .disable_help_flag(true)
                             .about("Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)")
                             .arg(
                                 Arg::new("packages")
@@ -397,10 +425,12 @@ pub fn build_command(manifest: &Manifest) -> Command {
             )
             .subcommand(
                 Command::new("manifest")
+                    .disable_help_flag(true)
                     .about("Manage the project's toolr manifest")
                     .subcommand_required(true)
                     .subcommand(
                         Command::new("rebuild")
+                            .disable_help_flag(true)
                             .about("Regenerate the static + dynamic manifest in place"),
                     ),
             ),
@@ -408,11 +438,13 @@ pub fn build_command(manifest: &Manifest) -> Command {
 
     root = root.subcommand(
         Command::new("self")
+            .disable_help_flag(true)
             .about("Operations on toolr itself")
             .subcommand_required(true)
             .arg_required_else_help(true)
             .subcommand(
                 Command::new("build-manifest")
+                    .disable_help_flag(true)
                     .about("Generate a third-party manifest fragment for a package")
                     .arg(
                         Arg::new("package_positional")
@@ -462,16 +494,20 @@ pub fn build_command(manifest: &Manifest) -> Command {
             )
             .subcommand(
                 Command::new("cache")
+                    .disable_help_flag(true)
                     .about("Manage the cache of per-repo virtualenvs")
                     .subcommand_required(true)
                     .arg_required_else_help(true)
                     .subcommand(
-                        Command::new("list").about(
+                        Command::new("list")
+                            .disable_help_flag(true)
+                            .about(
                             "List every cached virtualenv with size and last-use timestamp",
                         ),
                     )
                     .subcommand(
                         Command::new("prune")
+                            .disable_help_flag(true)
                             .about("Remove orphan and stale cache entries")
                             .arg(
                                 Arg::new("all")
@@ -504,11 +540,13 @@ pub fn build_command(manifest: &Manifest) -> Command {
             )
             .subcommand(
                 Command::new("completion")
+                    .disable_help_flag(true)
                     .about("Manage shell completion scripts")
                     .subcommand_required(true)
                     .arg_required_else_help(true)
                     .subcommand(
                         Command::new("print")
+                            .disable_help_flag(true)
                             .about("Print the completion script for a shell to stdout")
                             .arg(
                                 Arg::new("shell")
@@ -519,6 +557,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     )
                     .subcommand(
                         Command::new("install")
+                            .disable_help_flag(true)
                             .about(
                                 "Install the completion script for a shell into its \
                                  standard location",
@@ -544,12 +583,14 @@ pub fn build_command(manifest: &Manifest) -> Command {
 
     root = root.subcommand(
         Command::new("__build-static-manifest")
+            .disable_help_flag(true)
             .hide(true)
             .about("(internal) Regenerate the static manifest in place"),
     );
 
     root = root.subcommand(
         Command::new("__complete")
+            .disable_help_flag(true)
             .hide(true)
             .about("(internal) Emit completion candidates for the shell scripts")
             .arg(
@@ -568,6 +609,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
 
     root = root.subcommand(
         Command::new("__install-uv-now")
+            .disable_help_flag(true)
             .hide(true)
             .about("(internal) Force-install toolr-managed uv now"),
     );
@@ -596,6 +638,7 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
         crate::markdown::render(&cmd.description)
     };
     let mut c = Command::new(cmd.name.clone())
+        .disable_help_flag(true)
         .about(summary)
         .long_about(long_about);
     for arg in &cmd.arguments {
