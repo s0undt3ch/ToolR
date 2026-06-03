@@ -79,11 +79,16 @@ ${positional-lines
 * **${key}** ${help}
 }";
 
-const TPL_SUBCOMMANDS: &str = "\
+const TPL_SUBCOMMANDS: &str = "
 **Commands:**
+|:-|:-|
+|name|description|
+|:-|:-|
 ${subcommand-lines
-* **${sub-name}** ${sub-summary}
-}";
+|${sub-name}|${sub-summary}|
+}
+|-
+";
 
 const TPL_BUGS: &str =
     "\n**Report bugs to**: <https://github.com/s0undt3ch/ToolR/issues>";
