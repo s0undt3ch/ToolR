@@ -48,7 +48,7 @@ mod full_description_test {
         let out = render(
             "Short.\n\nExamples:\n    First example.\n\n    Second example.\n",
         );
-        assert!(out.contains("Examples:"), "missing Examples header: {out}");
+        assert!(out.contains("## Examples"), "missing Examples header: {out}");
         assert!(out.contains("- First example."), "missing first example bullet: {out}");
         assert!(out.contains("- Second example."), "missing second example bullet: {out}");
     }
@@ -95,7 +95,7 @@ Examples:
     #[test]
     fn notes_section_renders_as_bullet_list() {
         let out = render("Short.\n\nNotes:\n    Heads up.\n    Second note.\n");
-        assert!(out.contains("Notes:\n"), "missing Notes header: {out}");
+        assert!(out.contains("## Notes\n"), "missing Notes header: {out}");
         assert!(out.contains("- Heads up."), "missing first note: {out}");
         assert!(out.contains("- Second note."), "missing second note: {out}");
     }
@@ -103,14 +103,14 @@ Examples:
     #[test]
     fn warnings_section_renders_as_bullet_list() {
         let out = render("Short.\n\nWarnings:\n    Be careful here.\n");
-        assert!(out.contains("Warnings:\n"), "missing Warnings header: {out}");
+        assert!(out.contains("## Warnings\n"), "missing Warnings header: {out}");
         assert!(out.contains("- Be careful here."), "missing warning bullet: {out}");
     }
 
     #[test]
     fn see_also_section_renders_as_bullet_list() {
         let out = render("Short.\n\nSee Also:\n    other_function\n    related_module\n");
-        assert!(out.contains("See Also:\n"), "missing See Also header: {out}");
+        assert!(out.contains("## See Also\n"), "missing See Also header: {out}");
         assert!(out.contains("- other_function"), "missing first see-also: {out}");
         assert!(out.contains("- related_module"), "missing second see-also: {out}");
     }
@@ -118,7 +118,7 @@ Examples:
     #[test]
     fn references_section_renders_as_bullet_list() {
         let out = render("Short.\n\nReferences:\n    https://example.com/spec\n");
-        assert!(out.contains("References:\n"), "missing References header: {out}");
+        assert!(out.contains("## References\n"), "missing References header: {out}");
         assert!(
             out.contains("- https://example.com/spec"),
             "missing reference bullet: {out}"
@@ -128,7 +128,7 @@ Examples:
     #[test]
     fn todo_section_renders_as_bullet_list() {
         let out = render("Short.\n\nTodo:\n    Improve error messages.\n");
-        assert!(out.contains("Todo:\n"), "missing Todo header: {out}");
+        assert!(out.contains("## Todo\n"), "missing Todo header: {out}");
         assert!(
             out.contains("- Improve error messages."),
             "missing todo bullet: {out}"
@@ -140,7 +140,7 @@ Examples:
         // ``Deprecated:`` is a single-string field, not a list — the
         // renderer emits ``Deprecated:\n<text>`` (no bullet).
         let out = render("Short.\n\nDeprecated:\n    Removed in 2.0.\n");
-        assert!(out.contains("Deprecated:\n"), "missing Deprecated header: {out}");
+        assert!(out.contains("## Deprecated\n"), "missing Deprecated header: {out}");
         assert!(
             out.contains("Removed in 2.0."),
             "missing deprecated body: {out}"
@@ -152,7 +152,7 @@ Examples:
         // ``Version Added:`` is a single string formatted on one line.
         let out = render("Short.\n\nVersion Added:\n    1.5.0\n");
         assert!(
-            out.contains("Version Added: 1.5.0"),
+            out.contains("## Version Added\n\n1.5.0"),
             "missing Version Added line: {out}"
         );
     }
@@ -166,7 +166,7 @@ Examples:
             "Short.\n\nVersion Changed:\n    1.2.0: tightened input validation.\n    1.4.0: added X.\n",
         );
         assert!(
-            out.contains("Version Changed:\n"),
+            out.contains("## Version Changed\n"),
             "missing Version Changed header: {out}"
         );
         assert!(
@@ -187,8 +187,8 @@ Examples:
         // must not insert a phantom ``\n\n\n`` block.
         let docstring = "Short paragraph.\n\nNotes:\n    A note.\n";
         let out = render(docstring);
-        // The short paragraph is followed by either ``\n\nNotes:`` or
-        // ``\n\n<long>\nNotes:`` — never ``\n\n\nNotes:``.
+        // The short paragraph is followed by either ``\n\n## Notes`` or
+        // ``\n\n<long>\n## Notes`` — never ``\n\n\n## Notes``.
         assert!(
             !out.contains("\n\n\n"),
             "empty long_description produced a triple newline: {out:?}"

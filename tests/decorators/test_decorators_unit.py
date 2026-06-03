@@ -266,7 +266,7 @@ def test_command_group_docstring_with_notes_section_renders_into_description():
     )
     assert g.title == "Short title."
     assert "Long body explaining the group." in g.description
-    assert "Notes:" in g.description
+    assert "## Notes" in g.description
     assert "Heads-up about something subtle." in g.description
     assert "Second note." in g.description
 

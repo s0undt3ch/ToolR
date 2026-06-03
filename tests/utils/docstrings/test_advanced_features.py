@@ -17,7 +17,9 @@ This is a random example.
 result = process_data("input.txt")
 ```
 
-Examples:
+
+## Examples
+
 
 - Basic usage - creates 5 products, 20 customers, 1 subscription each:
 
@@ -51,41 +53,45 @@ result = generate_test_data(
 )
 ```
 
-Notes:
+## Notes
 
 - Only test keys (sk_test_*) are accepted for safety.
 - This function creates realistic test data for development and testing.
 - The generated data follows Stripe's best practices for test scenarios.
 - All created objects are automatically cleaned up after 24 hours in sandbox mode.
 
-Warnings:
+## Warnings
 
 - This function will create real objects in your Stripe sandbox account.
 - Make sure you're using a test key to avoid charges.
 
-See Also:
+## See Also
 
 - stripe.Customer.create: For creating individual customers
 - stripe.Product.create: For creating individual products
 - stripe.Subscription.create: For creating individual subscriptions
 
-References:
+## References
 
 - Stripe API Documentation: https://stripe.com/docs/api
 - Test Data Best Practices: https://stripe.com/docs/testing
 
-Todo:
+## Todo
 
 - Add support for creating webhooks
 - Implement data validation before creation
 - Add progress callbacks for long-running operations
 
-Deprecated:
+## Deprecated
+
 The 'legacy_mode' parameter is deprecated and will be removed in v2.0.
 
-Version Added: 1.0.0
+## Version Added
 
-Version Changed:
+1.0.0
+
+## Version Changed
+
 - 1.2.0: Added support for payment methods and coupons
 - 1.5.0: Improved error handling and progress reporting
 """

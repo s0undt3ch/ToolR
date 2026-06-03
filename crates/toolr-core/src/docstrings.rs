@@ -50,7 +50,7 @@ impl Docstring {
         }
 
         if !self.examples.is_empty() {
-            out.push_str("\nExamples:");
+            out.push_str("\n\n## Examples\n");
             for example in &self.examples {
                 let mut description = example.description.clone();
                 if !description.starts_with("- ") && !description.starts_with("* ") {
@@ -73,17 +73,17 @@ impl Docstring {
         append_bullet_section(&mut out, "Todo", &self.todo);
 
         if let Some(deprecated) = &self.deprecated {
-            out.push_str("\n\nDeprecated:\n");
+            out.push_str("\n\n## Deprecated\n\n");
             out.push_str(deprecated);
         }
 
         if let Some(version_added) = &self.version_added {
-            out.push_str("\n\nVersion Added: ");
+            out.push_str("\n\n## Version Added\n\n");
             out.push_str(version_added);
         }
 
         if !self.version_changed.is_empty() {
-            out.push_str("\n\nVersion Changed:\n");
+            out.push_str("\n\n## Version Changed\n\n");
             for vc in &self.version_changed {
                 out.push_str("- ");
                 out.push_str(&vc.version);
@@ -97,16 +97,16 @@ impl Docstring {
     }
 }
 
-/// Append a bulleted ``Section:\n- a\n- b`` block to ``out`` when
-/// ``items`` is non-empty. Existing leading ``- ``/``* `` bullets are
-/// preserved verbatim; otherwise we prefix each line with ``- ``.
+/// Append a `## Title\n\n- a\n- b` block to ``out`` when ``items`` is
+/// non-empty. Existing leading ``- ``/``* `` bullets are preserved
+/// verbatim; otherwise we prefix each line with ``- ``.
 fn append_bullet_section(out: &mut String, title: &str, items: &[String]) {
     if items.is_empty() {
         return;
     }
-    out.push_str("\n\n");
+    out.push_str("\n\n## ");
     out.push_str(title);
-    out.push_str(":\n");
+    out.push('\n');
     for item in items {
         let prefixed = if item.starts_with("- ") || item.starts_with("* ") {
             item.clone()
