@@ -152,9 +152,7 @@ fn running_a_user_command_invokes_python_runner() {
     assert!(stdout.contains("hi Alice"), "stdout was:\n{stdout}");
 }
 
-// Re-enabled in Task 11 once dispatch intercepts --help for built-in subcommands.
 #[test]
-#[ignore]
 fn project_manifest_rebuild_help_lists_command() {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");
@@ -172,9 +170,7 @@ fn project_manifest_rebuild_help_lists_command() {
     );
 }
 
-// Re-enabled in Task 11 once dispatch intercepts --help for built-in subcommands.
 #[test]
-#[ignore]
 fn self_build_manifest_help_works() {
     let output = Command::cargo_bin("toolr")
         .unwrap()
@@ -504,9 +500,7 @@ def boom(ctx) -> None:
 }
 
 /// `toolr project venv sync --help` exists and mentions `--force` / `--quiet`.
-// Re-enabled in Task 11 once dispatch intercepts --help for built-in subcommands.
 #[test]
-#[ignore]
 fn project_venv_sync_help_lists_force_and_quiet() {
     let tmp = TempDir::new().unwrap();
     let output = Command::cargo_bin("toolr")

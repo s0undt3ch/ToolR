@@ -144,9 +144,7 @@ fn syntax_error_in_tools_warns_and_serves_cached() {
     );
 }
 
-// Re-enabled in Task 11 once dispatch intercepts --help for built-in subcommands.
 #[test]
-#[ignore]
 fn skip_list_argv_does_not_trigger_freshness() {
     let tmp = TempDir::new().unwrap();
     write_minimal_project(tmp.path());

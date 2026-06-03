@@ -89,9 +89,7 @@ fn sync_quiet_silently_exits_when_pyproject_missing() {
 /// has a parallel test; this one anchors the assertion in the
 /// venv-sync-specific test file so a future split of these test
 /// crates keeps the contract close to the behavior it tests.)
-// Re-enabled in Task 11 once dispatch intercepts --help for built-in subcommands.
 #[test]
-#[ignore]
 fn sync_help_lists_force_and_quiet() {
     let output = cargo_bin()
         .args(["project", "venv", "sync", "--help"])
@@ -108,9 +106,7 @@ fn sync_help_lists_force_and_quiet() {
 }
 
 /// `venv sync --help` lists the new -U / -P flags.
-// Re-enabled in Task 11 once dispatch intercepts --help for built-in subcommands.
 #[test]
-#[ignore]
 fn sync_help_lists_upgrade_flags() {
     let output = cargo_bin()
         .args(["project", "venv", "sync", "--help"])
