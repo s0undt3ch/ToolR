@@ -4,6 +4,7 @@ mod builtin_completions;
 mod cli;
 mod dispatch;
 mod execute_build;
+mod help;
 mod init_scaffold;
 mod init_templates;
 mod markdown;
