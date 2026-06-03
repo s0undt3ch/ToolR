@@ -196,3 +196,61 @@ Examples:
         );
     }
 }
+
+#[cfg(test)]
+mod backtick_normalization {
+    use crate::SimpleDocstringParser;
+
+    #[test]
+    fn double_backticks_collapse_to_single_in_short_description() {
+        let parser = SimpleDocstringParser::new();
+        let doc = parser.parse("Demonstrates a call to ``ctx.print``.").unwrap();
+        assert_eq!(doc.short_description, "Demonstrates a call to `ctx.print`.");
+    }
+
+    #[test]
+    fn double_backticks_collapse_in_long_description() {
+        let parser = SimpleDocstringParser::new();
+        let doc = parser
+            .parse("Short.\n\nLong with ``foo`` and ``bar``.")
+            .unwrap();
+        assert_eq!(
+            doc.long_description.as_deref(),
+            Some("Long with `foo` and `bar`.")
+        );
+    }
+
+    #[test]
+    fn triple_backticks_preserved_for_fenced_code_blocks() {
+        let parser = SimpleDocstringParser::new();
+        let doc = parser
+            .parse("Short.\n\nLong body with ```rust\nfn main() {}\n``` code block.")
+            .unwrap();
+        assert!(
+            doc.long_description
+                .as_deref()
+                .unwrap()
+                .contains("```rust"),
+            "triple backticks should pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn single_backticks_left_alone() {
+        let parser = SimpleDocstringParser::new();
+        let doc = parser.parse("Already `markdown` style.").unwrap();
+        assert_eq!(doc.short_description, "Already `markdown` style.");
+    }
+
+    #[test]
+    fn backticks_in_notes_section_normalize() {
+        let parser = SimpleDocstringParser::new();
+        let doc = parser
+            .parse("Short.\n\nNotes:\n    Use ``--force`` carefully.")
+            .unwrap();
+        assert_eq!(
+            doc.notes.first().map(String::as_str),
+            Some("Use `--force` carefully.")
+        );
+    }
+}

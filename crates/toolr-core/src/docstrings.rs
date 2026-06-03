@@ -256,6 +256,7 @@ impl SimpleDocstringParser {
         // Parse the docstring
         self.parse_docstring_content(&lines, &mut result)?;
 
+        normalize_docstring_backticks(&mut result);
         Ok(result)
     }
 
@@ -700,6 +701,75 @@ impl SimpleDocstringParser {
 impl Default for SimpleDocstringParser {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Normalise Sphinx/RST-style ``code`` (double backticks) to commonplace
+/// markdown `code` (single backticks) so downstream markdown renderers
+/// like termimad emit inline-code styling rather than rendering the
+/// double backticks literally. Triple-or-more sequences are left alone
+/// so fenced code blocks survive.
+fn normalize_rst_backticks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '`' {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len() && chars[i] == '`' {
+            i += 1;
+        }
+        let run = i - start;
+        if run == 2 {
+            out.push('`');
+        } else {
+            for _ in 0..run {
+                out.push('`');
+            }
+        }
+    }
+    out
+}
+
+fn normalize_docstring_backticks(d: &mut Docstring) {
+    d.short_description = normalize_rst_backticks(&d.short_description);
+    if let Some(long) = &d.long_description {
+        d.long_description = Some(normalize_rst_backticks(long));
+    }
+    for s in d.params.values_mut().flatten() {
+        *s = normalize_rst_backticks(s);
+    }
+    for ex in &mut d.examples {
+        ex.description = normalize_rst_backticks(&ex.description);
+        ex.snippet = normalize_rst_backticks(&ex.snippet);
+    }
+    for s in &mut d.notes {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.warnings {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.see_also {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.references {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.todo {
+        *s = normalize_rst_backticks(s);
+    }
+    if let Some(s) = &d.deprecated {
+        d.deprecated = Some(normalize_rst_backticks(s));
+    }
+    if let Some(s) = &d.version_added {
+        d.version_added = Some(normalize_rst_backticks(s));
+    }
+    for vc in &mut d.version_changed {
+        vc.description = normalize_rst_backticks(&vc.description);
     }
 }
 
