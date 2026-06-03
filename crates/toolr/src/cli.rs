@@ -151,9 +151,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .long("debug")
                 .action(ArgAction::SetTrue)
                 .help_heading(OUTPUT_HEADING)
-                .help(crate::markdown::render(
-                    "Increase verbosity (also enables `DEBUG` logging).",
-                )),
+                .help("Increase verbosity (also enables `DEBUG` logging)."),
         )
         .arg(
             Arg::new("quiet")
@@ -162,7 +160,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .action(ArgAction::SetTrue)
                 .conflicts_with("debug")
                 .help_heading(OUTPUT_HEADING)
-                .help(crate::markdown::render("Suppress non-error output.")),
+                .help("Suppress non-error output."),
         )
         .arg(
             Arg::new("timestamps")
@@ -171,9 +169,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .action(ArgAction::SetTrue)
                 .conflicts_with("no-timestamps")
                 .help_heading(OUTPUT_HEADING)
-                .help(crate::markdown::render(
-                    "Prepend ISO-8601 timestamps to log lines.",
-                )),
+                .help("Prepend ISO-8601 timestamps to log lines."),
         )
         .arg(
             Arg::new("no-timestamps")
@@ -181,9 +177,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .alias("nts")
                 .action(ArgAction::SetTrue)
                 .help_heading(OUTPUT_HEADING)
-                .help(crate::markdown::render(
-                    "Suppress log-line timestamps (default; overrides `--timestamps`).",
-                )),
+                .help("Suppress log-line timestamps (default; overrides `--timestamps`)."),
         )
         .arg(
             Arg::new("timeout-secs")
@@ -192,10 +186,10 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .value_name("SECONDS")
                 .value_parser(clap::value_parser!(f64))
                 .help_heading(OUTPUT_HEADING)
-                .help(crate::markdown::render(
+                .help(
                     "Default timeout applied to every `ctx.run(...)` subprocess \
                      (per-call `timeout_secs=` wins when set).",
-                )),
+                ),
         )
         .arg(
             Arg::new("no-output-timeout-secs")
@@ -204,11 +198,11 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .value_name("SECONDS")
                 .value_parser(clap::value_parser!(f64))
                 .help_heading(OUTPUT_HEADING)
-                .help(crate::markdown::render(
+                .help(
                     "Default no-output watchdog applied to every `ctx.run(...)` \
                      subprocess — abort if no stdout/stderr for this many \
                      seconds. Per-call `no_output_timeout_secs=` wins when set.",
-                )),
+                ),
         )
         .arg(
             Arg::new("help")
@@ -631,11 +625,11 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
     // Notes / Warnings sections, so we hand it to clap as-is. The
     // ``Args:`` section never appears here because the parser folds
     // it into per-argument help instead.
-    let summary = crate::markdown::render(&cmd.summary);
+    let summary = cmd.summary.clone();
     let long_about = if cmd.description.is_empty() {
         summary.clone()
     } else {
-        crate::markdown::render(&cmd.description)
+        cmd.description.clone()
     };
     let mut c = Command::new(cmd.name.clone())
         .disable_help_flag(true)
@@ -643,7 +637,7 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
         .long_about(long_about);
     for arg in &cmd.arguments {
         let long_flag = arg.name.replace('_', "-");
-        let mut a = Arg::new(arg.name.clone()).help(crate::markdown::render(&arg.help));
+        let mut a = Arg::new(arg.name.clone()).help(arg.help.clone());
         let is_optional_wrapper = matches!(
             arg.resolved_type,
             Some(toolr_core::parser::SupportedType::Optional(_))
