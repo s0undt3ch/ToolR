@@ -13,7 +13,7 @@ use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{
     resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
 };
-use toolr_core::manifest::Manifest;
+use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
 use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_child_args};
@@ -407,13 +407,16 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
         .get_many::<String>("args")
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
-    let Ok(resolved) = resolve_manifest_at_tab(&cwd) else {
-        return Ok(ExitCode::from(1));
-    };
+    // No `tools/` ancestor → no user-defined commands to complete, but
+    // the binary's own `self` / `project` subtree must still be offered
+    // (it doesn't depend on a project root). Fall back to an empty
+    // manifest so the built-in injection below covers the cwd.
+    let mut manifest = resolve_manifest_at_tab(&cwd)
+        .map(|r| r.manifest)
+        .unwrap_or_else(|_| empty_manifest_for_completion());
     // The engine is purely manifest-driven, but the binary owns its own
     // built-in `self` / `project` subtree. Inject synthetic entries that
     // mirror `cli::build_command` so those subcommands also complete.
-    let mut manifest = resolved.manifest;
     let (extra_groups, extra_commands) =
         crate::builtin_completions::built_in_completion_entries();
     manifest.groups.extend(extra_groups);
@@ -422,6 +425,16 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
         println!("{candidate}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn empty_manifest_for_completion() -> Manifest {
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: String::new(),
+        third_party_hash: String::new(),
+        groups: Vec::new(),
+        commands: Vec::new(),
+    }
 }
 
 fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
