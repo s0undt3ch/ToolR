@@ -8,14 +8,8 @@ Usage: toolr example setlog [OPTIONS]
 Options:
 •  --level
   Which log level to use.
-
-
 •
-
    Possible values: [debug, info, warning]
-
 •
-
-
    Default: info
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

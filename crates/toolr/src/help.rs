@@ -55,13 +55,15 @@ const TPL_TITLE: &str = "# **${name}** ${version}";
 const TPL_INTRODUCTION: &str = "${about-text}";
 const TPL_USAGE: &str = "**Usage:** `${name} [OPTIONS]${positional-args}`";
 
+// `${possible_values}` and `${default}` come from clap-help with their own
+// leading-space + label prefix (e.g. " Possible values: [a, b]", " Default: `x`"),
+// or empty when absent. Inline-concatenate them on the help line so empty values
+// disappear cleanly; on their own template lines they'd leave a stray blank row.
 const TPL_OPTIONS: &str = "\
 **Options:**
 ${option-lines
 * **${short}** **${long}** ${value-braced}
-  ${help}
-  ${possible_values}
-  ${default}
+  ${help}${possible_values}${default}
 }";
 
 const TPL_POSITIONALS: &str = "\

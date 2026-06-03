@@ -5,6 +5,4 @@ Usage: toolr project venv remove [OPTIONS] PACKAGE
 Options:
 • -q --quiet
   Pass --quiet to uv
-
-
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

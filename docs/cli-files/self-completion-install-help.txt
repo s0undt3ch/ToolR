@@ -4,6 +4,4 @@ Usage: toolr self completion install [OPTIONS]
 Options:
 •  --force
   Overwrite an existing differing file without prompting
-
-
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

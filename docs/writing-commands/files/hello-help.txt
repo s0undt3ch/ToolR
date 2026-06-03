@@ -4,10 +4,6 @@ Usage: toolr greeting hello [OPTIONS]
 Options:
 •  --name
   The name of the person to greet.
-
-
 •
-
-
    Default: World
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

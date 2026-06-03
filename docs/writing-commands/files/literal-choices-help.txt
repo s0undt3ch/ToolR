@@ -4,14 +4,8 @@ Usage: toolr logs set-level [OPTIONS]
 Options:
 •  --level
   Which level to use.
-
-
 •
-
    Possible values: [debug, info, warning, error]
-
 •
-
-
    Default: info
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>
