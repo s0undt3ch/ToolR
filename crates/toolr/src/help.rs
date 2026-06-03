@@ -53,7 +53,10 @@ fn skin_for(is_tty: bool, no_color: bool) -> MadSkin {
 
 const TPL_TITLE: &str = "# **${name}** ${version}";
 const TPL_INTRODUCTION: &str = "${about-text}";
-const TPL_USAGE: &str = "**Usage:** `${name} [OPTIONS]${positional-args}`";
+// `${usage-options}` and `${usage-commands}` are set in `render_to_string`
+// to reflect the command's actual shape — empty strings when not applicable.
+// `${positional-args}` is populated natively by clap-help.
+const TPL_USAGE: &str = "**Usage:** `${name}${usage-options}${positional-args}${usage-commands}`";
 
 // `${possible_values}` and `${default}` come from clap-help with their own
 // leading-space + label prefix (e.g. " Possible values: [a, b]", " Default: `x`"),
@@ -80,14 +83,23 @@ ${subcommand-lines
 const TPL_BUGS: &str =
     "\n**Report bugs to**: <https://github.com/s0undt3ch/ToolR/issues>";
 
-fn templates_for(mode: HelpMode, has_subcommands: bool) -> Vec<(&'static str, &'static str)> {
+fn templates_for(
+    mode: HelpMode,
+    has_options: bool,
+    has_positionals: bool,
+    has_subcommands: bool,
+) -> Vec<(&'static str, &'static str)> {
     let mut v: Vec<(&'static str, &'static str)> = vec![
         ("title", TPL_TITLE),
         ("introduction", TPL_INTRODUCTION),
         ("usage", TPL_USAGE),
-        ("positionals", TPL_POSITIONALS),
-        ("options", TPL_OPTIONS),
     ];
+    if has_positionals {
+        v.push(("positionals", TPL_POSITIONALS));
+    }
+    if has_options {
+        v.push(("options", TPL_OPTIONS));
+    }
     if has_subcommands {
         v.push(("subcommands", TPL_SUBCOMMANDS));
     }
@@ -135,6 +147,11 @@ fn render_to_string(
 ) -> String {
     let mut cmd = cmd.clone().bin_name(bin_path.to_string());
     let has_subs = cmd.get_subcommands().any(|c| !c.is_hide_set());
+    let has_options = cmd
+        .get_arguments()
+        .any(|a| !a.is_positional() && !a.is_hide_set());
+    let has_positionals = cmd.get_positionals().any(|a| !a.is_hide_set());
+    let subcommand_required = cmd.is_subcommand_required_set();
 
     // For Short mode: truncate every option's help to its first line
     // *before* `Printer::new` walks the args, so the same options
@@ -155,13 +172,28 @@ fn render_to_string(
         HelpMode::Short => cmd.get_about().map(|s| s.to_string()).unwrap_or_default(),
     };
     printer.expander_mut().set("about-text", &about_text);
+    printer
+        .expander_mut()
+        .set("usage-options", if has_options { " [OPTIONS]" } else { "" });
+    printer.expander_mut().set(
+        "usage-commands",
+        if has_subs {
+            if subcommand_required {
+                " <COMMAND>"
+            } else {
+                " [COMMAND]"
+            }
+        } else {
+            ""
+        },
+    );
 
     if has_subs {
         populate_subcommands(&mut printer, &cmd);
     }
 
     let mut out = String::new();
-    for (_, tpl_str) in templates_for(mode, has_subs) {
+    for (_, tpl_str) in templates_for(mode, has_options, has_positionals, has_subs) {
         let tpl = TextTemplate::from(tpl_str);
         let text = printer.expander_mut().expand(&tpl);
         let fmt = FmtText::from_text(&skin, text, Some(width));
@@ -169,6 +201,7 @@ fn render_to_string(
     }
     out
 }
+
 
 fn truncate_arg_help_to_first_line(mut cmd: Command) -> Command {
     let arg_ids: Vec<String> = cmd

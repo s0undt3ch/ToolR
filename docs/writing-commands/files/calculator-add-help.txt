@@ -1,5 +1,4 @@
 toolr math add
 Add two numbers together.
-Usage: toolr math add [OPTIONS]
-Options:
+Usage: toolr math add
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

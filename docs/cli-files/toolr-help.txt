@@ -1,6 +1,6 @@
 toolr 0.23.0
 In-project CLI tooling support
-Usage: toolr [OPTIONS]
+Usage: toolr [OPTIONS] [COMMAND]
 Options:
 • -d --debug
   Increase verbosity (also enables DEBUG logging).

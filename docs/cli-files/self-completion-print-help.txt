@@ -1,5 +1,4 @@
 toolr self completion print
 Print the completion script for a shell to stdout
-Usage: toolr self completion print [OPTIONS]
-Options:
+Usage: toolr self completion print
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>
