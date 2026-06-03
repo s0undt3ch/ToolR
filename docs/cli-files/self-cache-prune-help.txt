@@ -2,14 +2,13 @@ toolr self cache prune
 Remove orphan and stale cache entries
 Usage: toolr self cache prune [OPTIONS]
 Options:
-•  --all
-  Remove every cache entry
-•  --stale-after-days <DAYS>
-  Override the staleness threshold
-•
-   Default: 30
-•  --dry-run
-  Show what would be deleted without deleting
-• -y --yes
-  Skip confirmation when used with --all
+┌─────┬──────────────────┬─────┬───────────────────────────────────────────┐
+│short│       long       │value│description                                │
+├─────┼──────────────────┼─────┼───────────────────────────────────────────┤
+│     │--all             │     │Remove every cache entry                   │
+│     │--stale-after-days│DAYS │Override the staleness threshold           │
+│     │                  │     │ Default: 30                               │
+│     │--dry-run         │     │Show what would be deleted without deleting│
+│ -y  │--yes             │     │Skip confirmation when used with --all     │
+└─────┴──────────────────┴─────┴───────────────────────────────────────────┘
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

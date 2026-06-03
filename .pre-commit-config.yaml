@@ -140,6 +140,17 @@ repos:
       - id: codespell
         args:
           - --ignore-words=.codespell.words.ignore
+        # Skip the ignore-list file itself (codespell would otherwise
+        # "fix" truncated-word entries like `PACKAGE` back to `PACKAGE`)
+        # and skip captured help snippets where termimad's table renderer
+        # wraps long values mid-word.
+        exclude: |
+          (?x)^(
+            \.codespell\.words\.ignore|
+            docs/cli-files/.*\.txt|
+            docs/quickstart-files/.*\.txt|
+            docs/writing-commands/files/.*\.txt
+          )$
         additional_dependencies:
           - tomli
 

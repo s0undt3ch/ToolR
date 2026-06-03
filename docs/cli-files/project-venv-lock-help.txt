@@ -2,10 +2,11 @@ toolr project venv lock
 Refresh tools/uv.lock without applying (wraps `uv lock`)
 Usage: toolr project venv lock [OPTIONS]
 Options:
-• -q --quiet
-  Pass --quiet to uv
-• -U --upgrade
-  Re-resolve every package (--upgrade)
-• -P --upgrade-package <PACKAGE>
-  Re-resolve a single package; pass repeatedly for multiple
+┌─────┬─────────────────┬───────┬─────────────────────────────────────────────────────────┐
+│short│      long       │ value │description                                              │
+├─────┼─────────────────┼───────┼─────────────────────────────────────────────────────────┤
+│ -q  │--quiet          │       │Pass --quiet to uv                                       │
+│ -U  │--upgrade        │       │Re-resolve every package (--upgrade)                     │
+│ -P  │--upgrade-package│PACKAGE│Re-resolve a single package; pass repeatedly for multiple│
+└─────┴─────────────────┴───────┴─────────────────────────────────────────────────────────┘
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

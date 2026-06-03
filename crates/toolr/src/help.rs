@@ -58,16 +58,21 @@ const TPL_INTRODUCTION: &str = "${about-text}";
 // `${positional-args}` is populated natively by clap-help.
 const TPL_USAGE: &str = "**Usage:** `${name}${usage-options}${positional-args}${usage-commands}`";
 
+// Markdown table — mirrors clap-help's default `TEMPLATE_OPTIONS`.
 // `${possible_values}` and `${default}` come from clap-help with their own
-// leading-space + label prefix (e.g. " Possible values: [a, b]", " Default: `x`"),
-// or empty when absent. Inline-concatenate them on the help line so empty values
-// disappear cleanly; on their own template lines they'd leave a stray blank row.
-const TPL_OPTIONS: &str = "\
+// leading-space + label prefix (` Possible values: [a, b]`, ` Default: \`x\``)
+// or empty when absent, so inline concatenation keeps the description cell
+// clean whether they're present or not.
+const TPL_OPTIONS: &str = "
 **Options:**
+|:-:|:-:|:-:|:-|
+|short|long|value|description|
+|:-:|:-|:-:|:-|
 ${option-lines
-* **${short}** **${long}** ${value-braced}
-  ${help}${possible_values}${default}
-}";
+|${short}|${long}|${value}|${help}${possible_values}${default}|
+}
+|-
+";
 
 const TPL_POSITIONALS: &str = "\
 ${positional-lines

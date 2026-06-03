@@ -4,7 +4,23 @@
 # messages — including commit SHAs that occasionally collide with
 # typos' default dictionary entries (e.g. `e979ba0` triggers a `ba` ->
 # `by`/`be` suggestion). Auto-generated content shouldn't be linted.
+#
+# docs/**/*.txt captured help snippets are regenerated from
+# `toolr --help` output by `regen-doc-snippets.py`. termimad's
+# table renderer wraps long values mid-word when the value column
+# is narrow; typos flags the truncated halves as misspellings.
+# Running typos against these files just fights the renderer.
 [files]
 extend-exclude = [
     "CHANGELOG.md",
+    "docs/cli-files/*.txt",
+    "docs/quickstart-files/*.txt",
+    "docs/writing-commands/files/*.txt",
+    # The ignore-words file itself contains misspelled tokens by design
+    # (so codespell can match them in inputs). typos would auto-"fix"
+    # them, defeating the purpose.
+    ".codespell.words.ignore",
+    # Pre-commit config has a literal misspelling example in a comment
+    # to document why the codespell exclude exists. Same rationale.
+    ".pre-commit-config.yaml",
 ]

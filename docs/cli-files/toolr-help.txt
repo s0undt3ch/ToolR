@@ -2,25 +2,23 @@ toolr 0.23.0
 In-project CLI tooling support
 Usage: toolr [OPTIONS] [COMMAND]
 Options:
-• -d --debug
-  Increase verbosity (also enables DEBUG logging).
-• -q --quiet
-  Suppress non-error output.
-•  --timestamps
-  Prepend ISO-8601 timestamps to log lines.
-•  --no-timestamps
-  Suppress log-line timestamps (default; overrides --timestamps).
-•  --timeout-secs <SECONDS>
-  Default timeout applied to every ctx.run(...) subprocess (per-call timeout_secs= wins when set).
-•  --no-output-timeout-secs <SECONDS>
-  Default no-output watchdog applied to every ctx.run(...) subprocess — abort if no stdout/stderr
-for this many seconds. Per-call no_output_timeout_secs= wins when set.
-•  --help
-  Print help
-• -h
-  Print short help
-• -V --version
-  Print version
+┌─────┬────────────────────────┬───────┬───────────────────────────────────────────────────────────┐
+│short│          long          │ value │description                                                │
+├─────┼────────────────────────┼───────┼───────────────────────────────────────────────────────────┤
+│ -d  │--debug                 │       │Increase verbosity (also enables DEBUG logging).           │
+│ -q  │--quiet                 │       │Suppress non-error output.                                 │
+│     │--timestamps            │       │Prepend ISO-8601 timestamps to log lines.                  │
+│     │--no-timestamps         │       │Suppress log-line timestamps (default; overrides           │
+│     │                        │       │--timestamps).                                             │
+│     │--timeout-secs          │SECONDS│Default timeout applied to every ctx.run(...) subprocess   │
+│     │                        │       │(per-call timeout_secs= wins when set).                    │
+│     │--no-output-timeout-secs│SECONDS│Default no-output watchdog applied to every ctx.run(...)   │
+│     │                        │       │subprocess — abort if no stdout/stderr for this many       │
+│     │                        │       │seconds. Per-call no_output_timeout_secs= wins when set.   │
+│     │--help                  │       │Print help                                                 │
+│ -h  │                        │       │Print short help                                           │
+│ -V  │--version               │       │Print version                                              │
+└─────┴────────────────────────┴───────┴───────────────────────────────────────────────────────────┘
 Commands:
 • example Example commands
 • project Operations on the current repo's tools/ directory

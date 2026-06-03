@@ -3,6 +3,9 @@ Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)
 Usage: toolr project venv remove [OPTIONS] PACKAGE
 • PACKAGE Package name to remove (must already appear in tools/pyproject.toml)
 Options:
-• -q --quiet
-  Pass --quiet to uv
+┌─────┬───────┬─────┬──────────────────┐
+│short│ long  │value│description       │
+├─────┼───────┼─────┼──────────────────┤
+│ -q  │--quiet│     │Pass --quiet to uv│
+└─────┴───────┴─────┴──────────────────┘
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

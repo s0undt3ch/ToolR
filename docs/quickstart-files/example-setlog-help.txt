@@ -6,10 +6,11 @@ Demonstrates `Literal[...]` rendering as a
 {debug,info,warning}` choice in the generated `--help` output.
 Usage: toolr example setlog [OPTIONS]
 Options:
-•  --level
-  Which log level to use.
-•
-   Possible values: [debug, info, warning]
-•
-   Default: info
+┌─────┬───────┬─────┬────────────────────────────────────────┐
+│short│ long  │value│description                             │
+├─────┼───────┼─────┼────────────────────────────────────────┤
+│     │--level│     │Which log level to use.                 │
+│     │       │     │ Possible values: [debug, info, warning]│
+│     │       │     │ Default: info                          │
+└─────┴───────┴─────┴────────────────────────────────────────┘
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>
