@@ -1634,10 +1634,10 @@ cargo test --workspace
 pre-commit run --all-files
 ```
 
-Then verify the dashtastic-style scenario manually one more time:
+Then verify the real-project scenario manually one more time:
 
 ```bash
-cd /Users/pedro.algarvio/projects/paddle/dashtastic
+cd ~/projects/example-repo
 ls tools/example.py             # make sure the example file is present
 toolr --help | grep example     # should appear without `toolr project manifest rebuild`
 ```

@@ -46,7 +46,7 @@
 - Modify: `crates/toolr/Cargo.toml`
 - [ ] **Step 1: Add `clap-help` to workspace `[workspace.dependencies]`**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/Cargo.toml`. Find the `[workspace.dependencies]` table. Add:
+Open `Cargo.toml`. Find the `[workspace.dependencies]` table. Add:
 
 ```toml
 clap-help = "1.5"
@@ -56,7 +56,7 @@ Place alphabetically next to `clap = "4"`.
 
 - [ ] **Step 2: Add `clap-help` to the `toolr` crate's deps**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/crates/toolr/Cargo.toml`. In `[dependencies]`, add:
+Open `crates/toolr/Cargo.toml`. In `[dependencies]`, add:
 
 ```toml
 clap-help.workspace = true
@@ -87,7 +87,7 @@ git commit -m "deps(toolr): add clap-help 1.5 for markdown --help rendering"
 - Test: existing test file above
 - [ ] **Step 1: Update unit tests to expect heading format (red)**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/crates/toolr-core/src/docstrings/full_description_test.rs`. Read the file end-to-end first. For every assertion that contains `Examples:`, `Notes:`, `Warnings:`, `See Also:`, `References:`, `Todo:`, `Deprecated:`, `Version Added:`, or `Version Changed:` in expected output, rewrite to expect the new markdown-heading form. Examples of replacements:
+Open `crates/toolr-core/src/docstrings/full_description_test.rs`. Read the file end-to-end first. For every assertion that contains `Examples:`, `Notes:`, `Warnings:`, `See Also:`, `References:`, `Todo:`, `Deprecated:`, `Version Added:`, or `Version Changed:` in expected output, rewrite to expect the new markdown-heading form. Examples of replacements:
 
 | Old expected fragment | New expected fragment |
 |-----------------------|-----------------------|
@@ -110,7 +110,7 @@ Expected: tests fail with assertion diffs showing old vs new heading format.
 
 - [ ] **Step 3: Update `Docstring::full_description()` to emit headings (green)**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/crates/toolr-core/src/docstrings.rs`.
+Open `crates/toolr-core/src/docstrings.rs`.
 
 Replace lines 52-78 (the section-rendering body inside `full_description`) and `append_bullet_section` (lines 100-119) with:
 
@@ -202,7 +202,7 @@ Run: `cargo test -p toolr-core --lib` until clean.
 Run: `uv run pytest tests/utils/docstrings/test_advanced_features.py -v`
 Expected: `test_full_description` fails because `LONG_DOCSTRING_FULL_DESCRIPTION` still contains flat labels.
 
-Open `/Users/pedro.algarvio/projects/me/toolr/tests/utils/docstrings/test_advanced_features.py`. Locate `LONG_DOCSTRING_FULL_DESCRIPTION` and rewrite its expected text using the same replacement table as Step 1.
+Open `tests/utils/docstrings/test_advanced_features.py`. Locate `LONG_DOCSTRING_FULL_DESCRIPTION` and rewrite its expected text using the same replacement table as Step 1.
 
 Run: `uv run pytest tests/utils/docstrings/test_advanced_features.py -v` until clean.
 
@@ -236,11 +236,11 @@ Only add files that you actually modified. Skip any test file that did not need 
 - Modify: `crates/toolr/src/main.rs` (add `mod help;`)
 - [ ] **Step 1: Add `mod help;` to `main.rs`**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/crates/toolr/src/main.rs`. Find the existing `mod ...;` declarations (e.g. `mod markdown;`, `mod cli;`). Insert `mod help;` in alphabetical order.
+Open `crates/toolr/src/main.rs`. Find the existing `mod ...;` declarations (e.g. `mod markdown;`, `mod cli;`). Insert `mod help;` in alphabetical order.
 
 - [ ] **Step 2: Create `help.rs` with `HelpMode` and `skin_for` (red)**
 
-Create `/Users/pedro.algarvio/projects/me/toolr/crates/toolr/src/help.rs` with this content:
+Create `crates/toolr/src/help.rs` with this content:
 
 ```rust
 //! Render styled `--help` output by feeding docstring markdown through
@@ -655,7 +655,7 @@ list per mode."
 
 - [ ] **Step 1: Add `disable_help_flag(true)` to the root `Command`**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/crates/toolr/src/cli.rs`. Locate `pub fn build_command(manifest: &Manifest) -> Command` (line 128). Find the line that constructs the root `Command::new("toolr")...`. Add `.disable_help_flag(true)` to the builder chain.
+Open `crates/toolr/src/cli.rs`. Locate `pub fn build_command(manifest: &Manifest) -> Command` (line 128). Find the line that constructs the root `Command::new("toolr")...`. Add `.disable_help_flag(true)` to the builder chain.
 
 - [ ] **Step 2: Add `disable_help_flag(true)` to every group + leaf builder**
 
@@ -713,7 +713,7 @@ them at any subcommand level."
 
 - [ ] **Step 1: Read the current dispatch entry point**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/crates/toolr/src/dispatch.rs`. Locate the function that takes `ArgMatches` and the built `Command` and routes to handlers. Identify where you'd insert a preflight check before normal argument validation runs.
+Open `crates/toolr/src/dispatch.rs`. Locate the function that takes `ArgMatches` and the built `Command` and routes to handlers. Identify where you'd insert a preflight check before normal argument validation runs.
 
 - [ ] **Step 2: Add a help-interception function**
 
@@ -897,7 +897,7 @@ clap-help renders docstring markdown directly via termimad. The
 
 - [ ] **Step 1: Edit workspace `Cargo.toml`**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/Cargo.toml`. Find the `clap` dep:
+Open `Cargo.toml`. Find the `clap` dep:
 
 ```toml
 clap = { version = "4", features = ["derive", "env", "string", "wrap_help"] }
@@ -1096,7 +1096,7 @@ If no fix was needed, no commit.
 
 - [ ] **Step 1: Add changelog entries**
 
-Open `/Users/pedro.algarvio/projects/me/toolr/UNRELEASED.md`. Add (creating the sections if missing, alphabetical inside each):
+Open `UNRELEASED.md`. Add (creating the sections if missing, alphabetical inside each):
 
 ```markdown
 ### Changed
@@ -1139,7 +1139,7 @@ Per `CLAUDE.md`: the archive move is the final commit before opening the PR — 
 
 - [ ] **Step 1: Confirm archive directory exists**
 
-Run: `ls /Users/pedro.algarvio/projects/me/toolr/specs/archive/2026/ 2>/dev/null || mkdir -p /Users/pedro.algarvio/projects/me/toolr/specs/archive/2026/`
+Run: `ls specs/archive/2026/ 2>/dev/null || mkdir -p specs/archive/2026/`
 
 - [ ] **Step 2: Move the spec and plan**
 

@@ -925,7 +925,7 @@ Check `crates/toolr-core/src/uv/install.rs` for the error text returned when `de
 produces `Refuse`. Search:
 
 ```sh
-grep -n "not available\|not found\|Refuse" /Users/pedro.algarvio/projects/me/toolr/crates/toolr-core/src/uv/install.rs | head
+grep -n "not available\|not found\|Refuse" crates/toolr-core/src/uv/install.rs | head
 ```
 
 If the actual error string differs (e.g. it might be "uv not available" or "could not find uv"),
@@ -1197,7 +1197,7 @@ git commit -m "fix(hints): point users to project venv sync, not project deps sy
 - [ ] **Step 1: List the failing assertions**
 
 ```sh
-grep -n "project deps\|deps sync" /Users/pedro.algarvio/projects/me/toolr/crates/toolr/tests/cli_smoke.rs
+grep -n "project deps\|deps sync" crates/toolr/tests/cli_smoke.rs
 ```
 
 Confirm: lines 309, 317, 346, 361 (or thereabouts).
@@ -1251,7 +1251,7 @@ Open `crates/toolr/tests/project_venv_upgrade.rs`. Replace every occurrence of:
   Integration tests for \`toolr project venv upgrade <pkg>\`.`
 
 ```sh
-grep -n "deps" /Users/pedro.algarvio/projects/me/toolr/crates/toolr/tests/project_venv_upgrade.rs
+grep -n "deps" crates/toolr/tests/project_venv_upgrade.rs
 ```
 
 Expected: no matches.
@@ -1289,7 +1289,7 @@ a temp project, points toolr at it, and asserts on stub-uv invocations) is what 
 If `toolr_bin()` or a shared helper exists, reuse it.
 
 ```sh
-grep -n "fn toolr_bin\|fn setup\|tempfile::tempdir\|sample-repo" /Users/pedro.algarvio/projects/me/toolr/crates/toolr/tests/*.rs | head -20
+grep -n "fn toolr_bin\|fn setup\|tempfile::tempdir\|sample-repo" crates/toolr/tests/*.rs | head -20
 ```
 
 - [ ] **Step 2: Create `project_venv_sync.rs`**
@@ -1889,7 +1889,7 @@ during execution will hit "file moved" surprises.
 - [ ] **Step 1: Confirm the archive directory exists**
 
 ```sh
-ls /Users/pedro.algarvio/projects/me/toolr/specs/archive/2026/
+ls specs/archive/2026/
 ```
 
 Expected: directory exists with prior archived designs in it (it does today — confirmed during

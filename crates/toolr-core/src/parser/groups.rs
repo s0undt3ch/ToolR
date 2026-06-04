@@ -288,17 +288,17 @@ mod tests {
         // Single-line docstring: short_description fills `title`,
         // `description` ends up the same single paragraph (no long
         // body, no sections to append).
-        let src = r#"group = command_group("dbt-config", docstring=__doc__)"#;
+        let src = r#"group = command_group("widget", docstring=__doc__)"#;
         let m = parse_src(src);
         let groups = extract_groups(
             &m,
-            "Paddle's dbt config and setup routines.",
+            "Example single-line docstring for a group.",
             &HashMap::new(),
         );
-        assert_eq!(groups[0].group.title, "Paddle's dbt config and setup routines.");
+        assert_eq!(groups[0].group.title, "Example single-line docstring for a group.");
         assert_eq!(
             groups[0].group.description,
-            "Paddle's dbt config and setup routines."
+            "Example single-line docstring for a group."
         );
     }
 

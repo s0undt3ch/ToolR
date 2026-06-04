@@ -80,7 +80,7 @@ crates/toolr-py/python/toolr/_registry.py
 - [ ] **Step 1:** From the repo root, capture the baseline wheel and binary signatures for diff-checking later in the stage:
 
 ```bash
-cd /Users/pedro.algarvio/projects/me/toolr
+cd
 rm -rf /tmp/toolr-baseline && mkdir -p /tmp/toolr-baseline
 maturin build --release --out /tmp/toolr-baseline
 cargo build --release --bin toolr
