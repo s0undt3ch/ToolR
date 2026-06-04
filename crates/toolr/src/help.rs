@@ -274,12 +274,20 @@ fn push_one_option(out: &mut String, arg: &Arg, mode: HelpMode, width: usize, gr
             );
         }
         if let Some(default) = arg.get_default_values().first() {
-            push_wrapped(
-                out,
-                &format!("[default: {}]", default.to_string_lossy()),
-                OPTION_HELP_INDENT,
-                width,
-            );
+            let value = default.to_string_lossy();
+            // `<expr>` is toolr-core's sentinel for a Python default
+            // expression we couldn't resolve to a literal (e.g.
+            // `param: str = SOME_CONSTANT`). Showing it as a "default"
+            // would mislead the user — there's nothing they could
+            // paste back. Suppress.
+            if value != "<expr>" {
+                push_wrapped(
+                    out,
+                    &format!("[default: {value}]"),
+                    OPTION_HELP_INDENT,
+                    width,
+                );
+            }
         }
     }
 }
