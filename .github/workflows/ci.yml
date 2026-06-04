@@ -96,10 +96,16 @@ jobs:
 
       - name: Check if the build should run
         id: check-build
-        run: |
-          toolr ci check-run-build ${{ github.event_name }} ${{ github.ref_name }}
         env:
+          # Route through `env:` so `github.ref_name` (which is
+          # attacker-controllable — branch names can contain shell
+          # metacharacters) doesn't get spliced into the shell line
+          # at interpolation time. The `toolr` CLI receives them as
+          # ordinary argv.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: toolr ci check-run-build "$EVENT_NAME" "$REF_NAME"
 
       - name: Generate Build Matrix
         id: generate-build-matrix
@@ -655,6 +661,189 @@ jobs:
           packages-dir: dist/
           skip-existing: true
           verbose: true
+
+  bench:
+    name: Bench (${{ matrix.display-name }})
+    # Informational only: posts the `toolr bench compare --markdown`
+    # table to the job's step summary so reviewers can see startup
+    # numbers next to other CI signal. Intentionally NOT in
+    # `set-pipeline-exit-status.needs` — perf numbers swing with
+    # runner load and we don't want flaky benchmarks gating PRs.
+    needs:
+      - prepare-ci
+      - build-binary-archive
+      - build-py-wheel-linux
+      - build-py-wheel-macos
+      - build-py-wheel-windows
+    if: fromJSON(needs.prepare-ci.outputs.should-run-build)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            display-name: Linux
+            triple: x86_64-unknown-linux-gnu
+            archive-ext: tar.gz
+            wheel-platform: manylinux_x86_64
+          - os: macos-latest
+            display-name: macOS
+            triple: aarch64-apple-darwin
+            archive-ext: tar.gz
+            wheel-platform: macosx_arm64
+          - os: windows-latest
+            display-name: Windows
+            triple: x86_64-pc-windows-msvc
+            archive-ext: zip
+            wheel-platform: win_amd64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Load shared env vars
+        shell: bash
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
+
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: bench-${{ matrix.display-name }}
+          cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+          # No workspace install — we bring in toolr-py from the
+          # prebuilt wheel, not by recompiling via maturin.
+          uv-sync-args: "--no-install-workspace"
+          mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+
+      - name: Compute Python cp-tag
+        id: cp-tag
+        shell: bash
+        # Mirror docs: derive the wheel ABI tag from the venv's
+        # active Python so a mise.toml python bump picks the matching
+        # wheel artifact without a second edit.
+        run: |
+          pyver=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+          echo "cp-tag=cp${pyver//./}" >> "$GITHUB_OUTPUT"
+
+      - name: Download toolr-py wheel
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cibw-wheel-py-${{ steps.cp-tag.outputs.cp-tag }}-${{ matrix.wheel-platform }}
+          path: ${{ runner.temp }}/toolr-py-wheel
+
+      - name: Download toolr binary archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: toolr-archive-${{ matrix.triple }}
+          path: ${{ runner.temp }}/toolr-archive
+
+      - name: Extract toolr binary
+        id: toolr-binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/toolr-bin"
+          mkdir -p "$dest"
+          archive=$(find "$RUNNER_TEMP/toolr-archive" -maxdepth 1 -type f \
+            \( -name 'toolr-*.tar.gz' -o -name 'toolr-*.zip' \) -print -quit)
+          if [ -z "$archive" ]; then
+            echo "no toolr-* archive found under $RUNNER_TEMP/toolr-archive/" >&2
+            find "$RUNNER_TEMP/toolr-archive" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          case "$archive" in
+            *.tar.gz) tar -xzf "$archive" -C "$dest" --strip-components=1 ;;
+            *.zip)    unzip -j -o "$archive" -d "$dest" >/dev/null ;;
+          esac
+          # `toolr.exe` on Windows; `toolr` everywhere else.
+          if [ -f "$dest/toolr.exe" ]; then
+            echo "$dest" >> "$GITHUB_PATH"
+            echo "bin=$dest/toolr.exe" >> "$GITHUB_OUTPUT"
+          else
+            chmod +x "$dest/toolr"
+            echo "$dest" >> "$GITHUB_PATH"
+            echo "bin=$dest/toolr" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Add uv tool bin dir to PATH
+        shell: bash
+        # `--install` shells `uv tool install <pkg>`, which drops
+        # binaries under `uv tool dir --bin`. That directory is NOT
+        # on PATH on a fresh runner, so `_resolve_binary` would warn
+        # "installed but not on PATH" and the Python task-runners
+        # would be excluded from the comparison. Add it up front.
+        run: uv tool dir --bin >> "$GITHUB_PATH"
+
+      - name: Sync tools venv (pulls toolr-py from PyPI)
+        shell: bash
+        # First run of `toolr` against a `tools/` directory bootstraps
+        # the tools venv (creates it, runs `uv sync`). This step
+        # forces that to happen explicitly so the wheel-swap step
+        # below has a venv to install into.
+        env:
+          TOOLR_BIN: ${{ steps.toolr-binary.outputs.bin }}
+        run: '"$TOOLR_BIN" project venv sync'
+
+      - name: Install local toolr-py wheel into tools venv
+        shell: bash
+        # `project venv sync` resolved `toolr-py` from PyPI. Swap in
+        # the just-built wheel so the bench measures THIS PR's
+        # toolr + toolr-py, not the released versions.
+        env:
+          TOOLR_BIN: ${{ steps.toolr-binary.outputs.bin }}
+        run: |
+          set -euo pipefail
+          venv=$("$TOOLR_BIN" project venv path)
+          wheel=$(find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 1 -type f -name 'toolr_py-*.whl' -print -quit)
+          if [ -z "$wheel" ]; then
+            echo "no toolr_py wheel found under $RUNNER_TEMP/toolr-py-wheel/" >&2
+            find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          # `--python` accepts either an interpreter path or a venv
+          # root; venv root is the portable form across Linux/macOS
+          # (`bin/python`) and Windows (`Scripts/python.exe`).
+          uv pip install --python "$venv" --force-reinstall "$wheel"
+
+      - name: Run startup bench
+        id: bench
+        shell: bash
+        env:
+          TOOLR_BIN: ${{ steps.toolr-binary.outputs.bin }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/bench.md"
+          workdir=$(mktemp -d)
+          "$TOOLR_BIN" bench compare \
+            --path "$workdir" \
+            --markdown \
+            --install \
+            | tee "$out"
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Publish bench results to step summary
+        if: always() && steps.bench.outputs.out != ''
+        shell: bash
+        env:
+          DISPLAY_NAME: ${{ matrix.display-name }}
+          TRIPLE: ${{ matrix.triple }}
+          CP_TAG: ${{ steps.cp-tag.outputs.cp-tag }}
+          WHEEL_PLATFORM: ${{ matrix.wheel-platform }}
+          BENCH_OUT: ${{ steps.bench.outputs.out }}
+        run: |
+          {
+            echo "## ⏱️ \`toolr bench compare\` — $DISPLAY_NAME (\`$TRIPLE\`)"
+            echo
+            echo "Built from this branch's \`toolr\` archive + \`toolr_py-${CP_TAG}-${WHEEL_PLATFORM}\` wheel."
+            echo
+            cat "$BENCH_OUT"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   set-pipeline-exit-status:
     permissions:
