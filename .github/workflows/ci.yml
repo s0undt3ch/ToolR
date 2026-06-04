@@ -666,9 +666,7 @@ jobs:
     name: Bench (${{ matrix.display-name }})
     # Informational only: posts the `toolr bench compare --markdown`
     # table to the job's step summary so reviewers can see startup
-    # numbers next to other CI signal. Intentionally NOT in
-    # `set-pipeline-exit-status.needs` — perf numbers swing with
-    # runner load and we don't want flaky benchmarks gating PRs.
+    # numbers next to other CI signal.
     needs:
       - prepare-ci
       - build-binary-archive
@@ -862,6 +860,7 @@ jobs:
       - test-windows
       - docs
       - publish
+      - bench
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
