@@ -1,0 +1,192 @@
+name: Bench
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+        description: 'Operating system to run bench on'
+      display-name:
+        required: true
+        type: string
+        description: 'Display name for the bench job (Linux / macOS / Windows)'
+      cache-seed:
+        required: true
+        type: string
+        description: 'Seed mixed into every cache key. Bump in the caller workflow to invalidate.'
+      mise-version:
+        required: true
+        type: string
+        description: 'Version of mise to install (forwarded to the setup-virtualenv composite). Pass the caller workflow''s MISE_VERSION env var.'
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: ${{ inputs.display-name }}
+    runs-on: ${{ inputs.os }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Derive the artifact identifiers we'll download below from the
+      # runner OS. Centralised here so the rest of the job can reference
+      # `steps.artifacts.outputs.*` instead of repeating the same `case
+      # $RUNNER_OS` everywhere. Mirrors `_test.yml`'s pattern.
+      - name: Compute artifact identifiers
+        id: artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Linux)   triple=x86_64-unknown-linux-gnu;  wheelplat=manylinux_x86_64 ;;
+            macOS)   triple=aarch64-apple-darwin;      wheelplat=macosx_arm64 ;;
+            Windows) triple=x86_64-pc-windows-msvc;    wheelplat=win_amd64 ;;
+            *) echo "unknown RUNNER_OS=$RUNNER_OS" >&2; exit 1 ;;
+          esac
+          {
+            echo "toolr-triple=$triple"
+            echo "wheel-platform=$wheelplat"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-virtualenv
+        with:
+          cache-prefix: bench-${{ inputs.display-name }}
+          cache-seed: ${{ inputs.cache-seed }}
+          # No workspace install — we bring in toolr-py from the
+          # prebuilt wheel, not by recompiling via maturin.
+          uv-sync-args: "--no-install-workspace"
+          mise-version: ${{ inputs.mise-version }}
+
+      - name: Compute Python cp-tag
+        id: cp-tag
+        shell: bash
+        # Mirror the docs job: derive the wheel ABI tag from the
+        # venv's active Python so a mise.toml python bump picks the
+        # matching wheel artifact without a second edit.
+        run: |
+          pyver=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+          echo "cp-tag=cp${pyver//./}" >> "$GITHUB_OUTPUT"
+
+      - name: Download toolr-py wheel
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cibw-wheel-py-${{ steps.cp-tag.outputs.cp-tag }}-${{ steps.artifacts.outputs.wheel-platform }}
+          path: ${{ runner.temp }}/toolr-py-wheel
+
+      - name: Download toolr binary archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: toolr-archive-${{ steps.artifacts.outputs.toolr-triple }}
+          path: ${{ runner.temp }}/toolr-archive
+
+      # Extract the standalone `toolr` binary from the archive and put
+      # it on PATH. Subsequent steps reference `toolr` directly rather
+      # than carrying around a `TOOLR_BIN` env var.
+      - name: Extract toolr binary onto PATH
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/toolr-bin"
+          mkdir -p "$dest"
+          archive=$(find "$RUNNER_TEMP/toolr-archive" -maxdepth 1 -type f \
+            \( -name 'toolr-*.tar.gz' -o -name 'toolr-*.zip' \) -print -quit)
+          if [ -z "$archive" ]; then
+            echo "no toolr archive found under $RUNNER_TEMP/toolr-archive/" >&2
+            find "$RUNNER_TEMP/toolr-archive" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          case "$archive" in
+            *.tar.gz)
+              tar -xzf "$archive" -C "$dest" --strip-components=1
+              ;;
+            *.zip)
+              unzip -q "$archive" -d "$dest"
+              # `Compress-Archive` retains the top-level dir; flatten
+              # so `toolr.exe` lands directly in $dest.
+              inner=$(find "$dest" -maxdepth 1 -mindepth 1 -type d | head -n1)
+              if [ -n "$inner" ]; then
+                mv "$inner"/* "$dest"/
+                rmdir "$inner"
+              fi
+              ;;
+          esac
+          chmod +x "$dest"/toolr* 2>/dev/null || true
+          echo "$dest" >> "$GITHUB_PATH"
+
+      - name: Add uv tool bin dir to PATH
+        shell: bash
+        # `--install` shells `uv tool install <pkg>`, which drops
+        # binaries under `uv tool dir --bin`. That directory is NOT
+        # on PATH on a fresh runner, so `_resolve_binary` would warn
+        # "installed but not on PATH" and the Python task-runners
+        # would be excluded from the comparison. Add it up front.
+        run: uv tool dir --bin >> "$GITHUB_PATH"
+
+      - name: Sync tools venv (pulls toolr-py from PyPI)
+        shell: bash
+        # First run of `toolr` against a `tools/` directory bootstraps
+        # the tools venv (creates it, runs `uv sync`). Force that to
+        # happen explicitly so the wheel-swap step below has a venv
+        # to install into.
+        run: toolr project venv sync
+
+      - name: Install local toolr-py wheel into tools venv
+        shell: bash
+        # `project venv sync` resolved `toolr-py` from PyPI. Swap in
+        # the just-built wheel so the bench measures THIS PR's
+        # `toolr` + `toolr-py`, not the released versions.
+        run: |
+          set -euo pipefail
+          venv=$(toolr project venv path)
+          wheel=$(find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 1 -type f -name 'toolr_py-*.whl' -print -quit)
+          if [ -z "$wheel" ]; then
+            echo "no toolr_py wheel found under $RUNNER_TEMP/toolr-py-wheel/" >&2
+            find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 2 -mindepth 1 -print >&2 || true
+            exit 1
+          fi
+          # `--python` accepts either an interpreter path or a venv
+          # root; venv root is the portable form across Linux/macOS
+          # (`bin/python`) and Windows (`Scripts/python.exe`).
+          uv pip install --python "$venv" --force-reinstall "$wheel"
+
+      - name: Run startup bench
+        id: bench
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/bench.md"
+          workdir=$(mktemp -d)
+          toolr bench compare \
+            --path "$workdir" \
+            --markdown \
+            --install \
+            | tee "$out"
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Publish bench results to step summary
+        if: always() && steps.bench.outputs.out != ''
+        shell: bash
+        env:
+          DISPLAY_NAME: ${{ inputs.display-name }}
+          TRIPLE: ${{ steps.artifacts.outputs.toolr-triple }}
+          CP_TAG: ${{ steps.cp-tag.outputs.cp-tag }}
+          WHEEL_PLATFORM: ${{ steps.artifacts.outputs.wheel-platform }}
+          BENCH_OUT: ${{ steps.bench.outputs.out }}
+        run: |
+          {
+            echo "## ⏱️ \`toolr bench compare\` — $DISPLAY_NAME (\`$TRIPLE\`)"
+            echo
+            echo "Built from this branch's \`toolr\` archive + \`toolr_py-${CP_TAG}-${WHEEL_PLATFORM}\` wheel."
+            echo
+            cat "$BENCH_OUT"
+          } >> "$GITHUB_STEP_SUMMARY"

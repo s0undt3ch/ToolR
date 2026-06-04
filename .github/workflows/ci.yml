@@ -96,10 +96,16 @@ jobs:
 
       - name: Check if the build should run
         id: check-build
-        run: |
-          toolr ci check-run-build ${{ github.event_name }} ${{ github.ref_name }}
         env:
+          # Route through `env:` so `github.ref_name` (which is
+          # attacker-controllable — branch names can contain shell
+          # metacharacters) doesn't get spliced into the shell line
+          # at interpolation time. The `toolr` CLI receives them as
+          # ordinary argv.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: toolr ci check-run-build "$EVENT_NAME" "$REF_NAME"
 
       - name: Generate Build Matrix
         id: generate-build-matrix
@@ -656,6 +662,54 @@ jobs:
           skip-existing: true
           verbose: true
 
+  # Bench-* jobs run `toolr bench compare --markdown --install` against
+  # this PR's built `toolr` + `toolr-py` artifacts and post the result
+  # to each runner's step summary.
+  bench-linux:
+    name: Bench
+    needs:
+      - prepare-ci
+      - build-binary-archive
+      - build-py-wheel-linux
+    uses: ./.github/workflows/_bench.yml
+    with:
+      os: ubuntu-latest
+      display-name: Linux
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+
+  bench-macos:
+    name: Bench
+    needs:
+      - prepare-ci
+      - build-binary-archive
+      - build-py-wheel-macos
+    uses: ./.github/workflows/_bench.yml
+    with:
+      os: macos-latest
+      display-name: macOS
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+
+  bench-windows:
+    name: Bench
+    needs:
+      - prepare-ci
+      - build-binary-archive
+      - build-py-wheel-windows
+    uses: ./.github/workflows/_bench.yml
+    with:
+      os: windows-latest
+      display-name: Windows
+      cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+    permissions:
+      contents: read
+
   set-pipeline-exit-status:
     permissions:
       actions: read
@@ -671,6 +725,9 @@ jobs:
       - test-linux
       - test-macos
       - test-windows
+      - bench-linux
+      - bench-macos
+      - bench-windows
       - docs
       - publish
     steps:
