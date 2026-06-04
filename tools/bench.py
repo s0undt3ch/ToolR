@@ -550,11 +550,13 @@ def _render_markdown(ctx: Context, rows: list[_Row], *, runs: int) -> None:
         padded = [pad(v, widths[i], numeric=_COLUMNS[i][1]) for i, v in enumerate(values)]
         return f"| {' | '.join(padded)} |"
 
+    # Right-aligned columns use `---:` — the colon counts toward the
+    # visible width, so emit one fewer dash so the separator row lines
+    # up with the data rows in the raw markdown source.
     sep_cells = [
-        "-" * widths[i] + (":" if is_numeric else "") for i, (_, is_numeric) in enumerate(_COLUMNS)
+        ("-" * (widths[i] - 1) + ":") if is_numeric else ("-" * widths[i])
+        for i, (_, is_numeric) in enumerate(_COLUMNS)
     ]
-    # The leading position of the colon for right-align is on the right;
-    # left-align uses a plain dash run.
 
     remaining_count = runs - 2
     out_lines: list[str] = [
