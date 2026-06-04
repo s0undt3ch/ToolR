@@ -70,11 +70,13 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
         let sources_imports = SourcesImports::from_module(&module);
+        let consts = super::symbols::ConstTable::from_module(&module);
         let commands = extract_commands(
             &module,
             &module_path,
             &bindings,
             &enums,
+            &consts,
             &type_imports,
             &sources_imports,
             &aliases,
