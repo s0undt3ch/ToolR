@@ -1,15 +1,17 @@
-toolr project venv sync
 Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)
+
 Usage: toolr project venv sync [OPTIONS]
+
 Options:
-┌─────┬─────────┬──────┬───────────────────────────────────────────────────────────────────────────┐
-│short│  long   │value │description                                                                │
-├─────┼─────────┼──────┼───────────────────────────────────────────────────────────────────────────┤
-│ -f  │--force  │      │Re-run uv sync even when the freshness stamp says the venv is up to date   │
-│ -q  │--quiet  │      │Silent on success and on benign unattended-mode exits (no toolr/uv output) │
-│ -U  │--upgrade│      │Re-resolve every package (passes --upgrade to uv). Combine with -P to also │
-│     │         │      │force specific packages.                                                   │
-│ -P  │--upgrade│PACKAG│Re-resolve a single package; pass repeatedly for multiple. Each <PACKAGE>  │
-│     │-package │  E   │must be declared in tools/pyproject.toml.                                  │
-└─────┴─────────┴──────┴───────────────────────────────────────────────────────────────────────────┘
+  -f, --force
+          Re-run uv sync even when the freshness stamp says the venv is up to date
+  -q, --quiet
+          Silent on success and on benign unattended-mode exits (no toolr/uv output)
+  -U, --upgrade
+          Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific
+          packages.
+  -P, --upgrade-package <PACKAGE>
+          Re-resolve a single package; pass repeatedly for multiple. Each <PACKAGE> must be declared
+          in tools/pyproject.toml.
+
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

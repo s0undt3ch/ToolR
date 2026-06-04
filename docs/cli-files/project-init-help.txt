@@ -1,19 +1,24 @@
-toolr project init
 Scaffold tools/ in the current directory
+
 Usage: toolr project init [OPTIONS]
+
 Options:
-┌─────┬───────────────┬────────┬───────────────────────────────────────────────────────────────────┐
-│short│     long      │ value  │description                                                        │
-├─────┼───────────────┼────────┼───────────────────────────────────────────────────────────────────┤
-│     │--force        │        │Overwrite an existing tools/ directory                             │
-│     │--no-sync      │        │Skip the automatic uv sync after scaffolding                       │
-│     │--venv-location│LOCATION│Where the tools venv should live                                   │
-│     │               │        │ Possible values: [cache, in-tree]                                 │
-│     │               │        │ Default: cache                                                    │
-│     │--no-example   │        │Skip generating tools/example.py                                   │
-│     │--python       │VERSION │requires-python value for tools/pyproject.toml (defaults to the    │
-│     │               │        │running Python's >=major.minor)                                    │
-│ -y  │--yes          │        │Auto-approve overwriting any conflicting scaffold files            │
-│ -q  │--quiet        │        │Suppress informational output                                      │
-└─────┴───────────────┴────────┴───────────────────────────────────────────────────────────────────┘
+      --force
+          Overwrite an existing tools/ directory
+      --no-sync
+          Skip the automatic uv sync after scaffolding
+      --venv-location <LOCATION>
+          Where the tools venv should live
+          [possible values: cache, in-tree]
+          [default: cache]
+      --no-example
+          Skip generating tools/example.py
+      --python <VERSION>
+          requires-python value for tools/pyproject.toml (defaults to the running Python's
+          >=major.minor)
+  -y, --yes
+          Auto-approve overwriting any conflicting scaffold files
+  -q, --quiet
+          Suppress informational output
+
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

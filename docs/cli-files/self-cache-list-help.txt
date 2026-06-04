@@ -1,4 +1,5 @@
-toolr self cache list
 List every cached virtualenv with size and last-use timestamp
+
 Usage: toolr self cache list
+
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

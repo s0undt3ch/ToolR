@@ -1,16 +1,21 @@
-toolr self build-manifest
 Generate a third-party manifest fragment for a package
+
 Usage: toolr self build-manifest [OPTIONS] [PACKAGE]
-• PACKAGE Dotted Python package name to introspect (looked up in the tools venv)
+
+Arguments:
+  [PACKAGE]    Dotted Python package name to introspect (looked up in the tools venv)
+
 Options:
-┌─────┬────────────────┬─────┬─────────────────────────────────────────────────────────────────────┐
-│short│      long      │value│description                                                          │
-├─────┼────────────────┼─────┼─────────────────────────────────────────────────────────────────────┤
-│     │--source-dir    │PATH │Path to the package's source tree (bypasses the tools-venv lookup)   │
-│     │--package       │ PKG │Package name to embed in the fragment when using --source-dir        │
-│     │                │     │(defaults to the leaf directory name)                                │
-│     │--output        │PATH │Override the output path                                             │
-│     │--schema-version│  N  │Pin the emitted schema version                                       │
-│     │--check         │     │Verify the on-disk manifest matches regeneration                     │
-└─────┴────────────────┴─────┴─────────────────────────────────────────────────────────────────────┘
+      --source-dir <PATH>
+          Path to the package's source tree (bypasses the tools-venv lookup)
+      --package <PKG>
+          Package name to embed in the fragment when using --source-dir (defaults to the leaf
+          directory name)
+      --output <PATH>
+          Override the output path
+      --schema-version <N>
+          Pin the emitted schema version
+      --check
+          Verify the on-disk manifest matches regeneration
+
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

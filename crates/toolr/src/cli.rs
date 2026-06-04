@@ -204,19 +204,18 @@ pub fn build_command(manifest: &Manifest) -> Command {
                      seconds. Per-call `no_output_timeout_secs=` wins when set.",
                 ),
         )
+        // Reset the help heading so the global help arg lands in the
+        // default Options: section, not "Output Options:" inherited
+        // above. `-h` and `--help` are combined into one Arg — dispatch
+        // distinguishes Short vs Long mode by scanning raw argv.
+        .next_help_heading(None)
         .arg(
             Arg::new("help")
+                .short('h')
                 .long("help")
                 .action(ArgAction::SetTrue)
                 .global(true)
                 .help("Print help"),
-        )
-        .arg(
-            Arg::new("help_short")
-                .short('h')
-                .action(ArgAction::SetTrue)
-                .global(true)
-                .help("Print short help"),
         );
 
     let children = children_by_parent(manifest);

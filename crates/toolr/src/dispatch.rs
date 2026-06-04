@@ -23,24 +23,23 @@ use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_
 // Help interception
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Walk the matched subcommand chain to find the deepest level where `--help`
-/// or `-h` was set, resolving the corresponding `clap::Command` from the tree
-/// in parallel. Returns `(resolved_cmd, bin_path, mode)` when a help flag is
-/// found, or `None` when no help was requested.
+/// Walk the matched subcommand chain to find the deepest level where the
+/// help flag was set, resolving the corresponding `clap::Command` from the
+/// tree in parallel. Returns `(resolved_cmd, bin_path, mode)` when help
+/// was requested, or `None` otherwise.
 ///
-/// Because `--help` / `help_short` are declared `global(true)` in `cli.rs`,
-/// clap stores the flag value at the root matches even when the flag appeared
-/// after a subcommand token. We therefore descend into the deepest subcommand
-/// the user actually named first, then check if a help flag is set there.
+/// `--help` and `-h` are a single global Arg in `cli.rs` — we determine
+/// Short vs Long mode by scanning raw argv, so users get terse `-h` output
+/// or the full `--help` body based on which form they typed.
 fn resolve_help_target(
     root_cmd: &clap::Command,
     matches: &ArgMatches,
+    argv: &[String],
 ) -> Option<(clap::Command, String, HelpMode)> {
     let mut cur_cmd = root_cmd.clone();
     let mut cur_matches = matches;
     let mut path: Vec<String> = vec![root_cmd.get_name().to_string()];
 
-    // Descend as far as the user named subcommands.
     while let Some((sub_name, sub_matches)) = cur_matches.subcommand() {
         let Some(child) = cur_cmd.find_subcommand(sub_name) else {
             break;
@@ -50,23 +49,23 @@ fn resolve_help_target(
         path.push(sub_name.to_string());
     }
 
-    // Check for a help flag at the deepest level we reached. Because the
-    // flags are global, the value may have been propagated up from the
-    // subcommand where it was typed; checking at each level is equivalent.
-    let want_long = cur_matches.get_flag("help");
-    let want_short = cur_matches.get_flag("help_short");
-    if !want_long && !want_short {
+    if !cur_matches.get_flag("help") {
         return None;
     }
+    Some((cur_cmd, path.join(" "), help_mode_from_argv(argv)))
+}
 
-    // Long wins when both are somehow set (shouldn't happen with SetTrue, but
-    // defensive).
-    let mode = if want_long {
+/// `--help` wins over `-h` when both appear; absent both, default to
+/// Long (matters only for synthetic invocations of `print` without
+/// argv routing).
+fn help_mode_from_argv(argv: &[String]) -> HelpMode {
+    if argv.iter().any(|a| a == "--help") {
         HelpMode::Long
-    } else {
+    } else if argv.iter().any(|a| a == "-h") {
         HelpMode::Short
-    };
-    Some((cur_cmd, path.join(" "), mode))
+    } else {
+        HelpMode::Long
+    }
 }
 
 /// Called by `main.rs` when clap's `try_get_matches_from` fails with a
@@ -82,12 +81,7 @@ pub fn dispatch_help_from_argv(
     _manifest: &Manifest,
     root: &mut clap::Command,
 ) -> anyhow::Result<()> {
-    let want_long = argv.iter().any(|a| a == "--help");
-    let mode = if want_long {
-        HelpMode::Long
-    } else {
-        HelpMode::Short
-    };
+    let mode = help_mode_from_argv(argv);
 
     let mut cur_cmd = &*root;
     let mut path: Vec<String> = vec![cur_cmd.get_name().to_string()];
@@ -144,12 +138,14 @@ pub fn dispatch(
     manifest: &Manifest,
     root: &mut clap::Command,
 ) -> anyhow::Result<ExitCode> {
+    let argv: Vec<String> = std::env::args().collect();
     // Intercept --help / -h before any other routing. Tab-completion
     // invocations (`__complete`) never set help flags, so they pass through
-    // immediately. For every other invocation we resolve the deepest
-    // subcommand the user named and check whether a help flag is set there.
+    // immediately.
     if !matches!(matches.subcommand(), Some(("__complete", _))) {
-        if let Some((resolved_cmd, bin_path, mode)) = resolve_help_target(root, matches) {
+        if let Some((resolved_cmd, bin_path, mode)) =
+            resolve_help_target(root, matches, &argv)
+        {
             help::print(&resolved_cmd, &bin_path, mode);
             return Ok(ExitCode::SUCCESS);
         }
