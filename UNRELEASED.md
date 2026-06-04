@@ -10,3 +10,9 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+Bumped all Rust, Python, and GitHub Actions dependencies in a single
+sweep — including `ruff_*` git deps to `0.15.15`, `ruff`/`coverage`/
+`hypothesis` on the Python side, and `actions/checkout` and
+`actions-cool/check-user-permission` in CI. Transitive lockfile bumps
+in `Cargo.lock` and `uv.lock` rolled forward at the same time.
