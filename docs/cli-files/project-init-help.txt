@@ -20,5 +20,7 @@ Options:
           Auto-approve overwriting any conflicting scaffold files
   -q, --quiet
           Suppress informational output
+  -h, --help
+          Print help
 
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

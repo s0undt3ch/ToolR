@@ -7,5 +7,7 @@ Options:
           Which level to use.
           [possible values: debug, info, warning, error]
           [default: info]
+  -h, --help
+          Print help
 
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

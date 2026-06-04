@@ -8,5 +8,7 @@ Arguments:
 Options:
       --force
           Overwrite an existing differing file without prompting
+  -h, --help
+          Print help
 
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

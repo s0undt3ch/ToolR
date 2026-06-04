@@ -187,7 +187,11 @@ fn push_options_by_heading(out: &mut String, cmd: &Command, mode: HelpMode, widt
     // Use a Vec so we preserve insertion order (the order clap returns
     // args), rather than a HashMap which would alphabetise.
     let mut named_groups: Vec<(String, Vec<&Arg>)> = Vec::new();
+    let mut have_help_arg = false;
     for arg in args {
+        if arg.get_id().as_str() == "help" {
+            have_help_arg = true;
+        }
         match arg.get_help_heading() {
             None => default_group.push(arg),
             Some(h) => {
@@ -200,20 +204,38 @@ fn push_options_by_heading(out: &mut String, cmd: &Command, mode: HelpMode, widt
         }
     }
 
-    if !default_group.is_empty() {
-        out.push_str("**Options:**\n");
-        for arg in default_group {
-            push_one_option(out, arg, mode, width);
-        }
-        out.push('\n');
+    // Default `Options:` section always renders. When the resolved
+    // command doesn't already carry the global `-h, --help` arg (clap
+    // doesn't propagate globals into a subcommand's get_arguments()),
+    // we synthesize a row so users see the flag listed at every level
+    // — matching clap's native per-command --help expectation.
+    let group_has_short = default_group.iter().any(|a| a.get_short().is_some()) || !have_help_arg;
+    out.push_str("**Options:**\n");
+    for arg in default_group {
+        push_one_option(out, arg, mode, width, group_has_short);
     }
+    if !have_help_arg {
+        push_synthetic_help_option(out, width);
+    }
+    out.push('\n');
+
     for (heading, args) in named_groups {
+        let group_has_short = args.iter().any(|a| a.get_short().is_some());
         out.push_str(&format!("**{heading}:**\n"));
         for arg in args {
-            push_one_option(out, arg, mode, width);
+            push_one_option(out, arg, mode, width, group_has_short);
         }
         out.push('\n');
     }
+}
+
+/// Render the standard `-h, --help    Print help` row. Used when the
+/// resolved command doesn't already carry an explicit `help` arg
+/// (i.e., on every subcommand, since clap doesn't propagate the root's
+/// global help into per-command `get_arguments()` walks).
+fn push_synthetic_help_option(out: &mut String, width: usize) {
+    out.push_str("  -h, --help\n");
+    push_wrapped(out, "Print help", OPTION_HELP_INDENT, width);
 }
 
 /// One option entry. Two-line form: signature on line 1, indented help
@@ -221,8 +243,11 @@ fn push_options_by_heading(out: &mut String, cmd: &Command, mode: HelpMode, widt
 /// indented lines) on subsequent lines. Short mode trims help to its
 /// first line. Help text is pre-wrapped at the available width minus
 /// indent so termimad doesn't re-wrap and drop our hanging indent.
-fn push_one_option(out: &mut String, arg: &Arg, mode: HelpMode, width: usize) {
-    let signature = render_option_signature(arg);
+/// `group_has_short` controls whether long-only options get a 4-column
+/// short-flag pad (clap's behavior: align only when at least one option
+/// in the group actually uses a short).
+fn push_one_option(out: &mut String, arg: &Arg, mode: HelpMode, width: usize, group_has_short: bool) {
+    let signature = render_option_signature(arg, group_has_short);
     out.push_str(&format!("  {signature}\n"));
 
     let help = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
@@ -266,18 +291,23 @@ fn push_one_option(out: &mut String, arg: &Arg, mode: HelpMode, width: usize) {
 /// their own background styling unaffected.
 const OPTION_HELP_INDENT: usize = 10;
 
-/// `-X, --long-name <VALUE>` style signature. Long-only options are
-/// padded so the long column lines up across all entries in a group —
-/// matching clap's default layout. The pad uses non-breaking spaces
-/// (`U+00A0`) so the line doesn't accidentally trip CommonMark's
-/// 4-space code-block trigger when termimad parses it.
-fn render_option_signature(arg: &Arg) -> String {
+/// `-X, --long-name <VALUE>` style signature. When the surrounding
+/// group has any short flag, long-only entries get a 4-column pad so
+/// the long column lines up (matching clap's default layout). When no
+/// option in the group has a short, no pad is applied — saving 4
+/// columns of horizontal real estate.
+///
+/// The pad uses non-breaking spaces (`U+00A0`) so the line doesn't
+/// accidentally trip CommonMark's 4-space code-block trigger when
+/// termimad parses it.
+fn render_option_signature(arg: &Arg, group_has_short: bool) -> String {
     // Width of `-X, ` in display columns — 4 cells.
     const SHORT_PAD: &str = "\u{a0}\u{a0}\u{a0}\u{a0}";
-    let short_or_pad: String = arg
-        .get_short()
-        .map(|c| format!("-{c}, "))
-        .unwrap_or_else(|| SHORT_PAD.to_string());
+    let short_or_pad: String = match (arg.get_short(), group_has_short) {
+        (Some(c), _) => format!("-{c}, "),
+        (None, true) => SHORT_PAD.to_string(),
+        (None, false) => String::new(),
+    };
     let long = arg.get_long().map(|l| format!("--{l}")).unwrap_or_default();
     let value = if arg.get_action().takes_values() {
         arg.get_value_names()
