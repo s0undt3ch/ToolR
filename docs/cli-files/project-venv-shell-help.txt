@@ -2,4 +2,8 @@ Spawn a subshell with the tools venv activated
 
 Usage: toolr project venv shell
 
+Options:
+  -h, --help
+          Print help
+
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

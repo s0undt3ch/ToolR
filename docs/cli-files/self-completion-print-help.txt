@@ -3,6 +3,10 @@ Print the completion script for a shell to stdout
 Usage: toolr self completion print <shell>
 
 Arguments:
-  <shell>    Shell to emit a completion script for
+  <shell>  Shell to emit a completion script for
+
+Options:
+  -h, --help
+          Print help
 
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

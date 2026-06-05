@@ -3,7 +3,7 @@ Install the completion script for a shell into its standard location
 Usage: toolr self completion install [OPTIONS] <shell>
 
 Arguments:
-  <shell>    Shell to install the completion script for
+  <shell>  Shell to install the completion script for
 
 Options:
       --force

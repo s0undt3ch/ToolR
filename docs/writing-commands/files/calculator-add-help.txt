@@ -3,7 +3,11 @@ Add two numbers together.
 Usage: toolr math add <a> <b>
 
 Arguments:
-  <a>    First number.
-  <b>    Second number.
+  <a>  First number.
+  <b>  Second number.
+
+Options:
+  -h, --help
+          Print help
 
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

@@ -2,4 +2,8 @@ Regenerate the static + dynamic manifest in place
 
 Usage: toolr project manifest rebuild
 
+Options:
+  -h, --help
+          Print help
+
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

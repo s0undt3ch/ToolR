@@ -3,7 +3,7 @@ Generate a third-party manifest fragment for a package
 Usage: toolr self build-manifest [OPTIONS] [PACKAGE]
 
 Arguments:
-  [PACKAGE]    Dotted Python package name to introspect (looked up in the tools venv)
+  [PACKAGE]  Dotted Python package name to introspect (looked up in the tools venv)
 
 Options:
       --source-dir <PATH>

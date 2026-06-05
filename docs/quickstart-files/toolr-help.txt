@@ -23,8 +23,8 @@ Output Options:
           stdout/stderr for this many seconds. Per-call no_output_timeout_secs= wins when set.
 
 Commands:
-  example    Example commands
-  project    Operations on the current repo's tools/ directory
-  self       Operations on toolr itself
+  example  Example commands
+  project  Operations on the current repo's tools/ directory
+  self     Operations on toolr itself
 
 Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>
