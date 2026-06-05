@@ -179,9 +179,6 @@ fn push_options_by_heading(out: &mut String, cmd: &Command, mode: HelpMode, widt
         .get_arguments()
         .filter(|a| !a.is_positional() && !a.is_hide_set())
         .collect();
-    if args.is_empty() {
-        return;
-    }
 
     let mut default_group: Vec<&Arg> = Vec::new();
     // Use a Vec so we preserve insertion order (the order clap returns
@@ -411,16 +408,17 @@ fn push_wrapped(out: &mut String, text: &str, indent: usize, width: usize) {
     }
 }
 
-/// Two-column block: `  <label-padded-to-width>    <text>`. When `text`
+/// Two-column block: `  <label-padded-to-width>  <text>`. When `text`
 /// has multiple lines, the continuation lines are indented past the
-/// label column so they hang under the description.
+/// label column so they hang under the description. The 2-space gap
+/// between label and text matches clap's default short-label layout.
 fn push_two_column_block(out: &mut String, label: &str, width: usize, text: &str) {
-    let indent_size = 2 + width + 4; // leading "  " + label-col + 4-space gap
+    let indent_size = 2 + width + 2; // leading "  " + label-col + 2-space gap
     let indent: String = " ".repeat(indent_size);
     let mut lines = text.lines();
     let first = lines.next().unwrap_or("");
     out.push_str(&format!(
-        "  {label:<width$}    {first}\n",
+        "  {label:<width$}  {first}\n",
         label = label,
         width = width,
         first = first
@@ -602,12 +600,90 @@ mod tests {
     }
 
     #[test]
-    fn options_section_omitted_when_no_options() {
+    fn options_section_always_shows_synthetic_help() {
+        // Even leaves with no flags of their own get `-h, --help` —
+        // clap's global help arg doesn't propagate into get_arguments()
+        // on subcommands, so we synthesise the row at every level.
         let cmd = Command::new("noops").subcommand(Command::new("kid"));
         let md = render_markdown(&cmd, "noops", HelpMode::Long, 100);
         assert!(
-            !md.contains("**Options:**"),
-            "no Options section when there are no flags: {md}"
+            md.contains("**Options:**"),
+            "Options section always renders for the synthetic --help row: {md}"
+        );
+        assert!(
+            md.contains("-h, --help"),
+            "synthetic --help row always present: {md}"
+        );
+    }
+
+    #[test]
+    fn two_column_block_uses_two_space_label_gap() {
+        // Single-line text: exactly `  <label>  <text>` — 2-space leading
+        // indent + label padded to width + 2-space gap before the text.
+        // Matches clap's default short-label layout.
+        let mut out = String::new();
+        push_two_column_block(&mut out, "name", 4, "the description");
+        assert_eq!(out, "  name  the description\n");
+    }
+
+    #[test]
+    fn two_column_block_pads_label_to_width() {
+        // Shorter labels get left-padded to the group width so the text
+        // column lines up. Padding lives inside the label column; the
+        // 2-space gap is added on top.
+        let mut out = String::new();
+        push_two_column_block(&mut out, "ex", 7, "short");
+        assert_eq!(out, "  ex       short\n");
+    }
+
+    #[test]
+    fn two_column_block_continuation_lines_hang_under_text() {
+        // Multi-line text hangs under the text column on continuation
+        // lines: leading indent (2) + label width + gap (2) = 2 + width
+        // + 2 spaces of leading whitespace on every line after the first.
+        let mut out = String::new();
+        push_two_column_block(&mut out, "name", 4, "first\nsecond\nthird");
+        let expected = "  name  first\n\
+                        \x20\x20\x20\x20\x20\x20\x20\x20second\n\
+                        \x20\x20\x20\x20\x20\x20\x20\x20third\n";
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn positionals_render_with_clap_two_space_gap() {
+        // End-to-end: `Arguments:` rows use the same 2-space gap and the
+        // label column widens to the longest label. Required → `<name>`,
+        // optional → `[name]`.
+        let cmd = Command::new("argy")
+            .arg(Arg::new("required").required(true).help("req help"))
+            .arg(Arg::new("optional").help("opt help"));
+        let md = render_markdown(&cmd, "argy", HelpMode::Long, 100);
+        assert!(
+            md.contains("  <required>  req help"),
+            "required positional uses 2-space gap: {md}"
+        );
+        assert!(
+            md.contains("  [optional]  opt help"),
+            "optional positional uses 2-space gap: {md}"
+        );
+    }
+
+    #[test]
+    fn commands_block_renders_with_clap_two_space_gap() {
+        // The `Commands:` block reuses push_two_column_block, so the
+        // spacing matches `Arguments:`. Sub-name column is padded to the
+        // longest sibling name.
+        let cmd = Command::new("root")
+            .subcommand(Command::new("short").about("a"))
+            .subcommand(Command::new("longer-name").about("b"));
+        let md = render_markdown(&cmd, "root", HelpMode::Long, 100);
+        assert!(
+            md.contains("  short        a"),
+            "short name padded to longest sibling width with 2-space gap: {md}"
+        );
+        assert!(
+            md.contains("  longer-name  b"),
+            "longest sibling has no padding before the 2-space gap: {md}"
         );
     }
 
