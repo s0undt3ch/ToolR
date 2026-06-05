@@ -2061,14 +2061,15 @@ when the two values disagree.</p>
 <p>Hooks include <code>ruff</code>, <code>mypy</code>, <code>clippy</code>, <code>cargo check</code>, <code>rumdl</code>, <code>codespell</code>, <code>typos</code>, <code>actionlint</code>,
 <code>shellcheck</code>, plus the project-local hooks (<code>pin-github-actions</code>, <code>regen-doc-snippets</code>).</p>
 <h2 id="benchmarking">Benchmarking<a class="headerlink" href="#benchmarking" title="Permanent link">&para;</a></h2>
-<p><code>toolr bench compare</code> measures <code>&lt;tool&gt; -h</code> startup latency for every task-runner CLI it finds on
-<code>$PATH</code> (<code>toolr</code>, <code>invoke</code>, <code>python-tools-scripts</code>, <code>duty</code>, <code>doit</code>, <code>nox</code>). Add <code>--install</code> to let
-it <code>uv tool install</code> missing Python tools on demand, and <code>--markdown</code> to render the result as a
-table:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>bench<span class="w"> </span>compare<span class="w"> </span>--install<span class="w"> </span>--markdown
+<p><code>scripts/bench.py</code> measures <code>&lt;tool&gt; -h</code> startup latency for every task-runner CLI it finds on
+<code>$PATH</code> (<code>toolr</code>, <code>invoke</code>, <code>python-tools-scripts</code>, <code>duty</code>, <code>doit</code>, <code>nox</code>). It's a stdlib-only
+script — no toolr, no rich, no venv to bootstrap — so it can run in a fresh CI job. Add
+<code>--install</code> to let it <code>uv tool install</code> missing Python tools on demand:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python3<span class="w"> </span>scripts/bench.py<span class="w"> </span>--install
 </span></code></pre></div>
-<p>The README's headline benchmark table comes from this command. Re-run it on a fresh hardware target
-before changing the README's numbers.</p>
+<p>Output is a markdown table on stdout (progress goes to stderr); the README's headline benchmark
+table comes from this command. Re-run it on a fresh hardware target before changing the README's
+numbers.</p>
 <h2 id="filing-bugs">Filing bugs<a class="headerlink" href="#filing-bugs" title="Permanent link">&para;</a></h2>
 <p>Open a <a href="https://github.com/s0undt3ch/ToolR/issues/new">GitHub issue</a> with:</p>
 <ul>
