@@ -27,6 +27,7 @@ without bootstrapping a project venv.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import os
 import shutil
 import statistics
@@ -43,13 +44,39 @@ from pathlib import Path
 # `--help` output has comparable shape across tools.
 # ---------------------------------------------------------------------------
 
-_TOOLR_PYPROJECT = """\
-[project]
-name = "tools"
-version = "0.0.0"
-requires-python = ">=3.11"
-dependencies = ["toolr-py"]
-"""
+
+def _toolr_pyproject(version_pin: str | None) -> str:
+    """Return the bench fixture's ``tools/pyproject.toml`` content.
+
+    When ``version_pin`` is ``None`` the toolr fixture pulls ``toolr-py``
+    from PyPI (the released version). When it's a concrete version (e.g.
+    ``"0.24.0.dev262"``), we pin the dependency to that exact version so
+    uv resolves it from the find-links directory exported via
+    ``UV_FIND_LINKS`` rather than PyPI — the way to bench the current
+    PR's ``toolr-py`` end-to-end in CI.
+    """
+    dep = '"toolr-py"' if version_pin is None else f'"toolr-py == {version_pin}"'
+    return (
+        "[project]\n"
+        'name = "tools"\n'
+        'version = "0.0.0"\n'
+        'requires-python = ">=3.11"\n'
+        f"dependencies = [{dep}]\n"
+    )
+
+
+def _wheel_version(wheel: Path) -> str | None:
+    """Parse the version segment from a ``toolr_py-<ver>-<py>-<abi>-<plat>.whl`` name.
+
+    Returns ``None`` for filenames that don't match the canonical wheel
+    layout — the caller treats that as a fatal error.
+    """
+    parts = wheel.stem.split("-")
+    expected_segments = 5
+    if len(parts) != expected_segments or parts[0] != "toolr_py":
+        return None
+    return parts[1]
+
 
 _TOOLR_EXAMPLE = '''\
 """Example commands."""
@@ -164,7 +191,7 @@ _TOOLS: tuple[ToolSpec, ...] = (
         binary="toolr",
         pip_pkg=None,  # ships as a binary; install via the install.sh path
         files=(
-            ("tools/pyproject.toml", _TOOLR_PYPROJECT),
+            ("tools/pyproject.toml", _toolr_pyproject(None)),
             ("tools/example.py", _TOOLR_EXAMPLE),
         ),
     ),
@@ -323,6 +350,72 @@ def _isolated_env(root: Path) -> dict[str, str]:
     return env
 
 
+def _select_tools(only: tuple[str, ...]) -> list[ToolSpec] | int:
+    """Return the ToolSpecs matching ``only`` (or all when empty), or ``2`` on bad input."""
+    known = {t.name for t in _TOOLS}
+    if not only:
+        return list(_TOOLS)
+    unknown = sorted(set(only) - known)
+    if unknown:
+        _log(f"error: unknown tool(s): {', '.join(unknown)}")
+        _log(f"known: {', '.join(sorted(known))}")
+        return 2
+    return [t for t in _TOOLS if t.name in only]
+
+
+def _resolve_root(path: str | None) -> Path:
+    """Return the bench root directory, creating a tmp dir when ``path`` is None."""
+    if path is not None:
+        root = Path(path).expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    return Path(tempfile.mkdtemp(prefix="toolr-bench-"))
+
+
+def _resolve_find_links(
+    arg: str,
+    selected: list[ToolSpec],
+) -> tuple[list[ToolSpec], Path] | None:
+    """Validate a ``--toolr-py-find-links DIR`` argument and pin the toolr spec.
+
+    Returns ``(selected_with_pin, find_links_dir)`` on success, or ``None``
+    after logging the failure. The caller maps ``None`` to a non-zero
+    exit code.
+
+    Pin the bench fixture's ``toolr-py`` to the exact version found in
+    the first matching wheel filename. When multiple wheels live in the
+    dir (e.g. a cross-platform CI artifact merge), uv still picks the
+    one whose tags match the runtime — the version pin only constrains
+    which version, not which build of that version.
+    """
+    find_links_dir = Path(arg).expanduser().resolve()
+    if not find_links_dir.is_dir():
+        _log(f"error: --toolr-py-find-links must be a directory (got {find_links_dir})")
+        return None
+    wheels = sorted(find_links_dir.glob("toolr_py-*.whl"))
+    if not wheels:
+        _log(f"error: no toolr_py-*.whl in {find_links_dir}")
+        return None
+    pinned_version = _wheel_version(wheels[0])
+    if pinned_version is None:
+        _log(f"error: cannot parse toolr-py version from {wheels[0].name}")
+        return None
+    pinned = [
+        dataclasses.replace(
+            spec,
+            files=(
+                ("tools/pyproject.toml", _toolr_pyproject(pinned_version)),
+                ("tools/example.py", _TOOLR_EXAMPLE),
+            ),
+        )
+        if spec.name == "toolr"
+        else spec
+        for spec in selected
+    ]
+    _log(f"toolr-py pinned to {pinned_version} (find-links: {find_links_dir})")
+    return pinned, find_links_dir
+
+
 def compare(
     *,
     only: tuple[str, ...],
@@ -331,6 +424,7 @@ def compare(
     keep_tmp: bool,
     path: str | None,
     reuse_caches: bool,
+    toolr_py_find_links: str | None,
 ) -> int:
     """Drive the benchmark loop and print the resulting markdown table to stdout."""
     min_runs = 10
@@ -341,28 +435,34 @@ def compare(
         )
         return 2
 
-    known = {t.name for t in _TOOLS}
-    if only:
-        unknown = sorted(set(only) - known)
-        if unknown:
-            _log(f"error: unknown tool(s): {', '.join(unknown)}")
-            _log(f"known: {', '.join(sorted(known))}")
+    selected_or_err = _select_tools(only)
+    if isinstance(selected_or_err, int):
+        return selected_or_err
+    selected = selected_or_err
+
+    find_links_dir: Path | None = None
+    if toolr_py_find_links is not None:
+        resolved = _resolve_find_links(toolr_py_find_links, selected)
+        if resolved is None:
             return 2
-        selected = [t for t in _TOOLS if t.name in only]
-    else:
-        selected = list(_TOOLS)
+        selected, find_links_dir = resolved
+        if reuse_caches:
+            _log("error: --toolr-py-find-links and --reuse-caches are mutually exclusive")
+            return 2
 
     user_path = path is not None
-    if path is not None:
-        root = Path(path).expanduser().resolve()
-        root.mkdir(parents=True, exist_ok=True)
-    else:
-        root = Path(tempfile.mkdtemp(prefix="toolr-bench-"))
+    root = _resolve_root(path)
     _log(f"workdir: {root}")
 
     env = None if reuse_caches else _isolated_env(root)
-    if not reuse_caches:
-        _log(f"isolated XDG_CACHE_HOME: {env['XDG_CACHE_HOME']}")  # type: ignore[index]
+    if env is not None:
+        _log(f"isolated XDG_CACHE_HOME: {env['XDG_CACHE_HOME']}")
+        if find_links_dir is not None:
+            # `UV_FIND_LINKS` is inherited by every `uv` subprocess that
+            # toolr spawns to materialize the bench fixture's tools venv,
+            # so the pinned `toolr-py == <ver>` resolves against the local
+            # wheel directory rather than PyPI.
+            env["UV_FIND_LINKS"] = str(find_links_dir)
 
     rows = [_Row(spec=s) for s in selected]
 
@@ -537,6 +637,18 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Inherit the parent XDG_CACHE_HOME instead of isolating it under <root>.",
     )
+    parser.add_argument(
+        "--toolr-py-find-links",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Directory of locally-built `toolr_py-*.whl` files. When set, "
+            "the bench fixture pins `toolr-py` to the wheel's version and "
+            "exports `UV_FIND_LINKS=<DIR>` so uv resolves the local wheel "
+            "instead of pulling from PyPI. Required to bench an unreleased "
+            "`toolr-py` in CI."
+        ),
+    )
     return parser
 
 
@@ -549,6 +661,7 @@ def main(argv: list[str] | None = None) -> int:
         keep_tmp=args.keep_tmp,
         path=args.path,
         reuse_caches=args.reuse_caches,
+        toolr_py_find_links=args.toolr_py_find_links,
     )
 
 
