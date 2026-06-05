@@ -19,5 +19,3 @@ Options:
           Verify the on-disk manifest matches regeneration
   -h, --help
           Print help
-
-Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

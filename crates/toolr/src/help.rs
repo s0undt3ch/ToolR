@@ -16,11 +16,9 @@ use termimad::{FmtText, MadSkin};
 pub enum HelpMode {
     /// `-h` — title + summary + usage + condensed options + subcommands.
     Short,
-    /// `--help` — full markdown body + verbose options + subcommands + bugs.
+    /// `--help` — full markdown body + verbose options + subcommands.
     Long,
 }
-
-const BUGS_URL: &str = "https://github.com/s0undt3ch/ToolR/issues";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Public entry point
@@ -88,8 +86,11 @@ fn render_markdown(cmd: &Command, bin_path: &str, mode: HelpMode, width: usize) 
     push_positionals(&mut out, cmd, width);
     push_options_by_heading(&mut out, cmd, mode, width);
     push_commands(&mut out, cmd);
-    if mode == HelpMode::Long {
-        push_bugs_footer(&mut out);
+    // Each section pushes a trailing blank-line separator. With the
+    // bugs footer gone, the final section's separator becomes a stray
+    // trailing blank line — collapse to exactly one terminating "\n".
+    while out.ends_with("\n\n") {
+        out.pop();
     }
     out
 }
@@ -358,11 +359,6 @@ fn push_commands(out: &mut String, cmd: &Command) {
     out.push('\n');
 }
 
-/// `**Report bugs to**: <https://...>`. Long mode only.
-fn push_bugs_footer(out: &mut String) {
-    out.push_str(&format!("**Report bugs to**: <{BUGS_URL}>\n"));
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Small shared helpers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -516,20 +512,15 @@ mod tests {
         assert!(md.contains("## Examples"), "## Examples heading present");
         assert!(md.contains("widget make"), "examples body present");
         assert!(md.contains("**Commands:**"), "commands section");
-        assert!(md.contains("Report bugs to"), "bugs footer");
     }
 
     #[test]
-    fn short_mode_omits_long_body_and_bugs() {
+    fn short_mode_omits_long_body() {
         let md = render_markdown(&widget(), "widget", HelpMode::Short, 100);
         assert!(md.contains("Manages widgets"), "about line present");
         assert!(
             !md.contains("widget make"),
             "long body should be absent in short mode"
-        );
-        assert!(
-            !md.contains("Report bugs to"),
-            "bugs footer absent in short mode"
         );
     }
 

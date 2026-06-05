@@ -26,5 +26,3 @@ Commands:
   example  Example commands
   project  Operations on the current repo's tools/ directory
   self     Operations on toolr itself
-
-Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>

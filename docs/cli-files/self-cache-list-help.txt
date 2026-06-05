@@ -5,5 +5,3 @@ Usage: toolr self cache list
 Options:
   -h, --help
           Print help
-
-Report bugs to: <https://github.com/s0undt3ch/ToolR/issues>
