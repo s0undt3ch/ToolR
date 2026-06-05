@@ -16,3 +16,9 @@ sweep — including `ruff_*` git deps to `0.15.15`, `ruff`/`coverage`/
 `hypothesis` on the Python side, and `actions/checkout` and
 `actions-cool/check-user-permission` in CI. Transitive lockfile bumps
 in `Cargo.lock` and `uv.lock` rolled forward at the same time.
+
+The task-runner startup benchmark moved from `toolr bench compare` to
+`python3 scripts/bench.py`. The script now depends only on the Python
+standard library (no toolr, no rich), so it can run in a fresh CI job
+without bootstrapping a project venv. Output is a markdown table on
+stdout; progress lines go to stderr.

@@ -95,17 +95,18 @@ Hooks include `ruff`, `mypy`, `clippy`, `cargo check`, `rumdl`, `codespell`, `ty
 
 ## Benchmarking
 
-`toolr bench compare` measures `<tool> -h` startup latency for every task-runner CLI it finds on
-`$PATH` (`toolr`, `invoke`, `python-tools-scripts`, `duty`, `doit`, `nox`). Add `--install` to let
-it `uv tool install` missing Python tools on demand, and `--markdown` to render the result as a
-table:
+`scripts/bench.py` measures `<tool> -h` startup latency for every task-runner CLI it finds on
+`$PATH` (`toolr`, `invoke`, `python-tools-scripts`, `duty`, `doit`, `nox`). It's a stdlib-only
+script — no toolr, no rich, no venv to bootstrap — so it can run in a fresh CI job. Add
+`--install` to let it `uv tool install` missing Python tools on demand:
 
 ```sh
-toolr bench compare --install --markdown
+python3 scripts/bench.py --install
 ```
 
-The README's headline benchmark table comes from this command. Re-run it on a fresh hardware target
-before changing the README's numbers.
+Output is a markdown table on stdout (progress goes to stderr); the README's headline benchmark
+table comes from this command. Re-run it on a fresh hardware target before changing the README's
+numbers.
 
 ## Filing bugs
 

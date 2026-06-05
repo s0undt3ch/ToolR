@@ -1,5 +1,4 @@
-"""
-Benchmark task-runner CLI startup time.
+"""Benchmark task-runner CLI startup time.
 
 For each available task-runner (toolr, invoke, python-tools-scripts, duty,
 doit, nox), write a minimal task-file in its own temp subdirectory, then
@@ -18,27 +17,26 @@ cold/hot so the first-run setup cost stays visible:
 Missing Python task-runners can be installed on demand with ``--install``
 (``uv tool install``). The ``toolr`` binary itself must already be on PATH
 (install via the standard ``install.sh``).
+
+The output is a column-padded markdown table (copy/paste-able into a
+README or PR description). This script depends only on the Python
+standard library — no toolr, no rich — so it can run in a fresh CI job
+without bootstrapping a project venv.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import statistics
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-
-from rich.table import Table
-
-from toolr import Context
-from toolr import command_group
-
-group = command_group("bench", "Benchmark task-runner CLIs", docstring=__doc__)
-
 
 # ---------------------------------------------------------------------------
 # Minimal task-files per tool. Each defines a single `hello` command so the
@@ -224,7 +222,12 @@ class _Row:
     note: str = ""
 
 
-def _resolve_binary(ctx: Context, spec: ToolSpec, *, install: bool) -> str | None:
+def _log(msg: str) -> None:
+    """Emit a progress line to stderr so it stays out of the captured markdown."""
+    print(msg, file=sys.stderr)  # noqa: T201
+
+
+def _resolve_binary(spec: ToolSpec, *, install: bool) -> str | None:
     """Return the path to ``spec.binary``, optionally installing on demand.
 
     For the Python task-runners (invoke, duty, doit, nox, ptscripts) we
@@ -239,28 +242,32 @@ def _resolve_binary(ctx: Context, spec: ToolSpec, *, install: bool) -> str | Non
         return found
     if not install or spec.pip_pkg is None:
         return None
-    ctx.info(f"installing {spec.name} via `uv tool install {spec.pip_pkg}` …")
-    result = ctx.run(
-        "uv",
-        "tool",
-        "install",
-        "--quiet",
-        spec.pip_pkg,
+    _log(f"installing {spec.name} via `uv tool install {spec.pip_pkg}` …")
+    # `uv` is intentionally resolved via PATH (S607) so this works against any
+    # supported uv install location; `spec.pip_pkg` is a static literal (S603).
+    result = subprocess.run(  # noqa: S603
+        ["uv", "tool", "install", "--quiet", spec.pip_pkg],  # noqa: S607
+        check=False,
         capture_output=True,
-        stream_output=False,
+        text=True,
     )
     if result.returncode != 0:
-        ctx.warn(f"`uv tool install {spec.pip_pkg}` failed; skipping {spec.name}")
+        _log(f"warn: `uv tool install {spec.pip_pkg}` failed; skipping {spec.name}")
         return None
     found = shutil.which(spec.binary)
     if found:
         return found
-    bin_dir = ctx.run("uv", "tool", "dir", "--bin", capture_output=True, stream_output=False)
+    bin_dir = subprocess.run(
+        ["uv", "tool", "dir", "--bin"],  # noqa: S607 — see comment above for `uv`.
+        check=False,
+        capture_output=True,
+        text=True,
+    )
     if bin_dir.returncode == 0:
-        candidate = Path(bin_dir.stdout.read().strip()) / spec.binary
+        candidate = Path(bin_dir.stdout.strip()) / spec.binary
         if candidate.exists():
             return str(candidate)
-    ctx.warn(f"{spec.binary!r} installed but not on PATH; run `uv tool update-shell`")
+    _log(f"warn: {spec.binary!r} installed but not on PATH; run `uv tool update-shell`")
     return None
 
 
@@ -316,122 +323,53 @@ def _isolated_env(root: Path) -> dict[str, str]:
     return env
 
 
-@group.command
 def compare(
-    ctx: Context,
-    *only: str,
-    runs: int = 20,
-    install: bool = False,
-    keep_tmp: bool = False,
-    path: str | None = None,
-    reuse_caches: bool = False,
-    markdown: bool = False,
-) -> None:
-    """Compare ``<tool> -h`` startup time across task-runner CLIs.
-
-    For each task-runner whose binary is on PATH (or installable via
-    ``--install``), write a minimal task-file in ``<root>/<tool-name>/``
-    and run ``<tool> -h`` ``runs`` times. The result is a table sorted
-    by steady-state mean (fastest first).
-
-    Methodology
-    -----------
-
-    * **Workspace isolation.** Each ``compare`` invocation creates a
-      fresh ``<root>`` (a random tmp dir, or ``--path`` if supplied) and
-      places each tool's config in its own subdirectory. Per-tool state
-      a runner writes into ``cwd`` (e.g. doit's ``.doit.db``, nox's
-      ``.nox/``, toolr's ``.toolr-manifest.json``) lives inside the
-      per-tool subdir and therefore starts clean every invocation.
-
-    * **Cache isolation.** ``XDG_CACHE_HOME`` is redirected to
-      ``<root>/_xdg_cache`` for the measured subprocesses so toolr's
-      venv cache is rebuilt rather than reused from a prior bench run.
-      ``UV_CACHE_DIR`` is preserved to the user's real uv wheel cache so
-      ``toolr-py`` doesn't get re-downloaded from PyPI every run — that
-      would be network-bound, not what we want to measure. Pass
-      ``--reuse-caches`` to skip the XDG redirect entirely.
-
-    * **Three columns instead of cold/hot.** The first two runs each
-      get their own column so first-run setup cost stays separately
-      visible from steady state. Runs #3..N are averaged into the
-      "Remaining" column with min/max alongside. Pre-warming is
-      deliberately avoided — for toolr in particular, the first run
-      builds the static manifest cache, and hiding that would be
-      unfair.
-
-    * **Sleeps between #1↔#2 and #2↔#3.** A 500ms gap is inserted after
-      runs #1 and #2 so the "Second" and first "Remaining" samples
-      don't piggy-back on a still-warm CPU / OS page cache from the
-      previous invocation. Runs #3 onward fire back-to-back to capture
-      the steady-state cadence a user actually experiences.
-
-    * **What still leaks across runs.** ``uv tool install`` venvs (and
-      their pre-compiled ``.pyc`` files) under
-      ``$XDG_DATA_HOME/uv/tools/`` persist across bench invocations,
-      so the Python task-runners are measured "with an already-installed
-      tool". The OS page cache also can't be flushed without root, and
-      the ``toolr`` binary itself stays hot in kernel cache because the
-      parent process running this bench *is* toolr. Both biases favour
-      whichever tool was invoked most recently.
-
-    Args:
-        runs: Total invocations per tool. Must be >= 10 so the
-            "Remaining" mean averages over a reasonable number of
-            steady-state samples.
-        install: When set, ``uv tool install`` missing Python
-            task-runners. The ``toolr`` binary itself is never
-            auto-installed — provision it via the standard install.sh
-            path.
-        keep_tmp: Leave the per-tool directories in place after the run
-            so the user can poke around. Implied when ``--path`` is set.
-        path: Root directory to use instead of a random tmp dir. Created
-            if missing; existing per-tool subdirs are reused as-is.
-        reuse_caches: Inherit the parent ``XDG_CACHE_HOME`` instead of
-            isolating it under ``<root>``. Lets toolr reuse a previously
-            provisioned venv + manifest cache across bench runs.
-        markdown: Render the result as a column-padded markdown table
-            (copy/paste-able into a README or PR description) instead of
-            the default Rich-styled table.
-        only: Optional positional list of tool names to benchmark.
-            Defaults to all known tools when omitted.
-    """
+    *,
+    only: tuple[str, ...],
+    runs: int,
+    install: bool,
+    keep_tmp: bool,
+    path: str | None,
+    reuse_caches: bool,
+) -> int:
+    """Drive the benchmark loop and print the resulting markdown table to stdout."""
     min_runs = 10
     if runs < min_runs:
-        ctx.error(
-            f"--runs must be >= {min_runs} (got {runs}); steady-state mean needs enough samples"
+        _log(
+            f"error: --runs must be >= {min_runs} (got {runs}); "
+            "steady-state mean needs enough samples"
         )
-        ctx.exit(2)
+        return 2
 
     known = {t.name for t in _TOOLS}
     if only:
         unknown = sorted(set(only) - known)
         if unknown:
-            ctx.error(f"unknown tool(s): {', '.join(unknown)}")
-            ctx.error(f"known: {', '.join(sorted(known))}")
-            ctx.exit(2)
+            _log(f"error: unknown tool(s): {', '.join(unknown)}")
+            _log(f"known: {', '.join(sorted(known))}")
+            return 2
         selected = [t for t in _TOOLS if t.name in only]
     else:
         selected = list(_TOOLS)
 
     user_path = path is not None
-    if user_path:
+    if path is not None:
         root = Path(path).expanduser().resolve()
         root.mkdir(parents=True, exist_ok=True)
     else:
         root = Path(tempfile.mkdtemp(prefix="toolr-bench-"))
-    ctx.info(f"workdir: {root}")
+    _log(f"workdir: {root}")
 
     env = None if reuse_caches else _isolated_env(root)
     if not reuse_caches:
-        ctx.info(f"isolated XDG_CACHE_HOME: {env['XDG_CACHE_HOME']}")  # type: ignore[index]
+        _log(f"isolated XDG_CACHE_HOME: {env['XDG_CACHE_HOME']}")  # type: ignore[index]
 
     rows = [_Row(spec=s) for s in selected]
 
     for row in rows:
         spec = row.spec
-        ctx.info(f"benchmarking {spec.name} …")
-        binary = _resolve_binary(ctx, spec, install=install)
+        _log(f"benchmarking {spec.name} …")
+        binary = _resolve_binary(spec, install=install)
         if binary is None:
             row.note = "binary not on PATH (pass --install for Python runners)"
             continue
@@ -455,15 +393,13 @@ def compare(
             if i <= 1:
                 time.sleep(0.5)
 
-    if markdown:
-        _render_markdown(ctx, rows, runs=runs)
-    else:
-        _render(ctx, rows, runs=runs)
+    _render_markdown(rows, runs=runs)
 
     if keep_tmp or user_path:
-        ctx.info(f"workdir kept at {root}")
+        _log(f"workdir kept at {root}")
     else:
         shutil.rmtree(root, ignore_errors=True)
+    return 0
 
 
 _COLUMNS: tuple[tuple[str, bool], ...] = (
@@ -514,21 +450,8 @@ def _row_cells(r: _Row) -> tuple[str, ...]:
     )
 
 
-def _render(ctx: Context, rows: list[_Row], *, runs: int) -> None:
-    """Render the timing rows as a Rich table sorted by remaining mean ascending."""
-    remaining_count = runs - 2
-    table = Table(
-        title=f"`<tool> -h` startup — {runs} runs (remaining = mean of last {remaining_count})"
-    )
-    for header, is_numeric in _COLUMNS:
-        table.add_column(header, justify="right" if is_numeric else "left")
-    for r in _sorted_rows(rows):
-        table.add_row(*_row_cells(r))
-    ctx.print(table)
-
-
-def _render_markdown(ctx: Context, rows: list[_Row], *, runs: int) -> None:
-    """Render the timing rows as a column-padded markdown table.
+def _render_markdown(rows: list[_Row], *, runs: int) -> None:
+    """Render the timing rows as a column-padded markdown table to stdout.
 
     Numeric columns are right-aligned (``|---:|``); text columns get the
     default left alignment. Each cell is padded to the column's widest
@@ -537,7 +460,6 @@ def _render_markdown(ctx: Context, rows: list[_Row], *, runs: int) -> None:
     """
     cells = [_row_cells(r) for r in _sorted_rows(rows)]
     headers = [h for h, _ in _COLUMNS]
-    # Column width = max(header, max-cell-in-column).
     widths = [
         max(len(h), *(len(row[i]) for row in cells)) if cells else len(h)
         for i, h in enumerate(headers)
@@ -566,7 +488,69 @@ def _render_markdown(ctx: Context, rows: list[_Row], *, runs: int) -> None:
         "| " + " | ".join(sep_cells) + " |",
         *(line(row) for row in cells),
     ]
-    # Use Rich with markup off + soft_wrap so brackets in headers aren't
-    # interpreted and long rows don't get terminal-width-wrapped. The
-    # source is then byte-identical to what gets pasted into markdown.
-    ctx.print("\n".join(out_lines), markup=False, soft_wrap=True, highlight=False)
+    print("\n".join(out_lines))  # noqa: T201 — markdown table goes to stdout.
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "only",
+        nargs="*",
+        metavar="TOOL",
+        help=(
+            "Optional positional list of tool names to benchmark. "
+            "Defaults to all known tools when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=20,
+        help="Total invocations per tool. Must be >= 10. (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help=(
+            "`uv tool install` missing Python task-runners. "
+            "The `toolr` binary itself is never auto-installed."
+        ),
+    )
+    parser.add_argument(
+        "--keep-tmp",
+        action="store_true",
+        help=("Leave the per-tool directories in place after the run. Implied when --path is set."),
+    )
+    parser.add_argument(
+        "--path",
+        default=None,
+        help=(
+            "Root directory to use instead of a random tmp dir. "
+            "Created if missing; existing per-tool subdirs are reused."
+        ),
+    )
+    parser.add_argument(
+        "--reuse-caches",
+        action="store_true",
+        help="Inherit the parent XDG_CACHE_HOME instead of isolating it under <root>.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    return compare(
+        only=tuple(args.only),
+        runs=args.runs,
+        install=args.install,
+        keep_tmp=args.keep_tmp,
+        path=args.path,
+        reuse_caches=args.reuse_caches,
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
