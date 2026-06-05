@@ -23,7 +23,7 @@ Python only runs when you invoke a command, inside a per-repo `uv`-managed venv.
 | python-tools-scripts |          252.2 ms |  340.3 ms |   189.0 ms |
 
 `<tool> -h`, 20 runs, steady-state = mean of last 18. Measured on Apple M3 Pro / macOS 26.5 / arm64.
-Reproduce locally with `toolr bench compare` (add `--markdown` for the table above).
+Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table above to stdout).
 
 ## Why ToolR
 

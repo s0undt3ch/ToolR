@@ -132,44 +132,21 @@ jobs:
         # would be excluded from the comparison. Add it up front.
         run: uv tool dir --bin >> "$GITHUB_PATH"
 
-      - name: Sync tools venv (pulls toolr-py from PyPI)
-        shell: bash
-        # First run of `toolr` against a `tools/` directory bootstraps
-        # the tools venv (creates it, runs `uv sync`). Force that to
-        # happen explicitly so the wheel-swap step below has a venv
-        # to install into.
-        run: toolr project venv sync
-
-      - name: Install local toolr-py wheel into tools venv
-        shell: bash
-        # `project venv sync` resolved `toolr-py` from PyPI. Swap in
-        # the just-built wheel so the bench measures THIS PR's
-        # `toolr` + `toolr-py`, not the released versions.
-        run: |
-          set -euo pipefail
-          venv=$(toolr project venv path)
-          wheel=$(find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 1 -type f -name 'toolr_py-*.whl' -print -quit)
-          if [ -z "$wheel" ]; then
-            echo "no toolr_py wheel found under $RUNNER_TEMP/toolr-py-wheel/" >&2
-            find "$RUNNER_TEMP/toolr-py-wheel" -maxdepth 2 -mindepth 1 -print >&2 || true
-            exit 1
-          fi
-          # `--python` accepts either an interpreter path or a venv
-          # root; venv root is the portable form across Linux/macOS
-          # (`bin/python`) and Windows (`Scripts/python.exe`).
-          uv pip install --python "$venv" --force-reinstall "$wheel"
-
       - name: Run startup bench
         id: bench
         shell: bash
+        # `--toolr-py-find-links` pins the bench fixture's `toolr-py`
+        # to the version of the wheel in that dir and exports
+        # `UV_FIND_LINKS` so toolr's per-fixture `uv sync` resolves
+        # the local wheel instead of the released version on PyPI.
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/bench.md"
           workdir=$(mktemp -d)
-          toolr bench compare \
+          python3 scripts/bench.py \
             --path "$workdir" \
-            --markdown \
             --install \
+            --toolr-py-find-links "$RUNNER_TEMP/toolr-py-wheel" \
             | tee "$out"
           echo "out=$out" >> "$GITHUB_OUTPUT"
 
@@ -184,7 +161,7 @@ jobs:
           BENCH_OUT: ${{ steps.bench.outputs.out }}
         run: |
           {
-            echo "## ⏱️ \`toolr bench compare\` — $DISPLAY_NAME (\`$TRIPLE\`)"
+            echo "## ⏱️ \`scripts/bench.py\` — $DISPLAY_NAME (\`$TRIPLE\`)"
             echo
             echo "Built from this branch's \`toolr\` archive + \`toolr_py-${CP_TAG}-${WHEEL_PLATFORM}\` wheel."
             echo
