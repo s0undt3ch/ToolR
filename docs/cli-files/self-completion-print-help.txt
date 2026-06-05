@@ -4,6 +4,7 @@ Usage: toolr self completion print <shell>
 
 Arguments:
   <shell>  Shell to emit a completion script for
+           [possible values: bash, zsh, fish]
 
 Options:
   -h, --help

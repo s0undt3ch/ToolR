@@ -2,6 +2,11 @@ In-project CLI tooling support
 
 Usage: toolr [OPTIONS] [COMMAND]
 
+Commands:
+  example  Example commands
+  project  Operations on the current repo's tools/ directory
+  self     Operations on toolr itself
+
 Options:
   -h, --help
           Print help
@@ -21,8 +26,3 @@ Output Options:
       --no-output-timeout-secs <SECONDS>
           Default no-output watchdog applied to every ctx.run(...) subprocess — abort if no
           stdout/stderr for this many seconds. Per-call no_output_timeout_secs= wins when set.
-
-Commands:
-  example  Example commands
-  project  Operations on the current repo's tools/ directory
-  self     Operations on toolr itself

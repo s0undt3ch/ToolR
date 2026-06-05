@@ -83,9 +83,12 @@ fn render_markdown(cmd: &Command, bin_path: &str, mode: HelpMode, width: usize) 
     let mut out = String::new();
     push_about(&mut out, cmd, mode);
     push_usage(&mut out, cmd, bin_path);
-    push_positionals(&mut out, cmd, width);
-    push_options_by_heading(&mut out, cmd, mode, width);
+    push_positionals(&mut out, cmd, mode, width);
+    // Match clap's native order: Arguments → Commands → Options. Options
+    // — including the synthetic `-h, --help` — render last so they sit
+    // closest to the prompt when the user reads the page bottom-up.
     push_commands(&mut out, cmd);
+    push_options_by_heading(&mut out, cmd, mode, width);
     // Each section pushes a trailing blank-line separator. With the
     // bugs footer gone, the final section's separator becomes a stray
     // trailing blank line — collapse to exactly one terminating "\n".
@@ -145,9 +148,12 @@ fn push_usage(out: &mut String, cmd: &Command, bin_path: &str) {
 }
 
 /// `Arguments:` block — only emitted when the command has positionals.
-/// Each line: `  <NAME>    help text`. Names are padded to the longest
-/// in the group so descriptions align in a single column.
-fn push_positionals(out: &mut String, cmd: &Command, _width: usize) {
+/// Each line: `  <NAME>  help text`. Names are padded to the longest in
+/// the group so descriptions align in a single column. In long mode
+/// `[possible values: …]` and `[default: …]` annotations hang under
+/// the description on their own lines (same shape as `push_one_option`
+/// for flags).
+fn push_positionals(out: &mut String, cmd: &Command, mode: HelpMode, width: usize) {
     let args: Vec<&Arg> = cmd.get_positionals().filter(|a| !a.is_hide_set()).collect();
     if args.is_empty() {
         return;
@@ -164,12 +170,74 @@ fn push_positionals(out: &mut String, cmd: &Command, _width: usize) {
             }
         })
         .collect();
-    let width = labels.iter().map(|l| l.len()).max().unwrap_or(0);
+    let label_width = labels.iter().map(|l| l.len()).max().unwrap_or(0);
     for (arg, label) in args.iter().zip(labels.iter()) {
-        let help = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
-        push_two_column_block(out, label, width, &help);
+        let mut body = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
+        if mode == HelpMode::Long {
+            let pv: Vec<String> = arg
+                .get_possible_values()
+                .iter()
+                .filter(|p| !p.is_hide_set())
+                .map(|p| p.get_name().to_string())
+                .collect();
+            if !pv.is_empty() {
+                if !body.is_empty() {
+                    body.push('\n');
+                }
+                body.push_str(&format!("[possible values: {}]", pv.join(", ")));
+            }
+            if let Some(default) = arg.get_default_values().first() {
+                let value = default.to_string_lossy();
+                // `<expr>` is toolr-core's sentinel for an unresolvable
+                // Python default expression — see push_one_option.
+                if value != "<expr>" {
+                    if !body.is_empty() {
+                        body.push('\n');
+                    }
+                    body.push_str(&format!("[default: {value}]"));
+                }
+            }
+        }
+        // Wrap the body at the available column width before handing it
+        // to push_two_column_block so multi-line annotations hang under
+        // the description column without termimad re-wrapping them.
+        let body = wrap_for_two_column(&body, label_width, width);
+        push_two_column_block(out, label, label_width, &body);
     }
     out.push('\n');
+}
+
+/// Wrap `text` at `(page_width - leading_indent - label_width - gap)`
+/// columns so it fits cleanly in the description column of a
+/// two-column block. Mirrors what push_wrapped does for the Options
+/// block; pulled out so push_positionals can pre-wrap before calling
+/// push_two_column_block (which preserves explicit `\n` boundaries).
+fn wrap_for_two_column(text: &str, label_width: usize, page_width: usize) -> String {
+    let indent = 2 + label_width + 2;
+    let max = page_width.saturating_sub(indent).max(20);
+    let mut out = String::new();
+    for (i, input_line) in text.lines().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let mut current = String::new();
+        for word in input_line.split_whitespace() {
+            let projected = current.len() + (if current.is_empty() { 0 } else { 1 }) + word.len();
+            if projected > max && !current.is_empty() {
+                out.push_str(&current);
+                out.push('\n');
+                current.clear();
+            }
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+        }
+        if !current.is_empty() {
+            out.push_str(&current);
+        }
+    }
+    out
 }
 
 /// `Options:` plus any custom `help_heading` groups. Args with no
@@ -408,9 +476,16 @@ fn push_wrapped(out: &mut String, text: &str, indent: usize, width: usize) {
 /// has multiple lines, the continuation lines are indented past the
 /// label column so they hang under the description. The 2-space gap
 /// between label and text matches clap's default short-label layout.
+///
+/// Continuation-line indent is built from non-breaking spaces
+/// (`U+00A0`) so CommonMark doesn't treat lines deeper than the
+/// 4-column code-block trigger as code blocks (which would cause
+/// termimad to strip leading whitespace and break the hanging
+/// indent). The label column on the first line uses regular ASCII
+/// spaces — it's only 2 columns deep, well under the trigger.
 fn push_two_column_block(out: &mut String, label: &str, width: usize, text: &str) {
     let indent_size = 2 + width + 2; // leading "  " + label-col + 2-space gap
-    let indent: String = " ".repeat(indent_size);
+    let indent: String = "\u{a0}".repeat(indent_size);
     let mut lines = text.lines();
     let first = lines.next().unwrap_or("");
     out.push_str(&format!(
@@ -631,12 +706,14 @@ mod tests {
     fn two_column_block_continuation_lines_hang_under_text() {
         // Multi-line text hangs under the text column on continuation
         // lines: leading indent (2) + label width + gap (2) = 2 + width
-        // + 2 spaces of leading whitespace on every line after the first.
+        // + 2 non-breaking spaces of leading whitespace on every line
+        // after the first. NBSPs (U+00A0) keep CommonMark from
+        // misreading the deep indent as a code block, which would
+        // make termimad strip the leading whitespace.
         let mut out = String::new();
         push_two_column_block(&mut out, "name", 4, "first\nsecond\nthird");
-        let expected = "  name  first\n\
-                        \x20\x20\x20\x20\x20\x20\x20\x20second\n\
-                        \x20\x20\x20\x20\x20\x20\x20\x20third\n";
+        let pad = "\u{a0}".repeat(8);
+        let expected = format!("  name  first\n{pad}second\n{pad}third\n");
         assert_eq!(out, expected);
     }
 
@@ -694,5 +771,62 @@ mod tests {
             "possible values listed: {md}"
         );
         assert!(md.contains("[default: info]"), "default listed: {md}");
+    }
+
+    #[test]
+    fn positionals_render_possible_values_and_default_in_long_mode() {
+        // Positionals with a fixed value_parser (or default) must show
+        // `[possible values: …]` / `[default: …]` just like flags do.
+        // Long mode only — short mode keeps positionals to one line.
+        let cmd = Command::new("printer").arg(
+            Arg::new("shell")
+                .value_parser(["bash", "zsh", "fish"])
+                .default_value("bash")
+                .help("Shell to emit a completion script for"),
+        );
+        let md = render_markdown(&cmd, "printer", HelpMode::Long, 100);
+        assert!(
+            md.contains("[possible values: bash, zsh, fish]"),
+            "positional possible values listed in long mode: {md}"
+        );
+        assert!(
+            md.contains("[default: bash]"),
+            "positional default listed in long mode: {md}"
+        );
+    }
+
+    #[test]
+    fn positionals_omit_annotations_in_short_mode() {
+        // Short mode (the `-h` path) keeps the Arguments block compact.
+        let cmd = Command::new("printer").arg(
+            Arg::new("shell")
+                .value_parser(["bash", "zsh", "fish"])
+                .default_value("bash")
+                .help("Shell to emit a completion script for"),
+        );
+        let md = render_markdown(&cmd, "printer", HelpMode::Short, 100);
+        assert!(
+            !md.contains("[possible values:"),
+            "short mode suppresses possible values: {md}"
+        );
+        assert!(
+            !md.contains("[default:"),
+            "short mode suppresses defaults: {md}"
+        );
+    }
+
+    #[test]
+    fn commands_render_before_options() {
+        // Match clap's native section order: Arguments → Commands →
+        // Options. The Options block (synthetic `-h, --help` at
+        // minimum) sits at the bottom of the page.
+        let cmd = Command::new("root").subcommand(Command::new("kid").about("hi"));
+        let md = render_markdown(&cmd, "root", HelpMode::Long, 100);
+        let cmd_pos = md.find("**Commands:**").expect("Commands block present");
+        let opt_pos = md.find("**Options:**").expect("Options block present");
+        assert!(
+            cmd_pos < opt_pos,
+            "Commands renders before Options: {md}"
+        );
     }
 }
