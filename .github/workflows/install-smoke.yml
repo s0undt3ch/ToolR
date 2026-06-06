@@ -117,7 +117,7 @@ jobs:
           egress-policy: audit
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.12'
+          python-version: '3.14'
       - name: Smoke `pip install toolr` (binary wheel)
         shell: bash
         run: |
@@ -192,7 +192,7 @@ jobs:
         run: |
           curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/.github/env" \
             | sed -n '/^[A-Z]/p' >> "$GITHUB_ENV"
-      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
           version: ${{ env.MISE_VERSION }}
           install: false
