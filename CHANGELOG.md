@@ -6,6 +6,23 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.24.1 - 2026-06-06
+
+### Notes
+
+Tab completion now offers flag candidates at every level of the
+command tree, not just leaf commands. `toolr --<Tab>` lists the
+binary's own root options (`--debug`, `--quiet`, `--timestamps`, …)
+alongside `--help`, and `--help` is offered at every group node
+(`toolr self --<Tab>`, `toolr self cache --<Tab>`, …) and on every
+leaf in addition to its own flags. A bare `--` typed as the
+in-progress word is now preserved through the engine — previously
+clap consumed it as the end-of-options marker and the shell saw
+an empty candidate list.
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(complete)* Offer flags at every node and preserve bare `--` ([`446c770`](https://github.com/s0undt3ch/ToolR/commit/446c77042ad5c3c2cf5377f50b1ea0c7a3b761a9))
 ## 0.24.0 - 2026-06-06
 
 ### Notes
