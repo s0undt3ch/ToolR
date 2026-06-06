@@ -1692,15 +1692,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0231-dev12-2026-06-05" class="md-nav__link">
+  <a href="#0231-dev47-2026-06-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.23.1-dev12 - 2026-06-05
+        0.23.1-dev47 - 2026-06-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.23.1-dev12 - 2026-06-05">
+    <nav class="md-nav" aria-label="0.23.1-dev47 - 2026-06-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1763,6 +1763,17 @@
     <span class="md-ellipsis">
       
         📚 Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing
       
     </span>
   </a>
@@ -1887,7 +1898,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
+  <a href="#testing_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -2087,7 +2098,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing_1" class="md-nav__link">
+  <a href="#testing_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -2498,7 +2509,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing_2" class="md-nav__link">
+  <a href="#testing_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -2758,7 +2769,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing_3" class="md-nav__link">
+  <a href="#testing_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -3069,15 +3080,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0231-dev12-2026-06-05" class="md-nav__link">
+  <a href="#0231-dev47-2026-06-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.23.1-dev12 - 2026-06-05
+        0.23.1-dev47 - 2026-06-06
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.23.1-dev12 - 2026-06-05">
+    <nav class="md-nav" aria-label="0.23.1-dev47 - 2026-06-06">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3140,6 +3151,17 @@
     <span class="md-ellipsis">
       
         📚 Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing
       
     </span>
   </a>
@@ -3264,7 +3286,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
+  <a href="#testing_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -3464,7 +3486,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing_1" class="md-nav__link">
+  <a href="#testing_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -3875,7 +3897,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing_2" class="md-nav__link">
+  <a href="#testing_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -4135,7 +4157,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#testing_3" class="md-nav__link">
+  <a href="#testing_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         🧪 Testing
@@ -4441,7 +4463,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0231-dev12-2026-06-05">0.23.1-dev12 - 2026-06-05<a class="headerlink" href="#0231-dev12-2026-06-05" title="Permanent link">&para;</a></h2>
+<h2 id="0231-dev47-2026-06-06">0.23.1-dev47 - 2026-06-06<a class="headerlink" href="#0231-dev47-2026-06-06" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Bumped all Rust, Python, and GitHub Actions dependencies in a single
 sweep — including <code>ruff_*</code> git deps to <code>0.15.15</code>, <code>ruff</code>/<code>coverage</code>/
@@ -4453,27 +4475,85 @@ in <code>Cargo.lock</code> and <code>uv.lock</code> rolled forward at the same t
 standard library (no toolr, no rich), so it can run in a fresh CI job
 without bootstrapping a project venv. Output is a markdown table on
 stdout; progress lines go to stderr.</p>
+<p><code>--help</code> output is now rendered as markdown through <code>termimad</code>.
+Python docstrings flow through unchanged — headings, sections
+(<code>## Examples</code>, <code>## Notes</code>, <code>## Warnings</code>), bullet lists, and
+fenced code blocks render as styled markdown in the terminal and
+as readable plain text when captured (non-TTY or <code>NO_COLOR</code>).
+<code>$COLUMNS</code> is honored for width control. The page matches clap's
+default layout: a <code>**Usage:**</code> line, <code>Arguments:</code> / <code>Options:</code> /
+<code>Commands:</code> blocks reflecting the actual command shape, possible
+values on positionals, and <code>[default: …]</code> on options where a
+literal default exists (unresolvable Python expressions are
+suppressed rather than shown as <code>&lt;expr&gt;</code>).</p>
+<p><code>-h</code> (short) and <code>--help</code> (long) remain distinct: short shows the
+first-paragraph <code>about</code> and truncates per-option help to its first
+line; long shows the full docstring body, Examples/Notes sections,
+possible-value lists, and <code>[default: …]</code> annotations.</p>
+<p>Sphinx-style <code>code</code> (double backticks) in docstrings is now
+normalized to single-backtick markdown at parse time, so RST
+syntax no longer leaks into rendered help.</p>
+<p>Internal: clap's built-in help is disabled and dispatched to
+<code>crate::help</code>; the <code>crate::markdown</code> pre-render layer, the
+<code>wrap_help</code> feature on <code>clap</code>, and the <code>clap-help</code> dependency
+are all gone.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(bench)</em> Add --toolr-py-find-links to pin the bench fixture to a local wheel (<a href="https://github.com/s0undt3ch/ToolR/commit/d828de7035dc462aca5a5680814c970f855776ed"><code>d828de7</code></a>)</li>
+<li><em>(core)</em> Promote docstring section labels to markdown headings (<a href="https://github.com/s0undt3ch/ToolR/commit/faf704d0c19217f76d6f8f38740a92d33c5e91e7"><code>faf704d</code></a>)</li>
+<li><em>(toolr)</em> Add help module skeleton with TTY-aware skin (<a href="https://github.com/s0undt3ch/ToolR/commit/8534fa431f129dcfc2b449ea899f4fc0c033c3cd"><code>8534fa4</code></a>)</li>
+<li><em>(toolr/help)</em> Resolve render width from $COLUMNS (<a href="https://github.com/s0undt3ch/ToolR/commit/868cfa223dcb85aa51b8594394bf6160d031489d"><code>868cfa2</code></a>)</li>
+<li><em>(toolr/help)</em> Implement render loop with custom width (<a href="https://github.com/s0undt3ch/ToolR/commit/3767ab3ebe44c44f68ef91e491dac4333a7035e3"><code>3767ab3</code></a>)</li>
+<li><em>(toolr)</em> Intercept --help/-h and dispatch to crate::help (<a href="https://github.com/s0undt3ch/ToolR/commit/8b9c9008273bb605c51e131012fc3c62057946fb"><code>8b9c900</code></a>)</li>
+<li><em>(toolr/help)</em> Render Options as a table (<a href="https://github.com/s0undt3ch/ToolR/commit/b9cda4469ed49514bd44be3dd0da576a7a8fda37"><code>b9cda44</code></a>)</li>
+<li><em>(toolr/help)</em> Render Commands as a table (<a href="https://github.com/s0undt3ch/ToolR/commit/f279b52542c4bc7005a03e113dd7dda663b3bfce"><code>f279b52</code></a>)</li>
+<li><em>(core/parser)</em> Resolve same-module constants as parameter defaults (<a href="https://github.com/s0undt3ch/ToolR/commit/db7da6182bc9780ee964663a714efcd67297ce84"><code>db7da61</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(tools/bench)</em> Account for <code>:</code> in right-aligned separator width (<a href="https://github.com/s0undt3ch/ToolR/commit/3244f8e7580f74f006c2438669aa016917178c9e"><code>3244f8e</code></a>)</li>
+<li><em>(core/docstrings)</em> Drop spurious newline between body and sections (<a href="https://github.com/s0undt3ch/ToolR/commit/c808b9178227142138baf7632a1170ab9a95f5d6"><code>c808b91</code></a>)</li>
+<li><em>(core/docstrings)</em> Normalize Sphinx double-backticks at parse time (<a href="https://github.com/s0undt3ch/ToolR/commit/ebd2b05f8f1c92aa3d56d54ff03e6998fc48b7e2"><code>ebd2b05</code></a>)</li>
+<li><em>(toolr/help)</em> Collapse blank rows between options (<a href="https://github.com/s0undt3ch/ToolR/commit/c555c7a9f82f73963a730f860f005adb7e820016"><code>c555c7a</code></a>)</li>
+<li><em>(toolr/help)</em> Make USAGE and Options reflect actual command shape (<a href="https://github.com/s0undt3ch/ToolR/commit/107a2d1e3a6de0d66f21eeffcc50abb711432a74"><code>107a2d1</code></a>)</li>
+<li>Gitignore .toolr-manifest.json fixtures at any depth (<a href="https://github.com/s0undt3ch/ToolR/commit/e22d501f34edb09c3af51ffd886740e53c1b5a01"><code>e22d501</code></a>)</li>
+<li><em>(toolr/help)</em> Drop short-flag pad when group has no shorts; add per-cmd --help (<a href="https://github.com/s0undt3ch/ToolR/commit/64324dab3fceb7803ac2dd5ed08da63afc1b1f19"><code>64324da</code></a>)</li>
+<li><em>(toolr/help)</em> Suppress <code>[default: &lt;expr&gt;]</code> for unresolvable defaults (<a href="https://github.com/s0undt3ch/ToolR/commit/d9de25dd5151d39768b7028f254191491324bc0a"><code>d9de25d</code></a>)</li>
+<li><em>(toolr/help)</em> Show <code>-h</code> on flag-less leaves; match clap's 2-space label gap (<a href="https://github.com/s0undt3ch/ToolR/commit/ca31fd0b0e11a0a8f778fe81007cec5231cdc968"><code>ca31fd0</code></a>)</li>
+<li><em>(toolr/help)</em> Drop the trailing "Report bugs to" footer (<a href="https://github.com/s0undt3ch/ToolR/commit/3eb0ec50304c50630c466d5aaf025758b48c23f2"><code>3eb0ec5</code></a>)</li>
+<li><em>(toolr/help)</em> Restore positional possible-values; render Commands before Options (<a href="https://github.com/s0undt3ch/ToolR/commit/f9942b74911df78aa0afeb2a6db8cefda6bdbf69"><code>f9942b7</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(deps)</em> Bump Rust workspace dependencies (<a href="https://github.com/s0undt3ch/ToolR/commit/32abda37658ad4a5cbdeeed1500fa465e7a2de21"><code>32abda3</code></a>)</li>
 <li><em>(deps-dev)</em> Bump Python dependencies (<a href="https://github.com/s0undt3ch/ToolR/commit/e95929641cc51c9bf3a5073166e91028970543c3"><code>e959296</code></a>)</li>
 <li><em>(deps)</em> Bump GitHub Actions (<a href="https://github.com/s0undt3ch/ToolR/commit/c4b15ccadb1b4d10fcc463c5bddac1b493b4bf71"><code>c4b15cc</code></a>)</li>
+<li><em>(toolr)</em> Add clap-help 1.5 for markdown --help rendering (<a href="https://github.com/s0undt3ch/ToolR/commit/31d0c52c33890e2edef918f66981d108f62ea2dc"><code>31d0c52</code></a>)</li>
+<li><em>(clap)</em> Drop wrap_help feature (<a href="https://github.com/s0undt3ch/ToolR/commit/fcaf48c72a1451b5b2ffafc65f311a5c8bdb9f6b"><code>fcaf48c</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(bench)</em> Move to scripts/ as a stdlib-only script (<a href="https://github.com/s0undt3ch/ToolR/commit/771ecee44c976a26441ea7a0f1a76ae8ed477d96"><code>771ecee</code></a>)</li>
+<li><em>(toolr/cli)</em> Disable clap built-in help, add global help flags (<a href="https://github.com/s0undt3ch/ToolR/commit/7f3dbde819acdad7de3070142c244feae9cdad84"><code>7f3dbde</code></a>)</li>
+<li><em>(toolr)</em> Drop markdown pre-render layer (<a href="https://github.com/s0undt3ch/ToolR/commit/246b4356023d4659902ca24a5ec093a36348268b"><code>246b435</code></a>)</li>
+<li><em>(toolr/help)</em> Match clap's default look; drop clap-help dep (<a href="https://github.com/s0undt3ch/ToolR/commit/a3fe821d6925183ab177b004125ddd3b584b8b40"><code>a3fe821</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(unreleased)</em> Note bundled dependency upgrade (<a href="https://github.com/s0undt3ch/ToolR/commit/e9e4d825ac29a5b632df20e80c337fea1e63de4b"><code>e9e4d82</code></a>)</li>
+<li><em>(specs)</em> Design clap-help-driven --help rendering (<a href="https://github.com/s0undt3ch/ToolR/commit/e912e1fb12c984516f2cb0a0a6f542251d5970ac"><code>e912e1f</code></a>)</li>
+<li><em>(specs)</em> Implementation plan for clap-help --help rendering (<a href="https://github.com/s0undt3ch/ToolR/commit/4a1c59e46e240b570595125d11017627ec2828c7"><code>4a1c59e</code></a>)</li>
+<li>Regenerate help snippets for clap-help renderer (<a href="https://github.com/s0undt3ch/ToolR/commit/473f6c6d59c71738bbbf2ee7acf62f8160a227c6"><code>473f6c6</code></a>)</li>
+<li><em>(changelog)</em> Note clap-help-driven --help renderer (<a href="https://github.com/s0undt3ch/ToolR/commit/4ab0c6429de85d8d1ca48b27bbc6ae186cd2f4e6"><code>4ab0c64</code></a>)</li>
+<li><em>(specs)</em> Archive clap-help rendering design + plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e032221528641d34ac705ab4acf178d49f2919c0"><code>e032221</code></a>)</li>
+<li>Standardize example values and relative paths (<a href="https://github.com/s0undt3ch/ToolR/commit/13128e233ad31e704f42a40e753f7108978efed6"><code>13128e2</code></a>)</li>
+<li><em>(cli-files)</em> Regen --help snapshots for 2-space gap and synthetic --help (<a href="https://github.com/s0undt3ch/ToolR/commit/65d9cc3faebf848c390b7157e980c31c23e7fa53"><code>65d9cc3</code></a>)</li>
+<li><em>(unreleased)</em> Refresh help-renderer notes to match shipped behavior (<a href="https://github.com/s0undt3ch/ToolR/commit/490ea497e7b088d36f1fd461fb6dd4dbd7357251"><code>490ea49</code></a>)</li>
+</ul>
+<h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(toolr)</em> Update --help assertions for clap-help output (<a href="https://github.com/s0undt3ch/ToolR/commit/5ae013930e9bd8fd5408968f2bae22b9175fc286"><code>5ae0139</code></a>)</li>
+<li>Refresh stale snapshots for new docstring format (<a href="https://github.com/s0undt3ch/ToolR/commit/44646661198372022cd2dbd39825f36fdaf56789"><code>4464666</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4529,7 +4609,7 @@ are offered everywhere.</p>
 <ul>
 <li><em>(agent)</em> Add CLAUDE.md with workspace facts and agent behavior rules (<a href="https://github.com/s0undt3ch/ToolR/commit/95272c7f964f039d4818e3e4a526f973a419441d"><code>95272c7</code></a>)</li>
 </ul>
-<h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
+<h3 id="testing_1"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(docstrings)</em> Direct coverage for full_description sections (<a href="https://github.com/s0undt3ch/ToolR/commit/88c68118c647d64a6cf5b160bae9156ad4ef2268"><code>88c6811</code></a>)</li>
 </ul>
@@ -4634,7 +4714,7 @@ empty, matching the static parser.</p>
 <li>Regenerate cli-files snippets for venv lock/add/remove + sync -U/-P (<a href="https://github.com/s0undt3ch/ToolR/commit/6c49bd2b443594c93eed862ea99e04e29687cdc9"><code>6c49bd2</code></a>)</li>
 <li>Cover venv lock/add/remove and migrate venv upgrade references (<a href="https://github.com/s0undt3ch/ToolR/commit/fcdbb977b34b76e6319f2ff51d3f285cbb23d1a7"><code>fcdbb97</code></a>)</li>
 </ul>
-<h3 id="testing_1"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_1" title="Permanent link">&para;</a></h3>
+<h3 id="testing_2"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(cli)</em> Update smoke assertions to project venv sync (<a href="https://github.com/s0undt3ch/ToolR/commit/ea462ceae140a17346751dab91b7a1d39a75677d"><code>ea462ce</code></a>)</li>
 <li><em>(cli)</em> Rename project_deps_upgrade to project_venv_upgrade (<a href="https://github.com/s0undt3ch/ToolR/commit/35405fb524115ca80b45dfa885dbc888987d9c79"><code>35405fb</code></a>)</li>
@@ -4932,7 +5012,7 @@ for the user-facing installation flow.</p>
 <li><em>(python)</em> Split ruff line-length (format 100, lint 120) + reformat (<a href="https://github.com/s0undt3ch/ToolR/commit/85dbeccc15abe2b9497eca2449fb57442bfcc0f2"><code>85dbecc</code></a>)</li>
 <li><em>(docs)</em> Enable MD013 with 120-char ceiling + reflow long lines (<a href="https://github.com/s0undt3ch/ToolR/commit/350c88fcc0ad5d313a1563102dbfcf375cf8d02f"><code>350c88f</code></a>)</li>
 </ul>
-<h3 id="testing_2"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_2" title="Permanent link">&para;</a></h3>
+<h3 id="testing_3"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(install-smoke)</em> Exercise mise plugin via canonical URL form (<a href="https://github.com/s0undt3ch/ToolR/commit/8797fc43474aec6934f1994828d0cbbe851b40e1"><code>8797fc4</code></a>)</li>
 <li><em>(skills)</em> Snapshot manifest over the authoring skill's examples tree (<a href="https://github.com/s0undt3ch/ToolR/commit/f347410e71f7c16c1a6788a8ea04130e34b3852f"><code>f347410</code></a>)</li>
@@ -5608,7 +5688,7 @@ blocking dispatch.</p>
 <li><em>(writing-commands)</em> Document toolr.testing.CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/e6b836260c9af3f00030413a689b349115cbbb12"><code>e6b8362</code></a>)</li>
 <li><em>(installation)</em> Align quickstart + install index with README (<a href="https://github.com/s0undt3ch/ToolR/commit/11d83c67223ad8e061f72661ab9d0defa3d7fe95"><code>11d83c6</code></a>)</li>
 </ul>
-<h3 id="testing_3"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_3" title="Permanent link">&para;</a></h3>
+<h3 id="testing_4"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing_4" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(project)</em> Integration tests for venv path resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/8fc400fb5508c8f5bdaf6f9d2e1529dd10b184c3"><code>8fc400f</code></a>)</li>
 <li><em>(project)</em> End-to-end deps-sync + execute smoke (ignored by default) (<a href="https://github.com/s0undt3ch/ToolR/commit/e5ac8ff3711a0bc2d10fd8fe5a1a7506c88e6fff"><code>e5ac8ff</code></a>)</li>

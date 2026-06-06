@@ -3,4 +3,5 @@ Spawn a subshell with the tools venv activated
 Usage: toolr project venv shell
 
 Options:
-  -h, --help  Print help
+  -h, --help
+          Print help
