@@ -11,8 +11,20 @@ use crate::manifest::{Argument, ArgumentKind, Command, Manifest};
 /// The returned vector is alphabetically sorted and deduplicated.
 pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<String> {
     let mut out = match classify(manifest, tokens) {
-        Slot::Group { prefix } => groups(manifest, &prefix),
-        Slot::Command { group, prefix } => commands(manifest, &group, &prefix),
+        Slot::Group { prefix } => {
+            if is_flag_prefix(&prefix) {
+                group_node_flags(&prefix)
+            } else {
+                groups(manifest, &prefix)
+            }
+        }
+        Slot::Command { group, prefix } => {
+            if is_flag_prefix(&prefix) {
+                group_node_flags(&prefix)
+            } else {
+                commands(manifest, &group, &prefix)
+            }
+        }
         Slot::Flag { command, prefix } => flags(command, &prefix),
         Slot::FlagValue { argument, prefix } => values(argument, &prefix),
         Slot::Positional { argument, prefix } => values(argument, &prefix),
@@ -21,6 +33,22 @@ pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<String> 
     out.sort();
     out.dedup();
     out
+}
+
+fn is_flag_prefix(prefix: &str) -> bool {
+    prefix.starts_with("--") || prefix == "-"
+}
+
+/// Group nodes (the root and any sub-group) carry no argument schema in
+/// the manifest, but clap injects `--help` on every subcommand. Offer it
+/// when the user has explicitly typed a flag prefix; binaries layer
+/// additional root-level flags on top via their own completion path.
+fn group_node_flags(prefix: &str) -> Vec<String> {
+    ["--help"]
+        .into_iter()
+        .filter(|f| f.starts_with(prefix))
+        .map(str::to_string)
+        .collect()
 }
 
 enum Slot<'a> {
@@ -373,7 +401,7 @@ fn commands(manifest: &Manifest, group: &str, prefix: &str) -> Vec<String> {
 }
 
 fn flags(command: &Command, prefix: &str) -> Vec<String> {
-    command
+    let mut out: Vec<String> = command
         .arguments
         .iter()
         .filter(|a| {
@@ -383,8 +411,15 @@ fn flags(command: &Command, prefix: &str) -> Vec<String> {
             )
         })
         .map(|a| format!("--{}", a.name.replace('_', "-")))
-        .filter(|flag| flag.starts_with(prefix))
-        .collect()
+        .collect();
+    // clap injects `--help` on every leaf, but only surface it when the
+    // user is explicitly probing flags (`--`/`-` prefix). The empty-prefix
+    // flag fallback that fires for argparse-style children still returns
+    // only the command's own flags, so existing behavior is preserved.
+    if is_flag_prefix(prefix) {
+        out.push("--help".to_string());
+    }
+    out.into_iter().filter(|flag| flag.starts_with(prefix)).collect()
 }
 
 fn values(argument: &Argument, prefix: &str) -> Vec<String> {
