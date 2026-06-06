@@ -137,6 +137,20 @@ pub fn built_in_completion_entries() -> (Vec<Group>, Vec<Command>) {
     (groups, commands)
 }
 
+/// Root-level flags carried by the `toolr` binary itself (the long-form
+/// names; short aliases are intentionally omitted to match how the
+/// engine renders leaf flags). Mirror [`crate::cli::build_command`]'s
+/// root [`Arg`]s. Engine-level `--help` is offered separately by
+/// [`toolr_core::complete::serve_completions`] at every group node.
+pub const ROOT_LONG_FLAGS: &[&str] = &[
+    "--debug",
+    "--no-output-timeout-secs",
+    "--no-timestamps",
+    "--quiet",
+    "--timeout-secs",
+    "--timestamps",
+];
+
 fn top_group(name: &str, title: &str) -> Group {
     Group {
         name: name.into(),
@@ -337,6 +351,32 @@ mod tests {
                 "missing {expected} in {out:?}"
             );
         }
+    }
+
+    #[test]
+    fn root_long_flags_cover_every_root_arg_in_build_command() {
+        // Guardrail: if someone adds a root-level `Arg::new(...).long(...)`
+        // to `cli::build_command`, this constant must grow to match.
+        // `--help` lives in the engine (every group node gets it for
+        // free), so it's deliberately not listed here.
+        let expected: std::collections::BTreeSet<&str> = [
+            "--debug",
+            "--no-output-timeout-secs",
+            "--no-timestamps",
+            "--quiet",
+            "--timeout-secs",
+            "--timestamps",
+        ]
+        .into_iter()
+        .collect();
+        let actual: std::collections::BTreeSet<&str> =
+            ROOT_LONG_FLAGS.iter().copied().collect();
+        assert_eq!(actual, expected);
+        // Sorted asc so the engine's downstream `sort()` is a no-op
+        // and tests asserting alphabetical output stay deterministic.
+        let mut sorted = ROOT_LONG_FLAGS.to_vec();
+        sorted.sort();
+        assert_eq!(sorted.as_slice(), ROOT_LONG_FLAGS);
     }
 
     #[test]

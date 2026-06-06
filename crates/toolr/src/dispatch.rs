@@ -504,10 +504,18 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     let Some(cwd) = matches.get_one::<String>("cwd").map(PathBuf::from) else {
         return Ok(ExitCode::from(1));
     };
-    let tokens: Vec<String> = matches
-        .get_many::<String>("args")
-        .map(|v| v.cloned().collect())
-        .unwrap_or_default();
+    // Read tokens directly from argv rather than from clap's parsed
+    // `args` vec. clap consumes a bare `--` as the end-of-options
+    // marker before it reaches the trailing var arg, but shell
+    // completion scripts pass the user's in-progress `--<TAB>` word
+    // through unchanged. Falling back to raw argv keeps every literal
+    // token (including bare `--`) intact.
+    let tokens: Vec<String> = raw_complete_tokens(matches).unwrap_or_else(|| {
+        matches
+            .get_many::<String>("args")
+            .map(|v| v.cloned().collect())
+            .unwrap_or_default()
+    });
     // No `tools/` ancestor → no user-defined commands to complete, but
     // the binary's own `self` / `project` subtree must still be offered
     // (it doesn't depend on a project root). Fall back to an empty
@@ -522,10 +530,67 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
         crate::builtin_completions::built_in_completion_entries();
     manifest.groups.extend(extra_groups);
     manifest.commands.extend(extra_commands);
-    for candidate in serve_completions(&manifest, &tokens) {
+    let mut candidates = serve_completions(&manifest, &tokens);
+    // The engine emits `--help` at every group node (it's universal for
+    // clap subcommands), but the binary's other root-level flags
+    // (`--debug`, `--quiet`, `--timestamps`, …) live only in
+    // `cli::build_command` and need to be merged in for top-level
+    // `toolr --<TAB>` to surface them.
+    merge_root_flags_at_top_level(&tokens, &mut candidates);
+    for candidate in candidates {
         println!("{candidate}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Re-derive the completion tokens from raw argv so a literal `--`
+/// typed as the in-progress word survives clap's end-of-options
+/// handling. Returns [`None`] when the structure doesn't look right
+/// (e.g. invoked as a library or via a non-standard entry point), in
+/// which case the caller falls back to clap's parsed view.
+///
+/// An optional explicit `--` separator inserted by completion scripts
+/// between the cwd and the in-progress tokens is stripped so future
+/// script revisions can adopt it without changing engine behavior.
+fn raw_complete_tokens(matches: &clap::ArgMatches) -> Option<Vec<String>> {
+    let cwd = matches.get_one::<String>("cwd")?;
+    let argv: Vec<String> = std::env::args().collect();
+    let marker_pos = argv.iter().position(|a| a == "__complete")?;
+    let after_marker = argv.get(marker_pos + 1..)?;
+    let cwd_pos = after_marker.iter().position(|a| a == cwd)?;
+    let mut rest: Vec<String> = after_marker[cwd_pos + 1..].to_vec();
+    // Strip a leading `--` ONLY when more tokens follow. That preserves
+    // the meaning of a trailing bare `--` (the user's in-progress word
+    // when they type `toolr --<TAB>`) while letting completion scripts
+    // optionally pass an explicit separator before the real tokens.
+    if rest.len() >= 2 && rest[0] == "--" {
+        rest.remove(0);
+    }
+    Some(rest)
+}
+
+/// When the user is completing a flag at the root (`toolr --<TAB>` or
+/// `toolr -<TAB>`), merge the binary's own root flags into the candidate
+/// list returned by the engine. No-op for any other slot.
+fn merge_root_flags_at_top_level(tokens: &[String], candidates: &mut Vec<String>) {
+    let Some(prefix) = tokens.last() else {
+        return;
+    };
+    let committed = &tokens[..tokens.len() - 1];
+    if !committed.is_empty() {
+        return;
+    }
+    let is_flag_prefix = prefix.starts_with("--") || prefix == "-";
+    if !is_flag_prefix {
+        return;
+    }
+    for flag in crate::builtin_completions::ROOT_LONG_FLAGS {
+        if flag.starts_with(prefix.as_str()) {
+            candidates.push((*flag).to_string());
+        }
+    }
+    candidates.sort();
+    candidates.dedup();
 }
 
 fn empty_manifest_for_completion() -> Manifest {

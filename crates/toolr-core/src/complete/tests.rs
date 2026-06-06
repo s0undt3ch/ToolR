@@ -131,8 +131,11 @@ fn command_prefix_filters_commands() {
 
 #[test]
 fn flag_prefix_lists_argument_flags() {
+    // `--help` is offered alongside the command's own flags whenever the
+    // user is explicitly probing flags (`--` prefix). clap injects it on
+    // every leaf, so the engine reflects that.
     let out = serve_completions(&fixture(), &tokens(&["ci", "hello", "--"]));
-    assert_eq!(out, vec!["--name".to_string()]);
+    assert_eq!(out, vec!["--help".to_string(), "--name".to_string()]);
 }
 
 #[test]
@@ -253,6 +256,49 @@ fn nested_command_completion_filters_by_prefix() {
     assert_eq!(out, vec!["start".to_string()]);
 }
 
+#[test]
+fn root_flag_prefix_offers_help() {
+    // Regression: `toolr --<TAB>` at the very top used to return an
+    // empty candidate list because the classifier landed on
+    // `Slot::Group` and `groups()` filtered out anything that didn't
+    // start with the literal prefix `--`. Group nodes carry no schema,
+    // so the engine emits `--help` directly.
+    let out = serve_completions(&fixture(), &tokens(&["--"]));
+    assert_eq!(out, vec!["--help".to_string()]);
+}
+
+#[test]
+fn nested_group_flag_prefix_offers_help() {
+    // Regression: `toolr docker --<TAB>` (sitting on a group, not a
+    // leaf) also dropped to nothing. `--help` must still surface.
+    let out = serve_completions(&nested_fixture(), &tokens(&["docker", "--"]));
+    assert_eq!(out, vec!["--help".to_string()]);
+}
+
+#[test]
+fn root_single_dash_prefix_offers_help() {
+    // `-` is a valid flag prefix even though no short alias is emitted
+    // by this engine. It must still produce `--help`.
+    let out = serve_completions(&fixture(), &tokens(&["-"]));
+    assert_eq!(out, vec!["--help".to_string()]);
+}
+
+#[test]
+fn group_node_empty_prefix_does_not_offer_help() {
+    // `toolr <TAB>` with an empty prefix must keep listing top-level
+    // groups, not inject `--help`. Help is for explicit flag probes.
+    let out = serve_completions(&fixture(), &tokens(&[""]));
+    assert_eq!(out, vec!["ci".to_string(), "data".to_string()]);
+}
+
+#[test]
+fn leaf_help_prefix_filters_to_help_only() {
+    // `toolr ci hello --he<TAB>` should narrow to `--help` even though
+    // the leaf has no `help` argument of its own.
+    let out = serve_completions(&fixture(), &tokens(&["ci", "hello", "--he"]));
+    assert_eq!(out, vec!["--help".to_string()]);
+}
+
 fn dispatcher_fixture() -> Manifest {
     // Mirrors the dashtastic shape: `jenkins job` is a dispatcher with
     // a couple of its own flags (`--dry-run`, `--cpu`) plus grafted
@@ -361,9 +407,13 @@ fn dispatcher_completion_filters_children_by_prefix() {
 #[test]
 fn dispatcher_flag_prefix_lists_dispatcher_flags_not_children() {
     // `toolr jenkins job --<TAB>` must offer the dispatcher's own
-    // flags, not the grafted child names.
+    // flags, not the grafted child names. `--help` is added by the
+    // engine because clap injects it on every subcommand.
     let out = serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "--"]));
-    assert_eq!(out, vec!["--cpu".to_string(), "--dry-run".to_string()]);
+    assert_eq!(
+        out,
+        vec!["--cpu".to_string(), "--dry-run".to_string(), "--help".to_string()]
+    );
 }
 
 #[test]

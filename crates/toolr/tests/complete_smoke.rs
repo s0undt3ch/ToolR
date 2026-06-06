@@ -182,6 +182,71 @@ fn completes_builtins_when_no_tools_dir_anywhere() {
 }
 
 #[test]
+fn completes_root_flags_on_double_dash_prefix() {
+    // Regression: `toolr --<TAB>` returned nothing because the engine
+    // landed on the top-level group slot and never offered flags. The
+    // binary's root options must surface alongside the engine-level
+    // `--help`.
+    let tmp = fixture();
+    let stdout = complete(&tmp, &["--"]);
+    let mut lines: Vec<&str> = stdout.lines().collect();
+    lines.sort();
+    assert_eq!(
+        lines,
+        vec![
+            "--debug",
+            "--help",
+            "--no-output-timeout-secs",
+            "--no-timestamps",
+            "--quiet",
+            "--timeout-secs",
+            "--timestamps",
+        ]
+    );
+}
+
+#[test]
+fn completes_root_flag_prefix_filters_to_matching_flags() {
+    // Narrower prefix → only matching long flags.
+    let tmp = fixture();
+    let stdout = complete(&tmp, &["--no"]);
+    let mut lines: Vec<&str> = stdout.lines().collect();
+    lines.sort();
+    assert_eq!(lines, vec!["--no-output-timeout-secs", "--no-timestamps"]);
+}
+
+#[test]
+fn completes_help_at_group_node() {
+    // `toolr ci --<TAB>` sits on a group; clap injects `--help` on
+    // every subcommand, so completion must follow suit.
+    let tmp = fixture();
+    let stdout = complete(&tmp, &["ci", "--"]);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines.contains(&"--help"),
+        "expected --help under group node, got: {stdout}"
+    );
+}
+
+#[test]
+fn completes_help_alongside_leaf_flags() {
+    // `toolr ci hello --<TAB>` should offer `--help` alongside the
+    // leaf's own flags. `hello` has `name="world"` which the parser
+    // surfaces as the `--name` optional flag.
+    let tmp = fixture();
+    let stdout = complete(&tmp, &["ci", "hello", "--"]);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines.contains(&"--help"),
+        "expected --help at leaf node, got: {stdout}"
+    );
+    assert!(
+        lines.contains(&"--name"),
+        "expected --name preserved at leaf node, got: {stdout}"
+    );
+}
+
+#[test]
 fn self_completion_print_emits_bash_script() {
     let tmp = TempDir::new().unwrap();
     let output = Command::cargo_bin("toolr")
