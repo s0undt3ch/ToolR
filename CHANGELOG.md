@@ -6,6 +6,110 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.24.0 - 2026-06-06
+
+### Notes
+
+Bumped all Rust, Python, and GitHub Actions dependencies in a single
+sweep — including `ruff_*` git deps to `0.15.15`, `ruff`/`coverage`/
+`hypothesis` on the Python side, and `actions/checkout` and
+`actions-cool/check-user-permission` in CI. Transitive lockfile bumps
+in `Cargo.lock` and `uv.lock` rolled forward at the same time.
+
+The task-runner startup benchmark moved from `toolr bench compare` to
+`python3 scripts/bench.py`. The script now depends only on the Python
+standard library (no toolr, no rich), so it can run in a fresh CI job
+without bootstrapping a project venv. Output is a markdown table on
+stdout; progress lines go to stderr.
+
+`--help` output is now rendered as markdown through `termimad`.
+Python docstrings flow through unchanged — headings, sections
+(`## Examples`, `## Notes`, `## Warnings`), bullet lists, and
+fenced code blocks render as styled markdown in the terminal and
+as readable plain text when captured (non-TTY or `NO_COLOR`).
+`$COLUMNS` is honored for width control. The page matches clap's
+default layout: a `**Usage:**` line, `Arguments:` / `Options:` /
+`Commands:` blocks reflecting the actual command shape, possible
+values on positionals, and `[default: …]` on options where a
+literal default exists (unresolvable Python expressions are
+suppressed rather than shown as `<expr>`).
+
+`-h` (short) and `--help` (long) remain distinct: short shows the
+first-paragraph `about` and truncates per-option help to its first
+line; long shows the full docstring body, Examples/Notes sections,
+possible-value lists, and `[default: …]` annotations.
+
+Sphinx-style ``code`` (double backticks) in docstrings is now
+normalized to single-backtick markdown at parse time, so RST
+syntax no longer leaks into rendered help.
+
+Internal: clap's built-in help is disabled and dispatched to
+`crate::help`; the `crate::markdown` pre-render layer, the
+`wrap_help` feature on `clap`, and the `clap-help` dependency
+are all gone.
+
+### <!-- 0 -->🚀 Features
+
+- *(bench)* Add --toolr-py-find-links to pin the bench fixture to a local wheel ([`d828de7`](https://github.com/s0undt3ch/ToolR/commit/d828de7035dc462aca5a5680814c970f855776ed))
+- *(core)* Promote docstring section labels to markdown headings ([`faf704d`](https://github.com/s0undt3ch/ToolR/commit/faf704d0c19217f76d6f8f38740a92d33c5e91e7))
+- *(toolr)* Add help module skeleton with TTY-aware skin ([`8534fa4`](https://github.com/s0undt3ch/ToolR/commit/8534fa431f129dcfc2b449ea899f4fc0c033c3cd))
+- *(toolr/help)* Resolve render width from $COLUMNS ([`868cfa2`](https://github.com/s0undt3ch/ToolR/commit/868cfa223dcb85aa51b8594394bf6160d031489d))
+- *(toolr/help)* Implement render loop with custom width ([`3767ab3`](https://github.com/s0undt3ch/ToolR/commit/3767ab3ebe44c44f68ef91e491dac4333a7035e3))
+- *(toolr)* Intercept --help/-h and dispatch to crate::help ([`8b9c900`](https://github.com/s0undt3ch/ToolR/commit/8b9c9008273bb605c51e131012fc3c62057946fb))
+- *(toolr/help)* Render Options as a table ([`b9cda44`](https://github.com/s0undt3ch/ToolR/commit/b9cda4469ed49514bd44be3dd0da576a7a8fda37))
+- *(toolr/help)* Render Commands as a table ([`f279b52`](https://github.com/s0undt3ch/ToolR/commit/f279b52542c4bc7005a03e113dd7dda663b3bfce))
+- *(core/parser)* Resolve same-module constants as parameter defaults ([`db7da61`](https://github.com/s0undt3ch/ToolR/commit/db7da6182bc9780ee964663a714efcd67297ce84))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(tools/bench)* Account for `:` in right-aligned separator width ([`3244f8e`](https://github.com/s0undt3ch/ToolR/commit/3244f8e7580f74f006c2438669aa016917178c9e))
+- *(core/docstrings)* Drop spurious newline between body and sections ([`c808b91`](https://github.com/s0undt3ch/ToolR/commit/c808b9178227142138baf7632a1170ab9a95f5d6))
+- *(core/docstrings)* Normalize Sphinx double-backticks at parse time ([`ebd2b05`](https://github.com/s0undt3ch/ToolR/commit/ebd2b05f8f1c92aa3d56d54ff03e6998fc48b7e2))
+- *(toolr/help)* Collapse blank rows between options ([`c555c7a`](https://github.com/s0undt3ch/ToolR/commit/c555c7a9f82f73963a730f860f005adb7e820016))
+- *(toolr/help)* Make USAGE and Options reflect actual command shape ([`107a2d1`](https://github.com/s0undt3ch/ToolR/commit/107a2d1e3a6de0d66f21eeffcc50abb711432a74))
+- Gitignore .toolr-manifest.json fixtures at any depth ([`e22d501`](https://github.com/s0undt3ch/ToolR/commit/e22d501f34edb09c3af51ffd886740e53c1b5a01))
+- *(toolr/help)* Drop short-flag pad when group has no shorts; add per-cmd --help ([`64324da`](https://github.com/s0undt3ch/ToolR/commit/64324dab3fceb7803ac2dd5ed08da63afc1b1f19))
+- *(toolr/help)* Suppress `[default: <expr>]` for unresolvable defaults ([`d9de25d`](https://github.com/s0undt3ch/ToolR/commit/d9de25dd5151d39768b7028f254191491324bc0a))
+- *(toolr/help)* Show `-h` on flag-less leaves; match clap's 2-space label gap ([`ca31fd0`](https://github.com/s0undt3ch/ToolR/commit/ca31fd0b0e11a0a8f778fe81007cec5231cdc968))
+- *(toolr/help)* Drop the trailing "Report bugs to" footer ([`3eb0ec5`](https://github.com/s0undt3ch/ToolR/commit/3eb0ec50304c50630c466d5aaf025758b48c23f2))
+- *(toolr/help)* Restore positional possible-values; render Commands before Options ([`f9942b7`](https://github.com/s0undt3ch/ToolR/commit/f9942b74911df78aa0afeb2a6db8cefda6bdbf69))
+
+### <!-- 10 -->💼 Other
+
+- *(deps)* Bump Rust workspace dependencies ([`32abda3`](https://github.com/s0undt3ch/ToolR/commit/32abda37658ad4a5cbdeeed1500fa465e7a2de21))
+- *(deps-dev)* Bump Python dependencies ([`e959296`](https://github.com/s0undt3ch/ToolR/commit/e95929641cc51c9bf3a5073166e91028970543c3))
+- *(deps)* Bump GitHub Actions ([`c4b15cc`](https://github.com/s0undt3ch/ToolR/commit/c4b15ccadb1b4d10fcc463c5bddac1b493b4bf71))
+- *(toolr)* Add clap-help 1.5 for markdown --help rendering ([`31d0c52`](https://github.com/s0undt3ch/ToolR/commit/31d0c52c33890e2edef918f66981d108f62ea2dc))
+- *(clap)* Drop wrap_help feature ([`fcaf48c`](https://github.com/s0undt3ch/ToolR/commit/fcaf48c72a1451b5b2ffafc65f311a5c8bdb9f6b))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(bench)* Move to scripts/ as a stdlib-only script ([`771ecee`](https://github.com/s0undt3ch/ToolR/commit/771ecee44c976a26441ea7a0f1a76ae8ed477d96))
+- *(toolr/cli)* Disable clap built-in help, add global help flags ([`7f3dbde`](https://github.com/s0undt3ch/ToolR/commit/7f3dbde819acdad7de3070142c244feae9cdad84))
+- *(toolr)* Drop markdown pre-render layer ([`246b435`](https://github.com/s0undt3ch/ToolR/commit/246b4356023d4659902ca24a5ec093a36348268b))
+- *(toolr/help)* Match clap's default look; drop clap-help dep ([`a3fe821`](https://github.com/s0undt3ch/ToolR/commit/a3fe821d6925183ab177b004125ddd3b584b8b40))
+
+### <!-- 3 -->📚 Documentation
+
+- *(unreleased)* Note bundled dependency upgrade ([`e9e4d82`](https://github.com/s0undt3ch/ToolR/commit/e9e4d825ac29a5b632df20e80c337fea1e63de4b))
+- *(specs)* Design clap-help-driven --help rendering ([`e912e1f`](https://github.com/s0undt3ch/ToolR/commit/e912e1fb12c984516f2cb0a0a6f542251d5970ac))
+- *(specs)* Implementation plan for clap-help --help rendering ([`4a1c59e`](https://github.com/s0undt3ch/ToolR/commit/4a1c59e46e240b570595125d11017627ec2828c7))
+- Regenerate help snippets for clap-help renderer ([`473f6c6`](https://github.com/s0undt3ch/ToolR/commit/473f6c6d59c71738bbbf2ee7acf62f8160a227c6))
+- *(changelog)* Note clap-help-driven --help renderer ([`4ab0c64`](https://github.com/s0undt3ch/ToolR/commit/4ab0c6429de85d8d1ca48b27bbc6ae186cd2f4e6))
+- *(specs)* Archive clap-help rendering design + plan ([`e032221`](https://github.com/s0undt3ch/ToolR/commit/e032221528641d34ac705ab4acf178d49f2919c0))
+- Standardize example values and relative paths ([`13128e2`](https://github.com/s0undt3ch/ToolR/commit/13128e233ad31e704f42a40e753f7108978efed6))
+- *(cli-files)* Regen --help snapshots for 2-space gap and synthetic --help ([`65d9cc3`](https://github.com/s0undt3ch/ToolR/commit/65d9cc3faebf848c390b7157e980c31c23e7fa53))
+- *(unreleased)* Refresh help-renderer notes to match shipped behavior ([`490ea49`](https://github.com/s0undt3ch/ToolR/commit/490ea497e7b088d36f1fd461fb6dd4dbd7357251))
+
+### <!-- 6 -->🧪 Testing
+
+- *(toolr)* Update --help assertions for clap-help output ([`5ae0139`](https://github.com/s0undt3ch/ToolR/commit/5ae013930e9bd8fd5408968f2bae22b9175fc286))
+- Refresh stale snapshots for new docstring format ([`4464666`](https://github.com/s0undt3ch/ToolR/commit/44646661198372022cd2dbd39825f36fdaf56789))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Bench `toolr` startup against built artifacts on Linux/macOS/Windows ([`2536a9f`](https://github.com/s0undt3ch/ToolR/commit/2536a9fac15042dc4a746f1f07885c184ff9273c))
+- *(bench)* Drive bench job through `scripts/bench.py` ([`98a94b2`](https://github.com/s0undt3ch/ToolR/commit/98a94b2365b10ff0f9781f17078aebcef5c8ffd1))
 ## 0.23.0 - 2026-06-03
 
 ### Notes
