@@ -4,9 +4,9 @@ mod builtin_completions;
 mod cli;
 mod dispatch;
 mod execute_build;
+mod help;
 mod init_scaffold;
 mod init_templates;
-mod markdown;
 mod project;
 mod self_cache;
 mod self_cache_prune;
@@ -37,7 +37,34 @@ fn run() -> anyhow::Result<ExitCode> {
     bootstrap::ensure_manifest_fresh(&cwd, &argv)?;
     let manifest = load_or_empty(&cwd);
     let mut command = cli::build_command(&manifest);
-    let matches = command.clone().get_matches();
+    // Use try_get_matches_from so that `subcommand_required` validation errors
+    // (e.g. `toolr self --help`) don't exit before dispatch can intercept
+    // help flags. When clap reports MissingRequiredArgument / NoSubcommand AND
+    // --help or -h is present in argv, we fall through to dispatch which
+    // renders help. For genuine errors (bad flags, unknown subcommands) we let
+    // clap print its error and exit.
+    let matches = match command.clone().try_get_matches_from(std::env::args_os()) {
+        Ok(m) => m,
+        Err(e) => {
+            use clap::error::ErrorKind;
+            let want_help = argv.iter().any(|a| a == "--help");
+            let want_short = !want_help && argv.iter().any(|a| a == "-h");
+            if (want_help || want_short) && matches!(
+                e.kind(),
+                ErrorKind::MissingSubcommand | ErrorKind::MissingRequiredArgument
+            ) {
+                // Help was requested but clap failed validation first.
+                // Delegate to dispatch with a synthesised "root" match by
+                // passing an empty argv so clap can build a valid root-level
+                // ArgMatches. Dispatch's resolve_help_target will then walk
+                // the argv to find the right level.
+                dispatch::dispatch_help_from_argv(&argv, &manifest, &mut command)?;
+                return Ok(ExitCode::SUCCESS);
+            }
+            // Genuine error: let clap print it and exit.
+            e.exit()
+        }
+    };
     dispatch::dispatch(&matches, &manifest, &mut command)
 }
 

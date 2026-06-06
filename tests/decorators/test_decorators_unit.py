@@ -224,17 +224,16 @@ def test_command_group_docstring_first_paragraph_becomes_title():
 
 def test_command_group_docstring_long_paragraph_becomes_description():
     # `description` is the Rust-rendered ``full_description`` — short
-    # paragraph + long body + a trailing newline (the same shape clap
-    # gets handed for ``--help``). The leading short paragraph repeats
-    # the title on purpose so ``--help`` re-states the blurb the parent
-    # listing already shows.
+    # paragraph + long body, no trailing newline when no sections follow.
+    # The leading short paragraph repeats the title on purpose so
+    # ``--help`` re-states the blurb the parent listing already shows.
     g = command_group(
         "ci",
         docstring="Short title for parent listing.\n\nLonger prose shown by --help only.",
     )
     assert g.title == "Short title for parent listing."
     assert g.description == (
-        "Short title for parent listing.\n\nLonger prose shown by --help only.\n"
+        "Short title for parent listing.\n\nLonger prose shown by --help only."
     )
 
 
@@ -245,7 +244,7 @@ def test_command_group_explicit_title_overrides_docstring_short():
         docstring="Short title from docstring.\n\nLong paragraph kept as description.",
     )
     assert g.title == "Explicit Title"
-    assert g.description == ("Short title from docstring.\n\nLong paragraph kept as description.\n")
+    assert g.description == "Short title from docstring.\n\nLong paragraph kept as description."
 
 
 def test_command_group_docstring_with_notes_section_renders_into_description():
@@ -266,7 +265,7 @@ def test_command_group_docstring_with_notes_section_renders_into_description():
     )
     assert g.title == "Short title."
     assert "Long body explaining the group." in g.description
-    assert "Notes:" in g.description
+    assert "## Notes" in g.description
     assert "Heads-up about something subtle." in g.description
     assert "Second note." in g.description
 

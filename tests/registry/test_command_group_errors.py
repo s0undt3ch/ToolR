@@ -42,7 +42,7 @@ def test_command_group_with_docstring_parsing():
     )
 
     assert group.title == "Docstring Test"
-    assert group.description == ("Short description.\n\nLong description with more details.\n")
+    assert group.description == ("Short description.\n\nLong description with more details.")
     assert group.long_description is None
 
 

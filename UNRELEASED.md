@@ -22,3 +22,29 @@ The task-runner startup benchmark moved from `toolr bench compare` to
 standard library (no toolr, no rich), so it can run in a fresh CI job
 without bootstrapping a project venv. Output is a markdown table on
 stdout; progress lines go to stderr.
+
+`--help` output is now rendered as markdown through `termimad`.
+Python docstrings flow through unchanged — headings, sections
+(`## Examples`, `## Notes`, `## Warnings`), bullet lists, and
+fenced code blocks render as styled markdown in the terminal and
+as readable plain text when captured (non-TTY or `NO_COLOR`).
+`$COLUMNS` is honored for width control. The page matches clap's
+default layout: a `**Usage:**` line, `Arguments:` / `Options:` /
+`Commands:` blocks reflecting the actual command shape, possible
+values on positionals, and `[default: …]` on options where a
+literal default exists (unresolvable Python expressions are
+suppressed rather than shown as `<expr>`).
+
+`-h` (short) and `--help` (long) remain distinct: short shows the
+first-paragraph `about` and truncates per-option help to its first
+line; long shows the full docstring body, Examples/Notes sections,
+possible-value lists, and `[default: …]` annotations.
+
+Sphinx-style ``code`` (double backticks) in docstrings is now
+normalized to single-backtick markdown at parse time, so RST
+syntax no longer leaks into rendered help.
+
+Internal: clap's built-in help is disabled and dispatched to
+`crate::help`; the `crate::markdown` pre-render layer, the
+`wrap_help` feature on `clap`, and the `clap-help` dependency
+are all gone.

@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use anyhow::Context as _;
 use clap::ArgMatches;
 
+use crate::help::{self, HelpMode};
 use toolr_core::complete::{
     InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell, completion_script,
     install_script,
@@ -17,6 +18,91 @@ use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
 use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_child_args};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Help interception
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Walk the matched subcommand chain to find the deepest level where the
+/// help flag was set, resolving the corresponding `clap::Command` from the
+/// tree in parallel. Returns `(resolved_cmd, bin_path, mode)` when help
+/// was requested, or `None` otherwise.
+///
+/// `--help` and `-h` are a single global Arg in `cli.rs` — we determine
+/// Short vs Long mode by scanning raw argv, so users get terse `-h` output
+/// or the full `--help` body based on which form they typed.
+fn resolve_help_target(
+    root_cmd: &clap::Command,
+    matches: &ArgMatches,
+    argv: &[String],
+) -> Option<(clap::Command, String, HelpMode)> {
+    let mut cur_cmd = root_cmd.clone();
+    let mut cur_matches = matches;
+    let mut path: Vec<String> = vec![root_cmd.get_name().to_string()];
+
+    while let Some((sub_name, sub_matches)) = cur_matches.subcommand() {
+        let Some(child) = cur_cmd.find_subcommand(sub_name) else {
+            break;
+        };
+        cur_cmd = child.clone();
+        cur_matches = sub_matches;
+        path.push(sub_name.to_string());
+    }
+
+    if !cur_matches.get_flag("help") {
+        return None;
+    }
+    Some((cur_cmd, path.join(" "), help_mode_from_argv(argv)))
+}
+
+/// `--help` wins over `-h` when both appear; absent both, default to
+/// Long (matters only for synthetic invocations of `print` without
+/// argv routing).
+fn help_mode_from_argv(argv: &[String]) -> HelpMode {
+    if argv.iter().any(|a| a == "--help") {
+        HelpMode::Long
+    } else if argv.iter().any(|a| a == "-h") {
+        HelpMode::Short
+    } else {
+        HelpMode::Long
+    }
+}
+
+/// Called by `main.rs` when clap's `try_get_matches_from` fails with a
+/// `MissingSubcommand` or similar error AND argv contains `--help` / `-h`.
+/// This happens because `subcommand_required(true)` commands (like `self`,
+/// `project`, `self cache`) enforce the subcommand constraint even when a
+/// global help flag is set — clap validates before we can intercept.
+///
+/// We resolve the target command by walking the raw argv token-by-token
+/// through the clap Command tree, stopping at the deepest named subcommand.
+pub fn dispatch_help_from_argv(
+    argv: &[String],
+    _manifest: &Manifest,
+    root: &mut clap::Command,
+) -> anyhow::Result<()> {
+    let mode = help_mode_from_argv(argv);
+
+    let mut cur_cmd = &*root;
+    let mut path: Vec<String> = vec![cur_cmd.get_name().to_string()];
+
+    // Walk argv tokens (skip argv[0] = binary name). Stop when we hit a
+    // flag token or a token that isn't a known subcommand.
+    for token in argv.iter().skip(1) {
+        if token.starts_with('-') {
+            break;
+        }
+        if let Some(child) = cur_cmd.find_subcommand(token.as_str()) {
+            cur_cmd = child;
+            path.push(token.clone());
+        } else {
+            break;
+        }
+    }
+
+    help::print(cur_cmd, &path.join(" "), mode);
+    Ok(())
+}
 
 /// Resolve a parsed subcommand `path` (e.g. `["jenkins", "job", "migrate"]`)
 /// to its manifest entry. Tries the most-specific candidate group first
@@ -52,6 +138,19 @@ pub fn dispatch(
     manifest: &Manifest,
     root: &mut clap::Command,
 ) -> anyhow::Result<ExitCode> {
+    let argv: Vec<String> = std::env::args().collect();
+    // Intercept --help / -h before any other routing. Tab-completion
+    // invocations (`__complete`) never set help flags, so they pass through
+    // immediately.
+    if !matches!(matches.subcommand(), Some(("__complete", _))) {
+        if let Some((resolved_cmd, bin_path, mode)) =
+            resolve_help_target(root, matches, &argv)
+        {
+            help::print(&resolved_cmd, &bin_path, mode);
+            return Ok(ExitCode::SUCCESS);
+        }
+    }
+
     if let Some(("__complete", sub)) = matches.subcommand() {
         return run_complete(sub);
     }
@@ -68,7 +167,9 @@ pub fn dispatch(
         return crate::project::dispatch_project(project_m);
     }
     let Some((first_name, first_matches)) = matches.subcommand() else {
-        root.print_help()?;
+        // No subcommand and no --help flag: show root help as a courtesy,
+        // using the same styled renderer so we never mix renderers.
+        help::print(root, "toolr", HelpMode::Long);
         return Ok(ExitCode::SUCCESS);
     };
     // Walk down the subcommand chain so nested groups (`docker image
@@ -297,7 +398,7 @@ fn write_atomically(path: &std::path::Path, contents: &str) -> anyhow::Result<()
 
 fn check_against_disk(path: &std::path::Path, serialised: &str) -> anyhow::Result<ExitCode> {
     let existing = if path.is_file() {
-        std::fs::read_to_string(path)?
+        std::fs::read_to_string(path)? // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
     } else {
         String::new()
     };

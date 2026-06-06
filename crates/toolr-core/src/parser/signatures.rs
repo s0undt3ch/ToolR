@@ -2,7 +2,7 @@
 
 use ruff_python_ast::{Expr, Number, StmtFunctionDef};
 
-use super::symbols::EnumTable;
+use super::symbols::{ConstTable, EnumTable};
 use super::types::SourcesImports;
 use crate::manifest::{Argument, ArgumentKind};
 
@@ -17,6 +17,7 @@ use crate::manifest::{Argument, ArgumentKind};
 pub fn extract_arguments(
     func: &StmtFunctionDef,
     enums: &EnumTable,
+    consts: &ConstTable,
     sources: &SourcesImports,
 ) -> Vec<Argument> {
     let params = func.parameters.as_ref();
@@ -37,6 +38,7 @@ pub fn extract_arguments(
             annotation,
             p.default.as_deref(),
             enums,
+            consts,
         ));
     }
 
@@ -49,6 +51,7 @@ pub fn extract_arguments(
             annotation,
             None,
             enums,
+            consts,
         ));
     }
 
@@ -74,6 +77,7 @@ pub fn extract_arguments(
             annotation,
             p.default.as_deref(),
             enums,
+            consts,
         ));
     }
 
@@ -86,6 +90,7 @@ fn build_argument(
     annotation: Option<&Expr>,
     default: Option<&Expr>,
     enums: &EnumTable,
+    consts: &ConstTable,
 ) -> Argument {
     let allowed_values = annotation
         .map(|a| collect_allowed_values(a, enums))
@@ -94,7 +99,7 @@ fn build_argument(
         name,
         kind,
         help: String::new(),
-        default: default.map(|d| literal_default(d, enums)),
+        default: default.map(|d| literal_default(d, enums, consts)),
         type_annotation: annotation.map(annotation_to_string),
         resolved_type: None,
         path_constraints: None,
@@ -196,7 +201,7 @@ fn referenced_name(expr: &Expr) -> Option<&str> {
 /// `Class.MEMBER` attribute defaults are resolved via `enums` to their
 /// serialised value (so `Operation.ADD` becomes `"add"` for a
 /// `StrEnum`).
-fn literal_default(expr: &Expr, enums: &EnumTable) -> String {
+fn literal_default(expr: &Expr, enums: &EnumTable, consts: &ConstTable) -> String {
     match expr {
         Expr::StringLiteral(s) => s.value.to_str().to_string(),
         Expr::NumberLiteral(n) => match &n.value {
@@ -215,6 +220,14 @@ fn literal_default(expr: &Expr, enums: &EnumTable) -> String {
         Expr::NoneLiteral(_) => String::new(),
         Expr::List(l) if l.elts.is_empty() => String::new(),
         Expr::Attribute(attr) => resolve_enum_attribute_default(attr, enums)
+            .unwrap_or_else(|| "<expr>".to_string()),
+        // Bare name reference (e.g. `mode: str = DEFAULT_MODE`) — look up
+        // the resolved literal in the same-module constant table. Falls
+        // through to `<expr>` when the name isn't a tracked literal
+        // constant (cross-module imports, function calls, expressions).
+        Expr::Name(n) => consts
+            .lookup(n.id.as_str())
+            .map(str::to_string)
             .unwrap_or_else(|| "<expr>".to_string()),
         _ => "<expr>".to_string(),
     }
@@ -300,7 +313,7 @@ mod tests {
     #[test]
     fn skips_ctx_first_argument() {
         let func = first_func("def f(ctx, name): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
@@ -308,7 +321,7 @@ mod tests {
     #[test]
     fn marks_arguments_with_defaults_as_optional() {
         let func = first_func("def f(ctx, name=\"x\"): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].kind, ArgumentKind::Optional);
         assert_eq!(args[0].default.as_deref(), Some("x"));
     }
@@ -316,7 +329,7 @@ mod tests {
     #[test]
     fn bool_with_false_default_classified_as_flag() {
         let func = first_func("def f(ctx, verbose: bool = False): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].kind, ArgumentKind::Flag);
         assert_eq!(args[0].default.as_deref(), Some("false"));
     }
@@ -333,7 +346,7 @@ mod tests {
              from toolr import arg\n\
              def f(ctx, verbose: Annotated[bool, arg(env=\"VERBOSE\")] = False): pass\n",
         );
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].kind, ArgumentKind::Flag);
     }
 
@@ -344,21 +357,21 @@ mod tests {
              from toolr import arg\n\
              def f(ctx, items: Annotated[list[str], arg(aliases=[\"-i\"])] = []): pass\n",
         );
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].kind, ArgumentKind::Repeated);
     }
 
     #[test]
     fn list_keyword_classified_as_repeated() {
         let func = first_func("def f(ctx, files: list[str] = []): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].kind, ArgumentKind::Repeated);
     }
 
     #[test]
     fn star_args_emits_var_positional() {
         let func = first_func("def f(ctx, *files: str): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "files");
         assert_eq!(args[0].kind, ArgumentKind::VarPositional);
@@ -368,14 +381,14 @@ mod tests {
     #[test]
     fn integer_default_serialized_without_format_noise() {
         let func = first_func("def f(ctx, n: int = 5): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].default.as_deref(), Some("5"));
     }
 
     #[test]
     fn string_default_has_no_embedded_quotes() {
         let func = first_func("def f(ctx, name: str = \"world\"): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].default.as_deref(), Some("world"));
     }
 
@@ -401,14 +414,14 @@ def f(ctx, op: Operation = Operation.ADD): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &enums, &SourcesImports::default());
+        let args = extract_arguments(&func, &enums, &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].default.as_deref(), Some("add"));
     }
 
     #[test]
     fn unknown_enum_attribute_falls_back_to_expr_placeholder() {
         let func = first_func("def f(ctx, x = Unknown.MEMBER): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].default.as_deref(), Some("<expr>"));
     }
 
@@ -421,7 +434,7 @@ def f(ctx, op: Operation = Operation.ADD): pass
     #[test]
     fn captures_type_annotations_as_strings() {
         let func = first_func("def f(ctx, name: str = \"x\"): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(args[0].type_annotation.as_deref(), Some("str"));
     }
 
@@ -433,7 +446,7 @@ from typing import Literal
 def f(ctx, mode: Literal["a", "b"]): pass
 "#,
         );
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert_eq!(
             args[0].allowed_values,
             vec!["a".to_string(), "b".to_string()]
@@ -443,7 +456,7 @@ def f(ctx, mode: Literal["a", "b"]): pass
     #[test]
     fn leaves_allowed_values_empty_for_non_literal_types() {
         let func = first_func("def f(ctx, name: str): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
         assert!(args[0].allowed_values.is_empty());
     }
 
@@ -475,7 +488,7 @@ def f(ctx, mode: Mode): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &enums, &SourcesImports::default());
+        let args = extract_arguments(&func, &enums, &ConstTable::default(), &SourcesImports::default());
         assert_eq!(
             args[0].allowed_values,
             vec!["fast".to_string(), "slow".to_string()]
@@ -504,7 +517,7 @@ def f(ctx, *, cpu: str = "1", dispatched: DispatchCommand): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
         assert_eq!(args.len(), 1, "expected `dispatched` to be filtered out, got {args:?}");
         assert_eq!(args[0].name, "cpu");
     }
@@ -529,7 +542,7 @@ def f(ctx, *, name: str = "x", dispatched: DC): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
@@ -554,7 +567,7 @@ def f(ctx, *, name: str = "x"): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
         // The annotation rendering hasn't lost the type tag.
@@ -580,7 +593,7 @@ def f(ctx, *, name: str = "x", dispatched: toolr.sources.DispatchCommand): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
@@ -610,7 +623,7 @@ def f(ctx, *, cpu: str = "1", dispatched: Annotated[DispatchCommand, arg(help="x
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
         assert!(
             args.iter().all(|a| a.name != "dispatched"),
             "expected `dispatched` to be filtered out, got {args:?}"
@@ -637,7 +650,7 @@ def f(ctx, *, cpu: str = "1", dispatched: "DispatchCommand"): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
         assert!(
             args.iter().all(|a| a.name != "dispatched"),
             "expected `dispatched` to be filtered out, got {args:?}"
@@ -665,10 +678,85 @@ def f(ctx, *, cpu: str = "1", dispatched: "DC"): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
         assert!(
             args.iter().all(|a| a.name != "dispatched"),
             "expected `dispatched` to be filtered out, got {args:?}"
         );
+    }
+
+    /// `param: str = NAME` resolves to the module-level constant when
+    /// the table is provided. Without the table the default falls
+    /// through to the `<expr>` sentinel.
+    #[test]
+    fn resolves_same_module_string_constant_default() {
+        let src = "\
+DEFAULT_MODE = \"fast\"
+
+def f(ctx, *, mode: str = DEFAULT_MODE): pass
+";
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(src.as_bytes()).unwrap();
+        let module = parse_python_file(f.path()).unwrap();
+        let consts = ConstTable::from_module(&module);
+        let func = module
+            .body
+            .into_iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default());
+        assert_eq!(args[0].default.as_deref(), Some("fast"));
+    }
+
+    #[test]
+    fn resolves_int_and_bool_module_constants() {
+        let src = "\
+MAX_RETRIES = 3
+VERBOSE = True
+
+def f(ctx, *, retries: int = MAX_RETRIES, loud: bool = VERBOSE): pass
+";
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(src.as_bytes()).unwrap();
+        let module = parse_python_file(f.path()).unwrap();
+        let consts = ConstTable::from_module(&module);
+        let func = module
+            .body
+            .into_iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default());
+        assert_eq!(args[0].default.as_deref(), Some("3"));
+        assert_eq!(args[1].default.as_deref(), Some("true"));
+    }
+
+    /// Names that don't point at a literal constant (function calls,
+    /// attribute references that aren't enum members, imports from
+    /// other modules) keep falling through to `<expr>`.
+    #[test]
+    fn unresolvable_name_falls_through_to_expr_sentinel() {
+        let src = "\
+def f(ctx, *, path: str = compute_default()): pass
+";
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(src.as_bytes()).unwrap();
+        let module = parse_python_file(f.path()).unwrap();
+        let consts = ConstTable::from_module(&module);
+        let func = module
+            .body
+            .into_iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default());
+        assert_eq!(args[0].default.as_deref(), Some("<expr>"));
     }
 }

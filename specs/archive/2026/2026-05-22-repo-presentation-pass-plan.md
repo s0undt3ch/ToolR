@@ -381,7 +381,7 @@ The PR title and body are auto-derived from the commit messages by `--fill`. Exp
 
 - [ ] **Step 5: Run the project's code-review skill on the PR**
 
-After the PR is open, invoke the project review pipeline (`/compound-engineering:ce-code-review` or `/paddle-shared:open-pr`). Address findings inline on the same branch. PR-1 closes when the user marks it ready and the review skill returns no high-confidence findings.
+After the PR is open, invoke the project review pipeline (`/compound-engineering:ce-code-review` or an equivalent in-house review skill). Address findings inline on the same branch. PR-1 closes when the user marks it ready and the review skill returns no high-confidence findings.
 
 ---
 

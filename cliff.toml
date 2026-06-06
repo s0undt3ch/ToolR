@@ -87,6 +87,12 @@ commit_preprocessors = [
 # Assigns commits to groups.
 # Optionally sets the commit's scope and can decide to exclude commits from further processing.
 commit_parsers = [
+  # Commits carrying a `Changelog: skip` trailer in their body are
+  # omitted from release notes. Use for purely-internal cleanups
+  # (formatting drift, test-fixture renames, etc.) that don't move
+  # the project forward in a user-visible way and would add noise
+  # to the changelog. Apply sparingly.
+  { body = "Changelog: skip", skip = true },
   { message = "^feat", group = "<!-- 0 -->🚀 Features" },
   { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
   { message = "^doc", group = "<!-- 3 -->📚 Documentation" },

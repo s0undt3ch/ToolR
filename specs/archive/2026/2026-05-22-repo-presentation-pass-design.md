@@ -610,7 +610,7 @@ described, not relative to the spec file. Safe to move unchanged.
 ### Update auto-memory
 
 Memory lives in
-`/Users/pedro.algarvio/.claude-work/projects/-Users-pedro-algarvio-projects-me-toolr/memory/`
+`~/.claude-work/projects/-Users-pedro-algarvio-projects-me-toolr/memory/`
 (outside the repo). Two edits at PR-3 merge time:
 
 - **Retire `toolr_rust_frontend_rewrite.md`**: rewrite as a short

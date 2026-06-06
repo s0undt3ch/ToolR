@@ -66,6 +66,75 @@ impl EnumTable {
     }
 }
 
+/// Module-level `NAME = <literal>` assignments. Used so a function
+/// parameter default like `mode: str = DEFAULT_MODE` resolves to the
+/// underlying literal when `DEFAULT_MODE = "fast"` is defined in the
+/// same module.
+///
+/// Only directly-literal RHS values are stored (strings, numbers,
+/// booleans, `None`). Names pointing at other names, function calls,
+/// attribute references, and other compound expressions are skipped
+/// — looking those up still yields `None`, which keeps the existing
+/// `<expr>` sentinel path active for unresolvable cases.
+#[derive(Debug, Default, Clone)]
+pub struct ConstTable {
+    values: HashMap<String, String>,
+}
+
+impl ConstTable {
+    pub fn from_module(module: &ModModule) -> Self {
+        let mut table = ConstTable::default();
+        for stmt in &module.body {
+            let Stmt::Assign(assign) = stmt else {
+                continue;
+            };
+            // Only handle single-target assignments: `NAME = value`.
+            // Multi-target / tuple / attribute targets are skipped.
+            let [target] = assign.targets.as_slice() else {
+                continue;
+            };
+            let Expr::Name(name) = target else {
+                continue;
+            };
+            if let Some(value) = literal_value(&assign.value) {
+                table.values.insert(name.id.to_string(), value);
+            }
+        }
+        table
+    }
+
+    /// Resolve a bare name reference to its module-level literal value
+    /// when known. Returns `None` if the name isn't a tracked literal
+    /// constant.
+    pub fn lookup(&self, name: &str) -> Option<&str> {
+        self.values.get(name).map(String::as_str)
+    }
+
+    pub fn merge(&mut self, other: ConstTable) {
+        self.values.extend(other.values);
+    }
+}
+
+/// Resolve an `Expr` to its serialised literal value. Mirrors the
+/// primitives handled by `literal_default` in `signatures.rs` (kept
+/// in sync intentionally: a Python parameter default and a
+/// module-level constant share the same notion of "resolvable
+/// literal"). Returns `None` for non-literal expressions.
+fn literal_value(expr: &Expr) -> Option<String> {
+    use ruff_python_ast::Number;
+    match expr {
+        Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
+        Expr::NumberLiteral(n) => Some(match &n.value {
+            Number::Int(i) => i.to_string(),
+            Number::Float(f) => f.to_string(),
+            Number::Complex { real, imag } => format!("({real}+{imag}j)"),
+        }),
+        Expr::BooleanLiteral(b) => Some(if b.value { "true" } else { "false" }.to_string()),
+        Expr::NoneLiteral(_) => Some(String::new()),
+        _ => None,
+    }
+}
+
 /// Module-level type aliases that the rust static parser knows how to
 /// follow. Triggered by patterns like:
 ///

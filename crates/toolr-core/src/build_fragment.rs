@@ -101,11 +101,13 @@ pub fn build_third_party_fragment(
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
         let sources_imports = SourcesImports::from_module(&module);
+        let consts = crate::parser::symbols::ConstTable::from_module(&module);
         let commands = extract_commands(
             &module,
             &module_path,
             &bindings,
             &enums,
+            &consts,
             &type_imports,
             &sources_imports,
             &aliases,

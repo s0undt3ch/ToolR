@@ -45,12 +45,11 @@ impl Docstring {
             if !long.is_empty() {
                 out.push_str("\n\n");
                 out.push_str(long);
-                out.push('\n');
             }
         }
 
         if !self.examples.is_empty() {
-            out.push_str("\nExamples:");
+            out.push_str("\n\n## Examples\n");
             for example in &self.examples {
                 let mut description = example.description.clone();
                 if !description.starts_with("- ") && !description.starts_with("* ") {
@@ -73,17 +72,17 @@ impl Docstring {
         append_bullet_section(&mut out, "Todo", &self.todo);
 
         if let Some(deprecated) = &self.deprecated {
-            out.push_str("\n\nDeprecated:\n");
+            out.push_str("\n\n## Deprecated\n\n");
             out.push_str(deprecated);
         }
 
         if let Some(version_added) = &self.version_added {
-            out.push_str("\n\nVersion Added: ");
+            out.push_str("\n\n## Version Added\n\n");
             out.push_str(version_added);
         }
 
         if !self.version_changed.is_empty() {
-            out.push_str("\n\nVersion Changed:\n");
+            out.push_str("\n\n## Version Changed\n\n");
             for vc in &self.version_changed {
                 out.push_str("- ");
                 out.push_str(&vc.version);
@@ -97,16 +96,16 @@ impl Docstring {
     }
 }
 
-/// Append a bulleted ``Section:\n- a\n- b`` block to ``out`` when
-/// ``items`` is non-empty. Existing leading ``- ``/``* `` bullets are
-/// preserved verbatim; otherwise we prefix each line with ``- ``.
+/// Append a `## Title\n\n- a\n- b` block to ``out`` when ``items`` is
+/// non-empty. Existing leading ``- ``/``* `` bullets are preserved
+/// verbatim; otherwise we prefix each line with ``- ``.
 fn append_bullet_section(out: &mut String, title: &str, items: &[String]) {
     if items.is_empty() {
         return;
     }
-    out.push_str("\n\n");
+    out.push_str("\n\n## ");
     out.push_str(title);
-    out.push_str(":\n");
+    out.push('\n');
     for item in items {
         let prefixed = if item.starts_with("- ") || item.starts_with("* ") {
             item.clone()
@@ -257,6 +256,7 @@ impl SimpleDocstringParser {
         // Parse the docstring
         self.parse_docstring_content(&lines, &mut result)?;
 
+        normalize_docstring_backticks(&mut result);
         Ok(result)
     }
 
@@ -701,6 +701,75 @@ impl SimpleDocstringParser {
 impl Default for SimpleDocstringParser {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Normalise Sphinx/RST-style ``code`` (double backticks) to commonplace
+/// markdown `code` (single backticks) so downstream markdown renderers
+/// like termimad emit inline-code styling rather than rendering the
+/// double backticks literally. Triple-or-more sequences are left alone
+/// so fenced code blocks survive.
+fn normalize_rst_backticks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '`' {
+            out.push(chars[i]);
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len() && chars[i] == '`' {
+            i += 1;
+        }
+        let run = i - start;
+        if run == 2 {
+            out.push('`');
+        } else {
+            for _ in 0..run {
+                out.push('`');
+            }
+        }
+    }
+    out
+}
+
+fn normalize_docstring_backticks(d: &mut Docstring) {
+    d.short_description = normalize_rst_backticks(&d.short_description);
+    if let Some(long) = &d.long_description {
+        d.long_description = Some(normalize_rst_backticks(long));
+    }
+    for s in d.params.values_mut().flatten() {
+        *s = normalize_rst_backticks(s);
+    }
+    for ex in &mut d.examples {
+        ex.description = normalize_rst_backticks(&ex.description);
+        ex.snippet = normalize_rst_backticks(&ex.snippet);
+    }
+    for s in &mut d.notes {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.warnings {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.see_also {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.references {
+        *s = normalize_rst_backticks(s);
+    }
+    for s in &mut d.todo {
+        *s = normalize_rst_backticks(s);
+    }
+    if let Some(s) = &d.deprecated {
+        d.deprecated = Some(normalize_rst_backticks(s));
+    }
+    if let Some(s) = &d.version_added {
+        d.version_added = Some(normalize_rst_backticks(s));
+    }
+    for vc in &mut d.version_changed {
+        vc.description = normalize_rst_backticks(&vc.description);
     }
 }
 

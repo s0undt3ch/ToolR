@@ -6,14 +6,14 @@
     {
       "name": "db",
       "title": "Database lifecycle",
-      "description": "Database lifecycle commands.\n\nExercise: ``arg_section`` for grouping related flags in ``--help``,\nthe string-attached ``@command(group=...)`` form, mixed positional\nand keyword-only arguments, and a Google-style docstring with\n``Args:`` and ``Examples:`` sections.\n",
+      "description": "Database lifecycle commands.\n\nExercise: `arg_section` for grouping related flags in `--help`,\nthe string-attached `@command(group=...)` form, mixed positional\nand keyword-only arguments, and a Google-style docstring with\n`Args:` and `Examples:` sections.",
       "parent": null,
       "origin": "static"
     },
     {
       "name": "greet",
       "title": "Say hello in various ways",
-      "description": "Greeting commands.\n\nExercise: top-level group, two commands, the bound and the\nstring-attached ``@command`` forms, a ``str`` argument with a\ndefault, a ``bool`` flag, and an ``Annotated[str, arg(...)]``\nmetavar override.\n",
+      "description": "Greeting commands.\n\nExercise: top-level group, two commands, the bound and the\nstring-attached `@command` forms, a `str` argument with a\ndefault, a `bool` flag, and an `Annotated[str, arg(...)]`\nmetavar override.",
       "parent": null,
       "origin": "static"
     }
@@ -25,7 +25,7 @@
       "module": "tools.db",
       "function": "reset",
       "summary": "Drop and recreate the database from scratch.",
-      "description": "Drop and recreate the database from scratch.\nExamples:\n\n- Reset interactively:\n\n- toolr db reset\n\n- Reset without prompting (CI):\n\n- toolr db reset --yes",
+      "description": "Drop and recreate the database from scratch.\n\n## Examples\n\n\n- Reset interactively:\n\n- toolr db reset\n\n- Reset without prompting (CI):\n\n- toolr db reset --yes",
       "arguments": [
         {
           "name": "yes",
@@ -59,7 +59,7 @@
         {
           "name": "who",
           "kind": "optional",
-          "help": "Who to greet. Defaults to ``\"world\"``.",
+          "help": "Who to greet. Defaults to `\"world\"`.",
           "default": "world",
           "type_annotation": "str",
           "resolved_type": {
@@ -93,7 +93,7 @@
         {
           "name": "message",
           "kind": "positional",
-          "help": "The message to shout. Becomes ``MSG`` in ``--help``.",
+          "help": "The message to shout. Becomes `MSG` in `--help`.",
           "default": null,
           "type_annotation": "Annotated[<expr>]",
           "resolved_type": {

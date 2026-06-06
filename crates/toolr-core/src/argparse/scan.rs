@@ -710,9 +710,9 @@ def add_arguments(self, parser):
         .unwrap();
         // `__init__.py` parses fine but has no add_argument calls.
         std::fs::write(cmds.join("__init__.py"), "# package marker\n").unwrap();
-        // `_setup_paddle_utils.py` — a private helper with no add_argument calls.
+        // `_helpers.py` — a private helper with no add_argument calls.
         std::fs::write(
-            cmds.join("_setup_paddle_utils.py"),
+            cmds.join("_helpers.py"),
             "def configure(parser):\n    pass\n",
         )
         .unwrap();
@@ -731,7 +731,7 @@ def add_arguments(self, parser):
             "__init__.py has no add_argument calls — must not become a command",
         );
         assert!(
-            !names.contains("_setup_paddle_utils"),
+            !names.contains("_helpers"),
             "helper module has no add_argument calls — must not become a command",
         );
     }
