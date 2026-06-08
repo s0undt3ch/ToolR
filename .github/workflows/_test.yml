@@ -294,7 +294,7 @@ jobs:
           cargo llvm-cov --workspace --exclude toolr-py --tests --cobertura --output-path target/coverage/cobertura.xml -- --test-threads=1
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           # Use OpenID Connect for secure authentication (no token needed)
           use_oidc: true
@@ -304,7 +304,7 @@ jobs:
         if: ${{ !cancelled() }}
         # codecov/test-results-action is deprecated in favour of running
         # codecov-action a second time with report_type: test_results.
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           # Use OpenID Connect for secure authentication (no token needed)
           use_oidc: true
