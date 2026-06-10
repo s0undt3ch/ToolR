@@ -31,6 +31,16 @@ comment.
   execution-free third-party glob). Repository code runs only on explicit
   command dispatch, through a provenance-verified interpreter. A committed
   `tools/.venv` is refused unless toolr provisioned it (`toolr project venv sync`).
+- The toolr runner no longer puts the invocation directory on `sys.path` (the
+  interpreter is started with `-P`), preventing a stray `.py` file in your
+  current directory from shadowing stdlib/site-packages modules.
+
+### Changed
+
+- Commands now run with the working directory set to the repo root (like
+  `make`/`cargo`). Relative path arguments resolve from the repo root, not your
+  current directory; toolr prints a one-line note if you pass a relative path
+  from a subdirectory.
 
 ### Removed
 
