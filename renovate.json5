@@ -49,11 +49,16 @@
     // ---- Grouping to cut PR noise ----
     {
       // The three ruff_* crates share one astral-sh/ruff git tag —
-      // they must move in lockstep.
+      // they must move in lockstep. They're declared as cargo git
+      // deps, so Renovate routes them through the `git-tags`
+      // datasource and the `packageName` becomes the git URL
+      // (`https://github.com/astral-sh/ruff`), not the crate name.
+      // Match by `depName` (the manifest-side crate identifier)
+      // instead — same shape as the `mise tools` rule below.
       description: "Group ruff_* crates",
       groupName: "ruff crates",
       matchManagers: ["cargo"],
-      matchPackageNames: [
+      matchDepNames: [
         "ruff_python_ast",
         "ruff_python_parser",
         "ruff_text_size",
