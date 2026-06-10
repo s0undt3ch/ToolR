@@ -156,6 +156,21 @@ repos:
 
   - repo: local
     hooks:
+      # Auto-fix style (mirrors `build-skill-refs`): `cargo fetch`
+      # resolves the dependency graph and minimally rewrites
+      # `Cargo.lock` to match `Cargo.toml` without gratuitously
+      # bumping unrelated transitives the way `cargo update` would.
+      # If the rewrite changes bytes on disk, prek sees the
+      # modification and fails the commit; re-stage the fresh
+      # lockfile and commit again. No compilation — the heavier
+      # `cargo check` hooks below pick that up on `.rs` changes.
+      - id: cargo-lock
+        name: Sync Cargo.lock with Cargo.toml
+        entry: cargo fetch
+        language: system
+        pass_filenames: false
+        files: ^(Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
+
       # Does it compile?
       - id: cargo-check
         name: cargo check
