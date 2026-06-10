@@ -410,6 +410,36 @@ def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
     )
 
 
+def _warn_if_paths_relative_to_invocation(
+    invocation_cwd: Path,
+    repo_root: Path,
+    values: list[Any],
+    stream: Any,
+) -> None:
+    """Emit one note iff cwd != repo_root AND a coerced arg is a relative Path.
+
+    Type-driven, never heuristic: only ``pathlib.Path`` instances (which all
+    ``toolr.types`` path-constrained args coerce to) count. ``str`` args are
+    never inspected for path-likeness.
+    """
+    if invocation_cwd.resolve() == repo_root.resolve():
+        return
+
+    def _is_rel_path(value: Any) -> bool:
+        if isinstance(value, Path):
+            return not value.is_absolute()
+        if isinstance(value, (list, tuple)):
+            return any(isinstance(x, Path) and not x.is_absolute() for x in value)
+        return False
+
+    if any(_is_rel_path(value) for value in values):
+        print(
+            f"toolr: note: commands run from the repo root ({repo_root}); "
+            f"relative path arguments resolve from there, not {invocation_cwd}",
+            file=stream,
+        )
+
+
 def _append_repo_root(repo_root: str, path_list: list[str] | None = None) -> None:
     """Append ``repo_root`` to ``sys.path`` so ``import tools.*`` resolves.
 
