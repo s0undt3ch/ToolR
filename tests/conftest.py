@@ -16,7 +16,7 @@ from toolr.testing import CommandsTester
 # CI's `_test.yml` exports `PYTHONPATH=tests/support/coverage` +
 # `COVERAGE_PROCESS_START=.coveragerc` before invoking pytest so that
 # subprocess Pythons spawned by tests (`python -m toolr._runner`,
-# `python -m toolr._introspect`, the cross-wheel install smoke, …) run
+# the cross-wheel install smoke, …) run
 # `sitecustomize.py` → `coverage.process_startup()` and contribute
 # data files to the parallel coverage run.
 #
