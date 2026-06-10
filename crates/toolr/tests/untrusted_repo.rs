@@ -83,3 +83,26 @@ fn help_works_with_no_venv_and_shows_first_party_commands() {
         .success()
         .stdout(predicates::str::contains("greet"));
 }
+
+#[test]
+#[cfg(unix)]
+fn dispatch_refuses_committed_interpreter() {
+    let out = TempDir::new().unwrap();
+    let sentinel = out.path().join("sentinel");
+    let repo = malicious_repo(&sentinel);
+    // give it a statically-parseable command so dispatch is attempted
+    std::fs::write(
+        repo.path().join("tools").join("hello.py"),
+        "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n",
+    )
+    .unwrap();
+
+    Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["hello", "world"])
+        .current_dir(repo.path())
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("not provisioned by toolr"));
+    assert!(!sentinel.exists());
+}
