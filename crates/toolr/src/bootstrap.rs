@@ -8,7 +8,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
-use toolr_core::dynamic::{compute_third_party_hash, empty_third_party_hash};
+use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 use toolr_core::freshness::{FreshnessVerdict, compare};
 use toolr_core::manifest::{Manifest, Origin, load_manifest, write_manifest};
 use toolr_core::parser::{build_static_manifest, build_static_manifest_with_venv};

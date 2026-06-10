@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 
 use crate::cache::meta::Meta;
 use crate::discovery::discover_project_root;
-use crate::dynamic::rebuild_manifest_full;
+use crate::manifest_build::rebuild_manifest_full;
 use crate::hash::hash_file;
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{

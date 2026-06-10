@@ -559,7 +559,7 @@ fn leaf_with_only_flags_offers_flags_on_empty_prefix() {
 }
 
 use crate::complete::{ResolvedManifest, resolve_manifest_at_tab};
-use crate::dynamic::empty_third_party_hash;
+use crate::manifest_build::empty_third_party_hash;
 use crate::manifest::{write_manifest};
 use tempfile::TempDir;
 

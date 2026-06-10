@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::dynamic::compute_third_party_hash;
+use crate::manifest_build::compute_third_party_hash;
 use crate::hash::hash_tools_dir;
 use crate::manifest::Manifest;
 

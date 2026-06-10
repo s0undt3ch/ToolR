@@ -240,7 +240,7 @@ fn preflight_fixture(
     let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
     let venv_dir = tools.join(".venv");
     let third_party_hash =
-        toolr_core::dynamic::compute_third_party_hash(&venv_dir).unwrap();
+        toolr_core::manifest_build::compute_third_party_hash(&venv_dir).unwrap();
 
     let imports_json: String = imports
         .iter()

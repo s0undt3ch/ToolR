@@ -206,7 +206,7 @@ fn detect_requires_python() -> String {
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {
-    use toolr_core::dynamic::rebuild_manifest_full;
+    use toolr_core::manifest_build::rebuild_manifest_full;
 
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
