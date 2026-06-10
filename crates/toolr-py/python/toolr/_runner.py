@@ -453,14 +453,32 @@ def _append_repo_root(repo_root: str, path_list: list[str] | None = None) -> Non
         target.append(repo_root)
 
 
+def _chdir_or_raise(repo_root: Path) -> None:
+    """``os.chdir`` into ``repo_root``, surfacing a clear error on failure."""
+    try:
+        os.chdir(repo_root)
+    except OSError as exc:
+        msg = f"failed to enter repo root {repo_root}: {exc}"
+        raise SpecError(msg) from exc
+
+
 def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     """Execute the command described by ``spec``. Returns a process exit code.
 
     ``ctx.exit(status, ...)`` raises :class:`SystemExit`; we honor its code.
     Any other uncaught exception is logged to stderr and returns 1.
     """
+    import sys  # noqa: PLC0415
+
+    # Capture the invocation cwd before any chdir; it's a runner-internal
+    # local (not part of Context or the wire format).
+    invocation_cwd = Path.cwd()
+    repo_root = Path(spec.context.repo_root)
     try:
         ctx = _build_context(spec)
+        # `''` is gone from sys.path (the interpreter ran with `-P`), so make
+        # `import tools.*` resolve regardless of where toolr was invoked.
+        _append_repo_root(str(repo_root))
         target = _import_target(spec)
         if spec.dispatch is not None:
             # Dispatched leaf: `target` is the parent dispatcher, `args`
@@ -469,6 +487,13 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
             # the parent's hints — `invoke_dispatcher` injects the
             # `DispatchCommand` keyword on top of those.
             _, parent_kwargs = _coerce_args(target, spec.args)
+            # Best-effort: only the parent's coerced kwargs are checked; a
+            # dispatched child's relative path args are coerced inside
+            # `invoke_dispatcher` and are not covered by this warning.
+            _warn_if_paths_relative_to_invocation(
+                invocation_cwd, repo_root, list(parent_kwargs.values()), sys.stderr
+            )
+            _chdir_or_raise(repo_root)
             invoke_dispatcher(
                 ctx=ctx,
                 func=target,
@@ -479,6 +504,10 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
             )
         else:
             var_args, kw_args = _coerce_args(target, spec.args)
+            _warn_if_paths_relative_to_invocation(
+                invocation_cwd, repo_root, [*var_args, *kw_args.values()], sys.stderr
+            )
+            _chdir_or_raise(repo_root)
             target(ctx, *var_args, **kw_args)
     except SystemExit as exc:
         code = exc.code
