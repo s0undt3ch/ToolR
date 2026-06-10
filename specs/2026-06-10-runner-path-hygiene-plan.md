@@ -17,6 +17,12 @@ is a runner-internal local; nothing is added to `Context` or the spec.
 
 **Design:** `specs/2026-06-10-runner-path-hygiene-design.md`. Read it before starting.
 
+> **Superseded in part:** the chdir and the relative-path warning were moved to the **Rust** side after
+> implementation (the dispatch layer has the cwd, arg `resolved_type`s, `PathBuf` values, and clap
+> `ValueSource`). Tasks below describe the original Python-level placement; the shipped form lives in
+> `spawn_runner` (`current_dir(repo_root)`) and `execute_build::relative_path_warning`. The runner keeps only
+> `sys.path.append(repo_root)` (append semantics — `PYTHONPATH` can't express it). See design §3 and §5.
+
 **Depends on / stacking:** This branch (`runner-path-hygiene`) is stacked on `static-only-manifest` (SEC-01).
 Implement only AFTER SEC-01 has landed on the lower branch and this branch has been restacked onto it — the
 plan assumes `_introspect.py` is already deleted and `spawn_runner` is the only `python -m toolr.*` entry
