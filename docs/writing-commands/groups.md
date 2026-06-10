@@ -34,6 +34,22 @@ prints it.
   become optional flags. See [Arguments](arguments.md) for the full
   inference rules.
 
+## Static-only discovery
+
+toolr discovers commands **only by static analysis** of your
+`tools/*.py` files. It never imports or executes those modules to build
+the command manifest — `toolr --help`, tab-completion, and first-run in a
+fresh clone are all execution-free. Your repository's Python runs only
+when you explicitly dispatch a command.
+
+The practical contract: declare `command_group(...)` at module top level
+and apply `@command` / `@group.command` to module-level functions.
+Commands registered dynamically — inside a `for` loop, behind an `if`, or
+returned from a factory invoked at import time — are **not** discovered
+and will not appear in `--help`, completion, or dispatch. If a command is
+missing, make its registration a top-level, statically-visible
+declaration.
+
 ## Overriding the CLI name
 
 To register a command under a name different from its function:
