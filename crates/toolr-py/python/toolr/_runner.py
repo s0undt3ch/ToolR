@@ -410,6 +410,19 @@ def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
     )
 
 
+def _append_repo_root(repo_root: str, path_list: list[str] | None = None) -> None:
+    """Append ``repo_root`` to ``sys.path`` so ``import tools.*`` resolves.
+
+    Append (not insert) so stdlib and site-packages win — only ``tools.*``,
+    which nothing else provides, resolves from the repo. Idempotent.
+    """
+    import sys  # noqa: PLC0415
+
+    target = sys.path if path_list is None else path_list
+    if repo_root not in target:
+        target.append(repo_root)
+
+
 def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     """Execute the command described by ``spec``. Returns a process exit code.
 
