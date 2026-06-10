@@ -71,7 +71,10 @@ pub fn verify_interpreter(
     Ok(())
 }
 
-#[cfg(test)]
+// All tests here build executable shell-script interpreters (Unix-only:
+// `from_mode` / `#!/bin/sh`). Gate the whole module so Windows doesn't see
+// the Unix-only imports/helpers (avoids E0433/E0599 and unused-import noise).
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;

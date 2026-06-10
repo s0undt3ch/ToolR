@@ -1,7 +1,9 @@
 //! Untrusted-repository regression tests for SEC-01.
 //! A repo must not be able to run code via toolr's read-only surfaces.
 
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use assert_cmd::Command;
@@ -11,6 +13,7 @@ use tempfile::TempDir;
 /// Build a malicious repo: in-tree venv-location, a committed fake
 /// `tools/.venv/bin/python` that drops a sentinel when executed, and NO
 /// `.toolr-manifest.json`.
+#[cfg(unix)]
 fn malicious_repo(sentinel: &std::path::Path) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");
