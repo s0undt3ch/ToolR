@@ -98,6 +98,23 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
 - **Calling subprocesses.** Use `ctx.run(...)`; it inherits stderr
   for TTY-aware tools and propagates timeouts.
 
+## Runtime working directory
+
+Commands run with the working directory set to the **repo root**,
+regardless of where you invoke `toolr` from (the `make`/`cargo`
+convention). Two consequences:
+
+- **Relative path arguments resolve from the repo root, not your
+  current directory.** `toolr build ./out.txt` run from `tools/`
+  writes `<repo-root>/out.txt`, not `<repo-root>/tools/out.txt`. Pass
+  an absolute path when you need a file relative to where you ran the
+  command. toolr prints a one-line note on stderr if you pass a
+  relative path argument from a subdirectory, so the surprise is
+  visible.
+- **`ctx.run(...)` subprocesses inherit the repo root as their cwd**
+  unless you override it, so paths in the commands you spawn are also
+  repo-root-relative by default.
+
 ## Static-only discovery contract
 
 toolr discovers commands **only by static analysis** of `tools/*.py` —
