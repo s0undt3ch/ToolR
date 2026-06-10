@@ -10,8 +10,8 @@ use crate::manifest_build::rebuild_manifest_full;
 use crate::hash::hash_file;
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
-    ResolvedVenv, UpgradeMode, compute_repo_key, perform_editable_installs, resolve_venv_path,
-    sync::sync_if_needed, validate::validate_venv, warn_failures,
+    ResolvedVenv, UpgradeMode, compute_repo_key, resolve_venv_path, sync::sync_if_needed,
+    validate::validate_venv,
 };
 
 /// Options for [`ensure_venv_ready`]. Constructed via `Default::default()`
@@ -63,13 +63,6 @@ pub fn ensure_venv_ready(
     if let Err(e) = finalize_sync(&repo_root, &resolved) {
         eprintln!("toolr: warning: failed to finalize sync (provenance/manifest): {e}");
     }
-    let outcomes = perform_editable_installs(
-        &uv,
-        &resolved.config,
-        &repo_root,
-        &resolved.python,
-    );
-    warn_failures(&outcomes);
     Ok((resolved, uv))
 }
 
