@@ -55,12 +55,16 @@ subdirectory import bug, because resolution no longer depends on where the user 
 Tradeoff (accepted): a venv package literally named `tools` would shadow the repo's `tools/`. Exotic, and the
 venv is the repo's own.
 
-### §3 — Run commands from the repo root
+### §3 — Run commands from the repo root (chdir on the Rust side)
 
-Before invoking the command function, the runner `os.chdir(repo_root)`. This gives commands a predictable
-working directory regardless of where the user invoked toolr (the make/cargo convention), and makes
-`ctx.run` subprocesses run from the repo root by default. Because `-P` already removed `''` from `sys.path`,
-the chdir does not reintroduce any import shadowing.
+The runner is spawned with its working directory set to `repo_root` —
+`Command::current_dir(repo_root)` in `spawn_runner` (`crates/toolr-core/src/execute/spawn.rs`). The child
+therefore starts in the repo root (the make/cargo convention) and never sees the invocation cwd; `ctx.run`
+subprocesses inherit it. Because `-P` already removed `''` from `sys.path`, the cwd is decoupled from import
+resolution, so this does not reintroduce shadowing. The runner no longer calls `os.chdir`.
+
+Why Rust, not Python: the dispatch layer already owns the spawn, knows `repo_root`, and setting the child cwd
+at spawn time means the runner process is never momentarily in the invocation cwd.
 
 ### §4 — Relative path arguments resolve from repo root (documented, not rewritten)
 
@@ -68,19 +72,22 @@ The chdir changes what a relative path **argument** means: `toolr build ./x.py` 
 resolves `./x.py` against the repo root. We do **not** silently rewrite path args (no magical path building) —
 the contract is "paths are resolved from the repo root," documented in the command-authoring guide.
 
-### §5 — Double-gated warning
+### §5 — Double-gated warning (on the Rust side)
 
-To catch the one footgun §4 introduces without adding noise, the runner emits a single stderr note only when
+To catch the one footgun §4 introduces without adding noise, toolr emits a single stderr note only when
 **both** hold:
 
 - the invocation cwd differs from the repo root, and
-- at least one coerced argument is a relative `pathlib.Path`.
+- at least one path-typed argument was given a relative value **on the command line**.
 
-Detection is type-driven, not heuristic: after `_coerce_args`, an argument is "a relative path" iff
-`isinstance(value, pathlib.Path) and not value.is_absolute()` (this uniformly covers `pathlib.Path` and all
-`toolr.types` path-constrained args, which coerce to `Path`). String arguments are never inspected for
-path-likeness. The captured invocation cwd is a **runner-internal local** — it is not added to `Context`
-(keeping the public command-author API unchanged) and not added to the wire format.
+This lives in Rust (`crates/toolr/src/execute_build.rs::relative_path_warning`), not the Python runner,
+because the dispatch layer has everything needed and more: the invocation cwd (its own process cwd, pre-spawn),
+`repo_root`, each arg's `resolved_type` (`SupportedType::Path` / `AbsolutePath` / `ResolvedPath`), the extracted
+`PathBuf` values, and clap's `ValueSource`. Detection is type-driven (only path-typed args — never a `str`
+that merely looks path-like) and source-precise: `ValueSource::CommandLine` only, so a relative **default**
+never warns (something the old `isinstance`-after-coercion check in Python could not distinguish). It also
+covers the dispatcher's own args in the dispatch path. The invocation cwd is never added to `Context` or the
+wire format.
 
 Example note:
 
@@ -88,37 +95,39 @@ Example note:
 toolr: note: commands run from the repo root (/abs/repo); relative path arguments resolve from there, not /abs/repo/sub
 ```
 
-## Runner control flow (target state)
+## Division of responsibility (target state)
 
-In `run(spec)` (`_runner.py:413`):
+Rust (`dispatch` → `execute_build` → `spawn_runner`), before the runner starts:
 
-1. `invocation_cwd = Path.cwd()` (before any chdir).
-2. `ctx = _build_context(spec)`.
-3. Append `spec.context.repo_root` to `sys.path` (before importing the target).
-4. `target = _import_target(spec)`.
-5. `_coerce_args(...)` → `var_args` / `kw_args` (or `parent_kwargs` for the dispatch path).
-6. Warning check (§5) using the coerced values + `invocation_cwd` vs `repo_root`.
-7. `os.chdir(repo_root)`.
-8. `target(ctx, ...)`.
+1. `relative_path_warning(cmd, matches, repo_root, cwd)` — emit the §5 note if gated (in `build_spec` /
+   `build_dispatch_spec`).
+2. `spawn_runner(python, spec_path, repo_root)` — `-P`, `current_dir(repo_root)`, `TOOLR_SPEC_FILE`.
+
+Python runner `run(spec)` — its only remaining cwd/path job:
+
+3. `_append_repo_root(spec.context.repo_root)` — append (not prepend) so stdlib + site-packages win.
+   `PYTHONPATH` cannot express this (it prepends ahead of stdlib + site-packages), which is exactly why the
+   append stays in-process rather than being passed as an env var.
 
 ## Error handling
 
-- Missing/garbage `repo_root` in the spec is already a `SpecError` path; `os.chdir` failure (repo_root not a
-  dir) surfaces as a clear error rather than a silent fallback to the invocation cwd.
+- Missing/garbage `repo_root` in the spec is already a `SpecError` path; an unreadable `repo_root` surfaces as
+  a normal `spawn_runner` I/O error (with the existing "run `toolr project venv sync`" hint nearby), not a
+  silent fallback.
 - Appending an already-present `repo_root` is a no-op guard (don't append twice).
 
 ## Testing
 
-- **CWD shadowing:** run a command from a directory containing a planted `msgspec.py`/`secrets.py` that would
-  raise or set a sentinel if imported; assert it is never imported (proves `-P` dropped `''`).
-- **Subdir import:** run a command from a repo subdirectory; assert `tools.*` still imports (proves the
-  append works and fixes the latent bug).
-- **CWD is repo root:** a command that returns `os.getcwd()`; assert it equals the repo root.
-- **Warning gating:** (a) relative `Path` arg + run from subdir → note present; (b) run from repo root → no
-  note; (c) no path args → no note; (d) absolute path arg → no note; (e) `str` arg that looks like a path →
-  no note.
-- **No child inheritance:** a command that spawns `python -c "import sys; print('' in sys.path)"` via
-  `ctx.run`; assert the child still has normal path semantics (the `-P` flag did not propagate).
+- **Warning gating (Rust, `execute_build` unit tests):** `relative_path_warning` returns a note for
+  (relative path arg + cwd≠repo_root), and `None` for: cwd==repo_root; an absolute path arg; a `str` arg whose
+  value looks path-like. (Pure function — takes cwd as a param, so no env dependence.)
+- **`-P` argv (Rust, `spawn.rs` unit test):** `spawn_runner` builds `["-P", "-m", "toolr._runner"]`.
+- **Subdir import / append (Python, `tests/runner/test_path_hygiene.py`):** run a command from a repo
+  subdirectory via `run()`; assert `tools.*` imports (proves the append works and fixes the latent bug).
+- **Coverage boundary:** the chdir's runtime effect and the `-P` shadowing effect both require a real spawn
+  (interpreter startup / `current_dir`), so they aren't unit-tested in-process — same documented boundary as
+  the original `-P` end-to-end note (the only venv-backed harness binds `toolr` from PATH). Verified manually
+  against the branch binary; CI exercises the real spawn.
 
 ## Out of scope
 

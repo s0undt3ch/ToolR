@@ -14,12 +14,18 @@ fn runner_args() -> [&'static str; 3] {
 
 /// Spawn `<python> -P -m toolr._runner` with:
 ///
+/// - working directory set to `repo_root`, so the command runs from the
+///   project root regardless of where the user invoked toolr (the
+///   make/cargo convention). Child processes the command spawns inherit
+///   this cwd. The runner itself no longer chdirs.
 /// - `TOOLR_SPEC_FILE` set to `spec_path`.
 /// - stdin/stdout/stderr inherited untouched (so Rich's TTY detection,
 ///   tools that read stdin, etc., all work).
-pub fn spawn_runner(python: &Path, spec_path: &Path) -> io::Result<Child> {
+pub fn spawn_runner(python: &Path, spec_path: &Path, repo_root: &Path) -> io::Result<Child> {
+    // nosemgrep: rust.actix.command-injection.rust-actix-command-injection.rust-actix-command-injection
     Command::new(python)
         .args(runner_args())
+        .current_dir(repo_root)
         .env("TOOLR_SPEC_FILE", spec_path)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -35,7 +41,7 @@ mod tests {
     #[test]
     fn spawn_with_nonexistent_python_returns_io_error() {
         let bogus = PathBuf::from("/definitely/not/a/real/python-binary-xyz");
-        let result = spawn_runner(&bogus, Path::new("/tmp/whatever.json"));
+        let result = spawn_runner(&bogus, Path::new("/tmp/whatever.json"), Path::new("/tmp"));
         assert!(result.is_err());
     }
 

@@ -28,6 +28,11 @@ pub fn build_spec(
     repo_root: &Path,
     output_opts: &OutputOptions,
 ) -> ExecutionSpec {
+    // SEC-02: the runner chdirs to repo_root, so a relative path typed from a
+    // subdirectory resolves from the repo root, not the user's cwd. Warn here
+    // (the Rust layer knows the cwd, the arg types, and which values the user
+    // actually typed) rather than after coercion in Python.
+    warn_relative_paths(cmd, matches, repo_root);
     let mut args = BTreeMap::new();
     for arg in &cmd.arguments {
         if let Some(value) = extract_value(arg, matches) {
@@ -115,6 +120,9 @@ pub fn build_dispatch_spec(
     repo_root: &Path,
     output_opts: &OutputOptions,
 ) -> ExecutionSpec {
+    // Covers the dispatcher's own (parent) args. A dispatched child's args are
+    // packed separately and not checked here — same scope as before.
+    warn_relative_paths(parent, parent_matches, repo_root);
     let mut parent_args = BTreeMap::new();
     for arg in &parent.arguments {
         if let Some(value) = extract_value(arg, parent_matches) {
@@ -334,6 +342,81 @@ fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
     }
 }
 
+/// True when `arg` is a path-typed argument whose value the user typed on
+/// the command line (not a default) and that value is a relative path.
+///
+/// Type-driven: only `SupportedType::Path` / `AbsolutePath` / `ResolvedPath`
+/// count — never a `str` arg that merely looks path-like. Source-precise:
+/// `ValueSource::CommandLine` only, so a relative *default* never warns.
+fn arg_has_relative_cli_path(arg: &Argument, matches: &ArgMatches) -> bool {
+    use clap::parser::ValueSource;
+
+    let is_path = matches!(
+        scalar_element_type(arg),
+        Some(SupportedType::Path | SupportedType::AbsolutePath | SupportedType::ResolvedPath)
+    );
+    if !is_path {
+        return false;
+    }
+    let name = arg.name.as_str();
+    if matches.value_source(name) != Some(ValueSource::CommandLine) {
+        return false;
+    }
+    let is_many = matches!(
+        arg.resolved_type.as_ref().map(unwrap_optional),
+        Some(SupportedType::Tuple(_))
+    ) || matches!(arg.kind, ArgumentKind::Repeated | ArgumentKind::VarPositional);
+    if is_many {
+        matches
+            .get_many::<std::path::PathBuf>(name)
+            .map(|it| it.into_iter().any(|p| !p.is_absolute()))
+            .unwrap_or(false)
+    } else {
+        matches
+            .get_one::<std::path::PathBuf>(name)
+            .map(|p| !p.is_absolute())
+            .unwrap_or(false)
+    }
+}
+
+/// The one-line note to print iff the invocation cwd differs from `repo_root`
+/// AND a path-typed argument was given a relative value on the command line.
+/// Pure (no I/O) so it can be unit-tested against constructed matches.
+pub(crate) fn relative_path_warning(
+    cmd: &Command,
+    matches: &ArgMatches,
+    repo_root: &Path,
+    cwd: &Path,
+) -> Option<String> {
+    let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    if canon(cwd) == canon(repo_root) {
+        return None;
+    }
+    if !cmd
+        .arguments
+        .iter()
+        .any(|arg| arg_has_relative_cli_path(arg, matches))
+    {
+        return None;
+    }
+    Some(format!(
+        "toolr: note: commands run from the repo root ({}); relative path \
+         arguments resolve from there, not {}",
+        repo_root.display(),
+        cwd.display(),
+    ))
+}
+
+/// Side-effecting wrapper: resolve the invocation cwd and print the note (if
+/// any) to stderr. Called by the spec builders before the runner is spawned.
+fn warn_relative_paths(cmd: &Command, matches: &ArgMatches, repo_root: &Path) {
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(msg) = relative_path_warning(cmd, matches, repo_root, &cwd) {
+            eprintln!("{msg}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,6 +561,57 @@ mod tests {
             dispatched_from: None,
             is_dispatcher: false,
         }
+    }
+
+    /// Parse `argv` against a single `file` arg with a `PathBuf` value-parser,
+    /// mirroring how the real CLI builder wires a `SupportedType::Path` arg.
+    fn path_matches(argv: &[&str]) -> ArgMatches {
+        clap::Command::new("t")
+            .arg(Arg::new("file").value_parser(clap::value_parser!(std::path::PathBuf)))
+            .try_get_matches_from(argv)
+            .expect("parse")
+    }
+
+    #[test]
+    fn warns_on_relative_path_arg_from_subdir() {
+        let cmd = cmd_with(vec![arg_of("file", ArgumentKind::Positional, SupportedType::Path)]);
+        let matches = path_matches(&["t", "rel/x.py"]);
+        let msg = relative_path_warning(&cmd, &matches, Path::new("/repo"), Path::new("/repo/sub"));
+        assert!(msg.is_some_and(|m| m.contains("repo root")), "expected a warning");
+    }
+
+    #[test]
+    fn no_warn_when_cwd_equals_repo_root() {
+        let cmd = cmd_with(vec![arg_of("file", ArgumentKind::Positional, SupportedType::Path)]);
+        let matches = path_matches(&["t", "rel/x.py"]);
+        assert!(
+            relative_path_warning(&cmd, &matches, Path::new("/repo"), Path::new("/repo")).is_none()
+        );
+    }
+
+    #[test]
+    fn no_warn_for_absolute_path_arg() {
+        let cmd = cmd_with(vec![arg_of("file", ArgumentKind::Positional, SupportedType::Path)]);
+        let matches = path_matches(&["t", "/abs/x.py"]);
+        assert!(
+            relative_path_warning(&cmd, &matches, Path::new("/repo"), Path::new("/repo/sub"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn no_warn_for_non_path_arg_even_if_value_looks_like_a_path() {
+        // A `str` arg whose value merely looks path-like must NOT warn —
+        // the check is type-driven, not heuristic.
+        let cmd = cmd_with(vec![arg_of("file", ArgumentKind::Positional, SupportedType::Str)]);
+        let matches = clap::Command::new("t")
+            .arg(Arg::new("file"))
+            .try_get_matches_from(["t", "rel/x.py"])
+            .expect("parse");
+        assert!(
+            relative_path_warning(&cmd, &matches, Path::new("/repo"), Path::new("/repo/sub"))
+                .is_none()
+        );
     }
 
     #[test]
