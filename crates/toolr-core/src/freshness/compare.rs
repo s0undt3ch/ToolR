@@ -35,7 +35,7 @@ pub enum FreshnessVerdict {
 /// produces a fresh manifest from scratch.
 ///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
-/// third-party and dynamic entries. On `ThirdPartyDrift`, call
+/// third-party entries. On `ThirdPartyDrift`, call
 /// `build_static_manifest_with_venv`; third-party entries come from the
 /// fresh glob.
 pub fn compare(

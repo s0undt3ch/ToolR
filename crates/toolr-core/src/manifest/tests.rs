@@ -83,6 +83,19 @@ fn load_returns_io_error_when_missing() {
     assert!(matches!(err, ManifestError::Io(_)));
 }
 
+#[test]
+fn legacy_dynamic_origin_is_not_loadable_and_triggers_rebuild() {
+    // A manifest written by an older toolr with an entry origin "dynamic"
+    // must not deserialize into the new enum; callers treat that as absent
+    // and rebuild from source.
+    let json = r#"{"schema_version":1,"static_hash":"x","third_party_hash":"",
+        "groups":[],"commands":[{"name":"c","group":"g","module":"m","function":"f",
+        "summary":"","description":"","arguments":[],"imports":[],"origin":"dynamic",
+        "dispatched_from":null,"is_dispatcher":false}]}"#;
+    let parsed: Result<Manifest, _> = serde_json::from_str(json);
+    assert!(parsed.is_err());
+}
+
 mod dispatched_from_tests {
     use super::*;
 

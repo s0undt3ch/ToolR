@@ -65,10 +65,10 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     })
 }
 
-/// Carry forward `origin == Dynamic` and `origin == ThirdParty` entries
-/// from the cache that don't collide with anything the fresh static
-/// parser produced. Also stamps the cached `third_party_hash` onto the
-/// fresh manifest, since we didn't re-glob.
+/// Carry forward non-`Static` (i.e. `ThirdParty`) entries from the cache
+/// that don't collide with anything the fresh static parser produced.
+/// Also stamps the cached `third_party_hash` onto the fresh manifest,
+/// since we didn't re-glob.
 ///
 /// **NOTE:** This helper is safe for tab completion's in-memory use only.
 /// Callers that persist the resulting manifest (e.g. dispatch's

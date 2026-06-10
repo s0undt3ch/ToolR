@@ -211,7 +211,7 @@ fn manifest_rebuild() -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
-    let outcome = rebuild_manifest_full(&repo_root, &resolved.python, &resolved.venv_dir)?;
+    let outcome = rebuild_manifest_full(&repo_root, &resolved.venv_dir)?;
     for w in &outcome.warnings {
         eprintln!("toolr: warning: {w}");
     }
