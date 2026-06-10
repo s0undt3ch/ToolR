@@ -1,4 +1,16 @@
-"""SEC-02: runner sys.path / cwd hygiene."""
+"""SEC-02: runner sys.path / cwd hygiene.
+
+Coverage boundary: the `-P` *runtime* effect (a planted `.py` in the invocation
+dir never shadows stdlib/site-packages because `''` is off `sys.path`) only
+takes hold at interpreter startup, so it cannot be exercised by an in-process
+`run()` call. It is covered by the `spawn_runner` argv unit test
+(`crates/toolr-core/src/execute/spawn.rs`) plus manual verification with a real
+`-P` binary; there is no automated end-to-end shadowing test because the only
+venv-backed harness (`tests/sources/test_e2e.py`) binds `toolr_bin` to
+`shutil.which("toolr")`, which picks up whatever toolr is on PATH rather than
+the freshly built `-P` branch binary — so such a test would be unreliable
+locally. See the SEC-02 plan, Task 5.
+"""
 
 from __future__ import annotations
 
