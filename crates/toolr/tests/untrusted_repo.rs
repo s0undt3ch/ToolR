@@ -58,3 +58,28 @@ fn bare_invocation_does_not_execute_committed_interpreter() {
 
     assert!(!sentinel.exists(), "bare toolr executed the committed interpreter");
 }
+
+#[test]
+fn help_works_with_no_venv_and_shows_first_party_commands() {
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    std::fs::create_dir_all(&tools).unwrap();
+    std::fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname=\"demo\"\nversion=\"0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tools.join("greet.py"),
+        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+    )
+    .unwrap();
+
+    Command::cargo_bin("toolr")
+        .unwrap()
+        .arg("--help")
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("greet"));
+}
