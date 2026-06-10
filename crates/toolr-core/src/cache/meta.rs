@@ -18,7 +18,10 @@ use thiserror::Error;
 /// Current sidecar schema version. Bump on breaking format changes;
 /// `Meta::load` rejects newer versions and silently upgrades older ones
 /// in-process if migrations are added.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// v2 adds interpreter provenance (`interpreter_path` + `interpreter_hash`).
+/// Both fields are `#[serde(default)]`, so v1 sidecars still load.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Filename used for the sidecar inside the per-repo cache directory.
 pub const FILE_NAME: &str = "meta.json";
@@ -38,6 +41,14 @@ pub struct Meta {
     pub created_at: DateTime<Utc>,
     /// Updated on every toolr invocation against this cache entry.
     pub last_used_at: DateTime<Utc>,
+    /// Canonical, symlink-resolved path of the interpreter toolr
+    /// provisioned for this repo. `None` for v1 sidecars (pre-provenance).
+    #[serde(default)]
+    pub interpreter_path: Option<PathBuf>,
+    /// blake3 hex of the interpreter file's bytes at provision time.
+    /// `None` for v1 sidecars (pre-provenance).
+    #[serde(default)]
+    pub interpreter_hash: Option<String>,
 }
 
 fn default_schema_version() -> u32 {
@@ -70,7 +81,19 @@ impl Meta {
             python_version: python_version.into(),
             created_at: now,
             last_used_at: now,
+            interpreter_path: None,
+            interpreter_hash: None,
         }
+    }
+
+    /// Record interpreter provenance: the canonical interpreter path and
+    /// the blake3 hex of its bytes at provision time. Used by
+    /// `venv::provenance::verify_interpreter` to decide whether an
+    /// in-repo interpreter is safe to execute.
+    pub fn with_interpreter(mut self, path: PathBuf, hash: String) -> Self {
+        self.interpreter_path = Some(path);
+        self.interpreter_hash = Some(hash);
+        self
     }
 
     /// Path of the sidecar file inside `cache_dir`.
