@@ -26,6 +26,10 @@ def test_discover_walks_a_real_tools_package(tmp_path: Path) -> None:
         "def hello(ctx):\n"
         '    """Say hi."""\n'
     )
+    # A second module that fails to import, so the walk exercises both the
+    # success path (ci) and the per-module `except` (which records a warning
+    # and continues — one bad file must not poison discovery).
+    (tools / "broken.py").write_text("raise RuntimeError('boom')\n")
     with CommandsTester(search_path=tmp_path) as tester:
         tester.discover()
         # The walk imported every `tools.*` module — proving the loop ran
