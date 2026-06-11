@@ -936,6 +936,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#working-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working directory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#prompting-and-exiting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1799,6 +1810,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#working-directory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working directory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#prompting-and-exiting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1928,6 +1950,17 @@ subprocess's output to the user's terminal.</p>
 </span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s2">&quot;git rev-parse failed&quot;</span><span class="p">)</span>
 </span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">sha</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
 </span></code></pre></div>
+<h2 id="working-directory">Working directory<a class="headerlink" href="#working-directory" title="Permanent link">&para;</a></h2>
+<p>Commands run with the working directory set to the <strong>repo root</strong>, no
+matter where you invoke <code>toolr</code> from — the same convention <code>make</code> and
+<code>cargo</code> follow. <code>ctx.repo_root</code> always points there, and <code>ctx.run(...)</code>
+subprocesses inherit it as their cwd unless you override it.</p>
+<p>Because of this, a <strong>relative path argument resolves from the repo
+root, not from your current directory</strong>. Running <code>toolr build ./out.txt</code>
+from a subdirectory writes <code>&lt;repo-root&gt;/out.txt</code>. Pass an absolute path
+when you need a file relative to where you ran the command. toolr prints
+a one-line note on stderr if you pass a relative path argument from a
+subdirectory, so the behaviour is never silent.</p>
 <h2 id="prompting-and-exiting">Prompting and exiting<a class="headerlink" href="#prompting-and-exiting" title="Permanent link">&para;</a></h2>
 <p><code>ctx.prompt(...)</code> reads a line from stdin (returns the typed string,
 empty if the user just hits enter). <code>ctx.exit(code, message=None)</code>

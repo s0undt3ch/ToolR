@@ -1692,15 +1692,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev33-2026-06-11" class="md-nav__link">
+  <a href="#0242-dev55-2026-06-11" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev33 - 2026-06-11
+        0.24.2-dev55 - 2026-06-11
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev33 - 2026-06-11">
+    <nav class="md-nav" aria-label="0.24.2-dev55 - 2026-06-11">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1719,6 +1719,17 @@
     <span class="md-ellipsis">
       
         Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
       
     </span>
   </a>
@@ -3246,15 +3257,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev33-2026-06-11" class="md-nav__link">
+  <a href="#0242-dev55-2026-06-11" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev33 - 2026-06-11
+        0.24.2-dev55 - 2026-06-11
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev33 - 2026-06-11">
+    <nav class="md-nav" aria-label="0.24.2-dev55 - 2026-06-11">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3273,6 +3284,17 @@
     <span class="md-ellipsis">
       
         Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
       
     </span>
   </a>
@@ -4795,7 +4817,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0242-dev33-2026-06-11">0.24.2-dev33 - 2026-06-11<a class="headerlink" href="#0242-dev33-2026-06-11" title="Permanent link">&para;</a></h2>
+<h2 id="0242-dev55-2026-06-11">0.24.2-dev55 - 2026-06-11<a class="headerlink" href="#0242-dev55-2026-06-11" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Automated dependency updates have moved from Dependabot to
 <a href="https://docs.renovatebot.com/">Mend Renovate</a>. The new <code>renovate.json5</code>
@@ -4816,6 +4838,16 @@ comment.</p>
   execution-free third-party glob). Repository code runs only on explicit
   command dispatch, through a provenance-verified interpreter. A committed
   <code>tools/.venv</code> is refused unless toolr provisioned it (<code>toolr project venv sync</code>).</li>
+<li>The toolr runner no longer puts the invocation directory on <code>sys.path</code> (the
+  interpreter is started with <code>-P</code>), preventing a stray <code>.py</code> file in your
+  current directory from shadowing stdlib/site-packages modules.</li>
+</ul>
+<h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Commands now run with the working directory set to the repo root (like
+  <code>make</code>/<code>cargo</code>). Relative path arguments resolve from the repo root, not your
+  current directory; toolr prints a one-line note if you pass a relative path
+  from a subdirectory.</li>
 </ul>
 <h3 id="removed">Removed<a class="headerlink" href="#removed" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4823,6 +4855,10 @@ comment.</p>
   registered dynamically (not via top-level <code>command_group(...)</code> + module-level
   <code>@group.command</code>) are no longer discovered. Third-party plugins via shipped
   <code>toolr-manifest.json</code> are unaffected.</li>
+<li>The <code>[tool.toolr] editable-install</code> directive is removed. toolr no longer runs <code>uv pip install -e</code> itself;
+  declare editable dependencies the uv-native way via <code>[tool.uv.sources]</code> (e.g.
+  <code>foo = { path = "./packages/foo", editable = true }</code>), which <code>uv sync</code> installs and records in <code>uv.lock</code>.
+  A <code>tools/pyproject.toml</code> that still lists <code>editable-install</code> keeps loading — the key is ignored.</li>
 </ul>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4830,17 +4866,26 @@ comment.</p>
 <li><em>(venv)</em> Interpreter provenance verification (<a href="https://github.com/s0undt3ch/ToolR/commit/94c7a4b122e40ca4883c9d98c1f89e214ed70ff5"><code>94c7a4b</code></a>)</li>
 <li><em>(venv)</em> Record interpreter provenance and rebuild manifest on sync (<a href="https://github.com/s0undt3ch/ToolR/commit/5a02790f2e767db0931b8bddaace270d853fee62"><code>5a02790</code></a>)</li>
 <li><em>(dispatch)</em> Refuse to execute non-provisioned in-repo interpreters (SEC-01) (<a href="https://github.com/s0undt3ch/ToolR/commit/dfa495920c13dce962161d75cb7e9006e521614e"><code>dfa4959</code></a>)</li>
+<li><em>(runner)</em> Append repo_root to sys.path (resolves tools.* from any cwd) (<a href="https://github.com/s0undt3ch/ToolR/commit/097de5c29b1089f5885e111a9a46c4c2aaf18329"><code>097de5c</code></a>)</li>
+<li><em>(runner)</em> Double-gated relative-path warning helper (<a href="https://github.com/s0undt3ch/ToolR/commit/6749619efdaee3094d30df557f579651ccfafa91"><code>6749619</code></a>)</li>
+<li><em>(runner)</em> Run commands from repo root; warn on relative path args from a subdir (SEC-02) (<a href="https://github.com/s0undt3ch/ToolR/commit/99e80c823b45918cde9e9e64d650cf273cb5975f"><code>99e80c8</code></a>)</li>
+<li><em>(execute)</em> Pass -P to the runner interpreter (drop implicit CWD from sys.path) (<a href="https://github.com/s0undt3ch/ToolR/commit/cc6fd6cb9638358bc068fc3cbba7ddc864288bf1"><code>cc6fd6c</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(renovate)</em> Match ruff_* crates by depName so grouping fires (<a href="https://github.com/s0undt3ch/ToolR/commit/8ea9faca134df7878b5484284d5bf63d5329d8a4"><code>8ea9fac</code></a>)</li>
 <li><em>(test)</em> Gate Unix-only test helpers/imports for Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/4ccf79ae27a58034adc9ff02a32cd5ce64811e5a"><code>4ccf79a</code></a>)</li>
 <li><em>(venv)</em> Accept real in-tree venvs without a provenance record (validate_venv fallback) (<a href="https://github.com/s0undt3ch/ToolR/commit/9114868af241c863532ec512f0d121968c312734"><code>9114868</code></a>)</li>
+<li><em>(test)</em> Use a platform-absolute path in no_warn_for_absolute_path_arg (<a href="https://github.com/s0undt3ch/ToolR/commit/aa2932dba10e7cde677eb1830558f96969c8d726"><code>aa2932d</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(manifest)</em> Remove the dynamic Python-introspection layer (<a href="https://github.com/s0undt3ch/ToolR/commit/cbb5ff17040f630b761f7c3ef8ec8214d5a72a3d"><code>cbb5ff1</code></a>)</li>
 <li><em>(core)</em> Rename the dynamic module to manifest_build (<a href="https://github.com/s0undt3ch/ToolR/commit/bc16f3204984b3ea6519b47d6d03d4f05ccc71a9"><code>bc16f32</code></a>)</li>
+<li><em>(sec-02)</em> Move chdir + relative-path warning to Rust; thin the runner (<a href="https://github.com/s0undt3ch/ToolR/commit/0dc9a93d2e2865a23e493e16f7c72e7dffed5e67"><code>0dc9a93</code></a>)</li>
+<li><em>(venv)</em> Stop running post-sync editable installs (<a href="https://github.com/s0undt3ch/ToolR/commit/6775c1f5ddd2e11e456a960a2a117ca0a9bcf044"><code>6775c1f</code></a>)</li>
+<li><em>(venv)</em> Delete the editable-install module (<a href="https://github.com/s0undt3ch/ToolR/commit/8085b91289f56534372053aa942348c97c6bdda4"><code>8085b91</code></a>)</li>
+<li><em>(venv)</em> Drop the editable-install config field (legacy key ignored, not an error) (<a href="https://github.com/s0undt3ch/ToolR/commit/5c7e7e03ab70fe837e01c214b2864daef3e49a91"><code>5c7e7e0</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4849,6 +4894,14 @@ comment.</p>
 <li><em>(authoring)</em> Document the static-only command-discovery contract (<a href="https://github.com/s0undt3ch/ToolR/commit/c34c13c7aab2a935c69064d5d12378276a14fd99"><code>c34c13c</code></a>)</li>
 <li><em>(unreleased)</em> Note static-only manifest and provenance (<a href="https://github.com/s0undt3ch/ToolR/commit/222f7430ca111d6adfcfd27cc942d2b365a63e6e"><code>222f743</code></a>)</li>
 <li><em>(test)</em> Drop stale toolr._introspect reference from conftest comment (<a href="https://github.com/s0undt3ch/ToolR/commit/4bb1a0b2457d6566ba35f33bd9863a9da703c672"><code>4bb1a0b</code></a>)</li>
+<li><em>(specs)</em> Runner path hygiene design (SEC-02) (<a href="https://github.com/s0undt3ch/ToolR/commit/f3aebf60c0f531bb2b5ee83a10f5ec9219511828"><code>f3aebf6</code></a>)</li>
+<li><em>(specs)</em> Runner path hygiene implementation plan (SEC-02) (<a href="https://github.com/s0undt3ch/ToolR/commit/ca935a2590a67e8cb9d03f729802a5446246d205"><code>ca935a2</code></a>)</li>
+<li><em>(authoring)</em> Commands run from the repo root; path args are repo-root-relative (<a href="https://github.com/s0undt3ch/ToolR/commit/a2482d9f6974324be888aa0db2298c0a5db1c983"><code>a2482d9</code></a>)</li>
+<li><em>(unreleased)</em> Note runner -P + repo-root cwd (SEC-02) (<a href="https://github.com/s0undt3ch/ToolR/commit/d72dcf524feca1373f2e95c515fb69d515f35d8c"><code>d72dcf5</code></a>)</li>
+<li><em>(specs)</em> Note SEC-02 chdir + warning moved to Rust (plan superseded in part) (<a href="https://github.com/s0undt3ch/ToolR/commit/065edc00e88d5682807bc919579de7df46e19de0"><code>065edc0</code></a>)</li>
+<li><em>(specs)</em> Remove editable-install design + plan (SEC-04) (<a href="https://github.com/s0undt3ch/ToolR/commit/8c1f9758e690f2cfbef6d6e0fab2f2971952f3c9"><code>8c1f975</code></a>)</li>
+<li><em>(config)</em> Document editable installs via [tool.uv.sources]; drop editable-install (<a href="https://github.com/s0undt3ch/ToolR/commit/7529dbe0f568e5bd0d50999fecaf22d32c4d72f7"><code>7529dbe</code></a>)</li>
+<li><em>(unreleased)</em> Note removal of editable-install (SEC-04) (<a href="https://github.com/s0undt3ch/ToolR/commit/63b4e150d3cbd6c45ee914f805142862e6ea0325"><code>63b4e15</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4856,6 +4909,9 @@ comment.</p>
 <li><em>(security)</em> --help builds statically with no venv (SEC-01 green) (<a href="https://github.com/s0undt3ch/ToolR/commit/13a20e2a9d09403acf299b0b8089dd216224ff73"><code>13a20e2</code></a>)</li>
 <li><em>(freshness)</em> Manifest rebuilds when a venv appears (<a href="https://github.com/s0undt3ch/ToolR/commit/2d9434d40c0b3ae64679b8d83ca29255a386f8f7"><code>2d9434d</code></a>)</li>
 <li><em>(coverage)</em> Cover provenance cache-dir, in-tree slot, bootstrap venv arm, tools walk (<a href="https://github.com/s0undt3ch/ToolR/commit/67f98c9dad93c9b56cb93431e3e258cce271711b"><code>67f98c9</code></a>)</li>
+<li><em>(runner)</em> Document -P shadowing coverage boundary (SEC-02 Task 5) (<a href="https://github.com/s0undt3ch/ToolR/commit/7c3731ac5b9ef54c8206b13eb0c0eec62168aa6e"><code>7c3731a</code></a>)</li>
+<li><em>(coverage)</em> Cover the walk's per-module except + finalize_sync existing-sidecar branch (<a href="https://github.com/s0undt3ch/ToolR/commit/3dd8d2c991a292152b4b569e2c163874d09e1213"><code>3dd8d2c</code></a>)</li>
+<li><em>(coverage)</em> Exercise the warn_relative_paths wrapper in build_spec (<a href="https://github.com/s0undt3ch/ToolR/commit/0d70ffb012e938a47583e112d46e8e589c7d8a79"><code>0d70ffb</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
