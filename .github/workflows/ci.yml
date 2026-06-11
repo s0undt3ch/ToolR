@@ -512,12 +512,11 @@ jobs:
       - name: Compute docs Python cp-tag
         id: cp-tag
         shell: bash
-        # Derive the wheel ABI tag from the venv's active Python so a
-        # mise.toml python bump (e.g. 3.14 → 3.15) automatically picks
-        # the matching wheel artifact below — no second edit needed.
+        # abi3: the toolr-py wheel is a single cp311-abi3 build that
+        # installs on every CPython >=3.11, so the artifact is always
+        # tagged cp311 — independent of the venv's active Python.
         run: |
-          pyver=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-          echo "cp-tag=cp${pyver//./}" >> "$GITHUB_OUTPUT"
+          echo "cp-tag=cp311" >> "$GITHUB_OUTPUT"
 
       - name: Download toolr-py wheel
         # `regen-doc-snippets.py` runs `toolr project manifest rebuild`,
