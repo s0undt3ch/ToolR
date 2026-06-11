@@ -1383,43 +1383,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pre-flight-check" class="md-nav__link">
+  <a href="#missing-dependency-interception" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pre-flight check
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#post-mortem-interception" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Post-mortem interception
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#disabling-pre-flight" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Disabling pre-flight
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-not-just-rely-on-python-tracebacks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why not just rely on Python tracebacks?
+        Missing-dependency interception
       
     </span>
   </a>
@@ -1777,43 +1744,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pre-flight-check" class="md-nav__link">
+  <a href="#missing-dependency-interception" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pre-flight check
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#post-mortem-interception" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Post-mortem interception
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#disabling-pre-flight" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Disabling pre-flight
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-not-just-rely-on-python-tracebacks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why not just rely on Python tracebacks?
+        Missing-dependency interception
       
     </span>
   </a>
@@ -1887,58 +1821,20 @@
 
 <h1 id="diagnostics">Diagnostics<a class="headerlink" href="#diagnostics" title="Permanent link">&para;</a></h1>
 <p>When a command fails because of missing dependencies, toolr aims for
-a one-line diagnostic that names the missing package and the fix —
-not a 50-line Python traceback at the user.</p>
-<h2 id="pre-flight-check">Pre-flight check<a class="headerlink" href="#pre-flight-check" title="Permanent link">&para;</a></h2>
-<p>Before spawning the Python subprocess that runs your command, the
-binary inspects the target command's recorded top-level imports
-(captured by the static parser) and probes the resolved tools venv
-for each:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>&lt;venv&gt;/lib/python*/site-packages/&lt;module&gt;/__init__.py
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>&lt;venv&gt;/lib/python*/site-packages/&lt;module&gt;.py
-</span></code></pre></div>
-<p>If any required import is missing, toolr aborts before invoking
-Python and prints:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>toolr: pre-flight check failed: `requests` is not installed in the tools venv.
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>toolr:   command: my-group fetch
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>toolr:   venv:    /Users/you/.cache/toolr/&lt;repo-key&gt;/venv
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>toolr:   fix:     toolr project venv sync
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>toolr: (exit 78)
-</span></code></pre></div>
-<p>Exit code <strong>78</strong> distinguishes pre-flight failures from runtime
-errors (per the <code>sysexits.h</code> <code>EX_CONFIG</code> convention). CI can branch
-on this code to surface configuration vs application failures.</p>
-<h2 id="post-mortem-interception">Post-mortem interception<a class="headerlink" href="#post-mortem-interception" title="Permanent link">&para;</a></h2>
-<p>For imports that the static parser couldn't see (deferred imports
-inside function bodies, conditional imports, etc.), toolr also
-intercepts <code>ImportError</code> from the Python subprocess. When detected,
-it appends the same <code>toolr project venv sync</code> suggestion to the
-captured traceback before re-emitting it:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ModuleNotFoundError: No module named &#39;foo&#39;
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>toolr: hint: the import above failed. If `foo` should be in the tools
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>toolr:       venv, run `toolr project venv sync`.
+a one-line diagnostic that names the fix — not a bare Python
+traceback at the user.</p>
+<h2 id="missing-dependency-interception">Missing-dependency interception<a class="headerlink" href="#missing-dependency-interception" title="Permanent link">&para;</a></h2>
+<p>When a command's import fails at runtime, toolr intercepts the
+<code>ImportError</code> from the Python subprocess. When detected, it appends a
+<code>toolr project venv sync</code> suggestion to the captured traceback before
+re-emitting it:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ModuleNotFoundError: No module named &#39;foo&#39;
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>toolr: hint: the import above failed. If `foo` should be in the tools
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>toolr:       venv, run `toolr project venv sync`.
 </span></code></pre></div>
 <p>The original traceback is preserved — toolr only adds a hint
 underneath.</p>
-<h2 id="disabling-pre-flight">Disabling pre-flight<a class="headerlink" href="#disabling-pre-flight" title="Permanent link">&para;</a></h2>
-<p>The pre-flight check can produce false positives in edge cases —
-PEP 420 namespace packages without <code>__init__.py</code>, packages that
-ship a single <code>*.pth</code> file, etc. Set:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">TOOLR_NO_PREFLIGHT_DEPS</span><span class="o">=</span><span class="m">1</span>
-</span></code></pre></div>
-<p>…to skip pre-flight entirely. Post-mortem interception still
-fires, so missing imports are still reported with a fix hint.</p>
-<p>Accepted truthy values: any non-empty string except <code>0</code>.</p>
-<h2 id="why-not-just-rely-on-python-tracebacks">Why not just rely on Python tracebacks?<a class="headerlink" href="#why-not-just-rely-on-python-tracebacks" title="Permanent link">&para;</a></h2>
-<p>Two reasons:</p>
-<ol>
-<li><strong>Speed.</strong> Pre-flight is a few <code>stat()</code> calls; spawning Python
-   to discover a missing module costs hundreds of ms.</li>
-<li><strong>Signal-to-noise.</strong> A Python traceback for "module not found"
-   buries the actual fix in 20 lines of stack frames. Toolr's
-   diagnostic puts the fix on line two.</li>
-</ol>
 
 
 
