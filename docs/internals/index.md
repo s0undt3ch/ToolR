@@ -10,8 +10,8 @@ is required reading for writing commands — head to
   orphan/stale detection.
 - [Pre-commit integration](pre-commit.md) — the shipped
   `.pre-commit-hooks.yaml`, what hooks toolr provides.
-- [Diagnostics](diagnostics.md) — pre-flight + post-mortem missing-deps,
-  `TOOLR_NO_PREFLIGHT_DEPS`.
+- [Diagnostics](diagnostics.md) — missing-dependency interception and
+  the `toolr project venv sync` hint.
 
 For the original design specs see
 [`specs/archive/2026/rust-front-end/`](https://github.com/s0undt3ch/ToolR/tree/main/specs/archive/2026/rust-front-end)

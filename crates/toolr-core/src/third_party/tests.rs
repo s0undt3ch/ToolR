@@ -237,7 +237,6 @@ fn sample_fragment(pkg: &str, group: &str, name: &str) -> ManifestFragment {
             summary: String::new(),
             description: String::new(),
             arguments: vec![],
-            imports: vec![],
         }],
     }
 }
@@ -275,7 +274,6 @@ fn merge_skips_third_party_command_when_local_already_defines_it() {
         summary: "local".into(),
         description: String::new(),
         arguments: vec![],
-        imports: vec![],
         origin: Origin::Static,
         dispatched_from: None,
         is_dispatcher: false,

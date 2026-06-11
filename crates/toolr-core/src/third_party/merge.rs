@@ -90,7 +90,6 @@ fn command_from_fragment(fc: FragmentCommand) -> Command {
             .into_iter()
             .map(argument_from_fragment)
             .collect(),
-        imports: fc.imports,
         origin: Origin::ThirdParty,
         dispatched_from: None,
         is_dispatcher: false,

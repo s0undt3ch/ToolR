@@ -278,23 +278,9 @@ pub fn dispatch(
         }
     }
 
-    // Pre-flight missing-dependency check against the command's
-    // declared `imports` list. Skip when the user sets
-    // `TOOLR_NO_PREFLIGHT_DEPS` to a non-empty, non-`0` value — at that
-    // point a missing dep surfaces as a raw Python traceback from the
-    // child, the same way it would when running python directly.
-    let skip_preflight = std::env::var_os("TOOLR_NO_PREFLIGHT_DEPS")
-        .is_some_and(|v| !v.is_empty() && v != "0");
-    if !skip_preflight {
-        if let Some(venv) = &venv_dir {
-            if let Some(sp) = toolr_core::deps_check::site_packages_dir(venv) {
-                if let Err(err) = toolr_core::deps_check::check_imports(&sp, &cmd.imports) {
-                    eprintln!("toolr: {err}");
-                    return Ok(ExitCode::from(78));
-                }
-            }
-        }
-    }
+    // A missing dependency surfaces as the Python runner's `ImportError`
+    // hint (which points the user at `toolr project venv sync`), so there
+    // is no Rust-side pre-flight import check here.
 
     // Pre-check that the resolved Python interpreter actually exists.
     // Without this, a missing tools venv surfaces as a bare
@@ -818,7 +804,6 @@ mod path_lookup_tests {
             summary: String::new(),
             description: String::new(),
             arguments: vec![],
-            imports: vec![],
             origin: Origin::Static,
             dispatched_from: None,
             is_dispatcher: false,

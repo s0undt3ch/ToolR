@@ -14,7 +14,6 @@
       "description": "Say hello to someone.",
       "function": "hello_command",
       "group": "third-party",
-      "imports": [],
       "module": "toolr_example_plugin.commands",
       "name": "hello",
       "summary": "Say hello to someone."
@@ -24,7 +23,6 @@
       "description": "Show the version of the example plugin.",
       "function": "version_command",
       "group": "third-party",
-      "imports": [],
       "module": "toolr_example_plugin.commands",
       "name": "version",
       "summary": "Show the version of the example plugin."
@@ -51,7 +49,6 @@
       "description": "Echo a message multiple times.",
       "function": "echo_command",
       "group": "utils",
-      "imports": [],
       "module": "toolr_example_plugin.commands",
       "name": "echo",
       "summary": "Echo a message multiple times."
@@ -61,7 +58,6 @@
       "description": "Show information about the example plugin.",
       "function": "info_command",
       "group": "utils",
-      "imports": [],
       "module": "toolr_example_plugin.commands",
       "name": "info",
       "summary": "Show information about the example plugin."

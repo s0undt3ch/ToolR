@@ -79,10 +79,6 @@ pub struct Command {
     pub description: String,
     /// Ordered list of arguments.
     pub arguments: Vec<Argument>,
-    /// Top-level imports recorded by the static parser. Consumed by
-    /// the pre-flight missing-dependency check in `deps_check`.
-    #[serde(default)]
-    pub imports: Vec<String>,
     /// Where this command entry came from.
     pub origin: Origin,
     /// Source identifier (e.g. `"argparse:django"`) when this command

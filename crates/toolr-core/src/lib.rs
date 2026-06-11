@@ -5,7 +5,6 @@ pub mod build_fragment;
 pub mod cache;
 mod command;
 pub mod complete;
-pub mod deps_check;
 pub mod discovery;
 pub mod manifest_build;
 pub mod docstrings;
