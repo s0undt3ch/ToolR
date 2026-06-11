@@ -4,19 +4,12 @@ run-name: "CI (${{ github.event_name == 'pull_request' && format('pr: #{0}', git
 on:
   push:
   pull_request:
-    # Default PR triggers PLUS labeled/unlabeled: applying or removing
-    # the `full-build` label re-runs CI so the new matrix shape takes
-    # effect without needing a dummy commit. Other label changes also
-    # trigger a re-run (cheap and self-correcting); the matrix selector
-    # in `tools/ci.py` ignores labels other than `full-build`.
+    # Default PR triggers PLUS labeled/unlabeled: applying or removing the
+    # `full-build` or `full-bench` label re-runs CI so the new matrix /
+    # bench shape takes effect without needing a dummy commit. Other label
+    # changes also trigger a re-run (cheap and self-correcting);
+    # `tools/ci.py` ignores labels other than `full-build`/`full-bench`.
     types: [opened, synchronize, reopened, labeled, unlabeled]
-  workflow_dispatch:
-    inputs:
-      bench-all-os:
-        description: "Run benchmarks on macOS and Windows too (Linux always runs)."
-        type: boolean
-        default: false
-        required: false
 
 concurrency:
   # Concurrency is defined in a way that concurrent builds against the main branch do not not cancel previous builds.
@@ -52,6 +45,7 @@ jobs:
       pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
       pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
       test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
+      run-full-bench: ${{ steps.generate-build-matrix.outputs.run-full-bench }}
       # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
       # reusable workflows can read them via `needs.prepare-ci.outputs.*`
       # (the `env` context is not allowed in workflow-call `with:` blocks).
@@ -689,13 +683,11 @@ jobs:
   bench-macos:
     name: Bench
     # macOS/Windows benches are advisory step-summary output nothing
-    # blocks on, and macOS runner-minutes cost ~10x Linux. Run them only
-    # on opt-in: the `bench-all-os` PR label, or the workflow_dispatch
-    # input. `pull_request.labels.*.name` is an empty array (not an
-    # error) on push/dispatch, so this expression is valid everywhere.
-    if: >-
-      contains(github.event.pull_request.labels.*.name, 'bench-all-os')
-      || github.event.inputs.bench-all-os == 'true'
+    # blocks on, and macOS runner-minutes cost ~10x Linux. Gated on
+    # `run-full-bench` (computed in tools/ci.py): true on push to `main`
+    # or a PR carrying the `full-bench` label. The Linux bench (below)
+    # always runs.
+    if: needs.prepare-ci.outputs.run-full-bench == 'true'
     needs:
       - prepare-ci
       - build-binary-archive
@@ -711,12 +703,9 @@ jobs:
 
   bench-windows:
     name: Bench
-    # Gated identically to bench-macos: opt-in via the `bench-all-os` PR
-    # label or the workflow_dispatch input. See bench-macos for the
-    # rationale and why the expression is safe on non-PR events.
-    if: >-
-      contains(github.event.pull_request.labels.*.name, 'bench-all-os')
-      || github.event.inputs.bench-all-os == 'true'
+    # Gated identically to bench-macos on `run-full-bench` (push to
+    # `main` or the `full-bench` PR label). See bench-macos for rationale.
+    if: needs.prepare-ci.outputs.run-full-bench == 'true'
     needs:
       - prepare-ci
       - build-binary-archive
