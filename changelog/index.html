@@ -1692,15 +1692,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev69-2026-06-11" class="md-nav__link">
+  <a href="#0242-dev73-2026-06-11" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev69 - 2026-06-11
+        0.24.2-dev73 - 2026-06-11
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev69 - 2026-06-11">
+    <nav class="md-nav" aria-label="0.24.2-dev73 - 2026-06-11">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3268,15 +3268,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev69-2026-06-11" class="md-nav__link">
+  <a href="#0242-dev73-2026-06-11" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev69 - 2026-06-11
+        0.24.2-dev73 - 2026-06-11
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev69 - 2026-06-11">
+    <nav class="md-nav" aria-label="0.24.2-dev73 - 2026-06-11">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4839,7 +4839,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0242-dev69-2026-06-11">0.24.2-dev69 - 2026-06-11<a class="headerlink" href="#0242-dev69-2026-06-11" title="Permanent link">&para;</a></h2>
+<h2 id="0242-dev73-2026-06-11">0.24.2-dev73 - 2026-06-11<a class="headerlink" href="#0242-dev73-2026-06-11" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Automated dependency updates have moved from Dependabot to
 <a href="https://docs.renovatebot.com/">Mend Renovate</a>. The new <code>renovate.json5</code>
@@ -4863,6 +4863,13 @@ comment.</p>
 <li>The toolr runner no longer puts the invocation directory on <code>sys.path</code> (the
   interpreter is started with <code>-P</code>), preventing a stray <code>.py</code> file in your
   current directory from shadowing stdlib/site-packages modules.</li>
+<li>The install scripts (<code>install.sh</code>, <code>install.ps1</code>) now <strong>verify the release's
+  SLSA build provenance by default</strong> (<code>--verify-attestation=require</code>). Previously
+  the default silently skipped verification when the <code>gh</code> CLI was absent, leaving
+  only a same-release <code>.sha256</code> check that can't detect a tampered release asset.
+  If <code>gh</code> is missing the install now fails with guidance rather than installing
+  unverified; pass <code>--verify-attestation=skip</code> (<code>-VerifyAttestation skip</code> on
+  Windows) to explicitly opt out. Matches the already-fail-closed GitHub Action.</li>
 </ul>
 <h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4913,6 +4920,7 @@ comment.</p>
 <li><em>(test)</em> Gate Unix-only test helpers/imports for Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/4ccf79ae27a58034adc9ff02a32cd5ce64811e5a"><code>4ccf79a</code></a>)</li>
 <li><em>(venv)</em> Accept real in-tree venvs without a provenance record (validate_venv fallback) (<a href="https://github.com/s0undt3ch/ToolR/commit/9114868af241c863532ec512f0d121968c312734"><code>9114868</code></a>)</li>
 <li><em>(test)</em> Use a platform-absolute path in no_warn_for_absolute_path_arg (<a href="https://github.com/s0undt3ch/ToolR/commit/aa2932dba10e7cde677eb1830558f96969c8d726"><code>aa2932d</code></a>)</li>
+<li><em>(install)</em> Verify SLSA attestation by default (fail closed) (<a href="https://github.com/s0undt3ch/ToolR/commit/886cdefeb3193648ca5b82b3e11ab72dab8af2c2"><code>886cdef</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4965,6 +4973,7 @@ comment.</p>
 <li>Run benches on Linux by default, with a bench-all-os opt-in (<a href="https://github.com/s0undt3ch/ToolR/commit/9c550022f333db460d7869b4617a120696007a85"><code>9c55002</code></a>)</li>
 <li><em>(test)</em> Verify example-plugin manifest with the shipped toolr binary (<a href="https://github.com/s0undt3ch/ToolR/commit/77f66c666540b27a8394ee513d309f41edf59634"><code>77f66c6</code></a>)</li>
 <li>Add the <code>full-bench</code> label to opt PRs into the macOS+Windows benches (<a href="https://github.com/s0undt3ch/ToolR/commit/c9db291e4f02acc93d86d9d32d36db397d2f7537"><code>c9db291</code></a>)</li>
+<li>Route workflow inputs through env vars (CWE-78 hardening) (<a href="https://github.com/s0undt3ch/ToolR/commit/00037f4388f190c82ef4b051d8a7e01687940e1d"><code>00037f4</code></a>)</li>
 </ul>
 <h3 id="new-contributors">New Contributors<a class="headerlink" href="#new-contributors" title="Permanent link">&para;</a></h3>
 <ul>

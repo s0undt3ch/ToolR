@@ -1957,7 +1957,8 @@ front-end rewrite; use the <code>toolr</code> executable instead.</p>
 <h3 id="curl-sh-linux-macos">curl | sh (Linux + macOS)<a class="headerlink" href="#curl-sh-linux-macos" title="Permanent link">&para;</a></h3>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </span></code></pre></div>
-<p>Verifies the SLSA attestation when <code>gh</code> is on PATH. Pin a version
+<p>Verifies the SLSA attestation by default (requires the <code>gh</code> CLI; pass
+<code>--verify-attestation=skip</code> to bypass). Pin a version
 with <code>sh -s -- --version X.Y.Z</code>. Custom prefix:
 <code>sh -s -- --prefix /opt/toolr/bin</code>. Default prefix is
 <code>$XDG_BIN_HOME</code> (or <code>~/.local/bin</code>).</p>
@@ -2016,10 +2017,15 @@ runtime tracks each project's tools venv.</p>
 <h2 id="supply-chain-verification-slsa-attestations">Supply-chain verification (SLSA attestations)<a class="headerlink" href="#supply-chain-verification-slsa-attestations" title="Permanent link">&para;</a></h2>
 <p>Every release archive is signed with a SLSA build-provenance
 attestation produced by the GitHub-hosted release workflow. The
-<code>install.sh</code> and <code>install.ps1</code> scripts verify the attestation
-automatically when the <code>gh</code> CLI is on PATH. To require verification:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>sh<span class="w"> </span>installation/install.sh<span class="w"> </span>--verify-attestation<span class="o">=</span>require<span class="w">   </span><span class="c1"># POSIX</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>./installation/install.ps1<span class="w"> </span>-VerifyAttestation<span class="w"> </span>require<span class="w">     </span><span class="c1"># Windows</span>
+<code>install.sh</code> and <code>install.ps1</code> scripts verify the attestation <strong>by
+default</strong> (<code>--verify-attestation=require</code>), which needs the <code>gh</code> CLI: if
+<code>gh</code> is missing the install <strong>fails</strong> rather than silently downgrading to
+a checksum-only install (the <code>.sha256</code> ships from the same release, so it
+catches transport corruption, not a tampered release asset).</p>
+<p>To install without supply-chain verification (accepting the risk — e.g.
+on a host where you can't install <code>gh</code>):</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>sh<span class="w"> </span>installation/install.sh<span class="w"> </span>--verify-attestation<span class="o">=</span>skip<span class="w">   </span><span class="c1"># POSIX</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>./installation/install.ps1<span class="w"> </span>-VerifyAttestation<span class="w"> </span>skip<span class="w">     </span><span class="c1"># Windows</span>
 </span></code></pre></div>
 <p>Or verify a downloaded archive manually:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gh<span class="w"> </span>attestation<span class="w"> </span>verify<span class="w"> </span>toolr-1.2.3-aarch64-apple-darwin.tar.gz<span class="w"> </span><span class="se">\</span>

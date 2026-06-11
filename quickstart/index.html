@@ -2054,7 +2054,8 @@ scaffolds for you.</p>
 <h3 id="curl-sh-linux-macos">curl | sh (Linux + macOS)<a class="headerlink" href="#curl-sh-linux-macos" title="Permanent link">&para;</a></h3>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </span></code></pre></div>
-<p>Verifies the SLSA attestation when <code>gh</code> is on PATH. Pin a version with
+<p>Verifies the SLSA attestation by default (requires the <code>gh</code> CLI; pass
+<code>--verify-attestation=skip</code> to bypass). Pin a version with
 <code>sh -s -- --version X.Y.Z</code>. Custom prefix: <code>sh -s -- --prefix /opt/toolr/bin</code>.</p>
 <h3 id="powershell-windows">PowerShell (Windows)<a class="headerlink" href="#powershell-windows" title="Permanent link">&para;</a></h3>
 <div class="language-powershell highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">irm </span><span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">s0undt3ch</span><span class="p">/</span><span class="n">ToolR</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">installation</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="p">|</span> <span class="nb">iex</span>
