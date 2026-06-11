@@ -141,8 +141,14 @@ jobs:
       - name: Bump Version
         id: bump-version
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release-version }}
         run: |
-          toolr version bump --write --check-existing-tag --include-action ${{ inputs.release-version != '' && format('--new-version={0}', inputs.release-version) || '' }}
+          new_version_arg=()
+          if [ -n "$RELEASE_VERSION" ]; then
+            new_version_arg=(--new-version="$RELEASE_VERSION")
+          fi
+          toolr version bump --write --check-existing-tag --include-action "${new_version_arg[@]}"
 
       - name: Load UNRELEASED.md into TOOLR_RELEASE_NOTES env var
         shell: bash
