@@ -10,6 +10,13 @@ on:
     # trigger a re-run (cheap and self-correcting); the matrix selector
     # in `tools/ci.py` ignores labels other than `full-build`.
     types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+    inputs:
+      bench-all-os:
+        description: "Run benchmarks on macOS and Windows too (Linux always runs)."
+        type: boolean
+        default: false
+        required: false
 
 concurrency:
   # Concurrency is defined in a way that concurrent builds against the main branch do not not cancel previous builds.
@@ -681,6 +688,14 @@ jobs:
 
   bench-macos:
     name: Bench
+    # macOS/Windows benches are advisory step-summary output nothing
+    # blocks on, and macOS runner-minutes cost ~10x Linux. Run them only
+    # on opt-in: the `bench-all-os` PR label, or the workflow_dispatch
+    # input. `pull_request.labels.*.name` is an empty array (not an
+    # error) on push/dispatch, so this expression is valid everywhere.
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'bench-all-os')
+      || github.event.inputs.bench-all-os == 'true'
     needs:
       - prepare-ci
       - build-binary-archive
@@ -696,6 +711,12 @@ jobs:
 
   bench-windows:
     name: Bench
+    # Gated identically to bench-macos: opt-in via the `bench-all-os` PR
+    # label or the workflow_dispatch input. See bench-macos for the
+    # rationale and why the expression is safe on non-PR events.
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'bench-all-os')
+      || github.event.inputs.bench-all-os == 'true'
     needs:
       - prepare-ci
       - build-binary-archive
