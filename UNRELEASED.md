@@ -41,6 +41,12 @@ comment.
   `make`/`cargo`). Relative path arguments resolve from the repo root, not your
   current directory; toolr prints a one-line note if you pass a relative path
   from a subdirectory.
+- `toolr-py` now ships a single stable-ABI (`abi3`) wheel per platform, tagged
+  `cp311-abi3`, instead of one wheel per CPython. The one wheel installs on every
+  CPython >=3.11 (matching `requires-python`), so `pip install toolr-py` resolves
+  the same wheel whether you run 3.11, 3.12, 3.13, or 3.14. No action needed —
+  this only shrinks the published wheel set; the supported interpreter range is
+  unchanged and still fully tested.
 
 ### Removed
 

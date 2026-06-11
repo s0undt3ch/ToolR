@@ -61,9 +61,12 @@ jobs:
             Windows) triple=x86_64-pc-windows-msvc;   wheelplat=win_amd64 ;;
             *) echo "unknown RUNNER_OS=$RUNNER_OS" >&2; exit 1 ;;
           esac
-          # 3.11 -> cp311 (drop the dot)
-          pyver="${{ matrix.python-version }}"
-          cptag="cp${pyver//./}"
+          # abi3: the toolr-py wheel is a single cp311-abi3 build that
+          # installs on every CPython >=3.11, so the artifact is always
+          # tagged cp311 regardless of which interpreter this matrix
+          # entry runs (matrix.python-version still spans the full range
+          # for test breadth — we just install the one shared wheel).
+          cptag="cp311"
           {
             echo "toolr-triple=$triple"
             echo "wheel-platform=$wheelplat"

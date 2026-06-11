@@ -28,11 +28,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 group = command_group("ci", "CI utilities", docstring=__doc__)
 
 
-# CPython ABI tags for the toolr-py (pyo3) wheel. Keep aligned with
-# `requires-python` in crates/toolr-py/pyproject.toml and the explicit
-# `[tool.cibuildwheel] build = ...` list in that same file. Bump in
-# lockstep when a new CPython is added/removed.
+# Every supported CPython, dotted form derived below. This drives the
+# *test* matrix only — the toolr-py wheel itself is now a single abi3
+# build (see ABI3_WHEEL_PYTHONS). Keep aligned with `requires-python`
+# in crates/toolr-py/pyproject.toml; bump when a CPython is added/removed.
 ALL_CPYTHONS = ["cp311", "cp312", "cp313", "cp314"]
+
+# CPython ABI tags cibuildwheel builds for the toolr-py (pyo3) wheel.
+# abi3 stable-ABI → a single cp311 wheel covers all CPython >=3.11;
+# build once, test everywhere. The pyo3 `abi3-py311` feature (root
+# Cargo.toml) makes maturin tag the wheel `cp311-abi3-<platform>`, which
+# pip installs on any CPython >=3.11. Building cp312/cp313/cp314 would
+# only re-emit the identical abi3 wheel, so we build cp311 alone while
+# TEST_PYTHONS below still exercises the full interpreter range.
+ABI3_WHEEL_PYTHONS = ["cp311"]
 
 
 def _cp_tag_to_dotted(tag: str) -> str:
@@ -40,7 +49,7 @@ def _cp_tag_to_dotted(tag: str) -> str:
 
     `cp311` -> `3.11`, `cp310` -> `3.10`, etc. Used to derive the
     `_test.yml` matrix's `python-version` entries from `ALL_CPYTHONS`
-    so the test matrix and the wheel-build matrix can't drift.
+    so the test matrix and the supported-CPython list can't drift.
     """
     if not tag.startswith("cp"):
         msg = f"unexpected python tag: {tag!r}"
@@ -49,8 +58,10 @@ def _cp_tag_to_dotted(tag: str) -> str:
     return f"{rest[:1]}.{rest[1:]}"
 
 
-# Dotted-form CPython versions for the `_test.yml` matrix. Derived
-# from ALL_CPYTHONS so a single bump propagates.
+# Dotted-form CPython versions for the `_test.yml` matrix. Derived from
+# ALL_CPYTHONS so a single bump propagates. Stays the full range even
+# though the wheel is abi3/single-build — we test every CPython against
+# the one shared wheel.
 TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
 
 # The toolr binary wheel uses `bindings = "bin"` → produces a single
@@ -224,9 +235,12 @@ def generate_build_matrix(
       - `binary-archive-triples` — list of triple+runner+archive objects
         (used by _build-binary-archive.yml's matrix).
       - `pythons-binary` — CPython ABI tags for the toolr binary wheel.
-      - `pythons-py` — CPython ABI tags for the toolr-py (pyo3) wheel.
+      - `pythons-py` — CPython ABI tag(s) for the toolr-py (pyo3) wheel.
+        A single `cp311` abi3 build: the stable-ABI wheel installs on
+        every CPython >=3.11, so we build it once.
       - `test-pythons` — dotted-form CPython versions for the test matrix
-        in `_test.yml` (derived from `pythons-py`, so the two cannot drift).
+        in `_test.yml` (the full supported range; every interpreter is
+        tested against the single shared abi3 wheel).
 
     Centralising these in one place (vs. hardcoded YAML across multiple
     workflow files) keeps the binary-wheel/py-wheel/binary-archive matrices
@@ -256,7 +270,7 @@ def generate_build_matrix(
         "platform-matrix": _WHEEL_PLATFORM_MATRIX,
         "binary-archive-triples": binary_archive_triples,
         "pythons-binary": BINARY_WHEEL_PYTHONS,
-        "pythons-py": ALL_CPYTHONS,
+        "pythons-py": ABI3_WHEEL_PYTHONS,
         "test-pythons": TEST_PYTHONS,
     }
 
@@ -288,7 +302,11 @@ def generate_build_matrix(
         )
         wfh.write("\n### Python ABIs\n\n")
         wfh.write(f"- Binary wheel: `{', '.join(BINARY_WHEEL_PYTHONS)}`\n")
-        wfh.write(f"- toolr-py wheel: `{', '.join(ALL_CPYTHONS)}`\n\n")
+        wfh.write(
+            f"- toolr-py wheel: `{', '.join(ABI3_WHEEL_PYTHONS)}` "
+            "(abi3 stable-ABI — one wheel covers all CPython >=3.11)\n"
+        )
+        wfh.write(f"- Test interpreters: `{', '.join(TEST_PYTHONS)}`\n\n")
 
     ctx.info(f"Emitting build matrix outputs for workflow={workflow!r} (reason: {reason})")
     ctx.print(outputs)
