@@ -41,6 +41,12 @@ comment.
   If `gh` is missing the install now fails with guidance rather than installing
   unverified; pass `--verify-attestation=skip` (`-VerifyAttestation skip` on
   Windows) to explicitly opt out. Matches the already-fail-closed GitHub Action.
+- The `s0undt3ch/ToolR` setup Action now re-runs checksum **and** SLSA
+  attestation verification on every job, **including cache hits** — previously a
+  warm cache placed the binary on `PATH` with no verification. The Action now
+  caches the release *archive* (not the extracted binary), so a poisoned cache
+  entry is rejected by attestation before it can execute. `skip-attestation:
+  true` remains the only bypass.
 
 ### Changed
 

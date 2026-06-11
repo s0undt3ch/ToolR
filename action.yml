@@ -192,7 +192,7 @@ runs:
           echo "archive=$archive"
         } >> "$GITHUB_OUTPUT"
 
-    - name: Cache toolr install
+    - name: Cache toolr archive
       id: cache
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
@@ -200,8 +200,17 @@ runs:
         # bumping the toolr version (e.g. after a runner image swap
         # that needs a fresh binary, or to recover from a corrupted
         # cache entry).
-        key: ${{ inputs.cache-prefix }}|${{ steps.resolve-version.outputs.version }}|${{ steps.archive.outputs.triple }}
-        path: ${{ runner.tool_cache }}/toolr/${{ steps.resolve-version.outputs.version }}
+        #
+        # SEC-09: we cache the *archive*, not the extracted binary, and
+        # the sha256 + `gh attestation verify` steps below run on EVERY
+        # job (cache hit included). A poisoned cache entry therefore can't
+        # smuggle an unverified binary onto PATH — attestation (checked
+        # against GitHub's store, not the cache) catches a tampered
+        # archive. The `|archive` key suffix guarantees we never restore a
+        # pre-SEC-09 entry that stored the extracted binary under the old
+        # key/path shape.
+        key: ${{ inputs.cache-prefix }}|${{ steps.resolve-version.outputs.version }}|${{ steps.archive.outputs.triple }}|archive
+        path: ${{ runner.tool_cache }}/toolr/${{ steps.resolve-version.outputs.version }}/archive
 
     - name: Download archive
       if: steps.cache.outputs.cache-hit != 'true'
@@ -212,7 +221,12 @@ runs:
         ARCHIVE: ${{ steps.archive.outputs.archive }}
       run: |
         set -euo pipefail
-        work="$RUNNER_TEMP/setup-toolr"
+        # Download into the cached archive dir so a warm cache restores
+        # the archive (+ .sha256) and the verify steps below re-check it
+        # every run. Checksum and attestation verification are NOT done
+        # here — they run unconditionally in the two steps that follow, so
+        # a cache hit is verified just like a cold download (SEC-09).
+        work="$RUNNER_TOOL_CACHE/toolr/${VERSION}/archive"
         rm -rf "$work"
         mkdir -p "$work"
 
@@ -235,9 +249,20 @@ runs:
           exit 1
         fi
 
-        # Verify the checksum the release pipeline shipped alongside
-        # the archive. Mismatch means the file is corrupt or has been
-        # tampered with — abort before unpacking.
+    - name: Verify archive checksum
+      # Runs on EVERY job, cache hit included: a restored cache entry is
+      # re-checked before anything is extracted or executed (SEC-09).
+      shell: bash
+      env:
+        VERSION: ${{ steps.resolve-version.outputs.version }}
+        ARCHIVE: ${{ steps.archive.outputs.archive }}
+      run: |
+        set -euo pipefail
+        work="$RUNNER_TOOL_CACHE/toolr/${VERSION}/archive"
+        if [ ! -f "${work}/${ARCHIVE}" ] || [ ! -f "${work}/${ARCHIVE}.sha256" ]; then
+          echo "setup-toolr: cached archive missing under ${work} — bump 'cache-prefix' to clear a corrupt cache and retry" >&2
+          exit 1
+        fi
         cd "$work"
         if command -v sha256sum >/dev/null 2>&1; then
           sha256sum --check "${ARCHIVE}.sha256"
@@ -250,11 +275,14 @@ runs:
             exit 1
           fi
         fi
-
         echo "ARCHIVE_PATH=${work}/${ARCHIVE}" >> "$GITHUB_ENV"
 
     - name: Verify SLSA build provenance
-      if: steps.cache.outputs.cache-hit != 'true' && inputs.skip-attestation != 'true'
+      # No cache-hit guard: attestation is verified on every run against
+      # GitHub's attestation store, so a poisoned cached archive is
+      # rejected before it reaches PATH (SEC-09). Only fork PRs / an
+      # explicit `skip-attestation: true` bypass it.
+      if: inputs.skip-attestation != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
