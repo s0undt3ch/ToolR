@@ -117,8 +117,15 @@ jobs:
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
-        # Only run attestations on the main repository, not on forks
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        # Attest everywhere except fork PRs (which lack `id-token`). The
+        # bare `head.repo.full_name == github.repository` check was FALSE
+        # on release (`workflow_dispatch`) and push-to-main — there's no
+        # pull_request context, so `'' == 's0undt3ch/ToolR'` silently
+        # skipped the per-wheel attestation (Test PyPI wheels from main
+        # got none). `|| event_name != 'pull_request'` attests on release
+        # + main pushes while still skipping only fork PRs. Matches
+        # `_prepare-release.yml`. SEC-11.
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
           subject-path: wheelhouse/*.whl
 
