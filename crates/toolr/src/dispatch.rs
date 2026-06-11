@@ -320,6 +320,7 @@ pub fn dispatch(
             toolr_core::project::provenance_cache_dir(&repo_root, resolved).ok();
         if let Err(e) = toolr_core::venv::verify_interpreter(
             &python,
+            &resolved.venv_dir,
             &repo_root,
             cache_dir.as_deref(),
         ) {

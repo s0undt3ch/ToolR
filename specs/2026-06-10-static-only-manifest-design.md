@@ -97,13 +97,26 @@ time — manifest building no longer spawns anything):
   independent of venv location) and store provenance at
   `$XDG_CACHE_HOME/toolr/<repo-key>/meta.json`. The venv stays in `tools/.venv`; only the
   provenance record lives in the (un-committable) cache. At dispatch, an interpreter inside
-  the repo tree is executed **only** if it matches that record; otherwise refuse:
-  `toolr: refusing to run tools/.venv (not provisioned by toolr) — run 'toolr project venv sync'`.
-  A committed fake `.venv` has no record → always rejected.
+  the repo tree is executed when it matches that record.
 
-This adds a provenance check alongside `validate_venv` (which today only checks
-"has python + has toolr package" — `crates/toolr-core/src/venv/validate.rs:94-99` — not a
-trust check).
+  **`validate_venv` fallback (added after a Windows distribution-test regression).** Requiring
+  a toolr-written record outright broke the legitimate "build the in-tree venv with `uv`
+  directly, then run toolr" workflow (what IDEs, `activate`, and CI rely on, and what the
+  plugin-contract distribution test does). So when an in-repo interpreter has no/mismatched
+  record, fall back to `validate_venv`: if `tools/.venv` is a *structurally real* toolr venv
+  (a `pyvenv.cfg`-style layout containing the installed `toolr` package), accept it; otherwise
+  refuse. The cheap committed-fake attack — a `#!/bin/sh` script at `tools/.venv/bin/python`
+  with no `toolr` package — fails `validate_venv` and stays refused. Residual (accepted,
+  documented): committing a *full real venv* with a trojaned `python` binary would pass — far
+  costlier and more conspicuous than the script fake this gate blocks; `toolr project venv
+  sync` records provenance and skips the fallback. Refusal message:
+
+  ```text
+  toolr: refusing to run <path>: it lives inside the repository and was not provisioned by toolr — run 'toolr project venv sync'
+  ```
+
+This builds on `validate_venv` (which checks "has python + has toolr package" —
+`crates/toolr-core/src/venv/validate.rs:94-99`), now also used as the in-tree trust fallback.
 
 **Rationale for keeping in-tree:** a predictable `tools/.venv` is what IDEs point their
 interpreter at, what `source tools/.venv/bin/activate` needs, and what CI caches by a known
