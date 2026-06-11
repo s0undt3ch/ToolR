@@ -194,19 +194,20 @@ jobs:
         # would regenerate from its current Python source. Drift here means
         # the plugin-packaging contract advertised in `docs/third-party.md`
         # would mislead authors who follow it. Lives here (rather than in
-        # pre-commit) because the check requires the workspace toolr binary
-        # to be built, which CI does anyway -- pre-commit would burn a
-        # full Rust compile on every dev's first commit.
+        # pre-commit) because it needs the `toolr` binary -- which this job
+        # already has on PATH from the downloaded release archive (the
+        # "Extract toolr binary onto PATH" step above), so we exercise the
+        # SHIPPED binary instead of a separate debug rebuild. pre-commit
+        # would instead burn a full Rust compile on every dev's first commit.
         #
         # Regen-and-diff pattern (same as the skills/*/references step
-        # below): build the binary, regenerate the manifest in place,
+        # below): regenerate the manifest in place with the on-PATH binary,
         # then `git diff --exit-code` to surface the exact bytes that
         # changed in the CI log. The previous `--check` variant just
         # exited non-zero with no visible diff.
         shell: bash
         run: |
-          cargo build --quiet -p toolr
-          ./target/debug/toolr self build-manifest \
+          toolr self build-manifest \
             --source-dir examples/plugin-package/src/toolr_example_plugin \
             --package toolr_example_plugin
           if ! git diff --exit-code -- examples/plugin-package/src/toolr_example_plugin/toolr-manifest.json; then
