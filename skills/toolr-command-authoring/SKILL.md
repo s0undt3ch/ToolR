@@ -98,8 +98,24 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
 - **Calling subprocesses.** Use `ctx.run(...)`; it inherits stderr
   for TTY-aware tools and propagates timeouts.
 
+## Static-only discovery contract
+
+toolr discovers commands **only by static analysis** of `tools/*.py` —
+it never imports or executes your modules to build the manifest. Declare
+`command_group(...)` at module top level and apply `@command` /
+`@group.command` to module-level functions. Commands registered
+dynamically — in a `for` loop, behind an `if`, or returned from a
+factory called at import time — are **not** discovered and will not
+appear in `--help`, completion, or dispatch. If a command is missing,
+make its registration a top-level, statically-visible declaration.
+
 ## Anti-patterns
 
+- **Don't register commands dynamically.** A loop like
+  `for name in names: group.command(...)` or a factory that builds
+  commands at import time produces nothing — the static parser can't see
+  it. Declare each command at module level (see the static-only contract
+  above).
 - **Don't bypass the decorator surface.** Defining a function and
   then calling `register(...)` directly skips the manifest builder.
   Always `@command` or `@<group>.command`.

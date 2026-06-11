@@ -206,12 +206,12 @@ fn detect_requires_python() -> String {
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {
-    use toolr_core::dynamic::rebuild_manifest_full;
+    use toolr_core::manifest_build::rebuild_manifest_full;
 
     let cwd = std::env::current_dir()?;
     let repo_root = toolr_core::discovery::discover_project_root(&cwd)?;
     let resolved = toolr_core::venv::resolve_venv_path(&repo_root)?;
-    let outcome = rebuild_manifest_full(&repo_root, &resolved.python, &resolved.venv_dir)?;
+    let outcome = rebuild_manifest_full(&repo_root, &resolved.venv_dir)?;
     for w in &outcome.warnings {
         eprintln!("toolr: warning: {w}");
     }

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::dynamic::compute_third_party_hash;
+use crate::manifest_build::compute_third_party_hash;
 use crate::hash::hash_tools_dir;
 use crate::manifest::Manifest;
 
@@ -35,7 +35,7 @@ pub enum FreshnessVerdict {
 /// produces a fresh manifest from scratch.
 ///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
-/// third-party and dynamic entries. On `ThirdPartyDrift`, call
+/// third-party entries. On `ThirdPartyDrift`, call
 /// `build_static_manifest_with_venv`; third-party entries come from the
 /// fresh glob.
 pub fn compare(

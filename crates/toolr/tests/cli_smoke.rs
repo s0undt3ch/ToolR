@@ -240,7 +240,7 @@ fn preflight_fixture(
     let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
     let venv_dir = tools.join(".venv");
     let third_party_hash =
-        toolr_core::dynamic::compute_third_party_hash(&venv_dir).unwrap();
+        toolr_core::manifest_build::compute_third_party_hash(&venv_dir).unwrap();
 
     let imports_json: String = imports
         .iter()
@@ -270,33 +270,73 @@ fn preflight_fixture(
     let py = bin_dir.join("python");
     let mut f = fs::File::create(&py).unwrap();
     writeln!(f, "#!/bin/sh").unwrap();
-    // The dispatcher invokes `python -m toolr._introspect ...` during
-    // auto-rebuild and `python -m toolr._runner` during the actual
-    // command execution. Branch on the argv so both work without a
-    // real Python.
-    writeln!(f, r#"case " $* " in"#).unwrap();
-    writeln!(
-        f,
-        r#"  *toolr._introspect*) echo '{{"payload_schema_version":1,"groups":[],"commands":[],"warnings":[]}}'; exit 0;;"#
-    )
-    .unwrap();
-    writeln!(f, "  *) exit 1;;").unwrap();
-    writeln!(f, "esac").unwrap();
+    // The dispatcher invokes `python -m toolr._runner` during command
+    // execution; the default branch exits non-zero so a command "runs"
+    // without a real Python.
+    writeln!(f, "exit 1").unwrap();
     drop(f);
     let mut perms = fs::metadata(&py).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&py, perms).unwrap();
 
+    // Record interpreter provenance so the dispatch-time provenance gate
+    // treats this in-tree `tools/.venv/bin/python` as trusted (as if
+    // `toolr project venv sync` had provisioned it). The provenance lives
+    // in an out-of-repo cache dir keyed by the repo path; we point the
+    // binary at it via `XDG_CACHE_HOME` (see `preflight_cmd`).
+    record_intree_provenance(tmp.path(), &py);
+
     tmp
+}
+
+/// `$XDG_CACHE_HOME` value used by the preflight fixtures so the in-tree
+/// venv's provenance record lives somewhere the (simulated) repo can't
+/// write. It is a sibling of the repo under the same TempDir.
+#[cfg(unix)]
+fn preflight_cache_home(repo: &std::path::Path) -> PathBuf {
+    repo.join(".xdg-cache")
+}
+
+/// Write a `meta.json` provenance record for an in-tree interpreter into
+/// the out-of-repo cache slot, mirroring what `toolr project venv sync`
+/// does on a real machine.
+///
+/// The cache dir is computed directly from `preflight_cache_home` rather
+/// than via `toolr_cache_dir()` (which reads the global `XDG_CACHE_HOME`),
+/// so this never mutates process-wide env and is safe under parallel
+/// tests. The spawned binary reads the same `XDG_CACHE_HOME` value via
+/// `preflight_cmd`, resolving to the same slot.
+#[cfg(unix)]
+fn record_intree_provenance(repo: &std::path::Path, python: &std::path::Path) {
+    let cache_home = preflight_cache_home(repo);
+    // In-tree venvs resolve with an empty python_version (no pin), so the
+    // repo-key uses "".
+    let key = toolr_core::venv::compute_repo_key(repo, "").unwrap();
+    let cache_dir = cache_home.join("toolr").join(key);
+    let canon = python.canonicalize().unwrap();
+    let hash = toolr_core::hash::hash_file(&canon).unwrap();
+    toolr_core::cache::Meta::new(repo, "test", "")
+        .with_interpreter(canon, hash)
+        .write(&cache_dir)
+        .unwrap();
+}
+
+/// Build a `toolr` command for the preflight fixtures with the
+/// `XDG_CACHE_HOME` that holds the in-tree venv's provenance record, so
+/// the dispatch-time provenance gate accepts the fixture's interpreter.
+#[cfg(unix)]
+fn preflight_cmd(repo: &std::path::Path) -> Command {
+    let mut cmd = Command::cargo_bin("toolr").unwrap();
+    cmd.current_dir(repo)
+        .env("XDG_CACHE_HOME", preflight_cache_home(repo));
+    cmd
 }
 
 #[test]
 #[cfg(unix)]
 fn preflight_fails_when_an_import_is_missing_from_venv() {
     let tmp = preflight_fixture(&["yaml"], &[]);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(tmp.path())
+    let output = preflight_cmd(tmp.path())
         .args(["ci", "hello"])
         .output()
         .unwrap();
@@ -330,9 +370,7 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
     assert!(py.exists(), "fixture should start with a stub python");
     fs::remove_file(&py).unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(tmp.path())
+    let output = preflight_cmd(tmp.path())
         .args(["ci", "hello"])
         .output()
         .unwrap();
@@ -370,9 +408,9 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
     use std::os::unix::fs::PermissionsExt;
 
     let tmp = preflight_fixture(&[], &[]);
-    // Replace the fake python so its non-introspect path emits a
-    // ModuleNotFoundError traceback (simulating the real runner
-    // failing at import time on an inline import).
+    // Replace the fake python so it emits a ModuleNotFoundError traceback
+    // (simulating the real runner failing at import time on an inline
+    // import).
     let py = tmp
         .path()
         .join("tools")
@@ -382,28 +420,21 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
     fs::remove_file(&py).unwrap();
     let mut f = fs::File::create(&py).unwrap();
     writeln!(f, "#!/bin/sh").unwrap();
-    writeln!(f, r#"case " $* " in"#).unwrap();
     writeln!(
         f,
-        r#"  *toolr._introspect*) echo '{{"payload_schema_version":1,"groups":[],"commands":[],"warnings":[]}}'; exit 0;;"#
+        r#"printf 'Traceback (most recent call last):\n  File "<tool>", line 2, in hello\n    import yaml\nModuleNotFoundError: No module named '"'"'yaml'"'"'\n' 1>&2"#
     )
     .unwrap();
-    writeln!(f, "  *)").unwrap();
-    writeln!(
-        f,
-        r#"    printf 'Traceback (most recent call last):\n  File "<tool>", line 2, in hello\n    import yaml\nModuleNotFoundError: No module named '"'"'yaml'"'"'\n' 1>&2"#
-    )
-    .unwrap();
-    writeln!(f, "    exit 1;;").unwrap();
-    writeln!(f, "esac").unwrap();
+    writeln!(f, "exit 1").unwrap();
     drop(f);
     let mut perms = fs::metadata(&py).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&py, perms).unwrap();
+    // Re-record provenance: rewriting the interpreter changed its bytes,
+    // so the original recorded hash no longer matches.
+    record_intree_provenance(tmp.path(), &py);
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(tmp.path())
+    let output = preflight_cmd(tmp.path())
         .args(["ci", "hello"])
         .output()
         .unwrap();
@@ -419,9 +450,7 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
 #[cfg(unix)]
 fn preflight_can_be_disabled_with_env_var() {
     let tmp = preflight_fixture(&["yaml"], &[]);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(tmp.path())
+    let output = preflight_cmd(tmp.path())
         .env("TOOLR_NO_PREFLIGHT_DEPS", "1")
         .args(["ci", "hello"])
         .output()
@@ -439,9 +468,7 @@ fn preflight_can_be_disabled_with_env_var() {
 #[cfg(unix)]
 fn preflight_passes_when_all_imports_present() {
     let tmp = preflight_fixture(&["packaging"], &["packaging"]);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(tmp.path())
+    let output = preflight_cmd(tmp.path())
         .args(["ci", "hello"])
         .output()
         .unwrap();

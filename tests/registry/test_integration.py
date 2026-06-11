@@ -2,8 +2,36 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from toolr import Context
 from toolr import command_group
+from toolr.testing import CommandsTester
+
+
+def test_discover_walks_a_real_tools_package(tmp_path: Path) -> None:
+    """`CommandsTester.discover()` imports every module under a real
+    `tools/` package, exercising the `pkgutil` walk in
+    `_import_tools_modules`. The shared `commands_tester` fixture runs
+    `discover()` on an empty dir, which only hits the
+    `ModuleNotFoundError` early-return — never the walk loop."""
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "__init__.py").write_text("")
+    (tools / "ci.py").write_text(
+        "from toolr import command_group\n"
+        'group = command_group("ci", "CI utils", "CI utilities")\n'
+        "@group.command\n"
+        "def hello(ctx):\n"
+        '    """Say hi."""\n'
+    )
+    with CommandsTester(search_path=tmp_path) as tester:
+        tester.discover()
+        # The walk imported every `tools.*` module — proving the loop ran
+        # (not just the `ModuleNotFoundError` early-return path).
+        walked = "tools.ci" in sys.modules
+    assert walked, "discover() should have imported tools.ci via the pkgutil walk"
 
 
 def test_complete_workflow_example(commands_tester):

@@ -245,17 +245,20 @@ pub fn dispatch(
     // PATH/TOOLR_PYTHON lookup only when there is no
     // `tools/pyproject.toml` — i.e. projects that never opted into
     // the per-repo venv layer.
-    let (python, venv_dir, python_version) =
+    let resolved_venv: Option<toolr_core::venv::ResolvedVenv> =
         if repo_root.join("tools").join("pyproject.toml").is_file() {
-            let resolved = resolve_venv_path(&repo_root)?;
-            (
-                resolved.python,
-                Some(resolved.venv_dir),
-                Some(resolved.python_version),
-            )
+            Some(resolve_venv_path(&repo_root)?)
         } else {
-            (resolve_python()?, None, None)
+            None
         };
+    let (python, venv_dir, python_version) = match &resolved_venv {
+        Some(resolved) => (
+            resolved.python.clone(),
+            Some(resolved.venv_dir.clone()),
+            Some(resolved.python_version.clone()),
+        ),
+        None => (resolve_python()?, None, None),
+    };
 
     // Touch last_used_at on every invocation against a cached venv.
     // Backfill a fresh `meta.json` for cache entries that predate the
@@ -297,8 +300,7 @@ pub fn dispatch(
     // Without this, a missing tools venv surfaces as a bare
     // `io::Error::NotFound` from `Command::spawn`, which `main` prints
     // as `toolr: No such file or directory (os error 2)` — uninformative
-    // and gives no recovery hint. Mirror the same check `run_introspect`
-    // performs (`crates/toolr-core/src/dynamic/runner.rs`).
+    // and gives no recovery hint.
     if !python.is_file() {
         anyhow::bail!(
             "Python interpreter not found at {}.\n\
@@ -306,6 +308,26 @@ pub fn dispatch(
             python.display()
         );
     }
+
+    // Interpreter-provenance gate (SEC-01). This is the only point where
+    // toolr executes repository-adjacent code, so verify the interpreter
+    // is one toolr is allowed to run: under its own cache dir, or — for
+    // an in-tree `tools/.venv` — matching the provenance record written
+    // by `toolr project venv sync`. A committed fake `tools/.venv` has no
+    // record and is refused.
+    if let Some(resolved) = &resolved_venv {
+        let cache_dir =
+            toolr_core::project::provenance_cache_dir(&repo_root, resolved).ok();
+        if let Err(e) = toolr_core::venv::verify_interpreter(
+            &python,
+            &resolved.venv_dir,
+            &repo_root,
+            cache_dir.as_deref(),
+        ) {
+            anyhow::bail!("toolr: {e}");
+        }
+    }
+
     let mut child = spawn_runner(&python, tempfile.path())
         .with_context(|| format!("spawning Python runner at {}", python.display()))?;
     let status = wait_with_signals(&mut child)?;

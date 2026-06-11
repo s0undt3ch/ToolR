@@ -7,7 +7,7 @@ mod command;
 pub mod complete;
 pub mod deps_check;
 pub mod discovery;
-pub mod dynamic;
+pub mod manifest_build;
 pub mod docstrings;
 pub mod execute;
 pub mod freshness;

@@ -8,8 +8,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
-use toolr_core::dynamic::rebuild_manifest_full;
-use toolr_core::dynamic::{compute_third_party_hash, empty_third_party_hash};
+use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 use toolr_core::freshness::{FreshnessVerdict, compare};
 use toolr_core::manifest::{Manifest, Origin, load_manifest, write_manifest};
 use toolr_core::parser::{build_static_manifest, build_static_manifest_with_venv};
@@ -18,11 +17,16 @@ use toolr_core::venv::resolve_venv_path;
 /// Bootstrap step that runs before clap parses the user's command.
 ///
 /// When the manifest is missing AND `tools/pyproject.toml` exists AND
-/// argv doesn't look like a built-in / help / completion call, run a
-/// full `rebuild_manifest_full` so the user's command can succeed on
-/// a fresh clone. Errors propagate so `main.rs` can print them and
-/// exit non-zero — we intentionally do NOT fall through to an empty
-/// manifest, since that's the buggy old behaviour this task fixes.
+/// argv doesn't look like a built-in / completion call, build the
+/// manifest **statically** so the user's command can succeed on a fresh
+/// clone. This never resolves or spawns the venv interpreter: first-party
+/// commands come from a pure-Rust AST parse of `tools/*.py`, and
+/// third-party commands are picked up by an execution-free glob of an
+/// already-existing venv's `site-packages/*/toolr-manifest.json`.
+///
+/// Errors propagate so `main.rs` can print them and exit non-zero — we
+/// intentionally do NOT fall through to an empty manifest, since that's
+/// the buggy old behaviour this task fixes.
 pub(crate) fn ensure_manifest_present_or_bootstrap(
     cwd: &Path,
     argv: &[String],
@@ -41,36 +45,49 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         return Ok(());
     }
 
-    let resolved = match resolve_venv_path(&root) {
-        Ok(r) => r,
-        Err(_) => return Ok(()),
+    let manifest_path = tools.join(".toolr-manifest.json");
+    // First-party is always available (pure AST). Add third-party only when
+    // a venv already exists — globbing site-packages JSON executes nothing.
+    let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
+    let manifest = match venv_dir.as_deref() {
+        Some(v) if v.join("pyvenv.cfg").is_file() => {
+            build_static_manifest_with_venv(&tools, v).map_err(anyhow::Error::from)?
+        }
+        _ => build_static_manifest(&tools)?,
     };
-    if !resolved.python.is_file() {
-        return Ok(());
-    }
-
-    eprintln!("toolr: manifest missing; building (first-time setup)...");
-    rebuild_manifest_full(&root, &resolved.python, &resolved.venv_dir)?;
+    write_manifest(&manifest_path, &manifest)
+        .with_context(|| format!("writing {}", manifest_path.display()))?;
     Ok(())
 }
 
+/// Decide whether the pre-clap bootstrap should skip building a missing
+/// manifest for this argv.
+///
+/// Building the manifest is now a cheap, **execution-free** static parse
+/// (AST of `tools/*.py` + an execution-free third-party glob), so this
+/// skip is purely a latency optimisation — never a safety gate. No code
+/// path here (or downstream) ever executes repository Python; that only
+/// happens when the user explicitly dispatches a command.
+///
+/// We still skip the built-ins that manage their own state
+/// (`__complete`, `project`, `self`, `init`) and `--version` (prints
+/// binary metadata only). `--help` and bare `toolr` take the static
+/// build so help renders the user's command tree.
 pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
     const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
     const VERSION_FLAGS: &[&str] = &["--version", "-V"];
 
     // `--version` prints binary metadata only — never needs the user
-    // manifest, so don't pay the rebuild cost.
+    // manifest, so don't pay the build cost.
     if argv.iter().skip(1).any(|a| VERSION_FLAGS.contains(&a.as_str())) {
         return true;
     }
     // First positional (= first arg after `toolr` that doesn't start with `-`).
-    // Note: `--help` / bare `toolr` deliberately fall through to the
-    // rebuild — both surfaces render the command tree, and rendering it
-    // without user groups (because the manifest is missing) is the UX
-    // bug this skip exists to avoid.
+    // `--help` / bare `toolr` fall through to the static build so both
+    // surfaces render the user's command tree.
     let first_positional = argv.iter().skip(1).find(|a| !a.starts_with('-'));
     match first_positional {
-        None => false, // `toolr` alone (with or without `--help`) → rebuild so help shows user groups
+        None => false, // `toolr` alone (with or without `--help`) → static build so help shows user groups
         Some(name) => BUILTINS.contains(&name.as_str()),
     }
 }
@@ -154,9 +171,10 @@ fn try_rebuild(
 
 /// Copy non-static entries from `cached` into `fresh` when the fresh
 /// rebuild has no entry with the same identity. On `StaticDrift` we
-/// preserve both `Dynamic` and `ThirdParty` origins (we didn't re-glob).
-/// On `ThirdPartyDrift` we only preserve `Dynamic` (third-party comes
-/// from the fresh glob).
+/// preserve `ThirdParty` entries (we didn't re-glob the venv). On
+/// `ThirdPartyDrift` we carry forward nothing — third-party comes from
+/// the fresh glob, and there is no longer any untrusted dynamic origin
+/// to carry forward (this is the SEC-03 fix).
 ///
 /// Note: this helper is purpose-built for persistent dispatch paths.
 /// It MUST NOT be confused with `complete::freshness::preserve_non_static_entries`,
@@ -169,8 +187,7 @@ fn carry_forward_cached_entries(
     let keep = |o: &Origin| {
         matches!(
             (verdict, o),
-            (FreshnessVerdict::StaticDrift, Origin::Dynamic | Origin::ThirdParty)
-                | (FreshnessVerdict::ThirdPartyDrift, Origin::Dynamic)
+            (FreshnessVerdict::StaticDrift, Origin::ThirdParty)
         )
     };
     for group in &cached.groups {
@@ -221,13 +238,15 @@ mod tests {
     #[test]
     fn fires_for_long_help_flag() {
         // `toolr --help` must render the user's command tree; that needs
-        // the manifest. Falling through to rebuild beats showing a
-        // partial help that hides every user command.
+        // the manifest. Falling through to the static build beats showing
+        // a partial help that hides every user command. The build is a
+        // pure-Rust AST parse — it executes no repository Python.
         assert!(!should_skip_auto_rebuild(&args(&["--help"])));
     }
 
     #[test]
     fn fires_for_short_help_flag() {
+        // Same as `--help`: take the execution-free static build.
         assert!(!should_skip_auto_rebuild(&args(&["-h"])));
     }
 
@@ -246,7 +265,8 @@ mod tests {
     #[test]
     fn fires_for_bare_toolr() {
         // Bare `toolr` falls through to clap's auto-generated help,
-        // which is the same surface as `--help`.
+        // which is the same surface as `--help`. The static build it
+        // triggers executes no repository Python.
         assert!(!should_skip_auto_rebuild(&args(&[])));
     }
 

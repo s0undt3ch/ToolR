@@ -559,7 +559,7 @@ fn leaf_with_only_flags_offers_flags_on_empty_prefix() {
 }
 
 use crate::complete::{ResolvedManifest, resolve_manifest_at_tab};
-use crate::dynamic::empty_third_party_hash;
+use crate::manifest_build::empty_third_party_hash;
 use crate::manifest::{write_manifest};
 use tempfile::TempDir;
 
@@ -630,34 +630,34 @@ fn re_parses_when_cached_hash_is_stale() {
 }
 
 #[test]
-fn preserves_dynamic_entries_from_cache_when_reparsing() {
+fn preserves_third_party_entries_from_cache_when_reparsing() {
     let tmp = make_tree(&[(
         "ci.py",
         "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    pass\n",
     )]);
-    // Seed a manifest with a fake dynamic command and a stale static_hash
-    // so the re-parse path runs.
+    // Seed a manifest with a fake third-party command and a stale
+    // static_hash so the re-parse path runs.
     let mut seeded = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
     seeded.static_hash = "stale".into();
     seeded.commands.push(crate::manifest::Command {
         name: "from-plugin".into(),
-        group: "dyn-group".into(),
+        group: "plugin-group".into(),
         module: "third_party_pkg".into(),
         function: "from_plugin".into(),
         summary: String::new(),
         description: String::new(),
         arguments: vec![],
         imports: vec![],
-        origin: Origin::Dynamic,
+        origin: Origin::ThirdParty,
         dispatched_from: None,
         is_dispatcher: false,
     });
     seeded.groups.push(crate::manifest::Group {
-        name: "dyn-group".into(),
-        title: "Dynamic group".into(),
+        name: "plugin-group".into(),
+        title: "Plugin group".into(),
         description: String::new(),
         parent: None,
-        origin: Origin::Dynamic,
+        origin: Origin::ThirdParty,
     });
     let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
     write_manifest(&manifest_path, &seeded).unwrap();
@@ -666,20 +666,20 @@ fn preserves_dynamic_entries_from_cache_when_reparsing() {
     assert!(!resolved.from_cache);
     // Static-layer entry survives.
     assert!(resolved.manifest.commands.iter().any(|c| c.name == "hello"));
-    // Dynamic-layer entry from the cache is preserved through the reparse.
+    // Third-party entry from the cache is preserved through the reparse.
     assert!(
         resolved
             .manifest
             .commands
             .iter()
-            .any(|c| c.name == "from-plugin" && matches!(c.origin, Origin::Dynamic))
+            .any(|c| c.name == "from-plugin" && matches!(c.origin, Origin::ThirdParty))
     );
     assert!(
         resolved
             .manifest
             .groups
             .iter()
-            .any(|g| g.name == "dyn-group" && matches!(g.origin, Origin::Dynamic))
+            .any(|g| g.name == "plugin-group" && matches!(g.origin, Origin::ThirdParty))
     );
 }
 

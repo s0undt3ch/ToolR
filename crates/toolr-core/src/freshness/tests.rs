@@ -36,7 +36,7 @@ fn make_venv(tmp: &Path, plugins: &[(&str, &str)]) {
 
 fn manifest_for(tmp: &Path) -> Manifest {
     use crate::hash::hash_tools_dir;
-    use crate::dynamic::compute_third_party_hash;
+    use crate::manifest_build::compute_third_party_hash;
     Manifest {
         schema_version: crate::manifest::SCHEMA_VERSION,
         static_hash: hash_tools_dir(&tmp.join("tools")).unwrap(),

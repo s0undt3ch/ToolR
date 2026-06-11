@@ -23,3 +23,18 @@ pins (Python, uv, Rust, `cargo-edit`) and individual cargo / pyproject
 crates still get their own PRs so each bump remains reviewable. GitHub
 Actions stay pinned to commit SHAs with the SemVer tag in a trailing
 comment.
+
+### Security
+
+- toolr no longer executes repository Python to build its command manifest.
+  `toolr --help`, completion, and first-run are now fully static (AST parse +
+  execution-free third-party glob). Repository code runs only on explicit
+  command dispatch, through a provenance-verified interpreter. A committed
+  `tools/.venv` is refused unless toolr provisioned it (`toolr project venv sync`).
+
+### Removed
+
+- The dynamic introspection layer (`toolr._introspect`) is gone. Commands
+  registered dynamically (not via top-level `command_group(...)` + module-level
+  `@group.command`) are no longer discovered. Third-party plugins via shipped
+  `toolr-manifest.json` are unaffected.
