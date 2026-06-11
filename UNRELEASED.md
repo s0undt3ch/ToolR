@@ -54,6 +54,14 @@ comment.
   registered dynamically (not via top-level `command_group(...)` + module-level
   `@group.command`) are no longer discovered. Third-party plugins via shipped
   `toolr-manifest.json` are unaffected.
+- The retired argparse internals in `toolr.utils._signature` are gone — the
+  private (`_`-prefixed) `Signature`/`Arg`/`KwArg`/`VarArg` structs,
+  `get_signature`, `_parse_parameter`, the argparse `Action` subclasses, and
+  their helpers. The Rust static parser now does signature extraction and the
+  runner coerces arguments via `msgspec`, so none of this was reachable at
+  runtime. The public surface (`arg`, `arg_section`, `ArgSection`,
+  `ArgumentAnnotation`) is unchanged; any out-of-tree code importing the removed
+  private names must migrate off them.
 - The `[tool.toolr] editable-install` directive is removed. toolr no longer runs `uv pip install -e` itself;
   declare editable dependencies the uv-native way via `[tool.uv.sources]` (e.g.
   `foo = { path = "./packages/foo", editable = true }`), which `uv sync` installs and records in `uv.lock`.
