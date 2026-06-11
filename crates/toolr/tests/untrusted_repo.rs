@@ -88,6 +88,38 @@ fn help_works_with_no_venv_and_shows_first_party_commands() {
         .stdout(predicates::str::contains("greet"));
 }
 
+/// Bootstrap with a missing manifest but an existing in-tree venv takes the
+/// static-build-WITH-venv arm (`build_static_manifest_with_venv`), still
+/// executing no Python. Covers the venv-present branch of
+/// `ensure_manifest_present_or_bootstrap`.
+#[test]
+fn help_builds_statically_with_an_existing_in_tree_venv() {
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    std::fs::create_dir_all(tools.join(".venv")).unwrap();
+    std::fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname=\"demo\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tools.join("greet.py"),
+        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+    )
+    .unwrap();
+    // An existing venv (only `pyvenv.cfg` needed) so bootstrap takes the
+    // `build_static_manifest_with_venv` arm; no manifest committed.
+    std::fs::write(tools.join(".venv").join("pyvenv.cfg"), "home = /usr\n").unwrap();
+
+    Command::cargo_bin("toolr")
+        .unwrap()
+        .arg("--help")
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("greet"));
+}
+
 /// Manifest-as-cache: a venv appearing after the first static-only build
 /// is detected as third-party drift, and the next read-only invocation
 /// rebuilds the manifest to include the plugin's commands — no manual

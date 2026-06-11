@@ -138,6 +138,11 @@ mod tests {
     use super::*;
     use crate::venv::config::ToolrConfig;
     use std::path::PathBuf;
+    use std::sync::Mutex;
+    use tempfile::TempDir;
+
+    /// Serialises the `XDG_CACHE_HOME`-mutating test below (process-global env).
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn make_resolved_cache(venv_dir: PathBuf, repo_key: &str) -> ResolvedVenv {
         ResolvedVenv {
@@ -191,6 +196,38 @@ mod tests {
         let resolved = make_resolved_cache(PathBuf::from("/cache/toolr/abc/venv"), "abc");
         let dir = provenance_cache_dir(&PathBuf::from("/repo"), &resolved).unwrap();
         assert_eq!(dir, PathBuf::from("/cache/toolr/abc"));
+    }
+
+    #[test]
+    fn provenance_cache_dir_for_in_tree_venv_uses_an_out_of_repo_cache_slot() {
+        // In-tree venv (`repo_key` empty): the sidecar must live outside the
+        // repo, under `$XDG_CACHE_HOME/toolr/<repo-key>` — exercises the
+        // `compute_repo_key` + cache-dir branch.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let xdg = TempDir::new().unwrap();
+        let prev = std::env::var_os("XDG_CACHE_HOME");
+        // SAFETY: serialised by ENV_LOCK; restored before returning.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", xdg.path()) };
+
+        let repo = TempDir::new().unwrap();
+        let resolved = ResolvedVenv {
+            python: repo.path().join("tools/.venv/bin/python"),
+            venv_dir: repo.path().join("tools/.venv"),
+            repo_key: String::new(), // in-tree
+            python_version: "3.13".to_string(),
+            config: ToolrConfig::default(),
+        };
+        let dir = provenance_cache_dir(repo.path(), &resolved);
+
+        match prev {
+            Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
+        }
+        let dir = dir.unwrap();
+        assert!(
+            dir.starts_with(xdg.path().join("toolr")),
+            "in-tree provenance must live under the toolr cache dir, got {dir:?}"
+        );
     }
 
     #[test]

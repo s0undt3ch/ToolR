@@ -100,7 +100,12 @@ pub fn verify_interpreter(
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    /// Serialises the `XDG_CACHE_HOME`-mutating test below; the env is
+    /// process-global. (Coverage CI runs `--test-threads=1` anyway.)
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn write_exec(p: &Path, body: &str) {
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -190,5 +195,29 @@ mod tests {
         let py = venv.join("bin/python");
         write_exec(&py, "#!/bin/sh\n");
         assert!(verify_interpreter(&py, &venv, repo.path(), None).is_ok());
+    }
+
+    #[test]
+    fn accepts_interpreter_under_toolr_cache_dir() {
+        // An interpreter under `$XDG_CACHE_HOME/toolr/` is trusted outright
+        // (a repo can't write there) — exercises the cache-dir branch.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let xdg = TempDir::new().unwrap();
+        let prev = std::env::var_os("XDG_CACHE_HOME");
+        // SAFETY: serialised by ENV_LOCK; restored before returning.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", xdg.path()) };
+
+        let py = xdg.path().join("toolr/abc/venv/bin/python");
+        write_exec(&py, "#!/bin/sh\n");
+        let venv = py.parent().unwrap().parent().unwrap().to_path_buf();
+        // Repo is elsewhere; the interpreter lives under the cache dir.
+        let repo = TempDir::new().unwrap();
+        let result = verify_interpreter(&py, &venv, repo.path(), None);
+
+        match prev {
+            Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
+        }
+        assert!(result.is_ok(), "interpreter under the toolr cache dir must be trusted");
     }
 }
