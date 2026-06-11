@@ -183,7 +183,6 @@ fn leaf(name: &str, group: &str, summary: &str, arguments: Vec<Argument>) -> Com
         summary: summary.into(),
         description: String::new(),
         arguments,
-        imports: Vec::new(),
         origin: Origin::Static,
         dispatched_from: None,
         is_dispatcher: false,

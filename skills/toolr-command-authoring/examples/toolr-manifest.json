@@ -45,7 +45,6 @@
           }
         }
       ],
-      "imports": [],
       "origin": "static"
     },
     {
@@ -79,7 +78,6 @@
           "allowed_values": []
         }
       ],
-      "imports": [],
       "origin": "static"
     },
     {
@@ -105,7 +103,6 @@
           }
         }
       ],
-      "imports": [],
       "origin": "static"
     }
   ]

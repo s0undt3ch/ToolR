@@ -35,7 +35,7 @@ fn help_lists_groups_from_manifest() {
             {
                 "name": "hello", "group": "ci", "module": "tools.ci",
                 "function": "hello", "summary": "Say hello.",
-                "description": "", "arguments": [], "imports": [],
+                "description": "", "arguments": [],
                 "origin": "static"
             }
         ]
@@ -116,7 +116,7 @@ def hello(ctx, name: str = "world") -> None:
                     "allowed_values": []
                 }
             ],
-            "imports": [], "origin": "static"
+            "origin": "static"
         }]
     }"#;
     std::fs::write(tools_dir.join(".toolr-manifest.json"), manifest).unwrap();
@@ -192,11 +192,9 @@ fn self_build_manifest_help_works() {
 ///   `__init__.py`).
 /// - `tools/.venv/bin/python` as a fake interpreter that just exits 1
 ///   when the runner is spawned (so we exercise stdout/stderr handling).
-/// - A `tools/.toolr-manifest.json` with one `ci hello` command whose
-///   `imports` list is whatever the test passes.
+/// - A `tools/.toolr-manifest.json` with one `ci hello` command.
 #[cfg(unix)]
 fn preflight_fixture(
-    imports: &[&str],
     present_in_venv: &[&str],
 ) -> tempfile::TempDir {
     use std::fs;
@@ -235,18 +233,12 @@ fn preflight_fixture(
     fs::write(toolr_pkg.join("__init__.py"), "").unwrap();
 
     // Stamp real hashes so ensure_manifest_fresh treats the manifest as
-    // Fresh and doesn't rebuild it (which would drop the `imports` field
-    // that the pre-flight tests rely on).
+    // Fresh and doesn't rebuild it.
     let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
     let venv_dir = tools.join(".venv");
     let third_party_hash =
         toolr_core::manifest_build::compute_third_party_hash(&venv_dir).unwrap();
 
-    let imports_json: String = imports
-        .iter()
-        .map(|i| format!("\"{i}\""))
-        .collect::<Vec<_>>()
-        .join(",");
     let manifest = format!(
         r#"{{
             "schema_version": 1,
@@ -258,7 +250,7 @@ fn preflight_fixture(
             "commands": [{{
                 "name": "hello", "group": "ci", "module": "tools.ci",
                 "function": "hello", "summary": "", "description": "",
-                "arguments": [], "imports": [{imports_json}],
+                "arguments": [],
                 "origin": "static"
             }}]
         }}"#
@@ -332,23 +324,6 @@ fn preflight_cmd(repo: &std::path::Path) -> Command {
     cmd
 }
 
-#[test]
-#[cfg(unix)]
-fn preflight_fails_when_an_import_is_missing_from_venv() {
-    let tmp = preflight_fixture(&["yaml"], &[]);
-    let output = preflight_cmd(tmp.path())
-        .args(["ci", "hello"])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(output.status.code(), Some(78), "stderr:\n{stderr}");
-    assert!(
-        stderr.contains("import `yaml` not found"),
-        "stderr:\n{stderr}"
-    );
-    assert!(stderr.contains("toolr project venv sync"));
-}
-
 /// Regression: deleting the resolved tools venv's `bin/python` between
 /// invocations used to surface as the bare error
 /// `toolr: No such file or directory (os error 2)` — the user couldn't
@@ -360,7 +335,7 @@ fn preflight_fails_when_an_import_is_missing_from_venv() {
 fn dispatch_emits_clear_error_when_venv_python_is_missing() {
     use std::fs;
 
-    let tmp = preflight_fixture(&[], &[]);
+    let tmp = preflight_fixture(&[]);
     let py = tmp
         .path()
         .join("tools")
@@ -407,7 +382,7 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
 
-    let tmp = preflight_fixture(&[], &[]);
+    let tmp = preflight_fixture(&[]);
     // Replace the fake python so it emits a ModuleNotFoundError traceback
     // (simulating the real runner failing at import time on an inline
     // import).
@@ -447,42 +422,6 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
 }
 
 #[test]
-#[cfg(unix)]
-fn preflight_can_be_disabled_with_env_var() {
-    let tmp = preflight_fixture(&["yaml"], &[]);
-    let output = preflight_cmd(tmp.path())
-        .env("TOOLR_NO_PREFLIGHT_DEPS", "1")
-        .args(["ci", "hello"])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !stderr.contains("not found in tools venv"),
-        "stderr:\n{stderr}"
-    );
-    // Pre-flight skipped → runner spawn proceeds (fake python exits 1).
-    assert_ne!(output.status.code(), Some(78));
-}
-
-#[test]
-#[cfg(unix)]
-fn preflight_passes_when_all_imports_present() {
-    let tmp = preflight_fixture(&["packaging"], &["packaging"]);
-    let output = preflight_cmd(tmp.path())
-        .args(["ci", "hello"])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    // Pre-flight passes → fake python runner runs and exits 1 (no
-    // pre-flight diagnostic in stderr).
-    assert!(
-        !stderr.contains("not found in tools venv"),
-        "stderr:\n{stderr}"
-    );
-    assert_ne!(output.status.code(), Some(78));
-}
-
-#[test]
 fn user_command_propagates_nonzero_exit() {
     let Some(python) = detect_test_python() else {
         eprintln!("skipping: no test python (see above)");
@@ -511,7 +450,7 @@ def boom(ctx) -> None:
         "commands": [{
             "name": "boom", "group": "demo", "module": "tools.demo",
             "function": "boom", "summary": "", "description": "",
-            "arguments": [], "imports": [], "origin": "static"
+            "arguments": [], "origin": "static"
         }]
     }"#;
     std::fs::write(tools_dir.join(".toolr-manifest.json"), manifest).unwrap();

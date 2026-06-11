@@ -181,7 +181,6 @@ pub fn build_third_party_fragment(
                         allowed_values: a.allowed_values,
                     })
                     .collect(),
-                imports: c.imports,
             })
             .collect(),
     })

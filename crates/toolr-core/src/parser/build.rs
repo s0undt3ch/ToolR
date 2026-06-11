@@ -572,7 +572,6 @@ def hello(ctx):
                 summary: String::new(),
                 description: String::new(),
                 arguments: vec![],
-                imports: vec![],
             }],
         };
         std::fs::write(

@@ -20,7 +20,6 @@ fn sample_manifest() -> Manifest {
             summary: "Generate a build matrix.".into(),
             description: "".into(),
             arguments: vec![],
-            imports: vec!["packaging".into()],
             origin: Origin::Static,
             dispatched_from: None,
             is_dispatcher: false,
@@ -48,6 +47,30 @@ fn missing_optional_fields_default_to_empty() {
     let m: Manifest = serde_json::from_str(json).expect("deserialize minimal");
     assert_eq!(m.schema_version, 1);
     assert!(m.third_party_hash.is_empty());
+}
+
+#[test]
+fn legacy_imports_key_is_tolerated() {
+    // Manifests written by an older toolr carry a now-removed `"imports"`
+    // key on each command. The `Command` struct no longer declares the
+    // field, but it must still deserialize: there is no
+    // `deny_unknown_fields`, so the stale key is ignored rather than
+    // erroring. This guards the forward/backward-compat we rely on to
+    // avoid a schema-version bump for the field's removal.
+    let json = r#"{
+        "schema_version": 1,
+        "static_hash": "h",
+        "third_party_hash": "",
+        "groups": [{"name": "ci", "title": "CI", "description": "", "origin": "static"}],
+        "commands": [{
+            "name": "hello", "group": "ci", "module": "tools.ci",
+            "function": "hello", "summary": "", "description": "",
+            "arguments": [], "imports": ["packaging"], "origin": "static"
+        }]
+    }"#;
+    let m: Manifest = serde_json::from_str(json).expect("legacy imports key must be tolerated");
+    assert_eq!(m.commands.len(), 1);
+    assert_eq!(m.commands[0].name, "hello");
 }
 
 use super::io::{ManifestError, load_manifest, write_manifest};
@@ -108,7 +131,6 @@ mod dispatched_from_tests {
             summary: String::new(),
             description: String::new(),
             arguments: vec![],
-            imports: vec![],
             origin: Origin::Static,
             dispatched_from,
             is_dispatcher: false,
@@ -141,7 +163,6 @@ mod is_dispatcher_tests {
             summary: String::new(),
             description: String::new(),
             arguments: vec![],
-            imports: vec![],
             origin: Origin::Static,
             dispatched_from: None,
             is_dispatcher,

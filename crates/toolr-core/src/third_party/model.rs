@@ -46,8 +46,6 @@ pub struct FragmentCommand {
     pub description: String,
     #[serde(default)]
     pub arguments: Vec<FragmentArgument>,
-    #[serde(default)]
-    pub imports: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

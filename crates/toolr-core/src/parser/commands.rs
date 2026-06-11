@@ -296,7 +296,6 @@ fn build_command(
         summary,
         description,
         arguments,
-        imports: Vec::new(),
         origin: Origin::Static,
         dispatched_from: None,
         is_dispatcher: false,
