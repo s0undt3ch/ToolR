@@ -610,7 +610,10 @@ mod tests {
     #[test]
     fn no_warn_for_absolute_path_arg() {
         let cmd = cmd_with(vec![arg_of("file", ArgumentKind::Positional, SupportedType::Path)]);
-        let matches = path_matches(&["t", "/abs/x.py"]);
+        // `/abs/x.py` is NOT absolute on Windows (no drive letter), so use a
+        // platform-appropriate absolute path for the "is_absolute" check.
+        let abs = if cfg!(windows) { "C:\\abs\\x.py" } else { "/abs/x.py" };
+        let matches = path_matches(&["t", abs]);
         assert!(
             relative_path_warning(&cmd, &matches, Path::new("/repo"), Path::new("/repo/sub"))
                 .is_none()
