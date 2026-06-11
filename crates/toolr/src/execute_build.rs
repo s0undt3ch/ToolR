@@ -478,6 +478,24 @@ mod tests {
     }
 
     #[test]
+    fn build_spec_runs_the_relative_path_warning_wrapper() {
+        // Drives `warn_relative_paths` (the `std::env::current_dir()` +
+        // `eprintln!` wrapper, not just the pure `relative_path_warning`):
+        // a relative Path arg plus a repo_root that differs from the test's
+        // cwd makes the note fire. The note only goes to stderr; we just
+        // assert the spec still builds.
+        let cmd = cmd_with(vec![arg_of("file", ArgumentKind::Positional, SupportedType::Path)]);
+        let matches = path_matches(&["t", "rel/x.py"]);
+        let spec = build_spec(
+            &cmd,
+            &matches,
+            Path::new("/nonexistent-repo-xyz"),
+            &OutputOptions::default(),
+        );
+        assert!(spec.args.contains_key("file"));
+    }
+
+    #[test]
     fn build_spec_extracts_optional_arg_value() {
         let cmd = cmd_hello_with_name_arg();
         let matches = parse("Alice");
