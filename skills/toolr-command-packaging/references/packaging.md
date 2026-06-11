@@ -29,12 +29,12 @@ Either layout works on every supported platform. If your wheel installs `<pkg>/t
 
 ## Schema version
 
-`FRAGMENT_SCHEMA_VERSION` is the version your plugin's `toolr-manifest.json` declares via the mandatory `toolr_schema_version` field. The toolr binary accepts fragments at this version or lower, applying migrations as needed; fragments at a higher version are rejected.
+`FRAGMENT_SCHEMA_VERSION` is the version your plugin's `toolr-manifest.json` declares via the mandatory `toolr_schema_version` field. The toolr binary accepts fragments that declare exactly this version; any other version is rejected.
 
 ```rust
-/// Current fragment schema version. The Rust binary accepts fragments at
-/// version `<= FRAGMENT_SCHEMA_VERSION`, applying migrations as needed.
-/// Fragments at a higher version are rejected.
+/// Current fragment schema version. The Rust binary accepts fragments that
+/// declare exactly this version; any other version is rejected. (There are
+/// no schema migrations — a migration function is the day-v2-ships change.)
 pub const FRAGMENT_SCHEMA_VERSION: u32 = 1;
 ```
 
@@ -135,7 +135,7 @@ pub struct Manifest {
 
 ## Plugin manifest schema (host invariants)
 
-Host-side schema version the merger expects on the project's own manifest. Bumped in lockstep with breaking changes to the host format; plugins don't need to react to it directly because their fragment is migrated to the latest before merge.
+Host-side schema version the merger expects on the project's own manifest. Bumped in lockstep with breaking changes to the host format; plugins don't need to react to it directly because the merger owns the host manifest, not the plugin fragment.
 
 ```rust
 /// Current manifest schema version. Bump on breaking format changes.

@@ -7,9 +7,9 @@
 use serde::{Deserialize, Serialize};
 
 // region: SkillRefFragmentVersion
-/// Current fragment schema version. The Rust binary accepts fragments at
-/// version `<= FRAGMENT_SCHEMA_VERSION`, applying migrations as needed.
-/// Fragments at a higher version are rejected.
+/// Current fragment schema version. The Rust binary accepts fragments that
+/// declare exactly this version; any other version is rejected. (There are
+/// no schema migrations — a migration function is the day-v2-ships change.)
 pub const FRAGMENT_SCHEMA_VERSION: u32 = 1;
 // endregion: SkillRefFragmentVersion
 
