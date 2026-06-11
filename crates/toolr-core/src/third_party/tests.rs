@@ -120,6 +120,48 @@ fn parse_rejects_unknown_future_version() {
         err,
         ThirdPartyError::UnknownVersion { version: 999, .. }
     ));
+    // The message must tell the user to upgrade toolr.
+    let msg = err.to_string();
+    assert!(msg.contains("999"), "got: {msg}");
+    assert!(msg.contains("Upgrade toolr"), "got: {msg}");
+}
+
+#[test]
+fn parse_rejects_zero_or_below_version_as_missing() {
+    // `toolr_schema_version` < 1 is treated as a malformed fragment: the
+    // `>= 1` filter in `parse_fragment` rejects it as MissingVersion (schema
+    // numbering starts at 1, so 0 never existed in the wild). Covers the
+    // filter-reject path distinctly from the absent-key case above.
+    let tmp = TempDir::new().unwrap();
+    let path = write_fragment(
+        &tmp,
+        "zero_pkg",
+        r#"{"toolr_schema_version": 0, "package": "zero_pkg", "groups": [], "commands": []}"#,
+    );
+    let err = parse_fragment(&path).expect_err("should reject");
+    assert!(matches!(err, ThirdPartyError::MissingVersion { .. }));
+}
+
+#[test]
+fn parse_accepts_exactly_current_version() {
+    // The only accepted version is FRAGMENT_SCHEMA_VERSION; a fragment
+    // declaring it parses unchanged (there is no migration step).
+    let tmp = TempDir::new().unwrap();
+    let path = write_fragment(
+        &tmp,
+        "cur_pkg",
+        &format!(
+            r#"{{
+                "toolr_schema_version": {FRAGMENT_SCHEMA_VERSION},
+                "package": "cur_pkg",
+                "groups": [],
+                "commands": []
+            }}"#
+        ),
+    );
+    let frag = parse_fragment(&path).expect("current version should parse");
+    assert_eq!(frag.toolr_schema_version, FRAGMENT_SCHEMA_VERSION);
+    assert_eq!(frag.package, "cur_pkg");
 }
 
 #[test]

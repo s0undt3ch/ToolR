@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use super::migrate::migrate_to_current;
 use super::model::{FRAGMENT_SCHEMA_VERSION, ManifestFragment};
 
 #[derive(Debug, Error)]
@@ -42,12 +41,6 @@ pub enum ThirdPartyError {
         version: u32,
         max: u32,
     },
-    #[error("{path}: migration from v{version} failed: {reason}")]
-    Migration {
-        path: PathBuf,
-        version: u32,
-        reason: String,
-    },
     #[error(
         "duplicate command `{group}/{name}` declared by both `{first_package}` \
          and `{second_package}`"
@@ -60,9 +53,11 @@ pub enum ThirdPartyError {
     },
 }
 
-/// Parse one fragment file, validating `toolr_schema_version` and
-/// migrating older fragments to the current shape. Returns the
-/// migrated, ready-to-merge fragment.
+/// Parse one fragment file, validating `toolr_schema_version` matches
+/// `FRAGMENT_SCHEMA_VERSION`. Returns the ready-to-merge fragment.
+///
+/// There are no schema migrations: the only accepted version is the
+/// current one. A future migration function is the day-v2-ships change.
 pub fn parse_fragment(path: &Path) -> Result<ManifestFragment, ThirdPartyError> {
     let bytes = fs::read(path).map_err(|e| ThirdPartyError::Io {
         path: path.to_path_buf(),
@@ -92,14 +87,12 @@ pub fn parse_fragment(path: &Path) -> Result<ManifestFragment, ThirdPartyError> 
         });
     }
 
-    let migrated =
-        migrate_to_current(raw, version).map_err(|reason| ThirdPartyError::Migration {
-            path: path.to_path_buf(),
-            version,
-            reason,
-        })?;
+    // At this point `version == FRAGMENT_SCHEMA_VERSION`: the `>= 1` filter
+    // above rejects 0/older as MissingVersion and the check just above
+    // rejects anything newer. There are no migrations — when a v2 schema
+    // ships, reintroduce a migration step here for the older versions.
 
-    serde_json::from_value(migrated).map_err(|e| ThirdPartyError::Json {
+    serde_json::from_value(raw).map_err(|e| ThirdPartyError::Json {
         path: path.to_path_buf(),
         source: e,
     })
