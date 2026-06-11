@@ -153,6 +153,11 @@ jobs:
           mise-version: ${{ env.MISE_VERSION }}
 
       - name: Run Prek
+        env:
+          # The `verify-action-pins` hook resolves each pinned action's tag
+          # via `gh api`; a token raises the rate limit from 60/hr
+          # (unauthenticated) to 5000/hr so the run can't be throttled.
+          GH_TOKEN: ${{ github.token }}
         run: |
           prek run --all-files --show-diff-on-failure
 
