@@ -2,7 +2,6 @@
 
 pub mod config;
 pub mod edit;
-pub mod editable;
 pub mod provenance;
 pub mod repo_key;
 pub mod resolve;
@@ -11,7 +10,6 @@ pub mod validate;
 
 pub use config::{ToolrConfig, VenvLocation, load_toolr_config};
 pub use edit::{run_uv_add, run_uv_remove};
-pub use editable::{EditableOutcome, perform_editable_installs, warn_failures};
 pub use provenance::{ProvenanceError, verify_interpreter};
 pub use repo_key::{TOOLR_MAJOR, compute_repo_key};
 pub use resolve::{ResolvedVenv, resolve_venv_path};

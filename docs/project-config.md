@@ -65,19 +65,27 @@ spellings the TOML key does. Useful as a CI escape hatch — the
 automatically so workflows can cache `tools/.venv` directly without
 the per-repo config caring.
 
-### `editable-install` {#editable-install}
+### Editable installs {#editable-install}
 
-A list of paths to `uv pip install -e` after the initial sync.
-Typically used to pick up an editable install of the surrounding
-project so commands can `import the_app` directly.
+Editable installs are configured the uv-native way, via
+`[tool.uv.sources]` in `tools/pyproject.toml` (declare the package as a
+dependency and point its source at a local path with `editable = true`).
+uv installs it as part of `uv sync`, recorded in `uv.lock`. toolr no
+longer performs separate editable installs.
+
+A former `[tool.toolr] editable-install = ["./packages/foo"]` becomes a
+standard editable path dependency:
 
 ```toml
-[tool.toolr]
-editable-install = ["."]
+[project]
+dependencies = ["foo"]
+
+[tool.uv.sources]
+foo = { path = "./packages/foo", editable = true }
 ```
 
-Each entry is resolved relative to the repo root. The post-sync hook
-is best-effort — failures log a warning but don't fail the sync.
+A `tools/pyproject.toml` that still carries an `editable-install` key
+keeps loading — the key is ignored.
 
 ### `python-version` {#python-version}
 
@@ -117,8 +125,7 @@ The sync flow is:
 2. Resolve the venv location (`venv-location` + repo-key, or
    `tools/.venv/`).
 3. Materialise / refresh the venv with `uv sync`.
-4. Apply each entry in `editable-install` via `uv pip install -e`.
-5. Verify the `toolr` Python package is present in the venv; refuse
+4. Verify the `toolr` Python package is present in the venv; refuse
    to proceed otherwise.
 
 `toolr project init` runs this same flow automatically after writing

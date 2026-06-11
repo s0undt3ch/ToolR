@@ -43,9 +43,6 @@ impl FromStr for VenvLocation {
 pub struct ToolrConfig {
     #[serde(default)]
     pub venv_location: VenvLocation,
-    /// Opt-in editable installs run post-`uv sync`. E.g. `["."]`.
-    #[serde(default)]
-    pub editable_install: Vec<String>,
     /// Optional explicit Python version override.
     #[serde(default)]
     pub python_version: Option<String>,
@@ -121,8 +118,21 @@ mod tests {
         write_pyproject(&tools, "[project]\nname=\"x\"\nversion=\"0\"\n");
         let cfg = load_toolr_config(&tools).unwrap();
         assert_eq!(cfg.venv_location, VenvLocation::Cache);
-        assert!(cfg.editable_install.is_empty());
         assert!(cfg.python_version.is_none());
+    }
+
+    #[test]
+    fn legacy_editable_install_key_is_ignored_not_an_error() {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        write_pyproject(
+            &tools,
+            "[project]\nname=\"x\"\nversion=\"0\"\n\n[tool.toolr]\neditable-install = [\".\", \"git+https://example/x\"]\n",
+        );
+        // Must not error — `ToolrConfig` has no deny_unknown_fields, so the
+        // removed key is silently ignored.
+        let cfg = load_toolr_config(&tools).unwrap();
+        assert_eq!(cfg.venv_location, VenvLocation::Cache);
     }
 
     #[test]
@@ -138,13 +148,11 @@ version = "0"
 
 [tool.toolr]
 venv-location = "in-tree"
-editable-install = ["."]
 python-version = "3.13"
 "#,
         );
         let cfg = load_toolr_config(&tools).unwrap();
         assert_eq!(cfg.venv_location, VenvLocation::InTree);
-        assert_eq!(cfg.editable_install, vec![".".to_string()]);
         assert_eq!(cfg.python_version.as_deref(), Some("3.13"));
     }
 

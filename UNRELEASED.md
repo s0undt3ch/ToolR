@@ -48,3 +48,7 @@ comment.
   registered dynamically (not via top-level `command_group(...)` + module-level
   `@group.command`) are no longer discovered. Third-party plugins via shipped
   `toolr-manifest.json` are unaffected.
+- The `[tool.toolr] editable-install` directive is removed. toolr no longer runs `uv pip install -e` itself;
+  declare editable dependencies the uv-native way via `[tool.uv.sources]` (e.g.
+  `foo = { path = "./packages/foo", editable = true }`), which `uv sync` installs and records in `uv.lock`.
+  A `tools/pyproject.toml` that still lists `editable-install` keeps loading — the key is ignored.
