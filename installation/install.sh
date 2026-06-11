@@ -13,7 +13,7 @@ TRIPLE=""
 PREFIX=""
 DRY_RUN=0
 NO_VERIFY=0
-VERIFY_ATTESTATION="auto"
+VERIFY_ATTESTATION="require"
 
 print_help() {
   cat <<EOF
@@ -26,7 +26,8 @@ Options:
   --dry-run                 Print actions without making changes
   --no-verify               Skip SHA-256 verification (not recommended)
   --verify-attestation MODE Attestation verification mode: auto|require|skip
-                            (default: auto - verify when 'gh' is available)
+                            (default: require - needs the 'gh' CLI; pass
+                            'skip' to bypass, accepting the supply-chain risk)
   -h, --help                Show this help
 EOF
 }
@@ -50,6 +51,7 @@ done
 
 err() { printf "install.sh: %s\n" "$*" >&2; exit 1; }
 info() { printf "install.sh: %s\n" "$*" >&2; }
+warn() { printf "install.sh: WARNING: %s\n" "$*" >&2; }
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || err "missing required command: $1"
@@ -108,9 +110,12 @@ verify_sha256() {
 
 # Verify the SLSA build-provenance attestation attached to a release
 # archive via the GitHub CLI. Modes:
-#   auto    - verify if `gh` is on PATH; skip silently otherwise
-#   require - fail hard if `gh` is missing or verification fails
+#   require - (default) fail hard if `gh` is missing or verification fails
+#   auto    - verify if `gh` is on PATH; skip with a warning otherwise
 #   skip    - never verify (e.g. when running offline)
+# `require` is the default so a missing verifier can't silently downgrade
+# the install to checksum-only (the `.sha256` ships from the same release,
+# so it catches transport corruption, not a tampered release asset).
 verify_attestation() {
   file="$1"
   case "$VERIFY_ATTESTATION" in
@@ -123,9 +128,16 @@ verify_attestation() {
   esac
   if ! command -v gh >/dev/null 2>&1; then
     if [ "$VERIFY_ATTESTATION" = "require" ]; then
-      err "gh CLI required for --verify-attestation=require but not on PATH"
+      printf '%s\n' \
+        "install.sh: cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH." \
+        "  toolr archives are signed; verification needs GitHub CLI -> https://cli.github.com" \
+        "  Choose one:" \
+        "    * install 'gh' and re-run this installer (recommended), or" \
+        "    * re-run with --verify-attestation=skip to install WITHOUT supply-chain verification." \
+        >&2
+      exit 1
     fi
-    info "skipping attestation verification ('gh' CLI not installed)"
+    warn "skipping attestation verification ('gh' CLI not installed) -- the archive is NOT supply-chain verified"
     return 0
   fi
   info "verifying SLSA build provenance via 'gh attestation verify'"

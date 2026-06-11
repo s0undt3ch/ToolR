@@ -14,7 +14,7 @@ param(
   [switch]$DryRun,
   [switch]$NoVerify,
   [ValidateSet("auto", "require", "skip")]
-  [string]$VerifyAttestation = "auto"
+  [string]$VerifyAttestation = "require"
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,9 +49,15 @@ function Test-AttestationVerified {
   $gh = Get-Command gh -ErrorAction SilentlyContinue
   if (-not $gh) {
     if ($VerifyAttestation -eq "require") {
-      throw "gh CLI required for -VerifyAttestation require but not on PATH"
+      throw @"
+cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH.
+  toolr archives are signed; verification needs GitHub CLI -> https://cli.github.com
+  Choose one:
+    * install 'gh' and re-run this installer (recommended), or
+    * re-run with -VerifyAttestation skip to install WITHOUT supply-chain verification.
+"@
     }
-    Write-Host "skipping attestation verification ('gh' CLI not installed)"
+    Write-Warning "skipping attestation verification ('gh' CLI not installed) -- the archive is NOT supply-chain verified"
     return
   }
   Write-Host "verifying SLSA build provenance via 'gh attestation verify'"

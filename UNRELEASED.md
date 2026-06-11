@@ -34,6 +34,13 @@ comment.
 - The toolr runner no longer puts the invocation directory on `sys.path` (the
   interpreter is started with `-P`), preventing a stray `.py` file in your
   current directory from shadowing stdlib/site-packages modules.
+- The install scripts (`install.sh`, `install.ps1`) now **verify the release's
+  SLSA build provenance by default** (`--verify-attestation=require`). Previously
+  the default silently skipped verification when the `gh` CLI was absent, leaving
+  only a same-release `.sha256` check that can't detect a tampered release asset.
+  If `gh` is missing the install now fails with guidance rather than installing
+  unverified; pass `--verify-attestation=skip` (`-VerifyAttestation skip` on
+  Windows) to explicitly opt out. Matches the already-fail-closed GitHub Action.
 
 ### Changed
 
