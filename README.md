@@ -36,7 +36,8 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
 - **First-class third-party command packages.** Plugins ship a static `toolr-manifest.json` inside
   the wheel. Discovery is a glob + JSON parse; no Python import to find them.
 - **Signed releases.** Every release archive ships with a SLSA build-provenance attestation. The
-  install scripts verify it automatically when `gh` is on PATH.
+  install scripts verify it by default (requires the `gh` CLI); pass `--verify-attestation=skip`
+  to bypass, accepting the supply-chain risk.
 
 ## Two wheels, two roles
 
@@ -81,7 +82,8 @@ See "Two wheels, two roles" above for the split.
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
-Verifies the SLSA attestation when `gh` is on PATH. Pin a version with `sh -s -- --version X.Y.Z`.
+Verifies the SLSA attestation by default (requires the `gh` CLI; pass `--verify-attestation=skip`
+to bypass). Pin a version with `sh -s -- --version X.Y.Z`.
 Custom prefix: `sh -s -- --prefix /opt/toolr/bin`.
 
 ### PowerShell (Windows)

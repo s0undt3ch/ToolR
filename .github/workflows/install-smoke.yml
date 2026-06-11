@@ -55,12 +55,15 @@ jobs:
           # `gh attestation verify` reads $GH_TOKEN to authenticate
           # against the GitHub API for attestation lookup.
           GH_TOKEN: ${{ github.token }}
+          # Route the workflow_dispatch input through an env var rather than
+          # interpolating it into the script body (CWE-78 shell injection).
+          VERSION: ${{ inputs.version }}
         run: |
           # The runner image ships the `gh` CLI; --verify-attestation=require
           # fails the job if the SLSA attestation does not validate.
-          if [ -n "${{ inputs.version }}" ]; then
+          if [ -n "$VERSION" ]; then
             sh ./installation/install.sh \
-              --version "${{ inputs.version }}" \
+              --version "$VERSION" \
               --prefix "$RUNNER_TEMP/toolr-bin" \
               --verify-attestation=require
           else
@@ -72,6 +75,43 @@ jobs:
         run: |
           "$RUNNER_TEMP/toolr-bin/toolr" --version
           "$RUNNER_TEMP/toolr-bin/toolr" --help
+
+      # SEC-08 regression: with `gh` absent and the default mode
+      # (`require`), the installer must FAIL CLOSED rather than silently
+      # downgrade to checksum-only. Hide `gh`, run with NO
+      # `--verify-attestation` flag (exercising the default), and assert a
+      # non-zero exit whose message points at `gh` / the `skip` escape hatch.
+      - name: install.sh fails closed when 'gh' is absent (SEC-08)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh_bin="$(command -v gh)"
+          sudo mv "$gh_bin" "${gh_bin}.hidden"
+          set +e
+          if [ -n "$VERSION" ]; then
+            out=$(sh ./installation/install.sh --version "$VERSION" --prefix "$RUNNER_TEMP/nogh-bin" 2>&1)
+          else
+            out=$(sh ./installation/install.sh --prefix "$RUNNER_TEMP/nogh-bin" 2>&1)
+          fi
+          rc=$?
+          set -e
+          sudo mv "${gh_bin}.hidden" "$gh_bin"
+          printf '%s\n' "$out"
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::install.sh installed WITHOUT attestation verification when gh was absent (must fail closed)" >&2
+            exit 1
+          fi
+          printf '%s\n' "$out" | grep -qi "gh" || {
+            echo "::error::install.sh failed but without actionable gh/skip guidance" >&2
+            exit 1
+          }
+          test ! -e "$RUNNER_TEMP/nogh-bin/toolr" || {
+            echo "::error::install.sh placed the binary despite failing verification" >&2
+            exit 1
+          }
+          echo "OK: install.sh failed closed (no gh, default=require)"
 
   smoke-install-ps1:
     name: install.ps1 (windows)
@@ -86,10 +126,11 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
         run: |
           $prefix = Join-Path $env:RUNNER_TEMP "toolr-bin"
-          if ("${{ inputs.version }}" -ne "") {
-            ./installation/install.ps1 -Version "${{ inputs.version }}" -Prefix $prefix -VerifyAttestation require
+          if ("$env:VERSION" -ne "") {
+            ./installation/install.ps1 -Version "$env:VERSION" -Prefix $prefix -VerifyAttestation require
           } else {
             ./installation/install.ps1 -Prefix $prefix -VerifyAttestation require
           }
@@ -120,35 +161,41 @@ jobs:
           python-version: '3.14'
       - name: Smoke `pip install toolr` (binary wheel)
         shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           # `toolr` on PyPI is now the binary-only wheel produced from
           # crates/toolr/pyproject.toml — it ships the `toolr` executable
           # entry point but has no importable Python module.
+          spec="toolr"; [ -n "$VERSION" ] && spec="toolr==$VERSION"
           python -m venv .venv-bin
           if [ "$RUNNER_OS" = "Windows" ]; then
             .venv-bin/Scripts/python.exe -m pip install --upgrade pip
-            .venv-bin/Scripts/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-bin/Scripts/pip install "$spec"
             .venv-bin/Scripts/toolr.exe --version
           else
             .venv-bin/bin/python -m pip install --upgrade pip
-            .venv-bin/bin/pip install toolr${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-bin/bin/pip install "$spec"
             .venv-bin/bin/toolr --version
           fi
 
       - name: Smoke `pip install toolr-py` (pyo3 wheel)
         shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           # `toolr-py` on PyPI is the pyo3 bindings wheel produced from
           # crates/toolr-py/pyproject.toml — installs as `import toolr`
           # with the Rust extension at `toolr.utils._rust_utils`.
+          spec="toolr-py"; [ -n "$VERSION" ] && spec="toolr-py==$VERSION"
           python -m venv .venv-py
           if [ "$RUNNER_OS" = "Windows" ]; then
             .venv-py/Scripts/python.exe -m pip install --upgrade pip
-            .venv-py/Scripts/pip install toolr-py${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-py/Scripts/pip install "$spec"
             .venv-py/Scripts/python.exe -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
           else
             .venv-py/bin/python -m pip install --upgrade pip
-            .venv-py/bin/pip install toolr-py${{ inputs.version && format('=={0}', inputs.version) || '' }}
+            .venv-py/bin/pip install "$spec"
             .venv-py/bin/python -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
           fi
 
@@ -197,10 +244,12 @@ jobs:
           version: ${{ env.MISE_VERSION }}
           install: false
       - name: Install toolr via the aqua backend
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            mise install "aqua:s0undt3ch/ToolR@${{ inputs.version }}"
-            mise exec "aqua:s0undt3ch/ToolR@${{ inputs.version }}" -- toolr --version
+          if [ -n "$VERSION" ]; then
+            mise install "aqua:s0undt3ch/ToolR@$VERSION"
+            mise exec "aqua:s0undt3ch/ToolR@$VERSION" -- toolr --version
           else
             mise install aqua:s0undt3ch/ToolR@latest
             mise exec aqua:s0undt3ch/ToolR@latest -- toolr --version

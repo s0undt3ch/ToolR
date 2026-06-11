@@ -57,7 +57,8 @@ front-end rewrite; use the `toolr` executable instead.
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
-Verifies the SLSA attestation when `gh` is on PATH. Pin a version
+Verifies the SLSA attestation by default (requires the `gh` CLI; pass
+`--verify-attestation=skip` to bypass). Pin a version
 with `sh -s -- --version X.Y.Z`. Custom prefix:
 `sh -s -- --prefix /opt/toolr/bin`. Default prefix is
 `$XDG_BIN_HOME` (or `~/.local/bin`).
@@ -132,12 +133,18 @@ your tools venv when it executes commands.
 
 Every release archive is signed with a SLSA build-provenance
 attestation produced by the GitHub-hosted release workflow. The
-`install.sh` and `install.ps1` scripts verify the attestation
-automatically when the `gh` CLI is on PATH. To require verification:
+`install.sh` and `install.ps1` scripts verify the attestation **by
+default** (`--verify-attestation=require`), which needs the `gh` CLI: if
+`gh` is missing the install **fails** rather than silently downgrading to
+a checksum-only install (the `.sha256` ships from the same release, so it
+catches transport corruption, not a tampered release asset).
+
+To install without supply-chain verification (accepting the risk — e.g.
+on a host where you can't install `gh`):
 
 ```sh
-sh installation/install.sh --verify-attestation=require   # POSIX
-./installation/install.ps1 -VerifyAttestation require     # Windows
+sh installation/install.sh --verify-attestation=skip   # POSIX
+./installation/install.ps1 -VerifyAttestation skip     # Windows
 ```
 
 Or verify a downloaded archive manually:
