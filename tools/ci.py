@@ -22,6 +22,13 @@ from toolr import command_group
 # only) to keep iteration fast.
 FULL_BUILD_LABEL = "full-build"
 
+# Label name a PR can carry to opt into the full benchmark suite (macOS +
+# Windows in addition to Linux). Without it, PRs bench Linux only; pushes
+# to `main` always run the full suite. Mirrors FULL_BUILD_LABEL above and
+# lives here so the label name sits next to the logic that reads it
+# (`_run_full_bench`), rather than being hardcoded in workflow YAML.
+FULL_BENCH_LABEL = "full-bench"
+
 # tools/ci.py → repo root (two parents up resolves the `tools/` directory).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -214,6 +221,43 @@ def _select_workflow_mode() -> tuple[Literal["ci", "release"], str]:
     )
 
 
+def _run_full_bench() -> tuple[bool, str]:
+    """Decide whether the full bench suite (macOS + Windows) should run.
+
+    Reads the GitHub event context. Returns ``(run, reason)``; the reason
+    is rendered into the job step
+    summary so reviewers see *why* the bench shape was chosen.
+
+    Rules (first match wins):
+
+    1. ``push`` to ``refs/heads/main`` → run. Main mirrors the release
+       surface, so cross-OS bench regressions get caught at merge time.
+    2. ``pull_request`` carrying the ``full-bench`` label → run. Opt-in
+       for PRs touching perf-sensitive, platform-divergent code (e.g. the
+       subprocess tee/timeout loop).
+    3. Everything else → Linux bench only.
+
+    The Linux bench always runs regardless; this only gates the macOS and
+    Windows bench jobs (advisory step-summary output nothing blocks on,
+    and macOS runner-minutes cost ~10x Linux).
+    """
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    ref = os.environ.get("GITHUB_REF", "")
+
+    if event_name == "push" and ref == "refs/heads/main":
+        return True, "push to `main` — full bench suite (macOS + Windows)."
+
+    if event_name == "pull_request":
+        if FULL_BENCH_LABEL in _pr_labels():
+            return True, f"PR carries the `{FULL_BENCH_LABEL}` label — full bench on opt-in."
+        return False, (
+            f"PR (no `{FULL_BENCH_LABEL}` label) — Linux bench only. "
+            f"Apply the `{FULL_BENCH_LABEL}` label and re-run for the macOS + Windows suite."
+        )
+
+    return False, f"event=`{event_name or '(unset)'}` — Linux bench only."
+
+
 class Workflow(StrEnum):
     """The workflow to run, either `ci` or `release`."""
 
@@ -229,7 +273,7 @@ def generate_build_matrix(
     """
     Emit the CI matrix configuration consumed by `prepare-ci` jobs.
 
-    Writes five GITHUB_OUTPUT keys:
+    Writes six GITHUB_OUTPUT keys:
 
       - `platform-matrix` — wheel platform map per OS (used by _build.yml).
       - `binary-archive-triples` — list of triple+runner+archive objects
@@ -241,6 +285,9 @@ def generate_build_matrix(
       - `test-pythons` — dotted-form CPython versions for the test matrix
         in `_test.yml` (the full supported range; every interpreter is
         tested against the single shared abi3 wheel).
+      - `run-full-bench` — `true`/`false`: whether ci.yml's macOS + Windows
+        bench jobs run (push to `main` or a `full-bench`-labelled PR). The
+        Linux bench always runs; this only gates the other two.
 
     Centralising these in one place (vs. hardcoded YAML across multiple
     workflow files) keeps the binary-wheel/py-wheel/binary-archive matrices
@@ -259,6 +306,8 @@ def generate_build_matrix(
     else:
         reason = f"caller forced `--workflow {workflow}`."
 
+    run_full_bench, bench_reason = _run_full_bench()
+
     if workflow == Workflow.RELEASE:
         binary_archive_triples: list[dict[str, object]] = list(_BINARY_ARCHIVE_TRIPLES)
     else:
@@ -272,6 +321,7 @@ def generate_build_matrix(
         "pythons-binary": BINARY_WHEEL_PYTHONS,
         "pythons-py": ABI3_WHEEL_PYTHONS,
         "test-pythons": TEST_PYTHONS,
+        "run-full-bench": run_full_bench,
     }
 
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -307,6 +357,10 @@ def generate_build_matrix(
             "(abi3 stable-ABI — one wheel covers all CPython >=3.11)\n"
         )
         wfh.write(f"- Test interpreters: `{', '.join(TEST_PYTHONS)}`\n\n")
+        wfh.write("### Benchmarks\n\n")
+        wfh.write(
+            f"- Full suite (macOS + Windows): `{json.dumps(run_full_bench)}` — {bench_reason}\n\n"
+        )
 
     ctx.info(f"Emitting build matrix outputs for workflow={workflow!r} (reason: {reason})")
     ctx.print(outputs)
