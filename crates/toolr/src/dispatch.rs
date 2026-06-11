@@ -328,7 +328,7 @@ pub fn dispatch(
         }
     }
 
-    let mut child = spawn_runner(&python, tempfile.path())
+    let mut child = spawn_runner(&python, tempfile.path(), &repo_root)
         .with_context(|| format!("spawning Python runner at {}", python.display()))?;
     let status = wait_with_signals(&mut child)?;
 

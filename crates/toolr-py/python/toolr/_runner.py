@@ -15,9 +15,17 @@ on are all supported "for free" via msgspec's coercion rules.
 
 from __future__ import annotations
 
+import datetime
+import importlib
 import inspect
+import ipaddress
 import os
+import pathlib
+import sys
+import traceback
+import uuid
 import warnings
+from argparse import ArgumentParser
 from pathlib import Path
 from types import UnionType
 from typing import TYPE_CHECKING
@@ -29,16 +37,18 @@ from typing import get_origin
 from typing import get_type_hints
 
 import msgspec
+from packaging.version import Version
 
+from toolr._context import Context
 from toolr._exc import ToolrDeprecationWarning
 from toolr.sources import CommandSchema
 from toolr.sources import DispatchCommand
+from toolr.utils._console import Consoles
+from toolr.utils._console import ConsoleVerbosity
 from toolr.utils._signature import detect_dispatch_parameter
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from toolr._context import Context
 
 # Promote toolr's own deprecation warnings to visible-by-default. The
 # stdlib silences DeprecationWarning by default for non-__main__ code,
@@ -183,15 +193,6 @@ def load_spec_from_env() -> RunnerSpec:
 
 def _build_context(spec: RunnerSpec) -> Context:
     """Construct a minimal :class:`toolr.Context` from a :class:`RunnerSpec`."""
-    # Late imports — keep module-load fast and avoid pulling rich into pure
-    # spec-decoding code paths.
-    import pathlib  # noqa: PLC0415
-    from argparse import ArgumentParser  # noqa: PLC0415
-
-    from toolr._context import Context  # noqa: PLC0415
-    from toolr.utils._console import Consoles  # noqa: PLC0415
-    from toolr.utils._console import ConsoleVerbosity  # noqa: PLC0415
-
     verbosity_map = {
         "quiet": ConsoleVerbosity.QUIET,
         "normal": ConsoleVerbosity.NORMAL,
@@ -220,10 +221,11 @@ def _build_context(spec: RunnerSpec) -> Context:
 
 def _import_target(spec: RunnerSpec) -> Any:
     """Import ``spec.module`` and return the attribute named ``spec.function``."""
-    import importlib  # noqa: PLC0415
-
     try:
-        module = importlib.import_module(spec.module)
+        # `spec.module` comes from the toolr-controlled manifest/spec (written by
+        # the toolr binary), not untrusted external input. SEC-05 tracks
+        # defense-in-depth confinement of the import target.
+        module = importlib.import_module(spec.module)  # nosemgrep
     except ImportError as exc:
         msg = f"failed to import {spec.module}: {exc}"
         raise SpecError(msg) from exc
@@ -261,30 +263,23 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
     into the matching Python type so the command function receives the
     expected type.
     """
-    import datetime as _dt  # noqa: PLC0415
-    import ipaddress as _ip  # noqa: PLC0415
-    import pathlib as _path  # noqa: PLC0415
-    import uuid as _uuid  # noqa: PLC0415
-
-    from packaging.version import Version as _PkgVersion  # noqa: PLC0415
-
     if isinstance(obj, str):
-        if isinstance(target_type, type) and issubclass(target_type, _path.PurePath):
+        if isinstance(target_type, type) and issubclass(target_type, pathlib.PurePath):
             return target_type(obj)
-        if target_type is _dt.datetime:
-            return _dt.datetime.fromisoformat(obj)
-        if target_type is _dt.date:
-            return _dt.date.fromisoformat(obj)
-        if target_type is _dt.time:
-            return _dt.time.fromisoformat(obj)
-        if target_type is _uuid.UUID:
-            return _uuid.UUID(obj)
-        if target_type is _ip.IPv4Address:
-            return _ip.IPv4Address(obj)
-        if target_type is _ip.IPv6Address:
-            return _ip.IPv6Address(obj)
-        if target_type is _PkgVersion:
-            return _PkgVersion(obj)
+        if target_type is datetime.datetime:
+            return datetime.datetime.fromisoformat(obj)
+        if target_type is datetime.date:
+            return datetime.date.fromisoformat(obj)
+        if target_type is datetime.time:
+            return datetime.time.fromisoformat(obj)
+        if target_type is uuid.UUID:
+            return uuid.UUID(obj)
+        if target_type is ipaddress.IPv4Address:
+            return ipaddress.IPv4Address(obj)
+        if target_type is ipaddress.IPv6Address:
+            return ipaddress.IPv6Address(obj)
+        if target_type is Version:
+            return Version(obj)
     msg = f"toolr runner: don't know how to coerce {type(obj).__name__} → {target_type!r}"
     raise TypeError(msg)
 
@@ -410,14 +405,37 @@ def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
     )
 
 
+def _append_repo_root(repo_root: str, path_list: list[str] | None = None) -> None:
+    """Append ``repo_root`` to ``sys.path`` so ``import tools.*`` resolves.
+
+    Append (not insert) so stdlib and site-packages win — only ``tools.*``,
+    which nothing else provides, resolves from the repo. Idempotent.
+
+    This is the one cwd/path concern that must stay in the runner: it needs
+    *append* semantics (repo_root last), which `PYTHONPATH` cannot express
+    (it prepends, ahead of stdlib + site-packages). The chdir and the
+    relative-path warning both live on the Rust side.
+    """
+    target = sys.path if path_list is None else path_list
+    if repo_root not in target:
+        target.append(repo_root)
+
+
 def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     """Execute the command described by ``spec``. Returns a process exit code.
 
     ``ctx.exit(status, ...)`` raises :class:`SystemExit`; we honor its code.
     Any other uncaught exception is logged to stderr and returns 1.
     """
+    repo_root = Path(spec.context.repo_root)
     try:
         ctx = _build_context(spec)
+        # `''` is gone from sys.path (the interpreter ran with `-P`), so make
+        # `import tools.*` resolve regardless of where toolr was invoked. The
+        # working directory is already repo_root (the Rust side spawned the
+        # runner with `current_dir(repo_root)`); the relative-path warning also
+        # lives on the Rust side, which knows the cwd, arg types, and values.
+        _append_repo_root(str(repo_root))
         target = _import_target(spec)
         if spec.dispatch is not None:
             # Dispatched leaf: `target` is the parent dispatcher, `args`
@@ -444,13 +462,9 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         if isinstance(code, int):
             return code
         # str / other: print and return 1
-        import sys  # noqa: PLC0415
-
         print(code, file=sys.stderr)  # noqa: T201
         return 1
     except SpecError as exc:
-        import sys  # noqa: PLC0415
-
         print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
         # `_import_target` wraps an ImportError thrown while loading the
         # user's command module into a SpecError. Surface the missing-dep
@@ -465,16 +479,10 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # bypasses `_import_target` entirely. Print the traceback and
         # add the same hint so the user gets the same affordance as a
         # top-level import failure.
-        import sys  # noqa: PLC0415
-        import traceback  # noqa: PLC0415
-
         traceback.print_exc(file=sys.stderr)
         _print_missing_dep_hint(exc, sys.stderr)
         return 1
     except Exception:  # noqa: BLE001
-        import sys  # noqa: PLC0415
-        import traceback  # noqa: PLC0415
-
         traceback.print_exc(file=sys.stderr)
         return 1
     return 0
@@ -485,14 +493,10 @@ def main() -> int:
     try:
         spec = load_spec_from_env()
     except SpecError as exc:
-        import sys  # noqa: PLC0415
-
         print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
         return 2
     return run(spec)
 
 
 if __name__ == "__main__":
-    import sys
-
     sys.exit(main())

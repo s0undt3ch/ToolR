@@ -36,6 +36,20 @@ subprocess's output to the user's terminal.
 --8<-- "docs/writing-commands/files/example.py:34:45"
 ```
 
+## Working directory
+
+Commands run with the working directory set to the **repo root**, no
+matter where you invoke `toolr` from — the same convention `make` and
+`cargo` follow. `ctx.repo_root` always points there, and `ctx.run(...)`
+subprocesses inherit it as their cwd unless you override it.
+
+Because of this, a **relative path argument resolves from the repo
+root, not from your current directory**. Running `toolr build ./out.txt`
+from a subdirectory writes `<repo-root>/out.txt`. Pass an absolute path
+when you need a file relative to where you ran the command. toolr prints
+a one-line note on stderr if you pass a relative path argument from a
+subdirectory, so the behaviour is never silent.
+
 ## Prompting and exiting
 
 `ctx.prompt(...)` reads a line from stdin (returns the typed string,

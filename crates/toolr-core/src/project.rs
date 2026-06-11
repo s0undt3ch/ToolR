@@ -277,4 +277,38 @@ mod tests {
         // Manifest rebuilt as the final step.
         assert!(tools.join(".toolr-manifest.json").is_file());
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn finalize_sync_preserves_an_existing_sidecar() {
+        // When a sidecar already exists, finalize_sync takes the
+        // `Meta::load -> Ok(existing)` branch and preserves `created_at`
+        // (rather than minting a fresh one), restamping the interpreter.
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let venv_dir = tmp.path().join("cache-entry").join("venv");
+        let bin = venv_dir.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let py = bin.join("python");
+        std::fs::write(&py, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&py, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let repo_root = tmp.path().join("proj");
+        let tools = repo_root.join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        std::fs::write(tools.join("ci.py"), "\"\"\"CI.\"\"\"\ngroup = command_group(\"ci\", \"CI\")\n").unwrap();
+
+        // Pre-seed a sidecar so the `Ok(existing)` branch runs.
+        let cache_dir = venv_dir.parent().unwrap();
+        Meta::new(&repo_root, "old-version", "3.13").write(cache_dir).unwrap();
+        let created = Meta::load(cache_dir).unwrap().created_at;
+
+        let resolved = make_resolved_cache(venv_dir.clone(), "abc");
+        finalize_sync(&repo_root, &resolved).unwrap();
+
+        let meta = Meta::load(cache_dir).unwrap();
+        assert_eq!(meta.created_at, created, "created_at preserved from the existing sidecar");
+        assert!(meta.interpreter_path.is_some(), "interpreter restamped");
+    }
 }
