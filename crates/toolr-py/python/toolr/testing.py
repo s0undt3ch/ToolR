@@ -139,3 +139,13 @@ class CommandsTester:
         self.command_group_patcher.stop()
         self.command_group_collector.clear()
         sys.path[:] = self.sys_path
+        # Reverse the module table back to the filtered snapshot `__enter__`
+        # installed (real modules minus the volatile `tools` /
+        # `toolr_example_plugin` packages). This undoes both the bare
+        # `clear()` on enter and any modules imported inside the block, so a
+        # long-lived process keeps its real imports instead of being left
+        # wiped. We deliberately do NOT reinstate `tools` /
+        # `toolr_example_plugin`: they are the reload-per-test targets, and
+        # carrying a stale copy forward would pollute later tests.
+        sys.modules.clear()
+        sys.modules.update(self.sys_modules)
