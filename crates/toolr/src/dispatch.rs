@@ -592,9 +592,9 @@ fn merge_root_flags_at_top_level(tokens: &[String], candidates: &mut Vec<String>
     if !is_flag_prefix {
         return;
     }
-    for flag in crate::builtin_completions::ROOT_LONG_FLAGS {
+    for flag in crate::builtin_completions::root_long_flags() {
         if flag.starts_with(prefix.as_str()) {
-            candidates.push((*flag).to_string());
+            candidates.push(flag);
         }
     }
     candidates.sort();
