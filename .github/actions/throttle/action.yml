@@ -13,5 +13,7 @@ runs:
   steps:
     - name: Configure Git
       shell: bash
+      env:
+        MAX_SLEEP: ${{ inputs.max-sleep-seconds }}
       run: |
-        t=$(python3 -c 'import random, sys; sys.stdout.write(str(random.randint(1, ${{ inputs.max-sleep-seconds }})))'); echo "Sleeping $t seconds"; sleep "$t"
+        t=$(python3 -c 'import os, random, sys; sys.stdout.write(str(random.randint(1, int(os.environ["MAX_SLEEP"]))))'); echo "Sleeping $t seconds"; sleep "$t"

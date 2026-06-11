@@ -19,5 +19,7 @@ runs:
 
     - name: Apply The Release Patch
       shell: bash
+      env:
+        RELEASE_PATCH_NAME: ${{ inputs.release-patch-name }}
       run: |
-        git am --committer-date-is-author-date ${{ inputs.release-patch-name }}
+        git am --committer-date-is-author-date "$RELEASE_PATCH_NAME"
