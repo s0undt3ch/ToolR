@@ -852,6 +852,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#static-only-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Static-only discovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#overriding-the-cli-name" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1810,6 +1821,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#static-only-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Static-only discovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#overriding-the-cli-name" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1955,6 +1977,19 @@ prints it.</p>
   become optional flags. See <a href="../arguments/">Arguments</a> for the full
   inference rules.</li>
 </ul>
+<h2 id="static-only-discovery">Static-only discovery<a class="headerlink" href="#static-only-discovery" title="Permanent link">&para;</a></h2>
+<p>toolr discovers commands <strong>only by static analysis</strong> of your
+<code>tools/*.py</code> files. It never imports or executes those modules to build
+the command manifest — <code>toolr --help</code>, tab-completion, and first-run in a
+fresh clone are all execution-free. Your repository's Python runs only
+when you explicitly dispatch a command.</p>
+<p>The practical contract: declare <code>command_group(...)</code> at module top level
+and apply <code>@command</code> / <code>@group.command</code> to module-level functions.
+Commands registered dynamically — inside a <code>for</code> loop, behind an <code>if</code>, or
+returned from a factory invoked at import time — are <strong>not</strong> discovered
+and will not appear in <code>--help</code>, completion, or dispatch. If a command is
+missing, make its registration a top-level, statically-visible
+declaration.</p>
 <h2 id="overriding-the-cli-name">Overriding the CLI name<a class="headerlink" href="#overriding-the-cli-name" title="Permanent link">&para;</a></h2>
 <p>To register a command under a name different from its function:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@example</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="s2">&quot;snippet-checker&quot;</span><span class="p">)</span>
