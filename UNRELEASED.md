@@ -24,6 +24,19 @@ crates still get their own PRs so each bump remains reviewable. GitHub
 Actions stay pinned to commit SHAs with the SemVer tag in a trailing
 comment.
 
+`mise.toml` now opts into the [mise lockfile](https://mise.en.dev/dev-tools/mise-lock.html)
+(`lockfile = true` in `[settings]`), and the generated `mise.lock` is
+committed alongside the toml. Every CI runner — and any contributor
+running `mise install` locally — installs tools from the lockfile's
+pre-resolved per-platform URLs and SHA256 checksums; `jdx/mise-action`
+detects `mise.lock` and adds `--locked` to `mise install` automatically,
+so missing or drifted entries fail the build instead of silently
+re-resolving via GitHub / aqua APIs. The Rust toolchain pin also moves
+from `stable` to an explicit `1.96.0` so rustc no longer drifts between
+runs. Refresh the lockfile with `mise upgrade && mise lock` (bare
+`mise lock` already targets every platform CI runs on) and commit
+`mise.lock` with the change.
+
 ### Security
 
 - toolr no longer executes repository Python to build its command manifest.

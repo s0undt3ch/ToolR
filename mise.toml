@@ -2,7 +2,12 @@
 python = "3.14.5"
 actionlint = "latest"
 shellcheck = "latest"
-rust = { version = "stable" }
+# Without an explicit profile, mise inherits whatever profile the
+# machine's rustup is configured with — CI runners resolve to
+# `minimal`, which ships no clippy. Pin the profile and add the
+# components the pre-commit hooks (clippy) and contributors
+# (rustfmt) need so the toolchain is identical everywhere.
+rust = { version = "1.96.0", profile = "minimal", components = "clippy,rustfmt" }
 uv = { version = "latest" }
 prek = "latest"
 "cargo:cargo-edit" = "latest"
@@ -12,6 +17,26 @@ _.python.venv = { path = ".venv", create = true, uv_create_args = ['--seed'] }
 
 [settings]
 python.uv_venv_auto = true
+# `lockfile = true` makes `mise install` write/refresh `mise.lock`
+# with per-platform checksums and pre-resolved URLs. Refresh via
+# `mise upgrade && mise lock`; bare `mise lock` already targets the
+# seven "common platforms" mise considers default (linux/macos
+# x64+arm64, plus linux musl and windows x64) — the exact set CI
+# runs on — so no `--platform` argument is needed when re-locking.
+# Commit `mise.lock` alongside this file.
+#
+# CI enforcement is automatic: `jdx/mise-action` detects the
+# committed `mise.lock` and appends `--locked` to `mise install`,
+# so every CI runner installs straight from the lockfile and fails
+# loudly if an entry is missing (no silent fallback to GitHub /
+# aqua API resolution).
+#
+# `locked = true` is *deliberately* not set here. mise's `locked`
+# setting is process-wide, not file-scoped — see
+# https://github.com/jdx/mise/discussions/8305 — so flipping it in
+# this project would force every contributor's personal
+# `~/.config/mise/config.toml` tools into our lockfile too.
+lockfile = true
 
 # --------------------------------------------------------------------
 # `mise run test` is the single entry-point a contributor (or CI)
