@@ -1692,15 +1692,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev75-2026-06-11" class="md-nav__link">
+  <a href="#0242-dev77-2026-06-11" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev75 - 2026-06-11
+        0.24.2-dev77 - 2026-06-11
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev75 - 2026-06-11">
+    <nav class="md-nav" aria-label="0.24.2-dev77 - 2026-06-11">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3268,15 +3268,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev75-2026-06-11" class="md-nav__link">
+  <a href="#0242-dev77-2026-06-11" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev75 - 2026-06-11
+        0.24.2-dev77 - 2026-06-11
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev75 - 2026-06-11">
+    <nav class="md-nav" aria-label="0.24.2-dev77 - 2026-06-11">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4839,7 +4839,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0242-dev75-2026-06-11">0.24.2-dev75 - 2026-06-11<a class="headerlink" href="#0242-dev75-2026-06-11" title="Permanent link">&para;</a></h2>
+<h2 id="0242-dev77-2026-06-11">0.24.2-dev77 - 2026-06-11<a class="headerlink" href="#0242-dev77-2026-06-11" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Automated dependency updates have moved from Dependabot to
 <a href="https://docs.renovatebot.com/">Mend Renovate</a>. The new <code>renovate.json5</code>
@@ -4870,6 +4870,12 @@ comment.</p>
   If <code>gh</code> is missing the install now fails with guidance rather than installing
   unverified; pass <code>--verify-attestation=skip</code> (<code>-VerifyAttestation skip</code> on
   Windows) to explicitly opt out. Matches the already-fail-closed GitHub Action.</li>
+<li>The <code>s0undt3ch/ToolR</code> setup Action now re-runs checksum <strong>and</strong> SLSA
+  attestation verification on every job, <strong>including cache hits</strong> — previously a
+  warm cache placed the binary on <code>PATH</code> with no verification. The Action now
+  caches the release <em>archive</em> (not the extracted binary), so a poisoned cache
+  entry is rejected by attestation before it can execute. <code>skip-attestation:
+  true</code> remains the only bypass.</li>
 </ul>
 <h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
 <ul>
@@ -4921,6 +4927,7 @@ comment.</p>
 <li><em>(venv)</em> Accept real in-tree venvs without a provenance record (validate_venv fallback) (<a href="https://github.com/s0undt3ch/ToolR/commit/9114868af241c863532ec512f0d121968c312734"><code>9114868</code></a>)</li>
 <li><em>(test)</em> Use a platform-absolute path in no_warn_for_absolute_path_arg (<a href="https://github.com/s0undt3ch/ToolR/commit/aa2932dba10e7cde677eb1830558f96969c8d726"><code>aa2932d</code></a>)</li>
 <li><em>(install)</em> Verify SLSA attestation by default (fail closed) (<a href="https://github.com/s0undt3ch/ToolR/commit/886cdefeb3193648ca5b82b3e11ab72dab8af2c2"><code>886cdef</code></a>)</li>
+<li><em>(action)</em> Re-verify checksum + attestation on cache hit (SEC-09) (<a href="https://github.com/s0undt3ch/ToolR/commit/228e51e7729079f53c5070b3a3a555612c1d74cb"><code>228e51e</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
