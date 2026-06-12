@@ -1,5 +1,11 @@
 [tools]
-python = "3.14.5"
+# All CPython versions the CI test matrix runs. The first entry is
+# the default (used for the project venv); the rest exist so
+# `mise.lock` carries pinned entries for them — CI's
+# `mise install --locked` fails for any version the lockfile doesn't
+# know, and the test matrix selects per-job versions via
+# `MISE_PYTHON_VERSION`.
+python = ["3.14.5", "3.13.14", "3.12.13", "3.11.15"]
 actionlint = "latest"
 shellcheck = "latest"
 # Without an explicit profile, mise inherits whatever profile the
