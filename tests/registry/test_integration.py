@@ -38,6 +38,36 @@ def test_discover_walks_a_real_tools_package(tmp_path: Path) -> None:
     assert walked, "discover() should have imported tools.ci via the pkgutil walk"
 
 
+def test_commands_tester_restores_sys_modules(tmp_path: Path) -> None:
+    """`CommandsTester.__exit__` undoes its mutation of `sys.modules`
+    (symmetric with the cwd / `sys.path` restore): a module imported inside
+    the `with` block does not leak out, and the bare `clear()` on enter is
+    reversed so a long-lived (e.g. pytest) process keeps its real imports
+    rather than being left wiped. The volatile `tools` / example packages
+    are intentionally NOT carried forward — they are reloaded per test."""
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "__init__.py").write_text("")
+    (tools / "ci.py").write_text(
+        'from toolr import command_group\ngroup = command_group("ci", "CI utils", "CI utilities")\n'
+    )
+    before = dict(sys.modules)
+    with CommandsTester(search_path=tmp_path) as tester:
+        tester.discover()
+        assert "tools.ci" in sys.modules  # imported inside the block
+    # The in-block import is reversed (no leak)...
+    assert "tools.ci" not in sys.modules
+    # ...and every real (non-volatile) module present before the block is
+    # restored — the enter-time clear() does not strand the interpreter.
+    nonvolatile = {
+        name
+        for name in before
+        if name not in ("tools", "toolr_example_plugin")
+        and not name.startswith(("tools.", "toolr_example_plugin."))
+    }
+    assert nonvolatile <= sys.modules.keys()
+
+
 def test_complete_workflow_example(commands_tester):
     """Test a complete workflow demonstrating the registry usage."""
     # Simulate building a Docker tooling hierarchy
