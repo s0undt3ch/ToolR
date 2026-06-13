@@ -62,18 +62,23 @@ runs:
     # installs via rustup and symlinks it; see `mise.toml`). `~/.rustup`
     # is outside mise's cached scope, so on a mise cache *hit* mise reports
     # "all tools are installed" and skips `rustup component add` — leaving
-    # `~/.rustup` as whatever the bare runner image shipped (a `minimal`
-    # profile with no clippy). The pre-commit `clippy` hook then fails with
-    # `'cargo-clippy' is not installed for the toolchain '1.96.0-...'`, and
-    # maturin's `cargo metadata` fails the same way for the `cargo`
-    # component. Cache `~/.rustup` so the cached "installed" state is
-    # truthful and the components persist across hits.
+    # `~/.rustup` as whatever was restored, which need not contain clippy.
+    # The pre-commit `clippy` hook then fails with `'cargo-clippy' is not
+    # installed for the toolchain '1.96.0-...'`, and maturin's
+    # `cargo metadata` fails the same way for the `cargo` component.
     #
-    # Exact-match key only (no `restore-keys`): it is keyed on the same
-    # `mise.toml`/`mise.lock` hash that drives the mise cache below, so the
-    # two co-invalidate on any toolchain change and never restore mismatched
-    # states. Shared across job types (no `cache-prefix`) — the toolchain is
-    # identical regardless of which job installs it.
+    # Caching `~/.rustup` (below) keeps a warm toolchain around, but is a
+    # *speed optimisation only* — it cannot guarantee correctness on its own:
+    # this cache and mise's data-dir cache have independent keys and are saved
+    # by different jobs at different times, so a job with a mise-cache hit but
+    # a `~/.rustup`-cache miss skips the install and then saves a
+    # clippy-less `~/.rustup` under the shared key, poisoning it for everyone.
+    # The "Ensure rust components" step after mise is what actually guarantees
+    # the components exist, regardless of what either cache restored.
+    #
+    # Exact-match key only (no `restore-keys`): keyed on the `mise.toml`/
+    # `mise.lock` hash so it invalidates on any toolchain change. Shared across
+    # job types (no `cache-prefix`) — the toolchain is identical everywhere.
     - name: Cache rust toolchain (~/.rustup)
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
@@ -91,6 +96,18 @@ runs:
         version: ${{ inputs.mise-version }}
         cache: true
         cache_key_prefix: mise|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|${{ inputs.cache-prefix }}
+
+    # Deterministic guarantee that `clippy`/`rustfmt` are present on the
+    # mise-pinned toolchain. mise declares these `components` in `mise.toml`,
+    # but only installs them when it actually installs the toolchain — on a
+    # mise-cache hit it short-circuits ("all tools are installed") and a
+    # restored/poisoned `~/.rustup` may lack them. `rustup component add` is
+    # idempotent: a no-op (~instant) when present, a quick fetch when not. It
+    # targets the active toolchain (mise exports `RUSTUP_TOOLCHAIN`), so it
+    # follows the `mise.toml` pin automatically with no version hardcoded here.
+    - name: Ensure rust components (clippy, rustfmt)
+      shell: bash
+      run: rustup component add clippy rustfmt
 
     - name: Get Python version checksum
       id: python-version-checksum
