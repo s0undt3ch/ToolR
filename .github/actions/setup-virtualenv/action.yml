@@ -55,6 +55,31 @@ runs:
       shell: bash
       run: echo "MISE_PYTHON_VERSION=${{ inputs.python-version }}" >> "$GITHUB_ENV"
 
+    # `jdx/mise-action` caches only mise's own data dir
+    # (`~/.local/share/mise`), which records that `rust 1.96.0` is
+    # installed — but the toolchain itself, including the `clippy` and
+    # `rustfmt` components, lives in `~/.rustup` (the `core:rust` backend
+    # installs via rustup and symlinks it; see `mise.toml`). `~/.rustup`
+    # is outside mise's cached scope, so on a mise cache *hit* mise reports
+    # "all tools are installed" and skips `rustup component add` — leaving
+    # `~/.rustup` as whatever the bare runner image shipped (a `minimal`
+    # profile with no clippy). The pre-commit `clippy` hook then fails with
+    # `'cargo-clippy' is not installed for the toolchain '1.96.0-...'`, and
+    # maturin's `cargo metadata` fails the same way for the `cargo`
+    # component. Cache `~/.rustup` so the cached "installed" state is
+    # truthful and the components persist across hits.
+    #
+    # Exact-match key only (no `restore-keys`): it is keyed on the same
+    # `mise.toml`/`mise.lock` hash that drives the mise cache below, so the
+    # two co-invalidate on any toolchain change and never restore mismatched
+    # states. Shared across job types (no `cache-prefix`) — the toolchain is
+    # identical regardless of which job installs it.
+    - name: Cache rust toolchain (~/.rustup)
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ~/.rustup
+        key: rustup|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|${{ hashFiles('mise.toml', 'mise.lock') }}
+
     - name: Set up mise
       uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
       env:
