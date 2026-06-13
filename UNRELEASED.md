@@ -92,3 +92,10 @@ runs. Refresh the lockfile with `mise upgrade && mise lock` (bare
   declare editable dependencies the uv-native way via `[tool.uv.sources]` (e.g.
   `foo = { path = "./packages/foo", editable = true }`), which `uv sync` installs and records in `uv.lock`.
   A `tools/pyproject.toml` that still lists `editable-install` keeps loading — the key is ignored.
+
+### Documentation
+
+- New "External command sources" guide under *Writing commands*. It documents
+  the `[tool.toolr.argparse.*]` source-scanning feature — statically scanning
+  argparse-style command files (e.g. Django management commands) and grafting
+  them under a dispatcher command — which previously had no coverage in the docs.
