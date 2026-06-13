@@ -1722,15 +1722,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev87-2026-06-13" class="md-nav__link">
+  <a href="#0242-dev95-2026-06-13" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev87 - 2026-06-13
+        0.24.2-dev95 - 2026-06-13
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev87 - 2026-06-13">
+    <nav class="md-nav" aria-label="0.24.2-dev95 - 2026-06-13">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1760,6 +1760,17 @@
     <span class="md-ellipsis">
       
         Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
       
     </span>
   </a>
@@ -3309,15 +3320,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev87-2026-06-13" class="md-nav__link">
+  <a href="#0242-dev95-2026-06-13" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev87 - 2026-06-13
+        0.24.2-dev95 - 2026-06-13
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev87 - 2026-06-13">
+    <nav class="md-nav" aria-label="0.24.2-dev95 - 2026-06-13">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3347,6 +3358,17 @@
     <span class="md-ellipsis">
       
         Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
       
     </span>
   </a>
@@ -4891,7 +4913,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0242-dev87-2026-06-13">0.24.2-dev87 - 2026-06-13<a class="headerlink" href="#0242-dev87-2026-06-13" title="Permanent link">&para;</a></h2>
+<h2 id="0242-dev95-2026-06-13">0.24.2-dev95 - 2026-06-13<a class="headerlink" href="#0242-dev95-2026-06-13" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Automated dependency updates have moved from Dependabot to
 <a href="https://docs.renovatebot.com/">Mend Renovate</a>. The new <code>renovate.json5</code>
@@ -4917,6 +4939,16 @@ from <code>stable</code> to an explicit <code>1.96.0</code> so rustc no longer d
 runs. Refresh the lockfile with <code>mise upgrade &amp;&amp; mise lock</code> (bare
 <code>mise lock</code> already targets every platform CI runs on) and commit
 <code>mise.lock</code> with the change.</p>
+<p>The <code>pin-github-actions</code> pre-commit hook now verifies as well as pins, in a
+single pass. By default it locks any unpinned <code>uses:</code> ref to a SHA <em>and</em>
+re-resolves every already-pinned <code>uses: …@&lt;sha&gt; # &lt;tag&gt;</code> line against the SHA
+its <code># &lt;tag&gt;</code> comment currently points to, failing on any mismatch or
+unverifiable pin — catching hand-edited or upstream-repointed pins that the
+old pin-only behaviour (which skipped already-pinned lines) would never flag.
+Resolutions are memoised per run. A missing <code>gh</code> CLI is now a hard error rather
+than a silent skip; pass <code>--exit-zero</code> for a non-blocking, gh-optional advisory
+run. The hook runs in CI too (<code>prek run --all-files</code> already covers <code>.github/**</code>),
+so no separate verification workflow is needed.</p>
 <h3 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h3>
 <ul>
 <li>toolr no longer executes repository Python to build its command manifest.
@@ -4954,6 +4986,14 @@ runs. Refresh the lockfile with <code>mise upgrade &amp;&amp; mise lock</code> (
   this only shrinks the published wheel set; the supported interpreter range is
   unchanged and still fully tested.</li>
 </ul>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>The <code>Running '…'</code> line that <code>ctx.run</code> logs now prints the command line
+  literally instead of interpreting it as rich markup. A command argument that
+  looks like a rich tag (e.g. <code>jq '[.foo]'</code>, <code>[link=…]</code>) is no longer consumed
+  or rendered, so the echo always reflects exactly what ran — matching how the
+  command would appear in your shell.</li>
+</ul>
 <h3 id="removed">Removed<a class="headerlink" href="#removed" title="Permanent link">&para;</a></h3>
 <ul>
 <li>The dynamic introspection layer (<code>toolr._introspect</code>) is gone. Commands
@@ -4990,6 +5030,7 @@ runs. Refresh the lockfile with <code>mise upgrade &amp;&amp; mise lock</code> (
 <li><em>(runner)</em> Double-gated relative-path warning helper (<a href="https://github.com/s0undt3ch/ToolR/commit/6749619efdaee3094d30df557f579651ccfafa91"><code>6749619</code></a>)</li>
 <li><em>(runner)</em> Run commands from repo root; warn on relative path args from a subdir (SEC-02) (<a href="https://github.com/s0undt3ch/ToolR/commit/99e80c823b45918cde9e9e64d650cf273cb5975f"><code>99e80c8</code></a>)</li>
 <li><em>(execute)</em> Pass -P to the runner interpreter (drop implicit CWD from sys.path) (<a href="https://github.com/s0undt3ch/ToolR/commit/cc6fd6cb9638358bc068fc3cbba7ddc864288bf1"><code>cc6fd6c</code></a>)</li>
+<li><em>(ci)</em> Pin &amp; verify action SHAs in one pre-commit pass (<a href="https://github.com/s0undt3ch/ToolR/commit/6ced9bde1c8845e3682220aa1c7def0d6599f7b3"><code>6ced9bd</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -5002,6 +5043,9 @@ runs. Refresh the lockfile with <code>mise upgrade &amp;&amp; mise lock</code> (
 <li><em>(testing)</em> Restore sys.modules when CommandsTester exits (SEC-07) (<a href="https://github.com/s0undt3ch/ToolR/commit/b481e5387531e1f3344bd2d14afa84c274853fbe"><code>b481e53</code></a>)</li>
 <li><em>(mise)</em> Lock all CI test-matrix CPythons in mise.lock (<a href="https://github.com/s0undt3ch/ToolR/commit/33d68a3fd397e1329db85263a26cc9f4d8025dc2"><code>33d68a3</code></a>)</li>
 <li><em>(ci)</em> Cache rust toolchain so clippy/rustfmt survive mise cache hits (<a href="https://github.com/s0undt3ch/ToolR/commit/de2046a107fe4c170a97407aaa3778cc334ce8ee"><code>de2046a</code></a>)</li>
+<li><em>(context)</em> Echo ctx.run cmdline literally, not as rich markup (<a href="https://github.com/s0undt3ch/ToolR/commit/4def5abab0f9b9ad3b47db05958e1fb8dd57c9f9"><code>4def5ab</code></a>)</li>
+<li><em>(ci)</em> Distinguish real pin failures from transient ones in verifier (<a href="https://github.com/s0undt3ch/ToolR/commit/2fbd07e2030357f55cb3d9ccf6580061726f1ee2"><code>2fbd07e</code></a>)</li>
+<li><em>(ci)</em> Guarantee clippy/rustfmt via rustup component add, not just caching (<a href="https://github.com/s0undt3ch/ToolR/commit/ec9bfbdf23d55dcc0ca379b7761f3155380cd852"><code>ec9bfbd</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
