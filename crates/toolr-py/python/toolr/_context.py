@@ -217,7 +217,11 @@ class Context(Struct, frozen=True):
         Returns:
             CommandResult instance.
         """
-        self.info(f"""Running '{" ".join(cmdline)}'""")
+        # markup=False: the cmdline is data, not rich markup. Without it, an
+        # argument like `[.foo]` or `[link=…]` would be parsed as a rich tag,
+        # so the echoed command would lie about what actually ran. Printing it
+        # literally keeps this line faithful to the shell.
+        self.info(f"""Running '{" ".join(cmdline)}'""", markup=False)
         # Per-call values win over the Context defaults set by
         # `toolr --timeout-secs` / `--no-output-timeout-secs`. The
         # defaults only fill in when the caller passes nothing.
