@@ -74,6 +74,14 @@ runs. Refresh the lockfile with `mise upgrade && mise lock` (bare
   this only shrinks the published wheel set; the supported interpreter range is
   unchanged and still fully tested.
 
+### Fixed
+
+- The `Running '…'` line that `ctx.run` logs now prints the command line
+  literally instead of interpreting it as rich markup. A command argument that
+  looks like a rich tag (e.g. `jq '[.foo]'`, `[link=…]`) is no longer consumed
+  or rendered, so the echo always reflects exactly what ran — matching how the
+  command would appear in your shell.
+
 ### Removed
 
 - The dynamic introspection layer (`toolr._introspect`) is gone. Commands
