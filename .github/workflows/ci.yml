@@ -25,7 +25,7 @@ env:
   FORCE_COLOR: "1"
   # Bump to invalidate every cache (mise install dirs, .venv, prek hooks,
   # mypy/ruff caches, ...) used by this workflow.
-  CACHE_SEED: "3"
+  CACHE_SEED: "4"
   # `MISE_VERSION` lives in `.github/env` — loaded per-job by a
   # "Load shared env vars" step (immediately after `actions/checkout`)
   # so the value is available via `$MISE_VERSION` / `env.MISE_VERSION`
