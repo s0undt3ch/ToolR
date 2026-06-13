@@ -15,11 +15,18 @@ repos:
 
   - repo: local
     hooks:
+      # One pass: pin any unpinned `uses:` ref to a SHA AND verify that
+      # every already-pinned ref still matches the SHA its `# <tag>` comment
+      # resolves to (catching hand-edited / typosquatted / upstream-repointed
+      # pins). Fires on everything that carries pins — workflows, composite
+      # actions, and the root action.yml. Resolutions are memoised per run.
+      # Requires `gh`; a missing gh is a hard error here (pass `--exit-zero`
+      # for a non-blocking, gh-optional advisory run).
       - id: pin-github-actions
-        name: Pin GitHub Actions to commit SHAs
-        language: python
-        entry: python .pre-commit-hooks/pin-github-actions.py
-        files: ^\.github/workflows/.*\.ya?ml$
+        name: Pin & verify GitHub Action SHAs
+        language: system
+        entry: .pre-commit-hooks/pin-github-actions.py
+        files: ^(\.github/(workflows|actions/[^/]+)/.*\.ya?ml|action\.yml)$
 
       - id: regen-doc-snippets
         name: Verify doc snippets are in sync

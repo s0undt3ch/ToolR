@@ -37,6 +37,17 @@ runs. Refresh the lockfile with `mise upgrade && mise lock` (bare
 `mise lock` already targets every platform CI runs on) and commit
 `mise.lock` with the change.
 
+The `pin-github-actions` pre-commit hook now verifies as well as pins, in a
+single pass. By default it locks any unpinned `uses:` ref to a SHA *and*
+re-resolves every already-pinned `uses: …@<sha> # <tag>` line against the SHA
+its `# <tag>` comment currently points to, failing on any mismatch or
+unverifiable pin — catching hand-edited or upstream-repointed pins that the
+old pin-only behaviour (which skipped already-pinned lines) would never flag.
+Resolutions are memoised per run. A missing `gh` CLI is now a hard error rather
+than a silent skip; pass `--exit-zero` for a non-blocking, gh-optional advisory
+run. The hook runs in CI too (`prek run --all-files` already covers `.github/**`),
+so no separate verification workflow is needed.
+
 ### Security
 
 - toolr no longer executes repository Python to build its command manifest.
