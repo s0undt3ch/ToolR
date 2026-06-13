@@ -100,11 +100,29 @@ def test_sha_pin_without_comment_fails(
 def test_unresolvable_tag_comment_fails(
     hook: ModuleType, resolver: Callable[[str, str, str], str | None]
 ) -> None:
-    """A tag comment the resolver can't map to a SHA is an error, not a pass."""
+    """A tag that genuinely does not exist (resolver returns None / HTTP 404)
+    is an error, not a pass."""
     line = f"      - uses: actions/checkout@{GOOD_SHA} # v9.9.9"
     error = hook.verify_action_line(line, resolve=resolver)
     assert error is not None
     assert "could not resolve tag" in error
+    assert "does not exist" in error
+
+
+def test_transient_resolution_is_skipped_not_failed(
+    hook: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A transient resolution failure (rate limit / network / timeout) must NOT
+    fail verification — the pin is correct, GitHub was merely unreachable. The
+    line is skipped with a warning instead of reported as an error."""
+
+    def transient(owner: str, repo: str, ref: str) -> str | None:
+        msg = "API rate limit exceeded (HTTP 403)"
+        raise hook.TransientResolutionError(msg)
+
+    line = f"      - uses: actions/checkout@{GOOD_SHA} # {TAG}"
+    assert hook.verify_action_line(line, resolve=transient) is None
+    assert "skipping pin check" in capsys.readouterr().err
 
 
 def test_unpinned_tag_ref_is_out_of_scope(
@@ -192,6 +210,60 @@ def test_process_file_verifies_existing_pins(
     assert len(errors) == 1
     assert errors[0].startswith(f"{bad}:5:")
     assert "mismatch" in errors[0]
+
+
+@pytest.fixture
+def gh_fail_stub(hook: ModuleType, monkeypatch: pytest.MonkeyPatch) -> Callable[[int, str], None]:
+    """Factory: stub ``gh`` to fail with a given returncode + stderr, so the
+    real ``get_commit_sha`` exercises its error-classification path."""
+
+    def install(returncode: int, stderr: str) -> None:
+        rc, err = returncode, stderr
+
+        def fake_run(argv: list[str], **kwargs: object) -> object:
+            class _Result:
+                returncode = rc
+                stdout = ""
+                stderr = err
+
+            return _Result()
+
+        hook.get_commit_sha.cache_clear()
+        monkeypatch.setattr(hook.subprocess, "run", fake_run)
+
+    return install
+
+
+def test_get_commit_sha_404_is_real_not_found(
+    hook: ModuleType, gh_fail_stub: Callable[[int, str], None]
+) -> None:
+    """A genuine HTTP 404 means the ref does not exist — returned as None (a
+    real, reportable problem), not a transient error."""
+    gh_fail_stub(1, "gh: Not Found (HTTP 404)")
+    assert hook.get_commit_sha("orhun", "git-cliff-action", "v9.9.9") is None
+
+
+def test_get_commit_sha_rate_limit_is_transient(
+    hook: ModuleType, gh_fail_stub: Callable[[int, str], None]
+) -> None:
+    """A 403 rate-limit (or any non-404 failure) is transient: the ref's
+    existence is unknown, so it raises rather than reporting a bad pin."""
+    gh_fail_stub(1, "gh: API rate limit exceeded for installation. (HTTP 403)")
+    with pytest.raises(hook.TransientResolutionError):
+        hook.get_commit_sha("orhun", "git-cliff-action", "v4.8.0")
+
+
+def test_process_file_does_not_fail_on_transient(
+    hook: ModuleType,
+    gh_fail_stub: Callable[[int, str], None],
+    workflow_factory: Callable[[str], Path],
+) -> None:
+    """Regression for the prepare-release flake: a correct pin must not be
+    reported as an error just because GitHub was rate-limited/unreachable when
+    the hook ran. A transient failure yields no errors and no rewrite."""
+    gh_fail_stub(1, "gh: API rate limit exceeded. (HTTP 403)")
+    wf = workflow_factory(f"      - uses: actions/checkout@{GOOD_SHA} # {TAG}\n")
+    assert hook.process_file(wf) == (False, [])
 
 
 def test_get_commit_sha_is_memoised(

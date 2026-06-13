@@ -14,6 +14,18 @@ from functools import lru_cache
 from pathlib import Path
 
 
+class TransientResolutionError(Exception):
+    """A ref could not be resolved for a *transient* reason — rate limiting,
+    a network/connection failure, a timeout, an auth/5xx response, or a
+    malformed reply — rather than the ref genuinely not existing.
+
+    Callers should treat this as "unknown, try again later" (warn and skip),
+    **not** as a verification failure. A definitive "this tag/repo does not
+    exist" (HTTP 404) is reported as ``None`` instead, which *is* a real
+    problem with the pin.
+    """
+
+
 def check_gh_cli() -> bool:
     """Check if gh CLI is available."""
     return shutil.which("gh") is not None
@@ -23,12 +35,19 @@ def check_gh_cli() -> bool:
 def get_commit_sha(owner: str, repo: str, ref: str) -> str | None:
     """Get the commit SHA for a given ref (tag or branch) using gh CLI.
 
+    Returns the resolved SHA on success, or ``None`` when GitHub reports the
+    ref genuinely does not exist (HTTP 404) — a real, actionable pin problem.
+    Raises :class:`TransientResolutionError` for everything else (rate limit,
+    auth, 5xx, network, timeout, malformed response): the ref's existence is
+    *unknown*, so the caller must not treat it as a verification failure.
+
     In-process memoised on ``(owner, repo, ref)``: a workflow/action set
     typically pins the same action+version many times over, so this
     resolves each unique ``owner/repo@ref`` once per run instead of
     re-querying `gh api` for every occurrence. The cache lives for the
     process (one hook invocation), so it never serves stale data across
-    runs.
+    runs. (``lru_cache`` does not memoise raised exceptions, so a transient
+    failure is retried on the next occurrence rather than poisoning the run.)
     """
     try:
         # Use gh api to get commit info
@@ -38,13 +57,27 @@ def get_commit_sha(owner: str, repo: str, ref: str) -> str | None:
             text=True,
             timeout=10,
         )
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            return data["sha"]
-        return None
     except Exception as e:
-        print(f"Warning: Failed to fetch SHA for {owner}/{repo}@{ref}: {e}", file=sys.stderr)
+        # Timeout, gh vanished mid-run, OSError, ... — all transient.
+        raise TransientResolutionError(f"failed to invoke gh for {owner}/{repo}@{ref}: {e}") from e
+
+    if result.returncode == 0:
+        try:
+            return json.loads(result.stdout)["sha"]
+        except (json.JSONDecodeError, KeyError) as e:
+            raise TransientResolutionError(
+                f"malformed gh response for {owner}/{repo}@{ref}: {e}"
+            ) from e
+
+    stderr = (result.stderr or "").strip()
+    # Definitive "does not exist" — the only case that is a real pin problem.
+    if "HTTP 404" in stderr or "Not Found" in stderr:
         return None
+    # Rate limit, auth, 5xx, connection reset, ... — existence still unknown.
+    raise TransientResolutionError(
+        f"could not reach GitHub to resolve {owner}/{repo}@{ref}: "
+        f"{stderr or f'gh exited {result.returncode}'}"
+    )
 
 
 def get_latest_release(owner: str, repo: str) -> str | None:
@@ -133,9 +166,23 @@ def verify_action_line(
         return f"{action_path} could not be parsed into owner/repo"
     owner, repo = parts[0], parts[1]
 
-    expected_sha = resolve(owner, repo, tag)
+    try:
+        expected_sha = resolve(owner, repo, tag)
+    except TransientResolutionError as e:
+        # Existence unknown (rate limit / network / timeout). Don't fail the
+        # run over a problem that isn't the pin's fault — warn and skip.
+        print(
+            f"Warning: skipping pin check for {action_path}@{pinned_sha} # {tag}: {e}",
+            file=sys.stderr,
+        )
+        return None
+
     if expected_sha is None:
-        return f"{action_path}@{pinned_sha} # {tag}: could not resolve tag '{tag}' to a SHA"
+        # Definitive 404: the tag genuinely does not exist — a real problem.
+        return (
+            f"{action_path}@{pinned_sha} # {tag}: "
+            f"tag '{tag}' does not exist — could not resolve tag '{tag}' to a SHA"
+        )
 
     if expected_sha != pinned_sha:
         return (
@@ -167,8 +214,14 @@ def pin_action(action_info: dict[str, str], use_latest: bool = False) -> str | N
         else:
             print(f"Warning: Could not fetch latest release for {action_path}, using current ref")
 
-    # Get the commit SHA
-    sha = get_commit_sha(owner, repo, ref)
+    # Get the commit SHA. A transient resolution failure (rate limit /
+    # network / timeout) leaves the ref unpinned for this run rather than
+    # crashing the whole pass — warn and move on.
+    try:
+        sha = get_commit_sha(owner, repo, ref)
+    except TransientResolutionError as e:
+        print(f"Warning: leaving {action_path}@{ref} unpinned this run: {e}", file=sys.stderr)
+        return None
     if not sha:
         return None
 
