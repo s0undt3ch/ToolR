@@ -47,6 +47,7 @@ nav:
     - Using `ctx`: writing-commands/context.md
     - Annotations: writing-commands/annotations.md
     - Scaling across files: writing-commands/across-files.md
+    - External command sources: writing-commands/external-sources.md
     - Nested groups: writing-commands/nesting.md
     - Testing your commands: writing-commands/testing.md
     - Known bugs: writing-commands/known-bugs.md
