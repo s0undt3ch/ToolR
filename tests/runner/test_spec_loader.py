@@ -96,6 +96,62 @@ def test_load_spec_from_env_raises_when_unset(monkeypatch: pytest.MonkeyPatch) -
     assert "TOOLR_SPEC_FILE" in str(exc_info.value)
 
 
+def test_load_spec_from_env_reports_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing spec path is reported as 'not found' — the provenance check
+    keeps the wording load_spec() used, so error messages don't shift."""
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(tmp_path / "absent.json"))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "not found" in str(exc_info.value)
+
+
+def test_load_spec_from_env_rejects_non_regular_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A spec path that resolves to a directory (or anything non-regular) is
+    refused before it is read."""
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(tmp_path))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "regular file" in str(exc_info.value)
+
+
+@posix_only
+def test_load_spec_from_env_reports_unreadable_path(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A path whose parent isn't a directory (ENOTDIR) surfaces as a generic
+    'not accessible' SpecError rather than crashing."""
+    spec_path = spec_file()
+    # `<regular file>/child` makes lstat raise NotADirectoryError (an OSError
+    # that is not FileNotFoundError), exercising the generic-OSError branch.
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path / "child.json"))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "not accessible" in str(exc_info.value)
+
+
+@posix_only
+def test_load_spec_from_env_rejects_foreign_owner(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A spec file owned by a different user is refused. We simulate it by
+    making os.getuid() report a uid other than the file's owner."""
+    spec_path = spec_file()
+    spec_path.chmod(0o600)
+    monkeypatch.setattr(os, "getuid", lambda: os.stat(spec_path).st_uid + 1)
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "not owned" in str(exc_info.value)
+
+
 @posix_only
 def test_load_spec_from_env_rejects_group_or_world_writable(
     spec_file: Callable[..., Path],

@@ -213,18 +213,25 @@ def _validate_spec_file(path: str) -> None:
     if not stat.S_ISREG(info.st_mode):
         msg = f"toolr spec file is not a regular file: {path}"
         raise SpecError(msg)
-    # POSIX-only: the binary creates the spec 0600 and owned by us. Refuse
-    # if another user owns it or it is group/world-writable (the classic
-    # tmp-swap scenarios). Windows lacks these semantics; the
-    # not-a-symlink + regular-file checks above are what we can portably
-    # assert there.
-    if hasattr(os, "getuid"):
-        if info.st_uid != os.getuid():
-            msg = f"toolr spec file is not owned by the current user: {path}"
-            raise SpecError(msg)
-        if info.st_mode & 0o022:
-            msg = f"toolr spec file is group/world-writable; refusing to read it: {path}"
-            raise SpecError(msg)
+    # POSIX-only: the binary creates the spec 0600 and owned by us. Windows
+    # lacks these ownership/permission semantics, so the not-a-symlink +
+    # regular-file checks above are what we can portably assert there.
+    if hasattr(os, "getuid"):  # pragma: no cover - POSIX guard; the skip is Windows-only
+        _check_spec_file_owner_and_mode(info, path)
+
+
+def _check_spec_file_owner_and_mode(info: os.stat_result, path: str) -> None:
+    """Refuse a spec file owned by another user or group/world-writable.
+
+    The POSIX half of :func:`_validate_spec_file` (the classic tmp-swap
+    scenarios); guarded there behind ``hasattr(os, "getuid")``.
+    """
+    if info.st_uid != os.getuid():
+        msg = f"toolr spec file is not owned by the current user: {path}"
+        raise SpecError(msg)
+    if info.st_mode & 0o022:
+        msg = f"toolr spec file is group/world-writable; refusing to read it: {path}"
+        raise SpecError(msg)
 
 
 def load_spec_from_env() -> RunnerSpec:
