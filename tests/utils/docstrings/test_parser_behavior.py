@@ -50,8 +50,11 @@ def test_parser_performance():
 
 def test_parser_error_handling():
     """Test parser error handling with malformed docstrings."""
-    # Test with None input
-    with pytest.raises(TypeError, match="argument 'docstring': 'None' is not an instance of 'str'"):
+    # Test with None input. pyo3 0.29 changed argument-extraction errors to
+    # attach the parameter name as a note ("...\nwhile processing 'docstring'")
+    # rather than prefixing the message ("argument 'docstring': ..."), so match
+    # on the stable type-mismatch text instead of the version-specific framing.
+    with pytest.raises(TypeError, match="'None' is not an instance of 'str'"):
         Docstring.parse(None)
 
     # Test with very long input
