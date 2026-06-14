@@ -1722,15 +1722,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev101-2026-06-14" class="md-nav__link">
+  <a href="#0242-dev106-2026-06-14" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev101 - 2026-06-14
+        0.24.2-dev106 - 2026-06-14
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev101 - 2026-06-14">
+    <nav class="md-nav" aria-label="0.24.2-dev106 - 2026-06-14">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3320,15 +3320,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev101-2026-06-14" class="md-nav__link">
+  <a href="#0242-dev106-2026-06-14" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev101 - 2026-06-14
+        0.24.2-dev106 - 2026-06-14
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev101 - 2026-06-14">
+    <nav class="md-nav" aria-label="0.24.2-dev106 - 2026-06-14">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4913,7 +4913,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0242-dev101-2026-06-14">0.24.2-dev101 - 2026-06-14<a class="headerlink" href="#0242-dev101-2026-06-14" title="Permanent link">&para;</a></h2>
+<h2 id="0242-dev106-2026-06-14">0.24.2-dev106 - 2026-06-14<a class="headerlink" href="#0242-dev106-2026-06-14" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Automated dependency updates have moved from Dependabot to
 <a href="https://docs.renovatebot.com/">Mend Renovate</a>. The new <code>renovate.json5</code>
@@ -4972,6 +4972,14 @@ so no separate verification workflow is needed.</p>
   caches the release <em>archive</em> (not the extracted binary), so a poisoned cache
   entry is rejected by attestation before it can execute. <code>skip-attestation:
   true</code> remains the only bypass.</li>
+<li>The runner hardens how it handles the dispatch spec file (defense-in-depth).
+  Before reading <code>$TOOLR_SPEC_FILE</code> it now refuses a spec that is a symlink, not
+  a regular file, owned by another user, or group/world-writable — so a
+  forgeable spec can't become a forgeable import target. It also unlinks the
+  spec immediately after reading it, rather than waiting for the binary to drop
+  its handle, so the 0600 spec JSON (which can carry CLI argument values) does
+  not linger in <code>TMPDIR</code> if the process is hard-killed. No change to normal
+  dispatch.</li>
 </ul>
 <h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
 <ul>
@@ -5047,6 +5055,8 @@ so no separate verification workflow is needed.</p>
 <li><em>(ci)</em> Distinguish real pin failures from transient ones in verifier (<a href="https://github.com/s0undt3ch/ToolR/commit/2fbd07e2030357f55cb3d9ccf6580061726f1ee2"><code>2fbd07e</code></a>)</li>
 <li><em>(ci)</em> Guarantee clippy/rustfmt via rustup component add, not just caching (<a href="https://github.com/s0undt3ch/ToolR/commit/ec9bfbdf23d55dcc0ca379b7761f3155380cd852"><code>ec9bfbd</code></a>)</li>
 <li><em>(ci)</em> Ensure rust components in setup-pre-commit too (<a href="https://github.com/s0undt3ch/ToolR/commit/f9f6a3fb7854434b8e3a8653535145e47e94da89"><code>f9f6a3f</code></a>)</li>
+<li><em>(runner)</em> Validate spec-file provenance before reading it (SEC-05) (<a href="https://github.com/s0undt3ch/ToolR/commit/01007ff7644a021bfc9eaeff47f7fb0b0e09f045"><code>01007ff</code></a>)</li>
+<li><em>(runner)</em> Unlink the spec file once it has been read (SEC-14) (<a href="https://github.com/s0undt3ch/ToolR/commit/f39bb9c188b91e32490314110069363a285b1d75"><code>f39bb9c</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -5081,6 +5091,7 @@ so no separate verification workflow is needed.</p>
 <li><em>(config)</em> Document editable installs via [tool.uv.sources]; drop editable-install (<a href="https://github.com/s0undt3ch/ToolR/commit/7529dbe0f568e5bd0d50999fecaf22d32c4d72f7"><code>7529dbe</code></a>)</li>
 <li><em>(unreleased)</em> Note removal of editable-install (SEC-04) (<a href="https://github.com/s0undt3ch/ToolR/commit/63b4e150d3cbd6c45ee914f805142862e6ea0325"><code>63b4e15</code></a>)</li>
 <li><em>(writing-commands)</em> Document external command sources [DOC-01] (<a href="https://github.com/s0undt3ch/ToolR/commit/6b03f2f0d18c3cb0259b4240af6be97b90ae844e"><code>6b03f2f</code></a>)</li>
+<li><em>(unreleased)</em> Note runner spec-file hardening (SEC-05)(SEC-14) (<a href="https://github.com/s0undt3ch/ToolR/commit/00277d10aedafb86bafb6665bd6cd706f9b2a085"><code>00277d1</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -5092,6 +5103,7 @@ so no separate verification workflow is needed.</p>
 <li><em>(coverage)</em> Cover the walk's per-module except + finalize_sync existing-sidecar branch (<a href="https://github.com/s0undt3ch/ToolR/commit/3dd8d2c991a292152b4b569e2c163874d09e1213"><code>3dd8d2c</code></a>)</li>
 <li><em>(coverage)</em> Exercise the warn_relative_paths wrapper in build_spec (<a href="https://github.com/s0undt3ch/ToolR/commit/0d70ffb012e938a47583e112d46e8e589c7d8a79"><code>0d70ffb</code></a>)</li>
 <li><em>(docstrings)</em> Match pyo3 0.29 argument-error message (<a href="https://github.com/s0undt3ch/ToolR/commit/7fbfac97c20b261010aa6f4cf21b30c7a23be0cd"><code>7fbfac9</code></a>)</li>
+<li><em>(runner)</em> Cover all spec-file provenance branches (SEC-05) (<a href="https://github.com/s0undt3ch/ToolR/commit/c03f931b30484d07032b9fc19abfc570be762469"><code>c03f931</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
