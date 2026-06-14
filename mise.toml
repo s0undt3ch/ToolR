@@ -8,6 +8,11 @@
 python = ["3.14.5", "3.13.14", "3.12.13", "3.11.15"]
 actionlint = "latest"
 shellcheck = "latest"
+# gitleaks, actionlint and shellcheck back the local pre-commit hooks under
+# `.pre-commit-hooks/*.sh` (which run the PATH binary instead of pulling a
+# Docker image / compiling from source). Pinned here so CI's
+# `mise install --locked` provides them.
+gitleaks = "latest"
 # Without an explicit profile, mise inherits whatever profile the
 # machine's rustup is configured with — CI runners resolve to
 # `minimal`, which ships no clippy. Pin the profile and add the
