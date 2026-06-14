@@ -71,6 +71,14 @@ so no separate verification workflow is needed.
   caches the release *archive* (not the extracted binary), so a poisoned cache
   entry is rejected by attestation before it can execute. `skip-attestation:
   true` remains the only bypass.
+- The runner hardens how it handles the dispatch spec file (defense-in-depth).
+  Before reading `$TOOLR_SPEC_FILE` it now refuses a spec that is a symlink, not
+  a regular file, owned by another user, or group/world-writable — so a
+  forgeable spec can't become a forgeable import target. It also unlinks the
+  spec immediately after reading it, rather than waiting for the binary to drop
+  its handle, so the 0600 spec JSON (which can carry CLI argument values) does
+  not linger in `TMPDIR` if the process is hard-killed. No change to normal
+  dispatch.
 
 ### Changed
 
