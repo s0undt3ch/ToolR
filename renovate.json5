@@ -72,14 +72,14 @@
       matchManagers: ["github-actions"],
     },
     {
-      // mise CLI tools (actionlint, shellcheck, prek) — group them so
-      // we don't get a PR per tool. Python and Rust toolchains stay
+      // mise CLI tools (actionlint, shellcheck, prek, gitleaks) — group
+      // them so we don't get a PR per tool. Python and Rust toolchains stay
       // in their own ecosystem-tagged PRs so language bumps remain
       // reviewable on their own.
       description: "Group mise CLI tooling updates",
       groupName: "mise tools",
       matchManagers: ["mise"],
-      matchDepNames: ["actionlint", "shellcheck", "prek"],
+      matchDepNames: ["actionlint", "shellcheck", "prek", "gitleaks"],
     },
   ],
 }

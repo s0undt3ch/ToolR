@@ -81,15 +81,29 @@ repos:
             skills/.*/references/.*\.md
           )$
 
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
+  - repo: local
     hooks:
+      # Run the mise-pinned `actionlint` from PATH via a local wrapper instead
+      # of rhysd/actionlint's default hook, which compiles the linter from
+      # source through `language: golang` on every cold cache. The wrapper
+      # errors if the binary is missing (run `mise install`) unless
+      # `--exit-zero` is passed. mise.toml is the single source of the version.
       - id: actionlint
+        name: Lint GitHub Actions workflow files
+        language: system
+        entry: .pre-commit-hooks/actionlint.sh
+        types: ["yaml"]
+        files: ^\.github/workflows/
 
-  - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.11.0
-    hooks:
+      # Run the mise-pinned `shellcheck` from PATH via a local wrapper instead
+      # of koalaman/shellcheck-precommit, which runs a Docker image
+      # (`language: docker_image`) — unavailable on hardened CI runners and
+      # redundant when mise already ships the pinned binary.
       - id: shellcheck
+        name: ShellCheck
+        language: system
+        entry: .pre-commit-hooks/shellcheck.sh
+        types: [shell]
         # shellcheck only understands sh/bash. The zsh and fish
         # completion scripts under src/complete/scripts/ use shell-specific
         # syntax that shellcheck cannot parse.
@@ -156,10 +170,17 @@ repos:
       - id: rumdl
         # Config picked up from .rumdl.toml.
 
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
+  - repo: local
     hooks:
+      # Run the mise-pinned `gitleaks` from PATH via a local wrapper instead of
+      # gitleaks/gitleaks's default hook, which compiles from source through
+      # `language: golang` on every cold cache. The wrapper errors if the
+      # binary is missing (run `mise install`) unless `--exit-zero` is passed.
       - id: gitleaks
+        name: Detect hardcoded secrets
+        language: system
+        entry: .pre-commit-hooks/gitleaks.sh
+        pass_filenames: false
 
   - repo: local
     hooks:
