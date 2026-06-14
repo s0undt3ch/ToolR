@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,6 +11,13 @@ from toolr._runner import SCHEMA_VERSION
 from toolr._runner import SpecError
 from toolr._runner import load_spec
 from toolr._runner import load_spec_from_env
+
+#: POSIX ownership / permission-bit semantics that the spec-file provenance
+#: checks rely on (``os.getuid``, meaningful mode bits, symlinks without
+#: elevation). Skipped on Windows, which lacks them.
+posix_only = pytest.mark.skipif(
+    not hasattr(os, "getuid"), reason="requires POSIX ownership/permission semantics"
+)
 
 
 @pytest.fixture
@@ -86,3 +94,117 @@ def test_load_spec_from_env_raises_when_unset(monkeypatch: pytest.MonkeyPatch) -
     with pytest.raises(SpecError) as exc_info:
         load_spec_from_env()
     assert "TOOLR_SPEC_FILE" in str(exc_info.value)
+
+
+def test_load_spec_from_env_reports_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing spec path is reported as 'not found' — the provenance check
+    keeps the wording load_spec() used, so error messages don't shift."""
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(tmp_path / "absent.json"))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "not found" in str(exc_info.value)
+
+
+def test_load_spec_from_env_rejects_non_regular_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A spec path that resolves to a directory (or anything non-regular) is
+    refused before it is read."""
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(tmp_path))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "regular file" in str(exc_info.value)
+
+
+@posix_only
+def test_load_spec_from_env_reports_unreadable_path(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A path whose parent isn't a directory (ENOTDIR) surfaces as a generic
+    'not accessible' SpecError rather than crashing."""
+    spec_path = spec_file()
+    # `<regular file>/child` makes lstat raise NotADirectoryError (an OSError
+    # that is not FileNotFoundError), exercising the generic-OSError branch.
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path / "child.json"))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "not accessible" in str(exc_info.value)
+
+
+@posix_only
+def test_load_spec_from_env_rejects_foreign_owner(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A spec file owned by a different user is refused. We simulate it by
+    making os.getuid() report a uid other than the file's owner."""
+    spec_path = spec_file()
+    spec_path.chmod(0o600)
+    monkeypatch.setattr(os, "getuid", lambda: os.stat(spec_path).st_uid + 1)
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "not owned" in str(exc_info.value)
+
+
+@posix_only
+def test_load_spec_from_env_rejects_group_or_world_writable(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A spec file anyone but the owner can write is refused before it is read
+    (defense-in-depth: a forgeable spec is a forgeable import target)."""
+    spec_path = spec_file()
+    spec_path.chmod(0o666)
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "writable" in str(exc_info.value)
+
+
+@posix_only
+def test_load_spec_from_env_rejects_symlink(
+    spec_file: Callable[..., Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A symlinked spec path is refused — the binary never writes one, so it
+    signals a swapped path."""
+    spec_path = spec_file()
+    link = tmp_path / "spec-link.json"
+    link.symlink_to(spec_path)
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(link))
+    with pytest.raises(SpecError) as exc_info:
+        load_spec_from_env()
+    assert "symlink" in str(exc_info.value)
+
+
+def test_load_spec_from_env_accepts_private_regular_file(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A normal 0600 regular file we own loads cleanly — the guard doesn't get
+    in the way of the real dispatch path."""
+    spec_path = spec_file()
+    spec_path.chmod(0o600)
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
+    spec = load_spec_from_env()
+    assert spec.group == "ci"
+
+
+def test_load_spec_from_env_unlinks_after_reading(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Once read, the spec file is removed, so a normal run leaves nothing
+    behind in TMPDIR (SEC-14A). The decoded spec is unaffected."""
+    spec_path = spec_file()
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
+    spec = load_spec_from_env()
+    assert spec.group == "ci"
+    assert not spec_path.exists()

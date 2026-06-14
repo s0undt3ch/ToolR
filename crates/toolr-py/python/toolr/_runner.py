@@ -15,12 +15,14 @@ on are all supported "for free" via msgspec's coercion rules.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import importlib
 import inspect
 import ipaddress
 import os
 import pathlib
+import stat
 import sys
 import traceback
 import uuid
@@ -182,13 +184,75 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
     return spec
 
 
+def _validate_spec_file(path: str) -> None:
+    """Refuse a spec file that isn't a private, we-own-it regular file.
+
+    Defense-in-depth (SEC-05). The toolr binary writes the spec to a 0600
+    ``O_EXCL`` tempfile it owns and hands us the path via
+    ``$TOOLR_SPEC_FILE``; ``_import_target`` then imports whatever
+    ``spec.module`` says. That chain is trusted today, but this guards a
+    future regression where the spec path becomes attacker-influenceable:
+    a symlink, a file owned by another user, or a group/world-writable
+    file is rejected with :class:`SpecError` rather than read-from (and
+    imported-from). If the spec can't be forged, the import target can't
+    be either.
+    """
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError as exc:
+        # Keep the wording load_spec() uses for a missing file, so the
+        # validation step doesn't change the message users (and tests) see.
+        msg = f"toolr spec file not found: {path}"
+        raise SpecError(msg) from exc
+    except OSError as exc:
+        msg = f"toolr spec file is not accessible: {path} ({exc})"
+        raise SpecError(msg) from exc
+    if stat.S_ISLNK(info.st_mode):
+        msg = f"toolr spec file must not be a symlink: {path}"
+        raise SpecError(msg)
+    if not stat.S_ISREG(info.st_mode):
+        msg = f"toolr spec file is not a regular file: {path}"
+        raise SpecError(msg)
+    # POSIX-only: the binary creates the spec 0600 and owned by us. Windows
+    # lacks these ownership/permission semantics, so the not-a-symlink +
+    # regular-file checks above are what we can portably assert there.
+    if hasattr(os, "getuid"):  # pragma: no cover - POSIX guard; the skip is Windows-only
+        _check_spec_file_owner_and_mode(info, path)
+
+
+def _check_spec_file_owner_and_mode(info: os.stat_result, path: str) -> None:
+    """Refuse a spec file owned by another user or group/world-writable.
+
+    The POSIX half of :func:`_validate_spec_file` (the classic tmp-swap
+    scenarios); guarded there behind ``hasattr(os, "getuid")``.
+    """
+    if info.st_uid != os.getuid():
+        msg = f"toolr spec file is not owned by the current user: {path}"
+        raise SpecError(msg)
+    if info.st_mode & 0o022:
+        msg = f"toolr spec file is group/world-writable; refusing to read it: {path}"
+        raise SpecError(msg)
+
+
 def load_spec_from_env() -> RunnerSpec:
     """Read ``$TOOLR_SPEC_FILE`` and call :func:`load_spec` on it."""
     spec_path = os.environ.get(_SPEC_ENV_VAR)
     if not spec_path:
         msg = f"{_SPEC_ENV_VAR} is not set. The toolr runner must be invoked by the toolr binary, not directly."
         raise SpecError(msg)
-    return load_spec(spec_path)
+    _validate_spec_file(spec_path)
+    spec = load_spec(spec_path)
+    # SEC-14(A): we are the last reader, so unlink the spec now rather than
+    # waiting for the binary to drop its NamedTempFile handle after we exit.
+    # That shrinks the window in which the 0600 spec JSON (which can carry
+    # CLI argument values) lingers in TMPDIR if the process is SIGKILLed.
+    # Best-effort: on Unix the unlink succeeds (the binary's open handle
+    # keeps the inode alive until it drops, and its drop tolerates the
+    # already-removed file); on Windows the binary still holds the file open
+    # so the unlink may fail — harmless, the binary cleans up on drop.
+    with contextlib.suppress(OSError):
+        os.unlink(spec_path)
+    return spec
 
 
 def _build_context(spec: RunnerSpec) -> Context:
