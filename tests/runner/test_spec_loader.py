@@ -139,3 +139,16 @@ def test_load_spec_from_env_accepts_private_regular_file(
     monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
     spec = load_spec_from_env()
     assert spec.group == "ci"
+
+
+def test_load_spec_from_env_unlinks_after_reading(
+    spec_file: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Once read, the spec file is removed, so a normal run leaves nothing
+    behind in TMPDIR (SEC-14A). The decoded spec is unaffected."""
+    spec_path = spec_file()
+    monkeypatch.setenv("TOOLR_SPEC_FILE", str(spec_path))
+    spec = load_spec_from_env()
+    assert spec.group == "ci"
+    assert not spec_path.exists()

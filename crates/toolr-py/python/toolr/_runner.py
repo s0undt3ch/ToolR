@@ -15,6 +15,7 @@ on are all supported "for free" via msgspec's coercion rules.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import importlib
 import inspect
@@ -233,7 +234,18 @@ def load_spec_from_env() -> RunnerSpec:
         msg = f"{_SPEC_ENV_VAR} is not set. The toolr runner must be invoked by the toolr binary, not directly."
         raise SpecError(msg)
     _validate_spec_file(spec_path)
-    return load_spec(spec_path)
+    spec = load_spec(spec_path)
+    # SEC-14(A): we are the last reader, so unlink the spec now rather than
+    # waiting for the binary to drop its NamedTempFile handle after we exit.
+    # That shrinks the window in which the 0600 spec JSON (which can carry
+    # CLI argument values) lingers in TMPDIR if the process is SIGKILLed.
+    # Best-effort: on Unix the unlink succeeds (the binary's open handle
+    # keeps the inode alive until it drops, and its drop tolerates the
+    # already-removed file); on Windows the binary still holds the file open
+    # so the unlink may fail — harmless, the binary cleans up on drop.
+    with contextlib.suppress(OSError):
+        os.unlink(spec_path)
+    return spec
 
 
 def _build_context(spec: RunnerSpec) -> Context:
