@@ -1722,15 +1722,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev95-2026-06-13" class="md-nav__link">
+  <a href="#0242-dev101-2026-06-14" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev95 - 2026-06-13
+        0.24.2-dev101 - 2026-06-14
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev95 - 2026-06-13">
+    <nav class="md-nav" aria-label="0.24.2-dev101 - 2026-06-14">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3320,15 +3320,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0242-dev95-2026-06-13" class="md-nav__link">
+  <a href="#0242-dev101-2026-06-14" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.24.2-dev95 - 2026-06-13
+        0.24.2-dev101 - 2026-06-14
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.24.2-dev95 - 2026-06-13">
+    <nav class="md-nav" aria-label="0.24.2-dev101 - 2026-06-14">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4913,7 +4913,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0242-dev95-2026-06-13">0.24.2-dev95 - 2026-06-13<a class="headerlink" href="#0242-dev95-2026-06-13" title="Permanent link">&para;</a></h2>
+<h2 id="0242-dev101-2026-06-14">0.24.2-dev101 - 2026-06-14<a class="headerlink" href="#0242-dev101-2026-06-14" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Automated dependency updates have moved from Dependabot to
 <a href="https://docs.renovatebot.com/">Mend Renovate</a>. The new <code>renovate.json5</code>
@@ -5046,6 +5046,7 @@ so no separate verification workflow is needed.</p>
 <li><em>(context)</em> Echo ctx.run cmdline literally, not as rich markup (<a href="https://github.com/s0undt3ch/ToolR/commit/4def5abab0f9b9ad3b47db05958e1fb8dd57c9f9"><code>4def5ab</code></a>)</li>
 <li><em>(ci)</em> Distinguish real pin failures from transient ones in verifier (<a href="https://github.com/s0undt3ch/ToolR/commit/2fbd07e2030357f55cb3d9ccf6580061726f1ee2"><code>2fbd07e</code></a>)</li>
 <li><em>(ci)</em> Guarantee clippy/rustfmt via rustup component add, not just caching (<a href="https://github.com/s0undt3ch/ToolR/commit/ec9bfbdf23d55dcc0ca379b7761f3155380cd852"><code>ec9bfbd</code></a>)</li>
+<li><em>(ci)</em> Ensure rust components in setup-pre-commit too (<a href="https://github.com/s0undt3ch/ToolR/commit/f9f6a3fb7854434b8e3a8653535145e47e94da89"><code>f9f6a3f</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -5090,6 +5091,7 @@ so no separate verification workflow is needed.</p>
 <li><em>(runner)</em> Document -P shadowing coverage boundary (SEC-02 Task 5) (<a href="https://github.com/s0undt3ch/ToolR/commit/7c3731ac5b9ef54c8206b13eb0c0eec62168aa6e"><code>7c3731a</code></a>)</li>
 <li><em>(coverage)</em> Cover the walk's per-module except + finalize_sync existing-sidecar branch (<a href="https://github.com/s0undt3ch/ToolR/commit/3dd8d2c991a292152b4b569e2c163874d09e1213"><code>3dd8d2c</code></a>)</li>
 <li><em>(coverage)</em> Exercise the warn_relative_paths wrapper in build_spec (<a href="https://github.com/s0undt3ch/ToolR/commit/0d70ffb012e938a47583e112d46e8e589c7d8a79"><code>0d70ffb</code></a>)</li>
+<li><em>(docstrings)</em> Match pyo3 0.29 argument-error message (<a href="https://github.com/s0undt3ch/ToolR/commit/7fbfac97c20b261010aa6f4cf21b30c7a23be0cd"><code>7fbfac9</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -5102,6 +5104,7 @@ so no separate verification workflow is needed.</p>
 <li>Route workflow inputs through env vars (CWE-78 hardening) (<a href="https://github.com/s0undt3ch/ToolR/commit/00037f4388f190c82ef4b051d8a7e01687940e1d"><code>00037f4</code></a>)</li>
 <li>Attest wheels on release + main pushes, not just PRs (SEC-11) (<a href="https://github.com/s0undt3ch/ToolR/commit/ecefa3e2d9ca8cfe8cd191349d1b8c1408eb3d50"><code>ecefa3e</code></a>)</li>
 <li><em>(mise)</em> Pin tools via mise.lock and freeze rust to 1.96.0 (<a href="https://github.com/s0undt3ch/ToolR/commit/d63d642b9ac2eea2cfb99530bb6ab0c82f610b1d"><code>d63d642</code></a>)</li>
+<li>Run shellcheck/actionlint/gitleaks from mise, not docker/golang (<a href="https://github.com/s0undt3ch/ToolR/commit/58e9845e0c75647d6c0a7884138004b6c7bdfbed"><code>58e9845</code></a>)</li>
 </ul>
 <h3 id="new-contributors">New Contributors<a class="headerlink" href="#new-contributors" title="Permanent link">&para;</a></h3>
 <ul>
