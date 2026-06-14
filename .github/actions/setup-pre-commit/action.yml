@@ -40,6 +40,20 @@ runs:
         cache: true
         cache_key_prefix: mise|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|pre-commit
 
+    # The `clippy` pre-commit hook runs `cargo clippy`, which needs the
+    # `clippy` rustup component on the mise-pinned toolchain. mise declares it
+    # in `mise.toml` but only installs components when it actually installs the
+    # toolchain — on a mise-cache hit it short-circuits ("all tools are
+    # installed") and `~/.rustup` (outside mise's cached scope) may lack it, so
+    # the hook fails with `'cargo-clippy' is not installed`. `rustup component
+    # add` is idempotent — instant when present, a quick fetch when not — and
+    # targets the active (mise-exported `RUSTUP_TOOLCHAIN`) toolchain, so it
+    # follows the pin with no version hardcoded. Mirrors the same guard in the
+    # `setup-virtualenv` composite.
+    - name: Ensure rust components (clippy, rustfmt)
+      shell: bash
+      run: rustup component add clippy rustfmt
+
     - name: Get prek version
       id: prek-version
       shell: bash
