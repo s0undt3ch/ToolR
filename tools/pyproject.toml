@@ -4,7 +4,14 @@ version = "0.0.0"
 description = "Toolr dogfooding tools venv (in-repo only; not published)"
 requires-python = ">=3.11"
 dependencies = [
-    "toolr-py",
+    # The `>=` floor is what lets Renovate bump the `uv.lock` pin: a bare
+    # `"toolr-py"` has no range to anchor against, so Renovate's pep621
+    # manager produces no update and the lock silently drifts (it sat on
+    # 0.20.1 until 0.25.0 broke dispatch). With the floor + the
+    # `rangeStrategy: update-lockfile` rule in `renovate.json5`, Renovate
+    # keeps this floor and bumps only the locked version. Floor = the first
+    # release whose runner matches the current binary's dispatch contract.
+    "toolr-py>=0.25.0",
 ]
 
 # `tools/` is intentionally NOT part of the root uv workspace, so
