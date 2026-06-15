@@ -27,6 +27,17 @@ use serde::{Deserialize, Serialize};
 ///   the runner consumes.
 /// - Change the env-var / stdin / stdout / exit-code conventions between
 ///   the toolr binary and the Python runner.
+/// - Change the runtime invocation contract the runner must honor — e.g.
+///   the interpreter flags the binary passes (`-P`) or which side sets up
+///   `sys.path` / the working directory. An older runner that doesn't
+///   implement the new contract can't run a newer binary's dispatch even
+///   though the JSON shape is unchanged.
+///
+/// `2` covers the `-P` + runner-side `sys.path` setup contract introduced
+/// in the 0.25.0 binary (which shipped as `1`, so it couldn't detect an
+/// older runner lacking `_append_repo_root` — surfacing as a silent
+/// `No module named 'tools'` instead of a clear "venv out of sync").
+/// Enforced from here on.
 ///
 /// # When *not* to bump
 ///
@@ -40,7 +51,7 @@ use serde::{Deserialize, Serialize};
 /// Toolr is pre-1.0, so we don't carve out "major" / "minor" — bumps are
 /// monotonic integers tied 1:1 to "the protocol changed in a way an
 /// older peer can't handle".
-pub const RUNNER_SCHEMA_VERSION: u32 = 1;
+pub const RUNNER_SCHEMA_VERSION: u32 = 2;
 
 /// Reduced view of `toolr.Context` reconstructable from JSON.
 ///
@@ -206,7 +217,7 @@ mod tests {
         let spec = ExecutionSpec::new("ci", "hello", "tools.ci", "hello", "/repo");
         let json = serde_json::to_string(&spec).expect("serialize");
         // These exact strings are what `toolr._runner.RunnerSpec` decodes.
-        assert!(json.contains("\"schema_version\":1"), "got: {json}");
+        assert!(json.contains("\"schema_version\":2"), "got: {json}");
         assert!(json.contains("\"group\":\"ci\""), "got: {json}");
         assert!(json.contains("\"command\":\"hello\""), "got: {json}");
         assert!(json.contains("\"repo_root\":\"/repo\""), "got: {json}");
@@ -214,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_version_constant_is_1() {
-        assert_eq!(RUNNER_SCHEMA_VERSION, 1);
+    fn schema_version_constant_is_2() {
+        assert_eq!(RUNNER_SCHEMA_VERSION, 2);
     }
 }

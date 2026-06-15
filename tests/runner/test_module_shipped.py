@@ -11,7 +11,7 @@ def test_runner_module_is_importable() -> None:
     mod = importlib.import_module("toolr._runner")
     assert hasattr(mod, "main")
     assert hasattr(mod, "RunnerSpec")
-    assert mod.SCHEMA_VERSION == 1
+    assert mod.SCHEMA_VERSION == 2
 
 
 def test_runner_module_file_is_under_toolr_package() -> None:
