@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 # keeps output bounded across runs with many deprecated call sites.
 warnings.simplefilter("default", ToolrDeprecationWarning)
 
-SCHEMA_VERSION: int = 1
+SCHEMA_VERSION: int = 2
 """Schema version of the toolr ↔ toolr-py dispatch protocol.
 
 This constant **must** match ``RUNNER_SCHEMA_VERSION`` in
@@ -78,6 +78,11 @@ together when the two sides would no longer understand each other:
   runner consumes.
 * Change the env-var / stdin / stdout / exit-code conventions between
   the toolr binary and the Python runner.
+* Change the runtime invocation contract this runner must honor — e.g.
+  the interpreter flags the binary passes (``-P``) or which side sets up
+  ``sys.path`` / the working directory. An older runner that doesn't
+  implement the new contract can't run a newer binary's dispatch even
+  though the JSON shape is unchanged.
 
 **When *not* to bump**:
 
@@ -89,6 +94,11 @@ together when the two sides would no longer understand each other:
 
 Toolr is pre-1.0, so bumps are monotonic integers tied 1:1 to "the
 protocol changed in a way an older peer can't handle".
+
+``2`` covers the ``-P`` + runner-side ``sys.path`` setup contract the
+0.25.0 binary introduced (which shipped as ``1``, so it couldn't detect
+an older runner lacking :func:`_append_repo_root` — a silent
+``No module named 'tools'`` instead of a clear "venv out of sync").
 """
 
 _SPEC_ENV_VAR = "TOOLR_SPEC_FILE"
