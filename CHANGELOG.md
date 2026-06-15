@@ -6,6 +6,219 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.25.0 - 2026-06-15
+
+### Notes
+
+Automated dependency updates have moved from Dependabot to
+[Mend Renovate](https://docs.renovatebot.com/). The new `renovate.json5`
+preserves the previous ecosystem labels (`dependencies:rust`,
+`dependencies:python`, `dependencies:github-actions`) and the weekly
+Monday cadence, then cuts PR noise by grouping updates: the three
+`ruff_*` crates (one `astral-sh/ruff` tag) ship together, every GitHub
+Actions digest bump rolls into one PR per week, and the mise CLI tools
+(`actionlint`, `shellcheck`, `prek`) share another. Language toolchain
+pins (Python, uv, Rust, `cargo-edit`) and individual cargo / pyproject
+crates still get their own PRs so each bump remains reviewable. GitHub
+Actions stay pinned to commit SHAs with the SemVer tag in a trailing
+comment.
+
+`mise.toml` now opts into the [mise lockfile](https://mise.en.dev/dev-tools/mise-lock.html)
+(`lockfile = true` in `[settings]`), and the generated `mise.lock` is
+committed alongside the toml. Every CI runner — and any contributor
+running `mise install` locally — installs tools from the lockfile's
+pre-resolved per-platform URLs and SHA256 checksums; `jdx/mise-action`
+detects `mise.lock` and adds `--locked` to `mise install` automatically,
+so missing or drifted entries fail the build instead of silently
+re-resolving via GitHub / aqua APIs. The Rust toolchain pin also moves
+from `stable` to an explicit `1.96.0` so rustc no longer drifts between
+runs. Refresh the lockfile with `mise upgrade && mise lock` (bare
+`mise lock` already targets every platform CI runs on) and commit
+`mise.lock` with the change.
+
+The `pin-github-actions` pre-commit hook now verifies as well as pins, in a
+single pass. By default it locks any unpinned `uses:` ref to a SHA *and*
+re-resolves every already-pinned `uses: …@<sha> # <tag>` line against the SHA
+its `# <tag>` comment currently points to, failing on any mismatch or
+unverifiable pin — catching hand-edited or upstream-repointed pins that the
+old pin-only behaviour (which skipped already-pinned lines) would never flag.
+Resolutions are memoised per run. A missing `gh` CLI is now a hard error rather
+than a silent skip; pass `--exit-zero` for a non-blocking, gh-optional advisory
+run. The hook runs in CI too (`prek run --all-files` already covers `.github/**`),
+so no separate verification workflow is needed.
+
+### Security
+
+- toolr no longer executes repository Python to build its command manifest.
+  `toolr --help`, completion, and first-run are now fully static (AST parse +
+  execution-free third-party glob). Repository code runs only on explicit
+  command dispatch, through a provenance-verified interpreter. A committed
+  `tools/.venv` is refused unless toolr provisioned it (`toolr project venv sync`).
+- The toolr runner no longer puts the invocation directory on `sys.path` (the
+  interpreter is started with `-P`), preventing a stray `.py` file in your
+  current directory from shadowing stdlib/site-packages modules.
+- The install scripts (`install.sh`, `install.ps1`) now **verify the release's
+  SLSA build provenance by default** (`--verify-attestation=require`). Previously
+  the default silently skipped verification when the `gh` CLI was absent, leaving
+  only a same-release `.sha256` check that can't detect a tampered release asset.
+  If `gh` is missing the install now fails with guidance rather than installing
+  unverified; pass `--verify-attestation=skip` (`-VerifyAttestation skip` on
+  Windows) to explicitly opt out. Matches the already-fail-closed GitHub Action.
+- The `s0undt3ch/ToolR` setup Action now re-runs checksum **and** SLSA
+  attestation verification on every job, **including cache hits** — previously a
+  warm cache placed the binary on `PATH` with no verification. The Action now
+  caches the release *archive* (not the extracted binary), so a poisoned cache
+  entry is rejected by attestation before it can execute. `skip-attestation:
+  true` remains the only bypass.
+- The runner hardens how it handles the dispatch spec file (defense-in-depth).
+  Before reading `$TOOLR_SPEC_FILE` it now refuses a spec that is a symlink, not
+  a regular file, owned by another user, or group/world-writable — so a
+  forgeable spec can't become a forgeable import target. It also unlinks the
+  spec immediately after reading it, rather than waiting for the binary to drop
+  its handle, so the 0600 spec JSON (which can carry CLI argument values) does
+  not linger in `TMPDIR` if the process is hard-killed. No change to normal
+  dispatch.
+
+### Changed
+
+- Commands now run with the working directory set to the repo root (like
+  `make`/`cargo`). Relative path arguments resolve from the repo root, not your
+  current directory; toolr prints a one-line note if you pass a relative path
+  from a subdirectory.
+- `toolr-py` now ships a single stable-ABI (`abi3`) wheel per platform, tagged
+  `cp311-abi3`, instead of one wheel per CPython. The one wheel installs on every
+  CPython >=3.11 (matching `requires-python`), so `pip install toolr-py` resolves
+  the same wheel whether you run 3.11, 3.12, 3.13, or 3.14. No action needed —
+  this only shrinks the published wheel set; the supported interpreter range is
+  unchanged and still fully tested.
+
+### Fixed
+
+- The `Running '…'` line that `ctx.run` logs now prints the command line
+  literally instead of interpreting it as rich markup. A command argument that
+  looks like a rich tag (e.g. `jq '[.foo]'`, `[link=…]`) is no longer consumed
+  or rendered, so the echo always reflects exactly what ran — matching how the
+  command would appear in your shell.
+
+### Removed
+
+- The dynamic introspection layer (`toolr._introspect`) is gone. Commands
+  registered dynamically (not via top-level `command_group(...)` + module-level
+  `@group.command`) are no longer discovered. Third-party plugins via shipped
+  `toolr-manifest.json` are unaffected.
+- The retired argparse internals in `toolr.utils._signature` are gone — the
+  private (`_`-prefixed) `Signature`/`Arg`/`KwArg`/`VarArg` structs,
+  `get_signature`, `_parse_parameter`, the argparse `Action` subclasses, and
+  their helpers. The Rust static parser now does signature extraction and the
+  runner coerces arguments via `msgspec`, so none of this was reachable at
+  runtime. The public surface (`arg`, `arg_section`, `ArgSection`,
+  `ArgumentAnnotation`) is unchanged; any out-of-tree code importing the removed
+  private names must migrate off them.
+- The `[tool.toolr] editable-install` directive is removed. toolr no longer runs `uv pip install -e` itself;
+  declare editable dependencies the uv-native way via `[tool.uv.sources]` (e.g.
+  `foo = { path = "./packages/foo", editable = true }`), which `uv sync` installs and records in `uv.lock`.
+  A `tools/pyproject.toml` that still lists `editable-install` keeps loading — the key is ignored.
+
+### Documentation
+
+- New "External command sources" guide under *Writing commands*. It documents
+  the `[tool.toolr.argparse.*]` source-scanning feature — statically scanning
+  argparse-style command files (e.g. Django management commands) and grafting
+  them under a dispatcher command — which previously had no coverage in the docs.
+
+### <!-- 0 -->🚀 Features
+
+- *(cache)* Record interpreter provenance in meta.json (schema v2) ([`f966573`](https://github.com/s0undt3ch/ToolR/commit/f966573ade502e8f500444619a8c9f74c9be07c8))
+- *(venv)* Interpreter provenance verification ([`94c7a4b`](https://github.com/s0undt3ch/ToolR/commit/94c7a4b122e40ca4883c9d98c1f89e214ed70ff5))
+- *(venv)* Record interpreter provenance and rebuild manifest on sync ([`5a02790`](https://github.com/s0undt3ch/ToolR/commit/5a02790f2e767db0931b8bddaace270d853fee62))
+- *(dispatch)* Refuse to execute non-provisioned in-repo interpreters (SEC-01) ([`dfa4959`](https://github.com/s0undt3ch/ToolR/commit/dfa495920c13dce962161d75cb7e9006e521614e))
+- *(runner)* Append repo_root to sys.path (resolves tools.* from any cwd) ([`097de5c`](https://github.com/s0undt3ch/ToolR/commit/097de5c29b1089f5885e111a9a46c4c2aaf18329))
+- *(runner)* Double-gated relative-path warning helper ([`6749619`](https://github.com/s0undt3ch/ToolR/commit/6749619efdaee3094d30df557f579651ccfafa91))
+- *(runner)* Run commands from repo root; warn on relative path args from a subdir (SEC-02) ([`99e80c8`](https://github.com/s0undt3ch/ToolR/commit/99e80c823b45918cde9e9e64d650cf273cb5975f))
+- *(execute)* Pass -P to the runner interpreter (drop implicit CWD from sys.path) ([`cc6fd6c`](https://github.com/s0undt3ch/ToolR/commit/cc6fd6cb9638358bc068fc3cbba7ddc864288bf1))
+- *(ci)* Pin & verify action SHAs in one pre-commit pass ([`6ced9bd`](https://github.com/s0undt3ch/ToolR/commit/6ced9bde1c8845e3682220aa1c7def0d6599f7b3))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(renovate)* Match ruff_* crates by depName so grouping fires ([`8ea9fac`](https://github.com/s0undt3ch/ToolR/commit/8ea9faca134df7878b5484284d5bf63d5329d8a4))
+- *(test)* Gate Unix-only test helpers/imports for Windows ([`4ccf79a`](https://github.com/s0undt3ch/ToolR/commit/4ccf79ae27a58034adc9ff02a32cd5ce64811e5a))
+- *(venv)* Accept real in-tree venvs without a provenance record (validate_venv fallback) ([`9114868`](https://github.com/s0undt3ch/ToolR/commit/9114868af241c863532ec512f0d121968c312734))
+- *(test)* Use a platform-absolute path in no_warn_for_absolute_path_arg ([`aa2932d`](https://github.com/s0undt3ch/ToolR/commit/aa2932dba10e7cde677eb1830558f96969c8d726))
+- *(install)* Verify SLSA attestation by default (fail closed) ([`886cdef`](https://github.com/s0undt3ch/ToolR/commit/886cdefeb3193648ca5b82b3e11ab72dab8af2c2))
+- *(action)* Re-verify checksum + attestation on cache hit (SEC-09) ([`228e51e`](https://github.com/s0undt3ch/ToolR/commit/228e51e7729079f53c5070b3a3a555612c1d74cb))
+- *(testing)* Restore sys.modules when CommandsTester exits (SEC-07) ([`b481e53`](https://github.com/s0undt3ch/ToolR/commit/b481e5387531e1f3344bd2d14afa84c274853fbe))
+- *(mise)* Lock all CI test-matrix CPythons in mise.lock ([`33d68a3`](https://github.com/s0undt3ch/ToolR/commit/33d68a3fd397e1329db85263a26cc9f4d8025dc2))
+- *(ci)* Cache rust toolchain so clippy/rustfmt survive mise cache hits ([`de2046a`](https://github.com/s0undt3ch/ToolR/commit/de2046a107fe4c170a97407aaa3778cc334ce8ee))
+- *(context)* Echo ctx.run cmdline literally, not as rich markup ([`4def5ab`](https://github.com/s0undt3ch/ToolR/commit/4def5abab0f9b9ad3b47db05958e1fb8dd57c9f9))
+- *(ci)* Distinguish real pin failures from transient ones in verifier ([`2fbd07e`](https://github.com/s0undt3ch/ToolR/commit/2fbd07e2030357f55cb3d9ccf6580061726f1ee2))
+- *(ci)* Guarantee clippy/rustfmt via rustup component add, not just caching ([`ec9bfbd`](https://github.com/s0undt3ch/ToolR/commit/ec9bfbdf23d55dcc0ca379b7761f3155380cd852))
+- *(ci)* Ensure rust components in setup-pre-commit too ([`f9f6a3f`](https://github.com/s0undt3ch/ToolR/commit/f9f6a3fb7854434b8e3a8653535145e47e94da89))
+- *(runner)* Validate spec-file provenance before reading it (SEC-05) ([`01007ff`](https://github.com/s0undt3ch/ToolR/commit/01007ff7644a021bfc9eaeff47f7fb0b0e09f045))
+- *(runner)* Unlink the spec file once it has been read (SEC-14) ([`f39bb9c`](https://github.com/s0undt3ch/ToolR/commit/f39bb9c188b91e32490314110069363a285b1d75))
+
+### <!-- 10 -->💼 Other
+
+- *(toolr-py)* Build a single abi3 (cp311) wheel instead of one per CPython ([`fa89b53`](https://github.com/s0undt3ch/ToolR/commit/fa89b5374c39abbddce08e69ca1513577f6674d3))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(manifest)* Remove the dynamic Python-introspection layer ([`cbb5ff1`](https://github.com/s0undt3ch/ToolR/commit/cbb5ff17040f630b761f7c3ef8ec8214d5a72a3d))
+- *(core)* Rename the dynamic module to manifest_build ([`bc16f32`](https://github.com/s0undt3ch/ToolR/commit/bc16f3204984b3ea6519b47d6d03d4f05ccc71a9))
+- *(sec-02)* Move chdir + relative-path warning to Rust; thin the runner ([`0dc9a93`](https://github.com/s0undt3ch/ToolR/commit/0dc9a93d2e2865a23e493e16f7c72e7dffed5e67))
+- *(venv)* Stop running post-sync editable installs ([`6775c1f`](https://github.com/s0undt3ch/ToolR/commit/6775c1f5ddd2e11e456a960a2a117ca0a9bcf044))
+- *(venv)* Delete the editable-install module ([`8085b91`](https://github.com/s0undt3ch/ToolR/commit/8085b91289f56534372053aa942348c97c6bdda4))
+- *(venv)* Drop the editable-install config field (legacy key ignored, not an error) ([`5c7e7e0`](https://github.com/s0undt3ch/ToolR/commit/5c7e7e03ab70fe837e01c214b2864daef3e49a91))
+- *(core)* Remove the dead deps_check preflight and Command.imports ([`4583afa`](https://github.com/s0undt3ch/ToolR/commit/4583afa3df042b4ec844b74e28f7a5b9c496afa2))
+- *(toolr-py)* Trim retired argparse machinery from _signature.py ([`be9741a`](https://github.com/s0undt3ch/ToolR/commit/be9741a4860adf72069d9177aa33f24fb1936533))
+- *(core)* Replace the zero-migration fragment framework with a version check ([`81c0f98`](https://github.com/s0undt3ch/ToolR/commit/81c0f98b88e22ba3d7de8880be78e741906d6c4e))
+- *(cli)* Derive built-in completions from clap instead of hand-mirroring ([`4de07ec`](https://github.com/s0undt3ch/ToolR/commit/4de07ecb6546470ec8dad5bc7d86d7a65bba2b2c))
+
+### <!-- 3 -->📚 Documentation
+
+- *(specs)* Static-only manifest design (SEC-01) ([`e2b7c9e`](https://github.com/s0undt3ch/ToolR/commit/e2b7c9ebf648e0c2b0b9cd4b2cbf4e71a022211c))
+- *(specs)* Static-only manifest implementation plan (SEC-01) ([`52e840c`](https://github.com/s0undt3ch/ToolR/commit/52e840c99e37f1181ac0101678b7ae00151d62a1))
+- *(authoring)* Document the static-only command-discovery contract ([`c34c13c`](https://github.com/s0undt3ch/ToolR/commit/c34c13c7aab2a935c69064d5d12378276a14fd99))
+- *(unreleased)* Note static-only manifest and provenance ([`222f743`](https://github.com/s0undt3ch/ToolR/commit/222f7430ca111d6adfcfd27cc942d2b365a63e6e))
+- *(test)* Drop stale toolr._introspect reference from conftest comment ([`4bb1a0b`](https://github.com/s0undt3ch/ToolR/commit/4bb1a0b2457d6566ba35f33bd9863a9da703c672))
+- *(specs)* Runner path hygiene design (SEC-02) ([`f3aebf6`](https://github.com/s0undt3ch/ToolR/commit/f3aebf60c0f531bb2b5ee83a10f5ec9219511828))
+- *(specs)* Runner path hygiene implementation plan (SEC-02) ([`ca935a2`](https://github.com/s0undt3ch/ToolR/commit/ca935a2590a67e8cb9d03f729802a5446246d205))
+- *(authoring)* Commands run from the repo root; path args are repo-root-relative ([`a2482d9`](https://github.com/s0undt3ch/ToolR/commit/a2482d9f6974324be888aa0db2298c0a5db1c983))
+- *(unreleased)* Note runner -P + repo-root cwd (SEC-02) ([`d72dcf5`](https://github.com/s0undt3ch/ToolR/commit/d72dcf524feca1373f2e95c515fb69d515f35d8c))
+- *(specs)* Note SEC-02 chdir + warning moved to Rust (plan superseded in part) ([`065edc0`](https://github.com/s0undt3ch/ToolR/commit/065edc00e88d5682807bc919579de7df46e19de0))
+- *(specs)* Remove editable-install design + plan (SEC-04) ([`8c1f975`](https://github.com/s0undt3ch/ToolR/commit/8c1f9758e690f2cfbef6d6e0fab2f2971952f3c9))
+- *(config)* Document editable installs via [tool.uv.sources]; drop editable-install ([`7529dbe`](https://github.com/s0undt3ch/ToolR/commit/7529dbe0f568e5bd0d50999fecaf22d32c4d72f7))
+- *(unreleased)* Note removal of editable-install (SEC-04) ([`63b4e15`](https://github.com/s0undt3ch/ToolR/commit/63b4e150d3cbd6c45ee914f805142862e6ea0325))
+- *(writing-commands)* Document external command sources [DOC-01] ([`6b03f2f`](https://github.com/s0undt3ch/ToolR/commit/6b03f2f0d18c3cb0259b4240af6be97b90ae844e))
+- *(unreleased)* Note runner spec-file hardening (SEC-05)(SEC-14) ([`00277d1`](https://github.com/s0undt3ch/ToolR/commit/00277d10aedafb86bafb6665bd6cd706f9b2a085))
+
+### <!-- 6 -->🧪 Testing
+
+- *(security)* Failing regression for SEC-01 implicit code execution ([`f2b057d`](https://github.com/s0undt3ch/ToolR/commit/f2b057d653afdcd4a91824cedd10ee41e97e0e91))
+- *(security)* --help builds statically with no venv (SEC-01 green) ([`13a20e2`](https://github.com/s0undt3ch/ToolR/commit/13a20e2a9d09403acf299b0b8089dd216224ff73))
+- *(freshness)* Manifest rebuilds when a venv appears ([`2d9434d`](https://github.com/s0undt3ch/ToolR/commit/2d9434d40c0b3ae64679b8d83ca29255a386f8f7))
+- *(coverage)* Cover provenance cache-dir, in-tree slot, bootstrap venv arm, tools walk ([`67f98c9`](https://github.com/s0undt3ch/ToolR/commit/67f98c9dad93c9b56cb93431e3e258cce271711b))
+- *(runner)* Document -P shadowing coverage boundary (SEC-02 Task 5) ([`7c3731a`](https://github.com/s0undt3ch/ToolR/commit/7c3731ac5b9ef54c8206b13eb0c0eec62168aa6e))
+- *(coverage)* Cover the walk's per-module except + finalize_sync existing-sidecar branch ([`3dd8d2c`](https://github.com/s0undt3ch/ToolR/commit/3dd8d2c991a292152b4b569e2c163874d09e1213))
+- *(coverage)* Exercise the warn_relative_paths wrapper in build_spec ([`0d70ffb`](https://github.com/s0undt3ch/ToolR/commit/0d70ffb012e938a47583e112d46e8e589c7d8a79))
+- *(docstrings)* Match pyo3 0.29 argument-error message ([`7fbfac9`](https://github.com/s0undt3ch/ToolR/commit/7fbfac97c20b261010aa6f4cf21b30c7a23be0cd))
+- *(runner)* Cover all spec-file provenance branches (SEC-05) ([`c03f931`](https://github.com/s0undt3ch/ToolR/commit/c03f931b30484d07032b9fc19abfc570be762469))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(ci)* Migrate dependency updates from Dependabot to Renovate ([`c59637f`](https://github.com/s0undt3ch/ToolR/commit/c59637f9ce1a6c3b13c482e66a083d9a0cd4a3b1))
+- *(prek)* Sync Cargo.lock with Cargo.toml via cargo-lock hook ([`29b3d85`](https://github.com/s0undt3ch/ToolR/commit/29b3d85703bf3d2c43d6ade5d3739b544ff2c5f7))
+- Re-trigger Windows distribution (transient mise/cargo-edit webpki-roots download flake) ([`38a4f4f`](https://github.com/s0undt3ch/ToolR/commit/38a4f4fd5492e98710645a3299d9dadc42066103))
+- Run benches on Linux by default, with a bench-all-os opt-in ([`9c55002`](https://github.com/s0undt3ch/ToolR/commit/9c550022f333db460d7869b4617a120696007a85))
+- *(test)* Verify example-plugin manifest with the shipped toolr binary ([`77f66c6`](https://github.com/s0undt3ch/ToolR/commit/77f66c666540b27a8394ee513d309f41edf59634))
+- Add the `full-bench` label to opt PRs into the macOS+Windows benches ([`c9db291`](https://github.com/s0undt3ch/ToolR/commit/c9db291e4f02acc93d86d9d32d36db397d2f7537))
+- Route workflow inputs through env vars (CWE-78 hardening) ([`00037f4`](https://github.com/s0undt3ch/ToolR/commit/00037f4388f190c82ef4b051d8a7e01687940e1d))
+- Attest wheels on release + main pushes, not just PRs (SEC-11) ([`ecefa3e`](https://github.com/s0undt3ch/ToolR/commit/ecefa3e2d9ca8cfe8cd191349d1b8c1408eb3d50))
+- *(mise)* Pin tools via mise.lock and freeze rust to 1.96.0 ([`d63d642`](https://github.com/s0undt3ch/ToolR/commit/d63d642b9ac2eea2cfb99530bb6ab0c82f610b1d))
+- Run shellcheck/actionlint/gitleaks from mise, not docker/golang ([`58e9845`](https://github.com/s0undt3ch/ToolR/commit/58e9845e0c75647d6c0a7884138004b6c7bdfbed))
+
+### New Contributors
+
+* @renovate[bot] made their first contribution
 ## 0.24.1 - 2026-06-06
 
 ### Notes
