@@ -131,4 +131,4 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "toolr-py" }]
+requires-dist = [{ name = "toolr-py", specifier = ">=0.25.0" }]

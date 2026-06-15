@@ -81,5 +81,28 @@
       matchManagers: ["mise"],
       matchDepNames: ["actionlint", "shellcheck", "prek", "gitleaks"],
     },
+
+    // ---- Keep the dogfood venv in lockstep with our own releases ----
+    {
+      // `toolr-py` is this repo's own published package, dogfooded in
+      // `tools/`. Two things make this rule work:
+      //   1. `tools/pyproject.toml` carries a `>=` floor — a bare name
+      //      yields no update from the pep621 manager, which is why the
+      //      lock silently drifted to 0.20.1 until 0.25.0 broke dispatch.
+      //   2. `update-lockfile` keeps that floor and bumps only the
+      //      `uv.lock` pin.
+      // Override the global weekly schedule so the bump lands on the next
+      // Renovate run after a release publishes (not the following Monday),
+      // keeping the dogfood runner in lockstep with the just-released
+      // binary. `at any time` lifts the PR-timing gate; detection is still
+      // bounded by Renovate's own run cadence — repo config can't make that
+      // instant.
+      description: "Track our own toolr-py release in tools/ ASAP",
+      matchManagers: ["pep621"],
+      matchFileNames: ["tools/pyproject.toml", "tools/uv.lock"],
+      matchPackageNames: ["toolr-py"],
+      rangeStrategy: "update-lockfile",
+      schedule: ["at any time"],
+    },
   ],
 }
