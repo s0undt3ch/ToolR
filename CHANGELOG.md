@@ -6,6 +6,29 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.25.1 - 2026-06-15
+
+### Notes
+
+### Changed
+
+- The binary↔runner dispatch schema is bumped to `2`. The 0.25.0 binary changed
+  the runtime contract (it starts the runner with `-P` and relies on the runner
+  to put the repo root on `sys.path`) without bumping the schema, so pairing it
+  with an older `toolr-py` failed with a cryptic `No module named 'tools'`
+  instead of the schema guard's clear "venv out of sync" message. The schema now
+  covers that contract, so a future binary paired with a stale `toolr-py` fails
+  loudly and points you at `toolr project venv upgrade toolr-py`. Re-sync your
+  tools venv after upgrading toolr.
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(tools)* Bump dogfood toolr-py to 0.25.0 (lockstep with the binary) ([`ad98dbf`](https://github.com/s0undt3ch/ToolR/commit/ad98dbfd5ecb9ed0ed0c9456d087ce66409c482a))
+- *(execute)* Bump dispatch schema to 2 for the -P/sys.path contract ([`cb260e0`](https://github.com/s0undt3ch/ToolR/commit/cb260e0a5d4fb20f20431f1d9ac627909970d887))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(renovate)* Track our own toolr-py in the dogfood venv, ASAP ([`9b0ac07`](https://github.com/s0undt3ch/ToolR/commit/9b0ac07c6d7c39b035fb2a23571e50b9b6b0f6f3))
 ## 0.25.0 - 2026-06-15
 
 ### Notes
