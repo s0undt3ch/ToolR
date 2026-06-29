@@ -80,13 +80,13 @@ runs:
     # `mise.lock` hash so it invalidates on any toolchain change. Shared across
     # job types (no `cache-prefix`) — the toolchain is identical everywhere.
     - name: Cache rust toolchain (~/.rustup)
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: ~/.rustup
         key: rustup|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|${{ hashFiles('mise.toml', 'mise.lock') }}
 
     - name: Set up mise
-      uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+      uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
       env:
         # Belt-and-braces: also pass via the step `env:` so the override
         # takes effect even when the previous step is skipped (empty
@@ -129,7 +129,7 @@ runs:
         echo "version-sha256sum=$VERSION_SHA256SUM" >> "$GITHUB_OUTPUT"
 
     - name: Set up cache
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: .venv
         key: venv|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ inputs.cache-prefix }}|${{ steps.python-version-checksum.outputs.version-sha256sum }}|${{ steps.uv-version-checksum.outputs.version-sha256sum }}|${{ hashFiles('**/uv.lock', '**/pyproject.toml') }}

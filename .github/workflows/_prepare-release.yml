@@ -95,7 +95,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up mise
-        uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           version: ${{ inputs.mise-version }}
           cache: true
@@ -206,7 +206,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attest release notes artifact
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         # Only run attestations on the main repository, not on forks
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
@@ -282,7 +282,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attest release patch artifact
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         # Only run attestations on the main repository, not on forks
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
@@ -337,7 +337,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attest source tarball artifacts
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         # Only run attestations on the main repository, not on forks
         if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         with:
