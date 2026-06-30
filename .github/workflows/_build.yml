@@ -71,7 +71,7 @@ jobs:
           platforms: all
 
       - name: Cache cibuildwheel
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cache/cibuildwheel
@@ -116,7 +116,7 @@ jobs:
           package-dir: ${{ inputs.release-tarball-name }}
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         # Attest everywhere except fork PRs (which lack `id-token`). The
         # bare `head.repo.full_name == github.repository` check was FALSE
         # on release (`workflow_dispatch`) and push-to-main — there's no
