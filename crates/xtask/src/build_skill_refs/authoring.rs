@@ -341,9 +341,19 @@ fn clone_module(module: &ModModule) -> ModModule {
 }
 
 fn find_definition<'a>(module: &'a ModModule, name: &str) -> Option<&'a Stmt> {
+    // For overloaded functions (`@overload def f(...): ...` stubs
+    // followed by the real implementation), prefer the implementation —
+    // it carries the signature default and the docstring. Fall back to
+    // the first matching def if every one is an overload.
+    let mut fallback: Option<&Stmt> = None;
     for stmt in &module.body {
         match stmt {
-            Stmt::FunctionDef(def) if def.name.as_str() == name => return Some(stmt),
+            Stmt::FunctionDef(def) if def.name.as_str() == name => {
+                if !is_overload(def) {
+                    return Some(stmt);
+                }
+                fallback.get_or_insert(stmt);
+            }
             Stmt::ClassDef(def) if def.name.as_str() == name => return Some(stmt),
             Stmt::Assign(assign) if assign.targets.len() == 1 => match &assign.targets[0] {
                 Expr::Name(n) if n.id.as_str() == name => return Some(stmt),
@@ -356,7 +366,17 @@ fn find_definition<'a>(module: &'a ModModule, name: &str) -> Option<&'a Stmt> {
             _ => {}
         }
     }
-    None
+    fallback
+}
+
+/// Whether a function def is a `typing.@overload` stub (so the skill-ref
+/// generator skips it in favour of the real implementation).
+fn is_overload(def: &ruff_python_ast::StmtFunctionDef) -> bool {
+    def.decorator_list.iter().any(|d| match &d.expression {
+        Expr::Name(n) => n.id.as_str() == "overload",
+        Expr::Attribute(a) => a.attr.as_str() == "overload",
+        _ => false,
+    })
 }
 
 fn render_entry(
@@ -555,4 +575,63 @@ fn render_docstring_block(doc: &str) -> String {
     }
     out.push_str("```\n");
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn module(src: &str) -> ModModule {
+        ruff_python_parser::parse_module(src)
+            .expect("valid python")
+            .into_syntax()
+    }
+
+    fn is_overload_stmt(stmt: &Stmt) -> bool {
+        matches!(stmt, Stmt::FunctionDef(def) if is_overload(def))
+    }
+
+    #[test]
+    fn find_definition_returns_implementation_over_overload_stubs() {
+        let m = module(
+            "from typing import overload\n\
+             @overload\n\
+             def f(x: int) -> int: ...\n\
+             @overload\n\
+             def f(x: str) -> str: ...\n\
+             def f(x):\n    return x\n",
+        );
+        let found = find_definition(&m, "f").expect("f found");
+        assert!(
+            !is_overload_stmt(found),
+            "should return the implementation, not an @overload stub"
+        );
+    }
+
+    #[test]
+    fn find_definition_recognises_attribute_spelled_overload() {
+        let m = module(
+            "import typing\n\
+             @typing.overload\n\
+             def f(x: int) -> int: ...\n\
+             def f(x):\n    return x\n",
+        );
+        let found = find_definition(&m, "f").expect("f found");
+        assert!(!is_overload_stmt(found));
+    }
+
+    #[test]
+    fn find_definition_falls_back_to_first_when_all_overloads() {
+        let m = module(
+            "from typing import overload\n\
+             @overload\n\
+             def f(x: int) -> int: ...\n\
+             @overload\n\
+             def f(x: str) -> str: ...\n",
+        );
+        // No implementation present — fall back to the first stub rather
+        // than returning nothing.
+        let found = find_definition(&m, "f").expect("falls back to a stub");
+        assert!(is_overload_stmt(found));
+    }
 }

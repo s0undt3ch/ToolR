@@ -209,10 +209,9 @@ Returns:
 
 ```python
 def command(
-    name_or_func: str | Callable[..., Any] | None = None,
+    name: str | Callable[..., Any] | None = None,
     *,
     group: str | None = None,
-    aliases: list[str] | None = None,
 ) -> Callable[..., Any]:
 ```
 
@@ -223,6 +222,12 @@ String-path attachment to a group, an alternative to the bound
 ``@<binding>.command`` form. Lets you declare commands in any
 file without importing a shared ``CommandGroup`` binding — the
 ``group=`` string is the only contract.
+
+The signature mirrors the bound :meth:`CommandGroup.command`
+(plus ``group=``). The command name may be passed positionally
+(``@command("snippet-checker", group=...)``) or by keyword
+(``@command(name="snippet-checker", group=...)``) — but not both;
+doing so raises ``TypeError``.
 
 Usage::
 
@@ -239,9 +244,10 @@ Usage::
     def check_snippets(ctx): ...
 
 Args:
-    name_or_func: When called as a bare decorator (``@command``),
-        this is the wrapped function. When called with parentheses
-        (``@command("name", group=...)``), this is the override
+    name: When called as a bare decorator (``@command``), this is
+        the wrapped function. When called with parentheses
+        (``@command("name", group=...)`` or
+        ``@command(name="name", group=...)``), this is the override
         for the command's CLI name; the function name (hyphenated)
         is used otherwise.
     group: Dotted full path of the target group
@@ -249,9 +255,6 @@ Args:
         matching ``command_group(...)`` declaration must exist
         elsewhere in ``tools/``; otherwise manifest-build fails
         with a clear error.
-    aliases: Reserved for future use; currently no-op (tracked
-        with the rest of the ``arg(aliases=...)`` plumbing in
-        issue #198).
 
 Returns:
     The decorated function unchanged; the decorator's only job is

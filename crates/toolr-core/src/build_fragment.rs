@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::parser::{list_python_files, module_path_for_prefix, parse_python_file};
 use crate::parser::{
-    commands::extract_commands,
+    commands::{CommandNameConflict, detect_name_conflicts, extract_commands},
     groups::extract_groups,
     symbols::{ArgSectionTable, EnumTable, TypeAliasTable},
     types::{SourcesImports, TypeImports, TypeResolutionError},
@@ -35,6 +35,8 @@ pub enum BuildFragmentError {
     },
     #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
+    #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
+    ConflictingCommandName(Vec<CommandNameConflict>),
 }
 
 fn format_type_errors(errors: &[TypeResolutionError]) -> String {
@@ -45,6 +47,23 @@ fn format_type_errors(errors: &[TypeResolutionError]) -> String {
         }
         use std::fmt::Write as _;
         let _ = write!(&mut s, "  - {err}");
+    }
+    s
+}
+
+fn format_name_conflicts(conflicts: &[CommandNameConflict]) -> String {
+    let mut s = String::new();
+    for (i, c) in conflicts.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        use std::fmt::Write as _;
+        let _ = write!(
+            &mut s,
+            "  - {}::{}: command name passed both positionally and via `name=`. \
+             Pass it one way only, e.g. `command(name=\"…\")`.",
+            c.module, c.function,
+        );
     }
     s
 }
@@ -90,6 +109,7 @@ pub fn build_third_party_fragment(
     let mut global_vars: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
+    let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
 
     for path in &py_files {
         let module = parse_python_file(path).map_err(|e| BuildFragmentError::Parse {
@@ -98,6 +118,7 @@ pub fn build_third_party_fragment(
         })?;
         let module_path = module_path_for_prefix(source_dir, path, package_name);
         let module_doc = module_docstring(&module);
+        name_conflicts.extend(detect_name_conflicts(&module, &module_path));
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
         let sources_imports = SourcesImports::from_module(&module);
@@ -124,6 +145,10 @@ pub fn build_third_party_fragment(
             }
         }
         all_commands.extend(commands);
+    }
+
+    if !name_conflicts.is_empty() {
+        return Err(BuildFragmentError::ConflictingCommandName(name_conflicts));
     }
 
     if !type_errors.is_empty() {
@@ -405,6 +430,36 @@ def subcmd(ctx):
             }
             other => panic!("expected Parse, got {other:?}"),
         }
+    }
+
+    /// A command whose name is passed both positionally and via `name=`
+    /// fails the fragment build with a conflicting-name error naming the
+    /// offending function — same contract as the local manifest build.
+    #[test]
+    fn conflicting_command_name_errors() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("conflictpkg");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "cmds.py",
+            r#"group = command_group("grp", "Grp")
+
+@group.command("positional", name="keyword")
+def do_thing(ctx):
+    pass
+"#,
+        );
+        let err = build_third_party_fragment(&pkg, "conflictpkg", 1).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            matches!(err, BuildFragmentError::ConflictingCommandName(_)),
+            "got: {err:?}"
+        );
+        assert!(
+            msg.contains("conflicting command name") && msg.contains("do_thing"),
+            "got: {msg}"
+        );
     }
 
     /// Source dir that does not exist surfaces MissingSourceDir.
