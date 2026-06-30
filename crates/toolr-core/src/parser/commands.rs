@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use ruff_python_ast::{Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
+use ruff_python_ast::{Arguments, Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
 use super::parse_docstring;
@@ -50,13 +50,13 @@ pub fn extract_commands(
             continue;
         };
         let (group_full_path, override_name) = match target {
-            CommandDecorator::LegacyVar { var, explicit_name } => {
+            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
                 let Some(group_name) = by_var.get(var.as_str()) else {
                     continue;
                 };
                 (group_name.clone(), explicit_name)
             }
-            CommandDecorator::Direct { explicit_name, group } => {
+            CommandDecorator::Direct { explicit_name, group, .. } => {
                 // `group=` is required on the direct form. If it's
                 // missing or the targeted group isn't registered
                 // anywhere, we still emit the command — the build-
@@ -92,13 +92,71 @@ enum CommandDecorator {
     LegacyVar {
         var: String,
         explicit_name: Option<String>,
+        /// Both a positional string and a `name=` keyword were passed —
+        /// an ambiguous override the build-time validator rejects via
+        /// [`CommandNameConflict`].
+        name_conflict: bool,
     },
     /// Modern: `@command(group="dotted.path")` or `@command("name", group=...)`
     /// or bare `@command` (no group — caught by validator).
     Direct {
         explicit_name: Option<String>,
         group: Option<String>,
+        /// See [`CommandDecorator::LegacyVar::name_conflict`].
+        name_conflict: bool,
     },
+}
+
+/// A command whose decorator passed the CLI-name override *both*
+/// positionally and via `name=`. Surfaced as a batch build error so the
+/// user fixes the ambiguity rather than silently getting one of the two.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandNameConflict {
+    /// Dotted python module the command lives in (`tools.foo.bar`).
+    pub module: String,
+    /// Python function name of the offending command.
+    pub function: String,
+}
+
+/// Resolve the explicit CLI-name override from a `command(...)` call's
+/// arguments. The name may come from the first positional string literal
+/// (`command("collect")`) or the `name=` keyword (`command(name="collect")`),
+/// but not both. Returns `(resolved_name, conflict)`: when both are
+/// present, `resolved_name` is `None` and `conflict` is `true`.
+fn resolve_explicit_name(args: &Arguments) -> (Option<String>, bool) {
+    let positional = args.args.first().and_then(literal_str);
+    let keyword = keyword_str(args, "name");
+    match (positional, keyword) {
+        (Some(_), Some(_)) => (None, true),
+        (Some(name), None) | (None, Some(name)) => (Some(name), false),
+        (None, None) => (None, false),
+    }
+}
+
+/// Walk a module for `@command`/`@<var>.command` decorators that passed
+/// the name both positionally and via `name=`, returning one
+/// [`CommandNameConflict`] per offender.
+pub fn detect_name_conflicts(module: &ModModule, module_path: &str) -> Vec<CommandNameConflict> {
+    let mut out = Vec::new();
+    for stmt in &module.body {
+        let Stmt::FunctionDef(func) = stmt else {
+            continue;
+        };
+        let Some(target) = command_decorator(&func.decorator_list) else {
+            continue;
+        };
+        let conflict = match target {
+            CommandDecorator::LegacyVar { name_conflict, .. }
+            | CommandDecorator::Direct { name_conflict, .. } => name_conflict,
+        };
+        if conflict {
+            out.push(CommandNameConflict {
+                module: module_path.to_string(),
+                function: func.name.as_str().to_string(),
+            });
+        }
+    }
+    out
 }
 
 fn command_decorator(decorators: &[Decorator]) -> Option<CommandDecorator> {
@@ -129,6 +187,7 @@ fn parse_legacy_command(expr: &Expr) -> Option<CommandDecorator> {
         return Some(CommandDecorator::LegacyVar {
             var: n.id.as_str().to_string(),
             explicit_name: None,
+            name_conflict: false,
         });
     }
     // Call form: `@<var>.command(...)` — func is an Attribute whose
@@ -146,10 +205,15 @@ fn parse_legacy_command(expr: &Expr) -> Option<CommandDecorator> {
     let Expr::Name(n) = attr.value.as_ref() else {
         return None;
     };
-    let explicit_name = call.arguments.args.first().and_then(literal_str);
+    // The CLI-name override may be the first positional string literal
+    // (`@<var>.command("name")`) or the `name=` keyword
+    // (`@<var>.command(name="name")`); the bound `command(self, name)`
+    // method accepts both shapes at runtime, but not both at once.
+    let (explicit_name, name_conflict) = resolve_explicit_name(&call.arguments);
     Some(CommandDecorator::LegacyVar {
         var: n.id.as_str().to_string(),
         explicit_name,
+        name_conflict,
     })
 }
 
@@ -163,6 +227,14 @@ fn literal_str(expr: &Expr) -> Option<String> {
     }
 }
 
+/// Find a string-literal keyword argument by name, e.g. `name="…"`.
+fn keyword_str(args: &Arguments, name: &str) -> Option<String> {
+    args.keywords
+        .iter()
+        .find(|k| k.arg.as_ref().map(ruff_python_ast::Identifier::as_str) == Some(name))
+        .and_then(|k| literal_str(&k.value))
+}
+
 /// Recognise the new `@command` / `@command("name", group="…")` shape.
 fn parse_direct_command(expr: &Expr) -> Option<CommandDecorator> {
     // Bare `@command` — Name expression on the decorator.
@@ -171,6 +243,7 @@ fn parse_direct_command(expr: &Expr) -> Option<CommandDecorator> {
             return Some(CommandDecorator::Direct {
                 explicit_name: None,
                 group: None,
+                name_conflict: false,
             });
         }
         return None;
@@ -185,28 +258,16 @@ fn parse_direct_command(expr: &Expr) -> Option<CommandDecorator> {
     if callee.id.as_str() != "command" {
         return None;
     }
-    // First positional, if a string literal, is the explicit name.
-    let explicit_name = call
-        .arguments
-        .args
-        .first()
-        .and_then(|e| match e {
-            Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
-            _ => None,
-        });
+    // The explicit name may be the first positional string literal
+    // (`@command("name", group=…)`) or the `name=` keyword
+    // (`@command(name="name", group=…)`), but not both.
+    let (explicit_name, name_conflict) = resolve_explicit_name(&call.arguments);
     // `group=` kwarg, string literal only.
-    let group = call
-        .arguments
-        .keywords
-        .iter()
-        .find(|k| k.arg.as_ref().map(|n| n.as_str()) == Some("group"))
-        .and_then(|k| match &k.value {
-            Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
-            _ => None,
-        });
+    let group = keyword_str(&call.arguments, "group");
     Some(CommandDecorator::Direct {
         explicit_name,
         group,
+        name_conflict,
     })
 }
 
@@ -435,6 +496,98 @@ def check_snippets(ctx):
     }
 
     #[test]
+    fn direct_command_decorator_supports_name_keyword() {
+        let src = r#"command_group("ci.helm-diff-pr-comment", "Helm diff")
+
+@command(name="snippet-checker", group="ci.helm-diff-pr-comment")
+def check_snippets(ctx):
+    """Check snippets."""
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        assert!(detect_name_conflicts(&m, "tools.ci").is_empty());
+        assert_eq!(commands.len(), 1);
+        // The `name=` keyword wins over the `check-snippets` function name.
+        assert_eq!(commands[0].name, "snippet-checker");
+        assert_eq!(commands[0].group, "ci.helm-diff-pr-comment");
+        assert_eq!(commands[0].function, "check_snippets");
+    }
+
+    #[test]
+    fn legacy_decorator_rejects_positional_and_name_keyword() {
+        let src = r#"group = command_group("ci", "CI")
+
+@group.command("positional", name="keyword")
+def do_thing(ctx):
+    pass
+"#;
+        let m = parse_src(src);
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        // The decorator resolves to no explicit name, flagged as a conflict.
+        match command_decorator(&func.decorator_list).unwrap() {
+            CommandDecorator::LegacyVar { explicit_name, name_conflict, .. } => {
+                assert_eq!(explicit_name, None);
+                assert!(name_conflict);
+            }
+            _ => panic!("expected LegacyVar"),
+        }
+        let conflicts = detect_name_conflicts(&m, "tools.ci");
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].module, "tools.ci");
+        assert_eq!(conflicts[0].function, "do_thing");
+    }
+
+    #[test]
+    fn direct_decorator_rejects_positional_and_name_keyword() {
+        let src = r#"command_group("ci", "CI")
+
+@command("positional", name="keyword", group="ci")
+def do_thing(ctx):
+    pass
+"#;
+        let m = parse_src(src);
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        match command_decorator(&func.decorator_list).unwrap() {
+            CommandDecorator::Direct { explicit_name, name_conflict, .. } => {
+                assert_eq!(explicit_name, None);
+                assert!(name_conflict);
+            }
+            _ => panic!("expected Direct"),
+        }
+        let conflicts = detect_name_conflicts(&m, "tools.ci");
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].function, "do_thing");
+    }
+
+    #[test]
     fn legacy_var_decorator_still_works() {
         let src = r#"group = command_group("ci", "CI")
 
@@ -496,7 +649,7 @@ def do_thing(ctx):
             .unwrap();
         let decorated = command_decorator(&func.decorator_list).unwrap();
         match decorated {
-            CommandDecorator::LegacyVar { var, explicit_name } => {
+            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
                 assert_eq!(var, "group");
                 assert_eq!(explicit_name, None);
             }
@@ -540,7 +693,7 @@ def do_thing(ctx):
             .unwrap();
         let decorated = command_decorator(&func.decorator_list).unwrap();
         match decorated {
-            CommandDecorator::LegacyVar { var, explicit_name } => {
+            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
                 assert_eq!(var, "group");
                 assert_eq!(explicit_name.as_deref(), Some("hello"));
             }
@@ -550,6 +703,52 @@ def do_thing(ctx):
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "hello");
         assert_eq!(commands[0].function, "do_thing");
+    }
+
+    #[test]
+    fn legacy_decorator_call_form_with_name_keyword() {
+        let src = r#"group = command_group("ci", "CI")
+
+@group.command(name="collect")
+def collect_data(ctx):
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        let func = m
+            .body
+            .iter()
+            .find_map(|s| match s {
+                Stmt::FunctionDef(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let decorated = command_decorator(&func.decorator_list).unwrap();
+        match decorated {
+            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
+                assert_eq!(var, "group");
+                assert_eq!(explicit_name.as_deref(), Some("collect"));
+            }
+            _ => panic!("expected LegacyVar"),
+        }
+        // The `name=` keyword wins over the hyphenated function name
+        // (`collect`, not the `collect-data` the function name would give).
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].name, "collect");
+        assert_eq!(commands[0].function, "collect_data");
     }
 
     #[test]
@@ -585,7 +784,7 @@ def do_thing(ctx):
             .unwrap();
         let decorated = command_decorator(&func.decorator_list).unwrap();
         match decorated {
-            CommandDecorator::LegacyVar { var, explicit_name } => {
+            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
                 assert_eq!(var, "group");
                 assert_eq!(explicit_name, None);
             }

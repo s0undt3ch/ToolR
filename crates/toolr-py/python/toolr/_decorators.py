@@ -77,15 +77,21 @@ class CommandGroup(Struct, frozen=True):
     def command(self, name: F) -> F: ...
 
     @overload
-    def command(self, name: str) -> Callable[[F], F]: ...
+    def command(self, name: str | None = ...) -> Callable[[F], F]: ...
 
-    def command(self, name: str | F) -> Callable[[F], F] | F:
+    def command(self, name: str | F | None = None) -> Callable[[F], F] | F:
         """Register a new command via the captured group binding.
 
         The canonical single-file form. Use the standalone
         :func:`toolr.command` decorator with ``group="..."`` when the
         command lives in a different file from its group declaration
         — see *Scaling command groups across files* in the docs.
+
+        Mirrors the standalone :func:`toolr.command` signature (minus
+        ``group=``, which the binding already determines). The command
+        name may be passed positionally (``@group.command("collect")``)
+        or by keyword (``@group.command(name="collect")``) — but not
+        both; doing so raises ``TypeError``.
 
         Args:
             name: Name of the command. If not passed, the function
@@ -104,14 +110,21 @@ class CommandGroup(Struct, frozen=True):
             return inner(cast("F", name))
 
         if TYPE_CHECKING:
-            assert isinstance(name, str)
+            assert name is None or isinstance(name, str)
+
+        explicit_name = name
 
         def register(func: F) -> F:
-            if name in self.__commands:
+            cli_name = (
+                explicit_name if explicit_name is not None else func.__name__.replace("_", "-")
+            )
+            if cli_name in self.__commands:
                 log.debug(
-                    "Command '%s' already exists in group '%s', overriding", name, self.full_name
+                    "Command '%s' already exists in group '%s', overriding",
+                    cli_name,
+                    self.full_name,
                 )
-            self.__commands[name] = func
+            self.__commands[cli_name] = func
             return func
 
         return register
@@ -165,11 +178,18 @@ def _get_command_group_storage() -> dict[str, CommandGroup]:
     return collector
 
 
+@overload
+def command(name: F) -> F: ...
+
+
+@overload
+def command(name: str | None = ..., *, group: str | None = ...) -> Callable[[F], F]: ...
+
+
 def command(
-    name_or_func: str | Callable[..., Any] | None = None,
+    name: str | Callable[..., Any] | None = None,
     *,
     group: str | None = None,
-    aliases: list[str] | None = None,
 ) -> Callable[..., Any]:
     """Register a function as a toolr CLI command.
 
@@ -177,6 +197,12 @@ def command(
     ``@<binding>.command`` form. Lets you declare commands in any
     file without importing a shared ``CommandGroup`` binding — the
     ``group=`` string is the only contract.
+
+    The signature mirrors the bound :meth:`CommandGroup.command`
+    (plus ``group=``). The command name may be passed positionally
+    (``@command("snippet-checker", group=...)``) or by keyword
+    (``@command(name="snippet-checker", group=...)``) — but not both;
+    doing so raises ``TypeError``.
 
     Usage::
 
@@ -193,9 +219,10 @@ def command(
         def check_snippets(ctx): ...
 
     Args:
-        name_or_func: When called as a bare decorator (``@command``),
-            this is the wrapped function. When called with parentheses
-            (``@command("name", group=...)``), this is the override
+        name: When called as a bare decorator (``@command``), this is
+            the wrapped function. When called with parentheses
+            (``@command("name", group=...)`` or
+            ``@command(name="name", group=...)``), this is the override
             for the command's CLI name; the function name (hyphenated)
             is used otherwise.
         group: Dotted full path of the target group
@@ -203,9 +230,6 @@ def command(
             matching ``command_group(...)`` declaration must exist
             elsewhere in ``tools/``; otherwise manifest-build fails
             with a clear error.
-        aliases: Reserved for future use; currently no-op (tracked
-            with the rest of the ``arg(aliases=...)`` plumbing in
-            issue #198).
 
     Returns:
         The decorated function unchanged; the decorator's only job is
@@ -213,14 +237,14 @@ def command(
         toolr calls the function directly with the parsed args.
     """
     # Bare form: @command def f(...) — no kwargs allowed in this shape.
-    if callable(name_or_func):
-        if group is not None or aliases is not None:
+    if callable(name):
+        if group is not None:
             err_msg = (
                 '@command(...) with kwargs must be used as `@command(group="…")`'
                 " — drop the parens-less form or move the kwargs into them."
             )
             raise TypeError(err_msg)
-        return name_or_func
+        return name
 
     # Parameterised form: @command(...) — returns a decorator. The
     # decorator itself is currently a passthrough; the static parser

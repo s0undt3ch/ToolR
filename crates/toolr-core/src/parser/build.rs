@@ -10,7 +10,7 @@ use crate::hash::hash_tools_dir;
 use crate::manifest::{ArgumentKind, Manifest, SCHEMA_VERSION};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
-    commands::extract_commands,
+    commands::{CommandNameConflict, detect_name_conflicts, extract_commands},
     groups::extract_groups,
     parse_python_file,
     symbols::{ArgSectionTable, EnumTable, TypeAliasTable},
@@ -63,10 +63,12 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let mut global_vars: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
+    let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
     for path in &py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for(tools_dir, path);
         let module_doc = module_docstring(&module);
+        name_conflicts.extend(detect_name_conflicts(&module, &module_path));
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
         let sources_imports = SourcesImports::from_module(&module);
@@ -97,6 +99,10 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
             }
         }
         all_commands.extend(commands);
+    }
+
+    if !name_conflicts.is_empty() {
+        return Err(BuildError::ConflictingCommandName(name_conflicts));
     }
 
     if !type_errors.is_empty() {
@@ -220,8 +226,27 @@ pub enum BuildError {
     UnknownGroupRefs(Vec<UnknownGroupRef>),
     #[error("invalid positional arity ({count}):\n{details}", count = .0.len(), details = format_positional_arity_errors(.0))]
     InvalidPositionalArity(Vec<PositionalArityError>),
+    #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
+    ConflictingCommandName(Vec<CommandNameConflict>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
+}
+
+fn format_name_conflicts(conflicts: &[CommandNameConflict]) -> String {
+    let mut s = String::new();
+    for (i, c) in conflicts.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        use std::fmt::Write as _;
+        let _ = write!(
+            &mut s,
+            "  - {}::{}: command name passed both positionally and via `name=`. \
+             Pass it one way only, e.g. `command(name=\"…\")`.",
+            c.module, c.function,
+        );
+    }
+    s
 }
 
 /// One command whose positional-argument layout violates the
@@ -923,6 +948,28 @@ def f(ctx, maybe: str | None, *files: str) -> None:
         let msg = err.to_string();
         assert!(
             msg.contains("cannot coexist with the variadic positional"),
+            "got: {msg}"
+        );
+    }
+
+    #[test]
+    fn rejects_command_name_passed_both_positionally_and_by_keyword() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/v.py",
+            r#""""Bad."""
+group = command_group("x", "X", docstring=__doc__)
+
+@group.command("positional", name="keyword")
+def f(ctx) -> None:
+    """Ambiguous name."""
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("conflicting command name") && msg.contains("v::f"),
             "got: {msg}"
         );
     }

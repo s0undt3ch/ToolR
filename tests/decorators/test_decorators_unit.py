@@ -100,6 +100,51 @@ def test_group_command_with_explicit_name_returns_decorator():
     assert decorator(f) is f
 
 
+def test_group_command_with_name_keyword_registers_under_that_name():
+    g = command_group("legacy", "Legacy", description="Legacy group for tests")
+
+    @g.command(name="collect")
+    def collect_data(ctx) -> None: ...
+
+    commands = g.get_commands()
+    # The `name=` keyword wins over the hyphenated function name.
+    assert "collect" in commands
+    assert "collect-data" not in commands
+
+
+def test_group_command_empty_parens_registers_under_function_name():
+    g = command_group("legacy", "Legacy", description="Legacy group for tests")
+
+    @g.command()
+    def collect_data(ctx) -> None: ...
+
+    assert "collect-data" in g.get_commands()
+
+
+def test_group_command_duplicate_name_overrides_and_logs(caplog: pytest.LogCaptureFixture):
+    g = command_group("legacy", "Legacy", description="Legacy group for tests")
+
+    @g.command(name="dup")
+    def first(ctx) -> None: ...
+
+    with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
+
+        @g.command(name="dup")
+        def second(ctx) -> None: ...
+
+    # The second registration overrides the first under the same name.
+    assert g.get_commands()["dup"].__name__ == "second"
+    assert any("already exists" in r.message for r in caplog.records)
+
+
+def test_group_command_rejects_positional_and_name_keyword():
+    # A single `name` parameter means Python itself rejects passing the
+    # name both positionally and by keyword — no explicit guard needed.
+    g = command_group("legacy", "Legacy", description="Legacy group for tests")
+    with pytest.raises(TypeError, match="multiple values for argument 'name'"):
+        g.command("positional", name="keyword")
+
+
 def test_parent_command_group_method_still_emits_deprecation():
     """The bound-subgroup form (`parent.command_group("child", ...)`) is
     still on track for removal in toolr 1.0 — guard the warning stays."""
@@ -156,6 +201,23 @@ def test_command_parameterised_form_with_string_first_arg():
     def f(ctx) -> None: ...
 
     assert decorator(f) is f
+
+
+def test_command_parameterised_form_with_name_keyword():
+    # `name=` is the keyword spelling of the same first positional; it
+    # mirrors the bound `@group.command(name=...)` form.
+    decorator = command(name="rename-me", group="ci")
+    assert callable(decorator)
+
+    def f(ctx) -> None: ...
+
+    assert decorator(f) is f
+
+
+def test_command_rejects_positional_and_name_keyword():
+    # Single `name` parameter → Python rejects the redundant override.
+    with pytest.raises(TypeError, match="multiple values for argument 'name'"):
+        command("positional", name="keyword", group="ci")
 
 
 # --------------------------------------------------------------------
