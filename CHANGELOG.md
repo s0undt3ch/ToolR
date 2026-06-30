@@ -6,6 +6,26 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.25.2 - 2026-06-30
+
+### Notes
+
+Fixed: `@group.command(name="…")` silently dropped the keyword and the
+command took its hyphenated function name instead — the static parser
+only read the positional override. The `name=` keyword is now honoured on
+both `@group.command` and `@command`, which share an identical
+command-name contract: the override may be passed positionally
+(`@command("collect", group="…")`) or by keyword
+(`@command(name="collect", group="…")`), but not both — passing both
+raises `TypeError` at runtime and fails `build-manifest` with a clear
+*conflicting command name* error.
+
+The vestigial, never-implemented `aliases=` keyword has been removed from
+the `@command` decorator.
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(parser)* Honor name= override on command decorators ([`91f45b8`](https://github.com/s0undt3ch/ToolR/commit/91f45b85882ce2927f69d9b08aa9c3cbb6499ac7))
 ## 0.25.1 - 2026-06-15
 
 ### Notes

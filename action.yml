@@ -18,7 +18,7 @@ inputs:
 
       Versions below `0.20.0` are not accepted — the binary-only
       release format started with that version.
-    default: "0.25.1"
+    default: "0.25.2"
 
   skip-attestation:
     description: |
