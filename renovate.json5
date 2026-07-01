@@ -61,7 +61,7 @@
     {
       description: "Tag mise Rust tooling pins as Rust",
       matchManagers: ["mise"],
-      matchDepNames: ["rust", "cargo-edit"],
+      matchDepNames: ["rust", "cargo:cargo-edit"],
       addLabels: ["dependencies:rust"],
     },
 
@@ -91,14 +91,20 @@
       matchManagers: ["github-actions"],
     },
     {
-      // mise CLI tools (actionlint, shellcheck, prek, gitleaks) — group
-      // them so we don't get a PR per tool. Python and Rust toolchains stay
-      // in their own ecosystem-tagged PRs so language bumps remain
-      // reviewable on their own.
+      // mise CLI tools (the pre-commit-hook binaries + prek) — group them so
+      // we don't get a PR per tool. All are pinned to exact versions in
+      // mise.toml (a `latest` pin has no version for Renovate to bump, so it
+      // would be silently skipped).
+      //
+      // Match by manager and *exclude* the language toolchains / package
+      // managers that we deliberately keep as their own ecosystem-tagged,
+      // individually-reviewable PRs. Everything else — including any new CLI
+      // tool later added to mise.toml — is grouped automatically, so there's
+      // no hand-maintained allow-list to drift out of sync with mise.toml.
       description: "Group mise CLI tooling updates",
       groupName: "mise tools",
       matchManagers: ["mise"],
-      matchDepNames: ["actionlint", "shellcheck", "prek", "gitleaks"],
+      matchDepNames: ["!python", "!rust", "!uv", "!cargo:cargo-edit"],
     },
 
     // ---- Keep the dogfood venv in lockstep with our own releases ----
