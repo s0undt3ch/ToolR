@@ -33,7 +33,7 @@ def test_module_not_found_error_handling(caplog):
     with caplog.at_level(logging.WARNING):
         with report_on_import_errors(message):
             # Simulate a module that doesn't exist
-            import nonexistent_module  # type: ignore[import-not-found]
+            import nonexistent_module
 
             # This assertion will never run and is only here to prevent ruff from removing the import
             assert nonexistent_module is None  # pragma: no cover
@@ -123,7 +123,7 @@ def test_multiple_import_errors_in_sequence(caplog):
     with caplog.at_level(logging.WARNING):
         # First import error
         with report_on_import_errors(message):
-            import nonexistent_module1  # type: ignore[import-not-found]
+            import nonexistent_module1
 
             # This assertion will never run and is only here to prevent ruff from removing the import
             assert nonexistent_module1 is None  # pragma: no cover
@@ -131,7 +131,7 @@ def test_multiple_import_errors_in_sequence(caplog):
     with caplog.at_level(logging.WARNING):
         # Second import error
         with report_on_import_errors(message):
-            import nonexistent_module2  # type: ignore[import-not-found]
+            import nonexistent_module2
 
             # This assertion will never run and is only here to prevent ruff from removing the import
             assert nonexistent_module2 is None  # pragma: no cover

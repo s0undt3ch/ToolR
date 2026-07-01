@@ -54,6 +54,16 @@ runs:
       shell: bash
       run: rustup component add clippy rustfmt
 
+    # The `mypy` prek hook (from s0undt3ch/pre-commit-hooks) runs mypy from the
+    # project venv on PATH. mise seeds an empty venv, so install just the
+    # `pre-commit` dependency group into it — `--only-group` skips the
+    # default/dev groups and the Rust workspace build (all wheels, so it's
+    # quick). Binary hook tools (ruff, typos, rumdl, gh, actionlint,
+    # shellcheck, gitleaks) come from mise, installed by the step above.
+    - name: Install pre-commit Python tools into the venv
+      shell: bash
+      run: uv sync --only-group pre-commit
+
     - name: Get prek version
       id: prek-version
       shell: bash

@@ -6,22 +6,22 @@
 # know, and the test matrix selects per-job versions via
 # `MISE_PYTHON_VERSION`.
 python = ["3.14.6", "3.13.14", "3.12.13", "3.11.15"]
-actionlint = "latest"
-shellcheck = "latest"
-# gitleaks, actionlint and shellcheck back the local pre-commit hooks under
-# `.pre-commit-hooks/*.sh` (which run the PATH binary instead of pulling a
-# Docker image / compiling from source). Pinned here so CI's
-# `mise install --locked` provides them.
-gitleaks = "latest"
+actionlint = "1.7.12"
+shellcheck = "0.11.0"
+gitleaks = "8.30.1"
+ruff = "0.15.17"
+typos = "1.47.2"
+rumdl = "0.2.17"
+gh = "2.94.0"
 # Without an explicit profile, mise inherits whatever profile the
 # machine's rustup is configured with — CI runners resolve to
 # `minimal`, which ships no clippy. Pin the profile and add the
 # components the pre-commit hooks (clippy) and contributors
 # (rustfmt) need so the toolchain is identical everywhere.
 rust = { version = "1.96.0", profile = "minimal", components = "clippy,rustfmt" }
-uv = { version = "latest" }
-prek = "latest"
-"cargo:cargo-edit" = "latest"
+uv = { version = "0.11.19" }
+prek = "0.4.4"
+"cargo:cargo-edit" = "0.13.11"
 
 [env]
 _.python.venv = { path = ".venv", create = true, uv_create_args = ['--seed'] }

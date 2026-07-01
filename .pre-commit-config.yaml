@@ -1,5 +1,12 @@
 ---
 minimum_pre_commit_version: 3.0.0
+# Install both the pre-commit and commit-msg git hooks on `prek install`
+# (existing clones must re-run `prek install --install-hooks` once to pick up
+# the commit-msg hook). `default_stages` pins every hook to the pre-commit
+# stage unless it opts in otherwise — without it, `pass_filenames: false` hooks
+# (cargo check, clippy, …) would run a second time at the commit-msg stage.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -10,10 +17,10 @@ repos:
       - id: mixed-line-ending     # Replaces or checks mixed line ending.
         args: [--fix=lf]
       - id: end-of-file-fixer     # Makes sure files end in a newline and only a newline.
-      - id: check-merge-conflict  # Check for files that contain merge conflict strings.
       - id: check-ast             # Simply check whether files parse as valid python.
 
-  - repo: local
+  - repo: https://github.com/s0undt3ch/pre-commit-hooks
+    rev: v1.0.0
     hooks:
       # One pass: pin any unpinned `uses:` ref to a SHA AND verify that
       # every already-pinned ref still matches the SHA its `# <tag>` comment
@@ -23,11 +30,53 @@ repos:
       # Requires `gh`; a missing gh is a hard error here (pass `--exit-zero`
       # for a non-blocking, gh-optional advisory run).
       - id: pin-github-actions
-        name: Pin & verify GitHub Action SHAs
-        language: system
-        entry: .pre-commit-hooks/pin-github-actions.py
-        files: ^(\.github/(workflows|actions/[^/]+)/.*\.ya?ml|action\.yml)$
 
+      - id: actionlint
+      - id: shellcheck
+
+      - id: gitleaks
+
+      - id: ruff-format
+      - id: ruff-check
+        alias: ruff
+        args:
+          - --fix
+        exclude: .pre-commit-hooks/.*\.py
+
+      - id: typos
+
+      # Spell-check the commit message too — git-cliff builds the CHANGELOG
+      # from commit subjects, so a typo here propagates into the release
+      # notes. Runs check-only via the generic `system-tool` wrapper (no
+      # `--write-changes`, so the message is never silently rewritten).
+      - id: system-tool
+        alias: typos-commit-msg
+        name: typos (commit message)
+        args: [typos]
+        stages: [commit-msg]
+
+      - id: rumdl
+        # Config picked up from .rumdl.toml.
+
+      - id: mypy
+        name: Run mypy against the code base
+        files: ^(python/|tests/).*\.py$
+        exclude: ^tests/support/coverage/.*\.py$
+
+      - id: uv-lock
+        alias: uv-lock-project
+        name: Lock project dependencies
+        files: ^(uv\.lock|pyproject\.toml)$
+
+      - id: uv-lock
+        alias: uv-lock-tools
+        name: Lock tools dependencies
+        args:
+          - --project=tools
+        files: ^tools/(uv\.lock|pyproject\.toml)$
+
+  - repo: local
+    hooks:
       - id: regen-doc-snippets
         name: Verify doc snippets are in sync
         entry: .pre-commit-hooks/regen-doc-snippets.py --check
@@ -80,107 +129,6 @@ repos:
             action\.yml|
             skills/.*/references/.*\.md
           )$
-
-  - repo: local
-    hooks:
-      # Run the mise-pinned `actionlint` from PATH via a local wrapper instead
-      # of rhysd/actionlint's default hook, which compiles the linter from
-      # source through `language: golang` on every cold cache. The wrapper
-      # errors if the binary is missing (run `mise install`) unless
-      # `--exit-zero` is passed. mise.toml is the single source of the version.
-      - id: actionlint
-        name: Lint GitHub Actions workflow files
-        language: system
-        entry: .pre-commit-hooks/actionlint.sh
-        types: ["yaml"]
-        files: ^\.github/workflows/
-
-      # Run the mise-pinned `shellcheck` from PATH via a local wrapper instead
-      # of koalaman/shellcheck-precommit, which runs a Docker image
-      # (`language: docker_image`) — unavailable on hardened CI runners and
-      # redundant when mise already ships the pinned binary.
-      - id: shellcheck
-        name: ShellCheck
-        language: system
-        entry: .pre-commit-hooks/shellcheck.sh
-        types: [shell]
-        # shellcheck only understands sh/bash. The zsh and fish
-        # completion scripts under src/complete/scripts/ use shell-specific
-        # syntax that shellcheck cannot parse.
-        exclude: '\.(zsh|fish)$'
-
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.15
-    hooks:
-      - id: uv-lock
-        alias: uv-lock-project
-        name: Lock project dependencies
-        files: ^(uv\.lock|pyproject\.toml)$
-
-      - id: uv-lock
-        alias: uv-lock-tools
-        name: Lock tools dependencies
-        args:
-          - --project=tools
-        files: ^tools/(uv\.lock|pyproject\.toml)$
-
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.15.13"
-    hooks:
-      - id: ruff-format
-      - id: ruff-check
-        alias: ruff
-        args:
-          - --fix
-        exclude: .pre-commit-hooks/.*\.py
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
-    hooks:
-      - id: mypy
-        name: Run mypy against the code base
-        files: ^(python/|tests/).*\.py$
-        exclude: ^tests/support/coverage/.*\.py$
-        args: []
-        additional_dependencies:
-          - attrs
-          - hypothesis
-          - msgspec
-          - pytest
-          - rich
-          - rich-argparse
-
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.46.2
-    hooks:
-      - id: typos
-
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.2
-    hooks:
-      - id: codespell
-        args:
-          - --ignore-words=.codespell.words.ignore
-        additional_dependencies:
-          - tomli
-
-  - repo: https://github.com/rvben/rumdl-pre-commit
-    rev: v0.1.94
-    hooks:
-      - id: rumdl
-        # Config picked up from .rumdl.toml.
-
-  - repo: local
-    hooks:
-      # Run the mise-pinned `gitleaks` from PATH via a local wrapper instead of
-      # gitleaks/gitleaks's default hook, which compiles from source through
-      # `language: golang` on every cold cache. The wrapper errors if the
-      # binary is missing (run `mise install`) unless `--exit-zero` is passed.
-      - id: gitleaks
-        name: Detect hardcoded secrets
-        language: system
-        entry: .pre-commit-hooks/gitleaks.sh
-        pass_filenames: false
 
   - repo: local
     hooks:

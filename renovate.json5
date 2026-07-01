@@ -13,6 +13,25 @@
   timezone: "Etc/UTC",
   schedule: ["before 6am on monday"],
 
+  // Remediate vulnerable *transitive* crates directly from OSV data.
+  // Without this, an advisory on an indirect dep (one that lives only in
+  // Cargo.lock, never in a Cargo.toml) produces no PR — the cargo manager
+  // only bumps manifest-declared deps. This is exactly how quinn-proto
+  // sat at 0.11.14 under RUSTSEC-2026-0185 until Scorecard's OSV scan
+  // flagged it. Security PRs bypass the weekly schedule above.
+  osvVulnerabilityAlerts: true,
+
+  // Once a month, regenerate the lockfiles (`cargo update`, `uv lock`) to
+  // pull every dep — direct and transitive — up to the newest version its
+  // existing manifest range already allows. This does NOT widen the ranges
+  // themselves (that's the regular per-dep PRs); it just keeps the locked
+  // graph current, so transitive drift is caught before it turns into an
+  // OSV advisory. One low-noise PR per month.
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ["before 6am on the first day of the month"],
+  },
+
   assignees: ["s0undt3ch"],
   labels: ["dependencies"],
 
@@ -42,7 +61,7 @@
     {
       description: "Tag mise Rust tooling pins as Rust",
       matchManagers: ["mise"],
-      matchDepNames: ["rust", "cargo-edit"],
+      matchDepNames: ["rust", "cargo:cargo-edit"],
       addLabels: ["dependencies:rust"],
     },
 
@@ -72,14 +91,20 @@
       matchManagers: ["github-actions"],
     },
     {
-      // mise CLI tools (actionlint, shellcheck, prek, gitleaks) — group
-      // them so we don't get a PR per tool. Python and Rust toolchains stay
-      // in their own ecosystem-tagged PRs so language bumps remain
-      // reviewable on their own.
+      // mise CLI tools (the pre-commit-hook binaries + prek) — group them so
+      // we don't get a PR per tool. All are pinned to exact versions in
+      // mise.toml (a `latest` pin has no version for Renovate to bump, so it
+      // would be silently skipped).
+      //
+      // Match by manager and *exclude* the language toolchains / package
+      // managers that we deliberately keep as their own ecosystem-tagged,
+      // individually-reviewable PRs. Everything else — including any new CLI
+      // tool later added to mise.toml — is grouped automatically, so there's
+      // no hand-maintained allow-list to drift out of sync with mise.toml.
       description: "Group mise CLI tooling updates",
       groupName: "mise tools",
       matchManagers: ["mise"],
-      matchDepNames: ["actionlint", "shellcheck", "prek", "gitleaks"],
+      matchDepNames: ["!python", "!rust", "!uv", "!cargo:cargo-edit"],
     },
 
     // ---- Keep the dogfood venv in lockstep with our own releases ----
