@@ -14,6 +14,15 @@ addopts = [
 ]
 
 [tool.uv]
+# `dev` is uv's implicit default; add `pre-commit` so a bare `uv sync` also
+# installs the venv `mypy` the prek mypy hook runs, plus its import-resolution
+# deps.
+default-groups = ["dev", "pre-commit"]
+# Dependency cooldown: never resolve a package release younger than 7 days.
+# Newly published (or yanked-and-republished) versions are the highest-risk
+# window for a compromised release, so we let the ecosystem vet them first.
+# Renovate's own bumps run `uv lock`, so they inherit the same 7-day gate.
+exclude-newer = "7 days"
 
 [tool.uv.workspace]
 members = [
@@ -46,7 +55,19 @@ docs = [
     "mkdocs-awesome-nav>=3.1.2",
     "mkdocs-material>=9.6.16",
     "mkdocstrings[python]>=1.0.4",
-    "ruff>=0.15.14",
+]
+# The venv `mypy` the `s0undt3ch/pre-commit-hooks` mypy hook runs (binary
+# tools — ruff, typos, rumdl — live in mise.toml instead). The extra runtime
+# deps give mypy real packages to resolve imports against, replacing the stubs
+# the old `mirrors-mypy` hook pinned via `additional_dependencies`.
+pre-commit = [
+    "mypy>=1.11",
+    "attrs>=25.3.0",
+    "hypothesis>=6.152.9",
+    "msgspec>=0.19.0",
+    "pytest>=8.3.5",
+    "rich>=13.0.0",
+    "rich-argparse>=1.7.0",
 ]
 
 [tool.ruff]

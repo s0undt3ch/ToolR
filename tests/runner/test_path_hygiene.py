@@ -100,7 +100,7 @@ def test_run_imports_tools_from_a_subdirectory(
         assert rc == 0
         # Deferred import is intentional: the `tools` package is created at
         # runtime and only becomes importable after `run()` appends repo_root.
-        import tools.probe  # type: ignore[import-not-found]  # noqa: PLC0415 — created at runtime
+        import tools.probe  # noqa: PLC0415 — created at runtime
 
         assert tools.probe.RAN.get("ok") is True
     finally:

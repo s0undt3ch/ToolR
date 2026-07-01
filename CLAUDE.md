@@ -79,7 +79,7 @@ prek run --all-files              # run every pre-commit hook
     - `crates/toolr-core/src/execute/spec.rs::RUNNER_SCHEMA_VERSION`
     - `crates/toolr-py/python/toolr/_runner.py::SCHEMA_VERSION`
 
-    Each carries a doc comment listing which changes require a bump. CI fails when they disagree.
+  Each carries a doc comment listing which changes require a bump. CI fails when they disagree.
 - **Queue release notes in `UNRELEASED.md`. Never hand-edit `CHANGELOG.md`** — `git-cliff`
   regenerates it on release from Conventional Commits.
 - **Regenerate doc snippets, don't hand-edit them.** `.pre-commit-hooks/regen-doc-snippets.py`
