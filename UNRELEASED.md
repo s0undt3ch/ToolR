@@ -19,3 +19,8 @@ wrappers. Tool versions now have a single source of truth: binaries pinned in
 `mise.toml` (Renovate-managed) and the venv `mypy` in the new `pre-commit` uv
 dependency group. `typos` now auto-fixes on commit, and the redundant
 `codespell` hook was dropped in favour of `typos` alone.
+
+`typos` also now spell-checks commit messages (a `commit-msg`-stage hook), so
+mistakes are caught before git-cliff folds commit subjects into the CHANGELOG —
+which is itself no longer excluded from the check. Existing clones should re-run
+`prek install --install-hooks` once to pick up the new `commit-msg` hook.

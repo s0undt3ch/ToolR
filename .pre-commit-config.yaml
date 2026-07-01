@@ -1,5 +1,12 @@
 ---
 minimum_pre_commit_version: 3.0.0
+# Install both the pre-commit and commit-msg git hooks on `prek install`
+# (existing clones must re-run `prek install --install-hooks` once to pick up
+# the commit-msg hook). `default_stages` pins every hook to the pre-commit
+# stage unless it opts in otherwise — without it, `pass_filenames: false` hooks
+# (cargo check, clippy, …) would run a second time at the commit-msg stage.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -37,6 +44,16 @@ repos:
         exclude: .pre-commit-hooks/.*\.py
 
       - id: typos
+
+      # Spell-check the commit message too — git-cliff builds the CHANGELOG
+      # from commit subjects, so a typo here propagates into the release
+      # notes. Runs check-only via the generic `system-tool` wrapper (no
+      # `--write-changes`, so the message is never silently rewritten).
+      - id: system-tool
+        alias: typos-commit-msg
+        name: typos (commit message)
+        args: [typos]
+        stages: [commit-msg]
 
       - id: rumdl
         # Config picked up from .rumdl.toml.
