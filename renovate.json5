@@ -13,6 +13,14 @@
   timezone: "Etc/UTC",
   schedule: ["before 6am on monday"],
 
+  // Remediate vulnerable *transitive* crates directly from OSV data.
+  // Without this, an advisory on an indirect dep (one that lives only in
+  // Cargo.lock, never in a Cargo.toml) produces no PR — the cargo manager
+  // only bumps manifest-declared deps. This is exactly how quinn-proto
+  // sat at 0.11.14 under RUSTSEC-2026-0185 until Scorecard's OSV scan
+  // flagged it. Security PRs bypass the weekly schedule above.
+  osvVulnerabilityAlerts: true,
+
   assignees: ["s0undt3ch"],
   labels: ["dependencies"],
 
