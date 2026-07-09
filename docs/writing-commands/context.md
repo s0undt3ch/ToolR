@@ -43,6 +43,12 @@ matter where you invoke `toolr` from — the same convention `make` and
 `cargo` follow. `ctx.repo_root` always points there, and `ctx.run(...)`
 subprocesses inherit it as their cwd unless you override it.
 
+Reach for `ctx.repo_root` whenever you need an absolute path into the
+project. **Prefer it over deriving the root from `__file__`** (for
+example `Path(__file__).parents[2]`): that hard-codes the file's depth
+in the tree, so it breaks the moment the file moves or the command is
+packaged as a plugin. toolr already discovered the root — ask it.
+
 Because of this, a **relative path argument resolves from the repo
 root, not from your current directory**. Running `toolr build ./out.txt`
 from a subdirectory writes `<repo-root>/out.txt`. Pass an absolute path

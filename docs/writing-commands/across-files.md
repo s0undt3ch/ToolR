@@ -98,4 +98,29 @@ in another. Toolr resolves both through the same registry, so a
 group declared with the bound form is reachable from a string key
 in a different file, and vice versa.
 
+## Sharing plain helper code
+
+The decorator forms above are for wiring *commands* to groups. When
+you just want to reuse ordinary functions between files — a shared
+constant, a `_helpers.py`, a `version.py` — import them directly.
+
+`tools/` is a [PEP 420](https://peps.python.org/pep-0420/) implicit
+namespace package: it needs **no `__init__.py`** (don't add one), and
+toolr puts the repo root on `sys.path` before running your command, so
+fully-qualified imports resolve from any command file:
+
+```python
+# tools/ci.py
+import tools.version                 # module import
+from tools import version            # same module, name-bound
+from tools.helpers import render     # import a name directly
+
+def build(ctx):
+    ctx.info(f"Building {tools.version.CURRENT}")
+```
+
+Always use the full `tools.<module>` path — that is what resolves via
+`sys.path`. This works both under `toolr` at runtime and in tests
+(toolr's testing harness imports every `tools.*` module the same way).
+
 Next: [Nested groups →](nesting.md)
