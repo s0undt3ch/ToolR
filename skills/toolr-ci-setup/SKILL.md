@@ -6,13 +6,14 @@ description: |
   when authoring `.github/workflows/*.yml` that runs a toolr
   command; when wiring `toolr self build-manifest --check`
   as a CI gate for a plugin repository; when picking the
-  right pin form for `uses: s0undt3ch/ToolR@…`; or when
+  right pin form for `uses: s0undt3ch/ToolR@…`; when forcing an
+  in-tree `tools/.venv` in CI via `TOOLR_VENV_LOCATION`; or when
   debugging the action's minimum-version error, attestation
   verify failures, or persistent venv cache misses. Triggers
   on phrases like "set up toolr in CI", "GitHub Actions for
   toolr", "use the toolr action", "cache toolr in CI",
-  "verify SLSA attestation in CI", and literal
-  `uses: s0undt3ch/ToolR@` snippets. Stays inert on local
+  "in-tree venv in CI", "verify SLSA attestation in CI", and
+  literal `uses: s0undt3ch/ToolR@` snippets. Stays inert on local
   authoring requests (covered by the `toolr-command-authoring`
   skill), on wheel-building outside a CI gate (covered by
   `toolr-command-packaging`), and on toolr's own internal
@@ -178,6 +179,33 @@ input controls) lives in
 from `action.yml` on every release, so it cannot drift. Read it when
 you need to override caching, point at a different release, or pass
 extra `uv sync` flags.
+
+## Where the venv lives in CI
+
+Locally, toolr materialises the tools venv in a per-repo **cache**
+directory by default (`$XDG_CACHE_HOME/toolr/<repo-key>/venv/`). That
+path is volatile on CI runners, so the action exports
+**`TOOLR_VENV_LOCATION=in-tree`** for you, which forces the venv to
+`tools/.venv/` inside the checkout regardless of what
+`[tool.toolr] venv-location` says in your `tools/pyproject.toml`. That
+stable, in-checkout path is exactly what the `tools/.venv` cache
+(see `cache-tools-venv`) keys on.
+
+- **Using the action?** Do nothing — it sets the env var itself.
+- **Running `toolr` in CI *without* the action** (a bare `run:` step,
+  which this skill otherwise discourages)? Export it yourself so the
+  venv lands somewhere cacheable:
+
+  ```yaml
+  - run: toolr <group> <cmd>
+    env:
+      TOOLR_VENV_LOCATION: in-tree
+  ```
+
+`TOOLR_VENV_LOCATION` accepts `in-tree` or `cache`; a typo is a hard
+error rather than a silent fallback. See the [`venv-location`
+reference](https://github.com/s0undt3ch/toolr/blob/main/docs/project-config.md#venv-location)
+for the file-configured equivalent.
 
 ## Common failure modes
 
