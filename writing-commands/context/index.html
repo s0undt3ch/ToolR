@@ -1985,6 +1985,11 @@ subprocess's output to the user's terminal.</p>
 matter where you invoke <code>toolr</code> from — the same convention <code>make</code> and
 <code>cargo</code> follow. <code>ctx.repo_root</code> always points there, and <code>ctx.run(...)</code>
 subprocesses inherit it as their cwd unless you override it.</p>
+<p>Reach for <code>ctx.repo_root</code> whenever you need an absolute path into the
+project. <strong>Prefer it over deriving the root from <code>__file__</code></strong> (for
+example <code>Path(__file__).parents[2]</code>): that hard-codes the file's depth
+in the tree, so it breaks the moment the file moves or the command is
+packaged as a plugin. toolr already discovered the root — ask it.</p>
 <p>Because of this, a <strong>relative path argument resolves from the repo
 root, not from your current directory</strong>. Running <code>toolr build ./out.txt</code>
 from a subdirectory writes <code>&lt;repo-root&gt;/out.txt</code>. Pass an absolute path

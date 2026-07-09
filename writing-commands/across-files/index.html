@@ -1015,6 +1015,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#sharing-plain-helper-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sharing plain helper code
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1850,6 +1861,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#sharing-plain-helper-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sharing plain helper code
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2007,6 +2029,30 @@ one tools module and a string-keyed group spanning several modules
 in another. Toolr resolves both through the same registry, so a
 group declared with the bound form is reachable from a string key
 in a different file, and vice versa.</p>
+<h2 id="sharing-plain-helper-code">Sharing plain helper code<a class="headerlink" href="#sharing-plain-helper-code" title="Permanent link">&para;</a></h2>
+<p>The decorator forms above are for wiring <em>commands</em> to groups. When
+you just want to reuse ordinary functions between files — a shared
+constant, a <code>helpers.py</code>, a <code>version.py</code> — import them directly.</p>
+<p><code>tools/</code> is a <a href="https://peps.python.org/pep-0420/">PEP 420</a> implicit
+namespace package: it needs <strong>no <code>__init__.py</code></strong> (don't add one).
+toolr puts the repo root on <code>sys.path</code> and imports your command
+modules <em>under</em> the <code>tools</code> package, so both import styles resolve
+from any command file — absolute or relative:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># tools/ci.py</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">tools.version</span>                 <span class="c1"># absolute module import</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">version</span>            <span class="c1"># absolute, name-bound</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tools.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">render</span>     <span class="c1"># absolute, import a name</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">version</span>                <span class="c1"># relative module import</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">.helpers</span><span class="w"> </span><span class="kn">import</span> <span class="n">render</span>          <span class="c1"># relative, import a name</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="n">ctx</span><span class="p">):</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="n">ctx</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Building </span><span class="si">{</span><span class="n">version</span><span class="o">.</span><span class="n">CURRENT</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Use whichever reads best; both work under <code>toolr</code> at runtime and in
+tests (toolr's testing harness imports every <code>tools.*</code> module the same
+way). The only thing to avoid is manual <code>sys.path</code> manipulation —
+toolr has already set it up for you.</p>
 <p>Next: <a href="../nesting/">Nested groups →</a></p>
 
 
