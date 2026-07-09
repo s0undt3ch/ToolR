@@ -104,10 +104,12 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
   is packaged as a plugin, and toolr already knows the answer.
 - **Importing sibling `tools/` code.** `tools/` is a PEP 420
   implicit namespace package — no `__init__.py`, and none is wanted.
-  toolr puts the repo root on `sys.path`, so fully-qualified imports
-  resolve from any command file: `import tools.helpers` or
-  `from tools import helpers`. Share helpers this way instead of
-  `sys.path` hacks or relative imports.
+  toolr puts the repo root on `sys.path` and imports command modules
+  under the `tools` package, so both forms resolve from any command
+  file: absolute (`import tools.helpers`, `from tools import helpers`)
+  or relative (`from . import helpers`, `from .helpers import render`).
+  Either is fine — share helpers this way rather than with `sys.path`
+  hacks.
 
 ## Runtime working directory
 
