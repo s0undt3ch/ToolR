@@ -97,12 +97,25 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
   sections.
 - **Calling subprocesses.** Use `ctx.run(...)`; it inherits stderr
   for TTY-aware tools and propagates timeouts.
+- **Referencing the repo root.** Use `ctx.repo_root` (a
+  `pathlib.Path`). It is toolr's discovered project root — do **not**
+  recompute it from `__file__` (`Path(__file__).parents[N]` and
+  friends). That guess breaks the moment the file moves or the command
+  is packaged as a plugin, and toolr already knows the answer.
+- **Importing sibling `tools/` code.** `tools/` is a PEP 420
+  implicit namespace package — no `__init__.py`, and none is wanted.
+  toolr puts the repo root on `sys.path` and imports command modules
+  under the `tools` package, so both forms resolve from any command
+  file: absolute (`import tools.helpers`, `from tools import helpers`)
+  or relative (`from . import helpers`, `from .helpers import render`).
+  Either is fine — share helpers this way rather than with `sys.path`
+  hacks.
 
 ## Runtime working directory
 
 Commands run with the working directory set to the **repo root**,
 regardless of where you invoke `toolr` from (the `make`/`cargo`
-convention). Two consequences:
+convention). `ctx.repo_root` always points there. Two consequences:
 
 - **Relative path arguments resolve from the repo root, not your
   current directory.** `toolr build ./out.txt` run from `tools/`
@@ -145,6 +158,12 @@ make its registration a top-level, statically-visible declaration.
   description.
 - **Don't write your own `argparse` subparser.** toolr owns the
   parser; you describe shape via decorators and type hints.
+- **Don't recompute the repo root from `__file__`.** No
+  `REPO_ROOT = Path(__file__).parents[1]`. Use `ctx.repo_root`.
+- **Don't add an `__init__.py` to `tools/`.** It's a namespace
+  package on purpose; a package init file is unnecessary and shadows
+  the implicit-namespace behaviour. Import siblings by their full
+  `tools.<module>` path.
 
 ## References
 
