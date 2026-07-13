@@ -317,6 +317,32 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .about("Spawn a subshell with the tools venv activated"),
                     )
                     .subcommand(
+                        Command::new("run")
+                            .disable_help_flag(true)
+                            .about("Run a command inside the managed tools venv (auto-syncs first; use --no-sync in CI)")
+                            .arg(
+                                Arg::new("no-sync")
+                                    .long("no-sync")
+                                    .action(ArgAction::SetTrue)
+                                    .help("Do not sync first; run against the existing venv and error if it is missing or stale (CI-deterministic)"),
+                            )
+                            .arg(
+                                Arg::new("quiet")
+                                    .long("quiet")
+                                    .action(ArgAction::SetTrue)
+                                    .help("Pass --quiet to the auto-sync step (no effect with --no-sync)"),
+                            )
+                            .arg(
+                                Arg::new("command")
+                                    .value_name("CMD")
+                                    .required(true)
+                                    .num_args(1..)
+                                    .trailing_var_arg(true)
+                                    .allow_hyphen_values(true)
+                                    .help("Command to run in the venv, e.g. `pytest tools/`. toolr's own flags must come before the command (or a `--`)."),
+                            ),
+                    )
+                    .subcommand(
                         Command::new("sync")
                             .disable_help_flag(true)
                             .about("Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)")
