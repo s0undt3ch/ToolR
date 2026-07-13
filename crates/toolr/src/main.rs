@@ -72,8 +72,18 @@ fn maybe_emit_cache_hint_from_argv() {
     if std::env::var_os("TOOLR_NO_CACHE_HINT").is_some() {
         return;
     }
-    // Suppress for tab-completion and `self cache ...` invocations.
     let argv: Vec<String> = std::env::args().collect();
+    // `--quiet` promises to "suppress non-error output"; the passive
+    // hint is non-error output, so honour it here. We scan argv by hand
+    // because this runs before clap and because `--quiet` is accepted
+    // both root-level and per-subcommand. Detect both `--quiet` and any
+    // short cluster containing `q` (e.g. `-q`), and stop at the `--`
+    // separator so a wrapped command's own `--quiet`
+    // (`run -- pytest --quiet`) doesn't count.
+    if argv_requests_quiet(&argv) {
+        return;
+    }
+    // Suppress for tab-completion and `self cache ...` invocations.
     let positional: Vec<&str> = argv
         .iter()
         .skip(1)
@@ -95,6 +105,26 @@ fn maybe_emit_cache_hint_from_argv() {
     }
 }
 
+/// Best-effort scan of `argv` for a `--quiet` / `-q` request, used to
+/// gate the passive cache hint. Stops at the `--` separator so args
+/// belonging to a wrapped command (`toolr project venv run -- <cmd>
+/// --quiet`) are never mistaken for toolr's own quiet flag.
+fn argv_requests_quiet(argv: &[String]) -> bool {
+    for arg in argv.iter().skip(1) {
+        if arg == "--" {
+            break;
+        }
+        if arg == "--quiet" {
+            return true;
+        }
+        // Short-flag cluster (`-q`, `-dq`, …) but not a long flag.
+        if arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('q') {
+            return true;
+        }
+    }
+    false
+}
+
 fn load_or_empty(cwd: &std::path::Path) -> Manifest {
     let Ok(root) = discover_project_root(cwd) else {
         return empty_manifest();
@@ -110,5 +140,45 @@ fn empty_manifest() -> Manifest {
         third_party_hash: String::new(),
         groups: Vec::new(),
         commands: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::argv_requests_quiet;
+
+    fn argv(args: &[&str]) -> Vec<String> {
+        std::iter::once("toolr")
+            .chain(args.iter().copied())
+            .map(String::from)
+            .collect()
+    }
+
+    #[test]
+    fn detects_long_and_short_quiet() {
+        assert!(argv_requests_quiet(&argv(&["project", "venv", "sync", "--quiet"])));
+        assert!(argv_requests_quiet(&argv(&["-q", "project", "venv", "sync"])));
+        // Short cluster.
+        assert!(argv_requests_quiet(&argv(&["-dq", "ci", "hello"])));
+    }
+
+    #[test]
+    fn absent_quiet_is_not_detected() {
+        assert!(!argv_requests_quiet(&argv(&["project", "venv", "sync"])));
+        assert!(!argv_requests_quiet(&argv(&["--debug", "ci", "hello"])));
+        // `--quiet` is a long flag; a bare `q` in a value must not match.
+        assert!(!argv_requests_quiet(&argv(&["ci", "hello", "queen"])));
+    }
+
+    #[test]
+    fn wrapped_command_quiet_after_separator_is_ignored() {
+        // The `--quiet` belongs to pytest, not toolr.
+        assert!(!argv_requests_quiet(&argv(&[
+            "project", "venv", "run", "--", "pytest", "--quiet",
+        ])));
+        // But toolr's own quiet before the separator still counts.
+        assert!(argv_requests_quiet(&argv(&[
+            "project", "venv", "run", "--quiet", "--", "pytest",
+        ])));
     }
 }
