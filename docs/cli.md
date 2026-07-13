@@ -186,6 +186,32 @@ toolr project venv shell --help
 --8<-- "docs/cli-files/project-venv-shell-help.txt"
 ```
 
+### `toolr project venv run` {#project-venv-run}
+
+Run a command inside the managed tools venv. By default it syncs the venv
+first (freshness-gated, exactly like [`venv sync`](#project-venv-sync) and
+`venv shell`), then runs the command with `$VIRTUAL_ENV`, `$TOOLR_VENV`, and
+`$PATH` set so entry points such as `pytest` resolve from the venv. The child's
+stdout, stderr, and exit code pass straight through.
+
+This is the one-liner for running a command-package's tests:
+
+```sh
+toolr project venv run -- pytest tools/
+```
+
+`--no-sync` never touches the venv — it errors if the venv is missing or stale
+instead of syncing. Use it in CI once the venv is known-synced, for
+deterministic runs. toolr's own flags must come before the command (or a `--`).
+
+```sh
+toolr project venv run --help
+```
+
+```text
+--8<-- "docs/cli-files/project-venv-run-help.txt"
+```
+
 ### `toolr project manifest rebuild` {#project-manifest-rebuild}
 
 Regenerate the static + dynamic manifest in place. Equivalent to what

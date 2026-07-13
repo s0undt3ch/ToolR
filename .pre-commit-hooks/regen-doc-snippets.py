@@ -102,6 +102,7 @@ SNIPPETS: tuple[Snippet, ...] = (
     Snippet(CLI_FILES / "project-venv-remove-help.txt", ("project", "venv", "remove", "--help")),
     Snippet(CLI_FILES / "project-venv-path-help.txt", ("project", "venv", "path", "--help")),
     Snippet(CLI_FILES / "project-venv-shell-help.txt", ("project", "venv", "shell", "--help")),
+    Snippet(CLI_FILES / "project-venv-run-help.txt", ("project", "venv", "run", "--help")),
     Snippet(
         CLI_FILES / "project-manifest-rebuild-help.txt",
         ("project", "manifest", "rebuild", "--help"),
