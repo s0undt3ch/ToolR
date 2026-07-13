@@ -187,6 +187,17 @@ make its registration a top-level, statically-visible declaration.
   `tools/*.py`. Fix the source; the manifest auto-rebuilds on the
   next dispatch.
 
+## Running your commands' tests
+
+Run your commands' tests in the managed venv with:
+
+```sh
+toolr project venv run -- pytest tools/
+```
+
+This syncs the venv if stale, then runs `pytest` from it. No need to hand-build
+the `"$(toolr project venv path)/bin/python" -m pytest …` invocation.
+
 ## Packaging is a different problem
 
 If the user wants to **ship** an existing set of toolr commands as a
