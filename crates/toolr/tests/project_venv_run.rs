@@ -97,9 +97,13 @@ fn fake_in_tree_venv(repo: &std::path::Path, python_body: &str) -> std::path::Pa
 /// (`bin/python` on Unix, `Scripts\python.exe` on Windows), plus a fake
 /// installed `toolr` package at the OS-correct site-packages layout
 /// (`lib/pythonX.Y/site-packages/toolr/` on Unix, `Lib/site-packages/toolr/`
-/// on Windows — see `toolr_core::venv::validate::candidate_site_packages`).
-/// Returns the venv dir.
-fn fake_in_tree_venv_cross_platform(repo: &std::path::Path) -> std::path::PathBuf {
+/// on Windows — see `toolr_core::venv::validate::candidate_site_packages`),
+/// unless `with_toolr_pkg` is false (used to exercise the validation-failure
+/// path). Returns the venv dir.
+fn fake_in_tree_venv_cross_platform(
+    repo: &std::path::Path,
+    with_toolr_pkg: bool,
+) -> std::path::PathBuf {
     write_tools(repo, IN_TREE_PYPROJECT);
     let venv = repo.join("tools").join(".venv");
 
@@ -111,16 +115,18 @@ fn fake_in_tree_venv_cross_platform(repo: &std::path::Path) -> std::path::PathBu
     std::fs::create_dir_all(python.parent().unwrap()).unwrap();
     std::fs::write(&python, b"").unwrap();
 
-    let site = if cfg!(windows) {
-        venv.join("Lib").join("site-packages").join("toolr")
-    } else {
-        venv.join("lib")
-            .join("python3.13")
-            .join("site-packages")
-            .join("toolr")
-    };
-    std::fs::create_dir_all(&site).unwrap();
-    std::fs::write(site.join("__init__.py"), b"").unwrap();
+    if with_toolr_pkg {
+        let site = if cfg!(windows) {
+            venv.join("Lib").join("site-packages").join("toolr")
+        } else {
+            venv.join("lib")
+                .join("python3.13")
+                .join("site-packages")
+                .join("toolr")
+        };
+        std::fs::create_dir_all(&site).unwrap();
+        std::fs::write(site.join("__init__.py"), b"").unwrap();
+    }
 
     venv
 }
@@ -210,7 +216,7 @@ fn no_sync_passes_args_verbatim() {
 #[test]
 fn not_found_command_gets_nudge() {
     let tmp = TempDir::new().unwrap();
-    let venv = fake_in_tree_venv_cross_platform(tmp.path());
+    let venv = fake_in_tree_venv_cross_platform(tmp.path(), true);
     mark_fresh(tmp.path(), &venv);
     let output = Command::cargo_bin("toolr")
         .unwrap()
@@ -237,6 +243,73 @@ fn not_found_command_gets_nudge() {
         "stderr: {stderr}"
     );
     assert!(stderr.contains("tools/pyproject.toml"), "stderr: {stderr}");
+}
+
+/// A fresh venv that passes the freshness gate but fails `validate_venv`
+/// (the interpreter placeholder exists, but no `toolr` package is
+/// installed) must surface the "validating the tools venv" error, not run
+/// anything. Covers the `validate_venv(...).map_err(...)` arm on the
+/// `--no-sync` path. Cross-platform: never executes the interpreter.
+#[test]
+fn no_sync_errors_when_venv_is_incomplete() {
+    let tmp = TempDir::new().unwrap();
+    let venv = fake_in_tree_venv_cross_platform(tmp.path(), /* with_toolr_pkg */ false);
+    mark_fresh(tmp.path(), &venv);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["project", "venv", "run", "--no-sync", "--", "python"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("validating the tools venv"),
+        "expected a validation error, got stderr: {stderr}"
+    );
+}
+
+/// A command that resolves on the venv PATH but cannot be executed (a
+/// non-executable file) fails to spawn with `PermissionDenied`, not
+/// `NotFound`. It must surface a real spawn error — NOT the
+/// command-not-found nudge, which is reserved for `NotFound`. Covers the
+/// generic `Err(e)` arm of `run_command_in_venv`. Unix-only: relies on the
+/// execute permission bit.
+#[cfg(unix)]
+#[test]
+fn non_executable_command_surfaces_spawn_error_not_nudge() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nexit 0\n");
+    mark_fresh(tmp.path(), &venv);
+    // A file on the venv's bin PATH that exists but is not executable.
+    let blocked = venv.join("bin").join("toolr-blocked-tool-xyz");
+    std::fs::write(&blocked, "not executable\n").unwrap();
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args([
+            "project",
+            "venv",
+            "run",
+            "--no-sync",
+            "--",
+            "toolr-blocked-tool-xyz",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("spawning `toolr-blocked-tool-xyz`"),
+        "expected a spawn error, got stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains("couldn't find"),
+        "a permission error must not be reported as command-not-found: {stderr}"
+    );
 }
 
 #[test]
