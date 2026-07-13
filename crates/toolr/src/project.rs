@@ -146,6 +146,9 @@ pub(crate) fn run_project_init(
         if !quiet {
             println!("toolr: skipping `uv sync` (--no-sync)");
             println!("toolr: run `toolr project venv sync` when you are ready");
+            println!(
+                "toolr: then run commands with `toolr project venv run -- <cmd>` (e.g. pytest tools/)"
+            );
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -172,6 +175,9 @@ pub(crate) fn run_project_init(
         println!("toolr:   toolr example commit");
         println!(
             "toolr:   toolr self completion install <bash|zsh|fish>   # optional, for tab completion"
+        );
+        println!(
+            "toolr:   toolr project venv run -- pytest tools/            # run your tools' tests in the managed venv"
         );
     }
     Ok(ExitCode::SUCCESS)
@@ -278,6 +284,9 @@ fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
             "toolr: synced venv at {} using uv {}.{}.{}",
             resolved.venv_dir.display(),
             uv.version.0, uv.version.1, uv.version.2,
+        );
+        println!(
+            "toolr: run a command in it with `toolr project venv run -- <cmd>` (e.g. pytest tools/)"
         );
     }
     Ok(ExitCode::SUCCESS)

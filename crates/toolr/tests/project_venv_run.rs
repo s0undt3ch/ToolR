@@ -207,6 +207,25 @@ fn not_found_command_gets_nudge() {
 }
 
 #[test]
+fn project_init_next_steps_mention_venv_run() {
+    let tmp = TempDir::new().unwrap();
+    // --no-sync keeps this offline and fast; we only assert on the
+    // scaffolding next-steps output, not on a real sync.
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["project", "init", "--no-sync"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("project venv run"),
+        "next-steps should advertise `venv run`, got: {stdout}"
+    );
+}
+
+#[test]
 #[ignore = "network-touching: requires uv to be available or installable"]
 fn runs_in_a_real_synced_venv() {
     let tmp = TempDir::new().unwrap();
