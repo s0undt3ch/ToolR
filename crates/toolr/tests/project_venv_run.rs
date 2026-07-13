@@ -90,8 +90,42 @@ fn fake_in_tree_venv(repo: &std::path::Path, python_body: &str) -> std::path::Pa
     venv
 }
 
+/// Build an in-tree fake venv at `tools/.venv` good enough for
+/// `validate_venv` on any platform: an interpreter placeholder (an empty
+/// file — never executed by the tests that use this builder, since they
+/// only exercise command-not-found resolution) at the OS-correct path
+/// (`bin/python` on Unix, `Scripts\python.exe` on Windows), plus a fake
+/// installed `toolr` package at the OS-correct site-packages layout
+/// (`lib/pythonX.Y/site-packages/toolr/` on Unix, `Lib/site-packages/toolr/`
+/// on Windows — see `toolr_core::venv::validate::candidate_site_packages`).
+/// Returns the venv dir.
+fn fake_in_tree_venv_cross_platform(repo: &std::path::Path) -> std::path::PathBuf {
+    write_tools(repo, IN_TREE_PYPROJECT);
+    let venv = repo.join("tools").join(".venv");
+
+    let python = if cfg!(windows) {
+        venv.join("Scripts").join("python.exe")
+    } else {
+        venv.join("bin").join("python")
+    };
+    std::fs::create_dir_all(python.parent().unwrap()).unwrap();
+    std::fs::write(&python, b"").unwrap();
+
+    let site = if cfg!(windows) {
+        venv.join("Lib").join("site-packages").join("toolr")
+    } else {
+        venv.join("lib")
+            .join("python3.13")
+            .join("site-packages")
+            .join("toolr")
+    };
+    std::fs::create_dir_all(&site).unwrap();
+    std::fs::write(site.join("__init__.py"), b"").unwrap();
+
+    venv
+}
+
 /// Mark the venv Fresh: uv.lock first, then the sync stamp (newer mtime).
-#[cfg(unix)]
 fn mark_fresh(repo: &std::path::Path, venv: &std::path::Path) {
     std::fs::write(repo.join("tools").join("uv.lock"), b"lock").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(20));
@@ -173,11 +207,10 @@ fn no_sync_passes_args_verbatim() {
     assert!(logged.lines().any(|l| l == "foo"), "argv: {logged}");
 }
 
-#[cfg(unix)]
 #[test]
 fn not_found_command_gets_nudge() {
     let tmp = TempDir::new().unwrap();
-    let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nexit 0\n");
+    let venv = fake_in_tree_venv_cross_platform(tmp.path());
     mark_fresh(tmp.path(), &venv);
     let output = Command::cargo_bin("toolr")
         .unwrap()
@@ -225,6 +258,12 @@ fn project_init_next_steps_mention_venv_run() {
     );
 }
 
+/// This is the cross-platform vehicle for coverage that can't be faked
+/// without a real synced venv: real `Scripts\*.exe` (Windows) / `bin/*`
+/// (Unix) bare-command PATHEXT/PATH resolution, and exit-code passthrough
+/// from a real interpreter. Run with `--ignored` on the Windows CI leg to
+/// cover the Windows-specific behavior the other (Unix-only) tests in this
+/// file can't reach with fake venvs.
 #[test]
 #[ignore = "network-touching: requires uv to be available or installable"]
 fn runs_in_a_real_synced_venv() {
