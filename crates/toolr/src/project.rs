@@ -18,6 +18,7 @@ pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
         Some(("venv", venv_m)) => match venv_m.subcommand() {
             Some(("path", _)) => venv_path(),
             Some(("shell", _)) => venv_shell(),
+            Some(("run", run_m)) => venv_run(run_m),
             Some(("sync", sync_m)) => venv_sync(sync_m),
             Some(("lock", lock_m)) => venv_lock(lock_m),
             Some(("add", add_m)) => venv_add(add_m),
@@ -145,6 +146,9 @@ pub(crate) fn run_project_init(
         if !quiet {
             println!("toolr: skipping `uv sync` (--no-sync)");
             println!("toolr: run `toolr project venv sync` when you are ready");
+            println!(
+                "toolr: then run commands with `toolr project venv run -- <cmd>` (e.g. pytest tools/)"
+            );
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -171,6 +175,9 @@ pub(crate) fn run_project_init(
         println!("toolr:   toolr example commit");
         println!(
             "toolr:   toolr self completion install <bash|zsh|fish>   # optional, for tab completion"
+        );
+        println!(
+            "toolr:   toolr project venv run -- pytest tools/            # run your tools' tests in the managed venv"
         );
     }
     Ok(ExitCode::SUCCESS)
@@ -277,6 +284,9 @@ fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
             "toolr: synced venv at {} using uv {}.{}.{}",
             resolved.venv_dir.display(),
             uv.version.0, uv.version.1, uv.version.2,
+        );
+        println!(
+            "toolr: run a command in it with `toolr project venv run -- <cmd>` (e.g. pytest tools/)"
         );
     }
     Ok(ExitCode::SUCCESS)
@@ -537,6 +547,89 @@ fn venv_shell() -> Result<ExitCode> {
         .env("TOOLR_VENV", &resolved.venv_dir)
         .status()?;
     Ok(ExitCode::from(status.code().unwrap_or(1) as u8))
+}
+
+fn venv_run(matches: &ArgMatches) -> Result<ExitCode> {
+    let no_sync = matches.get_flag("no-sync");
+    let quiet = matches.get_flag("quiet");
+    let argv: Vec<String> = matches
+        .get_many::<String>("command")
+        .expect("clap marks command required")
+        .cloned()
+        .collect();
+
+    let cwd = std::env::current_dir()?;
+
+    let resolved = if no_sync {
+        // Pure path: never touch the venv. Resolve, gate on freshness,
+        // validate, then run. Needs no uv / consent / network.
+        let repo_root = toolr_core::discovery::discover_project_root(&cwd)
+            .context("locating project root for the tools venv")?;
+        let resolved = toolr_core::venv::resolve_venv_path(&repo_root)
+            .context("resolving the tools venv path")?;
+        let tools = repo_root.join("tools");
+        match toolr_core::venv::check_freshness(&resolved, &tools) {
+            toolr_core::venv::Freshness::Missing => anyhow::bail!(
+                "the tools venv hasn't been created yet — run `toolr project venv sync`"
+            ),
+            toolr_core::venv::Freshness::Stale => anyhow::bail!(
+                "the tools venv is out of date with tools/uv.lock — run `toolr project venv sync` (or drop --no-sync)"
+            ),
+            toolr_core::venv::Freshness::Fresh => {}
+        }
+        toolr_core::venv::validate_venv(&resolved.venv_dir, &resolved.python)
+            .map_err(|e| anyhow::anyhow!("validating the tools venv: {e}"))?;
+        resolved
+    } else {
+        // Default: freshness-gated auto-sync (same path as `venv sync`,
+        // and as `venv shell`), then run. `--quiet` forwards to uv's
+        // --quiet inside the sync.
+        let consent = toolr_core::uv::install::ConsentMode::from_env();
+        let (resolved, _uv) = toolr_core::project::ensure_venv_ready(
+            &cwd,
+            consent,
+            toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+        )?;
+        resolved
+    };
+
+    run_command_in_venv(&resolved.venv_dir, &argv)
+}
+
+/// Activate `venv_dir` (VIRTUAL_ENV + TOOLR_VENV + PATH prepend) and run
+/// `argv` in it, inheriting stdio and passing the child's exit code
+/// through. A not-found spawn error becomes an actionable nudge (exit
+/// 127) instead of a raw OS error. No command echo — the child owns
+/// stdout/stderr (parity with `uv run`).
+fn run_command_in_venv(venv_dir: &Path, argv: &[String]) -> Result<ExitCode> {
+    use std::process::Command;
+
+    let bin_dir = venv_bin_dir(venv_dir);
+    let prepended_path = prepend_to_path(&bin_dir, std::env::var_os("PATH").as_deref())?;
+    let (program, rest) = argv
+        .split_first()
+        .expect("clap enforces at least one command token");
+
+    let result = Command::new(program) // nosemgrep: rust.actix.command-injection.rust-actix-command-injection.rust-actix-command-injection
+        .args(rest)
+        .env("VIRTUAL_ENV", venv_dir)
+        .env("TOOLR_VENV", venv_dir)
+        .env("PATH", &prepended_path)
+        .status();
+
+    match result {
+        Ok(status) => Ok(ExitCode::from(status.code().unwrap_or(1) as u8)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("toolr: couldn't find `{program}` in the tools venv.");
+            eprintln!(
+                "hint: did you forget to add it to tools/pyproject.toml (then `toolr project venv sync`)?"
+            );
+            Ok(ExitCode::from(127))
+        }
+        Err(e) => {
+            Err(anyhow::Error::new(e).context(format!("spawning `{program}` in the tools venv")))
+        }
+    }
 }
 
 /// Resolve the shell binary to spawn for `toolr project venv shell`.

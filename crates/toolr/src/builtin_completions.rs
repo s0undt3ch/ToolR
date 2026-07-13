@@ -282,10 +282,10 @@ mod tests {
     }
 
     #[test]
-    fn project_venv_offers_path_shell_sync_lock_add_remove() {
+    fn project_venv_offers_run_path_shell_sync_lock_add_remove() {
         let m = merged_empty_manifest();
         let out = serve_completions(&m, &tokens(&["project", "venv", ""]));
-        for expected in ["path", "shell", "sync", "lock", "add", "remove"] {
+        for expected in ["run", "path", "shell", "sync", "lock", "add", "remove"] {
             assert!(
                 out.contains(&expected.to_string()),
                 "missing {expected} under project venv, got: {out:?}"

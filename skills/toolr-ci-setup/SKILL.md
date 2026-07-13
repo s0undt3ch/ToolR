@@ -171,6 +171,29 @@ in the wheel — see
 [`toolr-command-packaging`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-packaging) —
 this skill only owns the `--check` gate side.
 
+## Recipe 3 — Run a command-package's tests in CI
+
+For deterministic CI test runs, sync the venv explicitly, then run tests
+against that already-synced venv rather than letting the run step re-sync:
+
+```yaml
+name: toolr
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: s0undt3ch/ToolR@<sha>   # v0.20.0
+      - run: toolr project venv sync
+      - run: toolr project venv run --no-sync -- pytest tools/
+```
+
+`--no-sync` makes the run step fail fast (instead of silently re-syncing) if
+the venv is missing or stale — the deterministic behaviour you want in CI, as
+opposed to the auto-sync-by-default `toolr project venv run` recipe used for
+local iteration.
+
 ## Inputs and outputs at a glance
 
 The full input/output surface (defaults, descriptions, what each

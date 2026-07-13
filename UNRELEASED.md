@@ -24,3 +24,9 @@ dependency group. `typos` now auto-fixes on commit, and the redundant
 mistakes are caught before git-cliff folds commit subjects into the CHANGELOG —
 which is itself no longer excluded from the check. Existing clones should re-run
 `prek install --install-hooks` once to pick up the new `commit-msg` hook.
+
+`toolr project venv run -- <cmd>` runs a command inside the managed tools venv —
+the first-class one-liner for running a command-package's tests
+(`toolr project venv run -- pytest tools/`). By default it syncs the venv first
+(like `venv shell`); `--no-sync` runs against the existing venv and errors if it
+is missing or stale, for deterministic CI.
