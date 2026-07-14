@@ -30,3 +30,9 @@ the first-class one-liner for running a command-package's tests
 (`toolr project venv run -- pytest tools/`). By default it syncs the venv first
 (like `venv shell`); `--no-sync` runs against the existing venv and errors if it
 is missing or stale, for deterministic CI.
+
+`--quiet` now suppresses the passive "your cache is big, consider pruning" hint.
+The hint is non-error output, so `--quiet` (which promises to suppress exactly
+that) now keeps it silent — including the per-`cd` `toolr project venv sync
+--quiet` the mise enter-hook runs, which previously leaked the hint to stderr in
+non-toolr directories once the cache accumulated enough orphans.
