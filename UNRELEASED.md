@@ -10,29 +10,3 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
-
-The pre-commit configuration now sources its shared hooks (actionlint,
-shellcheck, gitleaks, pin-github-actions, ruff, typos, rumdl, mypy, uv-lock)
-from [`s0undt3ch/pre-commit-hooks`](https://github.com/s0undt3ch/pre-commit-hooks),
-replacing the per-repo `rev:` pins and the local `.pre-commit-hooks/*.sh`
-wrappers. Tool versions now have a single source of truth: binaries pinned in
-`mise.toml` (Renovate-managed) and the venv `mypy` in the new `pre-commit` uv
-dependency group. `typos` now auto-fixes on commit, and the redundant
-`codespell` hook was dropped in favour of `typos` alone.
-
-`typos` also now spell-checks commit messages (a `commit-msg`-stage hook), so
-mistakes are caught before git-cliff folds commit subjects into the CHANGELOG —
-which is itself no longer excluded from the check. Existing clones should re-run
-`prek install --install-hooks` once to pick up the new `commit-msg` hook.
-
-`toolr project venv run -- <cmd>` runs a command inside the managed tools venv —
-the first-class one-liner for running a command-package's tests
-(`toolr project venv run -- pytest tools/`). By default it syncs the venv first
-(like `venv shell`); `--no-sync` runs against the existing venv and errors if it
-is missing or stale, for deterministic CI.
-
-`--quiet` now suppresses the passive "your cache is big, consider pruning" hint.
-The hint is non-error output, so `--quiet` (which promises to suppress exactly
-that) now keeps it silent — including the per-`cd` `toolr project venv sync
---quiet` the mise enter-hook runs, which previously leaked the hint to stderr in
-non-toolr directories once the cache accumulated enough orphans.

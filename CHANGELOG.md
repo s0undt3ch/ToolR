@@ -6,6 +6,69 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.26.0 - 2026-07-15
+
+### Notes
+
+The pre-commit configuration now sources its shared hooks (actionlint,
+shellcheck, gitleaks, pin-github-actions, ruff, typos, rumdl, mypy, uv-lock)
+from [`s0undt3ch/pre-commit-hooks`](https://github.com/s0undt3ch/pre-commit-hooks),
+replacing the per-repo `rev:` pins and the local `.pre-commit-hooks/*.sh`
+wrappers. Tool versions now have a single source of truth: binaries pinned in
+`mise.toml` (Renovate-managed) and the venv `mypy` in the new `pre-commit` uv
+dependency group. `typos` now auto-fixes on commit, and the redundant
+`codespell` hook was dropped in favour of `typos` alone.
+
+`typos` also now spell-checks commit messages (a `commit-msg`-stage hook), so
+mistakes are caught before git-cliff folds commit subjects into the CHANGELOG —
+which is itself no longer excluded from the check. Existing clones should re-run
+`prek install --install-hooks` once to pick up the new `commit-msg` hook.
+
+`toolr project venv run -- <cmd>` runs a command inside the managed tools venv —
+the first-class one-liner for running a command-package's tests
+(`toolr project venv run -- pytest tools/`). By default it syncs the venv first
+(like `venv shell`); `--no-sync` runs against the existing venv and errors if it
+is missing or stale, for deterministic CI.
+
+`--quiet` now suppresses the passive "your cache is big, consider pruning" hint.
+The hint is non-error output, so `--quiet` (which promises to suppress exactly
+that) now keeps it silent — including the per-`cd` `toolr project venv sync
+--quiet` the mise enter-hook runs, which previously leaked the hint to stderr in
+non-toolr directories once the cache accumulated enough orphans.
+
+### <!-- 0 -->🚀 Features
+
+- *(cli)* Add `toolr project venv run` to run commands in the managed venv ([`3910ccc`](https://github.com/s0undt3ch/ToolR/commit/3910ccc0f8448fcab369f6e34a7f521cb272c522))
+- *(cli)* Advertise `venv run` from `project init` and `venv sync` ([`0ae5685`](https://github.com/s0undt3ch/ToolR/commit/0ae568592a71f2cb1fe831e277a3546715e3b965))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(deps)* Bump quinn-proto to 0.11.15 for RUSTSEC-2026-0185 ([`9df2efe`](https://github.com/s0undt3ch/ToolR/commit/9df2efee5e2e7628221ba75b2752c7b4e8f4b83b))
+- *(cli)* Suppress passive cache hint under --quiet ([`de97fb9`](https://github.com/s0undt3ch/ToolR/commit/de97fb9739b4fa3a0e30135e282dc0b779eb5b1d))
+
+### <!-- 3 -->📚 Documentation
+
+- *(writing-commands)* Prefer ctx.repo_root and document tools namespace package ([`8f2f4ec`](https://github.com/s0undt3ch/ToolR/commit/8f2f4ec74898ec924a63bb909c79f716d1d9ea3e))
+- *(writing-commands)* Fix tools import example and note relative imports work ([`6d03f17`](https://github.com/s0undt3ch/ToolR/commit/6d03f1746de79bd0f31a6b2eb3f059758ab31a01))
+- *(ci-setup)* Document TOOLR_VENV_LOCATION and the action's in-tree default ([`52d55cb`](https://github.com/s0undt3ch/ToolR/commit/52d55cb19208f28413da6c3b94faea8737408a8f))
+- *(internals)* Venv-run design doc ([`fac9e27`](https://github.com/s0undt3ch/ToolR/commit/fac9e27f841554ca3cb38dee864325c905e901cd))
+- *(cli)* Document `toolr project venv run` ([`99f5ba0`](https://github.com/s0undt3ch/ToolR/commit/99f5ba06190f9c59335d254b949148c02a29e581))
+- *(skills)* Teach `toolr project venv run` for running/testing commands ([`5be24c2`](https://github.com/s0undt3ch/ToolR/commit/5be24c2ca4aacec46faccc468faebb4f87481a64))
+- *(internals)* Archive venv-run design + plan ([`e9ab46d`](https://github.com/s0undt3ch/ToolR/commit/e9ab46d87d693716871c696623f0a12c2fb39340))
+- *(internals)* Archive shipped specs (ci-setup, static-only-manifest, runner-path-hygiene, remove-editable-install) ([`6c20439`](https://github.com/s0undt3ch/ToolR/commit/6c2043934070e826b749cdab0eb98d89c239e73f))
+
+### <!-- 6 -->🧪 Testing
+
+- *(pre-commit)* Drop obsolete pin-github-actions hook test ([`d8dd8db`](https://github.com/s0undt3ch/ToolR/commit/d8dd8dbeb9b1921cfd56c4a88a3dc14432090d43))
+- *(cli)* Run venv-run not-found nudge on all platforms ([`a59e616`](https://github.com/s0undt3ch/ToolR/commit/a59e61613954e6b6c70f2ff362b853432a1e3e52))
+- *(cli)* Cover venv-run validate-failure and non-executable spawn-error paths ([`b8634b8`](https://github.com/s0undt3ch/ToolR/commit/b8634b8fe9dd3060699f93d5e314f9a79e052c24))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(renovate)* Enable osvVulnerabilityAlerts ([`c229783`](https://github.com/s0undt3ch/ToolR/commit/c229783cb3a653b004ba1fbe38b6a14c035d3c02))
+- *(renovate)* Monthly lockFileMaintenance ([`8c0b803`](https://github.com/s0undt3ch/ToolR/commit/8c0b80351534c54466164303aa0f34604f336ff5))
+- *(pre-commit)* Adopt s0undt3ch/pre-commit-hooks ([`5c23763`](https://github.com/s0undt3ch/ToolR/commit/5c23763ec088b8d6160c5fa2170a005f0c92ef39))
+- *(pre-commit)* Spell-check commit messages and the CHANGELOG ([`8a0a16b`](https://github.com/s0undt3ch/ToolR/commit/8a0a16b50dc196b890b3a5a400ca3cde17655d91))
 ## 0.25.2 - 2026-06-30
 
 ### Notes
