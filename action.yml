@@ -378,7 +378,7 @@ runs:
 
     - name: Install uv via astral-sh/setup-uv
       if: steps.uv-check.outputs.found == 'false' || inputs.uv-version != ''
-      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
       with:
         # Empty `version` lets setup-uv pick its own default — that's
         # exactly the behaviour we want for "uv is just missing, install
