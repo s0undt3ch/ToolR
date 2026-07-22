@@ -152,6 +152,16 @@ jobs:
           cache-seed: ${{ env.CACHE_SEED }}|ci
           mise-version: ${{ env.MISE_VERSION }}
 
+      - name: Setup ToolR
+        # The `check-pipeline-gate-needs` prek hook runs `toolr ci
+        # check-gate-needs` from the tools venv (see mise.toml for the
+        # local equivalent).
+        id: setup-toolr
+        uses: ./
+        with:
+          version: latest
+          cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|pre-commit
+
       - name: Run Prek
         env:
           # The `verify-action-pins` hook resolves each pinned action's tag
@@ -735,36 +745,39 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     needs:
-      - prepare-ci
-      - pre-commit
-      - prepare-release
-      - build-binary-archive
-      - build-example-plugin-wheel
-      - build-binary-wheel-linux
-      - build-py-wheel-linux
-      - build-binary-wheel-windows
-      - build-py-wheel-windows
-      - build-binary-wheel-macos
-      - build-py-wheel-macos
-      - test-linux
-      - test-macos
-      - test-windows
-      - test-distribution-linux
-      - test-distribution-macos
-      - test-distribution-windows
       - bench-linux
       - bench-macos
       - bench-windows
+      - build-binary-archive
+      - build-binary-wheel-linux
+      - build-binary-wheel-macos
+      - build-binary-wheel-windows
+      - build-example-plugin-wheel
+      - build-py-wheel-linux
+      - build-py-wheel-macos
+      - build-py-wheel-windows
       - docs
+      - pre-commit
+      - prepare-ci
+      - prepare-release
       - publish
+      - test-distribution-linux
+      - test-distribution-macos
+      - test-distribution-windows
+      - test-linux
+      - test-macos
+      - test-windows
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
-      - name: Fail when any job failed or was cancelled
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
-        run: |
-          echo "One or more jobs failed or were cancelled"
-          exit 1
+      # A local `uses:` resolves from the checked-out tree, and gate jobs
+      # otherwise never check out the repo.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Gate on the needed jobs' results
+        uses: ./.github/actions/pipeline-gate
+        with:
+          jobs: ${{ toJSON(needs) }}

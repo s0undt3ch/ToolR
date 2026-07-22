@@ -78,18 +78,21 @@ repos:
   - repo: local
     hooks:
       - id: check-pipeline-gate-needs
-        name: Verify pipeline gate jobs list every job
+        name: Sync pipeline gate `needs` lists
         # The `set-pipeline-exit-status` gate jobs only see the results of
         # their direct `needs` — a job missing from that list can fail
-        # without failing the gate. This drift check keeps the lists
-        # complete as jobs are added or renamed.
-        entry: .pre-commit-hooks/check-pipeline-gate-needs.py
+        # without failing the gate. Auto-fix style (like `build-skill-refs`
+        # below): the command rewrites each gate's `needs` to the full job
+        # set in place; prek sees the modified workflow and fails the
+        # commit until the fresh file is staged. Requires the `toolr`
+        # binary (pinned in `mise.toml`; Setup ToolR provides it in CI).
+        entry: toolr ci check-gate-needs
         language: system
         pass_filenames: false
         files: >
           (?x)^(
             \.github/workflows/.*\.yml$|
-            \.pre-commit-hooks/check-pipeline-gate-needs\.py$
+            tools/ci\.py$
           )$
 
       - id: regen-doc-snippets

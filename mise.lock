@@ -39,6 +39,52 @@ checksum = "sha256:6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_windows_amd64.zip"
 provenance = "github-attestations"
 
+[[tools."aqua:s0undt3ch/ToolR"]]
+version = "0.26.0"
+backend = "aqua:s0undt3ch/ToolR"
+
+[tools."aqua:s0undt3ch/ToolR"."platforms.linux-arm64"]
+checksum = "sha256:50eb5c72a80c5e4cdc4b18c1133ee97e66d82a2c1dfdc12b02dc471392fe94a0"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.26.0/toolr-0.26.0-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/477718833"
+provenance = "github-attestations"
+
+[tools."aqua:s0undt3ch/ToolR"."platforms.linux-arm64-musl"]
+checksum = "sha256:50eb5c72a80c5e4cdc4b18c1133ee97e66d82a2c1dfdc12b02dc471392fe94a0"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.26.0/toolr-0.26.0-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/477718833"
+provenance = "github-attestations"
+
+[tools."aqua:s0undt3ch/ToolR"."platforms.linux-x64"]
+checksum = "sha256:1b74371556b71ac07b64a399a37c4b70accd34141050f44dc57ac207148b6fd0"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.26.0/toolr-0.26.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/477718825"
+provenance = "github-attestations"
+
+[tools."aqua:s0undt3ch/ToolR"."platforms.linux-x64-musl"]
+checksum = "sha256:1b74371556b71ac07b64a399a37c4b70accd34141050f44dc57ac207148b6fd0"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.26.0/toolr-0.26.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/477718825"
+provenance = "github-attestations"
+
+[tools."aqua:s0undt3ch/ToolR"."platforms.macos-arm64"]
+checksum = "sha256:65785f20a26d3b5a97d7b7a5f9505bff862816a6dd99f00787b5771fad23a927"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.26.0/toolr-0.26.0-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/477718832"
+provenance = "github-attestations"
+
+[tools."aqua:s0undt3ch/ToolR"."platforms.macos-x64"]
+checksum = "sha256:0af676ca9cb56126abc7bba3d8681f3acf9a786de91c26df3fdaf4646689fd24"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.26.0/toolr-0.26.0-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/477718827"
+provenance = "github-attestations"
+
+[tools."aqua:s0undt3ch/ToolR"."platforms.windows-x64"]
+checksum = "sha256:cc0c481d019a9871ae125c028de599e6ec6ed3e4f07dc7dddd027015e0e12cff"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.26.0/toolr-0.26.0-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/477718821"
+provenance = "github-attestations"
+
 [[tools."cargo:cargo-edit"]]
 version = "0.13.11"
 backend = "cargo:cargo-edit"

@@ -1,0 +1,42 @@
+name: Pipeline Gate
+description: >-
+  Evaluates a gate job's `needs` context and fails when any needed job
+  failed or was cancelled. The step must always run — pass the context via
+  the `jobs` input and never guard the step with an `if`. The gate job
+  itself must carry `if: always()` (or it is skipped the moment an upstream
+  job fails, and a skipped check can satisfy branch protection) and its
+  `needs` must list every other job in the workflow — a job skipped because
+  an upstream dependency failed reports `skipped`, not `failure`, so only
+  direct `needs` entries make failures visible here. All of these
+  invariants are enforced by the `toolr ci check-gate-needs` pre-commit
+  hook, which detects gate jobs by their use of this action.
+
+inputs:
+  jobs:
+    description: >-
+      JSON object of the gate job's `needs` context; always pass
+      `toJSON(needs)`.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Evaluate needed job results
+      shell: bash
+      env:
+        NEEDS_JSON: ${{ inputs.jobs }}
+      run: |
+        # Composite actions do not enforce `required` inputs, so an unset
+        # or empty needs context must fail closed rather than wave the
+        # workflow through without checking anything.
+        if [ -z "$NEEDS_JSON" ] || [ "$NEEDS_JSON" = "null" ] || [ "$NEEDS_JSON" = "{}" ]; then
+          echo "::error::pipeline-gate received no needs context; pass 'jobs: toJSON(needs)' and list every job in the gate's needs" >&2
+          exit 1
+        fi
+        echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+        bad=$(echo "$NEEDS_JSON" | jq '[.[] | select(.result == "failure" or .result == "cancelled")] | length')
+        if [ "$bad" -gt 0 ]; then
+          echo "::error::$bad needed job(s) failed or were cancelled" >&2
+          exit 1
+        fi
+        echo "All needed jobs succeeded (or were skipped)."

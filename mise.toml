@@ -22,6 +22,11 @@ rust = { version = "1.96.1", profile = "minimal", components = "clippy,rustfmt" 
 uv = { version = "0.11.28" }
 prek = "0.4.4"
 "cargo:cargo-edit" = "0.13.11"
+# Dogfood: the released toolr binary drives repo automation (the
+# `check-pipeline-gate-needs` prek hook runs `toolr ci check-gate-needs`).
+# CI jobs install it via the in-repo Setup ToolR action instead, which
+# also verifies the SLSA attestation.
+"aqua:s0undt3ch/ToolR" = "0.26.0"
 
 [env]
 _.python.venv = { path = ".venv", create = true, uv_create_args = ['--seed'] }
