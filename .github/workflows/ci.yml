@@ -58,7 +58,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Load shared env vars
         # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
@@ -135,7 +135,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Load shared env vars
         # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
@@ -228,7 +228,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
@@ -499,7 +499,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout code
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Load shared env vars
         # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
@@ -748,7 +748,7 @@ jobs:
 
       # A local `uses:` resolves from the checked-out tree, and gate jobs
       # otherwise never check out the repo.
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Gate on the needed jobs' results
         uses: ./.github/actions/pipeline-gate
