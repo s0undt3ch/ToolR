@@ -41,7 +41,6 @@ repos:
         alias: ruff
         args:
           - --fix
-        exclude: .pre-commit-hooks/.*\.py
 
       - id: typos
 
@@ -77,9 +76,27 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-pipeline-gate-needs
+        name: Sync pipeline gate `needs` lists
+        # The pipeline gate jobs only see the results of their direct
+        # `needs` — a job missing from that list can fail without failing
+        # the gate. Auto-fix style (like `build-skill-refs` below): the
+        # command rewrites each gate's wiring in place; prek sees the
+        # modified workflow and fails the commit until the fresh file is
+        # staged. Requires the `toolr` binary (pinned in `mise.toml`;
+        # Setup ToolR provides it in CI).
+        entry: toolr pre-commit check-gate-needs
+        language: system
+        pass_filenames: false
+        files: >
+          (?x)^(
+            \.github/workflows/.*\.yml$|
+            tools/precommit/(workflows|_common)\.py$
+          )$
+
       - id: regen-doc-snippets
         name: Verify doc snippets are in sync
-        entry: .pre-commit-hooks/regen-doc-snippets.py --check
+        entry: toolr pre-commit regen-doc-snippets --check
         language: system
         pass_filenames: false
         # Fire on docs that include captured snippets and on the
@@ -89,7 +106,7 @@ repos:
         files: >
           (?x)^(
             docs/.*|
-            \.pre-commit-hooks/regen-doc-snippets\.py$|
+            tools/precommit/(docs|_common)\.py$|
             crates/toolr/src/.*\.rs$|
             crates/toolr/src/init_templates/.*|
             crates/toolr-core/src/.*\.rs$

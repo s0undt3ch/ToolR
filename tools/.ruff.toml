@@ -11,5 +11,9 @@ max-args = 10
   "D104",     # missing docstring in public package
   "D107",     # missing docstring in `__init__`
   "D417",     # Missing argument description in the docstring for `ctx`
+  "INP001",   # `tools/` is a PEP 420 namespace package by design — toolr
+              # discovers and imports command modules without `__init__.py`.
+  "TC001",    # Move application import `xyz` into a type-checking block —
+              # command modules import `Context` at module level by design.
   "TC002",    # Move third-party import `xyz` into a type-checking block
 ]

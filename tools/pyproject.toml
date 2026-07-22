@@ -12,6 +12,9 @@ dependencies = [
     # keeps this floor and bumps only the locked version. Floor = the first
     # release whose runner matches the current binary's dispatch contract.
     "toolr-py>=0.25.0",
+    # Comment-preserving YAML round-trip for `toolr ci check-gate-needs`,
+    # which rewrites workflow gate `needs` lists in place.
+    "ruamel.yaml>=0.18",
 ]
 
 # `tools/` is intentionally NOT part of the root uv workspace, so

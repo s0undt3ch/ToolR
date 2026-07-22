@@ -152,6 +152,16 @@ jobs:
           cache-seed: ${{ env.CACHE_SEED }}|ci
           mise-version: ${{ env.MISE_VERSION }}
 
+      - name: Setup ToolR
+        # The prek hooks backed by `toolr pre-commit <command>`
+        # dispatch from the tools venv (see mise.toml for the local
+        # equivalent).
+        id: setup-toolr
+        uses: ./
+        with:
+          version: latest
+          cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|pre-commit
+
       - name: Run Prek
         env:
           # The `verify-action-pins` hook resolves each pinned action's tag
@@ -568,52 +578,25 @@ jobs:
           chmod +x "$dest/toolr"
           echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
 
-      # Inline rather than via `toolr ci check-doc-snippets`. That
-      # command requires `tools/.toolr-manifest.json` to exist (it's
-      # gitignored) AND for the toolr dispatcher's resolved tools-venv
-      # to contain toolr-py. The docs job ships toolr-py in `<repo>/.venv`
-      # but toolr resolves a *different* venv (per `tools/pyproject.toml`'s
-      # `venv-location`, default cache), so the bootstrap would need an
-      # extra `toolr project manifest rebuild` + venv resolution dance.
-      # The bash version only needs the regen script + the extracted
-      # toolr binary, both already present. The `tools/ci.py`'s
-      # `check_doc_snippets` function stays as the canonical surface for
-      # any job that does have a fully bootstrapped toolr (e.g.
-      # `prepare-ci` via the `s0undt3ch/ToolR` action).
+      - name: Setup ToolR
+        # Dispatches `toolr pre-commit regen-doc-snippets`. The
+        # released binary from this action only drives the command —
+        # keeping the dispatcher's runner-schema contract aligned with
+        # the released toolr-py in the tools venv — while the freshly
+        # built binary under test is what the captures actually run,
+        # via TOOLR_REGEN_BINARY below.
+        id: setup-toolr
+        uses: ./
+        with:
+          version: latest
+          cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|docs
+
       - name: Verify doc snippets are in sync
+        # On drift the command replays the diff on stderr and writes the
+        # remediation block + diff to $GITHUB_STEP_SUMMARY itself.
         env:
           TOOLR_REGEN_BINARY: ${{ steps.toolr-binary.outputs.path }}
-        run: |
-          set +e
-          .pre-commit-hooks/regen-doc-snippets.py --check 2> "$RUNNER_TEMP/snippet-diff"
-          status=$?
-          set -e
-          cat "$RUNNER_TEMP/snippet-diff" >&2 || true
-          if [ "$status" -ne 0 ]; then
-            {
-              echo "## ❌ Doc snippets are stale"
-              echo
-              echo "The captured \`--help\` snippets under \`docs/\` no longer match the current \`toolr\` binary. The pre-commit hook is advisory (skipped when no \`toolr\` is on PATH locally), so CI is the authoritative check."
-              echo
-              echo "**Fix locally:**"
-              echo
-              echo '```bash'
-              echo 'cargo build --release -p toolr   # ensure target/release/toolr is current'
-              echo '.pre-commit-hooks/regen-doc-snippets.py'
-              echo 'git add docs/'
-              echo 'git commit -m "docs: regen snippets"'
-              echo '```'
-              echo
-              echo "<details><summary>Diff</summary>"
-              echo
-              echo '```diff'
-              cat "$RUNNER_TEMP/snippet-diff"
-              echo '```'
-              echo
-              echo "</details>"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+        run: toolr pre-commit regen-doc-snippets --check
 
       - name: Build MkDocs site
         run: uv run mkdocs build --strict
@@ -725,36 +708,49 @@ jobs:
       contents: read
 
   set-pipeline-exit-status:
-    permissions:
-      actions: read
-    # This step is just so we can make github require this step, to pass checks
-    # on a pull request instead of requiring all
+    permissions: {}
+    # This job exists so the branch ruleset can require a single check that
+    # represents the whole workflow. It must list EVERY job in `needs`: a job
+    # skipped because an upstream dependency failed reports `skipped`, not
+    # `failure`, so a failure is only visible here on the job that directly
+    # failed. `skipped` itself is acceptable — bench/publish skip routinely.
     name: Set the ${{ github.workflow }}(${{ github.event_name }}) Pipeline Exit Status
     if: always()
     runs-on: ubuntu-latest
     needs:
-      - prepare-ci
-      - pre-commit
-      - prepare-release
-      - test-linux
-      - test-macos
-      - test-windows
       - bench-linux
       - bench-macos
       - bench-windows
+      - build-binary-archive
+      - build-binary-wheel-linux
+      - build-binary-wheel-macos
+      - build-binary-wheel-windows
+      - build-example-plugin-wheel
+      - build-py-wheel-linux
+      - build-py-wheel-macos
+      - build-py-wheel-windows
       - docs
+      - pre-commit
+      - prepare-ci
+      - prepare-release
       - publish
+      - test-distribution-linux
+      - test-distribution-macos
+      - test-distribution-windows
+      - test-linux
+      - test-macos
+      - test-windows
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
-      - uses: martialonline/workflow-status@326830cacf79872efe767e15031f58d1ea0508c4 # v4.2
-        id: check
-      - run: echo "Workflow failed"
-        if: steps.check.outputs.status == 'failure'
-      - run: echo "Workflow was cancelled"
-        if: steps.check.outputs.status == 'cancelled'
-      - run: echo "Workflow was successful"
-        if: steps.check.outputs.status == 'success'
+      # A local `uses:` resolves from the checked-out tree, and gate jobs
+      # otherwise never check out the repo.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Gate on the needed jobs' results
+        uses: ./.github/actions/pipeline-gate
+        with:
+          jobs: ${{ toJSON(needs) }}
