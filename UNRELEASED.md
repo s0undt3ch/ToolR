@@ -10,3 +10,11 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+The `Set the … Pipeline Exit Status` gate jobs in the CI, Release, and
+install-smoke workflows now actually fail when any upstream job fails or is
+cancelled. Previously they only echoed the workflow status and always exited
+zero, so the required status check on `main` was green regardless of CI
+results. The gates also now depend on every job in their workflow, closing a
+gap where a failure early in the job graph surfaced downstream as `skipped`
+and went unnoticed.
