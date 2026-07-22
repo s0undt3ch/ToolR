@@ -86,7 +86,7 @@ runs:
         key: rustup|${{ inputs.cache-seed }}|${{ inputs.mise-version }}|${{ runner.os }}|${{ runner.arch }}|${{ hashFiles('mise.toml', 'mise.lock') }}
 
     - name: Set up mise
-      uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+      uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
       env:
         # Belt-and-braces: also pass via the step `env:` so the override
         # takes effect even when the previous step is skipped (empty
