@@ -250,7 +250,13 @@ def prepare_fixture(
         env={**os.environ, "TOOLR_NO_CACHE_HINT": "1"},
     )
     if ret.returncode != 0:
-        print("Failed to rebuild manifest")
+        print(
+            f"regen-doc-snippets: `{toolr} project manifest rebuild` exited "
+            f"{ret.returncode} in {dest}",
+            file=sys.stderr,
+        )
+        sys.stderr.write(ret.stdout.decode(errors="replace"))
+        sys.stderr.write(ret.stderr.decode(errors="replace"))
         sys.exit(1)
 
 
@@ -279,7 +285,13 @@ def capture(toolr: Path, fixture: Path, _python: Path, snippet: Snippet) -> str:
         stdin=subprocess.DEVNULL,
     )
     if result.returncode != 0:
-        print("Failed to run snippet")
+        print(
+            f"regen-doc-snippets: `toolr {' '.join(snippet.argv)}` exited "
+            f"{result.returncode} while capturing {snippet.path.relative_to(REPO_ROOT)}",
+            file=sys.stderr,
+        )
+        sys.stderr.write(result.stdout)
+        sys.stderr.write(result.stderr)
         sys.exit(1)
 
     # Concatenate stdout + stderr so error-path captures work too.
@@ -348,6 +360,32 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         return 0
     python = find_runner_python()
+    # A binary on PATH does not imply a usable runner: fixture commands
+    # dispatch to this Python, which must import toolr's runner (CI's
+    # pre-commit job, for instance, has the mise-pinned binary but a venv
+    # holding only the `pre-commit` dependency group). Mirror the
+    # missing-binary no-op unless the Python was explicitly requested.
+    probe = subprocess.run(  # noqa: S603
+        [str(python), "-c", "import toolr._runner"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if probe.returncode != 0:
+        if os.environ.get("TOOLR_REGEN_PYTHON"):
+            print(
+                f"regen-doc-snippets: $TOOLR_REGEN_PYTHON ({python}) cannot `import toolr._runner`",
+                file=sys.stderr,
+            )
+            sys.stderr.write(probe.stderr)
+            return 1
+        print(
+            f"regen-doc-snippets: {python} cannot `import toolr._runner`; "
+            "skipping. Run `uv sync --all-extras --dev` to enable this hook "
+            "locally — CI's docs job verifies snippet freshness regardless.",
+            file=sys.stderr,
+        )
+        return 0
     clean = True
     with tempfile.TemporaryDirectory(prefix="toolr-doc-fixture-") as tmpdir:
         tmproot = Path(tmpdir)
