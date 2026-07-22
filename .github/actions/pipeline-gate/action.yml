@@ -8,8 +8,8 @@ description: >-
   `needs` must list every other job in the workflow — a job skipped because
   an upstream dependency failed reports `skipped`, not `failure`, so only
   direct `needs` entries make failures visible here. All of these
-  invariants are enforced by the `toolr ci check-gate-needs` pre-commit
-  hook, which detects gate jobs by their use of this action.
+  invariants are enforced by the `toolr pre-commit check-gate-needs`
+  pre-commit hook, which detects gate jobs by their use of this action.
 
 inputs:
   jobs:

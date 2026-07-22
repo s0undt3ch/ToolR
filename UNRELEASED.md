@@ -20,10 +20,13 @@ that always executes, scans the `needs` context handed to it via
 `jobs: toJSON(needs)`, and sets the exit status — and they depend on every
 job in their workflow, closing a gap where a failure early in the job graph
 surfaced downstream as `skipped` and went unnoticed. A new dogfooded
-`toolr ci check-gate-needs` command enforces the whole gate wiring (full
-sorted `needs` list, job-level `if: always()`, the `jobs` input, no
-step-level `if`), rewriting workflows in place via comment-preserving
-`ruamel.yaml` round-trips, and runs as a pre-commit hook in auto-fix style
-so the wiring cannot silently drift as jobs are added. The released `toolr`
-binary is now pinned in `mise.toml` so `mise install` provides it locally;
-CI's pre-commit job installs it via the Setup ToolR action.
+`toolr pre-commit check-gate-needs` command enforces the whole gate
+wiring (full sorted `needs` list, job-level `if: always()`, the `jobs`
+input, no step-level `if`), rewriting workflows in place via
+comment-preserving `ruamel.yaml` round-trips, and runs as a pre-commit hook
+in auto-fix style so the wiring cannot silently drift as jobs are added.
+The doc-snippet regeneration script moved into the same dogfooded surface
+as `toolr pre-commit regen-doc-snippets` (`tools/precommit/`), retiring
+`.pre-commit-hooks/`. The released `toolr` binary is now pinned in
+`mise.toml` so `mise install` provides it locally; CI's pre-commit and docs
+jobs install it via the Setup ToolR action.

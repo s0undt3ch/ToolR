@@ -54,7 +54,7 @@ prek run --all-files              # run every pre-commit hook
 - Static manifest parser: `crates/toolr-core/src/parser/`.
 - Tab-completion freshness: `crates/toolr-core/src/complete/freshness.rs`.
 - Reference plugin / example: `examples/plugin-package/`.
-- Pre-commit hooks (project-local): `.pre-commit-hooks/`.
+- Pre-commit hook commands (project-local): `tools/precommit/` (`toolr pre-commit <command>`).
 - Skills shipped from this repo:
   `skills/toolr-ci-setup/`, `skills/toolr-command-authoring/`, `skills/toolr-command-packaging/`.
 
@@ -82,7 +82,7 @@ prek run --all-files              # run every pre-commit hook
   Each carries a doc comment listing which changes require a bump. CI fails when they disagree.
 - **Queue release notes in `UNRELEASED.md`. Never hand-edit `CHANGELOG.md`** — `git-cliff`
   regenerates it on release from Conventional Commits.
-- **Regenerate doc snippets, don't hand-edit them.** `.pre-commit-hooks/regen-doc-snippets.py`
+- **Regenerate doc snippets, don't hand-edit them.** `toolr pre-commit regen-doc-snippets`
   captures `toolr` output into `docs/**/*.txt` from `docs/.fixtures/sample-repo/`.
 - **Regenerate skill refs after public-surface changes.** `cargo xtask build-skill-refs --check`
   runs first in `mise run test` and CI. Regen with `cargo xtask build-skill-refs` and commit.

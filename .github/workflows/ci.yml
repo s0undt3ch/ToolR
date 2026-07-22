@@ -153,9 +153,9 @@ jobs:
           mise-version: ${{ env.MISE_VERSION }}
 
       - name: Setup ToolR
-        # The `check-pipeline-gate-needs` prek hook runs `toolr ci
-        # check-gate-needs` from the tools venv (see mise.toml for the
-        # local equivalent).
+        # The prek hooks backed by `toolr pre-commit <command>`
+        # dispatch from the tools venv (see mise.toml for the local
+        # equivalent).
         id: setup-toolr
         uses: ./
         with:
@@ -578,52 +578,25 @@ jobs:
           chmod +x "$dest/toolr"
           echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
 
-      # Inline rather than via `toolr ci check-doc-snippets`. That
-      # command requires `tools/.toolr-manifest.json` to exist (it's
-      # gitignored) AND for the toolr dispatcher's resolved tools-venv
-      # to contain toolr-py. The docs job ships toolr-py in `<repo>/.venv`
-      # but toolr resolves a *different* venv (per `tools/pyproject.toml`'s
-      # `venv-location`, default cache), so the bootstrap would need an
-      # extra `toolr project manifest rebuild` + venv resolution dance.
-      # The bash version only needs the regen script + the extracted
-      # toolr binary, both already present. The `tools/ci.py`'s
-      # `check_doc_snippets` function stays as the canonical surface for
-      # any job that does have a fully bootstrapped toolr (e.g.
-      # `prepare-ci` via the `s0undt3ch/ToolR` action).
+      - name: Setup ToolR
+        # Dispatches `toolr pre-commit regen-doc-snippets`. The
+        # released binary from this action only drives the command —
+        # keeping the dispatcher's runner-schema contract aligned with
+        # the released toolr-py in the tools venv — while the freshly
+        # built binary under test is what the captures actually run,
+        # via TOOLR_REGEN_BINARY below.
+        id: setup-toolr
+        uses: ./
+        with:
+          version: latest
+          cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|docs
+
       - name: Verify doc snippets are in sync
+        # On drift the command replays the diff on stderr and writes the
+        # remediation block + diff to $GITHUB_STEP_SUMMARY itself.
         env:
           TOOLR_REGEN_BINARY: ${{ steps.toolr-binary.outputs.path }}
-        run: |
-          set +e
-          .pre-commit-hooks/regen-doc-snippets.py --check 2> "$RUNNER_TEMP/snippet-diff"
-          status=$?
-          set -e
-          cat "$RUNNER_TEMP/snippet-diff" >&2 || true
-          if [ "$status" -ne 0 ]; then
-            {
-              echo "## ❌ Doc snippets are stale"
-              echo
-              echo "The captured \`--help\` snippets under \`docs/\` no longer match the current \`toolr\` binary. The pre-commit hook is advisory (skipped when no \`toolr\` is on PATH locally), so CI is the authoritative check."
-              echo
-              echo "**Fix locally:**"
-              echo
-              echo '```bash'
-              echo 'cargo build --release -p toolr   # ensure target/release/toolr is current'
-              echo '.pre-commit-hooks/regen-doc-snippets.py'
-              echo 'git add docs/'
-              echo 'git commit -m "docs: regen snippets"'
-              echo '```'
-              echo
-              echo "<details><summary>Diff</summary>"
-              echo
-              echo '```diff'
-              cat "$RUNNER_TEMP/snippet-diff"
-              echo '```'
-              echo
-              echo "</details>"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+        run: toolr pre-commit regen-doc-snippets --check
 
       - name: Build MkDocs site
         run: uv run mkdocs build --strict
