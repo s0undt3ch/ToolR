@@ -17,4 +17,6 @@ cancelled. Previously they only echoed the workflow status and always exited
 zero, so the required status check on `main` was green regardless of CI
 results. The gates also now depend on every job in their workflow, closing a
 gap where a failure early in the job graph surfaced downstream as `skipped`
-and went unnoticed.
+and went unnoticed. A new `check-pipeline-gate-needs` pre-commit hook keeps
+the gates' `needs` lists in sync with the full job set so they cannot
+silently drift as jobs are added.

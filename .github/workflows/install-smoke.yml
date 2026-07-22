@@ -255,7 +255,9 @@ jobs:
             mise exec aqua:s0undt3ch/ToolR@latest -- toolr --version
           fi
 
-  report:
+  # Job id matches the gate jobs in ci.yml / release.yml so the
+  # `check-pipeline-gate-needs` pre-commit hook covers this workflow too.
+  set-pipeline-exit-status:
     name: Report
     if: always()
     runs-on: ubuntu-latest
