@@ -359,19 +359,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "compact_str"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79fcda08c33bb58b97008b2cdada6622500e949e060f5913361763121abd2416"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "static_assertions",
- "zmij",
-]
-
-[[package]]
 name = "constant_time_eq"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -750,11 +737,11 @@ dependencies = [
 
 [[package]]
 name = "get-size2"
-version = "0.10.3"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b411f34418305908ab15a82ff78958c2a9aee9a272b2a2e663836b20a4e4b9d3"
+checksum = "823645bc6404ae2915707777061a47d3a031a9ee0bff51b34ec973df3d8d2990"
 dependencies = [
- "compact_str 0.10.0",
+ "compact_str",
  "get-size-derive2",
  "hashbrown",
  "ordermap",
@@ -1837,7 +1824,7 @@ dependencies = [
  "aho-corasick",
  "arrayvec",
  "bitflags",
- "compact_str 0.9.1",
+ "compact_str",
  "get-size2",
  "is-macro",
  "memchr",
@@ -1856,7 +1843,7 @@ source = "git+https://github.com/astral-sh/ruff?tag=0.15.22#0177a7e0d2c4a3805afa
 dependencies = [
  "bitflags",
  "bstr",
- "compact_str 0.9.1",
+ "compact_str",
  "drop_bomb",
  "get-size2",
  "memchr",
