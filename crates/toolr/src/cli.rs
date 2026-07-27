@@ -62,6 +62,8 @@ fn build_group_subtree(
     let full_path = group.full_path();
     let mut g = Command::new(group.name.clone())
         .disable_help_flag(true)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
         .about(group.title.clone());
     if !group.description.is_empty() {
         g = g.long_about(group.description.clone());
