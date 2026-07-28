@@ -109,8 +109,11 @@ def _find_capture_toolr(repo_root: Path) -> Path | None:
     Precedence:
     1. `TOOLR_REGEN_BINARY` env var (explicit override; CI's docs job sets
        this to the freshly built standalone archive).
-    2. `target/release/toolr` then `target/debug/toolr` (working-tree cargo
-       build, so the captures reflect uncommitted Rust changes).
+    2. Whichever of `target/release/toolr` / `target/debug/toolr` has the
+       newer mtime (working-tree cargo build, so the captures reflect
+       uncommitted Rust changes) — not a fixed release-over-debug order,
+       since a stale release binary from an earlier build would otherwise
+       shadow a debug binary that was just rebuilt from the current diff.
     3. `toolr` on PATH (system install via mise / install.sh).
     4. `None` — caller decides whether to skip or fail.
 
@@ -121,12 +124,16 @@ def _find_capture_toolr(repo_root: Path) -> Path | None:
     override = os.environ.get("TOOLR_REGEN_BINARY")
     if override:
         return Path(override)
-    for candidate in (
-        repo_root / "target" / "release" / "toolr",
-        repo_root / "target" / "debug" / "toolr",
-    ):
-        if candidate.is_file():
-            return candidate
+    candidates = [
+        candidate
+        for candidate in (
+            repo_root / "target" / "release" / "toolr",
+            repo_root / "target" / "debug" / "toolr",
+        )
+        if candidate.is_file()
+    ]
+    if candidates:
+        return max(candidates, key=lambda path: path.stat().st_mtime)
     if path_hit := shutil.which("toolr"):
         return Path(path_hit)
     return None
