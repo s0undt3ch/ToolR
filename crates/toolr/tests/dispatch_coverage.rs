@@ -79,18 +79,19 @@ fn no_subcommand_prints_root_help_and_exits_success() {
 }
 
 #[test]
-fn group_without_leaf_command_exits_success() {
-    // `toolr ci` reaches dispatch but ends with a single-element path,
-    // hitting the `group_full_path.is_empty()` early-return at line 56-59.
+fn group_without_leaf_command_prints_help_and_exits_nonzero() {
+    // `toolr ci` — a namespace with no subcommand — must show the group's
+    // help rather than silently doing nothing (matches `self`/`project`).
     let tmp = fixture_with_manifest(SINGLE_GROUP_MANIFEST);
     let assert = Command::cargo_bin("toolr")
         .unwrap()
         .current_dir(tmp.path())
         .arg("ci")
         .assert();
-    // clap's behaviour for a "group with no leaf" is to print the group
-    // help and exit 0 — same shape the dispatch fallback expects.
-    assert.success();
+    let output = assert.get_output();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Usage: toolr ci"), "expected `ci` group help, got:\n{stderr}");
 }
 
 // --------------------------------------------------------------------
