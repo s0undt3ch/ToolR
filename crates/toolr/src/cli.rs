@@ -137,6 +137,10 @@ pub fn build_command(manifest: &Manifest) -> Command {
     // / `no_output_timeout_secs=` arguments still override these.
     const OUTPUT_HEADING: &str = "Output Options";
     let mut root = Command::new("toolr")
+        // Without this, clap infers the usage-string binary name from
+        // `argv[0]` — `toolr.exe` on Windows vs `toolr` elsewhere — so
+        // help output (and tests asserting on it) would differ by platform.
+        .bin_name("toolr")
         .version(env!("CARGO_PKG_VERSION"))
         .about("In-project CLI tooling support")
         .styles(help_styles())
