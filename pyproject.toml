@@ -104,6 +104,7 @@ ignore = [
   "ANN",     # Don't complain about annotations
   "ARG001",  # Unused function argument
   "COM",     # flake8-commas - Black takes care of this
+  "CPY001",  # Missing copyright notice at top of file - not required under Apache-2.0
   "D103",    # Missing docstring in public function
   "D200",    # Reformat to one line
   "D212",    # Remove whitespace after opening quotes
