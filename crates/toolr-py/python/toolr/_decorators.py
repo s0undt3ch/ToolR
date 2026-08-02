@@ -86,6 +86,10 @@ class CommandGroup(Struct, frozen=True):
         :func:`toolr.command` decorator with ``group="..."`` when the
         command lives in a different file from its group declaration
         — see *Scaling command groups across files* in the docs.
+        Importing the group binding into another file and using
+        ``@group.command`` there also works correctly; it's just less
+        locally readable than the standalone ``group=`` form for that
+        case.
 
         Mirrors the standalone :func:`toolr.command` signature (minus
         ``group=``, which the binding already determines). The command

@@ -28,6 +28,9 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.entry-points.pytest11]
+toolr = "toolr.testing._pytest_plugin"
+
 [project.urls]
 Repository = "https://github.com/s0undt3ch/ToolR"
 Documentation = "https://toolr.readthedocs.io"

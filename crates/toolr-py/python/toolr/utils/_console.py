@@ -23,6 +23,24 @@ class ConsoleVerbosity(IntEnum):
         return self.name.lower()
 
 
+#: Styles every `ctx.*` output method (`print`, `info`, `error`, `exit`, ...)
+#: renders markup against. Shared with `toolr.testing.make_context`, which
+#: builds its own `Console` pair (pointed at in-memory buffers rather than
+#: the real terminal) and needs the same theme for that markup to resolve.
+TOOLR_THEME = Theme(
+    {
+        "log-debug": "dim blue",
+        "log-info": "dim cyan",
+        "log-warning": "magenta",
+        "log-error": "bold red",
+        "exit-ok": "green",
+        "exit-failure": "bold red",
+        "logging.level.stdout": "dim blue",
+        "logging.level.stderr": "dim red",
+    }
+)
+
+
 class Consoles(Struct, frozen=True):
     stderr: Console
     stdout: Console
@@ -46,18 +64,7 @@ class Consoles(Struct, frozen=True):
         # Late import to avoid circular import issues
         from toolr.utils._logs import include_timestamps  # noqa: PLC0415
 
-        console_kwargs["theme"] = Theme(
-            {
-                "log-debug": "dim blue",
-                "log-info": "dim cyan",
-                "log-warning": "magenta",
-                "log-error": "bold red",
-                "exit-ok": "green",
-                "exit-failure": "bold red",
-                "logging.level.stdout": "dim blue",
-                "logging.level.stderr": "dim red",
-            }
-        )
+        console_kwargs["theme"] = TOOLR_THEME
 
         log_path = verbosity >= ConsoleVerbosity.VERBOSE
         log_time = include_timestamps()

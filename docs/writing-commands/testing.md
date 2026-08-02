@@ -1,8 +1,15 @@
 # Testing your commands
 
-ToolR ships a small testing helper in the `toolr-py` wheel — `toolr.testing.CommandsTester` —
-that lets you write pytest assertions against your `tools/*.py` discovery without invoking the
-`toolr` binary as a subprocess.
+ToolR ships two small testing helpers in the `toolr-py` wheel, plus a pytest plugin that needs no
+setup at all.
+
+- `toolr.testing.CommandsTester` lets you write pytest assertions against your `tools/*.py`
+  discovery without invoking the `toolr` binary as a subprocess.
+- `toolr.testing.make_context` builds a real `Context` so you can call an `@command`-decorated
+  function directly and assert on what it did — see [Calling a command directly](#calling-a-command-directly)
+  below.
+- A `pytest11` plugin appends your repo root to `sys.path` automatically, so `import tools.*`
+  resolves under `pytest tools/` with zero configuration.
 
 It's designed for the case where you want to test *your own* command modules: "does my decorator
 land in the registry?", "do my command groups collect the right commands?", "does my dispatcher
@@ -111,12 +118,66 @@ If you need any of those, drive the `toolr` binary directly via `subprocess`
 (`shutil.which("toolr")` works under `mise` / `pip install toolr` / the install scripts), or use
 `assert_cmd` from a Rust integration test.
 
+## Calling a command directly
+
+`CommandsTester` proves your commands *register* correctly; it doesn't call them. To test the body
+of an `@command`-decorated function — does it read `ctx.repo_root` correctly, does it call
+`ctx.info` with the right message, does it `ctx.exit` on a bad input — build a real `Context` with
+`toolr.testing.make_context`:
+
+```python
+import pytest
+
+from toolr.testing import make_context
+
+from tools.example import hello
+
+
+def test_hello_prints_a_greeting(tmp_path):
+    result = make_context(tmp_path)
+    hello(result.ctx, name="Pedro")
+    assert "hello, Pedro" in result.output.stdout
+
+
+def test_confirm_aborts_on_no(tmp_path):
+    result = make_context(tmp_path)
+    result.ctx.prompt = lambda *a, **k: False  # stub the interactive prompt
+    with pytest.raises(SystemExit):
+        confirm(result.ctx)
+```
+
+A function-scoped fixture wires the boilerplate once per test, the same way `commands_tester` does above:
+
+```python
+import pytest
+from collections.abc import Iterator
+from pathlib import Path
+from toolr.testing import ContextForTesting
+from toolr.testing import make_context
+
+
+@pytest.fixture
+def ctx(tmp_path: Path) -> Iterator[ContextForTesting]:
+    yield make_context(tmp_path)
+
+
+def test_hello_prints_a_greeting(ctx: ContextForTesting) -> None:
+    hello(ctx.ctx, name="Pedro")
+    assert "hello, Pedro" in ctx.output.stdout
+```
+
+`result.ctx` is a real `Context` — `ctx.repo_root` is set, `ctx.run(...)` calls the real subprocess
+runner (monkeypatch it if a test needs to intercept it), and `ctx.exit(...)` raises `SystemExit` via
+a real `ArgumentParser`, exactly as it does under the CLI. `result.output.stdout` /
+`result.output.stderr` capture everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
+
 ## Stability
 
-`toolr.testing.CommandsTester` is part of toolr-py's public API and is tested in toolr's own suite.
-Its surface — the constructor, the context-manager protocol, `.discover()`, and
-`.collected_command_groups()` — is stable across the pre-1.0 series; any change is called out in
-the changelog.
+`toolr.testing.CommandsTester` and `toolr.testing.make_context` are part of toolr-py's public API
+and are tested in toolr's own suite. `CommandsTester`'s surface — the constructor, the
+context-manager protocol, `.discover()`, and `.collected_command_groups()` — is stable across the
+pre-1.0 series; any change is called out in the changelog. Same for `make_context`'s signature and
+the `ContextForTesting`/`CapturedOutput` shape it returns.
 
 Internal attributes (`sys_path`, `sys_modules`, `command_group_patcher`, `cwd`) are implementation
 detail and may change without notice.

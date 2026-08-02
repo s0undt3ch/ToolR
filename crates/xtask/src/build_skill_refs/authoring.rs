@@ -262,6 +262,8 @@ struct Entry {
     source_module: String,
     signature: Option<String>,
     docstring: Option<String>,
+    /// Public methods, for `EntryKind::Class` entries. Empty otherwise.
+    members: Vec<Entry>,
 }
 
 enum EntryKind {
@@ -289,6 +291,7 @@ fn resolve_entry(
                  via `importlib.metadata.version(\"toolr-py\")`."
                     .to_string(),
             ),
+            members: Vec::new(),
         });
     }
 
@@ -385,24 +388,25 @@ fn render_entry(
     source: &str,
     stmt: &Stmt,
 ) -> Result<Entry> {
-    let (kind, signature, docstring) = match stmt {
+    let (kind, signature, docstring, members) = match stmt {
         Stmt::FunctionDef(def) => {
             let sig = function_signature(def, source);
             let doc = function_docstring(&def.body);
-            (EntryKind::Function, Some(sig), doc)
+            (EntryKind::Function, Some(sig), doc, Vec::new())
         }
         Stmt::ClassDef(def) => {
             let sig = format!("class {}", def.name.as_str());
             let doc = function_docstring(&def.body);
-            (EntryKind::Class, Some(sig), doc)
+            let members = render_class_members(source_module, source, &def.body)?;
+            (EntryKind::Class, Some(sig), doc, members)
         }
         Stmt::AnnAssign(assign) => {
             let sig = slice_source(source, assign);
-            (EntryKind::Constant, Some(sig), None)
+            (EntryKind::Constant, Some(sig), None, Vec::new())
         }
         Stmt::Assign(assign) => {
             let sig = slice_source(source, assign);
-            (EntryKind::Constant, Some(sig), None)
+            (EntryKind::Constant, Some(sig), None, Vec::new())
         }
         other => {
             return Err(anyhow!(
@@ -417,7 +421,41 @@ fn render_entry(
         source_module: source_module.to_string(),
         signature,
         docstring,
+        members,
     })
+}
+
+/// Render a class's public methods (names not starting with `_`, except
+/// `__init__` when it carries its own docstring) as nested entries, in
+/// source order. Skips `@overload` stubs the same way `find_definition`
+/// does for module-level functions, and skips non-function members
+/// (fields are already visible in the class's own docstring/signature —
+/// walking `AnnAssign` too is a possible follow-up, not required here).
+fn render_class_members(source_module: &str, source: &str, body: &[Stmt]) -> Result<Vec<Entry>> {
+    let mut members = Vec::new();
+    for stmt in body {
+        let Stmt::FunctionDef(def) = stmt else {
+            continue;
+        };
+        let name = def.name.as_str();
+        if name != "__init__" && name.starts_with('_') {
+            continue;
+        }
+        if is_overload(def) {
+            continue;
+        }
+        let sig = function_signature(def, source);
+        let doc = function_docstring(&def.body);
+        members.push(Entry {
+            name: name.to_string(),
+            kind: EntryKind::Function,
+            source_module: source_module.to_string(),
+            signature: Some(sig),
+            docstring: doc,
+            members: Vec::new(),
+        });
+    }
+    Ok(members)
 }
 
 /// Render a `def` signature as `def name(...)` using the source text of
@@ -541,6 +579,27 @@ fn render_entry_md(out: &mut String, entry: &Entry) {
         out.push_str(
             "_No docstring on the source definition._\n\n",
         );
+    }
+    for member in &entry.members {
+        render_member_md(out, member);
+    }
+}
+
+/// Render a class method nested under its class entry, one heading level
+/// deeper than `render_entry_md`'s `###`.
+fn render_member_md(out: &mut String, member: &Entry) {
+    let _ = writeln!(out, "#### `{}`\n", member.name);
+    if let Some(sig) = &member.signature {
+        out.push_str("```python\n");
+        out.push_str(sig.trim_end());
+        out.push('\n');
+        out.push_str("```\n\n");
+    }
+    if let Some(doc) = &member.docstring {
+        out.push_str(&render_docstring_block(doc));
+        out.push('\n');
+    } else {
+        out.push_str("_No docstring on the source definition._\n\n");
     }
 }
 

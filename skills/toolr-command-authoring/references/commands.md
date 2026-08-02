@@ -73,6 +73,202 @@ class Context
 Context object passed to every command group function as the first argument.
 ```
 
+#### `prompt`
+
+```python
+def prompt(
+    self,
+    prompt: TextType,
+    expected_type: type[str | int | float | bool] | None = None,
+    *,
+    password: bool = False,
+    case_sensitive: bool = True,
+    choices: list[str] | None = None,
+    default: str | int | float | bool | None = None,
+    show_default: bool = True,
+    show_choices: bool = True,
+) -> str | int | float | bool:
+```
+
+```text
+
+Prompt the user for input.
+
+This is a wrapper around [rich.prompt.Prompt.ask][rich.prompt].
+
+See [rich.prompt.Prompt.ask][rich.prompt] for more details.
+
+```
+
+#### `print`
+
+```python
+def print(self, *args: Any, **kwargs: Any) -> None:
+```
+
+```text
+
+Print to stdout.
+
+This is a wrapper around :func:`rich.console.Console.print`.
+
+See :func:`rich.console.Console.print` for more details.
+
+```
+
+#### `debug`
+
+```python
+def debug(self, *args: Any, **kwargs: Any) -> None:
+```
+
+```text
+
+Print debug message to stderr.
+
+This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
+
+See [rich.console.Console.log][rich.console.Console.log] for more details.
+
+```
+
+#### `info`
+
+```python
+def info(self, *args: Any, **kwargs: Any) -> None:
+```
+
+```text
+
+Print info message to stderr.
+
+This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
+
+See [rich.console.Console.log][rich.console.Console.log] for more details.
+
+```
+
+#### `warn`
+
+```python
+def warn(self, *args: Any, **kwargs: Any) -> None:
+```
+
+```text
+
+Print warning message to stderr.
+
+This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
+
+See [rich.console.Console.log][rich.console.Console.log] for more details.
+
+```
+
+#### `error`
+
+```python
+def error(self, *args: Any, **kwargs: Any) -> None:
+```
+
+```text
+
+Print error message to stderr.
+
+This is a wrapper around [rich.console.Console.log][rich.console.Console.log].
+
+See [rich.console.Console.log][rich.console.Console.log] for more details.
+
+```
+
+#### `exit`
+
+```python
+def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
+```
+
+```text
+
+Exit the command execution.
+
+```
+
+#### `run`
+
+```python
+def run(
+    self,
+    *cmdline: str,
+    stream_output: bool = True,
+    capture_output: bool = False,
+    timeout_secs: float | None = None,
+    no_output_timeout_secs: float | None = None,
+    **kwargs: Any,
+) -> CommandResult[str] | CommandResult[bytes]:
+```
+
+```text
+Run a command with the given arguments.
+
+Thin wrapper around the internal command-runner that provides a
+simpler interface for command functions.
+
+Args:
+    cmdline: Command line to run
+    stream_output: Whether to stream output to stdout/stderr
+    capture_output: Whether to capture output to return
+    timeout_secs: Maximum time to wait for command completion
+    no_output_timeout_secs: Maximum time to wait without output
+    kwargs: Additional keyword arguments passed to the internal runner.
+
+Returns:
+    CommandResult instance.
+
+```
+
+#### `chdir`
+
+```python
+@contextmanager
+def chdir(self, path: str | pathlib.Path) -> Iterator[pathlib.Path]:
+```
+
+```text
+Change the working directory for this context.
+
+Args:
+    path: The new working directory path
+
+Returns:
+    Iterator yielding the new working directory as a Path object
+
+This is a context manager, so it should be used with 'with':
+
+.. code-block:: python
+
+    with ctx.chdir("/some/path") as p:
+        # Do something in /some/path
+        # p is the Path object for /some/path
+
+```
+
+#### `which`
+
+```python
+def which(
+    self, name: str, mode: int = os.F_OK | os.X_OK, path: str | None = None
+) -> str | None:
+```
+
+```text
+
+Find the path to an executable in the system PATH.
+
+This is a wrapper around [shutil.which][shutil.which].
+
+See [shutil.which][shutil.which] for more details.
+
+```
+
 ### `DispatchCommand`
 
 **Kind:** class &nbsp;·&nbsp; **Source:** `toolr.sources._dispatch`
@@ -82,6 +278,29 @@ class DispatchCommand
 ```
 
 _No docstring on the source definition._
+
+#### `argv`
+
+```python
+@property
+def argv(self) -> list[str]:
+```
+
+```text
+Argparse-shaped argv reconstructed from `command_args` per `schema`.
+
+For each argument in `schema.arguments` that appears in
+`command_args`, emit the appropriate token(s):
+
+- `positional` → bare value
+- `flag` → `--name` when truthy, omitted when falsy
+- `optional` → `--name value`, omitted when value == default
+- `repeated` → `--name value` per element
+
+Keys in `command_args` not found in `schema.arguments` raise
+ValueError so typos surface loudly.
+
+```
 
 ### `MANIFEST_SCHEMA_VERSION`
 
