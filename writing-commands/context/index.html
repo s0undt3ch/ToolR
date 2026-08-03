@@ -1964,10 +1964,11 @@ and <code>ctx.error(...)</code> write structured log records (respecting
 <p>(The example here is the <code>hello</code> function from the scaffold's
 <code>example.py</code> — same file that <code>toolr project init</code> generates.)</p>
 <h2 id="running-subprocesses">Running subprocesses<a class="headerlink" href="#running-subprocesses" title="Permanent link">&para;</a></h2>
-<p><code>ctx.run(*cmd, capture_output=True, check=True)</code> is the canonical way
-to run a subprocess. <code>capture_output=True</code> gives you a result object
-with <code>.stdout</code> and <code>.stderr</code>; default (no capture) streams the
-subprocess's output to the user's terminal.</p>
+<p><code>ctx.run(*cmd, capture_output=True)</code> is the canonical way to run a
+subprocess. <code>capture_output=True</code> gives you a result object with
+<code>.stdout</code> and <code>.stderr</code>; default (no capture) streams the subprocess's
+output to the user's terminal. There is no <code>check=</code> kwarg — a nonzero
+exit does not raise. Inspect <code>result.returncode</code> yourself.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@command</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">&quot;example&quot;</span><span class="p">)</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">commit</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Context</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Print the short SHA of the current git HEAD.</span>

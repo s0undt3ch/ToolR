@@ -1100,6 +1100,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#calling-a-command-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling a command directly
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#stability" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1862,6 +1873,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#calling-a-command-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling a command directly
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#stability" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1938,9 +1960,17 @@
 
 
 <h1 id="testing-your-commands">Testing your commands<a class="headerlink" href="#testing-your-commands" title="Permanent link">&para;</a></h1>
-<p>ToolR ships a small testing helper in the <code>toolr-py</code> wheel — <code>toolr.testing.CommandsTester</code> —
-that lets you write pytest assertions against your <code>tools/*.py</code> discovery without invoking the
-<code>toolr</code> binary as a subprocess.</p>
+<p>ToolR ships two small testing helpers in the <code>toolr-py</code> wheel, plus a pytest plugin that needs no
+setup at all.</p>
+<ul>
+<li><code>toolr.testing.CommandsTester</code> lets you write pytest assertions against your <code>tools/*.py</code>
+  discovery without invoking the <code>toolr</code> binary as a subprocess.</li>
+<li><code>toolr.testing.make_context</code> builds a real <code>Context</code> so you can call an <code>@command</code>-decorated
+  function directly and assert on what it did — see <a href="#calling-a-command-directly">Calling a command directly</a>
+  below.</li>
+<li>A <code>pytest11</code> plugin appends your repo root to <code>sys.path</code> automatically, so <code>import tools.*</code>
+  resolves under <code>pytest tools/</code> with zero configuration.</li>
+</ul>
 <p>It's designed for the case where you want to test <em>your own</em> command modules: "does my decorator
 land in the registry?", "do my command groups collect the right commands?", "does my dispatcher
 pick up the right children?". For end-to-end behaviour (Tab completion, <code>--help</code> output, real
@@ -2033,11 +2063,57 @@ subprocess execution) you'll still want to drive the binary directly.</p>
 <p>If you need any of those, drive the <code>toolr</code> binary directly via <code>subprocess</code>
 (<code>shutil.which("toolr")</code> works under <code>mise</code> / <code>pip install toolr</code> / the install scripts), or use
 <code>assert_cmd</code> from a Rust integration test.</p>
+<h2 id="calling-a-command-directly">Calling a command directly<a class="headerlink" href="#calling-a-command-directly" title="Permanent link">&para;</a></h2>
+<p><code>CommandsTester</code> proves your commands <em>register</em> correctly; it doesn't call them. To test the body
+of an <code>@command</code>-decorated function — does it read <code>ctx.repo_root</code> correctly, does it call
+<code>ctx.info</code> with the right message, does it <code>ctx.exit</code> on a bad input — build a real <code>Context</code> with
+<code>toolr.testing.make_context</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_context</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tools.example</span><span class="w"> </span><span class="kn">import</span> <span class="n">hello</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_hello_prints_a_greeting</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">hello</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">ctx</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Pedro&quot;</span><span class="p">)</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="k">assert</span> <span class="s2">&quot;hello, Pedro&quot;</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">stdout</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_confirm_aborts_on_no</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">result</span><span class="o">.</span><span class="n">ctx</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="k">lambda</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">k</span><span class="p">:</span> <span class="kc">False</span>  <span class="c1"># stub the interactive prompt</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">SystemExit</span><span class="p">):</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="n">confirm</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">ctx</span><span class="p">)</span>
+</span></code></pre></div>
+<p>A function-scoped fixture wires the boilerplate once per test, the same way <code>commands_tester</code> does above:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContextForTesting</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_context</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">ctx</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ContextForTesting</span><span class="p">]:</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="k">yield</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_hello_prints_a_greeting</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">ContextForTesting</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="n">hello</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">ctx</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Pedro&quot;</span><span class="p">)</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="k">assert</span> <span class="s2">&quot;hello, Pedro&quot;</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">stdout</span>
+</span></code></pre></div>
+<p><code>result.ctx</code> is a real <code>Context</code> — <code>ctx.repo_root</code> is set, <code>ctx.run(...)</code> calls the real subprocess
+runner (monkeypatch it if a test needs to intercept it), and <code>ctx.exit(...)</code> raises <code>SystemExit</code> via
+a real <code>ArgumentParser</code>, exactly as it does under the CLI. <code>result.output.stdout</code> /
+<code>result.output.stderr</code> capture everything written through <code>ctx.print</code>/<code>ctx.info</code>/<code>ctx.error</code>/etc.</p>
 <h2 id="stability">Stability<a class="headerlink" href="#stability" title="Permanent link">&para;</a></h2>
-<p><code>toolr.testing.CommandsTester</code> is part of toolr-py's public API and is tested in toolr's own suite.
-Its surface — the constructor, the context-manager protocol, <code>.discover()</code>, and
-<code>.collected_command_groups()</code> — is stable across the pre-1.0 series; any change is called out in
-the changelog.</p>
+<p><code>toolr.testing.CommandsTester</code> and <code>toolr.testing.make_context</code> are part of toolr-py's public API
+and are tested in toolr's own suite. <code>CommandsTester</code>'s surface — the constructor, the
+context-manager protocol, <code>.discover()</code>, and <code>.collected_command_groups()</code> — is stable across the
+pre-1.0 series; any change is called out in the changelog. Same for <code>make_context</code>'s signature and
+the <code>ContextForTesting</code>/<code>CapturedOutput</code> shape it returns.</p>
 <p>Internal attributes (<code>sys_path</code>, <code>sys_modules</code>, <code>command_group_patcher</code>, <code>cwd</code>) are implementation
 detail and may change without notice.</p>
 
