@@ -181,15 +181,22 @@ make its registration a top-level, statically-visible declaration.
 - `toolr <group> --help` — list commands in the group; if yours is
   missing, the manifest builder rejected it.
 - `toolr <group> <cmd> --help` — full per-command help.
-- `toolr project manifest rebuild --force` — bypass freshness
-  detection and rebuild from scratch.
+- `toolr project manifest rebuild` — unconditionally regenerate the
+  manifest, bypassing freshness detection.
 - On a manifest error, the message points at the offending line in
   `tools/*.py`. Fix the source; the manifest auto-rebuilds on the
   next dispatch.
 
 ## Running your commands' tests
 
-Run your commands' tests in the managed venv with:
+Put your tests under **`tools/tests/`** — that's the blessed convention,
+regardless of how deep your command files are nested. Mirror the source
+layout: `tools/mypackage/ledger.py` → `tools/tests/mypackage/test_ledger.py`.
+For a single file with multiple commands, use one subdirectory per module
+with one test file per command — `tools/db.py`'s `add`/`remove` commands →
+`tools/tests/db/test_add.py` / `tools/tests/db/test_remove.py` — rather than
+piling every command's tests into one `tools/tests/test_db.py`. Run them in
+the managed venv with:
 
 ```sh
 toolr project venv run -- pytest tools/
@@ -197,6 +204,21 @@ toolr project venv run -- pytest tools/
 
 This syncs the venv if stale, then runs `pytest` from it. No need to hand-build
 the `"$(toolr project venv path)/bin/python" -m pytest …` invocation.
+
+`import tools.*` resolving under pytest is handled automatically —
+`toolr-py` (a dependency of every scaffolded `tools/pyproject.toml`) ships a
+pytest plugin that appends the repo root to `sys.path` the moment pytest
+starts. Nothing to configure.
+
+Two testing layers are available for the `@command`-decorated functions
+themselves:
+
+- **`toolr.testing.CommandsTester`** — tests command *discovery* (that your
+  `@command_group`/`@command` decorators registered what you expect), without
+  spawning the real CLI.
+- **`toolr.testing.make_context`** — builds a real, usable `Context` so you
+  can call a decorated function directly and assert on what it did with
+  `ctx.run`/`ctx.info`/`ctx.exit`, without going through the CLI at all.
 
 ## Packaging is a different problem
 

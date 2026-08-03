@@ -27,10 +27,11 @@ toolr example hello --name Pedro
 
 ## Running subprocesses
 
-`ctx.run(*cmd, capture_output=True, check=True)` is the canonical way
-to run a subprocess. `capture_output=True` gives you a result object
-with `.stdout` and `.stderr`; default (no capture) streams the
-subprocess's output to the user's terminal.
+`ctx.run(*cmd, capture_output=True)` is the canonical way to run a
+subprocess. `capture_output=True` gives you a result object with
+`.stdout` and `.stderr`; default (no capture) streams the subprocess's
+output to the user's terminal. There is no `check=` kwarg — a nonzero
+exit does not raise. Inspect `result.returncode` yourself.
 
 ```python
 --8<-- "docs/writing-commands/files/example.py:34:45"

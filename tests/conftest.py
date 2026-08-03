@@ -9,6 +9,8 @@ import pytest
 
 from toolr.testing import CommandsTester
 
+pytest_plugins = ["pytester"]
+
 # --------------------------------------------------------------------
 # Subprocess-coverage bootstrap.
 # --------------------------------------------------------------------
