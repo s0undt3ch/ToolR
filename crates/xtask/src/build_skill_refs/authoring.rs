@@ -693,4 +693,109 @@ mod tests {
         let found = find_definition(&m, "f").expect("falls back to a stub");
         assert!(is_overload_stmt(found));
     }
+
+    #[test]
+    fn render_class_members_includes_public_and_dunder_init_skips_private_and_overloads() {
+        let src = "class Widget:\n\
+             \x20   def __init__(self, name: str) -> None:\n\
+             \x20       \"\"\"Set up the widget.\"\"\"\n\
+             \x20   def _helper(self) -> None:\n\
+             \x20       pass\n\
+             \x20   @overload\n\
+             \x20   def render(self, *, wide: bool) -> str: ...\n\
+             \x20   def render(self) -> str:\n\
+             \x20       \"\"\"Render the widget.\"\"\"\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Widget").expect("Widget found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["__init__", "render"], "{names:?}");
+        assert_eq!(members[1].docstring.as_deref(), Some("Render the widget."));
+    }
+
+    #[test]
+    fn render_class_members_skips_private_dunder_init_without_docstring_requirement() {
+        // `__init__` is kept even with no docstring — only non-`__init__`
+        // names starting with `_` are filtered out.
+        let src = "class Empty:\n\
+             \x20   def __init__(self) -> None:\n\
+             \x20       pass\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Empty").expect("Empty found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].name, "__init__");
+        assert_eq!(members[0].docstring, None);
+    }
+
+    #[test]
+    fn render_member_md_renders_signature_and_docstring() {
+        let member = Entry {
+            name: "render".to_string(),
+            kind: EntryKind::Function,
+            source_module: "mod".to_string(),
+            signature: Some("def render(self) -> str:".to_string()),
+            docstring: Some("Render the widget.".to_string()),
+            members: Vec::new(),
+        };
+        let mut out = String::new();
+        render_member_md(&mut out, &member);
+        assert!(out.contains("#### `render`"));
+        assert!(out.contains("def render(self) -> str:"));
+        assert!(out.contains("Render the widget."));
+    }
+
+    #[test]
+    fn render_member_md_falls_back_when_no_docstring() {
+        let member = Entry {
+            name: "render".to_string(),
+            kind: EntryKind::Function,
+            source_module: "mod".to_string(),
+            signature: None,
+            docstring: None,
+            members: Vec::new(),
+        };
+        let mut out = String::new();
+        render_member_md(&mut out, &member);
+        assert!(out.contains("_No docstring on the source definition._"));
+    }
+
+    #[test]
+    fn render_entry_nests_class_members_under_the_class() {
+        let src = "class Widget:\n\
+             \x20   def render(self) -> str:\n\
+             \x20       \"\"\"Render the widget.\"\"\"\n";
+        let m = module(src);
+        let stmt = find_definition(&m, "Widget").expect("Widget found");
+        let entry = render_entry("Widget", "mod", src, stmt).expect("renders entry");
+        assert_eq!(entry.members.len(), 1);
+        assert_eq!(entry.members[0].name, "render");
+    }
+
+    #[test]
+    fn render_entry_handles_plain_assign_constants() {
+        let src = "VALUE = 42\n";
+        let m = module(src);
+        let stmt = find_definition(&m, "VALUE").expect("VALUE found");
+        let entry = render_entry("VALUE", "mod", src, stmt).expect("renders entry");
+        assert!(matches!(entry.kind, EntryKind::Constant));
+        assert_eq!(entry.signature.as_deref(), Some("VALUE = 42"));
+        assert!(entry.members.is_empty());
+    }
+
+    #[test]
+    fn render_entry_rejects_unhandled_definition_shapes() {
+        let src = "if True:\n    pass\n";
+        let m = module(src);
+        let stmt = &m.body[0];
+        let result = render_entry("noop", "mod", src, stmt);
+        let Err(err) = result else {
+            panic!("expected an unhandled-shape error");
+        };
+        assert!(err.to_string().contains("unhandled definition shape"));
+    }
 }
