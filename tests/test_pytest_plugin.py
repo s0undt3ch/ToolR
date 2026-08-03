@@ -30,9 +30,23 @@ def test_discover_repo_root_finds_tools_in_ancestor(repo_with_tools: Path) -> No
     assert _discover_repo_root(nested) == repo_with_tools.resolve()
 
 
-def test_discover_repo_root_returns_none_when_no_tools_dir(tmp_path: Path) -> None:
-    # tmp_path itself has no `tools/`, and (barring a coincidental `tools/`
-    # somewhere above the pytest tmp dir root) neither do its ancestors.
+def test_discover_repo_root_returns_none_when_no_tools_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Confine the ancestor walk to tmp_path: real machines can have a
+    # `tools/` dir above it (e.g. GitHub's Windows runners ship `C:\tools\`),
+    # which would otherwise make this test flaky depending on the host.
+    real_is_dir = Path.is_dir
+    boundary = tmp_path.resolve()
+
+    def fake_is_dir(self: Path) -> bool:
+        try:
+            self.relative_to(boundary)
+        except ValueError:
+            return False
+        return real_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", fake_is_dir)
     assert _discover_repo_root(tmp_path) is None
 
 
