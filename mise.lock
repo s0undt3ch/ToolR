@@ -93,7 +93,7 @@ url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/47771882
 provenance = "github-attestations"
 
 [[tools."cargo:cargo-edit"]]
-version = "0.13.11"
+version = "0.13.13"
 backend = "cargo:cargo-edit"
 
 [[tools.gh]]

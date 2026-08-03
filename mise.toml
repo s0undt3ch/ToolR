@@ -21,7 +21,7 @@ gh = "2.97.0"
 rust = { version = "1.97.1", profile = "minimal", components = "clippy,rustfmt" }
 uv = { version = "0.11.32" }
 prek = "0.4.11"
-"cargo:cargo-edit" = "0.13.11"
+"cargo:cargo-edit" = "0.13.13"
 # Dogfood: the released toolr binary drives repo automation (the prek
 # hooks backed by `toolr pre-commit <command>` in `tools/precommit/`).
 # CI jobs install it via the in-repo Setup ToolR action instead, which
