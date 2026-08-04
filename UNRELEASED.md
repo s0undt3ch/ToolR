@@ -10,3 +10,8 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+- Fixed the argparse scanner dropping every flag spelling except the
+  longest `--flag` on a call declaring several (e.g.
+  `add_argument("-s", "--run-synchronously", ...)`). Short flags and
+  extra long spellings now all register as clap aliases.
