@@ -251,13 +251,15 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
     // *positional* (which argparse treats as optional, but we still
     // emit a required `Positional`) — isn't represented in
     // `ArgumentKind` and silently falls back to a single value; warn so
-    // it's visible rather than silently wrong at runtime.
+    // it's visible rather than silently wrong at runtime. Tracked by
+    // https://github.com/s0undt3ch/ToolR/issues/423 — remove this
+    // warning once those forms get first-class support.
     if let Some(raw) = &nargs_repr {
         let handled = matches!(nargs.as_deref(), Some("+") | Some("*"))
             || (is_keyword_style && nargs.as_deref() == Some("?"));
         if !handled {
             warnings.push(format!(
-                "argparse: {name_for_warning}: unsupported nargs={raw} (treated as a single value; may not match argparse's runtime behaviour)"
+                "argparse: {name_for_warning}: unsupported nargs={raw} (treated as a single value; may not match argparse's runtime behaviour; see https://github.com/s0undt3ch/ToolR/issues/423)"
             ));
         }
     }
@@ -615,9 +617,10 @@ def add_arguments(self, parser):
         assert_eq!(scanned.arguments[1].kind, ArgumentKind::Repeated);
         assert!(scanned.arguments[1].metadata.multi_value_occurrence);
         // Integer nargs isn't a repeat-flag signal; falls back to Optional.
-        // TODO: nargs=N (int) isn't represented in ArgumentKind yet —
-        // this silently degrades to a single-value Optional rather than
-        // enforcing exactly N values. A warning flags the mismatch.
+        // nargs=N (int) isn't represented in ArgumentKind yet — this
+        // silently degrades to a single-value Optional rather than
+        // enforcing exactly N values. A warning flags the mismatch;
+        // tracked by https://github.com/s0undt3ch/ToolR/issues/423.
         assert_eq!(scanned.arguments[2].kind, ArgumentKind::Optional);
         assert!(
             scanned.warnings.iter().any(|w| w.contains("--pair") && w.contains("nargs=2")),
