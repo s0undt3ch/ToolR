@@ -15,3 +15,14 @@ no scaffolding. Just write whatever should appear in the notes.
   longest `--flag` on a call declaring several (e.g.
   `add_argument("-s", "--run-synchronously", ...)`). Short flags and
   extra long spellings now all register as clap aliases.
+- Fixed `tests/distribution/test_example_plugin_contract.py` leaking real
+  venv provenance stubs into the developer/CI's live cache dir instead of
+  a sandboxed one, which inflated `toolr self cache`'s orphan count over
+  time.
+- Fixed the cache orphan hint (`toolr: cache has N orphan entries (~X)`)
+  reporting the whole cache's size instead of just the orphaned entries',
+  which made a couple of unrelated live venvs look like the cause of a
+  large orphan count.
+- Corrected `docs/internals/cache.md`, which falsely claimed multiple git
+  worktrees of the same repo share a single venv cache entry — they never
+  have. Each worktree gets (and needs) its own.

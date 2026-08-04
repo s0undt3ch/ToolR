@@ -18,8 +18,14 @@ $XDG_CACHE_HOME/toolr/
 ```
 
 `<repo-key>` is a stable, content-addressable identifier derived from
-the repo's canonical path and Python version. Multiple worktrees of
-the same repo share a single cache entry.
+the repo's canonical path and Python version. **Each git worktree gets
+its own cache entry** — the key is the worktree's own canonical path,
+not anything shared with the repo it was branched from. This is
+deliberate: worktrees can carry different `tools/` dependencies on
+different branches, and sharing one venv across them would mean
+constant resyncing (and, since nothing locks the venv directory, a
+race between worktrees running toolr concurrently). Run `toolr self
+cache prune` after removing a worktree to reclaim its venv.
 
 ## `meta.json`
 

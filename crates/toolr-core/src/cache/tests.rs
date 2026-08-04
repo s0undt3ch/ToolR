@@ -397,6 +397,31 @@ fn hint_fires_when_orphan_count_exceeds_threshold() {
 }
 
 #[test]
+fn hint_orphan_message_reports_orphan_bytes_not_total_cache_bytes() {
+    // A large live entry must not inflate the size reported alongside
+    // a small orphan count — the warning is about what pruning would
+    // reclaim, not the whole cache.
+    let tmp = TempDir::new().unwrap();
+    let live_repo = tmp.path().join("live");
+    std::fs::create_dir_all(&live_repo).unwrap();
+    let cache_root = tmp.path().join("toolr-cache");
+    std::fs::create_dir_all(&cache_root).unwrap();
+    make_entry(&cache_root, "live", live_repo.to_str().unwrap(), now_fixture(), 200 * 1024 * 1024);
+    for key in &["a", "b", "c"] {
+        make_entry(&cache_root, key, "/missing", now_fixture(), 32);
+    }
+
+    let cfg = HintConfig {
+        size_threshold_bytes: 100 * 1024 * 1024 * 1024,
+        orphan_threshold: 2,
+    };
+    let hint = compute_hint(&cache_root, &cfg, now_fixture()).unwrap().unwrap();
+    assert!(hint.contains("3 orphan entries"), "got: {hint}");
+    assert!(!hint.contains("MiB"), "orphan bytes are tiny — must not render as MiB: {hint}");
+    assert!(hint.contains("96 B") || hint.contains("B)"), "expected byte-scale size, got: {hint}");
+}
+
+#[test]
 fn hint_is_none_when_cache_root_is_missing() {
     let tmp = TempDir::new().unwrap();
     let hint = compute_hint(
