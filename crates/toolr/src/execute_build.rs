@@ -178,6 +178,9 @@ fn command_to_schema_spec(cmd: &Command) -> CommandSchemaSpec {
 /// - `type_annotation` ← `type_annotation`.
 /// - `nargs` is always `None` — the manifest doesn't carry argparse-
 ///   compatible nargs information.
+/// - `multi_value_occurrence` ← `metadata.multi_value_occurrence`
+///   (distinguishes argparse `nargs="+"`/`"*"` from `action="append"`
+///   for `Repeated` args).
 fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
     let kind = match arg.kind {
         ArgumentKind::Positional => "positional",
@@ -199,6 +202,7 @@ fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
         type_annotation: arg.type_annotation.clone(),
         nargs: None,
         long_flag: arg.long_flag.clone(),
+        multi_value_occurrence: arg.metadata.multi_value_occurrence,
     }
 }
 
@@ -1049,6 +1053,29 @@ mod dispatched_pack_tests {
         assert_eq!(schema.metavar.as_deref(), Some("PATH"));
         assert_eq!(schema.type_annotation.as_deref(), Some("str"));
         assert_eq!(schema.choices.as_deref(), Some(&["a".to_string(), "b".to_string()][..]));
+    }
+
+    #[test]
+    fn argument_to_arg_schema_carries_multi_value_occurrence() {
+        fn repeated_with(multi_value_occurrence: bool) -> Argument {
+            Argument {
+                name: "customer-ids".into(),
+                kind: ArgumentKind::Repeated,
+                help: String::new(),
+                default: None,
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: toolr_core::manifest::ArgMetadata {
+                    multi_value_occurrence,
+                    ..Default::default()
+                },
+                long_flag: None,
+            }
+        }
+        assert!(argument_to_arg_schema(&repeated_with(true)).multi_value_occurrence);
+        assert!(!argument_to_arg_schema(&repeated_with(false)).multi_value_occurrence);
     }
 
     #[test]

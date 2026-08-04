@@ -50,7 +50,10 @@ class DispatchCommand(Struct, frozen=True):
         - `positional` → bare value
         - `flag` → `--name` when truthy, omitted when falsy
         - `optional` → `--name value`, omitted when value == default
-        - `repeated` → `--name value` per element
+        - `repeated` → `--name value` per element (argparse
+          `action="append"`), or `--name value1 value2 ...` in one
+          occurrence when `arg.multi_value_occurrence` (argparse
+          `nargs="+"`/`"*"`)
 
         Keys in `command_args` not found in `schema.arguments` raise
         ValueError so typos surface loudly.
@@ -76,6 +79,10 @@ class DispatchCommand(Struct, frozen=True):
                     continue
                 out.extend([_flag_for_arg(arg), str(value)])
             elif arg.kind == "repeated":
-                for element in value:
-                    out.extend([_flag_for_arg(arg), str(element)])
+                if arg.multi_value_occurrence:
+                    out.append(_flag_for_arg(arg))
+                    out.extend(str(element) for element in value)
+                else:
+                    for element in value:
+                        out.extend([_flag_for_arg(arg), str(element)])
         return out

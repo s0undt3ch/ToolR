@@ -37,6 +37,16 @@ class ArgSchema(Struct, frozen=True):
     upstream tool's exact spelling is preserved across the round-trip,
     even when toolr's CLI normalises display to `--user-ids`.
     """
+    multi_value_occurrence: bool = False
+    """`kind == "repeated"` only: source is argparse `nargs="+"`/`"*"`,
+    not `action="append"`.
+
+    A single occurrence takes several space-separated values
+    (`--name a b c`) rather than accumulating one value per occurrence
+    (`--name a --name b --name c`). `DispatchCommand.argv` uses this to
+    pick the correct invocation form — emitting the append form for a
+    genuine `nargs="+"` target silently drops every value but the last.
+    """
 
 
 class CommandSchema(Struct, frozen=True):

@@ -295,7 +295,10 @@ For each argument in `schema.arguments` that appears in
 - `positional` → bare value
 - `flag` → `--name` when truthy, omitted when falsy
 - `optional` → `--name value`, omitted when value == default
-- `repeated` → `--name value` per element
+- `repeated` → `--name value` per element (argparse
+  `action="append"`), or `--name value1 value2 ...` in one
+  occurrence when `arg.multi_value_occurrence` (argparse
+  `nargs="+"`/`"*"`)
 
 Keys in `command_args` not found in `schema.arguments` raise
 ValueError so typos surface loudly.

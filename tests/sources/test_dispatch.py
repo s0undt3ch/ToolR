@@ -102,6 +102,22 @@ def test_dispatch_command_holds_match():
             ],
             ["--user_ids", "3", "--user_ids", "4"],
         ),
+        # Repeated + multi_value_occurrence (argparse nargs="+"/"*") →
+        # one occurrence, many space-separated values — NOT the
+        # repeat-the-flag form, which argparse would silently collapse
+        # to the last value only.
+        (
+            {"customer_ids": ["100087163", "100180680", "10033857"]},
+            [
+                ArgSchema(
+                    name="customer_ids",
+                    kind="repeated",
+                    help="",
+                    multi_value_occurrence=True,
+                ),
+            ],
+            ["--customer-ids", "100087163", "100180680", "10033857"],
+        ),
     ],
 )
 def test_argv_reconstruction(args_in, schema_args, expected):
