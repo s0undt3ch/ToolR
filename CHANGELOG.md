@@ -6,6 +6,59 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.26.1 - 2026-08-04
+
+### Notes
+
+The argparse-introspection source now classifies `nargs="+"`/`"*"` correctly
+instead of capping them at a single value. Optional flags (e.g.
+`parser.add_argument("--names", nargs="+")`) are treated as repeated, the
+same as `action="append"`, and a single occurrence may now take several
+space-separated values (`toolr django run greet --names alice bob`) as well
+as repeated invocations (`--names alice --names bob`); this widening only
+applies to nargs-derived flags; `action="append"` flags keep taking exactly
+one value per occurrence. Positional arguments with `nargs="+"`/`"*"` (e.g.
+Django's `manage.py test app1 app2`) are now scanned as variadic positionals
+instead of a single required value, with `nargs="+"` still requiring at
+least one. `nargs` shapes the scanner can't fully represent — an int count,
+`argparse.REMAINDER`, or `nargs="?"` on a positional — now emit a build
+warning instead of silently degrading.
+
+### <!-- 0 -->🚀 Features
+
+- *(ci)* Dogfood gate wiring sync as `toolr ci check-gate-needs` ([`94233a7`](https://github.com/s0undt3ch/ToolR/commit/94233a7449501ee8b88696a32cf7cf23e9c166e4))
+- *(testing)* Ship toolr.testing pytest plugin + make_context, fix doc drift ([`b865547`](https://github.com/s0undt3ch/ToolR/commit/b86554724fbedcbdae6c3182571fd40fed6f048e))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(ci)* Make pipeline exit-status gate jobs actually fail ([`a1599e8`](https://github.com/s0undt3ch/ToolR/commit/a1599e83ffc043c6ed708a8089a13ded3ed62bab))
+- *(ci)* Add drift gate for pipeline exit-status needs lists ([`9e8b72d`](https://github.com/s0undt3ch/ToolR/commit/9e8b72d7fbdc721848d41a56b42f7fb323bd4f32))
+- *(ci)* No-op regen-doc-snippets when the venv lacks the toolr runner ([`866e5f3`](https://github.com/s0undt3ch/ToolR/commit/866e5f3aa87780de90618bb67c66259c62493c10))
+- *(deps)* Hold get-size2 at 0.10.1 until ruff moves to compact_str 0.10 ([`91550b4`](https://github.com/s0undt3ch/ToolR/commit/91550b4849c171081f97aa64ba536e71a735fb72))
+- *(cli)* Show help when a namespace is invoked with no subcommand ([`aa9e903`](https://github.com/s0undt3ch/ToolR/commit/aa9e90387e69435b4148f6a72faae7cc5c64e11b))
+- *(cli)* Pin bin_name so help output is platform-stable ([`8999ee3`](https://github.com/s0undt3ch/ToolR/commit/8999ee324aea7f3c0e86697122dc63930d27a4cb))
+- *(precommit)* Pick newest of target/{release,debug}/toolr, not release-first ([`e245f59`](https://github.com/s0undt3ch/ToolR/commit/e245f59cab2b7cb6c418271dddf13ca663d9365b))
+- *(lint)* Ignore flake8-copyright rule, not required under Apache-2.0 ([`cf1144f`](https://github.com/s0undt3ch/ToolR/commit/cf1144f32f47ed49780d95207168cb41daca4a0d))
+- *(testing)* Repair CI failures from testing package split ([`29c5ed5`](https://github.com/s0undt3ch/ToolR/commit/29c5ed58c19aee834e7ce1b45458d4621ec76309))
+- *(cli)* Don't apply unresolvable <expr> default sentinel as a real clap default ([`0c865a9`](https://github.com/s0undt3ch/ToolR/commit/0c865a9bb2a26bc840e0e2ce819e3386910519eb))
+- *(argparse)* Classify nargs="+"/"*" as repeated/var-positional ([`3fbb449`](https://github.com/s0undt3ch/ToolR/commit/3fbb449379cccfbbb00a2893cc1429832a4fb191))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(ci)* Move pre-commit hook commands into `toolr pre-commit` ([`61a04e8`](https://github.com/s0undt3ch/ToolR/commit/61a04e849b96b14b1d8c70effea72295cd25a089))
+
+### <!-- 3 -->📚 Documentation
+
+- *(skills)* Flag that the default's shape doesn't drive coercion ([`571e9e6`](https://github.com/s0undt3ch/ToolR/commit/571e9e6004885b62227e6a8f0c4c2894ee915bb5))
+
+### <!-- 6 -->🧪 Testing
+
+- *(testing)* Cover make_context and the pytest-plugin repo-root discovery ([`66a8507`](https://github.com/s0undt3ch/ToolR/commit/66a8507b9c0490c5429bec607a01c3d62d8aff7b))
+- Close patch-coverage gaps flagged on b8655472's new code ([`7b3e7be`](https://github.com/s0undt3ch/ToolR/commit/7b3e7becc095f93a084ee0e24c2ae01c48770daf))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(specs)* Archive agent-feedback-skill-fixes design/plan ([`8e7881b`](https://github.com/s0undt3ch/ToolR/commit/8e7881b8be2d0ffb152d3dd598431ca847df66de))
 ## 0.26.0 - 2026-07-15
 
 ### Notes
