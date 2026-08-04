@@ -102,22 +102,37 @@ Python struct.
   strings (same `long_flag.is_some()` split), with `nargs` set to the int
   arity. `command_args[name]` becomes a JSON array of length N instead of a
   scalar.
-- `Repeated`/`VarPositional` populate `nargs` as `"+"`/`"*"`/`None` per the
-  table above. `DispatchCommand.argv`'s `"repeated"` branch switches from
-  `if arg.multi_value_occurrence` to `if arg.nargs in ("+", "*")`.
-- `OptionalPositional` maps to wire `kind="positional"`, `nargs="?"`. No
-  `argv` behavior change needed — an absent value is already omitted by the
-  existing "skip if not in `command_args`" loop.
+- `VarPositional` and `OptionalPositional` both map to wire `kind="positional"`
+  — not `"repeated"` — with `nargs` set to `"+"`/`"*"` (`VarPositional`) or
+  `"?"` (`OptionalPositional`). `"repeated"` is reserved for genuinely
+  keyword-style `Repeated` args, populating `nargs` as `"+"`/`"*"`/`None`.
+  `DispatchCommand.argv`'s `"repeated"` branch switches from
+  `if arg.multi_value_occurrence` to `if arg.nargs in ("+", "*")`; its
+  `"positional"` branch grows a matching `isinstance(nargs, int) or nargs in
+  ("+", "*")` case for the array-valued forms. An absent `OptionalPositional`
+  value needs no `argv` change — it's already omitted by the existing
+  "skip if not in `command_args`" loop.
 
 ### Bug found and fixed in passing
 
 `DispatchCommand.argv`'s `"repeated"` branch unconditionally calls
-`_flag_for_arg(arg)`, even when `arg.long_flag is None` (a genuinely positional
-`VarPositional` arg dispatched from an argparse scan). Untested today because
-no positional `nargs="+"/"*"` argparse arg has ever been dispatched through
-this path. REMAINDER support exercises this exact path for the first time, so
-the fix belongs here: skip the flag entirely when `long_flag` is absent,
-matching the `"positional"` branch's bare-value style.
+`_flag_for_arg(arg)` — including for a genuinely positional `VarPositional`
+arg, since `VarPositional` used to share the `"repeated"` wire `kind` with
+keyword-style `Repeated`. `arg.long_flag is None` is *not* a reliable signal
+to special-case there: it also legitimately occurs for keyword-style
+`Repeated` args from native commands or older manifests that never recorded
+a literal flag spelling (`_flag_for_arg` synthesizes `--name` for exactly
+that case). Conflating the two would misclassify real keyword args as
+positional.
+
+The actual fix is a cleaner wire-kind split, not a runtime check:
+`VarPositional` and `OptionalPositional` now map to wire `kind="positional"`
+(never `"repeated"`) — every positional-style arg (no CLI flag, ever) shares
+one wire kind, parameterised by `nargs` for its exact arity, so
+`DispatchCommand.argv` never has to guess whether a `"repeated"` arg has a
+flag to emit. This was untested before since no positional `nargs="+"/"*"`
+argparse arg had ever been dispatched through this path; REMAINDER support
+exercises it for the first time.
 
 ## Schema version bump
 
