@@ -280,8 +280,22 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
         ArgumentKind::Positional | ArgumentKind::Optional | ArgumentKind::OptionalPositional => {
             extract_scalar(arg, matches)
         }
-        ArgumentKind::Repeated | ArgumentKind::VarPositional | ArgumentKind::FixedArity => {
+        ArgumentKind::Repeated | ArgumentKind::VarPositional => {
             Some(Value::Array(extract_many(arg, matches)))
+        }
+        ArgumentKind::FixedArity => {
+            // Positional-style is always `required(true)`, so it's
+            // always present when parsing succeeds — but keyword-style
+            // is `required(false)` with no default, so an omitted
+            // `--pair` must come through as `None` (skipped from the
+            // args map entirely), not `Some([])`. An empty array would
+            // make `DispatchCommand.argv` emit a bare `--pair` with
+            // zero of its required N values.
+            if matches.contains_id(arg.name.as_str()) {
+                Some(Value::Array(extract_many(arg, matches)))
+            } else {
+                None
+            }
         }
     }
 }
@@ -845,6 +859,42 @@ mod tests {
             .get_matches_from(["test"]);
         let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
         assert!(!spec.args.contains_key("absent"));
+    }
+
+    #[test]
+    fn build_spec_missing_fixed_arity_keyword_does_not_appear_in_args_map() {
+        // A keyword-style FixedArity arg is `required(false)` with no
+        // default. If omitted, `extract_value` must return `None` —
+        // not `Some([])` — otherwise `DispatchCommand.argv` would emit
+        // a bare `--pair` with zero of its required 2 values.
+        let mut arg = arg_of("pair", ArgumentKind::FixedArity, SupportedType::Str);
+        arg.long_flag = Some("--pair".to_string());
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(2));
+        let cmd = cmd_with(vec![arg]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("pair").long("pair").num_args(2).required(false))
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert!(!spec.args.contains_key("pair"));
+    }
+
+    #[test]
+    fn build_spec_extracts_fixed_arity_keyword_when_present() {
+        let mut arg = arg_of("pair", ArgumentKind::FixedArity, SupportedType::Str);
+        arg.long_flag = Some("--pair".to_string());
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(2));
+        let cmd = cmd_with(vec![arg]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("pair").long("pair").num_args(2).required(false))
+            .get_matches_from(["test", "--pair", "a", "b"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("pair"),
+            Some(&Value::Array(vec![
+                Value::String("a".into()),
+                Value::String("b".into()),
+            ])),
+        );
     }
 
     #[test]
