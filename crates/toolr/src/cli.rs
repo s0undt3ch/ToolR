@@ -700,19 +700,30 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
             }
             ArgumentKind::Repeated => {
                 // --name VALUE that may repeat; each occurrence appends.
-                a = a
-                    .long(long_flag)
-                    .required(false)
-                    .action(ArgAction::Append)
-                    .num_args(1);
+                // `multi_value_occurrence` (argparse `nargs="+"`/`"*"`)
+                // additionally lets one occurrence take several
+                // space-separated values — widening `num_args` beyond 1
+                // is unsafe by default since a following positional
+                // would get swallowed, so it's opt-in per argument
+                // rather than blanket for the kind.
+                a = a.long(long_flag).required(false).action(ArgAction::Append);
+                a = if arg.metadata.multi_value_occurrence {
+                    a.num_args(1..)
+                } else {
+                    a.num_args(1)
+                };
             }
             ArgumentKind::VarPositional => {
-                // Trailing variadic positional. Required=false because
-                // zero values is a valid invocation.
-                a = a
-                    .required(false)
-                    .num_args(0..)
-                    .trailing_var_arg(true);
+                // Trailing variadic positional. Zero values is valid by
+                // default (native `*args`, argparse `nargs="*"`);
+                // `require_at_least_one` (argparse `nargs="+"`) demands
+                // one or more instead.
+                a = if arg.metadata.require_at_least_one {
+                    a.required(true).num_args(1..)
+                } else {
+                    a.required(false).num_args(0..)
+                };
+                a = a.trailing_var_arg(true);
             }
             ArgumentKind::Count => {
                 // `-v`, `-vv`, `-vvv` → 1 / 2 / 3 via clap's
@@ -1033,6 +1044,103 @@ mod cli_tree_tests {
         assert_eq!(
             matches.get_one::<String>("id").map(String::as_str),
             Some("12345678-1234-5678-1234-567812345678")
+        );
+    }
+
+    #[test]
+    fn repeated_flag_accepts_space_separated_values_and_repeat_invocations() {
+        // Covers argparse `nargs="+"`/`"*"` (space-separated values in one
+        // occurrence) alongside the pre-existing `action="append"` shape
+        // (one value per occurrence, repeated). Both classify as
+        // `ArgumentKind::Repeated`; the scanner sets
+        // `multi_value_occurrence` only for the nargs case.
+        let mut arg = empty_arg("names", ArgumentKind::Repeated);
+        arg.metadata.multi_value_occurrence = true;
+        let mut cmd = normal_leaf("greet", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        let space_separated = clap_cmd
+            .clone()
+            .try_get_matches_from(vec!["greet", "--names", "alice", "bob"])
+            .expect("space-separated values must parse");
+        assert_eq!(
+            space_separated
+                .get_many::<String>("names")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["alice", "bob"]
+        );
+
+        let repeated_flag = clap_cmd
+            .try_get_matches_from(vec!["greet", "--names", "alice", "--names", "bob"])
+            .expect("repeated flag invocations must parse");
+        assert_eq!(
+            repeated_flag
+                .get_many::<String>("names")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["alice", "bob"]
+        );
+    }
+
+    #[test]
+    fn plain_repeated_flag_beside_a_required_positional_does_not_swallow_it() {
+        // Without `multi_value_occurrence` (the `action="append"` shape,
+        // and every pre-existing native `list[T]` keyword param), each
+        // `--names` occurrence must still take exactly one value so a
+        // trailing positional isn't swallowed by a widened `num_args`.
+        let mut names_arg = empty_arg("names", ArgumentKind::Repeated);
+        names_arg.long_flag = Some("--names".into());
+        let env_arg = empty_arg("env", ArgumentKind::Positional);
+
+        let mut cmd = normal_leaf("greet", "jenkins");
+        cmd.arguments = vec![names_arg, env_arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["greet", "--names", "a", "prod"])
+            .expect("positional must still be reachable after a single-value --names");
+        assert_eq!(
+            matches
+                .get_many::<String>("names")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["a"]
+        );
+        assert_eq!(matches.get_one::<String>("env").map(String::as_str), Some("prod"));
+    }
+
+    #[test]
+    fn var_positional_require_at_least_one_rejects_zero_values() {
+        // argparse `nargs="+"` on a positional (e.g. Django's
+        // `manage.py test app1 app2`) demands at least one value, unlike
+        // native `*args`/argparse `nargs="*"` where zero is valid.
+        let mut labels_arg = empty_arg("labels", ArgumentKind::VarPositional);
+        labels_arg.metadata.require_at_least_one = true;
+
+        let mut cmd = normal_leaf("test", "jenkins");
+        cmd.arguments = vec![labels_arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        clap_cmd
+            .clone()
+            .try_get_matches_from(vec!["test"])
+            .expect_err("zero values must be rejected when require_at_least_one is set");
+
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["test", "app1", "app2"])
+            .expect("one or more values must parse");
+        assert_eq!(
+            matches
+                .get_many::<String>("labels")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["app1", "app2"]
         );
     }
 

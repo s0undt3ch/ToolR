@@ -186,6 +186,21 @@ pub struct ArgMetadata {
     /// is (`Arg::requires_all`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+    /// `Repeated` only: a single occurrence may itself take several
+    /// space-separated values (argparse `nargs="+"`/`"*"`), rather than
+    /// requiring one value per occurrence (argparse `action="append"`).
+    /// Drives `Arg::num_args(1..)` vs `Arg::num_args(1)` — the wider
+    /// range is unsafe next to a positional, so it's opt-in per
+    /// argument rather than blanket for the `Repeated` kind.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub multi_value_occurrence: bool,
+    /// `VarPositional` only: the source requires at least one value
+    /// (argparse `nargs="+"`), rather than zero-or-more being valid
+    /// (native `*args`, or argparse `nargs="*"`). Drives
+    /// `Arg::required(true)` + `Arg::num_args(1..)` vs the zero-or-more
+    /// default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub require_at_least_one: bool,
 }
 
 impl ArgMetadata {
@@ -198,6 +213,8 @@ impl ArgMetadata {
             && self.help_section.is_none()
             && self.conflicts_with.is_empty()
             && self.requires.is_empty()
+            && !self.multi_value_occurrence
+            && !self.require_at_least_one
     }
 }
 

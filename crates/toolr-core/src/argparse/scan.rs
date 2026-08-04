@@ -197,6 +197,8 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
 
     // Collect kwargs by name (string-encoded best-effort).
     let mut action: Option<String> = None;
+    let mut nargs: Option<String> = None;
+    let mut nargs_repr: Option<String> = None;
     let mut default: Option<String> = None;
     let mut help_text = String::new();
     let mut choices: Vec<String> = Vec::new();
@@ -208,6 +210,10 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         };
         match kw_name {
             "action" => action = literal_str(&kw.value),
+            "nargs" => {
+                nargs = literal_str(&kw.value);
+                nargs_repr = nargs_kwarg_repr(&kw.value);
+            }
             "default" => default = literal_to_string(&kw.value),
             "help" => {
                 if let Some(s) = literal_str(&kw.value) {
@@ -236,11 +242,36 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         }
     }
 
-    let kind = classify_kind(is_keyword_style, action.as_deref());
+    let kind = classify_kind(is_keyword_style, action.as_deref(), nargs.as_deref());
+
+    // "+" and "*" drive `kind` above; a keyword `nargs="?"` degrades
+    // harmlessly to a plain single-value optional (0-or-1 occurrence of
+    // 1 value is already what clap does). Every other explicit `nargs`
+    // — an int count, `argparse.REMAINDER`, or `nargs="?"` on a
+    // *positional* (which argparse treats as optional, but we still
+    // emit a required `Positional`) — isn't represented in
+    // `ArgumentKind` and silently falls back to a single value; warn so
+    // it's visible rather than silently wrong at runtime.
+    if let Some(raw) = &nargs_repr {
+        let handled = matches!(nargs.as_deref(), Some("+") | Some("*"))
+            || (is_keyword_style && nargs.as_deref() == Some("?"));
+        if !handled {
+            warnings.push(format!(
+                "argparse: {name_for_warning}: unsupported nargs={raw} (treated as a single value; may not match argparse's runtime behaviour)"
+            ));
+        }
+    }
 
     let mut metadata = ArgMetadata::default();
     if let Some(mv) = metavar {
         metadata.metavar = Some(mv);
+    }
+    if matches!(nargs.as_deref(), Some("+") | Some("*")) {
+        if is_keyword_style {
+            metadata.multi_value_occurrence = true;
+        } else if nargs.as_deref() == Some("+") {
+            metadata.require_at_least_one = true;
+        }
     }
 
     // When the source spells its long flag with underscores
@@ -279,14 +310,20 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
     }
 }
 
-fn classify_kind(is_keyword_style: bool, action: Option<&str>) -> ArgumentKind {
+fn classify_kind(is_keyword_style: bool, action: Option<&str>, nargs: Option<&str>) -> ArgumentKind {
     if !is_keyword_style {
-        return ArgumentKind::Positional;
+        return match nargs {
+            Some("+") | Some("*") => ArgumentKind::VarPositional,
+            _ => ArgumentKind::Positional,
+        };
     }
     match action {
         Some("store_true") | Some("store_false") => ArgumentKind::Flag,
         Some("append") => ArgumentKind::Repeated,
-        _ => ArgumentKind::Optional,
+        _ => match nargs {
+            Some("+") | Some("*") => ArgumentKind::Repeated,
+            _ => ArgumentKind::Optional,
+        },
     }
 }
 
@@ -308,6 +345,21 @@ fn type_kwarg_repr(expr: &Expr) -> String {
             format!("{prefix}.{}", a.attr)
         }
         _ => "<expr>".to_string(),
+    }
+}
+
+/// Best-effort textual rendering of a `nargs=...` value for warnings,
+/// covering every shape the argparse docs allow: an int count, `"?"` /
+/// `"+"` / `"*"`, and `argparse.REMAINDER` (a dotted attribute).
+fn nargs_kwarg_repr(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::StringLiteral(s) => Some(format!("{:?}", s.value.to_str())),
+        Expr::NumberLiteral(n) => match &n.value {
+            ruff_python_ast::Number::Int(i) => Some(i.to_string()),
+            _ => None,
+        },
+        Expr::Name(_) | Expr::Attribute(_) => Some(type_kwarg_repr(expr)),
+        _ => None,
     }
 }
 
@@ -534,6 +586,66 @@ def add_arguments(self, parser):
         assert_eq!(scanned.arguments[1].default.as_deref(), Some("default"));
         assert_eq!(scanned.arguments[2].kind, ArgumentKind::Flag);
         assert_eq!(scanned.arguments[3].kind, ArgumentKind::Repeated);
+    }
+
+    #[test]
+    fn nargs_plus_and_star_classify_as_repeated() {
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--names', nargs='+', help='Names to greet')
+    parser.add_argument('--tags', nargs='*', help='Optional tags')
+    parser.add_argument('--pair', nargs=2, help='Exactly two values')
+"#;
+        let scanned = scan_source("greet", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::Repeated);
+        assert!(scanned.arguments[0].metadata.multi_value_occurrence);
+        assert_eq!(scanned.arguments[1].kind, ArgumentKind::Repeated);
+        assert!(scanned.arguments[1].metadata.multi_value_occurrence);
+        // Integer nargs isn't a repeat-flag signal; falls back to Optional.
+        // TODO: nargs=N (int) isn't represented in ArgumentKind yet —
+        // this silently degrades to a single-value Optional rather than
+        // enforcing exactly N values. A warning flags the mismatch.
+        assert_eq!(scanned.arguments[2].kind, ArgumentKind::Optional);
+        assert!(
+            scanned.warnings.iter().any(|w| w.contains("--pair") && w.contains("nargs=2")),
+            "expected an unsupported-nargs warning, got {:?}",
+            scanned.warnings
+        );
+    }
+
+    #[test]
+    fn nargs_question_mark_warns_on_positional_but_not_on_a_flag() {
+        // Keyword `nargs="?"` degrades harmlessly (0-or-1 occurrence of
+        // 1 value is already clap's behaviour for a plain optional), so
+        // it's silent. On a *positional*, argparse treats `"?"` as
+        // optional but we still emit a required `Positional` — that
+        // mismatch is worth a warning.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--maybe', nargs='?', help='Optional single value')
+    parser.add_argument('maybe_label', nargs='?', help='Optional positional')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::Optional);
+        assert_eq!(scanned.arguments[1].kind, ArgumentKind::Positional);
+        assert!(!scanned.warnings.iter().any(|w| w.contains("--maybe")));
+        assert!(scanned.warnings.iter().any(|w| w.contains("maybe_label") && w.contains("nargs")));
+    }
+
+    #[test]
+    fn positional_nargs_plus_and_star_classify_as_var_positional() {
+        // Mirrors Django's `manage.py test app1 app2` shape:
+        // `parser.add_argument('args', nargs='+')`.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('labels', nargs='+', help='One or more labels')
+    parser.add_argument('extra', nargs='*', help='Zero or more extras')
+"#;
+        let scanned = scan_source("test", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::VarPositional);
+        assert!(scanned.arguments[0].metadata.require_at_least_one);
+        assert_eq!(scanned.arguments[1].kind, ArgumentKind::VarPositional);
+        assert!(!scanned.arguments[1].metadata.require_at_least_one);
     }
 
     #[test]
