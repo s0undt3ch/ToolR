@@ -378,9 +378,10 @@ fn type_kwarg_repr(expr: &Expr) -> String {
 /// Normalise a `nargs=...` value into the internal string form
 /// `classify_kind` and the warning gate match on: the literal string for
 /// `"?"`/`"+"`/`"*"`, the decimal string for an int count, or the
-/// sentinel `"REMAINDER"` for `argparse.REMAINDER` (recognised by
-/// attribute name only — tolerant of any import alias for the
-/// `argparse` module).
+/// sentinel `"REMAINDER"` for `argparse.REMAINDER` — recognised either
+/// as a dotted attribute (`argparse.REMAINDER`, tolerant of any import
+/// alias for the `argparse` module) or a bare name (`REMAINDER`, from
+/// `from argparse import REMAINDER`).
 fn nargs_value(expr: &Expr) -> Option<String> {
     match expr {
         Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
@@ -389,6 +390,7 @@ fn nargs_value(expr: &Expr) -> Option<String> {
             _ => None,
         },
         Expr::Attribute(a) if a.attr.as_str() == "REMAINDER" => Some("REMAINDER".to_string()),
+        Expr::Name(n) if n.id.as_str() == "REMAINDER" => Some("REMAINDER".to_string()),
         _ => None,
     }
 }
@@ -733,6 +735,20 @@ def add_arguments(self, parser):
             "REMAINDER on a positional shouldn't warn any more, got {:?}",
             scanned.warnings
         );
+    }
+
+    #[test]
+    fn positional_nargs_bare_remainder_name_classifies_as_var_positional() {
+        // `from argparse import REMAINDER` then `nargs=REMAINDER` (a bare
+        // name, not the dotted `argparse.REMAINDER` attribute) must be
+        // recognised too.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('rest', nargs=REMAINDER, help='Everything after')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::VarPositional);
+        assert_eq!(scanned.arguments[0].metadata.nargs, Some(Nargs::Star));
     }
 
     #[test]
