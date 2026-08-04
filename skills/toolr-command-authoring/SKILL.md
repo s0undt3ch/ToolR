@@ -42,9 +42,14 @@ cannot drift.
    than redeclaring it.
 4. **Write the function.** Take `ctx: Context` as the first
    parameter, then your CLI arguments as ordinary Python parameters.
-   Type hints drive argparse binding; defaults make arguments
-   optional; `Annotated[T, arg(...)]` adds clap metadata
-   (`aliases`, `metavar`, `help_section`, `must_exist`, etc.).
+   The **type hint alone** decides how a value is parsed and coerced
+   — the default's shape is irrelevant, so `root: str = "~/projects"`
+   stays a `str` even though it looks path-like; annotate `root: Path`
+   if you want a `pathlib.Path`. Defaults make arguments optional;
+   `Annotated[T, arg(...)]` adds clap metadata (`aliases`, `metavar`,
+   `help_section`, `must_exist`, etc.). See
+   [`docs/writing-commands/arguments.md`](../../docs/writing-commands/arguments.md)
+   for the full supported-type table.
 5. **Document via Google-style docstring.** The first line is the
    short help (`toolr <group> --help`). The rest is the long help
    (`toolr <group> <cmd> --help`). `Args:` populates per-argument
