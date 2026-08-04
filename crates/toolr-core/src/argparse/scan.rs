@@ -284,6 +284,19 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         metadata.aliases.push(format!("--{name}"));
     }
 
+    // argparse commonly declares a short flag alongside the long one
+    // (`add_argument("-s", "--run-synchronously", ...)`). Only the
+    // longest `--flag` became the canonical `name` above — every other
+    // flag-shaped positional (short flags, additional long spellings)
+    // must still be registered so clap accepts it too.
+    if is_keyword_style {
+        for p in positionals {
+            if p != &name_for_warning {
+                metadata.aliases.push(p.clone());
+            }
+        }
+    }
+
     // Preserve the literal long-flag spelling from the source. The
     // scanner's canonical `name` strips the leading `--` and may pick
     // between aliases (`add_argument("--user_ids", "--user-ids", ...)`
@@ -673,6 +686,56 @@ def add_arguments(self, parser):
         let dashed = &scanned.arguments[1];
         assert_eq!(dashed.name, "already-dashed");
         assert!(dashed.metadata.aliases.is_empty());
+    }
+
+    #[test]
+    fn short_and_long_flag_pair_registers_short_as_alias() {
+        // Django commands routinely declare both spellings on one call:
+        // `parser.add_argument("-s", "--run-synchronously", action="store_true", ...)`.
+        // The short flag must survive as a clap short alias, not be dropped.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('-s', '--run-synchronously', action='store_true', help='Run sync')
+"#;
+        let scanned = scan_source("propagate", source).unwrap();
+        assert_eq!(scanned.arguments.len(), 1);
+        let arg = &scanned.arguments[0];
+        assert_eq!(arg.name, "run-synchronously");
+        assert_eq!(arg.kind, ArgumentKind::Flag);
+        assert_eq!(arg.metadata.aliases, vec!["-s".to_string()]);
+    }
+
+    #[test]
+    fn more_than_two_flag_spellings_all_become_aliases() {
+        // argparse allows arbitrarily many flag spellings on one call, not
+        // just a short/long pair.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('-s', '-x', '--run-synchronously', action='store_true', help='Run sync')
+"#;
+        let scanned = scan_source("propagate", source).unwrap();
+        assert_eq!(scanned.arguments.len(), 1);
+        let arg = &scanned.arguments[0];
+        assert_eq!(arg.name, "run-synchronously");
+        assert_eq!(arg.metadata.aliases, vec!["-s".to_string(), "-x".to_string()]);
+    }
+
+    #[test]
+    fn mixed_short_and_multiple_long_flag_spellings_all_become_aliases() {
+        // Short flags and extra long spellings can both appear alongside
+        // the canonical (longest) `--flag`.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('-s', '-x', '--rs', '--run-synchronously', action='store_true', help='Run sync')
+"#;
+        let scanned = scan_source("propagate", source).unwrap();
+        assert_eq!(scanned.arguments.len(), 1);
+        let arg = &scanned.arguments[0];
+        assert_eq!(arg.name, "run-synchronously");
+        assert_eq!(
+            arg.metadata.aliases,
+            vec!["-s".to_string(), "-x".to_string(), "--rs".to_string()]
+        );
     }
 
     #[test]
