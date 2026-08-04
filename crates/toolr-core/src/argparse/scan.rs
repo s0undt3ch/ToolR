@@ -5,7 +5,7 @@ use ruff_python_parser as parser;
 use thiserror::Error;
 
 use crate::argparse::config::CommonArg;
-use crate::manifest::{ArgMetadata, Argument, ArgumentKind};
+use crate::manifest::{ArgMetadata, Argument, ArgumentKind, Nargs};
 
 #[derive(Debug, Error)]
 pub enum ScanError {
@@ -211,7 +211,7 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         match kw_name {
             "action" => action = literal_str(&kw.value),
             "nargs" => {
-                nargs = literal_str(&kw.value);
+                nargs = nargs_value(&kw.value);
                 nargs_repr = nargs_kwarg_repr(&kw.value);
             }
             "default" => default = literal_to_string(&kw.value),
@@ -244,19 +244,18 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
 
     let kind = classify_kind(is_keyword_style, action.as_deref(), nargs.as_deref());
 
-    // "+" and "*" drive `kind` above; a keyword `nargs="?"` degrades
-    // harmlessly to a plain single-value optional (0-or-1 occurrence of
-    // 1 value is already what clap does). Every other explicit `nargs`
-    // — an int count, `argparse.REMAINDER`, or `nargs="?"` on a
-    // *positional* (which argparse treats as optional, but we still
-    // emit a required `Positional`) — isn't represented in
-    // `ArgumentKind` and silently falls back to a single value; warn so
-    // it's visible rather than silently wrong at runtime. Tracked by
-    // https://github.com/s0undt3ch/ToolR/issues/423 — remove this
-    // warning once those forms get first-class support.
+    // `nargs=N` combined with `action="append"` (repeating groups of N
+    // values) isn't representable by any `ArgumentKind` — degrades to a
+    // single value silently. `argparse.REMAINDER` on a keyword-style arg
+    // is nonsensical in argparse itself and stays unsupported too. Warn
+    // so these are visible rather than silently wrong at runtime.
     if let Some(raw) = &nargs_repr {
-        let handled = matches!(nargs.as_deref(), Some("+") | Some("*"))
-            || (is_keyword_style && nargs.as_deref() == Some("?"));
+        let is_fixed_arity = nargs.as_deref().is_some_and(|n| n.parse::<usize>().is_ok());
+        let fixed_arity_with_append = is_fixed_arity && action.as_deref() == Some("append");
+        let handled = !fixed_arity_with_append
+            && (matches!(nargs.as_deref(), Some("+") | Some("*") | Some("?"))
+                || (!is_keyword_style && nargs.as_deref() == Some("REMAINDER"))
+                || is_fixed_arity);
         if !handled {
             warnings.push(format!(
                 "argparse: {name_for_warning}: unsupported nargs={raw} (treated as a single value; may not match argparse's runtime behaviour; see https://github.com/s0undt3ch/ToolR/issues/423)"
@@ -268,13 +267,23 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
     if let Some(mv) = metavar {
         metadata.metavar = Some(mv);
     }
-    if matches!(nargs.as_deref(), Some("+") | Some("*")) {
-        if is_keyword_style {
-            metadata.multi_value_occurrence = true;
-        } else if nargs.as_deref() == Some("+") {
-            metadata.require_at_least_one = true;
+    metadata.nargs = match kind {
+        ArgumentKind::Repeated if is_keyword_style => match nargs.as_deref() {
+            Some("+") => Some(Nargs::Plus),
+            Some("*") => Some(Nargs::Star),
+            // action="append": one value per occurrence, no extra shape.
+            _ => None,
+        },
+        ArgumentKind::VarPositional => match nargs.as_deref() {
+            Some("+") => Some(Nargs::Plus),
+            // "*" and REMAINDER are both zero-or-more.
+            _ => Some(Nargs::Star),
+        },
+        ArgumentKind::FixedArity => {
+            nargs.as_deref().and_then(|n| n.parse::<usize>().ok()).map(Nargs::Fixed)
         }
-    }
+        _ => None,
+    };
 
     // When the source spells its long flag with underscores
     // (`--skip_warm_cache`), cli.rs still normalises the canonical CLI
@@ -328,7 +337,9 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
 fn classify_kind(is_keyword_style: bool, action: Option<&str>, nargs: Option<&str>) -> ArgumentKind {
     if !is_keyword_style {
         return match nargs {
-            Some("+") | Some("*") => ArgumentKind::VarPositional,
+            Some("+") | Some("*") | Some("REMAINDER") => ArgumentKind::VarPositional,
+            Some("?") => ArgumentKind::OptionalPositional,
+            Some(n) if n.parse::<usize>().is_ok() => ArgumentKind::FixedArity,
             _ => ArgumentKind::Positional,
         };
     }
@@ -337,6 +348,7 @@ fn classify_kind(is_keyword_style: bool, action: Option<&str>, nargs: Option<&st
         Some("append") => ArgumentKind::Repeated,
         _ => match nargs {
             Some("+") | Some("*") => ArgumentKind::Repeated,
+            Some(n) if n.parse::<usize>().is_ok() => ArgumentKind::FixedArity,
             _ => ArgumentKind::Optional,
         },
     }
@@ -360,6 +372,24 @@ fn type_kwarg_repr(expr: &Expr) -> String {
             format!("{prefix}.{}", a.attr)
         }
         _ => "<expr>".to_string(),
+    }
+}
+
+/// Normalise a `nargs=...` value into the internal string form
+/// `classify_kind` and the warning gate match on: the literal string for
+/// `"?"`/`"+"`/`"*"`, the decimal string for an int count, or the
+/// sentinel `"REMAINDER"` for `argparse.REMAINDER` (recognised by
+/// attribute name only — tolerant of any import alias for the
+/// `argparse` module).
+fn nargs_value(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::StringLiteral(s) => Some(s.value.to_str().to_string()),
+        Expr::NumberLiteral(n) => match &n.value {
+            ruff_python_ast::Number::Int(i) => Some(i.to_string()),
+            _ => None,
+        },
+        Expr::Attribute(a) if a.attr.as_str() == "REMAINDER" => Some("REMAINDER".to_string()),
+        _ => None,
     }
 }
 
@@ -609,33 +639,55 @@ def add_arguments(self, parser):
 def add_arguments(self, parser):
     parser.add_argument('--names', nargs='+', help='Names to greet')
     parser.add_argument('--tags', nargs='*', help='Optional tags')
-    parser.add_argument('--pair', nargs=2, help='Exactly two values')
 "#;
         let scanned = scan_source("greet", source).unwrap();
         assert_eq!(scanned.arguments[0].kind, ArgumentKind::Repeated);
-        assert!(scanned.arguments[0].metadata.multi_value_occurrence);
+        assert_eq!(scanned.arguments[0].metadata.nargs, Some(Nargs::Plus));
         assert_eq!(scanned.arguments[1].kind, ArgumentKind::Repeated);
-        assert!(scanned.arguments[1].metadata.multi_value_occurrence);
-        // Integer nargs isn't a repeat-flag signal; falls back to Optional.
-        // nargs=N (int) isn't represented in ArgumentKind yet — this
-        // silently degrades to a single-value Optional rather than
-        // enforcing exactly N values. A warning flags the mismatch;
-        // tracked by https://github.com/s0undt3ch/ToolR/issues/423.
-        assert_eq!(scanned.arguments[2].kind, ArgumentKind::Optional);
+        assert_eq!(scanned.arguments[1].metadata.nargs, Some(Nargs::Star));
+    }
+
+    #[test]
+    fn nargs_int_classifies_as_fixed_arity_keyword_and_positional() {
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--pair', nargs=2, help='Exactly two values')
+    parser.add_argument('files', nargs=3, help='Exactly three files')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::FixedArity);
+        assert_eq!(scanned.arguments[0].metadata.nargs, Some(Nargs::Fixed(2)));
+        assert!(scanned.arguments[0].long_flag.is_some());
+        assert_eq!(scanned.arguments[1].kind, ArgumentKind::FixedArity);
+        assert_eq!(scanned.arguments[1].metadata.nargs, Some(Nargs::Fixed(3)));
+        assert!(scanned.arguments[1].long_flag.is_none());
         assert!(
-            scanned.warnings.iter().any(|w| w.contains("--pair") && w.contains("nargs=2")),
+            scanned.warnings.iter().all(|w| !w.contains("unsupported nargs")),
+            "fixed-arity nargs shouldn't warn any more, got {:?}",
+            scanned.warnings
+        );
+    }
+
+    #[test]
+    fn nargs_int_with_append_action_still_warns() {
+        // Repeating groups of N (nargs=2 + action="append") isn't
+        // representable — out of scope, still degrades to a single
+        // value with a warning.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--pairs', nargs=2, action='append', help='Pairs')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::Repeated);
+        assert!(
+            scanned.warnings.iter().any(|w| w.contains("--pairs") && w.contains("nargs=2")),
             "expected an unsupported-nargs warning, got {:?}",
             scanned.warnings
         );
     }
 
     #[test]
-    fn nargs_question_mark_warns_on_positional_but_not_on_a_flag() {
-        // Keyword `nargs="?"` degrades harmlessly (0-or-1 occurrence of
-        // 1 value is already clap's behaviour for a plain optional), so
-        // it's silent. On a *positional*, argparse treats `"?"` as
-        // optional but we still emit a required `Positional` — that
-        // mismatch is worth a warning.
+    fn positional_nargs_question_mark_classifies_as_optional_positional() {
         let source = r#"
 def add_arguments(self, parser):
     parser.add_argument('--maybe', nargs='?', help='Optional single value')
@@ -643,9 +695,12 @@ def add_arguments(self, parser):
 "#;
         let scanned = scan_source("cmd", source).unwrap();
         assert_eq!(scanned.arguments[0].kind, ArgumentKind::Optional);
-        assert_eq!(scanned.arguments[1].kind, ArgumentKind::Positional);
-        assert!(!scanned.warnings.iter().any(|w| w.contains("--maybe")));
-        assert!(scanned.warnings.iter().any(|w| w.contains("maybe_label") && w.contains("nargs")));
+        assert_eq!(scanned.arguments[1].kind, ArgumentKind::OptionalPositional);
+        assert!(
+            scanned.warnings.iter().all(|w| !w.contains("nargs")),
+            "nargs=\"?\" on either style shouldn't warn any more, got {:?}",
+            scanned.warnings
+        );
     }
 
     #[test]
@@ -659,9 +714,42 @@ def add_arguments(self, parser):
 "#;
         let scanned = scan_source("test", source).unwrap();
         assert_eq!(scanned.arguments[0].kind, ArgumentKind::VarPositional);
-        assert!(scanned.arguments[0].metadata.require_at_least_one);
+        assert_eq!(scanned.arguments[0].metadata.nargs, Some(Nargs::Plus));
         assert_eq!(scanned.arguments[1].kind, ArgumentKind::VarPositional);
-        assert!(!scanned.arguments[1].metadata.require_at_least_one);
+        assert_eq!(scanned.arguments[1].metadata.nargs, Some(Nargs::Star));
+    }
+
+    #[test]
+    fn positional_nargs_remainder_classifies_as_var_positional() {
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('rest', nargs=argparse.REMAINDER, help='Everything after')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::VarPositional);
+        assert_eq!(scanned.arguments[0].metadata.nargs, Some(Nargs::Star));
+        assert!(
+            scanned.warnings.iter().all(|w| !w.contains("nargs")),
+            "REMAINDER on a positional shouldn't warn any more, got {:?}",
+            scanned.warnings
+        );
+    }
+
+    #[test]
+    fn keyword_style_remainder_still_warns() {
+        // argparse.REMAINDER on a keyword-style arg is nonsensical in
+        // argparse itself; scope this to positionals only and keep
+        // warning.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--rest', nargs=argparse.REMAINDER, help='Weird')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert!(
+            scanned.warnings.iter().any(|w| w.contains("--rest") && w.contains("REMAINDER")),
+            "expected an unsupported-nargs warning, got {:?}",
+            scanned.warnings
+        );
     }
 
     #[test]

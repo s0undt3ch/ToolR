@@ -32,3 +32,13 @@ no scaffolding. Just write whatever should appear in the notes.
   value but the last was silently dropped. Now emits one occurrence
   with all values (`--customer-ids a b`), reserving the repeat-the-flag
   form for genuine `action="append"` args.
+- The argparse scanner now gives `nargs=N` (fixed-arity), positional
+  `nargs="?"`, and `argparse.REMAINDER` first-class support end to end —
+  clap arg construction, tab completion, and dispatch argv reconstruction
+  all handle these correctly instead of silently degrading to a single
+  value with a warning.
+- **Breaking (dispatch wire protocol):** bumped the toolr ↔ toolr-py
+  dispatch schema version from 2 to 3 to carry the above. If you see
+  `toolr-py in this tools venv speaks schema N, but the toolr binary
+  emitted schema M`, run `toolr project venv upgrade toolr-py` (or pin
+  the `toolr` binary to a compatible version).

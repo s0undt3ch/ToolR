@@ -51,7 +51,7 @@ use serde::{Deserialize, Serialize};
 /// Toolr is pre-1.0, so we don't carve out "major" / "minor" — bumps are
 /// monotonic integers tied 1:1 to "the protocol changed in a way an
 /// older peer can't handle".
-pub const RUNNER_SCHEMA_VERSION: u32 = 2;
+pub const RUNNER_SCHEMA_VERSION: u32 = 3;
 
 /// Reduced view of `toolr.Context` reconstructable from JSON.
 ///
@@ -154,8 +154,12 @@ pub struct ArgSchemaSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_annotation: Option<String>,
     /// `"*" | "+" | "?"` or an integer; serde encodes whichever variant.
-    /// Always `None` from the current Rust scanner — argparse-equivalent
-    /// nargs information isn't tracked yet.
+    /// `Repeated`/`VarPositional`: `"+"`/`"*"` when a single occurrence
+    /// takes several values (argparse `nargs="+"`/`"*"`/`REMAINDER`),
+    /// `None` when each occurrence takes one value (`action="append"`,
+    /// or native `*args`). `Optional`/`Positional` (from `FixedArity`):
+    /// an int, the exact value count. `Positional` (from
+    /// `OptionalPositional`): `"?"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nargs: Option<serde_json::Value>,
     /// Literal long-flag spelling from the source (e.g. `"--user_ids"`).
@@ -164,12 +168,6 @@ pub struct ArgSchemaSpec {
     /// form even when toolr's CLI normalises display to `--user-ids`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub long_flag: Option<String>,
-    /// `kind == "repeated"` only: source is argparse `nargs="+"`/`"*"`
-    /// (one occurrence, many space-separated values) rather than
-    /// `action="append"` (one occurrence per value). Drives which
-    /// invocation form `DispatchCommand.argv` reconstructs.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub multi_value_occurrence: bool,
 }
 
 impl ExecutionSpec {
@@ -223,7 +221,7 @@ mod tests {
         let spec = ExecutionSpec::new("ci", "hello", "tools.ci", "hello", "/repo");
         let json = serde_json::to_string(&spec).expect("serialize");
         // These exact strings are what `toolr._runner.RunnerSpec` decodes.
-        assert!(json.contains("\"schema_version\":2"), "got: {json}");
+        assert!(json.contains("\"schema_version\":3"), "got: {json}");
         assert!(json.contains("\"group\":\"ci\""), "got: {json}");
         assert!(json.contains("\"command\":\"hello\""), "got: {json}");
         assert!(json.contains("\"repo_root\":\"/repo\""), "got: {json}");
@@ -231,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_version_constant_is_2() {
-        assert_eq!(RUNNER_SCHEMA_VERSION, 2);
+    fn schema_version_constant_is_3() {
+        assert_eq!(RUNNER_SCHEMA_VERSION, 3);
     }
 }

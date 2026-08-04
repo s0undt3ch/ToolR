@@ -186,21 +186,10 @@ pub struct ArgMetadata {
     /// is (`Arg::requires_all`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
-    /// `Repeated` only: a single occurrence may itself take several
-    /// space-separated values (argparse `nargs="+"`/`"*"`), rather than
-    /// requiring one value per occurrence (argparse `action="append"`).
-    /// Drives `Arg::num_args(1..)` vs `Arg::num_args(1)` — the wider
-    /// range is unsafe next to a positional, so it's opt-in per
-    /// argument rather than blanket for the `Repeated` kind.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub multi_value_occurrence: bool,
-    /// `VarPositional` only: the source requires at least one value
-    /// (argparse `nargs="+"`), rather than zero-or-more being valid
-    /// (native `*args`, or argparse `nargs="*"`). Drives
-    /// `Arg::required(true)` + `Arg::num_args(1..)` vs the zero-or-more
-    /// default.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub require_at_least_one: bool,
+    /// Extra `nargs` shape from the source. See [`Nargs`] for the
+    /// per-kind meaning. `None` for every kind that doesn't carry one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nargs: Option<Nargs>,
 }
 
 impl ArgMetadata {
@@ -213,8 +202,7 @@ impl ArgMetadata {
             && self.help_section.is_none()
             && self.conflicts_with.is_empty()
             && self.requires.is_empty()
-            && !self.multi_value_occurrence
-            && !self.require_at_least_one
+            && self.nargs.is_none()
     }
 }
 
@@ -224,6 +212,26 @@ pub struct HelpSection {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+/// Extra `nargs` shape carried from an argparse `add_argument(...)` call,
+/// beyond what `ArgumentKind` alone implies.
+///
+/// - `Repeated`: `Some(Plus | Star)` means a single occurrence takes
+///   several space-separated values (`nargs="+"`/`"*"`) rather than one
+///   value per occurrence (`action="append"`, which leaves this `None`).
+/// - `VarPositional`: `Some(Plus)` requires at least one value;
+///   `Some(Star)` or `None` allows zero (covers `nargs="*"` and
+///   `argparse.REMAINDER`, which are equivalent for this purpose).
+/// - `FixedArity`: always `Some(Fixed(n))` — the exact value count.
+/// - Every other kind: always `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Nargs {
+    Question,
+    Plus,
+    Star,
+    Fixed(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,11 +247,21 @@ pub enum ArgumentKind {
     /// (`def f(ctx, items: list[str] = [])` → `--items a --items b`).
     Repeated,
     /// Variadic trailing positional (`def f(ctx, *files: str)` → `toolr ... a.py b.py`).
+    /// Also covers argparse positional `nargs="*"`/`"+"`/`argparse.REMAINDER`.
     VarPositional,
     /// Counting flag (`-vvv` → 3) via clap `ArgAction::Count`. Drives
     /// `toolr.types.Count`-annotated parameters; the runtime value
     /// passed to the Python function is the resulting integer.
     Count,
+    /// Fixed-arity value(s) in a single occurrence (argparse `nargs=N`).
+    /// Keyword-style (`--pair a b`) when `long_flag` is `Some`;
+    /// positional (`files a b`, no flag) when `None`. The exact count
+    /// lives on `ArgMetadata.nargs` as `Nargs::Fixed(n)`.
+    FixedArity,
+    /// Zero-or-one positional value (argparse positional `nargs="?"`).
+    /// Distinct from `Positional` (always required) and `VarPositional`
+    /// (zero-or-more, trailing/greedy).
+    OptionalPositional,
 }
 
 // region: SkillRefOrigin

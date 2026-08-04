@@ -29,6 +29,19 @@ class ArgSchema(Struct, frozen=True):
     metavar: str | None = None
     type_annotation: str | None = None  # "str" / "int" / "float" / "bool"
     nargs: Literal["*", "+", "?"] | int | None = None
+    """Extra `nargs` shape from the source, beyond what `kind` alone
+    implies.
+
+    `kind == "repeated"`: `"+"`/`"*"` when a single occurrence takes
+    several space-separated values (argparse `nargs="+"`/`"*"`/
+    `argparse.REMAINDER`), `None` when each occurrence takes one value
+    (`action="append"`, or a native `*args` positional).
+    `kind == "optional"`/`"positional"`: an int is the exact value
+    count for a fixed-arity arg (argparse `nargs=N`); `"?"` marks a
+    zero-or-one positional (argparse positional `nargs="?"`).
+    `DispatchCommand.argv` uses this to pick the correct invocation
+    form.
+    """
     long_flag: str | None = None
     """Literal long-flag spelling from the source (e.g. `"--user_ids"`).
 
@@ -36,16 +49,6 @@ class ArgSchema(Struct, frozen=True):
     for positionals. `DispatchCommand.argv` uses this verbatim so the
     upstream tool's exact spelling is preserved across the round-trip,
     even when toolr's CLI normalises display to `--user-ids`.
-    """
-    multi_value_occurrence: bool = False
-    """`kind == "repeated"` only: source is argparse `nargs="+"`/`"*"`,
-    not `action="append"`.
-
-    A single occurrence takes several space-separated values
-    (`--name a b c`) rather than accumulating one value per occurrence
-    (`--name a --name b --name c`). `DispatchCommand.argv` uses this to
-    pick the correct invocation form — emitting the append form for a
-    genuine `nargs="+"` target silently drops every value but the last.
     """
 
 

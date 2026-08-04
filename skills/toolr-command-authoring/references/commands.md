@@ -292,13 +292,28 @@ Argparse-shaped argv reconstructed from `command_args` per `schema`.
 For each argument in `schema.arguments` that appears in
 `command_args`, emit the appropriate token(s):
 
-- `positional` → bare value
-- `flag` → `--name` when truthy, omitted when falsy
-- `optional` → `--name value`, omitted when value == default
-- `repeated` → `--name value` per element (argparse
-  `action="append"`), or `--name value1 value2 ...` in one
-  occurrence when `arg.multi_value_occurrence` (argparse
-  `nargs="+"`/`"*"`)
+- `positional`, no `nargs` → bare value.
+- `positional`, `nargs == "?"` → bare value when present (an
+  absent zero-or-one value never appears in `command_args`).
+- `positional`, `nargs` an int or `"+"`/`"*"` (fixed arity, or
+  a variadic positional — argparse `nargs="+"`/`"*"`/
+  `REMAINDER`, or native `*args`) → each element as a bare
+  value, in order.
+- `flag` → `--name` when truthy, omitted when falsy.
+- `optional`, no `nargs` → `--name value`, omitted when
+  value == default.
+- `optional`, `nargs` an int (fixed arity) → `--name` once,
+  followed by all N values.
+- `repeated`, `nargs in ("+", "*")` → `--name value1 value2 ...`
+  in one occurrence (argparse `nargs="+"`/`"*"` on a
+  keyword-style arg).
+- `repeated`, `nargs is None` (`action="append"`) →
+  `--name value` once per element.
+
+`"positional"` is reserved for args with no CLI flag at all —
+`VarPositional`/`OptionalPositional` sources always map there,
+never to `"repeated"` — so this method never has to guess
+whether a `"repeated"` arg has a flag to emit.
 
 Keys in `command_args` not found in `schema.arguments` raise
 ValueError so typos surface loudly.

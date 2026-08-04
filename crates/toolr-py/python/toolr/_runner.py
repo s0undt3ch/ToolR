@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 # keeps output bounded across runs with many deprecated call sites.
 warnings.simplefilter("default", ToolrDeprecationWarning)
 
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 3
 """Schema version of the toolr ↔ toolr-py dispatch protocol.
 
 This constant **must** match ``RUNNER_SCHEMA_VERSION`` in

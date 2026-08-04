@@ -192,8 +192,10 @@ fn classify_leaf_args<'a>(
         .filter(|a| {
             matches!(
                 a.kind,
-                ArgumentKind::Positional | ArgumentKind::VarPositional
-            )
+                ArgumentKind::Positional
+                    | ArgumentKind::VarPositional
+                    | ArgumentKind::OptionalPositional
+            ) || (a.kind == ArgumentKind::FixedArity && a.long_flag.is_none())
         })
         .collect();
     if let Some(&arg) = positional_args.get(positional_index) {
@@ -219,10 +221,10 @@ fn classify_leaf_args<'a>(
     // entire surface is `--flag value` pairs (no positionals at all),
     // and for the trailing position past every fixed positional.
     let has_flags = command.arguments.iter().any(|a| {
-        !matches!(
+        !(matches!(
             a.kind,
-            ArgumentKind::Positional | ArgumentKind::VarPositional
-        )
+            ArgumentKind::Positional | ArgumentKind::VarPositional | ArgumentKind::OptionalPositional
+        ) || (a.kind == ArgumentKind::FixedArity && a.long_flag.is_none()))
     });
     if has_flags {
         return Slot::Flag { command, prefix };
@@ -405,10 +407,10 @@ fn flags(command: &Command, prefix: &str) -> Vec<String> {
         .arguments
         .iter()
         .filter(|a| {
-            !matches!(
+            !(matches!(
                 a.kind,
-                ArgumentKind::Positional | ArgumentKind::VarPositional
-            )
+                ArgumentKind::Positional | ArgumentKind::VarPositional | ArgumentKind::OptionalPositional
+            ) || (a.kind == ArgumentKind::FixedArity && a.long_flag.is_none()))
         })
         .map(|a| format!("--{}", a.name.replace('_', "-")))
         .collect();
