@@ -1722,15 +1722,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0262-dev2-2026-08-04" class="md-nav__link">
+  <a href="#0262-dev4-2026-08-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.26.2-dev2 - 2026-08-04
+        0.26.2-dev4 - 2026-08-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.26.2-dev2 - 2026-08-04">
+    <nav class="md-nav" aria-label="0.26.2-dev4 - 2026-08-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3636,15 +3636,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0262-dev2-2026-08-04" class="md-nav__link">
+  <a href="#0262-dev4-2026-08-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.26.2-dev2 - 2026-08-04
+        0.26.2-dev4 - 2026-08-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.26.2-dev2 - 2026-08-04">
+    <nav class="md-nav" aria-label="0.26.2-dev4 - 2026-08-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -5545,17 +5545,29 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0262-dev2-2026-08-04">0.26.2-dev2 - 2026-08-04<a class="headerlink" href="#0262-dev2-2026-08-04" title="Permanent link">&para;</a></h2>
+<h2 id="0262-dev4-2026-08-04">0.26.2-dev4 - 2026-08-04<a class="headerlink" href="#0262-dev4-2026-08-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Fixed the argparse scanner dropping every flag spelling except the
   longest <code>--flag</code> on a call declaring several (e.g.
   <code>add_argument("-s", "--run-synchronously", ...)</code>). Short flags and
   extra long spellings now all register as clap aliases.</li>
+<li>Fixed <code>tests/distribution/test_example_plugin_contract.py</code> leaking real
+  venv provenance stubs into the developer/CI's live cache dir instead of
+  a sandboxed one, which inflated <code>toolr self cache</code>'s orphan count over
+  time.</li>
+<li>Fixed the cache orphan hint (<code>toolr: cache has N orphan entries (~X)</code>)
+  reporting the whole cache's size instead of just the orphaned entries',
+  which made a couple of unrelated live venvs look like the cause of a
+  large orphan count.</li>
+<li>Corrected <code>docs/internals/cache.md</code>, which falsely claimed multiple git
+  worktrees of the same repo share a single venv cache entry — they never
+  have. Each worktree gets (and needs) its own.</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(argparse)</em> Keep every flag spelling as an alias, not just the longest (<a href="https://github.com/s0undt3ch/ToolR/commit/4a0b3b7f9bb065f3c21dd8fdf9f50cf8e3f21356"><code>4a0b3b7</code></a>)</li>
+<li><em>(cache)</em> Stop test leak inflating orphan count, fix misleading orphan size, correct worktree-sharing doc lie (<a href="https://github.com/s0undt3ch/ToolR/commit/43aa750d97695f78943f9817cc3e6f44c9a613e3"><code>43aa750</code></a>)</li>
 </ul>
 <h2 id="0261-2026-08-04">0.26.1 - 2026-08-04<a class="headerlink" href="#0261-2026-08-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

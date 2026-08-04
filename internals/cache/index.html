@@ -1974,8 +1974,14 @@
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    └── uv          # toolr&#39;s managed copy of uv (optional)
 </span></code></pre></div>
 <p><code>&lt;repo-key&gt;</code> is a stable, content-addressable identifier derived from
-the repo's canonical path and Python version. Multiple worktrees of
-the same repo share a single cache entry.</p>
+the repo's canonical path and Python version. <strong>Each git worktree gets
+its own cache entry</strong> — the key is the worktree's own canonical path,
+not anything shared with the repo it was branched from. This is
+deliberate: worktrees can carry different <code>tools/</code> dependencies on
+different branches, and sharing one venv across them would mean
+constant resyncing (and, since nothing locks the venv directory, a
+race between worktrees running toolr concurrently). Run <code>toolr self
+cache prune</code> after removing a worktree to reclaim its venv.</p>
 <h2 id="metajson"><code>meta.json</code><a class="headerlink" href="#metajson" title="Permanent link">&para;</a></h2>
 <p>Written when toolr creates a venv; updated on every invocation.</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
