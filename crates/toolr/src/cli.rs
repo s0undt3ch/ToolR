@@ -682,8 +682,15 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
                 if let Some(def) = &arg.default {
                     // Empty default means "no observable default at the
                     // CLI" — let Python's function default kick in
-                    // (e.g. `param: str | None = None`).
-                    if !def.is_empty() {
+                    // (e.g. `param: str | None = None`). `<expr>` is
+                    // toolr-core's sentinel for a default it couldn't
+                    // resolve to a literal (e.g. `Path("~/projects")`,
+                    // `uuid.uuid4()`) — applying it as a literal clap
+                    // default would ship the string `"<expr>"` itself
+                    // as the value, so treat it the same as "no CLI
+                    // default" and let Python's own default expression
+                    // run instead.
+                    if !def.is_empty() && def != "<expr>" {
                         a = a.default_value(def.clone());
                     }
                 }
@@ -982,6 +989,51 @@ mod cli_tree_tests {
             .try_get_matches_from(vec!["wrapup-company", "--skip_warm_cache"])
             .expect("underscored form must parse");
         assert!(underscored.get_flag("skip_warm_cache"));
+    }
+
+    #[test]
+    fn unresolvable_expr_default_is_not_applied_as_a_clap_default() {
+        // Mirrors `param: Path = Path("~/projects")` — toolr-core can't
+        // serialise the call expression to a literal, so it emits the
+        // `<expr>` sentinel. That sentinel must never reach clap as a
+        // real default_value (it would ship the literal string
+        // "<expr>" whenever the flag is omitted); Python's own default
+        // expression should run instead.
+        let mut arg = empty_arg("root", ArgumentKind::Optional);
+        arg.default = Some("<expr>".to_string());
+
+        let mut cmd = normal_leaf("sync", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["sync"])
+            .expect("omitting the flag must still parse");
+        assert_eq!(matches.get_one::<String>("root"), None);
+    }
+
+    #[test]
+    fn resolvable_literal_default_still_applies_for_typed_arguments() {
+        // Contrast with the `<expr>` case above: a plain string literal
+        // default (the actually-supported spelling, e.g.
+        // `id: uuid.UUID = "12345678-1234-5678-1234-567812345678"`)
+        // resolves cleanly in `literal_default()` and must still reach
+        // clap as a real default — and pass the type's own value_parser.
+        let mut arg = empty_arg("id", ArgumentKind::Optional);
+        arg.default = Some("12345678-1234-5678-1234-567812345678".to_string());
+        arg.resolved_type = Some(toolr_core::parser::SupportedType::Uuid);
+
+        let mut cmd = normal_leaf("sync", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["sync"])
+            .expect("omitting the flag must still parse using the default");
+        assert_eq!(
+            matches.get_one::<String>("id").map(String::as_str),
+            Some("12345678-1234-5678-1234-567812345678")
+        );
     }
 
     #[test]
