@@ -898,6 +898,25 @@ mod tests {
     }
 
     #[test]
+    fn build_spec_extracts_fixed_arity_positional_when_present() {
+        let mut arg = arg_of("files", ArgumentKind::FixedArity, SupportedType::Str);
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(3));
+        let cmd = cmd_with(vec![arg]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("files").num_args(3).required(true))
+            .get_matches_from(["test", "x", "y", "z"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("files"),
+            Some(&Value::Array(vec![
+                Value::String("x".into()),
+                Value::String("y".into()),
+                Value::String("z".into()),
+            ])),
+        );
+    }
+
+    #[test]
     fn output_options_default_values_match_python_runner_expectations() {
         // The runner side defaults `verbosity` to "normal" and
         // `log_level` to "INFO" when not overridden. Document those
