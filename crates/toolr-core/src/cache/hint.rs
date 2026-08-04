@@ -47,6 +47,7 @@ pub fn compute_hint(
         stale,
     } = classify_entries(entries, now, 30);
 
+    let orphan_bytes: u64 = orphan.iter().map(|c| c.entry.size_bytes).sum();
     let prune_target_count = orphan.len() + stale.len();
     let oversized = total_bytes >= config.size_threshold_bytes;
     let too_many_orphans = orphan.len() > config.orphan_threshold;
@@ -55,14 +56,18 @@ pub fn compute_hint(
         return Ok(None);
     }
 
-    let pretty_size = format_size(total_bytes, BINARY);
+    // Messages that count *orphan* entries report *orphan* bytes, not the
+    // whole cache's — otherwise a couple of large live/stale entries make
+    // a handful of kilobyte-sized orphan stubs look like the culprit.
+    let orphan_size = format_size(orphan_bytes, BINARY);
     let msg = if oversized && too_many_orphans {
         format!(
             "toolr: cache has {} orphan entries (~{}). Run `toolr self cache prune` to clean up.",
             orphan.len(),
-            pretty_size,
+            orphan_size,
         )
     } else if oversized {
+        let pretty_size = format_size(total_bytes, BINARY);
         format!(
             "toolr: cache has {} entr{} (~{}). Run `toolr self cache prune` to clean up.",
             prune_target_count.max(1),
@@ -77,7 +82,7 @@ pub fn compute_hint(
         format!(
             "toolr: cache has {} orphan entries (~{}). Run `toolr self cache prune` to clean up.",
             orphan.len(),
-            pretty_size,
+            orphan_size,
         )
     };
     Ok(Some(msg))
