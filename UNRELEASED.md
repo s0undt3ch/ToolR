@@ -26,3 +26,9 @@ no scaffolding. Just write whatever should appear in the notes.
 - Corrected `docs/internals/cache.md`, which falsely claimed multiple git
   worktrees of the same repo share a single venv cache entry — they never
   have. Each worktree gets (and needs) its own.
+- Fixed `DispatchCommand.argv` emitting the repeat-the-flag form
+  (`--customer-ids a --customer-ids b`) for `nargs="+"`/`"*"` args.
+  Standard argparse only keeps the last occurrence for those — every
+  value but the last was silently dropped. Now emits one occurrence
+  with all values (`--customer-ids a b`), reserving the repeat-the-flag
+  form for genuine `action="append"` args.

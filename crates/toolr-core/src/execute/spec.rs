@@ -164,6 +164,12 @@ pub struct ArgSchemaSpec {
     /// form even when toolr's CLI normalises display to `--user-ids`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub long_flag: Option<String>,
+    /// `kind == "repeated"` only: source is argparse `nargs="+"`/`"*"`
+    /// (one occurrence, many space-separated values) rather than
+    /// `action="append"` (one occurrence per value). Drives which
+    /// invocation form `DispatchCommand.argv` reconstructs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub multi_value_occurrence: bool,
 }
 
 impl ExecutionSpec {
