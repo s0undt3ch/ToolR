@@ -769,6 +769,48 @@ def add_arguments(self, parser):
     }
 
     #[test]
+    fn nargs_float_is_neither_recognised_nor_warned_about() {
+        // `nargs=1.5` is nonsense argparse itself would reject, but
+        // `nargs_value` must not panic on it — it falls through the
+        // `Number::Int` match's catch-all arm to `None`. `nargs_kwarg_repr`
+        // falls through the same way, so there's no renderable value to
+        // warn with either: the arg just quietly falls back to a plain
+        // `Optional`.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--float-count', nargs=1.5, help='Nonsense')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert_eq!(scanned.arguments[0].kind, ArgumentKind::Optional);
+        assert_eq!(scanned.arguments[0].metadata.nargs, None);
+        assert!(
+            scanned.warnings.iter().all(|w| !w.contains("--float-count")),
+            "a float nargs has no renderable repr, so it can't be warned about, got {:?}",
+            scanned.warnings
+        );
+    }
+
+    #[test]
+    fn nargs_dynamic_name_other_than_remainder_still_warns() {
+        // A bare name that isn't `REMAINDER` (e.g. a local variable
+        // holding some other value) is a shape `nargs_value` can't
+        // recognise — it falls through to `None` — but `nargs_kwarg_repr`
+        // can still render it via `type_kwarg_repr`, so it does surface
+        // an unsupported-nargs warning rather than silently degrading.
+        let source = r#"
+def add_arguments(self, parser):
+    parser.add_argument('--dynamic', nargs=some_var, help='Nonsense')
+"#;
+        let scanned = scan_source("cmd", source).unwrap();
+        assert_eq!(scanned.arguments[0].metadata.nargs, None);
+        assert!(
+            scanned.warnings.iter().any(|w| w.contains("--dynamic") && w.contains("some_var")),
+            "expected an unsupported-nargs warning for the dynamic name, got {:?}",
+            scanned.warnings
+        );
+    }
+
+    #[test]
     fn underscored_long_flag_registers_alias_for_both_spellings() {
         // argparse lets users write `--skip_warm_cache`; cli.rs
         // normalises that to `--skip-warm-cache` for the canonical CLI
