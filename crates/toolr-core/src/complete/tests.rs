@@ -8,6 +8,7 @@ fn fixture() -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
         third_party_hash: String::new(),
+        toolr_version: String::new(),
         groups: vec![
             Group {
                 name: "ci".into(),
@@ -171,6 +172,7 @@ fn nested_fixture() -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
         third_party_hash: String::new(),
+        toolr_version: String::new(),
         groups: vec![
             Group {
                 name: "docker".into(),
@@ -314,6 +316,7 @@ fn dispatcher_fixture() -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
         third_party_hash: String::new(),
+        toolr_version: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),
@@ -465,6 +468,7 @@ fn flags_only_child_fixture() -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
         third_party_hash: String::new(),
+        toolr_version: String::new(),
         groups: vec![Group {
             name: "jenkins".into(),
             title: "Jenkins".into(),
@@ -961,6 +965,7 @@ fn manifest_with_leaf_args(arguments: Vec<Argument>) -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "h".into(),
         third_party_hash: String::new(),
+        toolr_version: String::new(),
         groups: vec![Group {
             name: "cmd".into(),
             title: String::new(),

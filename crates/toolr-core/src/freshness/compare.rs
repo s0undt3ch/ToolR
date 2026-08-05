@@ -10,13 +10,13 @@ use crate::manifest::Manifest;
 
 /// Outcome of comparing the live filesystem state to a cached manifest.
 ///
-/// Variants are ordered by "stronger rebuild needed." When both axes
-/// drift simultaneously, `compare` returns `ThirdPartyDrift` because the
-/// third-party rebuild path is a superset that also re-parses
-/// `tools/*.py`.
+/// Variants are ordered by "stronger rebuild needed." When multiple
+/// axes drift simultaneously, `compare` returns `ThirdPartyDrift`
+/// because the third-party rebuild path is a superset that also
+/// re-parses `tools/*.py`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FreshnessVerdict {
-    /// Cached manifest matches the live state on both axes.
+    /// Cached manifest matches the live state on every axis.
     Fresh,
     /// `tools/*.py` content has drifted; third-party manifests are unchanged.
     StaticDrift,
@@ -34,6 +34,13 @@ pub enum FreshnessVerdict {
 /// A `None` `cached` always returns `ThirdPartyDrift` so the caller
 /// produces a fresh manifest from scratch.
 ///
+/// A `toolr_version` mismatch (binary upgraded since the cache was
+/// built, see #420) always forces at least `StaticDrift`. With
+/// `Some(venv)` it escalates to `ThirdPartyDrift`, since the venv can
+/// be re-globbed. With `None` it stays at `StaticDrift` — escalating
+/// further would make callers discard cached third-party entries with
+/// nothing to replace them.
+///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
 /// third-party entries. On `ThirdPartyDrift`, call
 /// `build_static_manifest_with_venv`; third-party entries come from the
@@ -46,6 +53,18 @@ pub fn compare(
     let Some(cached) = cached else {
         return Ok(FreshnessVerdict::ThirdPartyDrift);
     };
+
+    // Checked first, no I/O: a version mismatch is decided before either
+    // hash is computed, so it never pays for a walk/glob it's going to
+    // discard the result of.
+    if cached.toolr_version != env!("CARGO_PKG_VERSION") {
+        let verdict = if venv_dir.is_some() {
+            FreshnessVerdict::ThirdPartyDrift
+        } else {
+            FreshnessVerdict::StaticDrift
+        };
+        return Ok(verdict);
+    }
 
     let live_static = hash_tools_dir(tools_dir)
         .with_context(|| format!("hashing {}", tools_dir.display()))?;

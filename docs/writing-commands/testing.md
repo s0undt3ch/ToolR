@@ -25,8 +25,8 @@ subprocess execution) you'll still want to drive the binary directly.
 2. Patches `toolr._decorators._get_command_group_storage` with a fresh `dict` so the test gets an isolated registry.
 3. Restores everything on exit (`sys.path`, `sys.modules`, `cwd`).
 
-Calling `.discover()` inside the context runs the same `tools/`-import pass that
-`python -m toolr._introspect` runs for the Rust binary's dynamic manifest layer. After it returns,
+Calling `.discover()` inside the context imports every `tools/*.py` module, registering each
+`command_group` / `@command` call exactly as a real `import tools.*` would. After it returns,
 `.collected_command_groups()` gives you a `{full_name: CommandGroup}` dict you can assert against.
 
 ## Usage

@@ -13,7 +13,8 @@ use crate::parser::build_static_manifest;
 pub struct ResolvedManifest {
     pub manifest: Manifest,
     /// `true` if the cached on-disk manifest was returned verbatim
-    /// (both `static_hash` and `third_party_hash` matched the live state).
+    /// (`static_hash`, `third_party_hash`, and `toolr_version` all
+    /// matched the live state).
     pub from_cache: bool,
     /// The directory that contained `tools/` (the project root).
     pub project_root: PathBuf,
@@ -33,10 +34,10 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
 
     // Tab completion never globs the venv — too costly on the hot path.
     // Passing `venv_dir = None` to `compare` skips the third-party axis
-    // entirely; the cached third_party_hash is treated as canonical and
-    // only static drift triggers a re-parse. Real third-party changes will
-    // be picked up on the next dispatch invocation, which does pass the
-    // venv path.
+    // entirely; the cached third_party_hash is treated as canonical.
+    // Static drift or a toolr-version mismatch still triggers a re-parse.
+    // Real third-party changes will be picked up on the next dispatch
+    // invocation, which does pass the venv path.
     let verdict = crate::freshness::compare(cached.as_ref(), &tools_dir, None)?;
 
     if matches!(verdict, crate::freshness::FreshnessVerdict::Fresh) {

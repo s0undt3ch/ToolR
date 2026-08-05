@@ -257,6 +257,7 @@ fn empty_base() -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: String::new(),
         third_party_hash: String::new(),
+        toolr_version: String::new(),
         groups: vec![],
         commands: vec![],
     }

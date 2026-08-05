@@ -151,6 +151,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         schema_version: SCHEMA_VERSION,
         static_hash,
         third_party_hash: String::new(),
+        toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: all_groups,
         commands: all_commands,
     };

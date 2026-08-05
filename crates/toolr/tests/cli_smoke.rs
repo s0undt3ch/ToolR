@@ -238,11 +238,13 @@ fn preflight_fixture(
     let venv_dir = tools.join(".venv");
     let third_party_hash =
         toolr_core::manifest_build::compute_third_party_hash(&venv_dir).unwrap();
+    let toolr_version = env!("CARGO_PKG_VERSION");
 
     let manifest = format!(
         r#"{{
             "schema_version": 1,
             "static_hash": "{static_hash}", "third_party_hash": "{third_party_hash}",
+            "toolr_version": "{toolr_version}",
             "groups": [{{
                 "name": "ci", "title": "CI", "description": "",
                 "origin": "static"
