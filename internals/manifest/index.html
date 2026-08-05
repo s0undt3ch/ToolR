@@ -1384,10 +1384,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynamic-layer" class="md-nav__link">
+  <a href="#third-party-layer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Dynamic layer
+        Third-party layer
       
     </span>
   </a>
@@ -1906,10 +1906,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dynamic-layer" class="md-nav__link">
+  <a href="#third-party-layer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Dynamic layer
+        Third-party layer
       
     </span>
   </a>
@@ -2010,10 +2010,11 @@ and clap's subcommand-tree build all read from this single file — no
 Python imports involved in the hot path.</p>
 <div class="admonition note">
 <p class="admonition-title">It's a cache — don't commit it</p>
-<p>The manifest is regenerated automatically when the static or
-dynamic hashes drift, and the static layer alone rebuilds in
-~10 ms on typical projects. <code>toolr project init</code> adds the file
-to <code>tools/.gitignore</code> for you. Committing it just produces noisy
+<p>The manifest is regenerated automatically when the static hash,
+the third-party hash, or the toolr binary's own version drifts,
+and the static layer alone rebuilds in ~10 ms on typical
+projects. <code>toolr project init</code> adds the file to
+<code>tools/.gitignore</code> for you. Committing it just produces noisy
 merge conflicts on every <code>tools/</code> edit without buying anything
 the auto-rebuild doesn't already cover.</p>
 </div>
@@ -2022,9 +2023,10 @@ the auto-rebuild doesn't already cover.</p>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;schema_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">&quot;static_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;blake3 hex&gt;&quot;</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">&quot;third_party_hash&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;blake3 hex&gt;&quot;</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">&quot;groups&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">&quot;commands&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">}</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">&quot;toolr_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;CARGO_PKG_VERSION&gt;&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">&quot;groups&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">&quot;commands&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">}</span>
 </span></code></pre></div>
 <ul>
 <li><strong><code>schema_version</code></strong> — single integer; toolr refuses to load a
@@ -2038,8 +2040,15 @@ the auto-rebuild doesn't already cover.</p>
   rebuilds: installing an unrelated package no longer invalidates
   the manifest, only changes to packages that ship a toolr
   fragment do.</li>
+<li><strong><code>toolr_version</code></strong> — the <code>toolr</code> binary's own version at the time
+  it built this manifest. A mismatch against the running binary means
+  toolr itself was upgraded (parsing/classification behaviour may have
+  changed with no <code>tools/*.py</code> edit at all) and always forces at least
+  a static rebuild; with a venv available to re-glob, it forces a full
+  rebuild instead. Deserializes as <code>""</code> on older manifests, which also
+  forces one rebuild.</li>
 <li><strong><code>groups</code></strong> / <strong><code>commands</code></strong> — the actual command tree. Each
-  entry carries an <code>origin</code> field (<code>"static"</code> or <code>"dynamic"</code>)
+  entry carries an <code>origin</code> field (<code>"static"</code> or <code>"third_party"</code>)
   recording which layer produced it.</li>
 </ul>
 <h2 id="group-schema">Group schema<a class="headerlink" href="#group-schema" title="Permanent link">&para;</a></h2>
@@ -2134,34 +2143,33 @@ without a working venv. Captures:</p>
   files via a symbol table).</li>
 </ul>
 <p>The static layer is rebuilt when toolr detects <code>static_hash</code> drift
-against the on-disk files.</p>
-<h2 id="dynamic-layer">Dynamic layer<a class="headerlink" href="#dynamic-layer" title="Permanent link">&para;</a></h2>
-<p>Built by spawning <code>python -m toolr._introspect --tools-root &lt;tools&gt;</code>
-inside the resolved tools venv. The helper:</p>
-<ol>
-<li>Inserts <code>&lt;tools&gt;/..</code> on <code>sys.path</code> so <code>import tools</code> works.</li>
-<li>Imports every <code>tools.*</code> module — registering every
-   <code>command_group</code> / <code>@command</code> call. Catches dynamically-registered
-   commands the static AST parser can't see (e.g. registrations
-   inside <code>for</code> loops or conditionals).</li>
-<li>Dumps a JSON payload to stdout describing the merged registry.</li>
-</ol>
-<p>Third-party packages are <strong>not</strong> discovered through this layer.
-They contribute via static <code>toolr-manifest.json</code> fragments shipped
-inside the wheel and merged at static-build time
-(see <a href="../../third-party/">Third-party packages</a>).</p>
-<p>Toolr regenerates the dynamic layer when:</p>
+against the on-disk files, or when the cached <code>toolr_version</code> doesn't
+match the running binary — an upgrade forces a static rebuild even if
+<code>tools/*.py</code> hasn't changed at all.</p>
+<h2 id="third-party-layer">Third-party layer<a class="headerlink" href="#third-party-layer" title="Permanent link">&para;</a></h2>
+<p>Contributed by installed packages that ship a static
+<code>toolr-manifest.json</code> fragment inside their wheel, discovered by
+globbing <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code> and merged into
+the static layer at build time (see
+<a href="../../third-party/">Third-party packages</a>). No Python import happens
+during discovery — it's an execution-free glob-and-parse, same as
+the static layer.</p>
+<p>Toolr regenerates the manifest when:</p>
 <ul>
-<li>A command is invoked and the binary detects <code>static_hash</code> drift
-  on entry (the dynamic layer runs alongside the static rebuild).</li>
+<li>A command is invoked and the binary detects <code>static_hash</code> or
+  <code>third_party_hash</code> drift on entry.</li>
+<li>The cached <code>toolr_version</code> doesn't match the running binary — an
+  upgrade always forces at least a static rebuild regardless of
+  <code>static_hash</code>, and forces a rebuild of both layers when a venv is
+  available to re-glob third-party fragments too.</li>
 <li>The user explicitly runs <code>toolr project manifest rebuild</code>.</li>
 </ul>
 <h2 id="manual-rebuild">Manual rebuild<a class="headerlink" href="#manual-rebuild" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>manifest<span class="w"> </span>rebuild
 </span></code></pre></div>
-<p>Runs both layers and writes the merged result. Used by the shipped
-pre-commit hook (see <a href="../pre-commit/">Pre-commit integration</a>) and
-available for explicit invocation when you want to be sure the
+<p>Rebuilds both layers and writes the merged result. Used by the
+shipped pre-commit hook (see <a href="../pre-commit/">Pre-commit integration</a>)
+and available for explicit invocation when you want to be sure the
 manifest is current — for example before publishing a release that
 includes new commands.</p>
 <h2 id="hashing-details">Hashing details<a class="headerlink" href="#hashing-details" title="Permanent link">&para;</a></h2>
@@ -2180,6 +2188,11 @@ includes new commands.</p>
 </ul>
 <p>This gives stable, content-addressable rebuild decisions across
 machines and across CI / dev environments.</p>
+<p><code>toolr_version</code> costs no I/O to check, so a mismatch always wins over
+a matching hash — a toolr upgrade forces at least <code>StaticDrift</code>, and
+forces the stronger <code>ThirdPartyDrift</code> too when a venv is available to
+re-glob (see the <code>toolr_version</code> field description above for why a
+missing venv caps it at <code>StaticDrift</code> instead).</p>
 
 
 

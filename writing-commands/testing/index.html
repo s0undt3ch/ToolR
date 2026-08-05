@@ -1983,8 +1983,8 @@ subprocess execution) you'll still want to drive the binary directly.</p>
 <li>Patches <code>toolr._decorators._get_command_group_storage</code> with a fresh <code>dict</code> so the test gets an isolated registry.</li>
 <li>Restores everything on exit (<code>sys.path</code>, <code>sys.modules</code>, <code>cwd</code>).</li>
 </ol>
-<p>Calling <code>.discover()</code> inside the context runs the same <code>tools/</code>-import pass that
-<code>python -m toolr._introspect</code> runs for the Rust binary's dynamic manifest layer. After it returns,
+<p>Calling <code>.discover()</code> inside the context imports every <code>tools/*.py</code> module, registering each
+<code>command_group</code> / <code>@command</code> call exactly as a real <code>import tools.*</code> would. After it returns,
 <code>.collected_command_groups()</code> gives you a <code>{full_name: CommandGroup}</code> dict you can assert against.</p>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>

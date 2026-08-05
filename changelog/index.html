@@ -1722,15 +1722,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0262-dev18-2026-08-05" class="md-nav__link">
+  <a href="#0262-dev20-2026-08-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.26.2-dev18 - 2026-08-05
+        0.26.2-dev20 - 2026-08-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.26.2-dev18 - 2026-08-05">
+    <nav class="md-nav" aria-label="0.26.2-dev20 - 2026-08-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3669,15 +3669,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0262-dev18-2026-08-05" class="md-nav__link">
+  <a href="#0262-dev20-2026-08-05" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.26.2-dev18 - 2026-08-05
+        0.26.2-dev20 - 2026-08-05
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.26.2-dev18 - 2026-08-05">
+    <nav class="md-nav" aria-label="0.26.2-dev20 - 2026-08-05">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -5611,7 +5611,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0262-dev18-2026-08-05">0.26.2-dev18 - 2026-08-05<a class="headerlink" href="#0262-dev18-2026-08-05" title="Permanent link">&para;</a></h2>
+<h2 id="0262-dev20-2026-08-05">0.26.2-dev20 - 2026-08-05<a class="headerlink" href="#0262-dev20-2026-08-05" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Fixed the argparse scanner dropping every flag spelling except the
@@ -5645,6 +5645,12 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
   <code>toolr-py in this tools venv speaks schema N, but the toolr binary
   emitted schema M</code>, run <code>toolr project venv upgrade toolr-py</code> (or pin
   the <code>toolr</code> binary to a compatible version).</li>
+<li>Fixed the manifest freshness check silently keeping a stale
+  <code>.toolr-manifest.json</code> after a <code>toolr</code> upgrade that changed
+  CLI-parsing/classification behaviour but touched no <code>tools/*.py</code>
+  file. The manifest now records the <code>toolr</code> version that built it, and
+  any mismatch against the running binary forces a rebuild rather than
+  trusting the cached hashes.</li>
 </ul>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
@@ -5658,6 +5664,7 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 <li><em>(dispatch)</em> Omit absent keyword FixedArity args instead of sending [] (<a href="https://github.com/s0undt3ch/ToolR/commit/c51641b98feaa1da36fd4c95c5595b2771b5806a"><code>c51641b</code></a>)</li>
 <li><em>(argparse)</em> Recognise bare REMAINDER, not just argparse.REMAINDER (<a href="https://github.com/s0undt3ch/ToolR/commit/fb42c56f717d529bb2b5e11ad90a37d2255e9436"><code>fb42c56</code></a>)</li>
 <li><em>(manifest)</em> Reject FixedArity arguments without a fixed nargs count (<a href="https://github.com/s0undt3ch/ToolR/commit/d06a09e1db2ac3cf16e0504e61dd4a256b92137d"><code>d06a09e</code></a>)</li>
+<li><em>(manifest)</em> Key freshness rebuilds off the toolr binary version too (<a href="https://github.com/s0undt3ch/ToolR/commit/8c185e6e8da886e319dee39d1b15b082bcc147af"><code>8c185e6</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
