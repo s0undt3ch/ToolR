@@ -6,6 +6,74 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.27.0 - 2026-08-05
+
+### Notes
+
+- Fixed the argparse scanner dropping every flag spelling except the
+  longest `--flag` on a call declaring several (e.g.
+  `add_argument("-s", "--run-synchronously", ...)`). Short flags and
+  extra long spellings now all register as clap aliases.
+- Fixed `tests/distribution/test_example_plugin_contract.py` leaking real
+  venv provenance stubs into the developer/CI's live cache dir instead of
+  a sandboxed one, which inflated `toolr self cache`'s orphan count over
+  time.
+- Fixed the cache orphan hint (`toolr: cache has N orphan entries (~X)`)
+  reporting the whole cache's size instead of just the orphaned entries',
+  which made a couple of unrelated live venvs look like the cause of a
+  large orphan count.
+- Corrected `docs/internals/cache.md`, which falsely claimed multiple git
+  worktrees of the same repo share a single venv cache entry — they never
+  have. Each worktree gets (and needs) its own.
+- Fixed `DispatchCommand.argv` emitting the repeat-the-flag form
+  (`--customer-ids a --customer-ids b`) for `nargs="+"`/`"*"` args.
+  Standard argparse only keeps the last occurrence for those — every
+  value but the last was silently dropped. Now emits one occurrence
+  with all values (`--customer-ids a b`), reserving the repeat-the-flag
+  form for genuine `action="append"` args.
+- The argparse scanner now gives `nargs=N` (fixed-arity), positional
+  `nargs="?"`, and `argparse.REMAINDER` first-class support end to end —
+  clap arg construction, tab completion, and dispatch argv reconstruction
+  all handle these correctly instead of silently degrading to a single
+  value with a warning.
+- **Breaking (dispatch wire protocol):** bumped the toolr ↔ toolr-py
+  dispatch schema version from 2 to 3 to carry the above. If you see
+  `toolr-py in this tools venv speaks schema N, but the toolr binary
+  emitted schema M`, run `toolr project venv upgrade toolr-py` (or pin
+  the `toolr` binary to a compatible version).
+- Fixed the manifest freshness check silently keeping a stale
+  `.toolr-manifest.json` after a `toolr` upgrade that changed
+  CLI-parsing/classification behaviour but touched no `tools/*.py`
+  file. The manifest now records the `toolr` version that built it, and
+  any mismatch against the running binary forces a rebuild rather than
+  trusting the cached hashes.
+
+### <!-- 0 -->🚀 Features
+
+- *(argparse)* Full nargs support — nargs=N, REMAINDER, positional nargs="?" (#423) ([`444b9a2`](https://github.com/s0undt3ch/ToolR/commit/444b9a21db9504023ed4ba7d5ace663fbb032cd5))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(argparse)* Keep every flag spelling as an alias, not just the longest ([`4a0b3b7`](https://github.com/s0undt3ch/ToolR/commit/4a0b3b7f9bb065f3c21dd8fdf9f50cf8e3f21356))
+- *(cache)* Stop test leak inflating orphan count, fix misleading orphan size, correct worktree-sharing doc lie ([`43aa750`](https://github.com/s0undt3ch/ToolR/commit/43aa750d97695f78943f9817cc3e6f44c9a613e3))
+- *(dispatch)* Emit single-flag-many-values for nargs="+"/"*" args ([`699f5a0`](https://github.com/s0undt3ch/ToolR/commit/699f5a02fdfaa51c96e682d7a1a020c6d18be174))
+- *(dispatch)* Omit absent keyword FixedArity args instead of sending [] ([`c51641b`](https://github.com/s0undt3ch/ToolR/commit/c51641b98feaa1da36fd4c95c5595b2771b5806a))
+- *(argparse)* Recognise bare REMAINDER, not just argparse.REMAINDER ([`fb42c56`](https://github.com/s0undt3ch/ToolR/commit/fb42c56f717d529bb2b5e11ad90a37d2255e9436))
+- *(manifest)* Reject FixedArity arguments without a fixed nargs count ([`d06a09e`](https://github.com/s0undt3ch/ToolR/commit/d06a09e1db2ac3cf16e0504e61dd4a256b92137d))
+- *(manifest)* Key freshness rebuilds off the toolr binary version too ([`8c185e6`](https://github.com/s0undt3ch/ToolR/commit/8c185e6e8da886e319dee39d1b15b082bcc147af))
+
+### <!-- 3 -->📚 Documentation
+
+- *(argparse)* Link the unsupported-nargs warning to #423 ([`5369758`](https://github.com/s0undt3ch/ToolR/commit/536975870fca7bcf135418e57ddcf3b0aca437fd))
+- *(specs)* Design for full argparse nargs support (#423) ([`28688be`](https://github.com/s0undt3ch/ToolR/commit/28688be4214bb36f08e3a9637fe323af139bbc96))
+- *(specs)* Implementation plan for full argparse nargs support (#423) ([`3394329`](https://github.com/s0undt3ch/ToolR/commit/33943290197e2b3732a2a71b52c96894fc01d323))
+- *(specs)* Correct the design doc's bug-fix section to match the shipped fix ([`7c66b05`](https://github.com/s0undt3ch/ToolR/commit/7c66b051c153d8658e05dfd2ecbfc77d13e1bb68))
+- *(specs)* Archive the argparse-nargs-support design and plan ([`c9b658f`](https://github.com/s0undt3ch/ToolR/commit/c9b658f3609aac0379a16283a38e2558cbab6c64))
+
+### <!-- 6 -->🧪 Testing
+
+- *(dispatch)* Cover positional FixedArity extraction through build_spec ([`1057268`](https://github.com/s0undt3ch/ToolR/commit/10572683619ab01622aad18b2b18eff6c21f4f60))
+- *(argparse)* Cover nargs shapes argparse never produces ([`9075ee0`](https://github.com/s0undt3ch/ToolR/commit/9075ee0a3125f17290419f3e4a29e194bed9792e))
 ## 0.26.1 - 2026-08-04
 
 ### Notes
