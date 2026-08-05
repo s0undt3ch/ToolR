@@ -206,7 +206,6 @@ fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
         (_, Some(Nargs::Fixed(n))) => Some(serde_json::json!(n)),
         (_, Some(Nargs::Plus)) => Some(serde_json::json!("+")),
         (_, Some(Nargs::Star)) => Some(serde_json::json!("*")),
-        (_, Some(Nargs::Question)) => Some(serde_json::json!("?")),
         (_, None) => None,
     };
     ArgSchemaSpec {
@@ -1167,6 +1166,10 @@ mod dispatched_pack_tests {
         assert_eq!(
             argument_to_arg_schema(&repeated_with(Some(Nargs::Star))).nargs,
             Some(serde_json::json!("*"))
+        );
+        assert_eq!(
+            argument_to_arg_schema(&repeated_with(Some(Nargs::Plus))).nargs,
+            Some(serde_json::json!("+"))
         );
         assert_eq!(argument_to_arg_schema(&repeated_with(None)).nargs, None);
     }

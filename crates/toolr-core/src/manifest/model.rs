@@ -228,7 +228,6 @@ pub struct HelpSection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Nargs {
-    Question,
     Plus,
     Star,
     Fixed(usize),
@@ -262,6 +261,39 @@ pub enum ArgumentKind {
     /// Distinct from `Positional` (always required) and `VarPositional`
     /// (zero-or-more, trailing/greedy).
     OptionalPositional,
+}
+
+impl Argument {
+    /// Checks the one cross-field invariant the CLI builder relies on
+    /// without re-checking: a `FixedArity` argument always carries its
+    /// exact value count on `metadata.nargs`. Serde can't enforce this
+    /// (`nargs` is a plain `Option<Nargs>`), so hand-edited manifests
+    /// and third-party fragments — which don't have a `nargs` field at
+    /// all — could otherwise smuggle a `FixedArity` argument through
+    /// with `nargs: None` and crash the CLI builder later.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.kind == ArgumentKind::FixedArity && !matches!(self.metadata.nargs, Some(Nargs::Fixed(_))) {
+            return Err(format!(
+                "argument `{}` has kind `fixed_arity` but its metadata.nargs isn't a fixed count",
+                self.name
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl Manifest {
+    /// Runs [`Argument::validate`] over every argument in every command,
+    /// returning the first violation found.
+    pub fn validate_arguments(&self) -> Result<(), String> {
+        for cmd in &self.commands {
+            for arg in &cmd.arguments {
+                arg.validate()
+                    .map_err(|e| format!("{}::{}: {e}", cmd.module, cmd.name))?;
+            }
+        }
+        Ok(())
+    }
 }
 
 // region: SkillRefOrigin
