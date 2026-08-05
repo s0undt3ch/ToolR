@@ -5,6 +5,7 @@ fn sample_manifest() -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: "abc123".into(),
         third_party_hash: "".into(),
+        toolr_version: "1.0.0".into(),
         groups: vec![Group {
             name: "ci".into(),
             title: "CI utilities".into(),

@@ -128,6 +128,12 @@ pub struct Manifest {
     /// string `""` on manifests predating this field (schema v1).
     #[serde(default)]
     pub third_party_hash: String,
+    /// `CARGO_PKG_VERSION` of the toolr binary that built this manifest.
+    /// A mismatch against the running binary forces a rebuild even if
+    /// `tools/*.py` hasn't changed (see `freshness::compare`). Empty
+    /// string on manifests predating this field.
+    #[serde(default)]
+    pub toolr_version: String,
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
 }

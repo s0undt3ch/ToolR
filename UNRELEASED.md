@@ -42,3 +42,9 @@ no scaffolding. Just write whatever should appear in the notes.
   `toolr-py in this tools venv speaks schema N, but the toolr binary
   emitted schema M`, run `toolr project venv upgrade toolr-py` (or pin
   the `toolr` binary to a compatible version).
+- Fixed the manifest freshness check silently keeping a stale
+  `.toolr-manifest.json` after a `toolr` upgrade that changed
+  CLI-parsing/classification behaviour but touched no `tools/*.py`
+  file. The manifest now records the `toolr` version that built it, and
+  any mismatch against the running binary forces a rebuild rather than
+  trusting the cached hashes.

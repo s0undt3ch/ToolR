@@ -606,6 +606,7 @@ fn empty_manifest_for_completion() -> Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: String::new(),
         third_party_hash: String::new(),
+        toolr_version: String::new(),
         groups: Vec::new(),
         commands: Vec::new(),
     }
@@ -709,6 +710,7 @@ mod tests {
             schema_version: 1,
             static_hash: String::new(),
             third_party_hash: String::new(),
+            toolr_version: String::new(),
             groups: Vec::new(),
             commands: Vec::new(),
         }
@@ -815,6 +817,7 @@ mod path_lookup_tests {
             schema_version: 1,
             static_hash: String::new(),
             third_party_hash: String::new(),
+            toolr_version: String::new(),
             groups: vec![],
             commands,
         }

@@ -49,8 +49,14 @@ fn regenerate() {
         .unwrap_or_else(|e| panic!("write {}: {e}", snapshot_path.display()));
 }
 
+/// Redact `toolr_version` before serialising: it's the running binary's
+/// own `CARGO_PKG_VERSION`, which would otherwise drift this snapshot on
+/// every release even though the example tools/ tree hasn't changed.
+/// The snapshot documents manifest *shape*, not a pinned toolr version.
 fn serialise(manifest: &Manifest) -> String {
-    serde_json::to_string_pretty(manifest).expect("serialising the example manifest")
+    let mut manifest = manifest.clone();
+    manifest.toolr_version = "<toolr-version>".to_string();
+    serde_json::to_string_pretty(&manifest).expect("serialising the example manifest")
 }
 
 fn examples_dir() -> PathBuf {

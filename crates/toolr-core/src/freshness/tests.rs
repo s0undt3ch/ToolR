@@ -41,6 +41,7 @@ fn manifest_for(tmp: &Path) -> Manifest {
         schema_version: crate::manifest::SCHEMA_VERSION,
         static_hash: hash_tools_dir(&tmp.join("tools")).unwrap(),
         third_party_hash: compute_third_party_hash(&tmp.join("venv")).unwrap(),
+        toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: vec![],
         commands: vec![],
     }
@@ -133,9 +134,56 @@ fn missing_venv_skips_third_party_axis() {
         schema_version: crate::manifest::SCHEMA_VERSION,
         static_hash: crate::hash::hash_tools_dir(&tmp.path().join("tools")).unwrap(),
         third_party_hash: "arbitrary-non-empty-hash".to_string(),
+        toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: vec![],
         commands: vec![],
     };
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::Fresh));
+}
+
+#[test]
+fn toolr_version_mismatch_with_venv_forces_third_party_drift_even_when_both_axes_match() {
+    // #420: a toolr upgrade alone must invalidate the cache. With a venv
+    // available it's safe to escalate to the strongest verdict.
+    let tmp = TempDir::new().unwrap();
+    make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    make_venv(tmp.path(), &[("foo", "{}")]);
+    let mut cached = manifest_for(tmp.path());
+    cached.toolr_version = "0.0.0-old".to_string();
+    let venv = tmp.path().join("venv");
+    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    assert!(matches!(verdict, FreshnessVerdict::ThirdPartyDrift));
+}
+
+#[test]
+fn toolr_version_mismatch_without_venv_only_forces_static_drift() {
+    // Without a venv, escalating to `ThirdPartyDrift` would make the
+    // dispatch-side rebuild discard cached third-party entries with
+    // nothing to replace them. Must cap at `StaticDrift`.
+    let tmp = TempDir::new().unwrap();
+    make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    let cached = Manifest {
+        schema_version: crate::manifest::SCHEMA_VERSION,
+        static_hash: crate::hash::hash_tools_dir(&tmp.path().join("tools")).unwrap(),
+        third_party_hash: "arbitrary-non-empty-hash".to_string(),
+        toolr_version: "0.0.0-old".to_string(),
+        groups: vec![],
+        commands: vec![],
+    };
+    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
+}
+
+#[test]
+fn empty_toolr_version_from_a_pre_field_manifest_is_treated_as_a_mismatch() {
+    // Manifests written before this field existed deserialize it as ""
+    // (`#[serde(default)]`), which must never accidentally equal a real
+    // running version and pass as Fresh.
+    let tmp = TempDir::new().unwrap();
+    make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    let mut cached = manifest_for(tmp.path());
+    cached.toolr_version = String::new();
+    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
 }

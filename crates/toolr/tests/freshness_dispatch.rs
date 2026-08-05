@@ -183,6 +183,72 @@ fn skip_list_argv_does_not_trigger_freshness() {
 }
 
 #[test]
+fn version_mismatch_without_venv_preserves_third_party_entries() {
+    // #420 regression guard: a toolr-version mismatch must not escalate
+    // to `ThirdPartyDrift` when the venv can't be resolved — that would
+    // discard cached third-party entries with nothing to re-glob them
+    // from. Force venv resolution to fail via an invalid
+    // `TOOLR_VENV_LOCATION`, seed a manifest with a matching static_hash
+    // but a stale `toolr_version` and a third-party group/command, and
+    // confirm the rebuild keeps the third-party entries and still
+    // stamps the current version.
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n",
+    )
+    .unwrap();
+
+    let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
+    let manifest = format!(
+        r#"{{
+            "schema_version": 1,
+            "static_hash": "{static_hash}",
+            "third_party_hash": "",
+            "toolr_version": "0.0.0-old",
+            "groups": [
+                {{"name": "plugin", "title": "Plugin", "description": "", "parent": null, "origin": "third_party"}}
+            ],
+            "commands": [
+                {{
+                    "name": "run", "group": "plugin", "module": "plugin_pkg.commands",
+                    "function": "run", "summary": "", "description": "",
+                    "arguments": [], "origin": "third_party"
+                }}
+            ]
+        }}"#
+    );
+    fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .arg("--help")
+        .current_dir(tmp.path())
+        .env("TOOLR_VENV_LOCATION", "bogus")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "toolr --help failed: {output:?}");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("plugin"),
+        "expected cached third-party group in --help; got:\n{stdout}"
+    );
+
+    let manifest = fs::read_to_string(tools.join(".toolr-manifest.json")).unwrap();
+    assert!(
+        manifest.contains(r#""name": "run""#) || manifest.contains(r#""name":"run""#),
+        "third-party command dropped from persisted manifest:\n{manifest}"
+    );
+    assert!(
+        !manifest.contains("0.0.0-old"),
+        "stale toolr_version was not refreshed:\n{manifest}"
+    );
+}
+
+#[test]
 fn tab_completion_does_not_persist_manifest() {
     let tmp = TempDir::new().unwrap();
     write_minimal_project(tmp.path());

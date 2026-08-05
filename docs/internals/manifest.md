@@ -6,10 +6,11 @@ and clap's subcommand-tree build all read from this single file — no
 Python imports involved in the hot path.
 
 !!! note "It's a cache — don't commit it"
-    The manifest is regenerated automatically when the static or
-    dynamic hashes drift, and the static layer alone rebuilds in
-    ~10 ms on typical projects. `toolr project init` adds the file
-    to `tools/.gitignore` for you. Committing it just produces noisy
+    The manifest is regenerated automatically when the static hash,
+    the third-party hash, or the toolr binary's own version drifts,
+    and the static layer alone rebuilds in ~10 ms on typical
+    projects. `toolr project init` adds the file to
+    `tools/.gitignore` for you. Committing it just produces noisy
     merge conflicts on every `tools/` edit without buying anything
     the auto-rebuild doesn't already cover.
 
@@ -20,6 +21,7 @@ Python imports involved in the hot path.
   "schema_version": 1,
   "static_hash": "<blake3 hex>",
   "third_party_hash": "<blake3 hex>",
+  "toolr_version": "<CARGO_PKG_VERSION>",
   "groups": [...],
   "commands": [...]
 }
@@ -36,8 +38,15 @@ Python imports involved in the hot path.
   rebuilds: installing an unrelated package no longer invalidates
   the manifest, only changes to packages that ship a toolr
   fragment do.
+- **`toolr_version`** — the `toolr` binary's own version at the time
+  it built this manifest. A mismatch against the running binary means
+  toolr itself was upgraded (parsing/classification behaviour may have
+  changed with no `tools/*.py` edit at all) and always forces at least
+  a static rebuild; with a venv available to re-glob, it forces a full
+  rebuild instead. Deserializes as `""` on older manifests, which also
+  forces one rebuild.
 - **`groups`** / **`commands`** — the actual command tree. Each
-  entry carries an `origin` field (`"static"` or `"dynamic"`)
+  entry carries an `origin` field (`"static"` or `"third_party"`)
   recording which layer produced it.
 
 ## Group schema
@@ -142,29 +151,28 @@ without a working venv. Captures:
   files via a symbol table).
 
 The static layer is rebuilt when toolr detects `static_hash` drift
-against the on-disk files.
+against the on-disk files, or when the cached `toolr_version` doesn't
+match the running binary — an upgrade forces a static rebuild even if
+`tools/*.py` hasn't changed at all.
 
-## Dynamic layer
+## Third-party layer
 
-Built by spawning `python -m toolr._introspect --tools-root <tools>`
-inside the resolved tools venv. The helper:
+Contributed by installed packages that ship a static
+`toolr-manifest.json` fragment inside their wheel, discovered by
+globbing `<tools-venv>/lib/python*/site-packages/*/` and merged into
+the static layer at build time (see
+[Third-party packages](../third-party.md)). No Python import happens
+during discovery — it's an execution-free glob-and-parse, same as
+the static layer.
 
-1. Inserts `<tools>/..` on `sys.path` so `import tools` works.
-2. Imports every `tools.*` module — registering every
-   `command_group` / `@command` call. Catches dynamically-registered
-   commands the static AST parser can't see (e.g. registrations
-   inside `for` loops or conditionals).
-3. Dumps a JSON payload to stdout describing the merged registry.
+Toolr regenerates the manifest when:
 
-Third-party packages are **not** discovered through this layer.
-They contribute via static `toolr-manifest.json` fragments shipped
-inside the wheel and merged at static-build time
-(see [Third-party packages](../third-party.md)).
-
-Toolr regenerates the dynamic layer when:
-
-- A command is invoked and the binary detects `static_hash` drift
-  on entry (the dynamic layer runs alongside the static rebuild).
+- A command is invoked and the binary detects `static_hash` or
+  `third_party_hash` drift on entry.
+- The cached `toolr_version` doesn't match the running binary — an
+  upgrade always forces at least a static rebuild regardless of
+  `static_hash`, and forces a rebuild of both layers when a venv is
+  available to re-glob third-party fragments too.
 - The user explicitly runs `toolr project manifest rebuild`.
 
 ## Manual rebuild
@@ -173,9 +181,9 @@ Toolr regenerates the dynamic layer when:
 toolr project manifest rebuild
 ```
 
-Runs both layers and writes the merged result. Used by the shipped
-pre-commit hook (see [Pre-commit integration](pre-commit.md)) and
-available for explicit invocation when you want to be sure the
+Rebuilds both layers and writes the merged result. Used by the
+shipped pre-commit hook (see [Pre-commit integration](pre-commit.md))
+and available for explicit invocation when you want to be sure the
 manifest is current — for example before publishing a release that
 includes new commands.
 
@@ -196,3 +204,9 @@ Both hashes use blake3, written as lowercase hex.
 
 This gives stable, content-addressable rebuild decisions across
 machines and across CI / dev environments.
+
+`toolr_version` costs no I/O to check, so a mismatch always wins over
+a matching hash — a toolr upgrade forces at least `StaticDrift`, and
+forces the stronger `ThirdPartyDrift` too when a venv is available to
+re-glob (see the `toolr_version` field description above for why a
+missing venv caps it at `StaticDrift` instead).
