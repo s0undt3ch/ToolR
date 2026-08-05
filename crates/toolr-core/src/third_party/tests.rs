@@ -342,6 +342,29 @@ fn merge_errors_on_third_party_to_third_party_collision() {
 }
 
 #[test]
+fn merge_rejects_fixed_arity_fragment_argument() {
+    // `FragmentArgument` has no `nargs` field, so a fragment declaring
+    // `kind: "fixed_arity"` can't carry the exact value count the CLI
+    // builder needs — merging it would smuggle an `Argument` with
+    // `metadata.nargs: None` through to `cli.rs`, which panics on that
+    // combination. Must be rejected here instead.
+    let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
+    frag.commands[0].arguments.push(FragmentArgument {
+        name: "pair".into(),
+        kind: ArgumentKind::FixedArity,
+        help: String::new(),
+        default: None,
+        type_annotation: None,
+        allowed_values: vec![],
+    });
+    let err = merge_into_manifest(empty_base(), vec![frag]).expect_err("should reject");
+    let msg = err.to_string();
+    assert!(msg.contains("pkg_a"), "got: {msg}");
+    assert!(msg.contains("pair"), "got: {msg}");
+    assert!(msg.contains("fixed_arity"), "got: {msg}");
+}
+
+#[test]
 fn argument_kind_propagates_through_merge() {
     let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
     frag.commands[0].arguments.push(FragmentArgument {

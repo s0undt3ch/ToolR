@@ -955,3 +955,75 @@ fn install_bash_without_xdg_falls_back_to_home_local_share() {
         tmp.path().join(".local/share/bash-completion/completions/toolr")
     );
 }
+
+fn manifest_with_leaf_args(arguments: Vec<Argument>) -> Manifest {
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: "h".into(),
+        third_party_hash: String::new(),
+        groups: vec![Group {
+            name: "cmd".into(),
+            title: String::new(),
+            description: String::new(),
+            parent: None,
+            origin: Origin::Static,
+        }],
+        commands: vec![Command {
+            name: "run".into(),
+            group: "cmd".into(),
+            module: "tools.cmd".into(),
+            function: "run".into(),
+            summary: String::new(),
+            description: String::new(),
+            arguments,
+            origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher: false,
+        }],
+    }
+}
+
+fn empty_arg(name: &str, kind: ArgumentKind) -> Argument {
+    Argument {
+        name: name.into(),
+        kind,
+        help: String::new(),
+        default: None,
+        type_annotation: None,
+        resolved_type: None,
+        allowed_values: vec![],
+        path_constraints: None,
+        metadata: Default::default(),
+        long_flag: None,
+    }
+}
+
+#[test]
+fn optional_positional_is_a_completable_positional_slot() {
+    // `allowed_values` only surface via `Slot::Positional` — if this arg
+    // were mistakenly excluded from the positional-slot filter, the
+    // no-flags fallback would return no completions instead.
+    let mut arg = empty_arg("maybe", ArgumentKind::OptionalPositional);
+    arg.allowed_values = vec!["tall".into(), "wide".into()];
+    let manifest = manifest_with_leaf_args(vec![arg]);
+    let out = serve_completions(&manifest, &tokens(&["cmd", "run", ""]));
+    assert_eq!(out, vec!["tall".to_string(), "wide".to_string()]);
+}
+
+#[test]
+fn positional_fixed_arity_is_a_completable_positional_slot() {
+    let mut arg = empty_arg("pair", ArgumentKind::FixedArity);
+    arg.allowed_values = vec!["tall".into(), "wide".into()];
+    let manifest = manifest_with_leaf_args(vec![arg]);
+    let out = serve_completions(&manifest, &tokens(&["cmd", "run", ""]));
+    assert_eq!(out, vec!["tall".to_string(), "wide".to_string()]);
+}
+
+#[test]
+fn keyword_fixed_arity_offers_flag_completion() {
+    let mut arg = empty_arg("pair", ArgumentKind::FixedArity);
+    arg.long_flag = Some("--pair".to_string());
+    let manifest = manifest_with_leaf_args(vec![arg]);
+    let out = serve_completions(&manifest, &tokens(&["cmd", "run", ""]));
+    assert_eq!(out, vec!["--pair".to_string()]);
+}

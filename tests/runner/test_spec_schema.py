@@ -8,8 +8,8 @@ from toolr._runner import ContextSpec
 from toolr._runner import RunnerSpec
 
 
-def test_schema_version_constant_is_2() -> None:
-    assert SCHEMA_VERSION == 2
+def test_schema_version_constant_is_3() -> None:
+    assert SCHEMA_VERSION == 3
 
 
 def test_runner_spec_round_trips_through_json() -> None:

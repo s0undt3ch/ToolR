@@ -47,13 +47,28 @@ class DispatchCommand(Struct, frozen=True):
         For each argument in `schema.arguments` that appears in
         `command_args`, emit the appropriate token(s):
 
-        - `positional` → bare value
-        - `flag` → `--name` when truthy, omitted when falsy
-        - `optional` → `--name value`, omitted when value == default
-        - `repeated` → `--name value` per element (argparse
-          `action="append"`), or `--name value1 value2 ...` in one
-          occurrence when `arg.multi_value_occurrence` (argparse
-          `nargs="+"`/`"*"`)
+        - `positional`, no `nargs` → bare value.
+        - `positional`, `nargs == "?"` → bare value when present (an
+          absent zero-or-one value never appears in `command_args`).
+        - `positional`, `nargs` an int or `"+"`/`"*"` (fixed arity, or
+          a variadic positional — argparse `nargs="+"`/`"*"`/
+          `REMAINDER`, or native `*args`) → each element as a bare
+          value, in order.
+        - `flag` → `--name` when truthy, omitted when falsy.
+        - `optional`, no `nargs` → `--name value`, omitted when
+          value == default.
+        - `optional`, `nargs` an int (fixed arity) → `--name` once,
+          followed by all N values.
+        - `repeated`, `nargs in ("+", "*")` → `--name value1 value2 ...`
+          in one occurrence (argparse `nargs="+"`/`"*"` on a
+          keyword-style arg).
+        - `repeated`, `nargs is None` (`action="append"`) →
+          `--name value` once per element.
+
+        `"positional"` is reserved for args with no CLI flag at all —
+        `VarPositional`/`OptionalPositional` sources always map there,
+        never to `"repeated"` — so this method never has to guess
+        whether a `"repeated"` arg has a flag to emit.
 
         Keys in `command_args` not found in `schema.arguments` raise
         ValueError so typos surface loudly.
@@ -70,16 +85,21 @@ class DispatchCommand(Struct, frozen=True):
                 continue
             value = self.command_args[arg.name]
             if arg.kind == "positional":
-                out.append(str(value))
+                if isinstance(arg.nargs, int) or arg.nargs in ("+", "*"):
+                    out.extend(str(element) for element in value)
+                else:
+                    out.append(str(value))
             elif arg.kind == "flag":
                 if value:
                     out.append(_flag_for_arg(arg))
             elif arg.kind == "optional":
-                if arg.default is not None and str(value) == arg.default:
-                    continue
-                out.extend([_flag_for_arg(arg), str(value)])
+                if isinstance(arg.nargs, int):
+                    out.append(_flag_for_arg(arg))
+                    out.extend(str(element) for element in value)
+                elif arg.default is None or str(value) != arg.default:
+                    out.extend([_flag_for_arg(arg), str(value)])
             elif arg.kind == "repeated":
-                if arg.multi_value_occurrence:
+                if arg.nargs in ("+", "*"):
                     out.append(_flag_for_arg(arg))
                     out.extend(str(element) for element in value)
                 else:

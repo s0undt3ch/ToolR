@@ -100,6 +100,27 @@ fn load_rejects_unknown_schema_version() {
 }
 
 #[test]
+fn load_rejects_fixed_arity_argument_missing_nargs() {
+    // A hand-edited (or stale, pre-nargs) manifest can declare
+    // `kind: "fixed_arity"` without a matching `metadata.nargs` — that
+    // combination isn't serde-checkable and would otherwise panic the
+    // clap builder in `cli.rs`. `load_manifest` must catch it first.
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().join(".toolr-manifest.json");
+    std::fs::write(
+        &path,
+        r#"{"schema_version":1,"static_hash":"h","third_party_hash":"",
+        "groups":[],"commands":[{"name":"c","group":"g","module":"m","function":"f",
+        "summary":"","description":"","arguments":[{"name":"pair","kind":"fixed_arity"}],
+        "origin":"static","dispatched_from":null,"is_dispatcher":false}]}"#,
+    )
+    .unwrap();
+    let err = load_manifest(&path).expect_err("should reject");
+    assert!(matches!(err, ManifestError::InvalidArgument(_)));
+    assert!(err.to_string().contains("pair"), "got: {err}");
+}
+
+#[test]
 fn load_returns_io_error_when_missing() {
     let tmp = TempDir::new().unwrap();
     let err = load_manifest(&tmp.path().join("absent.json")).expect_err("should be missing");

@@ -102,8 +102,8 @@ def test_dispatch_command_holds_match():
             ],
             ["--user_ids", "3", "--user_ids", "4"],
         ),
-        # Repeated + multi_value_occurrence (argparse nargs="+"/"*") →
-        # one occurrence, many space-separated values — NOT the
+        # Repeated + nargs="+" (argparse nargs="+"/"*") → one
+        # occurrence, many space-separated values — NOT the
         # repeat-the-flag form, which argparse would silently collapse
         # to the last value only.
         (
@@ -113,10 +113,37 @@ def test_dispatch_command_holds_match():
                     name="customer_ids",
                     kind="repeated",
                     help="",
-                    multi_value_occurrence=True,
+                    nargs="+",
                 ),
             ],
             ["--customer-ids", "100087163", "100180680", "10033857"],
+        ),
+        # Fixed-arity keyword (nargs=2) — one flag, N values.
+        (
+            {"pair": ["a", "b"]},
+            [ArgSchema(name="pair", kind="optional", help="", nargs=2)],
+            ["--pair", "a", "b"],
+        ),
+        # Fixed-arity positional (nargs=3) — N bare values, no flag.
+        (
+            {"files": ["x", "y", "z"]},
+            [ArgSchema(name="files", kind="positional", help="", nargs=3)],
+            ["x", "y", "z"],
+        ),
+        # Optional positional (nargs="?"), present — bare value, same as
+        # a plain positional.
+        (
+            {"maybe": "present"},
+            [ArgSchema(name="maybe", kind="positional", help="", nargs="?")],
+            ["present"],
+        ),
+        # Positional repeated (VarPositional dispatch) — bare values, no
+        # flag. `VarPositional` maps to wire kind "positional" (not
+        # "repeated"), so there's no flag to guess at.
+        (
+            {"labels": ["a", "b", "c"]},
+            [ArgSchema(name="labels", kind="positional", help="", nargs="*")],
+            ["a", "b", "c"],
         ),
     ],
 )

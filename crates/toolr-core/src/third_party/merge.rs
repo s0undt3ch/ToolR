@@ -60,7 +60,7 @@ pub fn merge_into_manifest(
                 });
             }
             owner.insert(key, fragment.package.clone());
-            base.commands.push(command_from_fragment(fc));
+            base.commands.push(command_from_fragment(fc, &fragment.package)?);
         }
     }
 
@@ -77,27 +77,46 @@ fn group_from_fragment(fg: FragmentGroup) -> Group {
     }
 }
 
-fn command_from_fragment(fc: FragmentCommand) -> Command {
-    Command {
+fn command_from_fragment(fc: FragmentCommand, package: &str) -> Result<Command, ThirdPartyError> {
+    let arguments = fc
+        .arguments
+        .into_iter()
+        .map(|fa| argument_from_fragment(fa, package, &fc.group, &fc.name))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Command {
         name: fc.name,
         group: fc.group,
         module: fc.module,
         function: fc.function,
         summary: fc.summary,
         description: fc.description,
-        arguments: fc
-            .arguments
-            .into_iter()
-            .map(argument_from_fragment)
-            .collect(),
+        arguments,
         origin: Origin::ThirdParty,
         dispatched_from: None,
         is_dispatcher: false,
-    }
+    })
 }
 
-fn argument_from_fragment(fa: FragmentArgument) -> Argument {
-    Argument {
+fn argument_from_fragment(
+    fa: FragmentArgument,
+    package: &str,
+    group: &str,
+    command: &str,
+) -> Result<Argument, ThirdPartyError> {
+    // `FixedArity` (argparse `nargs=N`) needs its exact count on
+    // `metadata.nargs`, but `FragmentArgument` has no `nargs` field —
+    // fragments predate that kind. Reject it here rather than merging
+    // an `Argument` with `nargs: None`, which would later panic the
+    // clap builder in `cli.rs`.
+    if fa.kind == crate::manifest::ArgumentKind::FixedArity {
+        return Err(ThirdPartyError::UnsupportedArgumentKind {
+            package: package.to_string(),
+            group: group.to_string(),
+            command: command.to_string(),
+            argument: fa.name,
+        });
+    }
+    Ok(Argument {
         name: fa.name,
         kind: fa.kind,
         help: fa.help,
@@ -115,5 +134,5 @@ fn argument_from_fragment(fa: FragmentArgument) -> Argument {
         // Third-party manifest fragments aren't argparse-grafted, so
         // they have no source-literal flag to preserve.
         long_flag: None,
-    }
+    })
 }

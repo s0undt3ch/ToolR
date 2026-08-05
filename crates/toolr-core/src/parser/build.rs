@@ -324,11 +324,9 @@ fn validate_positional_arity(commands: &[crate::manifest::Command]) -> Vec<Posit
                 ArgumentKind::VarPositional => {
                     var_positional = Some(arg.name.as_str());
                 }
-                ArgumentKind::Positional => {
-                    let is_optional = matches!(
-                        arg.resolved_type,
-                        Some(SupportedType::Optional(_))
-                    );
+                ArgumentKind::Positional | ArgumentKind::OptionalPositional => {
+                    let is_optional = matches!(arg.kind, ArgumentKind::OptionalPositional)
+                        || matches!(arg.resolved_type, Some(SupportedType::Optional(_)));
                     if is_optional {
                         if let Some(first) = zero_or_one {
                             errors.push(PositionalArityError {
@@ -354,8 +352,28 @@ fn validate_positional_arity(commands: &[crate::manifest::Command]) -> Vec<Posit
                         });
                     }
                 }
+                // Positional-style FixedArity (no long_flag) always
+                // consumes a fixed slot — same ordering rule as a plain
+                // required Positional. Keyword-style FixedArity doesn't
+                // compete for positional slots at all.
+                ArgumentKind::FixedArity if arg.long_flag.is_none() => {
+                    if let Some(zo) = zero_or_one {
+                        errors.push(PositionalArityError {
+                            module: cmd.module.clone(),
+                            command: cmd.name.clone(),
+                            kind: PositionalArityErrorKind::RequiredAfterZeroOrOne {
+                                required: arg.name.clone(),
+                                zero_or_one: zo.to_string(),
+                            },
+                        });
+                    }
+                }
                 // Keyword-like kinds don't compete for positional slots.
-                ArgumentKind::Optional | ArgumentKind::Flag | ArgumentKind::Repeated | ArgumentKind::Count => {}
+                ArgumentKind::Optional
+                | ArgumentKind::Flag
+                | ArgumentKind::Repeated
+                | ArgumentKind::Count
+                | ArgumentKind::FixedArity => {}
             }
         }
         if let (Some(zo), Some(vp)) = (zero_or_one, var_positional) {
@@ -547,7 +565,103 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manifest::{ArgMetadata, Argument, Command, Origin};
     use tempfile::TempDir;
+
+    fn arg(kind: ArgumentKind, name: &str, long_flag: Option<&str>) -> Argument {
+        Argument {
+            name: name.to_string(),
+            kind,
+            help: String::new(),
+            default: None,
+            type_annotation: None,
+            resolved_type: None,
+            allowed_values: vec![],
+            path_constraints: None,
+            metadata: ArgMetadata::default(),
+            long_flag: long_flag.map(str::to_string),
+        }
+    }
+
+    fn cmd_with_args(name: &str, arguments: Vec<Argument>) -> Command {
+        Command {
+            name: name.to_string(),
+            group: String::new(),
+            module: format!("tools.{name}"),
+            function: name.to_string(),
+            summary: String::new(),
+            description: String::new(),
+            arguments,
+            origin: Origin::Static,
+            dispatched_from: None,
+            is_dispatcher: false,
+        }
+    }
+
+    #[test]
+    fn optional_positional_participates_in_zero_or_one_rules() {
+        let commands = vec![cmd_with_args(
+            "x",
+            vec![
+                arg(ArgumentKind::OptionalPositional, "first", None),
+                arg(ArgumentKind::OptionalPositional, "second", None),
+            ],
+        )];
+        let errors = validate_positional_arity(&commands);
+        assert_eq!(errors.len(), 1);
+        assert!(matches!(
+            errors[0].kind,
+            PositionalArityErrorKind::MultipleZeroOrOne { .. }
+        ));
+    }
+
+    #[test]
+    fn required_positional_after_optional_positional_errors() {
+        let commands = vec![cmd_with_args(
+            "x",
+            vec![
+                arg(ArgumentKind::OptionalPositional, "opt", None),
+                arg(ArgumentKind::Positional, "req", None),
+            ],
+        )];
+        let errors = validate_positional_arity(&commands);
+        assert_eq!(errors.len(), 1);
+        assert!(matches!(
+            errors[0].kind,
+            PositionalArityErrorKind::RequiredAfterZeroOrOne { .. }
+        ));
+    }
+
+    #[test]
+    fn positional_fixed_arity_after_optional_positional_errors() {
+        // A fixed-N positional slot is always present, same as a plain
+        // required Positional — can't follow a zero-or-one slot either.
+        let commands = vec![cmd_with_args(
+            "x",
+            vec![
+                arg(ArgumentKind::OptionalPositional, "opt", None),
+                arg(ArgumentKind::FixedArity, "pair", None),
+            ],
+        )];
+        let errors = validate_positional_arity(&commands);
+        assert_eq!(errors.len(), 1);
+        assert!(matches!(
+            errors[0].kind,
+            PositionalArityErrorKind::RequiredAfterZeroOrOne { .. }
+        ));
+    }
+
+    #[test]
+    fn keyword_fixed_arity_does_not_compete_for_positional_slots() {
+        let commands = vec![cmd_with_args(
+            "x",
+            vec![
+                arg(ArgumentKind::OptionalPositional, "opt", None),
+                arg(ArgumentKind::FixedArity, "pair", Some("--pair")),
+            ],
+        )];
+        assert!(validate_positional_arity(&commands).is_empty());
+    }
 
     fn write(tmp: &Path, name: &str, contents: &str) {
         let path = tmp.join(name);

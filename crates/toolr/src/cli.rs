@@ -700,25 +700,25 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
             }
             ArgumentKind::Repeated => {
                 // --name VALUE that may repeat; each occurrence appends.
-                // `multi_value_occurrence` (argparse `nargs="+"`/`"*"`)
-                // additionally lets one occurrence take several
+                // `nargs == Some(Plus | Star)` (argparse `nargs="+"`/
+                // `"*"`) additionally lets one occurrence take several
                 // space-separated values — widening `num_args` beyond 1
                 // is unsafe by default since a following positional
                 // would get swallowed, so it's opt-in per argument
                 // rather than blanket for the kind.
                 a = a.long(long_flag).required(false).action(ArgAction::Append);
-                a = if arg.metadata.multi_value_occurrence {
-                    a.num_args(1..)
-                } else {
-                    a.num_args(1)
+                a = match arg.metadata.nargs {
+                    Some(toolr_core::manifest::Nargs::Plus)
+                    | Some(toolr_core::manifest::Nargs::Star) => a.num_args(1..),
+                    _ => a.num_args(1),
                 };
             }
             ArgumentKind::VarPositional => {
                 // Trailing variadic positional. Zero values is valid by
-                // default (native `*args`, argparse `nargs="*"`);
-                // `require_at_least_one` (argparse `nargs="+"`) demands
-                // one or more instead.
-                a = if arg.metadata.require_at_least_one {
+                // default (native `*args`, argparse `nargs="*"` or
+                // `argparse.REMAINDER`); `nargs == Some(Plus)` (argparse
+                // `nargs="+"`) demands one or more instead.
+                a = if arg.metadata.nargs == Some(toolr_core::manifest::Nargs::Plus) {
                     a.required(true).num_args(1..)
                 } else {
                     a.required(false).num_args(0..)
@@ -730,6 +730,32 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
                 // ArgAction::Count. Python receives the resulting int
                 // through `toolr.types.Count` (which is `int`).
                 a = a.long(long_flag).action(ArgAction::Count);
+            }
+            ArgumentKind::FixedArity => {
+                // Exactly N values in a single occurrence (argparse
+                // `nargs=N`). Keyword-style (`--pair a b`) when the
+                // scanner recorded a literal flag spelling; positional
+                // (`files a b`, no flag, always required) otherwise —
+                // mirrors the Positional/Optional split used everywhere
+                // else in this function.
+                let arity = match arg.metadata.nargs {
+                    Some(toolr_core::manifest::Nargs::Fixed(n)) => n,
+                    _ => unreachable!("FixedArity always carries Nargs::Fixed(n)"),
+                };
+                a = if arg.long_flag.is_some() {
+                    a.long(long_flag).required(false)
+                } else {
+                    a.required(true)
+                };
+                a = a.num_args(arity);
+            }
+            ArgumentKind::OptionalPositional => {
+                // Zero-or-one positional value (argparse positional
+                // `nargs="?"`). No flag, not required — unlike
+                // `Positional`, which this function always marks
+                // required unless `resolved_type` says `T | None`
+                // (which argparse-scanned args never carry).
+                a = a.required(false);
             }
         }
         // Apply the per-type value_parser when we have structured type
@@ -1052,10 +1078,10 @@ mod cli_tree_tests {
         // Covers argparse `nargs="+"`/`"*"` (space-separated values in one
         // occurrence) alongside the pre-existing `action="append"` shape
         // (one value per occurrence, repeated). Both classify as
-        // `ArgumentKind::Repeated`; the scanner sets
-        // `multi_value_occurrence` only for the nargs case.
+        // `ArgumentKind::Repeated`; the scanner sets `metadata.nargs` to
+        // `Some(Star)`/`Some(Plus)` only for the nargs case.
         let mut arg = empty_arg("names", ArgumentKind::Repeated);
-        arg.metadata.multi_value_occurrence = true;
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Star);
         let mut cmd = normal_leaf("greet", "jenkins");
         cmd.arguments = vec![arg];
 
@@ -1088,8 +1114,8 @@ mod cli_tree_tests {
 
     #[test]
     fn plain_repeated_flag_beside_a_required_positional_does_not_swallow_it() {
-        // Without `multi_value_occurrence` (the `action="append"` shape,
-        // and every pre-existing native `list[T]` keyword param), each
+        // Without `metadata.nargs` set (the `action="append"` shape, and
+        // every pre-existing native `list[T]` keyword param), each
         // `--names` occurrence must still take exactly one value so a
         // trailing positional isn't swallowed by a widened `num_args`.
         let mut names_arg = empty_arg("names", ArgumentKind::Repeated);
@@ -1115,12 +1141,12 @@ mod cli_tree_tests {
     }
 
     #[test]
-    fn var_positional_require_at_least_one_rejects_zero_values() {
+    fn var_positional_nargs_plus_rejects_zero_values() {
         // argparse `nargs="+"` on a positional (e.g. Django's
         // `manage.py test app1 app2`) demands at least one value, unlike
         // native `*args`/argparse `nargs="*"` where zero is valid.
         let mut labels_arg = empty_arg("labels", ArgumentKind::VarPositional);
-        labels_arg.metadata.require_at_least_one = true;
+        labels_arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Plus);
 
         let mut cmd = normal_leaf("test", "jenkins");
         cmd.arguments = vec![labels_arg];
@@ -1129,7 +1155,7 @@ mod cli_tree_tests {
         clap_cmd
             .clone()
             .try_get_matches_from(vec!["test"])
-            .expect_err("zero values must be rejected when require_at_least_one is set");
+            .expect_err("zero values must be rejected when nargs is Plus");
 
         let matches = clap_cmd
             .try_get_matches_from(vec!["test", "app1", "app2"])
@@ -1141,6 +1167,94 @@ mod cli_tree_tests {
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
             vec!["app1", "app2"]
+        );
+    }
+
+    #[test]
+    fn fixed_arity_keyword_gets_exact_num_args() {
+        let mut arg = empty_arg("pair", ArgumentKind::FixedArity);
+        arg.long_flag = Some("--pair".to_string());
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(2));
+
+        let mut cmd = normal_leaf("greet", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["greet", "--pair", "a", "b"])
+            .expect("exactly 2 values must parse");
+        assert_eq!(
+            matches
+                .get_many::<String>("pair")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
+    }
+
+    #[test]
+    fn fixed_arity_keyword_rejects_wrong_arity() {
+        let mut arg = empty_arg("pair", ArgumentKind::FixedArity);
+        arg.long_flag = Some("--pair".to_string());
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(2));
+
+        let mut cmd = normal_leaf("greet", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        clap_cmd
+            .try_get_matches_from(vec!["greet", "--pair", "a"])
+            .expect_err("one value must be rejected when arity is 2");
+    }
+
+    #[test]
+    fn fixed_arity_positional_gets_exact_num_args_and_is_required() {
+        let arg = empty_arg("files", ArgumentKind::FixedArity);
+        let mut arg = arg;
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(3));
+
+        let mut cmd = normal_leaf("copy", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        clap_cmd
+            .clone()
+            .try_get_matches_from(vec!["copy"])
+            .expect_err("a required positional fixed-arity arg must reject zero values");
+
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["copy", "x", "y", "z"])
+            .expect("exactly 3 values must parse");
+        assert_eq!(
+            matches
+                .get_many::<String>("files")
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["x", "y", "z"]
+        );
+    }
+
+    #[test]
+    fn optional_positional_is_not_required() {
+        let arg = empty_arg("maybe", ArgumentKind::OptionalPositional);
+
+        let mut cmd = normal_leaf("cmd", "jenkins");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        clap_cmd
+            .clone()
+            .try_get_matches_from(vec!["cmd"])
+            .expect("an optional positional must parse when omitted");
+
+        let matches = clap_cmd
+            .try_get_matches_from(vec!["cmd", "present"])
+            .expect("an optional positional must still parse when given");
+        assert_eq!(
+            matches.get_one::<String>("maybe").map(String::as_str),
+            Some("present")
         );
     }
 

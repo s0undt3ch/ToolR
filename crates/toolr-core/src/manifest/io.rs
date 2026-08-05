@@ -15,6 +15,8 @@ pub enum ManifestError {
     Json(#[from] serde_json::Error),
     #[error("unknown manifest schema_version {0}; this toolr supports up to {max}", max = SCHEMA_VERSION)]
     UnknownSchemaVersion(u32),
+    #[error("malformed manifest: {0}")]
+    InvalidArgument(String),
 }
 
 pub fn load_manifest(path: &Path) -> Result<Manifest, ManifestError> {
@@ -28,6 +30,7 @@ pub fn load_manifest(path: &Path) -> Result<Manifest, ManifestError> {
         return Err(ManifestError::UnknownSchemaVersion(version));
     }
     let manifest: Manifest = serde_json::from_value(raw)?;
+    manifest.validate_arguments().map_err(ManifestError::InvalidArgument)?;
     Ok(manifest)
 }
 

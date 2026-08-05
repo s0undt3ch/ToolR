@@ -10,7 +10,7 @@ use toolr_core::execute::{
     ArgSchemaSpec, CommandSchemaSpec, ContextSpec, DispatchSpec, ExecutionSpec,
     RUNNER_SCHEMA_VERSION,
 };
-use toolr_core::manifest::{Argument, ArgumentKind, Command};
+use toolr_core::manifest::{Argument, ArgumentKind, Command, Nargs};
 use toolr_core::parser::SupportedType;
 
 /// Build the spec to write to disk, given:
@@ -169,24 +169,44 @@ fn command_to_schema_spec(cmd: &Command) -> CommandSchemaSpec {
 ///
 /// Maps:
 /// - `kind` → one of `"positional" | "optional" | "flag" | "repeated"`.
-///   `VarPositional` is encoded as `"repeated"` (closest argparse-shaped
-///   equivalent for argv reconstruction); `Count` falls back to
-///   `"flag"`. The argparse scanner only emits the first four kinds, so
-///   those two arms only fire for hand-authored manifests today.
+///   `Count` falls back to `"flag"`. `OptionalPositional` and
+///   `VarPositional` are both `"positional"` — every positional-style
+///   arg (no CLI flag, ever) maps to `"positional"`, parameterised by
+///   `nargs` for its exact arity; `"repeated"` is reserved for
+///   genuinely keyword-style repeatable args, so `DispatchCommand.argv`
+///   never has to guess whether a `"repeated"` arg has a flag. `FixedArity`
+///   is `"optional"` when `long_flag` is `Some` (keyword-style), else
+///   `"positional"` — mirroring the same split used everywhere else.
 /// - `choices` ← `allowed_values` (empty → `None`).
 /// - `metavar` ← `metadata.metavar`.
 /// - `type_annotation` ← `type_annotation`.
-/// - `nargs` is always `None` — the manifest doesn't carry argparse-
-///   compatible nargs information.
-/// - `multi_value_occurrence` ← `metadata.multi_value_occurrence`
-///   (distinguishes argparse `nargs="+"`/`"*"` from `action="append"`
-///   for `Repeated` args).
+/// - `nargs` ← `metadata.nargs`/`kind`: `"?"` for `OptionalPositional`,
+///   the exact int for `FixedArity`, `"+"`/`"*"` for `Repeated`/
+///   `VarPositional` when a single occurrence (or the single positional
+///   slot) takes several values, `None` otherwise (e.g.
+///   `action="append"`, native `*args`).
 fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
     let kind = match arg.kind {
-        ArgumentKind::Positional => "positional",
+        ArgumentKind::Positional | ArgumentKind::OptionalPositional | ArgumentKind::VarPositional => {
+            "positional"
+        }
         ArgumentKind::Optional => "optional",
         ArgumentKind::Flag | ArgumentKind::Count => "flag",
-        ArgumentKind::Repeated | ArgumentKind::VarPositional => "repeated",
+        ArgumentKind::Repeated => "repeated",
+        ArgumentKind::FixedArity => {
+            if arg.long_flag.is_some() {
+                "optional"
+            } else {
+                "positional"
+            }
+        }
+    };
+    let nargs = match (arg.kind, arg.metadata.nargs) {
+        (ArgumentKind::OptionalPositional, _) => Some(serde_json::json!("?")),
+        (_, Some(Nargs::Fixed(n))) => Some(serde_json::json!(n)),
+        (_, Some(Nargs::Plus)) => Some(serde_json::json!("+")),
+        (_, Some(Nargs::Star)) => Some(serde_json::json!("*")),
+        (_, None) => None,
     };
     ArgSchemaSpec {
         name: arg.name.clone(),
@@ -200,9 +220,8 @@ fn argument_to_arg_schema(arg: &Argument) -> ArgSchemaSpec {
         },
         metavar: arg.metadata.metavar.clone(),
         type_annotation: arg.type_annotation.clone(),
-        nargs: None,
+        nargs,
         long_flag: arg.long_flag.clone(),
-        multi_value_occurrence: arg.metadata.multi_value_occurrence,
     }
 }
 
@@ -257,11 +276,25 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
             let n = matches.get_count(arg.name.as_str());
             Some(Value::Number(u64::from(n).into()))
         }
-        ArgumentKind::Positional | ArgumentKind::Optional => {
+        ArgumentKind::Positional | ArgumentKind::Optional | ArgumentKind::OptionalPositional => {
             extract_scalar(arg, matches)
         }
         ArgumentKind::Repeated | ArgumentKind::VarPositional => {
             Some(Value::Array(extract_many(arg, matches)))
+        }
+        ArgumentKind::FixedArity => {
+            // Positional-style is always `required(true)`, so it's
+            // always present when parsing succeeds — but keyword-style
+            // is `required(false)` with no default, so an omitted
+            // `--pair` must come through as `None` (skipped from the
+            // args map entirely), not `Some([])`. An empty array would
+            // make `DispatchCommand.argv` emit a bare `--pair` with
+            // zero of its required N values.
+            if matches.contains_id(arg.name.as_str()) {
+                Some(Value::Array(extract_many(arg, matches)))
+            } else {
+                None
+            }
         }
     }
 }
@@ -369,7 +402,10 @@ fn arg_has_relative_cli_path(arg: &Argument, matches: &ArgMatches) -> bool {
     let is_many = matches!(
         arg.resolved_type.as_ref().map(unwrap_optional),
         Some(SupportedType::Tuple(_))
-    ) || matches!(arg.kind, ArgumentKind::Repeated | ArgumentKind::VarPositional);
+    ) || matches!(
+        arg.kind,
+        ArgumentKind::Repeated | ArgumentKind::VarPositional | ArgumentKind::FixedArity
+    );
     if is_many {
         matches
             .get_many::<std::path::PathBuf>(name)
@@ -825,6 +861,61 @@ mod tests {
     }
 
     #[test]
+    fn build_spec_missing_fixed_arity_keyword_does_not_appear_in_args_map() {
+        // A keyword-style FixedArity arg is `required(false)` with no
+        // default. If omitted, `extract_value` must return `None` —
+        // not `Some([])` — otherwise `DispatchCommand.argv` would emit
+        // a bare `--pair` with zero of its required 2 values.
+        let mut arg = arg_of("pair", ArgumentKind::FixedArity, SupportedType::Str);
+        arg.long_flag = Some("--pair".to_string());
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(2));
+        let cmd = cmd_with(vec![arg]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("pair").long("pair").num_args(2).required(false))
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert!(!spec.args.contains_key("pair"));
+    }
+
+    #[test]
+    fn build_spec_extracts_fixed_arity_keyword_when_present() {
+        let mut arg = arg_of("pair", ArgumentKind::FixedArity, SupportedType::Str);
+        arg.long_flag = Some("--pair".to_string());
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(2));
+        let cmd = cmd_with(vec![arg]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("pair").long("pair").num_args(2).required(false))
+            .get_matches_from(["test", "--pair", "a", "b"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("pair"),
+            Some(&Value::Array(vec![
+                Value::String("a".into()),
+                Value::String("b".into()),
+            ])),
+        );
+    }
+
+    #[test]
+    fn build_spec_extracts_fixed_arity_positional_when_present() {
+        let mut arg = arg_of("files", ArgumentKind::FixedArity, SupportedType::Str);
+        arg.metadata.nargs = Some(toolr_core::manifest::Nargs::Fixed(3));
+        let cmd = cmd_with(vec![arg]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("files").num_args(3).required(true))
+            .get_matches_from(["test", "x", "y", "z"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("files"),
+            Some(&Value::Array(vec![
+                Value::String("x".into()),
+                Value::String("y".into()),
+                Value::String("z".into()),
+            ])),
+        );
+    }
+
+    #[test]
     fn output_options_default_values_match_python_runner_expectations() {
         // The runner side defaults `verbosity` to "normal" and
         // `log_level` to "INFO" when not overridden. Document those
@@ -1020,7 +1111,8 @@ mod dispatched_pack_tests {
             (ArgumentKind::Flag, "flag"),
             (ArgumentKind::Count, "flag"),
             (ArgumentKind::Repeated, "repeated"),
-            (ArgumentKind::VarPositional, "repeated"),
+            (ArgumentKind::VarPositional, "positional"),
+            (ArgumentKind::OptionalPositional, "positional"),
         ];
         for (kind, expected) in cases {
             let schema = argument_to_arg_schema(&argument_named("a", kind));
@@ -1056,8 +1148,8 @@ mod dispatched_pack_tests {
     }
 
     #[test]
-    fn argument_to_arg_schema_carries_multi_value_occurrence() {
-        fn repeated_with(multi_value_occurrence: bool) -> Argument {
+    fn argument_to_arg_schema_carries_nargs_star_for_repeated() {
+        fn repeated_with(nargs: Option<Nargs>) -> Argument {
             Argument {
                 name: "customer-ids".into(),
                 kind: ArgumentKind::Repeated,
@@ -1067,15 +1159,61 @@ mod dispatched_pack_tests {
                 resolved_type: None,
                 allowed_values: vec![],
                 path_constraints: None,
-                metadata: toolr_core::manifest::ArgMetadata {
-                    multi_value_occurrence,
-                    ..Default::default()
-                },
+                metadata: toolr_core::manifest::ArgMetadata { nargs, ..Default::default() },
                 long_flag: None,
             }
         }
-        assert!(argument_to_arg_schema(&repeated_with(true)).multi_value_occurrence);
-        assert!(!argument_to_arg_schema(&repeated_with(false)).multi_value_occurrence);
+        assert_eq!(
+            argument_to_arg_schema(&repeated_with(Some(Nargs::Star))).nargs,
+            Some(serde_json::json!("*"))
+        );
+        assert_eq!(
+            argument_to_arg_schema(&repeated_with(Some(Nargs::Plus))).nargs,
+            Some(serde_json::json!("+"))
+        );
+        assert_eq!(argument_to_arg_schema(&repeated_with(None)).nargs, None);
+    }
+
+    fn bare_arg(name: &str, kind: ArgumentKind) -> Argument {
+        Argument {
+            name: name.into(),
+            kind,
+            help: String::new(),
+            default: None,
+            type_annotation: None,
+            resolved_type: None,
+            allowed_values: vec![],
+            path_constraints: None,
+            metadata: Default::default(),
+            long_flag: None,
+        }
+    }
+
+    #[test]
+    fn argument_to_arg_schema_maps_fixed_arity_keyword_to_optional_with_int_nargs() {
+        let mut arg = bare_arg("pair", ArgumentKind::FixedArity);
+        arg.long_flag = Some("--pair".to_string());
+        arg.metadata.nargs = Some(Nargs::Fixed(2));
+        let schema = argument_to_arg_schema(&arg);
+        assert_eq!(schema.kind, "optional");
+        assert_eq!(schema.nargs, Some(serde_json::json!(2)));
+    }
+
+    #[test]
+    fn argument_to_arg_schema_maps_fixed_arity_positional_to_positional_with_int_nargs() {
+        let mut arg = bare_arg("files", ArgumentKind::FixedArity);
+        arg.metadata.nargs = Some(Nargs::Fixed(3));
+        let schema = argument_to_arg_schema(&arg);
+        assert_eq!(schema.kind, "positional");
+        assert_eq!(schema.nargs, Some(serde_json::json!(3)));
+    }
+
+    #[test]
+    fn argument_to_arg_schema_maps_optional_positional_to_positional_with_question_nargs() {
+        let arg = bare_arg("maybe", ArgumentKind::OptionalPositional);
+        let schema = argument_to_arg_schema(&arg);
+        assert_eq!(schema.kind, "positional");
+        assert_eq!(schema.nargs, Some(serde_json::json!("?")));
     }
 
     #[test]

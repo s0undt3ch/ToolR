@@ -51,6 +51,17 @@ pub enum ThirdPartyError {
         first_package: String,
         second_package: String,
     },
+    #[error(
+        "{package}: command `{group}/{command}` argument `{argument}` has kind \
+         `fixed_arity`, which manifest fragments can't express (no `nargs` field) — \
+         unsupported for third-party commands"
+    )]
+    UnsupportedArgumentKind {
+        package: String,
+        group: String,
+        command: String,
+        argument: String,
+    },
 }
 
 /// Parse one fragment file, validating `toolr_schema_version` matches
