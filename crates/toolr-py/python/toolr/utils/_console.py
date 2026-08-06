@@ -29,14 +29,14 @@ class ConsoleVerbosity(IntEnum):
 #: the real terminal) and needs the same theme for that markup to resolve.
 TOOLR_THEME = Theme(
     {
-        "log-debug": "dim blue",
-        "log-info": "dim cyan",
+        "log-debug": "blue",
+        "log-info": "cyan",
         "log-warning": "magenta",
         "log-error": "bold red",
         "exit-ok": "green",
         "exit-failure": "bold red",
-        "logging.level.stdout": "dim blue",
-        "logging.level.stderr": "dim red",
+        "logging.level.stdout": "blue",
+        "logging.level.stderr": "red",
     }
 )
 
