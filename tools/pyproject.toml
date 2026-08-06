@@ -17,6 +17,17 @@ dependencies = [
     "ruamel.yaml>=0.18",
 ]
 
+[tool.uv]
+# The root `pyproject.toml`'s 7-day `exclude-newer` dependency cooldown is
+# inherited here even though `tools/` sits outside the root workspace. That
+# cooldown exists to let the ecosystem vet third-party releases before we
+# resolve them — but `toolr-py` is *our own* package, published by the same
+# release that builds the `toolr` binary CI dogfoods this venv against. A
+# 7-day lag between the two means every schema-bumping release breaks this
+# venv's dispatch contract against `main`'s freshly-built binary for up to a
+# week. Exempt `toolr-py` specifically so it always resolves to latest.
+exclude-newer-package = { "toolr-py" = "2100-01-01T00:00:00Z" }
+
 # `tools/` is intentionally NOT part of the root uv workspace, so
 # `toolr-py` resolves from PyPI by default (matching the experience
 # of external consumers of the Setup ToolR action). For local
