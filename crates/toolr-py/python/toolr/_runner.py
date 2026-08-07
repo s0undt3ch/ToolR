@@ -556,6 +556,14 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         traceback.print_exc(file=sys.stderr)
         _print_missing_dep_hint(exc, sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        # SIGINT forwarded from the parent toolr process (see
+        # `crates/toolr-core/src/execute/signals.rs`) surfaces here as
+        # `KeyboardInterrupt`, not a process-level signal death — so the
+        # Rust side's "128 + signal" exit-code logic never sees it. Match
+        # the conventional shell exit code (128 + SIGINT) ourselves rather
+        # than letting the interpreter print its default traceback.
+        return 130
     except Exception:  # noqa: BLE001
         traceback.print_exc(file=sys.stderr)
         return 1

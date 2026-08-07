@@ -550,6 +550,20 @@ def test_run_returns_1_on_unhandled_exception(
     assert "toolr project venv sync" not in err
 
 
+def test_run_returns_130_on_keyboard_interrupt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_target(ctx, **_kw) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert run(_runner_spec(repo_root=tmp_path)) == 130
+    # No traceback noise — Ctrl-C is expected user behaviour, not a bug.
+    assert capsys.readouterr().err == ""
+
+
 def test_run_emits_missing_dep_hint_for_function_body_importerror(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
