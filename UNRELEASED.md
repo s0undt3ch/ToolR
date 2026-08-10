@@ -18,3 +18,8 @@ no scaffolding. Just write whatever should appear in the notes.
   days"` dependency cooldown, inherited by `tools/`, is meant for
   third-party releases; `toolr-py` is exempted from it specifically since
   it ships from the same release as the binary that runs against it.
+- Fixed Ctrl-C during a running command printing a raw Python traceback
+  and exiting with an arbitrary code instead of the conventional 130.
+  The toolr binary already forwards SIGINT to the Python runner
+  subprocess; the runner now catches the resulting `KeyboardInterrupt`
+  and exits 130 cleanly instead of leaking it as an unhandled exception.
