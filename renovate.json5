@@ -107,27 +107,43 @@
       matchDepNames: ["!python", "!rust", "!uv", "!cargo:cargo-edit"],
     },
 
-    // ---- Keep the dogfood venv in lockstep with our own releases ----
+    // ---- Keep every in-repo pin of our own release in lockstep ----
     {
-      // `toolr-py` is this repo's own published package, dogfooded in
-      // `tools/`. Two things make this rule work:
-      //   1. `tools/pyproject.toml` carries a `>=` floor — a bare name
-      //      yields no update from the pep621 manager, which is why the
-      //      lock silently drifted to 0.20.1 until 0.25.0 broke dispatch.
-      //   2. `update-lockfile` keeps that floor and bumps only the
-      //      `uv.lock` pin.
-      // Override the global weekly schedule so the bump lands on the next
-      // Renovate run after a release publishes (not the following Monday),
-      // keeping the dogfood runner in lockstep with the just-released
-      // binary. `at any time` lifts the PR-timing gate; detection is still
-      // bounded by Renovate's own run cadence — repo config can't make that
-      // instant.
-      description: "Track our own toolr-py release in tools/ ASAP",
-      matchManagers: ["pep621"],
-      matchFileNames: ["tools/pyproject.toml", "tools/uv.lock"],
-      matchPackageNames: ["toolr-py"],
+      // We dogfood our own releases in three places, and all three should
+      // move together the moment a new version publishes:
+      //   1. `tools/pyproject.toml` / `tools/uv.lock` — the `toolr-py`
+      //      floor driving the dogfood venv (pep621 manager). Bare name
+      //      alone yields no update, hence the `>=` floor; the lock
+      //      silently drifted to 0.20.1 until 0.25.0 broke dispatch.
+      //      `update-lockfile` keeps the floor and bumps only the lock.
+      //   2. `mise.toml` — the `aqua:s0undt3ch/ToolR` pin driving the
+      //      local `toolr` binary used to run repo automation.
+      //   3. Any `uses: s0undt3ch/ToolR@…` pin in `.github/workflows/`,
+      //      if/when a workflow starts using our own GitHub Action.
+      // One groupName across all three managers means one PR, not one
+      // per file. Override the global weekly schedule so the bump lands
+      // on the next Renovate run after a release publishes (not the
+      // following Monday); `at any time` lifts the PR-timing gate,
+      // detection is still bounded by Renovate's own run cadence — repo
+      // config can't make that instant.
+      description: "Track our own toolr / toolr-py release everywhere ASAP",
+      groupName: "toolr release",
+      matchManagers: ["pep621", "mise", "github-actions"],
+      matchFileNames: [
+        "tools/pyproject.toml",
+        "tools/uv.lock",
+        "mise.toml",
+        ".github/workflows/**",
+        ".github/actions/**",
+        "action.yml",
+      ],
+      matchPackageNames: ["toolr-py", "aqua:s0undt3ch/ToolR", "s0undt3ch/ToolR"],
       rangeStrategy: "update-lockfile",
       schedule: ["at any time"],
+      // If a PR for this bump is already open and a *further* release
+      // lands before it's merged, force-update the existing PR to the
+      // newest version rather than leaving it stale behind the release.
+      recreateWhen: "always",
     },
   ],
 }
