@@ -50,7 +50,7 @@ consoles, which is sufficient. `which` is also untouched (see Non-goals).
 - No migration of that separate project in this design. That's a follow-up PR in its own repo once
   this ships in a released `toolr-py`.
 - No new third-party test dependency (`pytest-subprocess`, `pytest-mock`). `unittest.mock` is
-  stdlib; `RunMock` is a subclass of it, and the `chdir`/`prompt` doubles are plain `Mock`/`io`
+  stdlib; `RunMock` wraps a `Mock` instance, and the `chdir`/`prompt` doubles are plain `Mock`/`io`
   objects.
 
 ## Design
@@ -65,35 +65,75 @@ pattern as the existing private `_console_stderr`/`_console_stdout` fields on th
 _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = command.run
 ```
 
+Verified empirically: `msgspec.Struct` accepts a bare function as a field default (no special
+handling needed, unlike mutable defaults). New defaulted fields must be added after
+`default_no_output_timeout_secs` — `msgspec` raises `TypeError: Required field '…' cannot follow
+optional fields` if a defaulted field precedes a required one, same rule dataclasses enforce.
+
 `Context.run()` changes its one call site from `command.run(...)` to `self._run_impl(...)`. No
 other line in `run()` changes — the info-line logging and timeout-default resolution stay exactly
 as they are, so a mocked run still produces the same log output a real one would.
 
+`Context` is also declared in `crates/toolr-py/python/toolr/_context.pyi` — the stub needs the same
+three new fields (`_run_impl`, `_chdir_impl`, `_prompt_stream`, introduced below) or `mypy` sees the
+old signature and `make_context(run=...)` fails type-check even though it works at runtime.
+
 ### `toolr.testing.RunMock`
 
-A `unittest.mock.MagicMock` subclass in a new `crates/toolr-py/python/toolr/testing/_run_mock.py`:
+**Not** a `MagicMock` subclass — `unittest.mock`'s `__setattr__`/`__getattr__` overrides are heavily
+customized (attribute access auto-vivifies child mocks; a misspelled attribute call on the mock
+would silently return a fresh `Mock` instead of raising, directly undermining the "strict by default"
+goal), and storing a custom registry list alongside `MagicMock`'s own state invites fighting the
+base class's internals for no real benefit. Composition instead, in a new
+`crates/toolr-py/python/toolr/testing/_run_mock.py`:
 
-- **Call recording and configuration** — inherited from `MagicMock` as-is: `assert_called_with`,
-  `assert_any_call`, `call_args_list`, `reset_mock`, `side_effect`, `return_value` all work
-  unmodified.
-- **`capture_output` contract enforcement** — overrides `__call__`: resolves the return value via
-  the normal `MagicMock` machinery first, then — if the call's `capture_output` kwarg is not
-  truthy — forces the returned `CommandResult`'s `stdout`/`stderr` to `None` regardless of what was
-  configured. This matches the real `command.run`, which only opens capture files when
-  `capture_output=True` (confirmed in `crates/toolr-py/python/toolr/utils/command.py`), and closes
-  the footgun where a test configures a populated `stdout` but the code under test never actually
-  asked to capture it.
+```python
+class RunMock:
+    def __init__(self) -> None:
+        self._mock = Mock(name="RunMock")
+        self._registrations: list[tuple[tuple[str, ...], CommandResult, int | None]] = []
+
+    def register(self, *cmdline: str, stdout="", stderr="", returncode=0, occurrences=None) -> None:
+        ...
+
+    def __call__(self, cmdline, **kwargs):
+        result = self._mock(cmdline, **kwargs)  # records the call unconditionally
+        result = self._resolve(cmdline, kwargs, result)
+        if not kwargs.get("capture_output"):
+            result = msgspec.structs.replace(result, stdout=None, stderr=None)
+        return result
+
+    # explicit, fixed forwarding — not a blanket __getattr__, so a real typo raises AttributeError
+    assert_called_with = ...       # forwards to self._mock
+    assert_any_call = ...
+    assert_called_once_with = ...
+    call_args = ...                # property
+    call_args_list = ...           # property
+    call_count = ...               # property
+    reset_mock = ...
+```
+
+- **`capture_output` contract enforcement** — `CommandResult` is `frozen=True`, so `stdout`/`stderr`
+  can't be assigned after construction; forcing them to `None` means building a *replacement* via
+  `msgspec.structs.replace(result, stdout=None, stderr=None)`, not mutation. This matches the real
+  `command.run`, which only opens capture files when `capture_output=True` (confirmed in
+  `crates/toolr-py/python/toolr/utils/command.py`, and confirmed empirically that
+  `msgspec.structs.replace` works against a frozen struct) — the type annotation on
+  `CommandResult.stdout: IO[T]` is non-optional, so this is knowingly matching real behavior rather
+  than the declared type, same as the real runner already does.
 - **`.register(*cmdline, stdout="", stderr="", returncode=0, occurrences=None)`** — declarative
   sugar mirroring `pytest-subprocess`'s `fp.register(...)`. Internally appends
-  `(cmdline_prefix, CommandResult)` to an ordered list consulted by a `side_effect` installed on
-  first use. Matching is longest-leading-prefix, same semantics that existing `FakeRun`
-  already uses. `occurrences` limits how many times a registration may match (default: unlimited)
-  — once exhausted, later matching calls fall through to the next registration or to "unregistered."
-  A call that matches no registration raises `AssertionError` immediately (strict by default — no
-  silent `default=` fallback to mask a typo in the test), unless `side_effect`/`return_value` was
-  set directly on the mock instead of using `.register(...)`, in which case that takes precedence
-  and `.register(...)` must not be used on the same instance (mixing the two raises `TypeError` at
-  configuration time, not at call time).
+  `(cmdline_prefix, CommandResult, occurrences)` to an ordered list consulted on each call.
+  Matching is longest-leading-prefix, same semantics that existing `FakeRun` already uses.
+  `occurrences` limits how many times a registration may match (default: unlimited) — once
+  exhausted, later matching calls fall through to the next registration or to "unregistered." A
+  call that matches no registration, with no `side_effect`/`return_value` configured on the
+  underlying `Mock` either, raises `AssertionError` immediately (strict by default — no silent
+  `default=` fallback to mask a typo in the test).
+- **Assertions** go through the explicitly forwarded methods above (`run_mock.assert_called_with(...)`,
+  `run_mock.call_args_list`, etc.) — a fixed, documented surface, not everything `Mock` happens to
+  expose. Calling anything else on `run_mock` raises `AttributeError`, because there is no blanket
+  passthrough to silently catch a misspelled call.
 
 ### `toolr.testing.make_command_result`
 
@@ -157,8 +197,15 @@ ctx_for_test = make_context(repo_root, run=run_mock)
 
 my_command(ctx_for_test.ctx)  # calls ctx.run("git", "fetch")
 
-run_mock.assert_called_once_with(("git", "fetch"), stream_output=True, capture_output=False, ...)
+run_mock.assert_called_once_with(
+    ("git", "fetch"), stream_output=True, capture_output=False,
+    timeout_secs=None, no_output_timeout_secs=None,
+)
 ```
+
+(`Context.run` always forwards `timeout_secs=`/`no_output_timeout_secs=` to `_run_impl` — even when
+the caller passed neither, they arrive resolved to the `Context`'s configured defaults, `None` if
+unset. Any exact-call assertion has to spell out all four kwargs; there's no kwarg-subset shorthand.)
 
 `ctx.run("git", "fetch")` → `Context.run` logs the info line, resolves timeout defaults, calls
 `self._run_impl(("git", "fetch"), stream_output=..., capture_output=..., ...)` → `RunMock.__call__`
@@ -174,7 +221,7 @@ ctx_for_test = make_context(repo_root, chdir=chdir_mock, prompt_input="yes\n")
 
 my_command(ctx_for_test.ctx)  # calls `with ctx.chdir(some_path): ...` and `ctx.prompt("Continue?", bool)`
 
-chdir_mock.assert_called_once_with(some_path)
+chdir_mock.assert_any_call(some_path)  # not assert_called_once_with — chdir() also restores the cwd
 ```
 
 `ctx.chdir(some_path)` → `self._chdir_impl(some_path)` (`chdir_mock`, recording the call, doing
@@ -189,15 +236,23 @@ restore. `ctx.prompt("Continue?", bool)` → `self._prompt(..., stream=self._pro
 - `capture_output` not requested → `stdout`/`stderr` forced to `None` on the returned result,
   regardless of registration contents — same failure mode a real bug hitting the real runner would
   produce (`AttributeError`/`None`-access on the caller's side), not a false pass.
-- Mixing `.register(...)` with a directly-set `side_effect`/`return_value` on the same `RunMock`
-  instance → `TypeError` at configuration time (whichever is set second).
+- Mixing `.register(...)` with a directly-set `side_effect`/`return_value` on the underlying
+  `Mock` (`run_mock._mock.side_effect = ...`) → `TypeError` at `.register()`-call time if the
+  `Mock` already has one configured, and vice versa. Only one resolution strategy is active per
+  `RunMock` instance.
 - `chdir`'s restore-on-exit call still runs even when `_chdir_impl` is mocked, same as today's
   try/finally — a mocked `chdir` that raises on the restore call surfaces the same way a real
   `os.chdir` failure would (`self.error(...)` path taken if the *real* cwd stopped existing; with a
   mock this branch simply won't trigger unless the test configures the mock to simulate it).
-- Exhausting `_prompt_stream` (an answer read past what was provided) raises whatever `rich`'s
-  underlying `input()`/stream read raises today — unchanged, since the stream is real, just backed
-  by `io.StringIO` instead of a TTY.
+- **Exhausting `_prompt_stream` hangs, it does not raise, unless a `default` was passed to
+  `ctx.prompt(...)`.** `Console.input(stream=...)` calls `stream.readline()`; a plain
+  `io.StringIO`, once exhausted, returns `""` forever rather than raising. `rich`'s
+  `PromptBase.__call__` loops on `InvalidResponse` until it gets an answer, so a `Confirm`/`Prompt`
+  call with no `default` and an under-provisioned `prompt_input` spins forever — a test that
+  under-provides answers hangs the suite instead of failing it. To avoid this footgun,
+  `make_context`'s `prompt_input` wraps the given string/stream in a thin `io.StringIO` subclass
+  whose `readline()` raises `EOFError` once the underlying buffer is exhausted (mirroring real
+  stdin's EOF-on-closed-pipe behavior), so an under-provisioned test fails fast instead of hanging.
 
 ## Testing
 
@@ -220,12 +275,16 @@ Purely additive on the `toolr-py` side — no existing `Context` or `make_contex
 behavior. The separate project's three `_fakes.py` migrations are out of scope for this design
 (see Non-goals) and follow once a `toolr-py` release ships this.
 
+`toolr.testing.__all__` gains `RunMock` and `make_command_result` — a public-surface change, so per
+`CLAUDE.md`: queue a `UNRELEASED.md` entry, and run `cargo xtask build-skill-refs` (its `--check`
+form gates CI) since the public API skill-refs need regenerating.
+
 ## Risks
 
-- **`RunMock.__call__` overriding `MagicMock` semantics is a partial override** — if a future
-  `unittest.mock` version changes `MagicMock.__call__`'s internals in an incompatible way, the
-  subclass could drift. Low risk in practice (the override only wraps the return value after
-  delegating to `super().__call__`, it doesn't reimplement mock resolution).
+- **Composition over `MagicMock` subclassing avoids the sharpest footgun, but the fixed forwarding
+  list can go stale** — if a test needs a `Mock` method `RunMock` doesn't forward
+  (`assert_not_called`, say), it's a small addition to the explicit list, not a design change. Worth
+  a short spike (~10 lines) before the plan locks the exact forwarded surface.
 - **`.register(...)`'s longest-prefix matching can surprise** if two registrations have prefixes
   that are both valid leading subsequences of a call (e.g. `("git",)` and `("git", "fetch")`) —
   mitigated by picking the longest match deterministically and documenting it, same rule that
