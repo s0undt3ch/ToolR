@@ -528,6 +528,89 @@ def check_snippets(ctx):
     }
 
     #[test]
+    fn optional_list_keyword_resolves_to_repeated() {
+        // Regression for #435: `list[T] | None` was classified as
+        // `Optional` (single-value) by the syntactic pass, since it
+        // can't see through the `| None` union — only the post-resolution
+        // override in `resolve_arguments` catches it.
+        let src = r#"command_group("repro", "Repro")
+
+@command(group="repro")
+def go(ctx, items: list[str] | None = None):
+    """Repro."""
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.repro",
+            &bindings,
+            &EnumTable::default(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        assert_eq!(commands.len(), 1);
+        let items = &commands[0].arguments[0];
+        assert_eq!(items.name, "items");
+        assert_eq!(items.kind, crate::manifest::ArgumentKind::Repeated);
+        assert_eq!(
+            items.resolved_type,
+            Some(crate::parser::types::SupportedType::Optional(Box::new(
+                crate::parser::types::SupportedType::List(Box::new(
+                    crate::parser::types::SupportedType::Str
+                ))
+            )))
+        );
+    }
+
+    #[test]
+    fn optional_tuple_keyword_resolves_to_repeated() {
+        // Same fix as `optional_list_keyword_resolves_to_repeated`, for
+        // the other collection shape `is_list_like_annotation` accepts.
+        let src = r#"command_group("repro", "Repro")
+
+@command(group="repro")
+def go(ctx, pair: tuple[str, int] | None = None):
+    """Repro."""
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.repro",
+            &bindings,
+            &EnumTable::default(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        assert_eq!(commands.len(), 1);
+        let pair = &commands[0].arguments[0];
+        assert_eq!(pair.name, "pair");
+        assert_eq!(pair.kind, crate::manifest::ArgumentKind::Repeated);
+        assert_eq!(
+            pair.resolved_type,
+            Some(crate::parser::types::SupportedType::Optional(Box::new(
+                crate::parser::types::SupportedType::Tuple(vec![
+                    crate::parser::types::SupportedType::Str,
+                    crate::parser::types::SupportedType::Int,
+                ])
+            )))
+        );
+    }
+
+    #[test]
     fn legacy_decorator_rejects_positional_and_name_keyword() {
         let src = r#"group = command_group("ci", "CI")
 

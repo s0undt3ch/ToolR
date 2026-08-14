@@ -23,3 +23,10 @@ no scaffolding. Just write whatever should appear in the notes.
   The toolr binary already forwards SIGINT to the Python runner
   subprocess; the runner now catches the resulting `KeyboardInterrupt`
   and exits 130 cleanly instead of leaking it as an unhandled exception.
+- Fixed `list[T] | None` and `tuple[...] | None` keyword parameters
+  being classified as single-value flags instead of repeatable ones,
+  so `--items a` failed the runner's `array | null` type check and
+  `--items a --items b` was rejected by clap as a repeated single-value
+  flag. The syntactic classifier couldn't see through the `| None`
+  union; the type resolver already could, so the fix promotes the
+  argument's kind from the resolved type once it's known.

@@ -261,7 +261,7 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
         Some(SupportedType::Tuple(_))
     );
     if is_tuple {
-        return Some(Value::Array(extract_many(arg, matches)));
+        return extract_optional_many(arg, matches);
     }
     match arg.kind {
         ArgumentKind::Flag => {
@@ -279,9 +279,8 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
         ArgumentKind::Positional | ArgumentKind::Optional | ArgumentKind::OptionalPositional => {
             extract_scalar(arg, matches)
         }
-        ArgumentKind::Repeated | ArgumentKind::VarPositional => {
-            Some(Value::Array(extract_many(arg, matches)))
-        }
+        ArgumentKind::Repeated => extract_optional_many(arg, matches),
+        ArgumentKind::VarPositional => Some(Value::Array(extract_many(arg, matches))),
         ArgumentKind::FixedArity => {
             // Positional-style is always `required(true)`, so it's
             // always present when parsing succeeds — but keyword-style
@@ -296,6 +295,22 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
                 None
             }
         }
+    }
+}
+
+/// Multi-value extraction for `list[T] | None` / `tuple[...] | None`
+/// (kind `Repeated`, or `Tuple`'s early-return above). An omitted flag
+/// has no clap value to collect, but the wire value must stay absent
+/// too — so the Python function's own `= None` default runs — rather
+/// than sending `[]`, which would silently turn `None` into an empty
+/// collection (and, for a fixed-arity tuple, fail its own schema).
+fn extract_optional_many(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
+    if !matches.contains_id(arg.name.as_str())
+        && matches!(arg.resolved_type.as_ref(), Some(SupportedType::Optional(_)))
+    {
+        None
+    } else {
+        Some(Value::Array(extract_many(arg, matches)))
     }
 }
 
@@ -792,6 +807,44 @@ mod tests {
     }
 
     #[test]
+    fn build_spec_omits_optional_repeated_when_absent() {
+        // Regression for #435: `list[T] | None` is promoted to
+        // `Repeated`, but an omitted flag must stay absent from the
+        // wire spec (not `[]`) so the Python function's own `= None`
+        // default runs.
+        let cmd = cmd_with(vec![arg_of(
+            "items",
+            ArgumentKind::Repeated,
+            SupportedType::Optional(Box::new(SupportedType::List(Box::new(SupportedType::Str)))),
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("items").long("items").action(ArgAction::Append))
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(spec.args.get("items"), None);
+    }
+
+    #[test]
+    fn build_spec_extracts_optional_repeated_when_present() {
+        let cmd = cmd_with(vec![arg_of(
+            "items",
+            ArgumentKind::Repeated,
+            SupportedType::Optional(Box::new(SupportedType::List(Box::new(SupportedType::Str)))),
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("items").long("items").action(ArgAction::Append))
+            .get_matches_from(["test", "--items", "a", "--items", "b"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(
+            spec.args.get("items"),
+            Some(&Value::Array(vec![
+                Value::String("a".into()),
+                Value::String("b".into()),
+            ])),
+        );
+    }
+
+    #[test]
     fn build_spec_extracts_repeated_path_as_json_strings() {
         let cmd = cmd_with(vec![arg_of(
             "files",
@@ -840,6 +893,28 @@ mod tests {
                 Value::String("42".into()),
             ])),
         );
+    }
+
+    #[test]
+    fn build_spec_omits_optional_tuple_when_absent() {
+        // Regression for #435 (tuple half): `tuple[...] | None` resolves
+        // as `Optional(Tuple(_))`, which the `is_tuple` early-return
+        // above would otherwise route straight to `extract_many` and
+        // send `[]` for an omitted flag — failing the tuple's own
+        // fixed-arity schema instead of letting `= None` run.
+        let cmd = cmd_with(vec![arg_of(
+            "pair",
+            ArgumentKind::Repeated,
+            SupportedType::Optional(Box::new(SupportedType::Tuple(vec![
+                SupportedType::Str,
+                SupportedType::Int,
+            ]))),
+        )]);
+        let matches = clap::Command::new("test")
+            .arg(Arg::new("pair").long("pair").num_args(2))
+            .get_matches_from(["test"]);
+        let spec = build_spec(&cmd, &matches, Path::new("/repo"), &OutputOptions::default());
+        assert_eq!(spec.args.get("pair"), None);
     }
 
     #[test]
