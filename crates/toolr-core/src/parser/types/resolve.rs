@@ -137,6 +137,16 @@ fn resolve_one(
             // and module-level aliases.
             if is_count_type(&ty) {
                 arg.kind = ArgumentKind::Count;
+            } else if arg.kind == ArgumentKind::Optional && is_optional_list_or_tuple(&ty) {
+                // `list[T] | None` / `tuple[...] | None` (or
+                // `Annotated`/alias equivalents): the syntactic classifier
+                // can't see through the union, so it defaulted to a
+                // single-value `Optional` keyword. Promote it to
+                // `Repeated` now that the resolved type confirms the
+                // element is a list or tuple — matches how the bare
+                // (non-`Optional`) shape is already classified, and
+                // mirrors the `Count` override above.
+                arg.kind = ArgumentKind::Repeated;
             }
             arg.resolved_type = Some(ty);
         }
@@ -153,6 +163,10 @@ fn resolve_one(
 fn is_count_type(ty: &SupportedType) -> bool {
     matches!(ty, SupportedType::Count)
         || matches!(ty, SupportedType::Optional(inner) if matches!(inner.as_ref(), SupportedType::Count))
+}
+
+fn is_optional_list_or_tuple(ty: &SupportedType) -> bool {
+    matches!(ty, SupportedType::Optional(inner) if matches!(inner.as_ref(), SupportedType::List(_) | SupportedType::Tuple(_)))
 }
 
 fn follow_alias_for_path_constraints(
