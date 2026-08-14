@@ -275,9 +275,14 @@ Purely additive on the `toolr-py` side — no existing `Context` or `make_contex
 behavior. The separate project's three `_fakes.py` migrations are out of scope for this design
 (see Non-goals) and follow once a `toolr-py` release ships this.
 
-`toolr.testing.__all__` gains `RunMock` and `make_command_result` — a public-surface change, so per
-`CLAUDE.md`: queue a `UNRELEASED.md` entry, and run `cargo xtask build-skill-refs` (its `--check`
-form gates CI) since the public API skill-refs need regenerating.
+`toolr.testing.__all__` gains `RunMock` and `make_command_result` — queue a `UNRELEASED.md` entry
+per `CLAUDE.md`. `cargo xtask build-skill-refs` does **not** need re-running for this: its
+`authoring::commands` generator walks `toolr.__all__` (the top-level package) to build
+`skills/toolr-command-authoring/references/commands.md`, and `toolr.testing` isn't re-exported
+there — confirmed by reading `crates/xtask/src/build_skill_refs/authoring.rs` and
+`crates/toolr-py/python/toolr/__init__.py`. `skills/toolr-command-authoring/SKILL.md` does mention
+`make_context`/`CommandsTester` in hand-written prose (not generated) — worth a courtesy update to
+mention the new `run=`/`chdir=`/`prompt_input=` params, but it's not a CI gate.
 
 ## Risks
 
