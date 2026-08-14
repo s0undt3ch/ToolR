@@ -1722,15 +1722,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0271-dev16-2026-08-10" class="md-nav__link">
+  <a href="#0271-dev20-2026-08-14" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.27.1-dev16 - 2026-08-10
+        0.27.1-dev20 - 2026-08-14
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.27.1-dev16 - 2026-08-10">
+    <nav class="md-nav" aria-label="0.27.1-dev20 - 2026-08-14">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3730,15 +3730,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0271-dev16-2026-08-10" class="md-nav__link">
+  <a href="#0271-dev20-2026-08-14" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.27.1-dev16 - 2026-08-10
+        0.27.1-dev20 - 2026-08-14
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.27.1-dev16 - 2026-08-10">
+    <nav class="md-nav" aria-label="0.27.1-dev20 - 2026-08-14">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -5733,7 +5733,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0271-dev16-2026-08-10">0.27.1-dev16 - 2026-08-10<a class="headerlink" href="#0271-dev16-2026-08-10" title="Permanent link">&para;</a></h2>
+<h2 id="0271-dev20-2026-08-14">0.27.1-dev20 - 2026-08-14<a class="headerlink" href="#0271-dev20-2026-08-14" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Fixed the <code>tools/</code> dogfooding venv lagging its own <code>toolr-py</code> pin behind
@@ -5748,12 +5748,20 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
   The toolr binary already forwards SIGINT to the Python runner
   subprocess; the runner now catches the resulting <code>KeyboardInterrupt</code>
   and exits 130 cleanly instead of leaking it as an unhandled exception.</li>
+<li>Fixed <code>list[T] | None</code> and <code>tuple[...] | None</code> keyword parameters
+  being classified as single-value flags instead of repeatable ones,
+  so <code>--items a</code> failed the runner's <code>array | null</code> type check and
+  <code>--items a --items b</code> was rejected by clap as a repeated single-value
+  flag. The syntactic classifier couldn't see through the <code>| None</code>
+  union; the type resolver already could, so the fix promotes the
+  argument's kind from the resolved type once it's known.</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(ci)</em> Exempt toolr-py from the tools/ dependency cooldown (<a href="https://github.com/s0undt3ch/ToolR/commit/e8c807de5a52c455dfd1d0c8fc5299306108fe54"><code>e8c807d</code></a>)</li>
 <li><em>(runner)</em> Return exit code 130 on KeyboardInterrupt instead of a raw traceback (<a href="https://github.com/s0undt3ch/ToolR/commit/79525b9b364df2b47c30bcd7feeef85efa0028a4"><code>79525b9</code></a>)</li>
 <li><em>(mise)</em> Bump toolr binary pin to 0.27.0 to match tools/uv.lock's toolr-py (<a href="https://github.com/s0undt3ch/ToolR/commit/f527a8ebdd982089f6c3d4f2e8ac23a819802b40"><code>f527a8e</code></a>)</li>
+<li><em>(parser)</em> Classify list[T] | None and tuple[...] | None as repeatable (<a href="https://github.com/s0undt3ch/ToolR/commit/77a1276f9f5159e11cfa0bd0f0592568fce4dae1"><code>77a1276</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
