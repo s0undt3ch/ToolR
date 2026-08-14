@@ -695,34 +695,86 @@ git commit -m "feat(testing): add RunMock and make_command_result"
 
 ---
 
-### Task 5: Wire `run=`/`chdir=`/`prompt_input=` into `make_context`
+### Task 5: `ContextForTesting` + wire `run=`/`chdir=`/`prompt_input=` into `make_context`
+
+**This task's scope grew mid-plan** (see the spec's "Amendment (2026-08-14, mid-implementation)"
+section — read it before starting). `make_context` no longer returns a `ContextForTesting` wrapper;
+it returns a `ContextForTesting`, a `Context` subclass, directly. `CapturedOutput` and
+`ContextForTesting` are deleted, not deprecated. If a Task 1 commit already added a `run=` param to
+`make_context` using the old wrapper shape, and migrated `tests/context/test_core.py`/
+`tests/context/test_run.py` to call `make_context(..., run=...).ctx`/`.output`, **all of that is
+superseded here** — this task replaces it wholesale with the flat `ContextForTesting` shape. Check
+`git log -p -- crates/toolr-py/python/toolr/testing/_make_context.py` for what's actually there
+before writing new code, rather than assuming the file matches this plan's original Task 5 text.
 
 **Files:**
 
-- Modify: `crates/toolr-py/python/toolr/testing/_make_context.py`
-- Test: `tests/test_make_context.py`
+- Modify: `crates/toolr-py/python/toolr/testing/_make_context.py` (delete `CapturedOutput`/
+  `ContextForTesting`, add `ContextForTesting`, rewrite `make_context`)
+- Modify: `crates/toolr-py/python/toolr/testing/__init__.py` (replace the `CapturedOutput`/
+  `ContextForTesting` exports with `ContextForTesting`)
+- Test: `tests/test_make_context.py` (rewrite every test to the flat shape)
+- Test: `tests/context/test_core.py` (if Task 1 touched it — rewrite to the flat shape; if Task 1
+  didn't touch it, leave it alone, it's out of this task's concern otherwise)
+- Test: `tests/context/test_run.py` (same as above)
 
 **Interfaces:**
 
-- Consumes: `Context._run_impl`/`_chdir_impl`/`_prompt_stream` (Tasks 1–3), `RunMock`/
-  `make_command_result` (Task 4, used only in tests here — `make_context` itself accepts any
-  `Callable`/`Mock`, it doesn't import `RunMock`).
-- Produces: `make_context(repo_root, *, verbosity=..., default_timeout_secs=None,
-  default_no_output_timeout_secs=None, run=None, chdir=None, prompt_input=None) -> ContextForTesting`
-  (three new keyword-only params, all optional, all backward compatible).
+- Consumes: `Context._run_impl`/`_chdir_impl`/`_prompt_stream` (Tasks 1–3).
+- Produces: `class ContextForTesting(Context, frozen=True)` with `stdout`/`stderr` properties;
+  `make_context(repo_root, *, verbosity=..., default_timeout_secs=None,
+  default_no_output_timeout_secs=None, run=None, chdir=None, prompt_input=None) -> ContextForTesting`.
+  Task 6 consumes this shape directly (`ctx.run(...)`, `ctx.stdout`).
 - [ ] **Step 1: Write the failing tests**
 
-Add to `tests/test_make_context.py`:
+Rewrite `tests/test_make_context.py` in full to the flat shape (replace every existing test in the
+file — they currently use the `result.ctx`/`result.output.stdout` wrapper shape, which no longer
+exists):
 
 ```python
+"""Tests for `toolr.testing.make_context`."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from toolr.testing import make_context
+
+
+def test_make_context_sets_repo_root(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path)
+    assert ctx.repo_root == tmp_path
+
+
+def test_make_context_captures_stdout(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path)
+    ctx.print("hello, world")
+    assert "hello, world" in ctx.stdout
+
+
+def test_make_context_captures_stderr(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path)
+    ctx.error("something broke")
+    assert "something broke" in ctx.stderr
+
+
+def test_make_context_exit_raises_system_exit(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        ctx.exit(2, "bad input")
+    assert exc_info.value.code == 2
+
+
 def test_make_context_run_param_wires_into_ctx_run(tmp_path):
     from toolr.testing import RunMock
 
     run_mock = RunMock()
     run_mock.register("echo", "hi", stdout="hi\n")
 
-    result = make_context(tmp_path, run=run_mock)
-    output = result.ctx.run("echo", "hi", capture_output=True)
+    ctx = make_context(tmp_path, run=run_mock)
+    output = ctx.run("echo", "hi", capture_output=True)
 
     assert output.stdout.read() == "hi\n"
     run_mock.assert_called_once_with(
@@ -737,20 +789,20 @@ def test_make_context_run_param_wires_into_ctx_run(tmp_path):
 def test_make_context_run_param_omitted_uses_real_runner(tmp_path):
     from toolr.utils import command
 
-    result = make_context(tmp_path)
+    ctx = make_context(tmp_path)
 
-    assert result.ctx._run_impl is command.run
+    assert ctx._run_impl is command.run
 
 
 def test_make_context_chdir_param_wires_into_ctx_chdir(tmp_path):
     from unittest.mock import Mock
 
     chdir_mock = Mock()
-    result = make_context(tmp_path, chdir=chdir_mock)
+    ctx = make_context(tmp_path, chdir=chdir_mock)
     target = tmp_path / "somewhere"
     target.mkdir()
 
-    with result.ctx.chdir(target):
+    with ctx.chdir(target):
         pass
 
     chdir_mock.assert_any_call(target)
@@ -758,30 +810,46 @@ def test_make_context_chdir_param_wires_into_ctx_chdir(tmp_path):
 
 
 def test_make_context_prompt_input_param_feeds_a_canned_answer(tmp_path):
-    result = make_context(tmp_path, prompt_input="yes\n")
+    ctx = make_context(tmp_path, prompt_input="yes\n")
 
-    assert result.ctx.prompt("Continue?", bool) is True
+    assert ctx.prompt("Continue?", bool) is True
 
 
 def test_make_context_prompt_input_omitted_defaults_to_none(tmp_path):
-    result = make_context(tmp_path)
+    ctx = make_context(tmp_path)
 
-    assert result.ctx._prompt_stream is None
+    assert ctx._prompt_stream is None
 
 
 def test_make_context_prompt_input_exhaustion_raises_instead_of_hanging(tmp_path):
-    import pytest
-
-    result = make_context(tmp_path, prompt_input="")  # no answers provided
+    ctx = make_context(tmp_path, prompt_input="")  # no answers provided
 
     with pytest.raises(EOFError):
-        result.ctx.prompt("Continue?", bool)  # no `default=` — would hang on a plain StringIO
+        ctx.prompt("Continue?", bool)  # no `default=` — would hang on a plain StringIO
+
+
+def test_make_context_returns_a_context_subclass(tmp_path):
+    from toolr._context import Context
+
+    ctx = make_context(tmp_path)
+
+    assert isinstance(ctx, Context)
 ```
+
+Also update `tests/context/test_core.py` and `tests/context/test_run.py` the same way, **only if**
+a prior task's commits already call `make_context(...)` in those files — grep first
+(`grep -n "make_context" tests/context/test_core.py tests/context/test_run.py`) and rewrite every
+`result_ctx = make_context(...)` / `result_ctx.ctx` / `result_ctx.output` occurrence to the flat
+`ctx = make_context(...)` / `ctx` shape. If those files don't call `make_context` at all yet
+(construct `Context(...)` directly instead), leave them untouched — that's correct, unrelated to
+this task.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/test_make_context.py -k "run_param or chdir_param or prompt_input" -v`
-Expected: FAIL — `make_context()` doesn't accept `run=`/`chdir=`/`prompt_input=` yet.
+Run: `uv run pytest tests/test_make_context.py -v`
+Expected: FAIL — `make_context` doesn't return a `ContextForTesting` yet (or, if Task 1's `run=`
+addition is present, the old wrapper shape's `.ctx`/`.output` attributes don't exist on whatever
+this rewritten test file now expects).
 
 - [ ] **Step 3: Implement the EOF-on-exhaustion stream wrapper**
 
@@ -805,7 +873,32 @@ class _EOFOnExhaustionStringIO(io.StringIO):
         return line
 ```
 
-- [ ] **Step 4: Add the three new parameters to `make_context`**
+- [ ] **Step 4: Replace `CapturedOutput`/`ContextForTesting` with `ContextForTesting`**
+
+In `crates/toolr-py/python/toolr/testing/_make_context.py`, delete the `CapturedOutput` and
+`ContextForTesting` classes entirely. Add:
+
+```python
+class ContextForTesting(Context, frozen=True):
+    """A `Context` returned by `make_context`, with captured-output accessors.
+
+    Every `Context` method works unmodified (`run`, `print`, `chdir`, `prompt`, `exit`, …) —
+    this only adds `stdout`/`stderr` properties reading back what was written through the
+    captured consoles `make_context` wires up.
+    """
+
+    @property
+    def stdout(self) -> str:
+        """Everything written to `print`/`info` so far."""
+        return self._console_stdout.file.getvalue()
+
+    @property
+    def stderr(self) -> str:
+        """Everything written to `error`/`warn`/`debug` so far."""
+        return self._console_stderr.file.getvalue()
+```
+
+- [ ] **Step 5: Add the three new parameters and rewrite `make_context`'s body**
 
 Change `make_context`'s signature to:
 
@@ -826,14 +919,16 @@ Add the necessary imports (`Callable`, `TextIO`, `CommandResult` under `TYPE_CHE
 what's already imported under the existing `if TYPE_CHECKING:` block and extend it rather than
 duplicating).
 
-Update the docstring's `Args:` section with the three new parameters, following the existing
-docstring's style for the other params (each one gets a one-line description, matching this
-module's Google-style docstring conventions — see `docs/writing-commands/docstrings.md` if unsure).
+Update the docstring: change the `Returns:` section (a `ContextForTesting` now, not a
+`ContextForTesting`/captured-output pair), and add the three new params to `Args:`, following the
+existing docstring's one-line-per-param style (Google-style — see
+`docs/writing-commands/docstrings.md` if unsure).
 
-Where `Context(...)` is constructed, add the three new fields, only including each one when its
-corresponding parameter isn't `None` (so omitting a param keeps `Context`'s own default rather than
-explicitly passing `None` and overriding a non-`None` class default — this matters for `_run_impl`,
-whose default is `command.run`, not `None`):
+Where the return value is built, replace the old two-object construction
+(`Context(...)` + `ContextForTesting(ctx=ctx, output=CapturedOutput(...))`) with a single
+`ContextForTesting(...)` call, conditionally including the three new fields (so omitting a param keeps
+`Context`'s own default rather than explicitly passing `None` and overriding a non-`None` class
+default — this matters for `_run_impl`, whose default is `command.run`, not `None`):
 
 ```python
     context_kwargs: dict[str, object] = {}
@@ -846,7 +941,7 @@ whose default is `command.run`, not `None`):
             prompt_input = _EOFOnExhaustionStringIO(prompt_input)
         context_kwargs["_prompt_stream"] = prompt_input
 
-    ctx = Context(
+    return ContextForTesting(
         repo_root=repo_root,
         parser=parser,
         verbosity=verbosity,
@@ -858,21 +953,31 @@ whose default is `command.run`, not `None`):
     )
 ```
 
-(Adjust to match however the existing `Context(...)` construction call is actually laid out in this
-file — the point is: build `context_kwargs` conditionally, then splat it in, rather than always
-passing all three fields with `None`/default-shadowing values.)
+(Adjust to match however the existing `parser`/`console_stderr`/`console_stdout` construction is
+actually laid out in this file — that part is unaffected by this change, only the final return
+value's shape changes.)
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 6: Update the `toolr.testing` package exports**
 
-Run: `uv run pytest tests/test_make_context.py -v`
-Expected: PASS, including every pre-existing test in the file.
+In `crates/toolr-py/python/toolr/testing/__init__.py`, remove the `CapturedOutput` and
+`ContextForTesting` imports/`__all__` entries, add `ContextForTesting` in their place (alphabetical
+position in `__all__`, matching the existing sort order).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Run tests to verify they pass**
+
+Run: `uv run pytest tests/test_make_context.py tests/context/ -v`
+Expected: PASS, including every test in both locations (this also catches any leftover
+`.ctx`/`.output` reference Step 1 missed).
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add crates/toolr-py/python/toolr/testing/_make_context.py tests/test_make_context.py
-git commit -m "feat(testing): add run/chdir/prompt_input params to make_context"
+git add crates/toolr-py/python/toolr/testing/_make_context.py crates/toolr-py/python/toolr/testing/__init__.py tests/test_make_context.py tests/context/test_core.py tests/context/test_run.py
+git commit -m "feat(testing): make_context returns ContextForTesting directly, add run/chdir/prompt_input"
 ```
+
+(Drop `tests/context/test_core.py`/`tests/context/test_run.py` from the `git add` if this task
+didn't end up touching them — see Step 1's grep-first note.)
 
 ---
 

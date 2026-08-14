@@ -304,6 +304,62 @@ mention the new `run=`/`chdir=`/`prompt_input=` params, but it's not a CI gate.
   after release).
 - Mocking `Context.which` — no reported pain point; already testable via its existing `path=` kwarg.
 
+## Amendment (2026-08-14, mid-implementation): `ContextForTesting` replaces `ContextForTesting`
+
+During implementation (after Task 1 landed), the user rejected the pre-existing
+`make_context(...) -> ContextForTesting` wrapper shape (`result.ctx.run(...)`,
+`result.output.stdout`) as awkward, and — offered a non-breaking alternative alongside it —
+explicitly chose the breaking redesign instead: `make_context` returns a `Context` subclass
+directly, so `ctx = make_context(...)` and `ctx.run(...)`/`ctx.stdout` both work on the same
+object, no wrapper indirection.
+
+This breaks the stability guarantee this repo's own docs currently state (`docs/writing-commands/testing.md`
+§ Stability: "Same for `make_context`'s signature and the `ContextForTesting`/`CapturedOutput` shape
+it returns.") — accepted as a deliberate pre-1.0 breaking change, not an oversight.
+
+**Design:**
+
+```python
+class ContextForTesting(Context, frozen=True):
+    """A `Context` returned by `make_context`, with captured-output accessors."""
+
+    @property
+    def stdout(self) -> str:
+        """Everything written to `print`/`info` so far."""
+        return self._console_stdout.file.getvalue()
+
+    @property
+    def stderr(self) -> str:
+        """Everything written to `error`/`warn`/`debug` so far."""
+        return self._console_stderr.file.getvalue()
+```
+
+Verified empirically: a frozen `msgspec.Struct` subclass that adds only properties (no new fields)
+works exactly as expected — `isinstance(ContextForTesting(...), Context)` is `True`, all inherited
+methods (`run`, `print`, `error`, `chdir`, `prompt`, …) work unmodified, and `rich.console.Console.file`
+(the object the constructor was given as `file=`) is the same object back, so `.getvalue()` reads
+whatever was written through it, including with `stderr=True` and a custom `theme=`.
+
+`make_context`'s signature changes from `-> ContextForTesting` to `-> ContextForTesting`, and its body
+constructs `ContextForTesting(...)` directly instead of building a `Context` plus a separate
+`CapturedOutput`/`ContextForTesting` wrapper pair — those two classes are deleted, not deprecated.
+
+**Blast radius** (confirmed via repo-wide grep before this amendment was written): every caller of
+`.ctx`/`.output.stdout`/`.output.stderr` in this repo needs updating —
+`tests/test_make_context.py`, `tests/context/test_core.py`, `tests/context/test_run.py` (already
+migrated in Task 1's commits to the old `result_ctx.ctx` shape — those calls change again to the
+new flat shape), and `docs/writing-commands/testing.md`. `docs/reference/testing.md` is
+mkdocstrings-generated from docstrings, so it picks up the new class automatically — no manual
+edit needed there. `skills/toolr-command-authoring/SKILL.md` has a hand-written mention of
+`make_context`; a courtesy update is worthwhile but non-blocking (same as the plan's existing
+Out-of-scope note about that file).
+
+**Non-goal, still:** this amendment does not change `RunMock`, `make_command_result`, or the
+`_run_impl`/`_chdir_impl`/`_prompt_stream` seams on `Context` itself — those are unaffected by
+what `make_context` returns.
+
 ## Approval
 
-User approved the design via brainstorming session on 2026-08-14.
+User approved the design via brainstorming session on 2026-08-14. The `ContextForTesting` amendment
+above was approved directly by the user mid-implementation, the same day, in response to a
+concrete ergonomics complaint raised against Task 1's tests.
