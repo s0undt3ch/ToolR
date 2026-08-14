@@ -51,6 +51,10 @@ class Context(Struct, frozen=True):
     # Injectable subprocess runner. Defaults to the real `command.run`;
     # `toolr.testing.make_context(run=...)` overrides this for tests.
     _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = command.run
+    # Injectable cwd-changer. Defaults to the real `os.chdir`;
+    # `toolr.testing.make_context(chdir=...)` overrides this for tests
+    # that don't want to mutate the real test-process cwd.
+    _chdir_impl: Callable[[str | pathlib.Path], None] = os.chdir
 
     def prompt(
         self,
@@ -264,13 +268,13 @@ class Context(Struct, frozen=True):
         if isinstance(path, str):
             path = pathlib.Path(path)
         try:
-            os.chdir(path)
+            self._chdir_impl(path)
             yield path
         finally:
             if not cwd.exists():
                 self.error(f"Unable to change back to path {cwd}")
             else:
-                os.chdir(cwd)
+                self._chdir_impl(cwd)
 
     def which(
         self, name: str, mode: int = os.F_OK | os.X_OK, path: str | None = None

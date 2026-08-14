@@ -33,6 +33,10 @@ class Context(Struct, frozen=True):
     # Injectable subprocess runner. Defaults to the real `command.run`;
     # `toolr.testing.make_context(run=...)` overrides this for tests.
     _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = ...
+    # Injectable cwd-changer. Defaults to the real `os.chdir`;
+    # `toolr.testing.make_context(chdir=...)` overrides this for tests
+    # that don't want to mutate the real test-process cwd.
+    _chdir_impl: Callable[[str | Path], None] = ...
 
     # Boolean
     @overload
