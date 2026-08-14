@@ -1,8 +1,8 @@
-# Mockable `Context.run` for `toolr.testing`
+# Mockable `Context.run`/`chdir`/`prompt` for `toolr.testing`
 
 **Status:** Approved (2026-08-14)
-**Topic:** Give `toolr.testing.make_context` a real, first-class way to mock `ctx.run` so caller
-repos stop hand-rolling fake `Context`/`FakeRun` doubles.
+**Topic:** Give `toolr.testing.make_context` real, first-class ways to mock `ctx.run`, `ctx.chdir`,
+and `ctx.prompt` so caller repos stop hand-rolling fake `Context`/`FakeRun` doubles.
 
 ## Background
 
@@ -34,22 +34,24 @@ Two API shapes were considered and rejected before landing on this design:
 
 ## Goal
 
-Add an injection seam to the real `Context` so `ctx.run` can be replaced with a test double, and
-ship a canonical double in `toolr.testing` with `unittest.mock`-compatible ergonomics
-(`assert_called_with`, `call_args_list`, `side_effect`, `return_value`) plus a `pytest-subprocess`-
-style `.register(...)` for the common declarative case. Every other `Context` method
-(`print`/`info`/`warn`/`error`/`exit`/`prompt`/`chdir`/`which`) is untouched — this design only
-touches subprocess execution.
+Add injection seams to the real `Context` so `ctx.run`, `ctx.chdir`, and `ctx.prompt` can each be
+replaced with a test double, and ship canonical doubles in `toolr.testing` with `unittest.mock`-
+compatible ergonomics (`assert_called_with`, `call_args_list`, `side_effect`, `return_value`) — plus
+a `pytest-subprocess`-style `.register(...)` for `run`'s common declarative case. `print`/`debug`/
+`info`/`warn`/`error`/`exit` are untouched — `make_context` already routes those through captured
+consoles, which is sufficient. `which` is also untouched (see Non-goals).
 
 ## Non-goals
 
 - No change to `toolr.utils.command.run`'s real implementation or the Rust command runner.
-- No change to `Context.prompt`, `chdir`, or `which` — out of scope; `make_context` callers who need
-  those mocked continue to monkeypatch them directly, same as today.
+- No change to `Context.which` — it already takes an explicit `path=` kwarg, so a test simulates
+  "tool missing" or "tool found at X" by passing `path=str(tmp_path)` without any seam. Adding
+  `_which_impl` would solve a problem that doesn't exist.
 - No migration of that separate project in this design. That's a follow-up PR in its own repo once
   this ships in a released `toolr-py`.
 - No new third-party test dependency (`pytest-subprocess`, `pytest-mock`). `unittest.mock` is
-  stdlib; `RunMock` is a subclass of it.
+  stdlib; `RunMock` is a subclass of it, and the `chdir`/`prompt` doubles are plain `Mock`/`io`
+  objects.
 
 ## Design
 
@@ -106,11 +108,44 @@ Builds a genuine `CommandResult` with real `io.StringIO`/`io.BytesIO` streams (m
 type `stdout`/`stderr` are passed as). `.register(...)` calls this internally; it's also exported
 directly for tests that want to build a `side_effect`/`return_value` by hand.
 
-### `make_context(..., run: Callable | None = None)`
+### `Context._chdir_impl`
 
-New optional keyword on `toolr.testing.make_context`. When provided, passed straight through as the
-new `Context._run_impl` field. When omitted, `Context` uses its own default (`command.run`,
-today's behavior) — fully backward compatible, no existing caller needs to change.
+Same pattern, for the real-cwd-mutation problem: `chdir()` currently calls module-level `os.chdir`
+twice (enter and restore-on-exit) directly against the actual test process. A not-quite-
+exception-safe test leaves the pytest process's cwd wrong for whatever runs after it — a real
+test-isolation hazard, not a hypothetical one.
+
+```python
+_chdir_impl: Callable[[str | pathlib.Path], None] = os.chdir
+```
+
+Both call sites in `chdir()` change from `os.chdir(...)` to `self._chdir_impl(...)`. `make_context`
+gains `chdir: Callable | None = None`, passed through as `_chdir_impl`. A test passes a bare
+`unittest.mock.Mock()` and asserts `assert_called_once_with(expected_path)` — the real filesystem
+cwd never moves.
+
+### `Context._prompt_stream`
+
+`prompt()`'s private `_prompt()` implementation already accepts a `stream=` override built for
+exactly this — `klass.ask(..., stream=stream)` — but the public `prompt()` never forwards it, so
+`make_context` has no way to reach that existing seam.
+
+```python
+_prompt_stream: TextIO | None = None
+```
+
+`prompt()` changes its one call to `self._prompt(...)` to also pass `stream=self._prompt_stream`.
+`make_context` gains `prompt_input: str | TextIO | None = None`: a plain `str` is wrapped in
+`io.StringIO` (so a test can write `prompt_input="yes\n"` for the common single-answer case), a
+`TextIO` is passed through as-is (for multi-prompt sequences). Feeds real answers through the real
+`rich.prompt.Prompt`/`IntPrompt`/`FloatPrompt`/`Confirm` classes — no mocking of `rich` internals.
+
+### `make_context(..., run=None, chdir=None, prompt_input=None)`
+
+Three new optional keywords on `toolr.testing.make_context`, each independently optional and each
+passed straight through to the matching `Context` private field. Omitting any of them keeps that
+piece's real, current behavior (real subprocess runner / real `os.chdir` / real blocking stdin
+read) — fully backward compatible, no existing caller needs to change.
 
 ## Data flow
 
@@ -131,6 +166,22 @@ matches the registration, builds/returns the `CommandResult`, forcing `stdout`/`
 if `capture_output` wasn't requested. The test asserts either via `run_mock`'s standard `Mock` API
 or on the returned `CommandResult`/`ctx_for_test.output`.
 
+`chdir` and `prompt_input` follow the same shape:
+
+```python
+chdir_mock = Mock()
+ctx_for_test = make_context(repo_root, chdir=chdir_mock, prompt_input="yes\n")
+
+my_command(ctx_for_test.ctx)  # calls `with ctx.chdir(some_path): ...` and `ctx.prompt("Continue?", bool)`
+
+chdir_mock.assert_called_once_with(some_path)
+```
+
+`ctx.chdir(some_path)` → `self._chdir_impl(some_path)` (`chdir_mock`, recording the call, doing
+nothing to the real filesystem) → on context-manager exit, `self._chdir_impl(cwd)` again to
+restore. `ctx.prompt("Continue?", bool)` → `self._prompt(..., stream=self._prompt_stream)` →
+`Confirm.ask` reads `"yes\n"` from the wrapped `io.StringIO` exactly as it would read real stdin.
+
 ## Error handling
 
 - Unregistered call with no `side_effect`/`return_value` configured → `AssertionError` naming the
@@ -140,6 +191,13 @@ or on the returned `CommandResult`/`ctx_for_test.output`.
   produce (`AttributeError`/`None`-access on the caller's side), not a false pass.
 - Mixing `.register(...)` with a directly-set `side_effect`/`return_value` on the same `RunMock`
   instance → `TypeError` at configuration time (whichever is set second).
+- `chdir`'s restore-on-exit call still runs even when `_chdir_impl` is mocked, same as today's
+  try/finally — a mocked `chdir` that raises on the restore call surfaces the same way a real
+  `os.chdir` failure would (`self.error(...)` path taken if the *real* cwd stopped existing; with a
+  mock this branch simply won't trigger unless the test configures the mock to simulate it).
+- Exhausting `_prompt_stream` (an answer read past what was provided) raises whatever `rich`'s
+  underlying `input()`/stream read raises today — unchanged, since the stream is real, just backed
+  by `io.StringIO` instead of a TTY.
 
 ## Testing
 
@@ -148,9 +206,13 @@ or on the returned `CommandResult`/`ctx_for_test.output`.
   registration hit with `capture_output=False` and the unregistered-call error), and the
   register-vs-side_effect conflict.
 - New tests for `make_command_result`: fresh streams per call, str vs bytes dispatch.
-- Extend the existing `make_context` tests to cover the new `run=` param end-to-end (a fake command
-  function calling `ctx.run`, asserting the mock recorded it) and confirm the default path
-  (`run` omitted) is unchanged.
+- Extend the existing `make_context` tests to cover all three new params end-to-end, and confirm
+  each default path (param omitted) is unchanged:
+    - `run=` — a fake command function calling `ctx.run`, asserting the mock recorded it.
+    - `chdir=` — a command using `with ctx.chdir(...)`, asserting the mock recorded both the enter
+  and restore calls, and that the real process cwd never moved.
+    - `prompt_input=` — a command calling `ctx.prompt(...)` with each `expected_type`
+  (`str`/`int`/`float`/`bool`), asserting the fed answer comes back typed correctly.
 
 ## Migration considerations
 
@@ -174,7 +236,7 @@ behavior. The separate project's three `_fakes.py` migrations are out of scope f
 - Migrating that separate project's three `_fakes.py` files to import `RunMock`/
   `make_command_result` from `toolr.testing` and delete `FakeCtx` (separate PR, in its own repo,
   after release).
-- Mocking `Context.prompt`, `chdir`, or `which` — no reported pain point for these today.
+- Mocking `Context.which` — no reported pain point; already testable via its existing `path=` kwarg.
 
 ## Approval
 
