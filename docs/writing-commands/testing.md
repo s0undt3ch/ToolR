@@ -166,6 +166,12 @@ tempting — don't: `Context` is a frozen `msgspec.Struct`, and that assignment 
 --8<-- "tests/test_make_context.py:mock-prompt-example"
 ```
 
+`make_context` returns a `ContextForTesting` — a `Context` subclass — so `ctx.repo_root` is
+set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
+CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
+`run=`/`chdir=`/`prompt_input=` to `make_context` (see below). `ctx.stdout`/`ctx.stderr` capture
+everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
+
 ### Mocking `ctx.run`
 
 `make_context`'s `run` parameter replaces the real subprocess runner with a test double. Pass a
@@ -186,19 +192,18 @@ real filesystem, passes a bare `unittest.mock.Mock` as `chdir`:
 --8<-- "tests/test_make_context.py:mock-chdir-example"
 ```
 
-`make_context` returns a real `Context` (a `ContextForTesting` subclass) — `ctx.repo_root` is
-set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
-CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
-`run=`/`chdir=`/`prompt_input=` to `make_context` (see above). `ctx.stdout`/`ctx.stderr` capture
-everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
-
 ## Stability
 
 `toolr.testing.CommandsTester` and `toolr.testing.make_context` are part of toolr-py's public API
 and are tested in toolr's own suite. `CommandsTester`'s surface — the constructor, the
 context-manager protocol, `.discover()`, and `.collected_command_groups()` — is stable across the
 pre-1.0 series; any change is called out in the changelog. Same for `make_context`'s signature and
-the `ContextForTesting`/`CapturedOutput` shape it returns.
+the `ContextForTesting` it returns — a `Context` subclass, not a wrapper.
+
+`toolr.testing.RunMock` and `toolr.testing.make_command_result` are likewise part of toolr-py's
+public API and tested in toolr's own suite. `RunMock`'s `Mock`-style assertion surface and
+`make_command_result`'s signature are stable across the pre-1.0 series; any change is called out
+in the changelog.
 
 Internal attributes (`sys_path`, `sys_modules`, `command_group_patcher`, `cwd`) are implementation
 detail and may change without notice.

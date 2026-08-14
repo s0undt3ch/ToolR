@@ -35,3 +35,8 @@ no scaffolding. Just write whatever should appear in the notes.
   `Context.run`/`chdir`/`prompt` previously had no supported way to intercept them without
   monkeypatching internals; each now reads from an injectable, defaulted field
   (`_run_impl`/`_chdir_impl`/`_prompt_stream`) that `make_context` can override.
+- **Breaking:** `make_context` now returns a `ContextForTesting` — a real `Context` subclass —
+  instead of the old `ContextForTesting(ctx=, output=)` wrapper pair. The wrapper's `.ctx` and
+  `.output` attributes, and the `CapturedOutput` class it used, are gone. Update call sites:
+  `result.ctx.run(...)` becomes `ctx.run(...)`, and `result.output.stdout` becomes `ctx.stdout`
+  (same for `.stderr`).
