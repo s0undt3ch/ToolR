@@ -8,6 +8,7 @@ import os
 import pathlib
 import shutil
 from argparse import ArgumentParser
+from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -47,6 +48,9 @@ class Context(Struct, frozen=True):
     # means "no default — don't apply a watchdog."
     default_timeout_secs: float | None = None
     default_no_output_timeout_secs: float | None = None
+    # Injectable subprocess runner. Defaults to the real `command.run`;
+    # `toolr.testing.make_context(run=...)` overrides this for tests.
+    _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = command.run
 
     def prompt(
         self,
@@ -229,7 +233,7 @@ class Context(Struct, frozen=True):
             timeout_secs = self.default_timeout_secs
         if no_output_timeout_secs is None:
             no_output_timeout_secs = self.default_no_output_timeout_secs
-        return command.run(
+        return self._run_impl(
             cmdline,
             stream_output=stream_output,
             capture_output=capture_output,

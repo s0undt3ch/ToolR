@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from collections.abc import Callable
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,9 @@ class Context(Struct, frozen=True):
     # means "no default — don't apply a watchdog."
     default_timeout_secs: float | None = ...
     default_no_output_timeout_secs: float | None = ...
+    # Injectable subprocess runner. Defaults to the real `command.run`;
+    # `toolr.testing.make_context(run=...)` overrides this for tests.
+    _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = ...
 
     # Boolean
     @overload
