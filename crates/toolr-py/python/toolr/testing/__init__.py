@@ -17,10 +17,14 @@ from toolr.testing._discovery import CommandsTester
 from toolr.testing._make_context import CapturedOutput
 from toolr.testing._make_context import ContextForTesting
 from toolr.testing._make_context import make_context
+from toolr.testing._run_mock import RunMock
+from toolr.testing._run_mock import make_command_result
 
 __all__ = [
     "CapturedOutput",
     "CommandsTester",
     "ContextForTesting",
+    "RunMock",
+    "make_command_result",
     "make_context",
 ]
