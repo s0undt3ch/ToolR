@@ -91,7 +91,28 @@ class RunMock:
         # get "the" resolved value; this *is* it.
         recorded_result = self.mock(cmdline, **kwargs)
 
-        result = self._resolve(cmdline) if self._registrations else recorded_result
+        if self._registrations:
+            result = self._resolve(cmdline)
+        else:
+            result = recorded_result
+            # No `.register(...)` calls and nothing else configured on the
+            # underlying `Mock` — `recorded_result` is just a plain,
+            # auto-vivified `Mock`, not a `CommandResult`. Checking the
+            # actual return type (rather than trying to detect "was
+            # return_value explicitly set", which has no reliable sentinel —
+            # see the `.register(...)` guard above) is what lets us raise a
+            # clear, actionable error here instead of letting
+            # `msgspec.structs.replace` below fail with a confusing,
+            # off-topic `TypeError`.
+            if not isinstance(result, CommandResult):
+                msg = (
+                    "RunMock: no `.register(...)` calls configured, and `run_mock.mock` has no "
+                    "`side_effect`/`return_value` that returns a `CommandResult`. Either call "
+                    "`run_mock.register(...)`, or set `run_mock.mock.side_effect`/"
+                    "`run_mock.mock.return_value` to a `CommandResult` built with "
+                    "`make_command_result(...)`."
+                )
+                raise TypeError(msg)
 
         if not kwargs.get("capture_output"):
             result = msgspec.structs.replace(result, stdout=None, stderr=None)
