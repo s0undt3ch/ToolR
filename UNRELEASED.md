@@ -30,3 +30,8 @@ no scaffolding. Just write whatever should appear in the notes.
   flag. The syntactic classifier couldn't see through the `| None`
   union; the type resolver already could, so the fix promotes the
   argument's kind from the resolved type once it's known.
+- `toolr.testing.make_context` gained `run`/`chdir`/`prompt_input` parameters, and
+  `toolr.testing.RunMock`/`make_command_result` ship as canonical test doubles for `ctx.run`.
+  `Context.run`/`chdir`/`prompt` previously had no supported way to intercept them without
+  monkeypatching internals; each now reads from an injectable, defaulted field
+  (`_run_impl`/`_chdir_impl`/`_prompt_stream`) that `make_context` can override.
