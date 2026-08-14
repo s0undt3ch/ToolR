@@ -709,14 +709,17 @@ before writing new code, rather than assuming the file matches this plan's origi
 
 **Files:**
 
-- Modify: `crates/toolr-py/python/toolr/testing/_make_context.py` (delete `CapturedOutput`/
-  `ContextForTesting`, add `ContextForTesting`, rewrite `make_context`)
-- Modify: `crates/toolr-py/python/toolr/testing/__init__.py` (replace the `CapturedOutput`/
-  `ContextForTesting` exports with `ContextForTesting`)
+- Modify: `crates/toolr-py/python/toolr/testing/_make_context.py` (delete the existing
+  `CapturedOutput` and `ContextForTesting` classes — the old wrapper pair — and replace them with a
+  new `ContextForTesting` class that's a direct `Context` subclass; the name is reused, the shape
+  is not)
+- Modify: `crates/toolr-py/python/toolr/testing/__init__.py` (still exports `ContextForTesting`;
+  remove the `CapturedOutput` export, it no longer exists)
 - Test: `tests/test_make_context.py` (rewrite every test to the flat shape)
-- Test: `tests/context/test_core.py` (if Task 1 touched it — rewrite to the flat shape; if Task 1
-  didn't touch it, leave it alone, it's out of this task's concern otherwise)
-- Test: `tests/context/test_run.py` (same as above)
+- Test: `tests/context/test_core.py` (unconditionally: fix the dead `mock.patch` regression flagged
+  below, regardless of whether it also needs a `make_context` rewrite)
+- Test: `tests/context/test_run.py` (only if Task 1's commits already call `make_context(...)` here
+  using the old wrapper shape — rewrite to the flat shape if so; otherwise unaffected)
 
 **Interfaces:**
 
@@ -836,13 +839,23 @@ def test_make_context_returns_a_context_subclass(tmp_path):
     assert isinstance(ctx, Context)
 ```
 
-Also update `tests/context/test_core.py` and `tests/context/test_run.py` the same way, **only if**
-a prior task's commits already call `make_context(...)` in those files — grep first
-(`grep -n "make_context" tests/context/test_core.py tests/context/test_run.py`) and rewrite every
+If a prior task's commits already call `make_context(...)` in `tests/context/test_core.py` or
+`tests/context/test_run.py` — grep first
+(`grep -n "make_context" tests/context/test_core.py tests/context/test_run.py`) — rewrite every
 `result_ctx = make_context(...)` / `result_ctx.ctx` / `result_ctx.output` occurrence to the flat
-`ctx = make_context(...)` / `ctx` shape. If those files don't call `make_context` at all yet
-(construct `Context(...)` directly instead), leave them untouched — that's correct, unrelated to
-this task.
+`ctx = make_context(...)` / `ctx` shape. If neither file calls `make_context` (they construct
+`Context(...)` directly instead), that part's a no-op.
+
+**Separately, unconditionally required regardless of the above:** Task 1's review surfaced that
+`tests/context/test_core.py::test_run_basic` and `test_run_with_options` still use
+`mock.patch("toolr.utils.command.run", ...)`, which is a no-op against `Context._run_impl`'s
+class-bound default (same defect Task 1 fixed in `test_run.py` — patching the module attribute
+after the field's default already captured the function object at class-definition time doesn't
+change what an existing instance resolves to). Fix these the same way Task 1 fixed
+`test_run.py`: migrate to direct `Context(..., _run_impl=Mock(return_value=command_result))`
+construction (this doesn't need `make_context` at all — match whatever pattern Task 1 established
+in `test_run.py` for its equivalent tests). Do this even if the rest of `test_core.py` is otherwise
+untouched by this task.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -873,10 +886,12 @@ class _EOFOnExhaustionStringIO(io.StringIO):
         return line
 ```
 
-- [ ] **Step 4: Replace `CapturedOutput`/`ContextForTesting` with `ContextForTesting`**
+- [ ] **Step 4: Replace the old `CapturedOutput`/`ContextForTesting` wrapper pair with the new
+  `ContextForTesting` subclass**
 
-In `crates/toolr-py/python/toolr/testing/_make_context.py`, delete the `CapturedOutput` and
-`ContextForTesting` classes entirely. Add:
+In `crates/toolr-py/python/toolr/testing/_make_context.py`, delete the existing `CapturedOutput`
+class and the existing `ContextForTesting` class (the wrapper, holding `.ctx`/`.output`) entirely.
+Add a new class, reusing the same name for the replacement:
 
 ```python
 class ContextForTesting(Context, frozen=True):
@@ -919,10 +934,10 @@ Add the necessary imports (`Callable`, `TextIO`, `CommandResult` under `TYPE_CHE
 what's already imported under the existing `if TYPE_CHECKING:` block and extend it rather than
 duplicating).
 
-Update the docstring: change the `Returns:` section (a `ContextForTesting` now, not a
-`ContextForTesting`/captured-output pair), and add the three new params to `Args:`, following the
-existing docstring's one-line-per-param style (Google-style — see
-`docs/writing-commands/docstrings.md` if unsure).
+Update the docstring: change the `Returns:` section to describe the new `ContextForTesting`
+subclass directly (not the old `ContextForTesting`/`CapturedOutput` wrapper pair), and add the
+three new params to `Args:`, following the existing docstring's one-line-per-param style
+(Google-style — see `docs/writing-commands/docstrings.md` if unsure).
 
 Where the return value is built, replace the old two-object construction
 (`Context(...)` + `ContextForTesting(ctx=ctx, output=CapturedOutput(...))`) with a single
@@ -959,9 +974,9 @@ value's shape changes.)
 
 - [ ] **Step 6: Update the `toolr.testing` package exports**
 
-In `crates/toolr-py/python/toolr/testing/__init__.py`, remove the `CapturedOutput` and
-`ContextForTesting` imports/`__all__` entries, add `ContextForTesting` in their place (alphabetical
-position in `__all__`, matching the existing sort order).
+In `crates/toolr-py/python/toolr/testing/__init__.py`, remove the `CapturedOutput` import and
+`__all__` entry (it no longer exists). The `ContextForTesting` import/`__all__` entry stays — it's
+the same name, now importing the new class from Step 4 instead of the old wrapper.
 
 - [ ] **Step 7: Run tests to verify they pass**
 
@@ -986,20 +1001,21 @@ didn't end up touching them — see Step 1's grep-first note.)
 **Files:**
 
 - Modify: `docs/writing-commands/testing.md`
-- Modify: `tests/context/test_prompt.py` (add one more snippet-marked example test)
 - Modify: `tests/context/test_chdir.py` (add one more snippet-marked example test)
-- Modify: `tests/testing/test_run_mock.py` or `tests/test_make_context.py` (add one more
-  snippet-marked example test — use whichever already has a `make_context(run=...)` example from
-  Task 5 and add the marker there instead of duplicating)
+- Modify: `tests/context/test_prompt.py` (add one more snippet-marked example test)
+- Modify: `tests/test_make_context.py` (add snippet markers to the run/prompt_input examples
+  written in Task 5)
 
 **Interfaces:**
 
-- Consumes: `RunMock` (Task 4), `make_context(run=/chdir=/prompt_input=)` (Task 5).
+- Consumes: `RunMock` (Task 4), `ContextForTesting`/`make_context(run=/chdir=/prompt_input=)`
+  (Task 5).
 - Produces: nothing consumed by later tasks — this is the terminal doc-facing task.
-- [ ] **Step 1: Mark the existing Task 5 test as a doc snippet**
+- [ ] **Step 1: Mark the Task 5 `run=` test as a doc snippet**
 
 In `tests/test_make_context.py`, wrap `test_make_context_run_param_wires_into_ctx_run` (written in
-Task 5) with section markers, on their own comment lines immediately inside the function:
+Task 5, flat `ContextForTesting` shape) with section markers, on their own comment lines
+immediately inside the function:
 
 ```python
 def test_make_context_run_param_wires_into_ctx_run(tmp_path):
@@ -1009,8 +1025,8 @@ def test_make_context_run_param_wires_into_ctx_run(tmp_path):
     run_mock = RunMock()
     run_mock.register("echo", "hi", stdout="hi\n")
 
-    result = make_context(tmp_path, run=run_mock)
-    output = result.ctx.run("echo", "hi", capture_output=True)
+    ctx = make_context(tmp_path, run=run_mock)
+    output = ctx.run("echo", "hi", capture_output=True)
 
     assert output.stdout.read() == "hi\n"
     run_mock.assert_called_once_with(
@@ -1023,13 +1039,14 @@ def test_make_context_run_param_wires_into_ctx_run(tmp_path):
     # --8<-- [end:mock-run-example]
 ```
 
-- [ ] **Step 2: Mark the Task 5 chdir test as a doc snippet**
+- [ ] **Step 2: Mark the Task 5 `chdir=` test as a doc snippet**
 
 In `tests/test_make_context.py`, wrap `test_make_context_chdir_param_wires_into_ctx_chdir` the same
-way with `# --8<-- [start:mock-chdir-example]` / `# --8<-- [end:mock-chdir-example]` around its body
-(everything after the docstring/blank line, same pattern as Step 1).
+way with `# --8<-- [start:mock-chdir-example]` / `# --8<-- [end:mock-chdir-example]` around its
+body (everything after the function signature, same pattern as Step 1 — the flat `ctx =
+make_context(...)` / `ctx.chdir(...)` shape from Task 5, not `result.ctx`).
 
-- [ ] **Step 3: Mark the Task 5 prompt test as a doc snippet**
+- [ ] **Step 3: Mark the Task 5 `prompt_input=` test as a doc snippet**
 
 In `tests/test_make_context.py`, wrap `test_make_context_prompt_input_param_feeds_a_canned_answer`
 the same way with `# --8<-- [start:mock-prompt-example]` / `# --8<-- [end:mock-prompt-example]`.
@@ -1046,12 +1063,16 @@ In `docs/writing-commands/testing.md`, replace the existing broken example
 (`result.ctx.prompt = lambda *a, **k: False`) and the paragraph after it. Read the current file's
 "Calling a command directly" section first (`## Calling a command directly` heading through the
 following `## Stability` heading) to see exactly what to replace — the broken snippet is the
-`test_confirm_aborts_on_no` function inside the first ` ```python ` block in that section.
+`test_confirm_aborts_on_no` function inside the first ` ```python ` block in that section. Note
+that every other example in this section also uses the *old* `result = make_context(...)` /
+`result.ctx.run(...)` / `result.output.stdout` wrapper shape (pre-dating this plan) — Task 5
+deleted that shape, so every one of those examples needs updating to the flat
+`ctx = make_context(...)` / `ctx.run(...)` / `ctx.stdout` shape, not just the broken prompt one.
 
-Replace that whole function with a note plus the real, working replacement:
+Replace the whole section's code examples with a note plus the real, working replacements:
 
 ````markdown
-Prior to this, stubbing `ctx.prompt` by assigning a lambda directly onto `result.ctx.prompt` looked
+Prior to this, stubbing `ctx.prompt` by assigning a lambda directly onto `ctx.prompt` looked
 tempting — don't: `Context` is a frozen `msgspec.Struct`, and that assignment raises
 `AttributeError: immutable type: 'Context'`. Feed canned answers through `make_context`'s
 `prompt_input` parameter instead:
@@ -1081,7 +1102,14 @@ real filesystem, passes a bare `unittest.mock.Mock` as `chdir`:
 ```
 ````
 
-- [ ] **Step 6: Update the closing paragraph of that section**
+Also update the section's remaining plain (non-mocking) examples — the ones showing
+`hello(result.ctx, name="Pedro")` / `assert "hello, Pedro" in result.output.stdout` and the
+fixture-based variant — to the flat shape: `ctx = make_context(tmp_path)`, `hello(ctx,
+name="Pedro")`, `assert "hello, Pedro" in ctx.stdout`. Same for the `@pytest.fixture` example
+further down (it currently yields a `ContextForTesting` — still correct, just update the body that
+consumes it from `ctx.ctx`/`ctx.output.stdout` to the flat `ctx`/`ctx.stdout`).
+
+- [ ] **Step 6: Update the closing paragraph of the section**
 
 The paragraph immediately after the code examples currently reads (approximately):
 
@@ -1090,20 +1118,19 @@ The paragraph immediately after the code examples currently reads (approximately
 > `SystemExit` via a real `ArgumentParser`, exactly as it does under the CLI. `result.output.stdout`
 > / `result.output.stderr` capture everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
 
-Update the `ctx.run(...)` clause to describe the new capability instead of telling readers to
-monkeypatch it themselves:
+Replace it with:
 
-> `result.ctx` is a real `Context` — `ctx.repo_root` is set, `ctx.exit(...)` raises `SystemExit` via
-> a real `ArgumentParser`, exactly as it does under the CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt`
-> all run for real unless you pass `run=`/`chdir=`/`prompt_input=` to `make_context` (see above).
-> `result.output.stdout`/`result.output.stderr` capture everything written through
-> `ctx.print`/`ctx.info`/`ctx.error`/etc.
+> `make_context` returns a real `Context` (a `ContextForTesting` subclass) — `ctx.repo_root` is
+> set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
+> CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
+> `run=`/`chdir=`/`prompt_input=` to `make_context` (see above). `ctx.stdout`/`ctx.stderr` capture
+> everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
 
 - [ ] **Step 7: Build the docs to confirm the snippet includes resolve**
 
 Run: `uv run mkdocs build --strict`
-Expected: builds cleanly with no warnings about missing snippet sources (`pymdownx.snippets` errors
-loudly if a `--8<-- "path:label"` target doesn't exist or the label isn't found).
+Expected: builds cleanly with no warnings about missing snippet sources (`pymdownx.snippets`
+errors loudly if a `--8<-- "path:label"` target doesn't exist or the label isn't found).
 
 - [ ] **Step 8: Commit**
 

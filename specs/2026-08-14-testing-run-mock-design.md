@@ -304,14 +304,15 @@ mention the new `run=`/`chdir=`/`prompt_input=` params, but it's not a CI gate.
   after release).
 - Mocking `Context.which` — no reported pain point; already testable via its existing `path=` kwarg.
 
-## Amendment (2026-08-14, mid-implementation): `ContextForTesting` replaces `ContextForTesting`
+## Amendment (2026-08-14, mid-implementation): `ContextForTesting` becomes a `Context` subclass
 
 During implementation (after Task 1 landed), the user rejected the pre-existing
-`make_context(...) -> ContextForTesting` wrapper shape (`result.ctx.run(...)`,
+`make_context(...) -> ContextForTesting` **wrapper** shape (`result.ctx.run(...)`,
 `result.output.stdout`) as awkward, and — offered a non-breaking alternative alongside it —
-explicitly chose the breaking redesign instead: `make_context` returns a `Context` subclass
+explicitly chose the breaking redesign instead: `make_context` returns a `Context` **subclass**
 directly, so `ctx = make_context(...)` and `ctx.run(...)`/`ctx.stdout` both work on the same
-object, no wrapper indirection.
+object, no wrapper indirection. The class keeps the name `ContextForTesting` — same concept, new
+shape — rather than inventing a new name (see the naming note below on why).
 
 This breaks the stability guarantee this repo's own docs currently state (`docs/writing-commands/testing.md`
 § Stability: "Same for `make_context`'s signature and the `ContextForTesting`/`CapturedOutput` shape
@@ -340,19 +341,32 @@ methods (`run`, `print`, `error`, `chdir`, `prompt`, …) work unmodified, and `
 (the object the constructor was given as `file=`) is the same object back, so `.getvalue()` reads
 whatever was written through it, including with `stderr=True` and a custom `theme=`.
 
-`make_context`'s signature changes from `-> ContextForTesting` to `-> ContextForTesting`, and its body
-constructs `ContextForTesting(...)` directly instead of building a `Context` plus a separate
-`CapturedOutput`/`ContextForTesting` wrapper pair — those two classes are deleted, not deprecated.
+**Naming:** the obvious alternative, `TestingContext`, was rejected — it matches pytest's default
+`python_classes = "Test*"` collection glob. Verified empirically that this specific case wouldn't
+actually trigger pytest's classic `PytestCollectionWarning` (a `msgspec.Struct` subclass's
+`__init__`/`__new__` compare equal to `object`'s at the Python level, unlike a plain class with a
+real `__init__`, so pytest's constructor-detection check doesn't fire) — but it's still a fragile,
+confusing name to carry in a pytest-based codebase, and a future pytest version could change that
+detection heuristic. Reusing `ContextForTesting` (the old wrapper's name) sidesteps the glob
+entirely (it doesn't start with `Test`) while keeping the established concept name.
+
+`make_context`'s signature changes from returning the old wrapper `ContextForTesting` (holding
+`.ctx`/`.output`) to returning the new subclass `ContextForTesting` (which *is* the `Context`,
+directly) — same name, replaced shape. Its body constructs the new `ContextForTesting(...)`
+directly instead of building a `Context` plus a separate `CapturedOutput` + old-shape
+`ContextForTesting` wrapper pair — the old `CapturedOutput` class and the old wrapper shape are
+deleted, not deprecated.
 
 **Blast radius** (confirmed via repo-wide grep before this amendment was written): every caller of
-`.ctx`/`.output.stdout`/`.output.stderr` in this repo needs updating —
-`tests/test_make_context.py`, `tests/context/test_core.py`, `tests/context/test_run.py` (already
-migrated in Task 1's commits to the old `result_ctx.ctx` shape — those calls change again to the
-new flat shape), and `docs/writing-commands/testing.md`. `docs/reference/testing.md` is
-mkdocstrings-generated from docstrings, so it picks up the new class automatically — no manual
-edit needed there. `skills/toolr-command-authoring/SKILL.md` has a hand-written mention of
-`make_context`; a courtesy update is worthwhile but non-blocking (same as the plan's existing
-Out-of-scope note about that file).
+`.ctx`/`.output.stdout`/`.output.stderr` in this repo needs updating — `tests/test_make_context.py`
+and `docs/writing-commands/testing.md`. `tests/context/test_core.py`/`tests/context/test_run.py`
+do not call `make_context` at all after Task 1's fix round (an earlier attempt to call it from
+`test_run.py` was reverted as scope creep, see the ledger) — they construct `Context(...)` directly
+and are unaffected by this amendment. `docs/reference/testing.md` is mkdocstrings-generated from
+docstrings, so it picks up the new class automatically — no manual edit needed there.
+`skills/toolr-command-authoring/SKILL.md` has a hand-written mention of `make_context`; a courtesy
+update is worthwhile but non-blocking (same as the plan's existing Out-of-scope note about that
+file).
 
 **Non-goal, still:** this amendment does not change `RunMock`, `make_command_result`, or the
 `_run_impl`/`_chdir_impl`/`_prompt_stream` seams on `Context` itself — those are unaffected by
