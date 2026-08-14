@@ -1001,10 +1001,9 @@ didn't end up touching them — see Step 1's grep-first note.)
 **Files:**
 
 - Modify: `docs/writing-commands/testing.md`
-- Modify: `tests/context/test_chdir.py` (add one more snippet-marked example test)
-- Modify: `tests/context/test_prompt.py` (add one more snippet-marked example test)
-- Modify: `tests/test_make_context.py` (add snippet markers to the run/prompt_input examples
-  written in Task 5)
+- Modify: `tests/test_make_context.py` (add snippet markers to the `run=`/`chdir=`/`prompt_input=`
+  examples written in Task 5 — no other test file needs touching; all three doc examples source
+  from tests already in this file)
 
 **Interfaces:**
 
