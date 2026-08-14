@@ -236,10 +236,12 @@ restore. `ctx.prompt("Continue?", bool)` → `self._prompt(..., stream=self._pro
 - `capture_output` not requested → `stdout`/`stderr` forced to `None` on the returned result,
   regardless of registration contents — same failure mode a real bug hitting the real runner would
   produce (`AttributeError`/`None`-access on the caller's side), not a false pass.
-- Mixing `.register(...)` with a directly-set `side_effect`/`return_value` on the underlying
-  `Mock` (`run_mock._mock.side_effect = ...`) → `TypeError` at `.register()`-call time if the
-  `Mock` already has one configured, and vice versa. Only one resolution strategy is active per
-  `RunMock` instance.
+- Mixing `.register(...)` with a directly-set `side_effect` on the underlying `Mock`
+  (`run_mock.mock.side_effect = ...`) → `TypeError` at `.register()`-call time if the `Mock`
+  already has a `side_effect` configured. (`return_value` isn't guarded the same way: a fresh
+  `Mock`'s `return_value` is itself a lazily auto-vivified child `Mock`, not a distinguishable
+  "unset" sentinel via the public API — registrations simply take priority over it whenever any
+  are present.)
 - `chdir`'s restore-on-exit call still runs even when `_chdir_impl` is mocked, same as today's
   try/finally — a mocked `chdir` that raises on the restore call surfaces the same way a real
   `os.chdir` failure would (`self.error(...)` path taken if the *real* cwd stopped existing; with a
