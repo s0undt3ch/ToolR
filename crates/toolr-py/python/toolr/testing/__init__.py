@@ -14,14 +14,12 @@ under pytest lives here too, registered via the `pytest11` entry point in
 from __future__ import annotations
 
 from toolr.testing._discovery import CommandsTester
-from toolr.testing._make_context import CapturedOutput
 from toolr.testing._make_context import ContextForTesting
 from toolr.testing._make_context import make_context
 from toolr.testing._run_mock import RunMock
 from toolr.testing._run_mock import make_command_result
 
 __all__ = [
-    "CapturedOutput",
     "CommandsTester",
     "ContextForTesting",
     "RunMock",

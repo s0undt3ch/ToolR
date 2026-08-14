@@ -11,8 +11,6 @@ import io
 from argparse import ArgumentParser
 from typing import TYPE_CHECKING
 
-from attrs import define
-from attrs import field
 from rich.console import Console
 
 from toolr._context import Context
@@ -20,39 +18,47 @@ from toolr.utils._console import TOOLR_THEME
 from toolr.utils._console import ConsoleVerbosity
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+    from typing import TextIO
+
+    from toolr.utils.command import CommandResult
 
 
-@define(slots=True, frozen=True)
-class CapturedOutput:
-    """The two in-memory buffers a `make_context`-built `Context` writes to."""
+class _EOFOnExhaustionStringIO(io.StringIO):
+    """Raises `EOFError` on `readline()` once exhausted, instead of returning `""` forever.
 
-    _stdout: io.StringIO
-    _stderr: io.StringIO
+    A plain `io.StringIO` returns `""` past its end, and `rich`'s prompt retry
+    loop treats that as "keep asking" rather than "no more input" unless a
+    `default` was set — an under-provisioned `prompt_input` in a test would
+    otherwise hang the test suite instead of failing it.
+    """
+
+    def readline(self, size: int = -1) -> str:  # type: ignore[override]
+        line = super().readline(size)
+        if line == "":
+            msg = "prompt_input exhausted — no more canned answers to read"
+            raise EOFError(msg)
+        return line
+
+
+class ContextForTesting(Context, frozen=True):
+    """A `Context` returned by `make_context`, with captured-output accessors.
+
+    Every `Context` method works unmodified (`run`, `print`, `chdir`, `prompt`, `exit`, …) —
+    this only adds `stdout`/`stderr` properties reading back what was written through the
+    captured consoles `make_context` wires up.
+    """
 
     @property
     def stdout(self) -> str:
-        """Everything written to `ctx.print`/`ctx.info` so far."""
-        return self._stdout.getvalue()
+        """Everything written to `print`/`info` so far."""
+        return self._console_stdout.file.getvalue()  # type: ignore[attr-defined]
 
     @property
     def stderr(self) -> str:
-        """Everything written to `ctx.error`/`ctx.warn`/`ctx.debug` so far."""
-        return self._stderr.getvalue()
-
-
-@define(slots=True, frozen=True)
-class ContextForTesting:
-    """A `Context` plus the buffers its consoles write to.
-
-    `ctx.exit(...)` still raises `SystemExit` (via the real `ArgumentParser`
-    it's built with) — assert on that with `pytest.raises(SystemExit)`.
-    `ctx.run(...)` runs the real subprocess runner; monkeypatch it yourself
-    if a test needs to intercept it.
-    """
-
-    ctx: Context
-    output: CapturedOutput = field()
+        """Everything written to `error`/`warn`/`debug` so far."""
+        return self._console_stderr.file.getvalue()  # type: ignore[attr-defined]
 
 
 def make_context(
@@ -61,6 +67,9 @@ def make_context(
     verbosity: ConsoleVerbosity = ConsoleVerbosity.NORMAL,
     default_timeout_secs: float | None = None,
     default_no_output_timeout_secs: float | None = None,
+    run: Callable[..., CommandResult[str] | CommandResult[bytes]] | None = None,
+    chdir: Callable[[str | Path], None] | None = None,
+    prompt_input: str | TextIO | None = None,
 ) -> ContextForTesting:
     """Build a `Context` usable in a unit test.
 
@@ -69,10 +78,18 @@ def make_context(
         verbosity: Value for `ctx.verbosity`.
         default_timeout_secs: Value for `ctx.default_timeout_secs`.
         default_no_output_timeout_secs: Value for `ctx.default_no_output_timeout_secs`.
+        run: Override for `ctx.run`'s underlying implementation. Omit to keep the real
+            subprocess runner.
+        chdir: Override for `ctx.chdir`'s underlying implementation. Omit to keep the real
+            `os.chdir`.
+        prompt_input: Canned answer(s) fed to `ctx.prompt`. A `str` is wrapped in a stream
+            that raises `EOFError` once exhausted (instead of hanging). Pass a `TextIO`
+            directly for finer control. Omit to keep `ctx.prompt`'s real stdin-reading
+            behavior.
 
     Returns:
-        A `ContextForTesting` bundling the `Context` and its captured
-        stdout/stderr text.
+        A `ContextForTesting` — a `Context` subclass with `stdout`/`stderr`
+        properties reading back what was written through its captured consoles.
     """
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
@@ -83,7 +100,18 @@ def make_context(
         file=stderr_buffer, stderr=True, force_terminal=False, theme=TOOLR_THEME
     )
     parser = ArgumentParser(prog="toolr-test", add_help=False)
-    ctx = Context(
+
+    context_kwargs: dict[str, object] = {}
+    if run is not None:
+        context_kwargs["_run_impl"] = run
+    if chdir is not None:
+        context_kwargs["_chdir_impl"] = chdir
+    if prompt_input is not None:
+        if isinstance(prompt_input, str):
+            prompt_input = _EOFOnExhaustionStringIO(prompt_input)
+        context_kwargs["_prompt_stream"] = prompt_input
+
+    return ContextForTesting(
         repo_root=repo_root,
         parser=parser,
         verbosity=verbosity,
@@ -91,5 +119,5 @@ def make_context(
         _console_stdout=console_stdout,
         default_timeout_secs=default_timeout_secs,
         default_no_output_timeout_secs=default_no_output_timeout_secs,
+        **context_kwargs,  # type: ignore[arg-type]
     )
-    return ContextForTesting(ctx=ctx, output=CapturedOutput(stdout_buffer, stderr_buffer))
