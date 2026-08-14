@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import io
 from argparse import ArgumentParser
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from attrs import define
@@ -22,8 +21,6 @@ from toolr.utils._console import ConsoleVerbosity
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from toolr.utils.command import CommandResult
 
 
 @define(slots=True, frozen=True)
@@ -64,7 +61,6 @@ def make_context(
     verbosity: ConsoleVerbosity = ConsoleVerbosity.NORMAL,
     default_timeout_secs: float | None = None,
     default_no_output_timeout_secs: float | None = None,
-    run: Callable[..., CommandResult[str] | CommandResult[bytes]] | None = None,
 ) -> ContextForTesting:
     """Build a `Context` usable in a unit test.
 
@@ -73,7 +69,6 @@ def make_context(
         verbosity: Value for `ctx.verbosity`.
         default_timeout_secs: Value for `ctx.default_timeout_secs`.
         default_no_output_timeout_secs: Value for `ctx.default_no_output_timeout_secs`.
-        run: Optional callable to inject as the subprocess runner (for testing).
 
     Returns:
         A `ContextForTesting` bundling the `Context` and its captured
@@ -88,16 +83,13 @@ def make_context(
         file=stderr_buffer, stderr=True, force_terminal=False, theme=TOOLR_THEME
     )
     parser = ArgumentParser(prog="toolr-test", add_help=False)
-    kwargs = {
-        "repo_root": repo_root,
-        "parser": parser,
-        "verbosity": verbosity,
-        "_console_stderr": console_stderr,
-        "_console_stdout": console_stdout,
-        "default_timeout_secs": default_timeout_secs,
-        "default_no_output_timeout_secs": default_no_output_timeout_secs,
-    }
-    if run is not None:
-        kwargs["_run_impl"] = run
-    ctx = Context(**kwargs)
+    ctx = Context(
+        repo_root=repo_root,
+        parser=parser,
+        verbosity=verbosity,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
+        default_timeout_secs=default_timeout_secs,
+        default_no_output_timeout_secs=default_no_output_timeout_secs,
+    )
     return ContextForTesting(ctx=ctx, output=CapturedOutput(stdout_buffer, stderr_buffer))

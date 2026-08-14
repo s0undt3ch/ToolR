@@ -5,11 +5,10 @@ from __future__ import annotations
 import os
 import pathlib
 import shutil
-from unittest.mock import Mock
+from unittest import mock
 
 import pytest
 
-from toolr.testing import make_context
 from toolr.utils.command import CommandResult
 
 
@@ -20,44 +19,44 @@ def test_context_frozen(ctx):
     assert "immutable type: 'Context'" in str(excinfo.value)
 
 
-def test_run_basic(tmp_path):
+def test_run_basic(ctx):
     """Test basic command execution."""
-    args = ("echo", "hello")
-    mock_run = Mock(return_value=CommandResult(args=args, stdout="output", stderr="", returncode=0))
-    result_ctx = make_context(tmp_path, run=mock_run)
-    result = result_ctx.ctx.run(*args)
-    mock_run.assert_called_once_with(
-        ("echo", "hello"),
-        stream_output=True,
-        capture_output=False,
-        timeout_secs=None,
-        no_output_timeout_secs=None,
-    )
-    assert result.stdout == "output"
-    assert result.returncode == 0
+    with mock.patch("toolr.utils.command.run") as mock_run:
+        args = ("echo", "hello")
+        mock_run.return_value = CommandResult(args=args, stdout="output", stderr="", returncode=0)
+        result = ctx.run(*args)
+        mock_run.assert_called_once_with(
+            ("echo", "hello"),
+            stream_output=True,
+            capture_output=False,
+            timeout_secs=None,
+            no_output_timeout_secs=None,
+        )
+        assert result.stdout == "output"
+        assert result.returncode == 0
 
 
-def test_run_with_options(tmp_path):
+def test_run_with_options(ctx):
     """Test command execution with various options."""
-    args = ("ls", "-l")
-    mock_run = Mock(return_value=CommandResult(args=args, stdout="", stderr="", returncode=0))
-    result_ctx = make_context(tmp_path, run=mock_run)
-    result_ctx.ctx.run(
-        *args,
-        stream_output=False,
-        capture_output=True,
-        timeout_secs=10,
-        no_output_timeout_secs=5,
-        custom_kwarg="value",
-    )
-    mock_run.assert_called_once_with(
-        ("ls", "-l"),
-        stream_output=False,
-        capture_output=True,
-        timeout_secs=10,
-        no_output_timeout_secs=5,
-        custom_kwarg="value",
-    )
+    with mock.patch("toolr.utils.command.run") as mock_run:
+        args = ("ls", "-l")
+        mock_run.return_value = CommandResult(args=args, stdout="", stderr="", returncode=0)
+        ctx.run(
+            *args,
+            stream_output=False,
+            capture_output=True,
+            timeout_secs=10,
+            no_output_timeout_secs=5,
+            custom_kwarg="value",
+        )
+        mock_run.assert_called_once_with(
+            ("ls", "-l"),
+            stream_output=False,
+            capture_output=True,
+            timeout_secs=10,
+            no_output_timeout_secs=5,
+            custom_kwarg="value",
+        )
 
 
 def test_chdir(ctx, temp_cwd, tmp_path):
