@@ -37,6 +37,10 @@ class Context(Struct, frozen=True):
     # `toolr.testing.make_context(chdir=...)` overrides this for tests
     # that don't want to mutate the real test-process cwd.
     _chdir_impl: Callable[[str | Path], None] = ...
+    # Injectable input stream for `prompt()`. Defaults to `None` (real
+    # stdin, via rich's own default); `toolr.testing.make_context(prompt_input=...)`
+    # overrides this for tests.
+    _prompt_stream: TextIO | None = ...
 
     # Boolean
     @overload
