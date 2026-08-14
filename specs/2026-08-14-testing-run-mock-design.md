@@ -12,8 +12,9 @@ repos stop hand-rolling fake `Context`/`FakeRun` doubles.
 subprocess runner — `Context.run()` calls the module-level `toolr.utils.command.run` directly, and
 its docstring tells callers to "monkeypatch it yourself if a test needs to intercept it."
 
-Three caller repos in `dashtastic` (`tools/db/tests/_fakes.py`, `tools/pw/tests/_fakes.py`,
-`tools/tests/env/_fakes.py`) each independently invented near-identical fixes: a `FakeRun` that
+A separate caller project has three toolr command groups (`tools/db/tests/_fakes.py`,
+`tools/pw/tests/_fakes.py`, `tools/tests/env/_fakes.py`) that each independently invented
+near-identical fixes: a `FakeRun` that
 records calls and resolves a canned `FakeResult` by matching a leading-argument prefix, plus a
 `FakeCtx` that duck-types the entire `Context` surface instead of using `make_context` at all
 (reintroducing exactly the drift risk `make_context` exists to avoid). The three copies have
@@ -21,7 +22,7 @@ already started to diverge in small ways.
 
 Two API shapes were considered and rejected before landing on this design:
 
-- **A bespoke `FakeRun`/`FakeResult` matcher** (canonicalizing dashtastic's existing code as-is) —
+- **A bespoke `FakeRun`/`FakeResult` matcher** (canonicalizing that project's existing code as-is) —
   rejected because it invents a one-off API (`.calls`, prefix-matched `responses` dict) instead of
   the call-assertion API most Python test authors already know (`unittest.mock`).
 - **`pytest-subprocess`** — rejected: it works by monkeypatching `subprocess.Popen`/`subprocess.run`
@@ -45,8 +46,8 @@ touches subprocess execution.
 - No change to `toolr.utils.command.run`'s real implementation or the Rust command runner.
 - No change to `Context.prompt`, `chdir`, or `which` — out of scope; `make_context` callers who need
   those mocked continue to monkeypatch them directly, same as today.
-- No dashtastic migration in this design. That's a follow-up PR in the dashtastic repo once this
-  ships in a released `toolr-py`.
+- No migration of that separate project in this design. That's a follow-up PR in its own repo once
+  this ships in a released `toolr-py`.
 - No new third-party test dependency (`pytest-subprocess`, `pytest-mock`). `unittest.mock` is
   stdlib; `RunMock` is a subclass of it.
 
@@ -83,7 +84,7 @@ A `unittest.mock.MagicMock` subclass in a new `crates/toolr-py/python/toolr/test
 - **`.register(*cmdline, stdout="", stderr="", returncode=0, occurrences=None)`** — declarative
   sugar mirroring `pytest-subprocess`'s `fp.register(...)`. Internally appends
   `(cmdline_prefix, CommandResult)` to an ordered list consulted by a `side_effect` installed on
-  first use. Matching is longest-leading-prefix, same semantics dashtastic's existing `FakeRun`
+  first use. Matching is longest-leading-prefix, same semantics that existing `FakeRun`
   already uses. `occurrences` limits how many times a registration may match (default: unlimited)
   — once exhausted, later matching calls fall through to the next registration or to "unregistered."
   A call that matches no registration raises `AssertionError` immediately (strict by default — no
@@ -154,8 +155,8 @@ or on the returned `CommandResult`/`ctx_for_test.output`.
 ## Migration considerations
 
 Purely additive on the `toolr-py` side — no existing `Context` or `make_context` caller changes
-behavior. `dashtastic`'s three `_fakes.py` migrations are out of scope for this design (see
-Non-goals) and follow once a `toolr-py` release ships this.
+behavior. The separate project's three `_fakes.py` migrations are out of scope for this design
+(see Non-goals) and follow once a `toolr-py` release ships this.
 
 ## Risks
 
@@ -165,13 +166,14 @@ Non-goals) and follow once a `toolr-py` release ships this.
   delegating to `super().__call__`, it doesn't reimplement mock resolution).
 - **`.register(...)`'s longest-prefix matching can surprise** if two registrations have prefixes
   that are both valid leading subsequences of a call (e.g. `("git",)` and `("git", "fetch")`) —
-  mitigated by picking the longest match deterministically and documenting it, same rule
-  dashtastic's existing `FakeRun` already established informally.
+  mitigated by picking the longest match deterministically and documenting it, same rule that
+  existing `FakeRun` already established informally.
 
 ## Out-of-scope follow-ups (not part of this work)
 
-- Migrating dashtastic's three `_fakes.py` files to import `RunMock`/`make_command_result` from
-  `toolr.testing` and delete `FakeCtx` (separate PR, in the dashtastic repo, after release).
+- Migrating that separate project's three `_fakes.py` files to import `RunMock`/
+  `make_command_result` from `toolr.testing` and delete `FakeCtx` (separate PR, in its own repo,
+  after release).
 - Mocking `Context.prompt`, `chdir`, or `which` — no reported pain point for these today.
 
 ## Approval
