@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
 from toolr._context import Context
-from toolr.testing import RunMock
 from toolr.testing import make_context
 from toolr.utils import command
+
+# `RunMock` and `Mock` are imported locally inside the `run=`/`chdir=` tests below rather than
+# here, so the `--8<--` doc snippets they carry are self-contained when included in
+# docs/writing-commands/testing.md.
 
 
 def test_make_context_sets_repo_root(tmp_path: Path) -> None:
@@ -38,6 +40,9 @@ def test_make_context_exit_raises_system_exit(tmp_path: Path) -> None:
 
 
 def test_make_context_run_param_wires_into_ctx_run(tmp_path):
+    # --8<-- [start:mock-run-example]
+    from toolr.testing import RunMock  # noqa: PLC0415 — keeps the doc snippet self-contained
+
     run_mock = RunMock()
     run_mock.register("echo", "hi", stdout="hi\n")
 
@@ -52,6 +57,7 @@ def test_make_context_run_param_wires_into_ctx_run(tmp_path):
         timeout_secs=None,
         no_output_timeout_secs=None,
     )
+    # --8<-- [end:mock-run-example]
 
 
 def test_make_context_run_param_omitted_uses_real_runner(tmp_path):
@@ -61,6 +67,9 @@ def test_make_context_run_param_omitted_uses_real_runner(tmp_path):
 
 
 def test_make_context_chdir_param_wires_into_ctx_chdir(tmp_path):
+    # --8<-- [start:mock-chdir-example]
+    from unittest.mock import Mock  # noqa: PLC0415 — keeps the doc snippet self-contained
+
     chdir_mock = Mock()
     ctx = make_context(tmp_path, chdir=chdir_mock)
     target = tmp_path / "somewhere"
@@ -71,12 +80,15 @@ def test_make_context_chdir_param_wires_into_ctx_chdir(tmp_path):
 
     chdir_mock.assert_any_call(target)
     assert chdir_mock.call_count == 2
+    # --8<-- [end:mock-chdir-example]
 
 
 def test_make_context_prompt_input_param_feeds_a_canned_answer(tmp_path):
+    # --8<-- [start:mock-prompt-example]
     ctx = make_context(tmp_path, prompt_input="y\n")
 
     assert ctx.prompt("Continue?", bool) is True
+    # --8<-- [end:mock-prompt-example]
 
 
 def test_make_context_prompt_input_omitted_defaults_to_none(tmp_path):
