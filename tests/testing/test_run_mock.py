@@ -143,3 +143,17 @@ def test_run_mock_escape_hatch_return_value_is_honored():
     result = run_mock(("anything",), capture_output=True)
 
     assert result.stdout.read() == "from return_value\n"
+
+
+def test_run_mock_escape_hatch_still_nulls_output_without_capture_output():
+    """The `capture_output` guard applies to the escape hatch too, not just
+    `.register(...)` — a manually-built `CommandResult` with populated
+    stdout/stderr still comes back with both forced to `None` if the call
+    itself didn't ask for `capture_output=True`, matching real `command.run`."""
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="from return_value\n")
+
+    result = run_mock(("anything",))
+
+    assert result.stdout is None
+    assert result.stderr is None

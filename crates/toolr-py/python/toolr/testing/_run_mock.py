@@ -126,6 +126,13 @@ class RunMock:
                 )
                 raise TypeError(msg)
 
+        # Applies uniformly to every path — `.register(...)` and the escape
+        # hatch (`.mock.side_effect`/`.mock.return_value`) alike. The real
+        # runner has no way to "opt out" of this either: it only ever
+        # captures output when asked, regardless of what a caller configured
+        # in advance. A manually-built `CommandResult` with populated
+        # `stdout`/`stderr` still comes back with both forced to `None` if
+        # the call itself didn't request `capture_output=True`.
         if not kwargs.get("capture_output"):
             result = msgspec.structs.replace(result, stdout=None, stderr=None)
         return result
