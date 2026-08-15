@@ -85,7 +85,12 @@ def make_context(
         prompt_input: Canned answer(s) fed to `ctx.prompt`. A `str` is wrapped in a stream
             that raises `EOFError` once exhausted (instead of hanging). Pass a `TextIO`
             directly for finer control. Omit to keep `ctx.prompt`'s real stdin-reading
-            behavior.
+            behavior. **Does not cover `ctx.prompt(..., password=True)`** — `getpass.getpass`
+            only uses its `stream` argument to *write* the prompt text, never to *read* the
+            answer (it always reads from `/dev/tty` or real `stdin`), so a password prompt
+            ignores this parameter entirely. Test password prompts by patching
+            `getpass.getpass` directly instead — see `tests/context/test_prompt.py::test_prompt_password`
+            for the established pattern.
 
     Returns:
         A `ContextForTesting` — a `Context` subclass with `stdout`/`stderr`

@@ -49,6 +49,15 @@ def test_run_mock_resolves_registration_by_longest_prefix():
     assert result.stdout.read() == "fetch-specific output\n"
 
 
+def test_run_mock_result_args_reflects_actual_invocation_not_registered_prefix():
+    run_mock = RunMock()
+    run_mock.register("git", stdout="ok\n")
+
+    result = run_mock(("git", "fetch", "--all"), capture_output=True)
+
+    assert result.args == ["git", "fetch", "--all"]
+
+
 def test_run_mock_forces_stdout_and_stderr_none_without_capture_output():
     run_mock = RunMock()
     run_mock.register("git", "fetch", stdout="up to date\n")

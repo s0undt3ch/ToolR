@@ -35,7 +35,7 @@ class _Registration:
     def __init__(
         self,
         prefix: tuple[str, ...],
-        make_result: Callable[[], CommandResult[str] | CommandResult[bytes]],
+        make_result: Callable[[tuple[str, ...]], CommandResult[str] | CommandResult[bytes]],
         occurrences: int | None,
     ) -> None:
         self.prefix = prefix
@@ -76,9 +76,14 @@ class RunMock:
             msg = "cannot mix RunMock.register(...) with a directly-configured side_effect"
             raise TypeError(msg)
 
-        def make_result() -> CommandResult[str] | CommandResult[bytes]:
+        def make_result(
+            invoked_cmdline: tuple[str, ...],
+        ) -> CommandResult[str] | CommandResult[bytes]:
+            # `args` reflects the actual invocation, not the registered
+            # prefix — matches the real `command.run`, which sets
+            # `args=list(args)` for whatever was actually run.
             return make_command_result(
-                args=list(cmdline), stdout=stdout, stderr=stderr, returncode=returncode
+                args=list(invoked_cmdline), stdout=stdout, stderr=stderr, returncode=returncode
             )
 
         self._registrations.append(_Registration(cmdline, make_result, occurrences))
@@ -132,7 +137,7 @@ class RunMock:
             raise AssertionError(msg)
         if best.occurrences is not None:
             best.occurrences -= 1
-        return best.make_result()
+        return best.make_result(cmdline)
 
     # Explicit, fixed forwarding to the underlying Mock — not a blanket
     # __getattr__, so a genuine typo raises AttributeError instead of
