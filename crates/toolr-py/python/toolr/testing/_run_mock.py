@@ -51,6 +51,13 @@ class RunMock:
     return this exact result" case; `side_effect`/`return_value` on the
     underlying `Mock` (accessible as `run_mock.mock`) are the escape hatch
     for anything `.register(...)` can't express.
+
+    `.register(...)` does not inspect or validate the real runner's
+    `text=`/`stream_output=` kwargs — it always builds `str`-backed
+    `stdout`/`stderr` streams (unless you pass `bytes` explicitly) and never
+    raises the real runner's `ValueError` for `stream_output=True` with
+    `text=False`. A test that exercises those specific combinations should
+    use `.mock.side_effect`/`.mock.return_value` directly instead.
     """
 
     def __init__(self) -> None:
@@ -126,6 +133,14 @@ class RunMock:
     def _resolve(self, cmdline: tuple[str, ...]) -> CommandResult[str] | CommandResult[bytes]:
         best: _Registration | None = None
         for reg in self._registrations:
+            # Longest prefix wins outright. Among *equal*-length prefixes,
+            # registration order acts as a priority list: the first one
+            # registered (with occurrences remaining) wins, and only once
+            # it's exhausted does resolution fall through to the next
+            # equal-length registration in the order they were added — this
+            # is what makes `occurrences=N` a meaningful "try this first,
+            # then fall back" tool. Re-registering the same prefix later
+            # does NOT override an earlier, not-yet-exhausted registration.
             if cmdline[: len(reg.prefix)] == reg.prefix and (
                 best is None or len(reg.prefix) > len(best.prefix)
             ):
@@ -165,5 +180,12 @@ class RunMock:
         return self.mock.call_count
 
     def reset_mock(self, *args: object, **kwargs: object) -> None:
+        """Clear the call log and all `.register(...)` entries.
+
+        Forwarded straight to `Mock.reset_mock`, so — matching that
+        method's own default — a `side_effect`/`return_value` configured
+        directly on `.mock` is *not* cleared unless you pass
+        `side_effect=True`/`return_value=True`, same as a plain `Mock`.
+        """
         self.mock.reset_mock(*args, **kwargs)
         self._registrations.clear()

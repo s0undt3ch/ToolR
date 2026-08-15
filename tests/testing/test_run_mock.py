@@ -88,6 +88,21 @@ def test_run_mock_occurrences_exhausts_then_raises():
     assert second.stdout.read() == "second\n"
 
 
+def test_run_mock_equal_length_prefixes_resolve_in_registration_order():
+    """Among equal-length prefixes, the first-registered one wins while it has
+    occurrences remaining — registering a second same-prefix entry later does
+    NOT override it; it only takes over once the first is exhausted."""
+    run_mock = RunMock()
+    run_mock.register("git", "status", stdout="first-registered\n")
+    run_mock.register("git", "status", stdout="second-registered\n")
+
+    first = run_mock(("git", "status"), capture_output=True)
+    second = run_mock(("git", "status"), capture_output=True)
+
+    assert first.stdout.read() == "first-registered\n"
+    assert second.stdout.read() == "first-registered\n"
+
+
 def test_run_mock_reset_mock_clears_registrations():
     """After `reset_mock()`, an unregistered call falls through to the plain
     `Mock` escape hatch instead of resolving against a stale registration —
