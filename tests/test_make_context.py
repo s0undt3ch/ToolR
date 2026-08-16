@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pytest
@@ -104,6 +105,16 @@ def test_make_context_prompt_input_omitted_defaults_to_none(tmp_path):
     ctx = make_context(tmp_path)
 
     assert ctx._prompt_stream is None
+
+
+def test_make_context_prompt_input_accepts_a_textio_directly(tmp_path):
+    """A `TextIO` passed directly (not a plain `str`) is used as-is, not wrapped in the
+    EOF-on-exhaustion helper — only `str` gets that treatment."""
+    stream = io.StringIO("y\n")
+    ctx = make_context(tmp_path, prompt_input=stream)
+
+    assert ctx._prompt_stream is stream
+    assert ctx.prompt("Continue?", bool) is True
 
 
 def test_make_context_prompt_input_exhaustion_raises_instead_of_hanging(tmp_path):

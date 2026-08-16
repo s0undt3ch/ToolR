@@ -152,3 +152,56 @@ def test_run_mock_reset_mock_clears_call_log():
     run_mock.reset_mock()
 
     assert run_mock.call_count == 0
+
+
+def test_run_mock_assert_called_with_checks_only_the_most_recent_call():
+    """`assert_called_with` looks at the *last* call only — unlike `assert_any_call`,
+    it must fail once a second, different call has happened."""
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="ok\n")
+
+    run_mock(("git", "status"), capture_output=True)
+    run_mock(("git", "fetch"), capture_output=True)
+
+    run_mock.assert_called_with(("git", "fetch"), capture_output=True)
+    with pytest.raises(AssertionError):
+        run_mock.assert_called_with(("git", "status"), capture_output=True)
+
+
+def test_run_mock_assert_any_call_matches_an_earlier_call():
+    """`assert_any_call` succeeds for a call that happened earlier, not just the last
+    one — the opposite case from `assert_called_with`, proving the two forwarders
+    aren't redundant with each other."""
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="ok\n")
+
+    run_mock(("git", "status"), capture_output=True)
+    run_mock(("git", "fetch"), capture_output=True)
+
+    run_mock.assert_any_call(("git", "status"), capture_output=True)
+    with pytest.raises(AssertionError):
+        run_mock.assert_any_call(("git", "push"), capture_output=True)
+
+
+def test_run_mock_call_args_is_the_most_recent_call():
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="ok\n")
+
+    run_mock(("git", "status"), capture_output=True)
+    run_mock(("git", "fetch"), capture_output=False)
+
+    assert run_mock.call_args.args == (("git", "fetch"),)
+    assert run_mock.call_args.kwargs == {"capture_output": False}
+
+
+def test_run_mock_call_args_list_records_every_call_in_order():
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="ok\n")
+
+    run_mock(("git", "status"), capture_output=True)
+    run_mock(("git", "fetch"), capture_output=False)
+
+    assert [call.args for call in run_mock.call_args_list] == [
+        (("git", "status"),),
+        (("git", "fetch"),),
+    ]
