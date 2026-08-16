@@ -30,16 +30,10 @@ class Context(Struct, frozen=True):
     # means "no default — don't apply a watchdog."
     default_timeout_secs: float | None = ...
     default_no_output_timeout_secs: float | None = ...
-    # Injectable subprocess runner. Defaults to the real `command.run`;
-    # `toolr.testing.make_context(run=...)` overrides this for tests.
+    # Frozen struct fields, not module globals, so tests can override real
+    # subprocess/filesystem/stdin behavior per-instance without monkeypatching.
     _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = ...
-    # Injectable cwd-changer. Defaults to the real `os.chdir`;
-    # `toolr.testing.make_context(chdir=...)` overrides this for tests
-    # that don't want to mutate the real test-process cwd.
     _chdir_impl: Callable[[str | Path], None] = ...
-    # Injectable input stream for `prompt()`. Defaults to `None` (real
-    # stdin, via rich's own default); `toolr.testing.make_context(prompt_input=...)`
-    # overrides this for tests.
     _prompt_stream: TextIO | None = ...
 
     # Boolean
