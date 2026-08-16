@@ -175,8 +175,9 @@ everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
 ### Mocking `ctx.run`
 
 `make_context`'s `run` parameter replaces the real subprocess runner with a test double. Pass a
-`toolr.testing.RunMock`, register the commands your code under test is expected to run, and assert
-on it with the standard `Mock`-style API:
+`toolr.testing.RunMock`, configure its `.mock.return_value`/`.mock.side_effect` with a
+`CommandResult` built via `make_command_result(...)` — the same `unittest.mock` idiom you already
+know — and assert on it with the standard `Mock`-style API:
 
 ```python
 --8<-- "tests/test_make_context.py:mock-run-example"
