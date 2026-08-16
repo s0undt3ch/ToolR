@@ -11,6 +11,7 @@ import io
 from argparse import ArgumentParser
 from typing import TYPE_CHECKING
 
+import msgspec
 from rich.console import Console
 
 from toolr._context import Context
@@ -59,6 +60,14 @@ class ContextForTesting(Context, frozen=True):
     def stderr(self) -> str:
         """Everything written to `error`/`warn`/`debug` so far."""
         return self._console_stderr.file.getvalue()  # type: ignore[attr-defined]
+
+    def replace(self, **changes: object) -> ContextForTesting:
+        """Build a copy with the given fields overridden — e.g. `ctx.replace(_run_impl=...)`.
+
+        A thin wrapper around `msgspec.structs.replace`, scoped to this
+        testing-only subclass rather than added to the real `Context`.
+        """
+        return msgspec.structs.replace(self, **changes)
 
 
 def make_context(

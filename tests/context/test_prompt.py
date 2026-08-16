@@ -5,10 +5,10 @@ from __future__ import annotations
 import io
 from unittest.mock import patch
 
-import msgspec
 import pytest
 
 from toolr._context import Context
+from toolr.testing import ContextForTesting
 
 
 def test_prompt_string_default(ctx: Context, capfd: pytest.CaptureFixture[str]):
@@ -210,9 +210,9 @@ def test_prompt_with_empty_choices(ctx: Context, capfd: pytest.CaptureFixture[st
     assert result is None
 
 
-def test_prompt_uses_prompt_stream_override(ctx: Context):
+def test_prompt_uses_prompt_stream_override(ctx: ContextForTesting):
     """Test that Context.prompt uses the _prompt_stream override."""
-    ctx = msgspec.structs.replace(ctx, _prompt_stream=io.StringIO("y\n"))
+    ctx = ctx.replace(_prompt_stream=io.StringIO("y\n"))
 
     assert ctx.prompt("Continue?", bool) is True
 

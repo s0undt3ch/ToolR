@@ -5,8 +5,6 @@ from __future__ import annotations
 import pathlib
 from unittest.mock import Mock
 
-import msgspec
-
 
 def test_chdir_uses_real_os_chdir_by_default(ctx, tmp_path):
     """The default path still really moves the process cwd (and restores it)."""
@@ -24,7 +22,7 @@ def test_chdir_uses_real_os_chdir_by_default(ctx, tmp_path):
 def test_chdir_uses_chdir_impl_override_without_touching_real_cwd(ctx, tmp_path):
     """Mocking _chdir_impl prevents real cwd changes."""
     chdir_impl = Mock()
-    ctx = msgspec.structs.replace(ctx, _chdir_impl=chdir_impl)
+    ctx = ctx.replace(_chdir_impl=chdir_impl)
     target = tmp_path / "somewhere"
     original_cwd = pathlib.Path.cwd()
 

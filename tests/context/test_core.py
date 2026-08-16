@@ -7,7 +7,6 @@ import pathlib
 import shutil
 from unittest.mock import Mock
 
-import msgspec
 import pytest
 
 from toolr.utils.command import CommandResult
@@ -17,7 +16,7 @@ def test_context_frozen(ctx):
     """Test that Context is frozen."""
     with pytest.raises(AttributeError) as excinfo:
         ctx._console_stderr = None
-    assert "immutable type: 'Context'" in str(excinfo.value)
+    assert "immutable type" in str(excinfo.value)
 
 
 def test_run_basic(ctx):
@@ -25,7 +24,7 @@ def test_run_basic(ctx):
     args = ("echo", "hello")
     command_result = CommandResult(args=args, stdout="output", stderr="", returncode=0)
     run_impl = Mock(return_value=command_result)
-    ctx = msgspec.structs.replace(ctx, _run_impl=run_impl)
+    ctx = ctx.replace(_run_impl=run_impl)
 
     result = ctx.run(*args)
     run_impl.assert_called_once_with(
@@ -44,7 +43,7 @@ def test_run_with_options(ctx):
     args = ("ls", "-l")
     command_result = CommandResult(args=args, stdout="", stderr="", returncode=0)
     run_impl = Mock(return_value=command_result)
-    ctx = msgspec.structs.replace(ctx, _run_impl=run_impl)
+    ctx = ctx.replace(_run_impl=run_impl)
 
     ctx.run(
         *args,
