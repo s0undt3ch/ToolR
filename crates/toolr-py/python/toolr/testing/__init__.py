@@ -2,9 +2,12 @@
 
 - `CommandsTester` — test command *discovery* (`@command_group`/`@command`
   registration) without spawning the real CLI. See `_discovery`.
-- `make_context` — build a real, usable `Context` to call an
-  `@command`-decorated function directly and assert on what it did. See
-  `_make_context`.
+- `make_context` — build a real, usable `ContextForTesting` (a `Context`
+  subclass) to call an `@command`-decorated function directly and assert
+  on what it did. See `_make_context`.
+- `RunMock`/`make_command_result` — a canonical `unittest.mock`-based
+  double for `ctx.run`, and a factory for building genuine `CommandResult`
+  objects to configure it with. See `_run_mock`.
 
 The pytest plugin (`_pytest_plugin`) that makes `import tools.*` resolve
 under pytest lives here too, registered via the `pytest11` entry point in

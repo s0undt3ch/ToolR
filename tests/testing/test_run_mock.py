@@ -81,6 +81,22 @@ def test_run_mock_return_value_still_nulls_output_without_capture_output():
     assert result.stderr is None
 
 
+def test_run_mock_return_value_stream_is_exhausted_on_second_call():
+    """`return_value` hands back the *same* `CommandResult` every call, so a
+    command that calls `ctx.run` more than once gets an empty stream on the
+    second and later calls — this is a real footgun to document, not a bug
+    to fix: it's how `Mock.return_value` has always worked. `side_effect` is
+    the safe choice for multi-call tests (see the next test)."""
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="hi\n")
+
+    first = run_mock(("a",), capture_output=True)
+    second = run_mock(("b",), capture_output=True)
+
+    assert first.stdout.read() == "hi\n"
+    assert second.stdout.read() == ""  # same object, already exhausted
+
+
 def test_run_mock_side_effect_dispatches_per_command():
     """A `side_effect` callable is the way to return different results for
     different commands — the standard `unittest.mock` idiom, not a bespoke

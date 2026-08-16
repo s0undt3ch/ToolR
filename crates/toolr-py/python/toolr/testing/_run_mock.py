@@ -55,6 +55,15 @@ class RunMock:
     `.mock.side_effect` to a `CommandResult` (build one with
     `make_command_result(...)`), or a callable/exception for `side_effect`.
 
+    `.mock.return_value` hands back the *same* `CommandResult` on every
+    call, and its `stdout`/`stderr` streams are read-once — a command
+    under test that calls `ctx.run` more than once gets an empty stream
+    on the second and later calls. Fine for a single-call test; for
+    anything that calls `ctx.run` repeatedly, use `.mock.side_effect`
+    instead — either a callable that builds a fresh `make_command_result(...)`
+    per call (optionally dispatching on the `cmdline` argument), or a list
+    of pre-built results for `Mock`'s own per-call-consumption behavior.
+
     Does not inspect or validate the real runner's `text=`/`stream_output=`
     kwargs — whatever `CommandResult` you configure comes back as-is (modulo
     the `capture_output` guard below). A test that exercises those specific
