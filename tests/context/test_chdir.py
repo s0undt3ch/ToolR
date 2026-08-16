@@ -5,22 +5,11 @@ from __future__ import annotations
 import pathlib
 from unittest.mock import Mock
 
-from toolr._context import Context
-from toolr.utils._console import Consoles
-from toolr.utils._console import ConsoleVerbosity
+import msgspec
 
 
-def test_chdir_uses_real_os_chdir_by_default(parser, repo_root, tmp_path):
+def test_chdir_uses_real_os_chdir_by_default(ctx, tmp_path):
     """The default path still really moves the process cwd (and restores it)."""
-    verbosity = ConsoleVerbosity.NORMAL
-    consoles = Consoles.setup_no_colors(verbosity)
-    ctx = Context(
-        repo_root=repo_root,
-        parser=parser,
-        verbosity=verbosity,
-        _console_stderr=consoles.stderr,
-        _console_stdout=consoles.stdout,
-    )
     target = tmp_path / "somewhere"
     target.mkdir()
     original_cwd = pathlib.Path.cwd()
@@ -32,19 +21,10 @@ def test_chdir_uses_real_os_chdir_by_default(parser, repo_root, tmp_path):
     assert pathlib.Path.cwd() == original_cwd
 
 
-def test_chdir_uses_chdir_impl_override_without_touching_real_cwd(parser, repo_root, tmp_path):
+def test_chdir_uses_chdir_impl_override_without_touching_real_cwd(ctx, tmp_path):
     """Mocking _chdir_impl prevents real cwd changes."""
     chdir_impl = Mock()
-    verbosity = ConsoleVerbosity.NORMAL
-    consoles = Consoles.setup_no_colors(verbosity)
-    ctx = Context(
-        repo_root=repo_root,
-        parser=parser,
-        verbosity=verbosity,
-        _console_stderr=consoles.stderr,
-        _console_stdout=consoles.stdout,
-        _chdir_impl=chdir_impl,
-    )
+    ctx = msgspec.structs.replace(ctx, _chdir_impl=chdir_impl)
     target = tmp_path / "somewhere"
     original_cwd = pathlib.Path.cwd()
 

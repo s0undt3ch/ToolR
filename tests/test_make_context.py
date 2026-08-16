@@ -41,8 +41,8 @@ def test_make_context_exit_raises_system_exit(tmp_path: Path) -> None:
 
 def test_make_context_run_param_wires_into_ctx_run(tmp_path):
     # --8<-- [start:mock-run-example]
-    from toolr.testing import RunMock  # noqa: PLC0415 — keeps the doc snippet self-contained
-    from toolr.testing import make_command_result  # noqa: PLC0415
+    from toolr.testing import RunMock
+    from toolr.testing import make_command_result
 
     run_mock = RunMock()
     run_mock.mock.return_value = make_command_result(stdout="hi\n")
@@ -69,7 +69,7 @@ def test_make_context_run_param_omitted_uses_real_runner(tmp_path):
 
 def test_make_context_chdir_param_wires_into_ctx_chdir(tmp_path):
     # --8<-- [start:mock-chdir-example]
-    from unittest.mock import Mock  # noqa: PLC0415 — keeps the doc snippet self-contained
+    from unittest.mock import Mock
 
     chdir_mock = Mock()
     ctx = make_context(tmp_path, chdir=chdir_mock)

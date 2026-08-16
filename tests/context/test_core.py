@@ -7,11 +7,9 @@ import pathlib
 import shutil
 from unittest.mock import Mock
 
+import msgspec
 import pytest
 
-from toolr._context import Context
-from toolr.utils._console import Consoles
-from toolr.utils._console import ConsoleVerbosity
 from toolr.utils.command import CommandResult
 
 
@@ -22,21 +20,12 @@ def test_context_frozen(ctx):
     assert "immutable type: 'Context'" in str(excinfo.value)
 
 
-def test_run_basic(parser, repo_root):
+def test_run_basic(ctx):
     """Test basic command execution."""
     args = ("echo", "hello")
     command_result = CommandResult(args=args, stdout="output", stderr="", returncode=0)
     run_impl = Mock(return_value=command_result)
-    verbosity = ConsoleVerbosity.NORMAL
-    consoles = Consoles.setup_no_colors(verbosity)
-    ctx = Context(
-        parser=parser,
-        repo_root=repo_root,
-        verbosity=verbosity,
-        _console_stderr=consoles.stderr,
-        _console_stdout=consoles.stdout,
-        _run_impl=run_impl,
-    )
+    ctx = msgspec.structs.replace(ctx, _run_impl=run_impl)
 
     result = ctx.run(*args)
     run_impl.assert_called_once_with(
@@ -50,21 +39,12 @@ def test_run_basic(parser, repo_root):
     assert result.returncode == 0
 
 
-def test_run_with_options(parser, repo_root):
+def test_run_with_options(ctx):
     """Test command execution with various options."""
     args = ("ls", "-l")
     command_result = CommandResult(args=args, stdout="", stderr="", returncode=0)
     run_impl = Mock(return_value=command_result)
-    verbosity = ConsoleVerbosity.NORMAL
-    consoles = Consoles.setup_no_colors(verbosity)
-    ctx = Context(
-        parser=parser,
-        repo_root=repo_root,
-        verbosity=verbosity,
-        _console_stderr=consoles.stderr,
-        _console_stdout=consoles.stdout,
-        _run_impl=run_impl,
-    )
+    ctx = msgspec.structs.replace(ctx, _run_impl=run_impl)
 
     ctx.run(
         *args,

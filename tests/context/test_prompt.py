@@ -5,11 +5,10 @@ from __future__ import annotations
 import io
 from unittest.mock import patch
 
+import msgspec
 import pytest
 
 from toolr._context import Context
-from toolr.utils._console import Consoles
-from toolr.utils._console import ConsoleVerbosity
 
 
 def test_prompt_string_default(ctx: Context, capfd: pytest.CaptureFixture[str]):
@@ -211,32 +210,13 @@ def test_prompt_with_empty_choices(ctx: Context, capfd: pytest.CaptureFixture[st
     assert result is None
 
 
-def test_prompt_uses_prompt_stream_override(repo_root, parser):
+def test_prompt_uses_prompt_stream_override(ctx: Context):
     """Test that Context.prompt uses the _prompt_stream override."""
-    verbosity = ConsoleVerbosity.NORMAL
-    consoles = Consoles.setup_no_colors(verbosity)
-    ctx = Context(
-        repo_root=repo_root,
-        parser=parser,
-        verbosity=verbosity,
-        _console_stderr=consoles.stderr,
-        _console_stdout=consoles.stdout,
-        _prompt_stream=io.StringIO("y\n"),
-    )
+    ctx = msgspec.structs.replace(ctx, _prompt_stream=io.StringIO("y\n"))
 
     assert ctx.prompt("Continue?", bool) is True
 
 
-def test_prompt_stream_defaults_to_none(repo_root, parser):
+def test_prompt_stream_defaults_to_none(ctx: Context):
     """Omitting `_prompt_stream` keeps today's real-stdin behavior."""
-    verbosity = ConsoleVerbosity.NORMAL
-    consoles = Consoles.setup_no_colors(verbosity)
-    ctx = Context(
-        repo_root=repo_root,
-        parser=parser,
-        verbosity=verbosity,
-        _console_stderr=consoles.stderr,
-        _console_stdout=consoles.stdout,
-    )
-
     assert ctx._prompt_stream is None
