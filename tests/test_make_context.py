@@ -92,6 +92,14 @@ def test_make_context_prompt_input_param_feeds_a_canned_answer(tmp_path):
     # --8<-- [end:mock-prompt-example]
 
 
+def test_make_context_prompt_input_feeds_an_abort_answer(tmp_path):
+    # --8<-- [start:mock-prompt-abort-example]
+    ctx = make_context(tmp_path, prompt_input="n\n")
+
+    assert ctx.prompt("Continue?", bool) is False
+    # --8<-- [end:mock-prompt-abort-example]
+
+
 def test_make_context_prompt_input_omitted_defaults_to_none(tmp_path):
     ctx = make_context(tmp_path)
 

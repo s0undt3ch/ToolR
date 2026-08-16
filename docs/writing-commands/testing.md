@@ -166,6 +166,12 @@ tempting — don't: `Context` is a frozen `msgspec.Struct`, and that assignment 
 --8<-- "tests/test_make_context.py:mock-prompt-example"
 ```
 
+Feed a "no" answer the same way to test the abort path of a confirm-style command:
+
+```python
+--8<-- "tests/test_make_context.py:mock-prompt-abort-example"
+```
+
 `make_context` returns a `ContextForTesting` — a `Context` subclass — so `ctx.repo_root` is
 set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
 CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
