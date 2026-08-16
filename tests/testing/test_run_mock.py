@@ -114,6 +114,20 @@ def test_run_mock_side_effect_raising_still_records_the_call():
     assert run_mock.call_count == 1
 
 
+def test_run_mock_assert_not_called_and_called():
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="ok\n")
+
+    assert run_mock.called is False
+    run_mock.assert_not_called()
+
+    run_mock(("git", "status"), capture_output=True)
+
+    assert run_mock.called is True
+    with pytest.raises(AssertionError):
+        run_mock.assert_not_called()
+
+
 def test_run_mock_reset_mock_clears_call_log():
     run_mock = RunMock()
     run_mock.mock.return_value = make_command_result(stdout="ok\n")

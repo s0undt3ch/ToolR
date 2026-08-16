@@ -44,7 +44,13 @@ def make_command_result(
 class RunMock:
     """Drop-in for `Context._run_impl`. Wraps a `Mock`, not a `MagicMock` subclass.
 
-    Standard `Mock` assertions are available via the forwarded methods below.
+    Forwards a fixed, explicit subset of `Mock`'s API — `assert_called_with`,
+    `assert_any_call`, `assert_called_once_with`, `assert_not_called`,
+    `call_args`, `call_args_list`, `call_count`, `called`, `reset_mock` —
+    not a blanket passthrough, so a call to anything else (including a
+    typo) raises `AttributeError` instead of silently succeeding. Reach
+    through to `.mock` directly for anything not in that list.
+
     Configure it like any other `Mock` — set `.mock.return_value` or
     `.mock.side_effect` to a `CommandResult` (build one with
     `make_command_result(...)`), or a callable/exception for `side_effect`.
@@ -104,6 +110,9 @@ class RunMock:
     def assert_called_once_with(self, *args: object, **kwargs: object) -> None:
         self.mock.assert_called_once_with(*args, **kwargs)
 
+    def assert_not_called(self) -> None:
+        self.mock.assert_not_called()
+
     @property
     def call_args(self) -> Any:  # mirrors unittest.mock's own untyped property
         return self.mock.call_args
@@ -115,6 +124,10 @@ class RunMock:
     @property
     def call_count(self) -> int:
         return self.mock.call_count
+
+    @property
+    def called(self) -> bool:
+        return self.mock.called
 
     def reset_mock(self, *, return_value: bool = False, side_effect: bool = False) -> None:
         """Clear the call log.
