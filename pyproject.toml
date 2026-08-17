@@ -159,6 +159,9 @@ ignore = [
 "tests/utils/**/*.py" = [
   "PLC0415", # `import` should be at the top-level of a file
 ]
+"tests/test_make_context.py" = [
+  "PLC0415", # local imports keep the `--8<--` doc snippets self-contained
+]
 "tests/support/coverage/*.py" = [
   "INP001",   # File `...` is part of an implicit namespace package. Add an `__init__.py`."
 ]

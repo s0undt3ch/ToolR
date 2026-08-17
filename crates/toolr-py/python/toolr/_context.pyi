@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from collections.abc import Callable
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,11 @@ class Context(Struct, frozen=True):
     # means "no default — don't apply a watchdog."
     default_timeout_secs: float | None = ...
     default_no_output_timeout_secs: float | None = ...
+    # Frozen struct fields, not module globals, so tests can override real
+    # subprocess/filesystem/stdin behavior per-instance without monkeypatching.
+    _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = ...
+    _chdir_impl: Callable[[str | Path], None] = ...
+    _prompt_stream: TextIO | None = ...
 
     # Boolean
     @overload

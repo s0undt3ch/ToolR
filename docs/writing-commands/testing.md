@@ -126,24 +126,15 @@ of an `@command`-decorated function — does it read `ctx.repo_root` correctly, 
 `toolr.testing.make_context`:
 
 ```python
-import pytest
-
 from toolr.testing import make_context
 
 from tools.example import hello
 
 
 def test_hello_prints_a_greeting(tmp_path):
-    result = make_context(tmp_path)
-    hello(result.ctx, name="Pedro")
-    assert "hello, Pedro" in result.output.stdout
-
-
-def test_confirm_aborts_on_no(tmp_path):
-    result = make_context(tmp_path)
-    result.ctx.prompt = lambda *a, **k: False  # stub the interactive prompt
-    with pytest.raises(SystemExit):
-        confirm(result.ctx)
+    ctx = make_context(tmp_path)
+    hello(ctx, name="Pedro")
+    assert "hello, Pedro" in ctx.stdout
 ```
 
 A function-scoped fixture wires the boilerplate once per test, the same way `commands_tester` does above:
@@ -162,14 +153,54 @@ def ctx(tmp_path: Path) -> Iterator[ContextForTesting]:
 
 
 def test_hello_prints_a_greeting(ctx: ContextForTesting) -> None:
-    hello(ctx.ctx, name="Pedro")
-    assert "hello, Pedro" in ctx.output.stdout
+    hello(ctx, name="Pedro")
+    assert "hello, Pedro" in ctx.stdout
 ```
 
-`result.ctx` is a real `Context` — `ctx.repo_root` is set, `ctx.run(...)` calls the real subprocess
-runner (monkeypatch it if a test needs to intercept it), and `ctx.exit(...)` raises `SystemExit` via
-a real `ArgumentParser`, exactly as it does under the CLI. `result.output.stdout` /
-`result.output.stderr` capture everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
+Prior to this, stubbing `ctx.prompt` by assigning a lambda directly onto `ctx.prompt` looked
+tempting — don't: `Context` is a frozen `msgspec.Struct`, and that assignment raises
+`AttributeError: immutable type: 'Context'`. Feed canned answers through `make_context`'s
+`prompt_input` parameter instead:
+
+```python
+--8<-- "tests/test_make_context.py:mock-prompt-example"
+```
+
+Feed a "no" answer the same way to test the abort path of a confirm-style command:
+
+```python
+--8<-- "tests/test_make_context.py:mock-prompt-abort-example"
+```
+
+`make_context` returns a `ContextForTesting` — a `Context` subclass — so `ctx.repo_root` is
+set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
+CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
+`run=`/`chdir=`/`prompt_input=` to `make_context` (see below). `ctx.stdout`/`ctx.stderr` capture
+everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
+
+### Mocking `ctx.run`
+
+`make_context`'s `run` parameter replaces the real subprocess runner with a test double. Pass a
+`toolr.testing.RunMock`, configure its `.mock.return_value`/`.mock.side_effect` with a
+`CommandResult` built via `make_command_result(...)` — the same `unittest.mock` idiom you already
+know — and assert on it with the standard `Mock`-style API. `return_value` hands back the *same*
+result (and its already-read stream) on every call, so it's only safe for a command that calls
+`ctx.run` once; for more than one call, use `side_effect` to mint a fresh
+`make_command_result(...)` each time:
+
+```python
+--8<-- "tests/test_make_context.py:mock-run-example"
+```
+
+### Mocking `ctx.chdir`
+
+`chdir()` calls the real `os.chdir` twice (enter and restore) by default — fine for most tests, but
+a test that wants to assert *which* directory a command tried to move into, without touching the
+real filesystem, passes a bare `unittest.mock.Mock` as `chdir`:
+
+```python
+--8<-- "tests/test_make_context.py:mock-chdir-example"
+```
 
 ## Stability
 
@@ -177,7 +208,12 @@ a real `ArgumentParser`, exactly as it does under the CLI. `result.output.stdout
 and are tested in toolr's own suite. `CommandsTester`'s surface — the constructor, the
 context-manager protocol, `.discover()`, and `.collected_command_groups()` — is stable across the
 pre-1.0 series; any change is called out in the changelog. Same for `make_context`'s signature and
-the `ContextForTesting`/`CapturedOutput` shape it returns.
+the `ContextForTesting` it returns — a `Context` subclass, not a wrapper.
+
+`toolr.testing.RunMock` and `toolr.testing.make_command_result` are likewise part of toolr-py's
+public API and tested in toolr's own suite. `RunMock`'s `Mock`-style assertion surface and
+`make_command_result`'s signature are stable across the pre-1.0 series; any change is called out
+in the changelog.
 
 Internal attributes (`sys_path`, `sys_modules`, `command_group_patcher`, `cwd`) are implementation
 detail and may change without notice.

@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from toolr._context import Context
+from toolr.testing import ContextForTesting
 
 
 def test_prompt_string_default(ctx: Context, capfd: pytest.CaptureFixture[str]):
@@ -207,3 +208,15 @@ def test_prompt_with_empty_choices(ctx: Context, capfd: pytest.CaptureFixture[st
     assert out == ""
     assert err == ""
     assert result is None
+
+
+def test_prompt_uses_prompt_stream_override(ctx: ContextForTesting):
+    """Test that Context.prompt uses the _prompt_stream override."""
+    ctx = ctx.replace(_prompt_stream=io.StringIO("y\n"))
+
+    assert ctx.prompt("Continue?", bool) is True
+
+
+def test_prompt_stream_defaults_to_none(ctx: Context):
+    """Omitting `_prompt_stream` keeps today's real-stdin behavior."""
+    assert ctx._prompt_stream is None

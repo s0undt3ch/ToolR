@@ -30,3 +30,19 @@ no scaffolding. Just write whatever should appear in the notes.
   flag. The syntactic classifier couldn't see through the `| None`
   union; the type resolver already could, so the fix promotes the
   argument's kind from the resolved type once it's known.
+- `toolr.testing.make_context` gained `run`/`chdir`/`prompt_input` parameters, and
+  `toolr.testing.RunMock`/`make_command_result` ship as canonical test doubles for `ctx.run`.
+  `Context.run`/`chdir`/`prompt` previously had no supported way to intercept them without
+  monkeypatching internals; each now reads from an injectable, defaulted field
+  (`_run_impl`/`_chdir_impl`/`_prompt_stream`) that `make_context` can override.
+  **Compatibility note:** if you were previously patching the module-level function directly
+  (`mock.patch("toolr.utils.command.run", ...)` or `monkeypatch.setattr(os, "chdir", ...)`)
+  around a `Context` you construct yourself, that patch now silently stops working — the field's
+  default is bound to the real function at class-definition time, before your patch runs. Pass
+  `_run_impl=`/`_chdir_impl=` explicitly at construction time instead (or use `make_context`'s
+  new `run=`/`chdir=` parameters).
+- **Breaking:** `make_context` now returns a `ContextForTesting` — a real `Context` subclass —
+  instead of the old `ContextForTesting(ctx=, output=)` wrapper pair. The wrapper's `.ctx` and
+  `.output` attributes, and the `CapturedOutput` class it used, are gone. Update call sites:
+  `result.ctx.run(...)` becomes `ctx.run(...)`, and `result.output.stdout` becomes `ctx.stdout`
+  (same for `.stderr`).

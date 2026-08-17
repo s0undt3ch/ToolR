@@ -8,6 +8,7 @@ import os
 import pathlib
 import shutil
 from argparse import ArgumentParser
+from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -47,6 +48,11 @@ class Context(Struct, frozen=True):
     # means "no default — don't apply a watchdog."
     default_timeout_secs: float | None = None
     default_no_output_timeout_secs: float | None = None
+    # Frozen struct fields, not module globals, so tests can override real
+    # subprocess/filesystem/stdin behavior per-instance without monkeypatching.
+    _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = command.run
+    _chdir_impl: Callable[[str | pathlib.Path], None] = os.chdir
+    _prompt_stream: TextIO | None = None
 
     def prompt(
         self,
@@ -76,6 +82,7 @@ class Context(Struct, frozen=True):
             default=default,
             show_default=show_default,
             show_choices=show_choices,
+            stream=self._prompt_stream,
         )
 
     def _prompt(
@@ -229,7 +236,7 @@ class Context(Struct, frozen=True):
             timeout_secs = self.default_timeout_secs
         if no_output_timeout_secs is None:
             no_output_timeout_secs = self.default_no_output_timeout_secs
-        return command.run(
+        return self._run_impl(
             cmdline,
             stream_output=stream_output,
             capture_output=capture_output,
@@ -260,13 +267,13 @@ class Context(Struct, frozen=True):
         if isinstance(path, str):
             path = pathlib.Path(path)
         try:
-            os.chdir(path)
+            self._chdir_impl(path)
             yield path
         finally:
             if not cwd.exists():
                 self.error(f"Unable to change back to path {cwd}")
             else:
-                os.chdir(cwd)
+                self._chdir_impl(cwd)
 
     def which(
         self, name: str, mode: int = os.F_OK | os.X_OK, path: str | None = None

@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 
 import pytest
 
-from toolr._context import Context
+from toolr.testing import ContextForTesting
 from toolr.utils._console import Consoles
 from toolr.utils._console import ConsoleVerbosity
 
@@ -39,9 +39,13 @@ def parser():
 
 @pytest.fixture
 def ctx(parser, repo_root):
+    """A real `ContextForTesting` (see `toolr.testing`), so tests get `.replace(...)` for
+    free. Built with real, non-StringIO consoles (this file's tests use `capfd`, not
+    `.stdout`/`.stderr`) — those two properties aren't usable on a fixture built this way.
+    """
     verbosity = ConsoleVerbosity.NORMAL
     consoles = Consoles.setup_no_colors(verbosity)
-    return Context(
+    return ContextForTesting(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
@@ -54,7 +58,7 @@ def ctx(parser, repo_root):
 def verbose_ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.VERBOSE
     consoles = Consoles.setup_no_colors(verbosity)
-    return Context(
+    return ContextForTesting(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
@@ -67,7 +71,7 @@ def verbose_ctx(parser, repo_root):
 def quiet_ctx(parser, repo_root):
     verbosity = ConsoleVerbosity.QUIET
     consoles = Consoles.setup_no_colors(verbosity)
-    return Context(
+    return ContextForTesting(
         parser=parser,
         repo_root=repo_root,
         verbosity=verbosity,
