@@ -6,6 +6,106 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.28.0 - 2026-08-17
+
+### Notes
+
+- Fixed the `tools/` dogfooding venv lagging its own `toolr-py` pin behind
+  the `toolr` binary CI builds from `main` HEAD for up to a week after
+  every schema-bumping release, breaking self-CI (`toolr ci
+  check-run-build`) for that whole window. The root `exclude-newer = "7
+  days"` dependency cooldown, inherited by `tools/`, is meant for
+  third-party releases; `toolr-py` is exempted from it specifically since
+  it ships from the same release as the binary that runs against it.
+- Fixed Ctrl-C during a running command printing a raw Python traceback
+  and exiting with an arbitrary code instead of the conventional 130.
+  The toolr binary already forwards SIGINT to the Python runner
+  subprocess; the runner now catches the resulting `KeyboardInterrupt`
+  and exits 130 cleanly instead of leaking it as an unhandled exception.
+- Fixed `list[T] | None` and `tuple[...] | None` keyword parameters
+  being classified as single-value flags instead of repeatable ones,
+  so `--items a` failed the runner's `array | null` type check and
+  `--items a --items b` was rejected by clap as a repeated single-value
+  flag. The syntactic classifier couldn't see through the `| None`
+  union; the type resolver already could, so the fix promotes the
+  argument's kind from the resolved type once it's known.
+- `toolr.testing.make_context` gained `run`/`chdir`/`prompt_input` parameters, and
+  `toolr.testing.RunMock`/`make_command_result` ship as canonical test doubles for `ctx.run`.
+  `Context.run`/`chdir`/`prompt` previously had no supported way to intercept them without
+  monkeypatching internals; each now reads from an injectable, defaulted field
+  (`_run_impl`/`_chdir_impl`/`_prompt_stream`) that `make_context` can override.
+  **Compatibility note:** if you were previously patching the module-level function directly
+  (`mock.patch("toolr.utils.command.run", ...)` or `monkeypatch.setattr(os, "chdir", ...)`)
+  around a `Context` you construct yourself, that patch now silently stops working — the field's
+  default is bound to the real function at class-definition time, before your patch runs. Pass
+  `_run_impl=`/`_chdir_impl=` explicitly at construction time instead (or use `make_context`'s
+  new `run=`/`chdir=` parameters).
+- **Breaking:** `make_context` now returns a `ContextForTesting` — a real `Context` subclass —
+  instead of the old `ContextForTesting(ctx=, output=)` wrapper pair. The wrapper's `.ctx` and
+  `.output` attributes, and the `CapturedOutput` class it used, are gone. Update call sites:
+  `result.ctx.run(...)` becomes `ctx.run(...)`, and `result.output.stdout` becomes `ctx.stdout`
+  (same for `.stderr`).
+
+### <!-- 0 -->🚀 Features
+
+- *(context)* Make Context.run's subprocess runner injectable ([`a34efe6`](https://github.com/s0undt3ch/ToolR/commit/a34efe680ec9783ba7642bae2ade2271b425081e))
+- *(context)* Make Context.chdir's os.chdir call injectable ([`d83b816`](https://github.com/s0undt3ch/ToolR/commit/d83b816486b07bdcb918631338b79cf8ee1d1e33))
+- *(context)* Make Context.prompt's input stream injectable ([`ef04889`](https://github.com/s0undt3ch/ToolR/commit/ef04889cac2f71f104f26a0977d04e92dd5aeece))
+- *(testing)* Add RunMock and make_command_result ([`9ec5d20`](https://github.com/s0undt3ch/ToolR/commit/9ec5d209c61a807b109b11b639f99cbe1e18d40d))
+- *(testing)* Make_context returns ContextForTesting directly, add run/chdir/prompt_input ([`3d91617`](https://github.com/s0undt3ch/ToolR/commit/3d916174e460fabbba9f06c52751860b25f0cfd4))
+- *(testing)* Forward assert_not_called/called, document the RunMock.register() removal ([`07717fb`](https://github.com/s0undt3ch/ToolR/commit/07717fb4fbfdee10af8a363818fc39bc72ed2da4))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(ci)* Exempt toolr-py from the tools/ dependency cooldown ([`e8c807d`](https://github.com/s0undt3ch/ToolR/commit/e8c807de5a52c455dfd1d0c8fc5299306108fe54))
+- *(runner)* Return exit code 130 on KeyboardInterrupt instead of a raw traceback ([`79525b9`](https://github.com/s0undt3ch/ToolR/commit/79525b9b364df2b47c30bcd7feeef85efa0028a4))
+- *(mise)* Bump toolr binary pin to 0.27.0 to match tools/uv.lock's toolr-py ([`f527a8e`](https://github.com/s0undt3ch/ToolR/commit/f527a8ebdd982089f6c3d4f2e8ac23a819802b40))
+- *(parser)* Classify list[T] | None and tuple[...] | None as repeatable ([`77a1276`](https://github.com/s0undt3ch/ToolR/commit/77a1276f9f5159e11cfa0bd0f0592568fce4dae1))
+- *(context)* Revert scope creep and fix remaining patching test ([`eaaabf9`](https://github.com/s0undt3ch/ToolR/commit/eaaabf9770bc51b20c1f123be6ed4dbc403b08f8))
+- *(testing)* Raise clear error on unconfigured RunMock, cover side_effect guard ([`d09156c`](https://github.com/s0undt3ch/ToolR/commit/d09156cfc8768e33cb50b026a6b9f3e42ebbbd54))
+- *(testing)* RunMock.args reflects actual invocation, document password-prompt limitation ([`4b330ad`](https://github.com/s0undt3ch/ToolR/commit/4b330ad79e0d8df542457aefc65461c6f73c1315))
+- *(testing)* Document capture_output applies to RunMock's escape hatch too ([`dbf98d2`](https://github.com/s0undt3ch/ToolR/commit/dbf98d214a2224276f6486b62b511b78e0f509ae))
+- *(precommit)* Point mypy hook at the real toolr-py source path ([`a30be71`](https://github.com/s0undt3ch/ToolR/commit/a30be71365e9a216023fae85297f21cb50109fc9))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(testing)* Drop RunMock.register(), fix mypy errors CI caught ([`6a12f4b`](https://github.com/s0undt3ch/ToolR/commit/6a12f4b38c066c2ee010f893cb8b422922936a1d))
+
+### <!-- 3 -->📚 Documentation
+
+- *(changelog)* Queue release note for KeyboardInterrupt exit-code fix ([`771c3cc`](https://github.com/s0undt3ch/ToolR/commit/771c3cc5eb2c00bfb072f5dee0fdead0e4240f73))
+- *(specs)* Design mockable Context.run for toolr.testing ([`e641d51`](https://github.com/s0undt3ch/ToolR/commit/e641d51239f4ad16acdfbe8c05e551db61cf2432))
+- *(specs)* De-identify caller project in run-mock design ([`f8187bf`](https://github.com/s0undt3ch/ToolR/commit/f8187bfa991e46afc31911c6293c8b1deda7f3b3))
+- *(specs)* Fold chdir and prompt mocking into run-mock design ([`d69fb54`](https://github.com/s0undt3ch/ToolR/commit/d69fb54a7bf2a5703bf209d9cb296e9acc1f09e8))
+- *(specs)* Fix frozen-struct mutation, MagicMock subclass risk, and stale examples ([`ab549b6`](https://github.com/s0undt3ch/ToolR/commit/ab549b6cac0766cd68587d23e8adb2abad7f6cc7))
+- *(specs)* Correct build-skill-refs claim in run-mock design ([`5057114`](https://github.com/s0undt3ch/ToolR/commit/5057114b07cc8968c511663130bf824d831d4d3a))
+- *(specs)* Write implementation plan for mockable run/chdir/prompt ([`6da53bd`](https://github.com/s0undt3ch/ToolR/commit/6da53bdfc68421f333050ec5001cff7973699373))
+- *(specs)* Replace ContextForTesting wrapper with a Context subclass ([`0c0f41e`](https://github.com/s0undt3ch/ToolR/commit/0c0f41e88a38f63458aa9a89031d1e933746efa4))
+- *(specs)* Fix ContextForTesting rename artifacts and update Task 6 doc examples ([`086e0c6`](https://github.com/s0undt3ch/ToolR/commit/086e0c68dd585aa22a53e3406ebbe08c4a597539))
+- *(specs)* Fix stale Task 6 file list (only tests/test_make_context.py needed) ([`8f43adb`](https://github.com/s0undt3ch/ToolR/commit/8f43adb6638a00836370a41061b7a20df281efad))
+- *(testing)* Fix broken ctx.prompt example, document run/chdir/prompt_input mocking ([`59c66d0`](https://github.com/s0undt3ch/ToolR/commit/59c66d0384f159855a70afdeb55c701e10fe3b7d))
+- *(changelog)* Queue release notes for mockable run/chdir/prompt ([`1069ba1`](https://github.com/s0undt3ch/ToolR/commit/1069ba1aee8426cd0feb4de1a7970822e00696d4))
+- *(testing)* Fix stability section, breaking-change note, and snippet indentation ([`2c4506f`](https://github.com/s0undt3ch/ToolR/commit/2c4506fb688bffeae63b45fc50544fe71d8caad7))
+- *(testing)* Clarify RunMock tie-break, reset_mock, and text/stream_output scope ([`7d641df`](https://github.com/s0undt3ch/ToolR/commit/7d641dfa34bfb9d4aabc3caaa5976f17137e2443))
+- *(testing)* Document capture_output applies to the escape hatch too ([`68953c2`](https://github.com/s0undt3ch/ToolR/commit/68953c21d996d1b7f875116b8d4a26962b2ede38))
+- *(specs)* Archive mockable run/chdir/prompt design and plan ([`09b371e`](https://github.com/s0undt3ch/ToolR/commit/09b371ea3078125b8db0712e50138a2282d9a8e2))
+- *(testing)* Document RunMock.return_value's single-use stream, sync module docstring ([`5f7aa8a`](https://github.com/s0undt3ch/ToolR/commit/5f7aa8a8897c1fe74cc7a95ca8bd93ed0b8b2e1f))
+- *(testing)* Add abort-path prompt example, warn about mock.patch(command.run) no-op ([`86d2eed`](https://github.com/s0undt3ch/ToolR/commit/86d2eed023bb147b75ab6e4b8e8f33cbf5a1e576))
+
+### <!-- 5 -->🎨 Styling
+
+- *(context)* Trim caller-referencing comments on the injectable seam fields ([`42b684d`](https://github.com/s0undt3ch/ToolR/commit/42b684d36f273f605303e55930f65e8c5b08c3cc))
+
+### <!-- 6 -->🧪 Testing
+
+- *(context)* Inject run impl instead of patching command.run ([`4d0028d`](https://github.com/s0undt3ch/ToolR/commit/4d0028d2cce63d906c320f8b01fc92c54e976027))
+- *(context)* Reuse the ctx fixture via msgspec.structs.replace, drop noqa from doc snippets ([`2959507`](https://github.com/s0undt3ch/ToolR/commit/29595076d376f6dcbf1675b02ea392d4d7dfd481))
+- *(context)* Add ContextForTesting.replace(), dogfood it in the ctx fixtures ([`8419c00`](https://github.com/s0undt3ch/ToolR/commit/8419c00e650a0ed7c3c8bf1fc8ed9c79988e73c9))
+- *(testing)* Cover the four RunMock forwarders and the prompt_input TextIO branch ([`d319ba4`](https://github.com/s0undt3ch/ToolR/commit/d319ba4b9ce63dbcc35401bbb0d2860e638124a5))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(mise)* Regenerate mise.lock for toolr 0.27.0 ([`a29cfff`](https://github.com/s0undt3ch/ToolR/commit/a29cfffb1a3ee2789c7b13b7e7b8d4e485da9990))
 ## 0.27.0 - 2026-08-05
 
 ### Notes
