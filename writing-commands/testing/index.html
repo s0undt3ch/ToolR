@@ -1108,6 +1108,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Calling a command directly">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mocking-ctxrun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mocking ctx.run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mocking-ctxchdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mocking ctx.chdir
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1881,6 +1909,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Calling a command directly">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mocking-ctxrun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mocking ctx.run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mocking-ctxchdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mocking ctx.chdir
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2068,24 +2124,15 @@ subprocess execution) you'll still want to drive the binary directly.</p>
 of an <code>@command</code>-decorated function — does it read <code>ctx.repo_root</code> correctly, does it call
 <code>ctx.info</code> with the right message, does it <code>ctx.exit</code> on a bad input — build a real <code>Context</code> with
 <code>toolr.testing.make_context</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_context</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_context</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tools.example</span><span class="w"> </span><span class="kn">import</span> <span class="n">hello</span>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tools.example</span><span class="w"> </span><span class="kn">import</span> <span class="n">hello</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_hello_prints_a_greeting</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">hello</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">ctx</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Pedro&quot;</span><span class="p">)</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="k">assert</span> <span class="s2">&quot;hello, Pedro&quot;</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">stdout</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_confirm_aborts_on_no</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">result</span><span class="o">.</span><span class="n">ctx</span><span class="o">.</span><span class="n">prompt</span> <span class="o">=</span> <span class="k">lambda</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">k</span><span class="p">:</span> <span class="kc">False</span>  <span class="c1"># stub the interactive prompt</span>
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">SystemExit</span><span class="p">):</span>
-</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="n">confirm</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">ctx</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_hello_prints_a_greeting</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">ctx</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">hello</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Pedro&quot;</span><span class="p">)</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="k">assert</span> <span class="s2">&quot;hello, Pedro&quot;</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">stdout</span>
 </span></code></pre></div>
 <p>A function-scoped fixture wires the boilerplate once per test, the same way <code>commands_tester</code> does above:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
@@ -2101,19 +2148,80 @@ of an <code>@command</code>-decorated function — does it read <code>ctx.repo_r
 </span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
 </span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
 </span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_hello_prints_a_greeting</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">ContextForTesting</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="n">hello</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">ctx</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Pedro&quot;</span><span class="p">)</span>
-</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="k">assert</span> <span class="s2">&quot;hello, Pedro&quot;</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">stdout</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="n">hello</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Pedro&quot;</span><span class="p">)</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="k">assert</span> <span class="s2">&quot;hello, Pedro&quot;</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">stdout</span>
 </span></code></pre></div>
-<p><code>result.ctx</code> is a real <code>Context</code> — <code>ctx.repo_root</code> is set, <code>ctx.run(...)</code> calls the real subprocess
-runner (monkeypatch it if a test needs to intercept it), and <code>ctx.exit(...)</code> raises <code>SystemExit</code> via
-a real <code>ArgumentParser</code>, exactly as it does under the CLI. <code>result.output.stdout</code> /
-<code>result.output.stderr</code> capture everything written through <code>ctx.print</code>/<code>ctx.info</code>/<code>ctx.error</code>/etc.</p>
+<p>Prior to this, stubbing <code>ctx.prompt</code> by assigning a lambda directly onto <code>ctx.prompt</code> looked
+tempting — don't: <code>Context</code> is a frozen <code>msgspec.Struct</code>, and that assignment raises
+<code>AttributeError: immutable type: 'Context'</code>. Feed canned answers through <code>make_context</code>'s
+<code>prompt_input</code> parameter instead:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">ctx</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">prompt_input</span><span class="o">=</span><span class="s2">&quot;y</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">assert</span> <span class="n">ctx</span><span class="o">.</span><span class="n">prompt</span><span class="p">(</span><span class="s2">&quot;Continue?&quot;</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+</span></code></pre></div>
+<p>Feed a "no" answer the same way to test the abort path of a confirm-style command:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">ctx</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">prompt_input</span><span class="o">=</span><span class="s2">&quot;n</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">assert</span> <span class="n">ctx</span><span class="o">.</span><span class="n">prompt</span><span class="p">(</span><span class="s2">&quot;Continue?&quot;</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+</span></code></pre></div>
+<p><code>make_context</code> returns a <code>ContextForTesting</code> — a <code>Context</code> subclass — so <code>ctx.repo_root</code> is
+set, <code>ctx.exit(...)</code> raises <code>SystemExit</code> via a real <code>ArgumentParser</code>, exactly as it does under the
+CLI, and <code>ctx.run</code>/<code>ctx.chdir</code>/<code>ctx.prompt</code> all run for real unless you pass
+<code>run=</code>/<code>chdir=</code>/<code>prompt_input=</code> to <code>make_context</code> (see below). <code>ctx.stdout</code>/<code>ctx.stderr</code> capture
+everything written through <code>ctx.print</code>/<code>ctx.info</code>/<code>ctx.error</code>/etc.</p>
+<h3 id="mocking-ctxrun">Mocking <code>ctx.run</code><a class="headerlink" href="#mocking-ctxrun" title="Permanent link">&para;</a></h3>
+<p><code>make_context</code>'s <code>run</code> parameter replaces the real subprocess runner with a test double. Pass a
+<code>toolr.testing.RunMock</code>, configure its <code>.mock.return_value</code>/<code>.mock.side_effect</code> with a
+<code>CommandResult</code> built via <code>make_command_result(...)</code> — the same <code>unittest.mock</code> idiom you already
+know — and assert on it with the standard <code>Mock</code>-style API. <code>return_value</code> hands back the <em>same</em>
+result (and its already-read stream) on every call, so it's only safe for a command that calls
+<code>ctx.run</code> once; for more than one call, use <code>side_effect</code> to mint a fresh
+<code>make_command_result(...)</code> each time:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">RunMock</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.testing</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_command_result</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">run_mock</span> <span class="o">=</span> <span class="n">RunMock</span><span class="p">()</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">run_mock</span><span class="o">.</span><span class="n">mock</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="n">make_command_result</span><span class="p">(</span><span class="n">stdout</span><span class="o">=</span><span class="s2">&quot;hi</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="n">ctx</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">run</span><span class="o">=</span><span class="n">run_mock</span><span class="p">)</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">output</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;echo&quot;</span><span class="p">,</span> <span class="s2">&quot;hi&quot;</span><span class="p">,</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">assert</span> <span class="n">output</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;hi</span><span class="se">\n</span><span class="s2">&quot;</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="n">run_mock</span><span class="o">.</span><span class="n">assert_called_once_with</span><span class="p">(</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="p">(</span><span class="s2">&quot;echo&quot;</span><span class="p">,</span> <span class="s2">&quot;hi&quot;</span><span class="p">),</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="n">stream_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="n">timeout_secs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="n">no_output_timeout_secs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="mocking-ctxchdir">Mocking <code>ctx.chdir</code><a class="headerlink" href="#mocking-ctxchdir" title="Permanent link">&para;</a></h3>
+<p><code>chdir()</code> calls the real <code>os.chdir</code> twice (enter and restore) by default — fine for most tests, but
+a test that wants to assert <em>which</em> directory a command tried to move into, without touching the
+real filesystem, passes a bare <code>unittest.mock.Mock</code> as <code>chdir</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">unittest.mock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mock</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">chdir_mock</span> <span class="o">=</span> <span class="n">Mock</span><span class="p">()</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">ctx</span> <span class="o">=</span> <span class="n">make_context</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">chdir</span><span class="o">=</span><span class="n">chdir_mock</span><span class="p">)</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">target</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;somewhere&quot;</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">target</span><span class="o">.</span><span class="n">mkdir</span><span class="p">()</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="k">with</span> <span class="n">ctx</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="n">target</span><span class="p">):</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="k">pass</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="n">chdir_mock</span><span class="o">.</span><span class="n">assert_any_call</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="k">assert</span> <span class="n">chdir_mock</span><span class="o">.</span><span class="n">call_count</span> <span class="o">==</span> <span class="mi">2</span>
+</span></code></pre></div>
 <h2 id="stability">Stability<a class="headerlink" href="#stability" title="Permanent link">&para;</a></h2>
 <p><code>toolr.testing.CommandsTester</code> and <code>toolr.testing.make_context</code> are part of toolr-py's public API
 and are tested in toolr's own suite. <code>CommandsTester</code>'s surface — the constructor, the
 context-manager protocol, <code>.discover()</code>, and <code>.collected_command_groups()</code> — is stable across the
 pre-1.0 series; any change is called out in the changelog. Same for <code>make_context</code>'s signature and
-the <code>ContextForTesting</code>/<code>CapturedOutput</code> shape it returns.</p>
+the <code>ContextForTesting</code> it returns — a <code>Context</code> subclass, not a wrapper.</p>
+<p><code>toolr.testing.RunMock</code> and <code>toolr.testing.make_command_result</code> are likewise part of toolr-py's
+public API and tested in toolr's own suite. <code>RunMock</code>'s <code>Mock</code>-style assertion surface and
+<code>make_command_result</code>'s signature are stable across the pre-1.0 series; any change is called out
+in the changelog.</p>
 <p>Internal attributes (<code>sys_path</code>, <code>sys_modules</code>, <code>command_group_patcher</code>, <code>cwd</code>) are implementation
 detail and may change without notice.</p>
 
