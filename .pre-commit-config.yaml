@@ -59,7 +59,7 @@ repos:
 
       - id: mypy
         name: Run mypy against the code base
-        files: ^(python/|tests/).*\.py$
+        files: ^(crates/toolr-py/python/|tests/).*\.py$
         exclude: ^tests/support/coverage/.*\.py$
 
       - id: uv-lock
