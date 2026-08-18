@@ -1433,15 +1433,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0281-dev12-2026-08-18" class="md-nav__link">
+  <a href="#0281-dev14-2026-08-18" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.28.1-dev12 - 2026-08-18
+        0.28.1-dev14 - 2026-08-18
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.28.1-dev12 - 2026-08-18">
+    <nav class="md-nav" aria-label="0.28.1-dev14 - 2026-08-18">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3546,15 +3546,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0281-dev12-2026-08-18" class="md-nav__link">
+  <a href="#0281-dev14-2026-08-18" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.28.1-dev12 - 2026-08-18
+        0.28.1-dev14 - 2026-08-18
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.28.1-dev12 - 2026-08-18">
+    <nav class="md-nav" aria-label="0.28.1-dev14 - 2026-08-18">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -5654,7 +5654,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0281-dev12-2026-08-18">0.28.1-dev12 - 2026-08-18<a class="headerlink" href="#0281-dev12-2026-08-18" title="Permanent link">&para;</a></h2>
+<h2 id="0281-dev14-2026-08-18">0.28.1-dev14 - 2026-08-18<a class="headerlink" href="#0281-dev14-2026-08-18" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Fixed the built-in argparse scanner (<code>[tool.toolr.argparse.*]</code>) silently
@@ -5671,6 +5671,13 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
   skipped outright for every block, Django or not — that convention is
   plain Python, not Django-specific.</li>
 </ul>
+<p>A dispatcher's own flag (e.g. <code>--dry-run</code> on a <code>job</code> dispatcher wrapping
+Django management commands) typed <em>after</em> the dispatched subcommand name
+was silently forwarded to the wrapped command instead of being rejected —
+the dispatcher's own parameter kept its default, so a safety flag like
+<code>--dry-run</code> had no effect at all. <code>toolr &lt;dispatcher&gt; &lt;leaf&gt; ... --flag</code>
+now errors, pointing at the correct position, instead of silently
+executing for real (<a href="https://github.com/s0undt3ch/ToolR/issues/445">#445</a>).</p>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(docs)</em> Drop navigation.tabs so all top-level pages stay reachable (<a href="https://github.com/s0undt3ch/ToolR/commit/befa20d0b9fe2702ad70fd35110e21774a8ed61a"><code>befa20d</code></a>)</li>
@@ -5678,6 +5685,7 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 <li><em>(argparse)</em> Keep zero-arg Django management commands in the scanner (<a href="https://github.com/s0undt3ch/ToolR/commit/a54dcc79d1e19e0beee3d7fb250ffb14cdb4c039"><code>a54dcc7</code></a>)</li>
 <li><em>(argparse)</em> Gate Command-symbol detection behind an opt-in django flag (<a href="https://github.com/s0undt3ch/ToolR/commit/3698642806537ce7597abd6038c16a38976d62fa"><code>3698642</code></a>)</li>
 <li><em>(argparse)</em> Make the underscore-filename skip unconditional (<a href="https://github.com/s0undt3ch/ToolR/commit/2a2db0bf210789d41925f167859c4c81560cd698"><code>2a2db0b</code></a>)</li>
+<li><em>(dispatch)</em> Reject dispatcher flags leaked into a leaf's trailing args (<a href="https://github.com/s0undt3ch/ToolR/commit/142ba117beff849fc5760b257e9ad97a13bd17ae"><code>142ba11</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
