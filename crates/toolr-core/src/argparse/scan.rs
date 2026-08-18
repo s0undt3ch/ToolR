@@ -20,6 +20,13 @@ pub struct ScannedCommand {
     pub description: String, // rest of module docstring
     pub arguments: Vec<Argument>,
     pub warnings: Vec<String>,
+    /// True when the module defines Django's `Command` entry point —
+    /// either `class Command(...)` directly, or `Command = <Name>`
+    /// aliased to a class defined earlier in the same module. Lets
+    /// `scan_block_paths` keep zero-argument management commands
+    /// (e.g. a `BaseCommand` subclass with no `add_arguments` at all)
+    /// instead of mistaking them for stray helper modules.
+    pub is_command_class: bool,
 }
 
 /// argparse keyword arguments we recognise — the signature-shape filter
@@ -41,6 +48,7 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
     })?;
     let module = parsed.into_syntax();
     let (summary, description) = split_docstring(&module_docstring(&module));
+    let is_command_class = defines_command_class(&module);
 
     let mut out = ScannedCommand {
         name: command_name.to_string(),
@@ -48,6 +56,7 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
         description,
         arguments: Vec::new(),
         warnings: Vec::new(),
+        is_command_class,
     };
 
     for stmt in &module.body {
@@ -55,6 +64,44 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
     }
 
     Ok(out)
+}
+
+/// True when the module's top level defines Django's `Command` entry
+/// point: a literal `class Command(...)`, or `Command = <Name>` where
+/// `<Name>` is a class defined at module top level. Only same-module
+/// classes are resolved — an alias to an imported name (`Command =
+/// SomeImportedClass`) isn't verifiable without import resolution, so
+/// it's treated as unresolved rather than guessed at.
+fn defines_command_class(module: &ModModule) -> bool {
+    let mut top_level_classes: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for stmt in &module.body {
+        if let Stmt::ClassDef(class_def) = stmt {
+            top_level_classes.insert(class_def.name.as_str());
+        }
+    }
+    if top_level_classes.contains("Command") {
+        return true;
+    }
+    for stmt in &module.body {
+        let Stmt::Assign(assign) = stmt else {
+            continue;
+        };
+        if assign.targets.len() != 1 {
+            continue;
+        }
+        let Expr::Name(target) = &assign.targets[0] else {
+            continue;
+        };
+        if target.id.as_str() != "Command" {
+            continue;
+        }
+        if let Expr::Name(value) = assign.value.as_ref() {
+            if top_level_classes.contains(value.id.as_str()) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Recursively walk statements looking for `Expr::Call` whose `.func` is
@@ -529,6 +576,13 @@ pub fn scan_block_paths(
             .and_then(|s| s.to_str())
             .unwrap_or("?")
             .to_string();
+        // Leading-underscore stems (`_helpers.py`, `__init__.py`) are
+        // Django/Python convention for "not a command" — mirrors the
+        // filter Python tooling in caller repos already applies when
+        // walking `management/commands/`.
+        if stem.starts_with('_') {
+            continue;
+        }
         let text = match std::fs::read_to_string(&path) {
             Ok(t) => t,
             Err(err) => {
@@ -545,14 +599,18 @@ pub fn scan_block_paths(
         };
         match scan_source(&stem, &text) {
             Ok(cmd) => {
-                // A file with no `add_argument` calls is almost always a
-                // helper module (`_setup_*.py`, `__init__.py`, shared
-                // utilities) that happens to live inside the scan glob.
-                // Grafting it as a child would either collide on common
-                // stems (e.g. multiple `__init__.py` files under one
-                // parent — a clap startup panic) or surface a no-arg
-                // ghost command the user never wrote. Skip silently.
-                if cmd.arguments.is_empty() {
+                // A file with no `add_argument` calls and no resolvable
+                // `Command` symbol is almost always a helper module that
+                // happens to live inside the scan glob (the underscore
+                // filter above already caught the common case; this
+                // catches an unprefixed stray helper too). Grafting it
+                // as a child would either collide on common stems — a
+                // clap startup panic — or surface a ghost command the
+                // user never wrote. Skip silently. A file that *does*
+                // define `Command` is a genuine management command
+                // even with zero args (e.g. a long-running consumer),
+                // so it's kept.
+                if cmd.arguments.is_empty() && !cmd.is_command_class {
                     continue;
                 }
                 out.push(cmd);
@@ -967,6 +1025,7 @@ def add_arguments(self, parser):
                 long_flag: Some("--verbosity".into()),
             }],
             warnings: vec![],
+            is_command_class: false,
         };
         let common = vec![
             CommonArg {
@@ -1057,6 +1116,75 @@ def add_arguments(self, parser):
         assert!(
             !names.contains("_helpers"),
             "helper module has no add_argument calls — must not become a command",
+        );
+    }
+
+    #[test]
+    fn scan_source_detects_literal_command_class() {
+        let source = "class Command(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n";
+        let scanned = scan_source("x", source).unwrap();
+        assert!(scanned.is_command_class);
+        assert!(scanned.arguments.is_empty());
+    }
+
+    #[test]
+    fn scan_source_detects_command_alias_to_same_module_class() {
+        // Mirrors a real-world shape: a Django command class under its own
+        // name, aliased to `Command` for Django's loader, with no
+        // `add_arguments` method at all (e.g. a long-running consumer).
+        let source = "\
+class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n\nCommand = SegmentationDocumentsUpdater\n";
+        let scanned = scan_source("x", source).unwrap();
+        assert!(scanned.is_command_class);
+        assert!(scanned.arguments.is_empty());
+    }
+
+    #[test]
+    fn scan_source_does_not_guess_alias_to_imported_class() {
+        // `Command = SomeImportedClass` isn't verifiable without import
+        // resolution — treated as unresolved, not guessed at.
+        let source = "from elsewhere import SomeImportedClass\n\nCommand = SomeImportedClass\n";
+        let scanned = scan_source("x", source).unwrap();
+        assert!(!scanned.is_command_class);
+    }
+
+    #[test]
+    fn scan_paths_keeps_zero_arg_command_alias_files() {
+        // Regression: a Django management command with no CLI arguments
+        // at all (e.g. a PubSubConsumer-style listener) still defines
+        // `Command`, so it must survive — unlike a stray helper module.
+        let project = tempfile::tempdir().unwrap();
+        let cmds = project.path().join("apps/x/management/commands");
+        std::fs::create_dir_all(&cmds).unwrap();
+
+        std::fs::write(
+            cmds.join("segmentation_documents_updater.py"),
+            "class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n\nCommand = SegmentationDocumentsUpdater\n",
+        )
+        .unwrap();
+        // A stray helper with no underscore prefix and no `Command` symbol
+        // must still be dropped.
+        std::fs::write(
+            cmds.join("shared_utils.py"),
+            "def configure(parser):\n    pass\n",
+        )
+        .unwrap();
+
+        let scanned = scan_block_paths(
+            project.path(),
+            &["apps/*/management/commands/*.py".to_string()],
+        )
+        .unwrap();
+
+        let names: std::collections::BTreeSet<_> =
+            scanned.iter().map(|s| s.name.as_str()).collect();
+        assert!(
+            names.contains("segmentation_documents_updater"),
+            "zero-arg command that defines Command must still scan",
+        );
+        assert!(
+            !names.contains("shared_utils"),
+            "helper module with no Command symbol and no add_argument calls must not become a command",
         );
     }
 }
