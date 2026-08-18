@@ -1744,9 +1744,10 @@ reads its <code>add_arguments</code>:</p>
 <p>And you wire the two together in <code>tools/pyproject.toml</code>:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[tool.toolr.argparse.django]</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">scan_paths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;apps/*/management/commands/*.py&quot;</span><span class="p">]</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">[[tool.toolr.argparse.django.attach]]</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">parent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;django&quot;</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">django</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">[[tool.toolr.argparse.django.attach]]</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">parent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;django&quot;</span>
 </span></code></pre></div>
 <p>After a manifest rebuild, the scanned commands appear under the dispatcher:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>django<span class="w"> </span>migrate<span class="w"> </span>--check<span class="w"> </span>--database<span class="w"> </span>primary
@@ -1818,7 +1819,7 @@ any dispatcher.</p>
 <tr>
 <td><code>scan_paths</code></td>
 <td>list of glob strings</td>
-<td>Files to scan, relative to the project root. Each matched file becomes one command. Files with no <code>add_argument</code> calls are skipped.</td>
+<td>Files to scan, relative to the project root. Each matched file becomes one command. Underscore-prefixed filenames (<code>_helpers.py</code>, <code>__init__.py</code>) are always skipped, and by default files with no <code>add_argument</code> calls are skipped too — see <code>django</code> below for the exception.</td>
 </tr>
 <tr>
 <td><code>common_args</code></td>
@@ -1830,16 +1831,22 @@ any dispatcher.</p>
 <td>list of tables</td>
 <td>Where to graft the discovered commands. Each <code>[[…attach]]</code> entry takes a <code>parent</code> dotted path naming the dispatcher.</td>
 </tr>
+<tr>
+<td><code>django</code></td>
+<td>boolean, default <code>false</code></td>
+<td>Opts this block into the Django <code>Command</code>-entry-point convention: a file with no <code>add_argument</code> calls is still kept as a command if it defines Django's <code>Command</code> entry point (<code>class Command(...)</code>, or <code>Command = &lt;Name&gt;</code> aliased to a class in the same file). Leave unset for non-Django argparse sources.</td>
+</tr>
 </tbody>
 </table>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">[tool.toolr.argparse.django]</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">scan_paths</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;apps/*/management/commands/*.py&quot;</span><span class="p">]</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">common_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;verbosity&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;optional&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">default</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">help</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Verbosity level&quot;</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="p">]</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="k">[[tool.toolr.argparse.django.attach]]</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">parent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;django&quot;</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">django</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">common_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;verbosity&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;optional&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">default</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">help</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;Verbosity level&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">]</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="k">[[tool.toolr.argparse.django.attach]]</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="n">parent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;django&quot;</span>
 </span></code></pre></div>
 <p><code>parent</code> may be a top-level group command (<code>"django"</code>) or a nested command
 (<code>"jenkins.job"</code>). A single source can attach to several parents — list more
