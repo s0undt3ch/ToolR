@@ -584,12 +584,8 @@ pub fn scan_block_paths(
             .and_then(|s| s.to_str())
             .unwrap_or("?")
             .to_string();
-        // Leading-underscore stems (`_helpers.py`, `__init__.py`) are
-        // Django/Python convention for "not a command" — mirrors the
-        // filter Python tooling in caller repos already applies when
-        // walking `management/commands/`. Only meaningful for Django
-        // blocks: a plain argparse helper module is caught below
-        // regardless of its name, by having no `add_argument` calls.
+        // `_helpers.py`/`__init__.py` are Django/Python convention for
+        // "not a command"; a plain block relies on the empty-args rule below instead.
         if django && stem.starts_with('_') {
             continue;
         }
@@ -609,15 +605,9 @@ pub fn scan_block_paths(
         };
         match scan_source(&stem, &text) {
             Ok(cmd) => {
-                // A file with no `add_argument` calls is almost always a
-                // helper module that happens to live inside the scan
-                // glob. Grafting it as a child would either collide on
-                // common stems — a clap startup panic — or surface a
-                // ghost command the user never wrote. Skip silently,
-                // unless this is a Django block and the file defines
-                // Django's `Command` entry point — that's a genuine
-                // management command even with zero args (e.g. a
-                // long-running consumer), so it's kept.
+                // A no-arg file is usually a helper, not a command — grafting it
+                // would risk a clap stem collision. Kept anyway for a Django block
+                // whose file defines `Command`: that's a genuine zero-arg command.
                 if cmd.arguments.is_empty() && !(django && cmd.is_command_class) {
                     continue;
                 }
@@ -1091,10 +1081,9 @@ def add_arguments(self, parser):
         // utilities) parse fine but contain zero `add_argument` calls.
         // They must not become commands — multiple `__init__.py` files
         // under one parent would collide on the stem and crash clap with
-        // a "command name is duplicated" panic at startup. `django` is
-        // off here — this is the plain-argparse baseline, so `__init__.py`
-        // is dropped by the empty-arguments rule alone, not the
-        // underscore filter (which only applies to Django blocks).
+        // a "command name is duplicated" panic at startup. `django` is off
+        // here, so `__init__.py` is caught by the empty-arguments rule, not the
+        // underscore filter.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
@@ -1144,9 +1133,8 @@ def add_arguments(self, parser):
 
     #[test]
     fn scan_source_detects_command_alias_to_same_module_class() {
-        // Mirrors a real-world shape: a Django command class under its own
-        // name, aliased to `Command` for Django's loader, with no
-        // `add_arguments` method at all (e.g. a long-running consumer).
+        // Real-world shape: a command class under its own name, aliased to
+        // `Command` for Django's loader, with no `add_arguments` at all.
         let source = "\
 class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n\nCommand = SegmentationDocumentsUpdater\n";
         let scanned = scan_source("x", source).unwrap();
@@ -1201,10 +1189,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_paths_keeps_zero_arg_command_alias_files_when_django() {
-        // Regression: a Django management command with no CLI arguments
-        // at all (e.g. a PubSubConsumer-style listener) still defines
-        // `Command`, so it must survive — unlike a stray helper module.
-        // Only kicks in when the block opts in via `django = true`.
+        // A zero-arg command (e.g. a PubSubConsumer-style listener) still
+        // defines `Command`, so it must survive when `django = true`.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
@@ -1243,10 +1229,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_paths_drops_zero_arg_command_alias_files_without_django() {
-        // The same file as above, but the block doesn't opt in — the
-        // Command-symbol carve-out must not apply to plain argparse
-        // blocks, so this is dropped exactly like any other zero-arg
-        // file.
+        // Same file as above, but the block doesn't opt in — the
+        // carve-out must not apply to plain argparse blocks.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
@@ -1272,11 +1256,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_paths_underscore_skip_only_applies_when_django() {
-        // An underscore-prefixed file that *does* define `Command` and
-        // has zero args: dropped under `django = true` (the underscore
-        // filter runs first), kept-or-dropped the same way as any other
-        // file under `django = false` (dropped here too, since it has
-        // no `add_argument` calls) — asserting both to pin the ordering.
+        // Defines `Command` but is underscore-prefixed: the underscore
+        // filter runs first, so it's dropped under `django = true` too.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
