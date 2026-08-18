@@ -199,6 +199,7 @@ mod tests {
             name: name.into(),
             scan_paths: vec![],
             common_args: vec![],
+            django: false,
             attach: vec![Attachment {
                 parent: parent.into(),
             }],
@@ -306,6 +307,7 @@ mod tests {
             name: "django".into(),
             scan_paths: vec![],
             common_args: vec![],
+            django: false,
             attach: vec![Attachment {
                 parent: "django".into(),
             }],
@@ -316,6 +318,7 @@ mod tests {
             description: "".into(),
             arguments: vec![],
             warnings: vec![],
+            is_django_command_class: false,
         }];
         let children = graft_children(&block, &scanned, &parents_with_django()).unwrap();
         assert_eq!(children.len(), 1);
