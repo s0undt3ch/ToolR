@@ -20,12 +20,10 @@ pub struct ScannedCommand {
     pub description: String, // rest of module docstring
     pub arguments: Vec<Argument>,
     pub warnings: Vec<String>,
-    /// True when the module defines Django's `Command` entry point —
-    /// either `class Command(...)` directly, or `Command = <Name>`
-    /// aliased to a class defined earlier in the same module. Lets
-    /// `scan_block_paths` keep zero-argument management commands
-    /// (e.g. a `BaseCommand` subclass with no `add_arguments` at all)
-    /// instead of mistaking them for stray helper modules.
+    /// True when the module defines Django's `Command` entry point — either `class Command(...)`
+    /// directly, or `Command = <Name>` aliased to a class defined earlier in the same module. Lets
+    /// `scan_block_paths` keep zero-argument management commands (e.g. a `BaseCommand` subclass
+    /// with no `add_arguments` at all) instead of mistaking them for stray helper modules.
     pub is_django_command_class: bool,
 }
 
@@ -66,12 +64,11 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
     Ok(out)
 }
 
-/// True when the module's top level defines Django's `Command` entry
-/// point: a literal `class Command(...)`, or `Command = <Name>` where
-/// `<Name>` is a class defined at module top level. Only same-module
-/// classes are resolved — an alias to an imported name (`Command =
-/// SomeImportedClass`) isn't verifiable without import resolution, so
-/// it's treated as unresolved rather than guessed at.
+/// True when the module's top level defines Django's `Command` entry point: a literal `class
+/// Command(...)`, or `Command = <Name>` where `<Name>` is a class defined at module top level.
+/// Only same-module classes are resolved — an alias to an imported name (`Command =
+/// SomeImportedClass`) isn't verifiable without import resolution, so it's treated as unresolved
+/// rather than guessed at.
 fn defines_django_command_class(module: &ModModule) -> bool {
     let mut top_level_classes: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for stmt in &module.body {
@@ -543,12 +540,11 @@ use std::path::Path;
 /// become placeholder `ScannedCommand`s (no arguments) with the failure
 /// recorded in their `warnings` field — the rest of the build continues.
 ///
-/// `django` opts this block into Django management-command conventions:
-/// underscore-prefixed filenames are skipped outright, and a file with
-/// no `add_argument()` calls is still kept if it defines Django's
-/// `Command` entry point. Plain argparse blocks (`django == false`)
-/// ignore both — a file with no `add_argument()` calls is always
-/// treated as a non-command helper there, regardless of name or shape.
+/// `django` opts this block into Django management-command conventions: underscore-prefixed
+/// filenames are skipped outright, and a file with no `add_argument()` calls is still kept if
+/// it defines Django's `Command` entry point. Plain argparse blocks (`django == false`) ignore
+/// both — a file with no `add_argument()` calls is always treated as a non-command helper
+/// there, regardless of name or shape.
 pub fn scan_block_paths(
     root: &Path,
     scan_paths: &[String],
@@ -584,8 +580,8 @@ pub fn scan_block_paths(
             .and_then(|s| s.to_str())
             .unwrap_or("?")
             .to_string();
-        // `_helpers.py`/`__init__.py` are Django/Python convention for
-        // "not a command"; a plain block relies on the empty-args rule below instead.
+        // `_helpers.py`/`__init__.py` are Django/Python convention for "not a command"; a plain
+        // block relies on the empty-args rule below instead.
         if django && stem.starts_with('_') {
             continue;
         }
@@ -605,9 +601,9 @@ pub fn scan_block_paths(
         };
         match scan_source(&stem, &text) {
             Ok(cmd) => {
-                // A no-arg file is usually a helper, not a command — grafting it
-                // would risk a clap stem collision. Kept anyway for a Django block
-                // whose file defines `Command`: that's a genuine zero-arg command.
+                // A no-arg file is usually a helper, not a command — grafting it would risk a clap
+                // stem collision. Kept anyway for a Django block whose file defines `Command`:
+                // that's a genuine zero-arg command.
                 if cmd.arguments.is_empty() && !(django && cmd.is_django_command_class) {
                     continue;
                 }
@@ -1077,13 +1073,11 @@ def add_arguments(self, parser):
 
     #[test]
     fn scan_paths_skips_files_with_no_add_argument_calls() {
-        // Regression: helper modules (`__init__.py`, `_setup_*.py`, shared
-        // utilities) parse fine but contain zero `add_argument` calls.
-        // They must not become commands — multiple `__init__.py` files
-        // under one parent would collide on the stem and crash clap with
-        // a "command name is duplicated" panic at startup. `django` is off
-        // here, so `__init__.py` is caught by the empty-arguments rule, not the
-        // underscore filter.
+        // Regression: helper modules (`__init__.py`, `_setup_*.py`, shared utilities) parse fine
+        // but contain zero `add_argument` calls. They must not become commands — multiple
+        // `__init__.py` files under one parent would collide on the stem and crash clap with a
+        // "command name is duplicated" panic at startup. `django` is off here, so `__init__.py` is
+        // caught by the empty-arguments rule, not the underscore filter.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
@@ -1133,8 +1127,8 @@ def add_arguments(self, parser):
 
     #[test]
     fn scan_source_detects_command_alias_to_same_module_class() {
-        // Real-world shape: a command class under its own name, aliased to
-        // `Command` for Django's loader, with no `add_arguments` at all.
+        // Real-world shape: a command class under its own name, aliased to `Command` for Django's
+        // loader, with no `add_arguments` at all.
         let source = "\
 class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n\nCommand = SegmentationDocumentsUpdater\n";
         let scanned = scan_source("x", source).unwrap();
@@ -1144,8 +1138,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_source_does_not_guess_alias_to_imported_class() {
-        // `Command = SomeImportedClass` isn't verifiable without import
-        // resolution — treated as unresolved, not guessed at.
+        // `Command = SomeImportedClass` isn't verifiable without import resolution — treated as
+        // unresolved, not guessed at.
         let source = "from elsewhere import SomeImportedClass\n\nCommand = SomeImportedClass\n";
         let scanned = scan_source("x", source).unwrap();
         assert!(!scanned.is_django_command_class);
@@ -1153,8 +1147,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_source_ignores_unrelated_module_level_assignment() {
-        // `LOGGER = ...` is a common module-level assignment that isn't
-        // `Command` at all — must not be mistaken for one.
+        // `LOGGER = ...` is a common module-level assignment that isn't `Command` at all — must not
+        // be mistaken for one.
         let source = "class Foo(BaseCommand):\n    pass\n\nLOGGER = 'x'\n";
         let scanned = scan_source("x", source).unwrap();
         assert!(!scanned.is_django_command_class);
@@ -1162,8 +1156,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_source_ignores_command_assignment_with_non_name_target() {
-        // `obj.Command = Foo` targets an attribute, not a bare name —
-        // doesn't satisfy Django's module-level `Command` contract.
+        // `obj.Command = Foo` targets an attribute, not a bare name — doesn't satisfy Django's
+        // module-level `Command` contract.
         let source = "class Foo(BaseCommand):\n    pass\n\nobj.Command = Foo\n";
         let scanned = scan_source("x", source).unwrap();
         assert!(!scanned.is_django_command_class);
@@ -1171,8 +1165,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_source_ignores_command_assignment_with_multiple_targets() {
-        // `a = Command = Foo` has two assignment targets — not the
-        // single-target `Command = <Name>` shape this detects.
+        // `a = Command = Foo` has two assignment targets — not the single-target `Command = <Name>`
+        // shape this detects.
         let source = "class Foo(BaseCommand):\n    pass\n\na = Command = Foo\n";
         let scanned = scan_source("x", source).unwrap();
         assert!(!scanned.is_django_command_class);
@@ -1180,8 +1174,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_source_ignores_command_assignment_with_non_name_value() {
-        // `Command = make_command()` doesn't alias to a same-module
-        // class by name — nothing to resolve statically.
+        // `Command = make_command()` doesn't alias to a same-module class by name — nothing to
+        // resolve statically.
         let source = "class Foo(BaseCommand):\n    pass\n\nCommand = make_command()\n";
         let scanned = scan_source("x", source).unwrap();
         assert!(!scanned.is_django_command_class);
@@ -1189,8 +1183,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_paths_keeps_zero_arg_command_alias_files_when_django() {
-        // A zero-arg command (e.g. a PubSubConsumer-style listener) still
-        // defines `Command`, so it must survive when `django = true`.
+        // A zero-arg command (e.g. a PubSubConsumer-style listener) still defines `Command`, so it
+        // must survive when `django = true`.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
@@ -1200,8 +1194,7 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
             "class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n\nCommand = SegmentationDocumentsUpdater\n",
         )
         .unwrap();
-        // A stray helper with no underscore prefix and no `Command` symbol
-        // must still be dropped.
+        // A stray helper with no underscore prefix and no `Command` symbol must still be dropped.
         std::fs::write(
             cmds.join("shared_utils.py"),
             "def configure(parser):\n    pass\n",
@@ -1229,8 +1222,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_paths_drops_zero_arg_command_alias_files_without_django() {
-        // Same file as above, but the block doesn't opt in — the
-        // carve-out must not apply to plain argparse blocks.
+        // Same file as above, but the block doesn't opt in — the carve-out must not apply to plain
+        // argparse blocks.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
@@ -1256,8 +1249,8 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
 
     #[test]
     fn scan_paths_underscore_skip_only_applies_when_django() {
-        // Defines `Command` but is underscore-prefixed: the underscore
-        // filter runs first, so it's dropped under `django = true` too.
+        // Defines `Command` but is underscore-prefixed: the underscore filter runs first, so it's
+        // dropped under `django = true` too.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
