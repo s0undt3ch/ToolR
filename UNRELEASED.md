@@ -17,7 +17,9 @@ no scaffolding. Just write whatever should appear in the notes.
   for "this isn't a real command," which also matched genuine zero-arg
   commands. A new opt-in `django = true` block setting recognises a
   module-level `class Command(...)` or `Command = <Name>` alias to a
-  same-module class — Django's own loader contract — and skips
-  underscore-prefixed filenames outright, so zero-arg commands are kept
-  and stray helper modules are still excluded. Plain argparse blocks
-  (the default) are unaffected.
+  same-module class — Django's own loader contract — so zero-arg
+  commands are kept while stray helper modules are still excluded.
+  Plain argparse blocks (the default) are unaffected. Separately,
+  underscore-prefixed filenames (`_helpers.py`, `__init__.py`) are now
+  skipped outright for every block, Django or not — that convention is
+  plain Python, not Django-specific.

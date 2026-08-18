@@ -535,16 +535,15 @@ fn split_docstring(raw: &str) -> (String, String) {
 
 use std::path::Path;
 
-/// Expand every glob in `scan_paths` against `root`, scan each match,
-/// and return one `ScannedCommand` per file. Files that failed to parse
-/// become placeholder `ScannedCommand`s (no arguments) with the failure
-/// recorded in their `warnings` field — the rest of the build continues.
+/// Expand every glob in `scan_paths` against `root`, scan each match, and return one
+/// `ScannedCommand` per file. Files that failed to parse become placeholder `ScannedCommand`s
+/// (no arguments) with the failure recorded in their `warnings` field — the rest of the build
+/// continues. Underscore-prefixed filenames (`_helpers.py`, `__init__.py`) are always skipped.
 ///
-/// `django` opts this block into Django management-command conventions: underscore-prefixed
-/// filenames are skipped outright, and a file with no `add_argument()` calls is still kept if
-/// it defines Django's `Command` entry point. Plain argparse blocks (`django == false`) ignore
-/// both — a file with no `add_argument()` calls is always treated as a non-command helper
-/// there, regardless of name or shape.
+/// `django` opts this block into one additional Django management-command convention: a file
+/// with no `add_argument()` calls is still kept if it defines Django's `Command` entry point.
+/// Plain argparse blocks (`django == false`) treat a file with no `add_argument()` calls as a
+/// non-command helper regardless of its shape.
 pub fn scan_block_paths(
     root: &Path,
     scan_paths: &[String],
@@ -580,9 +579,9 @@ pub fn scan_block_paths(
             .and_then(|s| s.to_str())
             .unwrap_or("?")
             .to_string();
-        // `_helpers.py`/`__init__.py` are Django/Python convention for "not a command"; a plain
-        // block relies on the empty-args rule below instead.
-        if django && stem.starts_with('_') {
+        // `_helpers.py`/`__init__.py` are plain Python convention for "not a command" —
+        // applies regardless of `django`.
+        if stem.starts_with('_') {
             continue;
         }
         let text = match std::fs::read_to_string(&path) {
@@ -1076,8 +1075,8 @@ def add_arguments(self, parser):
         // Regression: helper modules (`__init__.py`, `_setup_*.py`, shared utilities) parse fine
         // but contain zero `add_argument` calls. They must not become commands — multiple
         // `__init__.py` files under one parent would collide on the stem and crash clap with a
-        // "command name is duplicated" panic at startup. `django` is off here, so `__init__.py` is
-        // caught by the empty-arguments rule, not the underscore filter.
+        // "command name is duplicated" panic at startup. Both are caught by the (unconditional)
+        // underscore filter here, regardless of `django`.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
@@ -1248,39 +1247,29 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
     }
 
     #[test]
-    fn scan_paths_underscore_skip_only_applies_when_django() {
-        // Defines `Command` but is underscore-prefixed: the underscore filter runs first, so it's
-        // dropped under `django = true` too.
+    fn scan_paths_skips_underscore_prefixed_files_regardless_of_django() {
+        // The underscore convention is plain Python, not Django-specific — must be skipped
+        // even with real `add_argument` calls, so the empty-args rule can't be what's doing it.
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
         std::fs::write(
             cmds.join("_internal_command.py"),
-            "class Command(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n",
+            "def add_arguments(self, parser):\n    parser.add_argument('--flag', action='store_true')\n",
         )
         .unwrap();
 
-        let with_django = scan_block_paths(
-            project.path(),
-            &["apps/*/management/commands/*.py".to_string()],
-            true,
-        )
-        .unwrap();
-        assert!(
-            with_django.is_empty(),
-            "underscore-prefixed stem must be skipped outright under django = true, \
-             even though it defines Command",
-        );
-
-        let without_django = scan_block_paths(
-            project.path(),
-            &["apps/*/management/commands/*.py".to_string()],
-            false,
-        )
-        .unwrap();
-        assert!(
-            without_django.is_empty(),
-            "without django, the file is still dropped, but via the empty-arguments rule",
-        );
+        for django in [true, false] {
+            let scanned = scan_block_paths(
+                project.path(),
+                &["apps/*/management/commands/*.py".to_string()],
+                django,
+            )
+            .unwrap();
+            assert!(
+                scanned.is_empty(),
+                "underscore-prefixed stem with real args must still be skipped (django={django})",
+            );
+        }
     }
 }

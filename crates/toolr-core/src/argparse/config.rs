@@ -19,12 +19,11 @@ pub struct ArgparseBlock {
     pub common_args: Vec<CommonArg>,
     #[serde(default)]
     pub attach: Vec<Attachment>,
-    /// Opt in to Django management-command conventions for this block: a scanned file with zero
-    /// `add_argument()` calls is still kept as a command if it defines Django's `Command` entry
-    /// point (`class Command(...)`, or `Command = <Name>` aliased to a same-module class), and
-    /// underscore-prefixed filenames are skipped outright. Plain argparse blocks (the default) keep
-    /// neither behaviour — a file with no `add_argument()` calls is always treated as a non-command
-    /// helper, regardless of its name or class shape.
+    /// Opt in to the Django `Command`-entry-point convention for this block: a scanned file with
+    /// zero `add_argument()` calls is still kept as a command if it defines Django's `Command`
+    /// entry point (`class Command(...)`, or `Command = <Name>` aliased to a same-module class).
+    /// Plain argparse blocks (the default) treat a zero-arg file as a non-command helper,
+    /// regardless of its name or class shape.
     #[serde(default)]
     pub django: bool,
 }
