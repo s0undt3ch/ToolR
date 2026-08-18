@@ -12,11 +12,12 @@ no scaffolding. Just write whatever should appear in the notes.
 -->
 - Fixed the built-in argparse scanner (`[tool.toolr.argparse.*]`) silently
   dropping Django management commands that take no CLI arguments at all —
-  e.g. a `BaseCommand` subclass with no `add_arguments` method, such as a
-  long-running queue consumer. The scanner used "found zero
-  `add_argument()` calls" as its only signal for "this isn't a real
-  command," which also matched genuine zero-arg commands. It now also
-  recognises a module-level `class Command(...)` or `Command = <Name>`
-  alias to a same-module class — Django's own loader contract — and skips
+  e.g. a `BaseCommand` subclass with no `add_arguments` method. The
+  scanner used "found zero `add_argument()` calls" as its only signal
+  for "this isn't a real command," which also matched genuine zero-arg
+  commands. A new opt-in `django = true` block setting recognises a
+  module-level `class Command(...)` or `Command = <Name>` alias to a
+  same-module class — Django's own loader contract — and skips
   underscore-prefixed filenames outright, so zero-arg commands are kept
-  and stray helper modules are still excluded.
+  and stray helper modules are still excluded. Plain argparse blocks
+  (the default) are unaffected.

@@ -93,6 +93,7 @@ And you wire the two together in `tools/pyproject.toml`:
 ```toml
 [tool.toolr.argparse.django]
 scan_paths = ["apps/*/management/commands/*.py"]
+django = true
 
 [[tool.toolr.argparse.django.attach]]
 parent = "django"
@@ -152,13 +153,15 @@ any dispatcher.
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `scan_paths` | list of glob strings | Files to scan, relative to the project root. Each matched file becomes one command. Files with no `add_argument` calls are skipped. |
+| `scan_paths` | list of glob strings | Files to scan, relative to the project root. Each matched file becomes one command. By default, files with no `add_argument` calls are skipped — see `django` below for the exception. |
 | `common_args` | list of tables | Arguments merged into *every* command discovered by this block — handy for flags the upstream tool accepts globally (e.g. Django's `--verbosity`). Each entry takes `name`, `kind` (`positional` / `optional` / `flag` / `repeated`), and optional `help`, `default`, `choices`. |
 | `attach` | list of tables | Where to graft the discovered commands. Each `[[…attach]]` entry takes a `parent` dotted path naming the dispatcher. |
+| `django` | boolean, default `false` | Opts this block into two Django-specific conventions: a file with no `add_argument` calls is still kept as a command if it defines Django's `Command` entry point (`class Command(...)`, or `Command = <Name>` aliased to a class in the same file) — this covers commands with no CLI arguments at all, such as a long-running queue consumer — and underscore-prefixed filenames (`_helpers.py`, `__init__.py`) are skipped outright rather than relying on the empty-arguments rule. Leave unset for non-Django argparse sources. |
 
 ```toml
 [tool.toolr.argparse.django]
 scan_paths = ["apps/*/management/commands/*.py"]
+django = true
 common_args = [
   { name = "verbosity", kind = "optional", default = "1", help = "Verbosity level" },
 ]

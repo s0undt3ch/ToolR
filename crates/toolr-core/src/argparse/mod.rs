@@ -64,10 +64,11 @@ pub fn run_for_project(
     let mut out: HashMap<String, Vec<Command>> = HashMap::new();
     let mut dispatchers: HashSet<String> = HashSet::new();
     for block in &blocks {
-        let scanned: Vec<scan::ScannedCommand> = scan::scan_block_paths(project_root, &block.scan_paths)?
-            .into_iter()
-            .map(|s| scan::with_common_args(s, &block.common_args))
-            .collect();
+        let scanned: Vec<scan::ScannedCommand> =
+            scan::scan_block_paths(project_root, &block.scan_paths, block.django)?
+                .into_iter()
+                .map(|s| scan::with_common_args(s, &block.common_args))
+                .collect();
         for (parent, children) in attach::graft_children(block, &scanned, parents)? {
             if !children.is_empty() {
                 dispatchers.insert(parent.clone());

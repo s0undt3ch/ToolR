@@ -199,6 +199,7 @@ mod tests {
             name: name.into(),
             scan_paths: vec![],
             common_args: vec![],
+            django: false,
             attach: vec![Attachment {
                 parent: parent.into(),
             }],
@@ -306,6 +307,7 @@ mod tests {
             name: "django".into(),
             scan_paths: vec![],
             common_args: vec![],
+            django: false,
             attach: vec![Attachment {
                 parent: "django".into(),
             }],
