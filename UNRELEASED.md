@@ -23,3 +23,11 @@ no scaffolding. Just write whatever should appear in the notes.
   underscore-prefixed filenames (`_helpers.py`, `__init__.py`) are now
   skipped outright for every block, Django or not — that convention is
   plain Python, not Django-specific.
+
+A dispatcher's own flag (e.g. `--dry-run` on a `job` dispatcher wrapping
+Django management commands) typed *after* the dispatched subcommand name
+was silently forwarded to the wrapped command instead of being rejected —
+the dispatcher's own parameter kept its default, so a safety flag like
+`--dry-run` had no effect at all. `toolr <dispatcher> <leaf> ... --flag`
+now errors, pointing at the correct position, instead of silently
+executing for real ([#445](https://github.com/s0undt3ch/ToolR/issues/445)).

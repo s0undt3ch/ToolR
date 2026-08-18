@@ -235,7 +235,7 @@ pub fn dispatch(
                     cmd.function,
                 )
             })?;
-        build_dispatch_spec(dispatcher, parent_matches, packed, &repo_root, &output_opts)
+        build_dispatch_spec(dispatcher, parent_matches, packed, &repo_root, &output_opts)?
     } else {
         build_spec(cmd, cmd_matches, &repo_root, &output_opts)
     };
