@@ -119,7 +119,8 @@ pub fn build_dispatch_spec(
     packed: PackedChild,
     repo_root: &Path,
     output_opts: &OutputOptions,
-) -> ExecutionSpec {
+) -> anyhow::Result<ExecutionSpec> {
+    reject_leaked_dispatcher_flags(parent, &packed)?;
     // Covers the dispatcher's own (parent) args. A dispatched child's args are
     // packed separately and not checked here — same scope as before.
     warn_relative_paths(parent, parent_matches, repo_root);
@@ -129,7 +130,7 @@ pub fn build_dispatch_spec(
             parent_args.insert(arg.name.clone(), value);
         }
     }
-    ExecutionSpec {
+    Ok(ExecutionSpec {
         schema_version: RUNNER_SCHEMA_VERSION,
         group: parent.group.clone(),
         command: parent.name.clone(),
@@ -149,7 +150,72 @@ pub fn build_dispatch_spec(
             command_args: packed.args,
             schema: command_to_schema_spec(&packed.schema),
         }),
+    })
+}
+
+/// Long-flag spellings clap would attach to `arg`, mirroring
+/// `cli::build_user_command` (always `--` + the kebab-cased name, for
+/// any kind that calls `.long(...)`).
+fn arg_long_flag_spelling(arg: &Argument) -> Option<String> {
+    let has_long_flag = match arg.kind {
+        ArgumentKind::Optional
+        | ArgumentKind::Flag
+        | ArgumentKind::Repeated
+        | ArgumentKind::Count => true,
+        ArgumentKind::FixedArity => arg.long_flag.is_some(),
+        ArgumentKind::Positional
+        | ArgumentKind::OptionalPositional
+        | ArgumentKind::VarPositional => false,
+    };
+    has_long_flag.then(|| format!("--{}", arg.name.replace('_', "-")))
+}
+
+/// Guard against dispatcher-level flags (e.g. `--dry-run`) typed *after*
+/// the dispatched subcommand name (see toolr#445): clap only rejects an
+/// unrecognized option in scope of the leaf's own args, and the leaf's
+/// `VarPositional` args are built with `trailing_var_arg(true)` so any
+/// unclaimed token — including one that spells a *parent* dispatcher
+/// flag — is silently accepted as a positional value instead of erroring.
+/// That's dangerous specifically for a safety flag like `--dry-run`: the
+/// dispatcher never sees it and runs as though it had never been passed.
+///
+/// Cross-checks the leaf's packed `VarPositional` values against the
+/// parent dispatcher's own flag spellings and errors before the
+/// `ExecutionSpec` (and the side-effecting dispatcher call it drives) is
+/// ever built.
+fn reject_leaked_dispatcher_flags(parent: &Command, packed: &PackedChild) -> anyhow::Result<()> {
+    let parent_flags: Vec<String> = parent
+        .arguments
+        .iter()
+        .filter_map(arg_long_flag_spelling)
+        .collect();
+    if parent_flags.is_empty() {
+        return Ok(());
     }
+    for leaf_arg in &packed.schema.arguments {
+        if leaf_arg.kind != ArgumentKind::VarPositional {
+            continue;
+        }
+        let Some(Value::Array(values)) = packed.args.get(&leaf_arg.name) else {
+            continue;
+        };
+        for value in values {
+            let Value::String(token) = value else {
+                continue;
+            };
+            if let Some(flag) = parent_flags.iter().find(|f| *f == token) {
+                anyhow::bail!(
+                    "'{flag}' is an option of `toolr {} {}`, not of `{}` — put it \
+                     before the `{}` subcommand name.",
+                    parent.group,
+                    parent.name,
+                    packed.name,
+                    packed.name,
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Convert a manifest [`Command`] into the wire-shape consumed by
@@ -1104,7 +1170,8 @@ mod dispatched_pack_tests {
             packed,
             Path::new("/repo"),
             &OutputOptions::default(),
-        );
+        )
+        .unwrap();
         assert_eq!(spec.module, "tools.dispatcher");
         assert_eq!(spec.function, "django");
         let dispatch = spec.dispatch.expect("dispatch present");
@@ -1154,7 +1221,8 @@ mod dispatched_pack_tests {
             packed,
             Path::new("/repo"),
             &OutputOptions::default(),
-        );
+        )
+        .unwrap();
         assert_eq!(
             spec.args.get("cpu"),
             Some(&Value::String("5000m".into()))
@@ -1162,6 +1230,151 @@ mod dispatched_pack_tests {
         // Dispatch payload still carries the leaf's args, independent of parent kwargs.
         let dispatch = spec.dispatch.expect("dispatch present");
         assert_eq!(dispatch.command_args.get("check"), Some(&Value::Bool(false)));
+    }
+
+    /// A leaf whose only argument is a `VarPositional` (mirrors
+    /// `company_ids` in toolr#445's repro, or native `*args`) — the
+    /// shape that lets clap's `trailing_var_arg` silently swallow an
+    /// unrecognized flag as a positional value.
+    fn leaf_with_var_positional(name: &str) -> Command {
+        Command {
+            arguments: vec![Argument {
+                name: "company_ids".into(),
+                kind: ArgumentKind::VarPositional,
+                help: String::new(),
+                default: None,
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: Default::default(),
+                long_flag: None,
+            }],
+            ..Command { name: name.into(), arguments: vec![], ..migrate_cmd() }
+        }
+    }
+
+    fn dry_run_dispatcher() -> Command {
+        Command {
+            name: "job".into(),
+            group: "jenkins".into(),
+            arguments: vec![Argument {
+                name: "dry_run".into(),
+                kind: ArgumentKind::Flag,
+                help: String::new(),
+                default: None,
+                type_annotation: None,
+                resolved_type: None,
+                allowed_values: vec![],
+                path_constraints: None,
+                metadata: Default::default(),
+                long_flag: None,
+            }],
+            ..migrate_cmd()
+        }
+    }
+
+    #[test]
+    fn build_dispatch_spec_rejects_dispatcher_flag_leaked_into_leaf_var_positional() {
+        // Regression for toolr#445: `--dry-run` typed after the leaf name
+        // (`toolr jenkins job wrapup_company 12345 --dry-run`) must not
+        // silently forward to the wrapped command.
+        let leaf = leaf_with_var_positional("wrapup_company");
+        let leaf_matches = clap::Command::new("wrapup_company")
+            .arg(
+                Arg::new("company_ids")
+                    .num_args(0..)
+                    .trailing_var_arg(true)
+                    .allow_hyphen_values(true),
+            )
+            .try_get_matches_from(vec!["wrapup_company", "12345", "--dry-run"])
+            .unwrap();
+        let packed = pack_child_args(&leaf, &leaf_matches);
+        let parent = dry_run_dispatcher();
+        let parent_matches = clap::Command::new("job")
+            .arg(Arg::new("dry_run").long("dry-run").action(ArgAction::SetTrue))
+            .try_get_matches_from(vec!["job"])
+            .unwrap();
+        let err = build_dispatch_spec(
+            &parent,
+            &parent_matches,
+            packed,
+            Path::new("/repo"),
+            &OutputOptions::default(),
+        )
+        .expect_err("leaked --dry-run must be rejected");
+        let msg = err.to_string();
+        assert!(msg.contains("--dry-run"), "expected flag name in error, got: {msg}");
+        assert!(msg.contains("jenkins job"), "expected dispatcher path in error, got: {msg}");
+        assert!(msg.contains("wrapup_company"), "expected leaf name in error, got: {msg}");
+    }
+
+    #[test]
+    fn build_dispatch_spec_accepts_dry_run_placed_before_the_leaf() {
+        // The correctly-ordered invocation must keep working: `--dry-run`
+        // is consumed by the parent's own clap `Arg`, so it never lands
+        // in the leaf's `VarPositional` bucket at all.
+        let leaf = leaf_with_var_positional("wrapup_company");
+        let leaf_matches = clap::Command::new("wrapup_company")
+            .arg(
+                Arg::new("company_ids")
+                    .num_args(0..)
+                    .trailing_var_arg(true)
+                    .allow_hyphen_values(true),
+            )
+            .try_get_matches_from(vec!["wrapup_company", "12345"])
+            .unwrap();
+        let packed = pack_child_args(&leaf, &leaf_matches);
+        let parent = dry_run_dispatcher();
+        let parent_matches = clap::Command::new("job")
+            .arg(Arg::new("dry_run").long("dry-run").action(ArgAction::SetTrue))
+            .try_get_matches_from(vec!["job", "--dry-run"])
+            .unwrap();
+        let spec = build_dispatch_spec(
+            &parent,
+            &parent_matches,
+            packed,
+            Path::new("/repo"),
+            &OutputOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(spec.args.get("dry_run"), Some(&Value::Bool(true)));
+    }
+
+    #[test]
+    fn build_dispatch_spec_does_not_flag_a_literal_positional_value() {
+        // A positional value that isn't one of the parent's own flag
+        // spellings must pass through untouched — the check is an exact
+        // match against the parent's declared flags, not a blanket
+        // "looks like a flag" heuristic.
+        let leaf = leaf_with_var_positional("wrapup_company");
+        let leaf_matches = clap::Command::new("wrapup_company")
+            .arg(
+                Arg::new("company_ids")
+                    .num_args(0..)
+                    .trailing_var_arg(true)
+                    .allow_hyphen_values(true),
+            )
+            .try_get_matches_from(vec!["wrapup_company", "--stuck-company"])
+            .unwrap();
+        let packed = pack_child_args(&leaf, &leaf_matches);
+        let parent = dry_run_dispatcher();
+        let parent_matches = clap::Command::new("job")
+            .arg(Arg::new("dry_run").long("dry-run").action(ArgAction::SetTrue))
+            .try_get_matches_from(vec!["job"])
+            .unwrap();
+        let spec = build_dispatch_spec(
+            &parent,
+            &parent_matches,
+            packed,
+            Path::new("/repo"),
+            &OutputOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            spec.dispatch.unwrap().command_args.get("company_ids"),
+            Some(&Value::Array(vec![Value::String("--stuck-company".into())]))
+        );
     }
 
     #[test]

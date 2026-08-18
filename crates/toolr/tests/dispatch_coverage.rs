@@ -246,3 +246,116 @@ fn root_help_advertises_every_output_option() {
         );
     }
 }
+
+// --------------------------------------------------------------------
+// build_dispatch_spec(): dispatcher-level flags leaked into a leaf's
+// trailing variadic positional (toolr#445).
+// --------------------------------------------------------------------
+
+/// A `job` dispatcher (declaring its own `--dry-run`) under group
+/// `jenkins`, hosting one grafted child `wrapup_company` with a
+/// `VarPositional` `company_ids` argument — mirrors the issue's repro
+/// shape (a Django-management-command dispatcher).
+const JENKINS_JOB_MANIFEST: &str = r#"{
+    "schema_version": 1,
+    "static_hash": "h",
+    "third_party_hash": "",
+    "groups": [
+        {"name": "jenkins", "title": "Jenkins", "description": "", "origin": "static"}
+    ],
+    "commands": [
+        {
+            "name": "job",
+            "group": "jenkins",
+            "module": "tools.dispatcher",
+            "function": "job",
+            "summary": "Trigger a Jenkins job.",
+            "description": "",
+            "is_dispatcher": true,
+            "arguments": [
+                {
+                    "name": "dry_run",
+                    "kind": "flag",
+                    "help": "Print what would run instead of triggering the job.",
+                    "default": "false",
+                    "type_annotation": "bool",
+                    "resolved_type": {"kind": "bool"},
+                    "allowed_values": []
+                }
+            ],
+            "imports": [],
+            "origin": "static"
+        },
+        {
+            "name": "wrapup_company",
+            "group": "jenkins.job",
+            "module": "tools.dispatcher",
+            "function": "job",
+            "summary": "Wrap up a company.",
+            "description": "",
+            "dispatched_from": "argparse:jenkins.job",
+            "arguments": [
+                {
+                    "name": "company_ids",
+                    "kind": "var_positional",
+                    "help": "Company ids.",
+                    "default": null,
+                    "type_annotation": "str",
+                    "resolved_type": {"kind": "str"},
+                    "allowed_values": []
+                }
+            ],
+            "imports": [],
+            "origin": "static"
+        }
+    ]
+}"#;
+
+#[test]
+fn dispatcher_flag_typed_after_leaf_name_is_rejected() {
+    // Regression for toolr#445: `--dry-run` belongs to `jenkins job`, not
+    // to `wrapup_company`, but typed after the leaf name it used to be
+    // silently swallowed by the leaf's trailing `VarPositional` bucket
+    // and forwarded to the wrapped command instead of routing to the
+    // dispatcher's own flag.
+    let tmp = fixture_with_manifest(JENKINS_JOB_MANIFEST);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["jenkins", "job", "wrapup_company", "12345", "--dry-run"])
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit, got success. stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--dry-run"), "expected flag name in stderr, got:\n{stderr}");
+    assert!(
+        stderr.contains("wrapup_company"),
+        "expected leaf name in stderr, got:\n{stderr}"
+    );
+}
+
+#[test]
+fn dispatcher_flag_typed_before_leaf_name_still_parses_past_the_guard() {
+    // The correctly-ordered invocation must not trip the new guard —
+    // `--dry-run` is consumed by the dispatcher's own clap `Arg` before
+    // the leaf subcommand is even reached. No working Python venv exists
+    // in this fixture, so the run still fails downstream; we only assert
+    // it gets past the new rejection message.
+    let tmp = fixture_with_manifest(JENKINS_JOB_MANIFEST);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["jenkins", "job", "--dry-run", "wrapup_company", "12345"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("is an option of"),
+        "correctly-ordered --dry-run must not trip the leaked-flag guard; stderr:\n{stderr}",
+    );
+}
