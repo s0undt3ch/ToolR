@@ -318,7 +318,7 @@ mod tests {
             description: "".into(),
             arguments: vec![],
             warnings: vec![],
-            is_command_class: false,
+            is_django_command_class: false,
         }];
         let children = graft_children(&block, &scanned, &parents_with_django()).unwrap();
         assert_eq!(children.len(), 1);

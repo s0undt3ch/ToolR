@@ -26,7 +26,7 @@ pub struct ScannedCommand {
     /// `scan_block_paths` keep zero-argument management commands
     /// (e.g. a `BaseCommand` subclass with no `add_arguments` at all)
     /// instead of mistaking them for stray helper modules.
-    pub is_command_class: bool,
+    pub is_django_command_class: bool,
 }
 
 /// argparse keyword arguments we recognise — the signature-shape filter
@@ -48,7 +48,7 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
     })?;
     let module = parsed.into_syntax();
     let (summary, description) = split_docstring(&module_docstring(&module));
-    let is_command_class = defines_command_class(&module);
+    let is_django_command_class = defines_django_command_class(&module);
 
     let mut out = ScannedCommand {
         name: command_name.to_string(),
@@ -56,7 +56,7 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
         description,
         arguments: Vec::new(),
         warnings: Vec::new(),
-        is_command_class,
+        is_django_command_class,
     };
 
     for stmt in &module.body {
@@ -72,7 +72,7 @@ pub fn scan_source(command_name: &str, source_text: &str) -> Result<ScannedComma
 /// classes are resolved — an alias to an imported name (`Command =
 /// SomeImportedClass`) isn't verifiable without import resolution, so
 /// it's treated as unresolved rather than guessed at.
-fn defines_command_class(module: &ModModule) -> bool {
+fn defines_django_command_class(module: &ModModule) -> bool {
     let mut top_level_classes: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for stmt in &module.body {
         if let Stmt::ClassDef(class_def) = stmt {
@@ -608,7 +608,7 @@ pub fn scan_block_paths(
                 // A no-arg file is usually a helper, not a command — grafting it
                 // would risk a clap stem collision. Kept anyway for a Django block
                 // whose file defines `Command`: that's a genuine zero-arg command.
-                if cmd.arguments.is_empty() && !(django && cmd.is_command_class) {
+                if cmd.arguments.is_empty() && !(django && cmd.is_django_command_class) {
                     continue;
                 }
                 out.push(cmd);
@@ -1023,7 +1023,7 @@ def add_arguments(self, parser):
                 long_flag: Some("--verbosity".into()),
             }],
             warnings: vec![],
-            is_command_class: false,
+            is_django_command_class: false,
         };
         let common = vec![
             CommonArg {
@@ -1127,7 +1127,7 @@ def add_arguments(self, parser):
         let source =
             "class Command(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n";
         let scanned = scan_source("x", source).unwrap();
-        assert!(scanned.is_command_class);
+        assert!(scanned.is_django_command_class);
         assert!(scanned.arguments.is_empty());
     }
 
@@ -1138,7 +1138,7 @@ def add_arguments(self, parser):
         let source = "\
 class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **options):\n        pass\n\nCommand = SegmentationDocumentsUpdater\n";
         let scanned = scan_source("x", source).unwrap();
-        assert!(scanned.is_command_class);
+        assert!(scanned.is_django_command_class);
         assert!(scanned.arguments.is_empty());
     }
 
@@ -1148,7 +1148,7 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
         // resolution — treated as unresolved, not guessed at.
         let source = "from elsewhere import SomeImportedClass\n\nCommand = SomeImportedClass\n";
         let scanned = scan_source("x", source).unwrap();
-        assert!(!scanned.is_command_class);
+        assert!(!scanned.is_django_command_class);
     }
 
     #[test]
@@ -1157,7 +1157,7 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
         // `Command` at all — must not be mistaken for one.
         let source = "class Foo(BaseCommand):\n    pass\n\nLOGGER = 'x'\n";
         let scanned = scan_source("x", source).unwrap();
-        assert!(!scanned.is_command_class);
+        assert!(!scanned.is_django_command_class);
     }
 
     #[test]
@@ -1166,7 +1166,7 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
         // doesn't satisfy Django's module-level `Command` contract.
         let source = "class Foo(BaseCommand):\n    pass\n\nobj.Command = Foo\n";
         let scanned = scan_source("x", source).unwrap();
-        assert!(!scanned.is_command_class);
+        assert!(!scanned.is_django_command_class);
     }
 
     #[test]
@@ -1175,7 +1175,7 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
         // single-target `Command = <Name>` shape this detects.
         let source = "class Foo(BaseCommand):\n    pass\n\na = Command = Foo\n";
         let scanned = scan_source("x", source).unwrap();
-        assert!(!scanned.is_command_class);
+        assert!(!scanned.is_django_command_class);
     }
 
     #[test]
@@ -1184,7 +1184,7 @@ class SegmentationDocumentsUpdater(BaseCommand):\n    def handle(self, *args, **
         // class by name — nothing to resolve statically.
         let source = "class Foo(BaseCommand):\n    pass\n\nCommand = make_command()\n";
         let scanned = scan_source("x", source).unwrap();
-        assert!(!scanned.is_command_class);
+        assert!(!scanned.is_django_command_class);
     }
 
     #[test]
