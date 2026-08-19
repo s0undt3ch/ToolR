@@ -13,17 +13,32 @@ pub struct EnumMember {
     pub value: String,
 }
 
+/// A class name's enum members plus the dotted module path that
+/// defines it, so that two unrelated classes sharing a bare name
+/// (e.g. `Database` in two different `tools/*.py` files) don't
+/// collide when tables from multiple modules are merged (GH #449).
+#[derive(Debug, Clone)]
+struct EnumDef {
+    module: String,
+    members: Vec<EnumMember>,
+}
+
 /// Mapping of local class name → enum members, for classes that look
 /// like an `Enum` subclass. Tracks both the member name (`ADD`) and
 /// its serialised value (`"add"`) so we can resolve attribute-style
 /// defaults like `Operation.ADD` to the CLI-visible value.
+///
+/// Keyed by bare class name, but each entry carries every module that
+/// defines a class with that name — `resolve_def` picks the one that's
+/// actually in scope for the caller's module rather than whichever
+/// definition happened to be merged in last.
 #[derive(Debug, Default, Clone)]
 pub struct EnumTable {
-    members: HashMap<String, Vec<EnumMember>>,
+    members: HashMap<String, Vec<EnumDef>>,
 }
 
 impl EnumTable {
-    pub fn from_module(module: &ModModule) -> Self {
+    pub fn from_module(module: &ModModule, module_path: &str) -> Self {
         let mut table = EnumTable::default();
         for stmt in &module.body {
             let Stmt::ClassDef(class) = stmt else {
@@ -38,31 +53,54 @@ impl EnumTable {
                 .filter_map(member_value)
                 .collect::<Vec<_>>();
             if !members.is_empty() {
-                table.members.insert(class.name.to_string(), members);
+                table.members.entry(class.name.to_string()).or_default().push(EnumDef {
+                    module: module_path.to_string(),
+                    members,
+                });
             }
         }
         table
     }
 
+    /// Pick the `class` definition that's actually visible from
+    /// `current_module`: a same-module definition always wins. Failing
+    /// that, an unambiguous single cross-module definition (the common
+    /// "enum lives in a shared module, imported elsewhere" case) is
+    /// used. Two or more different-module definitions with no local
+    /// match are genuinely ambiguous — the static parser doesn't track
+    /// which one, if any, was actually imported here — so this returns
+    /// `None` rather than silently picking one, surfacing as an
+    /// unsupported-type error instead of a wrong result.
+    fn resolve_def(&self, class: &str, current_module: &str) -> Option<&[EnumMember]> {
+        let defs = self.members.get(class)?;
+        if let Some(d) = defs.iter().find(|d| d.module == current_module) {
+            return Some(&d.members);
+        }
+        match defs.as_slice() {
+            [only] => Some(&only.members),
+            _ => None,
+        }
+    }
+
     /// List of serialised values for `class`. Used for `allowed_values`.
-    pub fn lookup(&self, class: &str) -> Option<Vec<String>> {
-        self.members
-            .get(class)
+    pub fn lookup(&self, class: &str, current_module: &str) -> Option<Vec<String>> {
+        self.resolve_def(class, current_module)
             .map(|m| m.iter().map(|em| em.value.clone()).collect())
     }
 
     /// Resolve `class.member` to its serialised value. Used when
     /// rendering enum-attribute defaults in `--help`.
-    pub fn lookup_member(&self, class: &str, member: &str) -> Option<&str> {
-        self.members
-            .get(class)?
+    pub fn lookup_member(&self, class: &str, member: &str, current_module: &str) -> Option<&str> {
+        self.resolve_def(class, current_module)?
             .iter()
             .find(|em| em.name == member)
             .map(|em| em.value.as_str())
     }
 
     pub fn merge(&mut self, other: EnumTable) {
-        self.members.extend(other.members);
+        for (name, defs) in other.members {
+            self.members.entry(name).or_default().extend(defs);
+        }
     }
 }
 
@@ -331,8 +369,8 @@ class Mode(StrEnum):
     FAST = "fast"
     SLOW = "slow"
 "#;
-        let table = EnumTable::from_module(&parse(src));
-        let vals = table.lookup("Mode").unwrap();
+        let table = EnumTable::from_module(&parse(src), "tools.example");
+        let vals = table.lookup("Mode", "tools.example").unwrap();
         assert_eq!(vals, vec!["fast".to_string(), "slow".to_string()]);
     }
 
@@ -345,11 +383,14 @@ class Operation(StrEnum):
     ADD = "add"
     SUBTRACT = "subtract"
 "#;
-        let table = EnumTable::from_module(&parse(src));
-        assert_eq!(table.lookup_member("Operation", "ADD"), Some("add"));
-        assert_eq!(table.lookup_member("Operation", "SUBTRACT"), Some("subtract"));
-        assert_eq!(table.lookup_member("Operation", "MISSING"), None);
-        assert_eq!(table.lookup_member("OtherClass", "ADD"), None);
+        let table = EnumTable::from_module(&parse(src), "tools.example");
+        assert_eq!(table.lookup_member("Operation", "ADD", "tools.example"), Some("add"));
+        assert_eq!(
+            table.lookup_member("Operation", "SUBTRACT", "tools.example"),
+            Some("subtract")
+        );
+        assert_eq!(table.lookup_member("Operation", "MISSING", "tools.example"), None);
+        assert_eq!(table.lookup_member("OtherClass", "ADD", "tools.example"), None);
     }
 
     #[test]
@@ -361,10 +402,10 @@ class Code(IntEnum):
     OK = 0
     ERROR = 1
 "#;
-        let table = EnumTable::from_module(&parse(src));
+        let table = EnumTable::from_module(&parse(src), "tools.example");
         // No string value, so we record the member's own name.
-        assert_eq!(table.lookup_member("Code", "OK"), Some("OK"));
-        assert_eq!(table.lookup_member("Code", "ERROR"), Some("ERROR"));
+        assert_eq!(table.lookup_member("Code", "OK", "tools.example"), Some("OK"));
+        assert_eq!(table.lookup_member("Code", "ERROR", "tools.example"), Some("ERROR"));
     }
 
     #[test]
@@ -373,8 +414,43 @@ class Code(IntEnum):
 class Foo:
     X = "x"
 "#;
-        let table = EnumTable::from_module(&parse(src));
-        assert!(table.lookup("Foo").is_none());
+        let table = EnumTable::from_module(&parse(src), "tools.example");
+        assert!(table.lookup("Foo", "tools.example").is_none());
+    }
+
+    #[test]
+    fn colliding_bare_names_resolve_per_module_not_last_merged_wins() {
+        let a = parse(
+            r#"
+from enum import StrEnum
+
+class Database(StrEnum):
+    PRIMARY = "primary"
+"#,
+        );
+        let b = parse(
+            r#"
+from enum import StrEnum
+
+class Database(StrEnum):
+    REPLICA = "replica"
+"#,
+        );
+        let mut table = EnumTable::from_module(&a, "tools.module_a");
+        table.merge(EnumTable::from_module(&b, "tools.module_b"));
+
+        assert_eq!(
+            table.lookup("Database", "tools.module_a").unwrap(),
+            vec!["primary".to_string()]
+        );
+        assert_eq!(
+            table.lookup("Database", "tools.module_b").unwrap(),
+            vec!["replica".to_string()]
+        );
+        // Neither module's definition wins from an unrelated module —
+        // the collision is genuinely ambiguous, so this resolves to
+        // nothing rather than silently picking one (GH #449).
+        assert!(table.lookup("Database", "tools.module_c").is_none());
     }
 
     #[test]

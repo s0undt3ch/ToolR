@@ -19,6 +19,7 @@ pub fn extract_arguments(
     enums: &EnumTable,
     consts: &ConstTable,
     sources: &SourcesImports,
+    module: &str,
 ) -> Vec<Argument> {
     let params = func.parameters.as_ref();
     let mut out = Vec::new();
@@ -39,6 +40,7 @@ pub fn extract_arguments(
             p.default.as_deref(),
             enums,
             consts,
+            module,
         ));
     }
 
@@ -52,6 +54,7 @@ pub fn extract_arguments(
             None,
             enums,
             consts,
+            module,
         ));
     }
 
@@ -78,12 +81,14 @@ pub fn extract_arguments(
             p.default.as_deref(),
             enums,
             consts,
+            module,
         ));
     }
 
     out
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_argument(
     name: String,
     kind: ArgumentKind,
@@ -91,15 +96,16 @@ fn build_argument(
     default: Option<&Expr>,
     enums: &EnumTable,
     consts: &ConstTable,
+    module: &str,
 ) -> Argument {
     let allowed_values = annotation
-        .map(|a| collect_allowed_values(a, enums))
+        .map(|a| collect_allowed_values(a, enums, module))
         .unwrap_or_default();
     Argument {
         name,
         kind,
         help: String::new(),
-        default: default.map(|d| literal_default(d, enums, consts)),
+        default: default.map(|d| literal_default(d, enums, consts, module)),
         type_annotation: annotation.map(annotation_to_string),
         resolved_type: None,
         path_constraints: None,
@@ -172,13 +178,13 @@ fn is_list_like_annotation(expr: &Expr) -> bool {
     matches!(head, "list" | "List" | "tuple" | "Tuple")
 }
 
-fn collect_allowed_values(annotation: &Expr, enums: &EnumTable) -> Vec<String> {
+fn collect_allowed_values(annotation: &Expr, enums: &EnumTable, module: &str) -> Vec<String> {
     let mut allowed = literal_values(annotation);
     if !allowed.is_empty() {
         return allowed;
     }
     if let Some(name) = referenced_name(annotation) {
-        if let Some(vals) = enums.lookup(name) {
+        if let Some(vals) = enums.lookup(name, module) {
             allowed = vals.to_vec();
         }
     }
@@ -201,7 +207,7 @@ fn referenced_name(expr: &Expr) -> Option<&str> {
 /// `Class.MEMBER` attribute defaults are resolved via `enums` to their
 /// serialised value (so `Operation.ADD` becomes `"add"` for a
 /// `StrEnum`).
-fn literal_default(expr: &Expr, enums: &EnumTable, consts: &ConstTable) -> String {
+fn literal_default(expr: &Expr, enums: &EnumTable, consts: &ConstTable, module: &str) -> String {
     match expr {
         Expr::StringLiteral(s) => s.value.to_str().to_string(),
         Expr::NumberLiteral(n) => match &n.value {
@@ -219,7 +225,7 @@ fn literal_default(expr: &Expr, enums: &EnumTable, consts: &ConstTable) -> Strin
         // in cli.rs:build_user_command skips applying it).
         Expr::NoneLiteral(_) => String::new(),
         Expr::List(l) if l.elts.is_empty() => String::new(),
-        Expr::Attribute(attr) => resolve_enum_attribute_default(attr, enums)
+        Expr::Attribute(attr) => resolve_enum_attribute_default(attr, enums, module)
             .unwrap_or_else(|| "<expr>".to_string()),
         // Bare name reference (e.g. `mode: str = DEFAULT_MODE`) — look up
         // the resolved literal in the same-module constant table. Falls
@@ -239,13 +245,14 @@ fn literal_default(expr: &Expr, enums: &EnumTable, consts: &ConstTable) -> Strin
 fn resolve_enum_attribute_default(
     attr: &ruff_python_ast::ExprAttribute,
     enums: &EnumTable,
+    module: &str,
 ) -> Option<String> {
     let class = match attr.value.as_ref() {
         Expr::Name(n) => n.id.as_str(),
         _ => return None,
     };
     enums
-        .lookup_member(class, attr.attr.as_str())
+        .lookup_member(class, attr.attr.as_str(), module)
         .map(str::to_string)
 }
 
@@ -313,7 +320,7 @@ mod tests {
     #[test]
     fn skips_ctx_first_argument() {
         let func = first_func("def f(ctx, name): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
@@ -321,7 +328,7 @@ mod tests {
     #[test]
     fn marks_arguments_with_defaults_as_optional() {
         let func = first_func("def f(ctx, name=\"x\"): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].kind, ArgumentKind::Optional);
         assert_eq!(args[0].default.as_deref(), Some("x"));
     }
@@ -329,7 +336,7 @@ mod tests {
     #[test]
     fn bool_with_false_default_classified_as_flag() {
         let func = first_func("def f(ctx, verbose: bool = False): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].kind, ArgumentKind::Flag);
         assert_eq!(args[0].default.as_deref(), Some("false"));
     }
@@ -346,7 +353,7 @@ mod tests {
              from toolr import arg\n\
              def f(ctx, verbose: Annotated[bool, arg(env=\"VERBOSE\")] = False): pass\n",
         );
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].kind, ArgumentKind::Flag);
     }
 
@@ -357,21 +364,21 @@ mod tests {
              from toolr import arg\n\
              def f(ctx, items: Annotated[list[str], arg(aliases=[\"-i\"])] = []): pass\n",
         );
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].kind, ArgumentKind::Repeated);
     }
 
     #[test]
     fn list_keyword_classified_as_repeated() {
         let func = first_func("def f(ctx, files: list[str] = []): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].kind, ArgumentKind::Repeated);
     }
 
     #[test]
     fn star_args_emits_var_positional() {
         let func = first_func("def f(ctx, *files: str): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "files");
         assert_eq!(args[0].kind, ArgumentKind::VarPositional);
@@ -381,14 +388,14 @@ mod tests {
     #[test]
     fn integer_default_serialized_without_format_noise() {
         let func = first_func("def f(ctx, n: int = 5): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].default.as_deref(), Some("5"));
     }
 
     #[test]
     fn string_default_has_no_embedded_quotes() {
         let func = first_func("def f(ctx, name: str = \"world\"): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].default.as_deref(), Some("world"));
     }
 
@@ -405,7 +412,7 @@ def f(ctx, op: Operation = Operation.ADD): pass
 "#;
         let m = module(src);
         let mut enums = EnumTable::default();
-        enums.merge(EnumTable::from_module(&m));
+        enums.merge(EnumTable::from_module(&m, "tools.test"));
         let func = m
             .body
             .iter()
@@ -414,14 +421,14 @@ def f(ctx, op: Operation = Operation.ADD): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &enums, &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &enums, &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].default.as_deref(), Some("add"));
     }
 
     #[test]
     fn unknown_enum_attribute_falls_back_to_expr_placeholder() {
         let func = first_func("def f(ctx, x = Unknown.MEMBER): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].default.as_deref(), Some("<expr>"));
     }
 
@@ -434,7 +441,7 @@ def f(ctx, op: Operation = Operation.ADD): pass
     #[test]
     fn captures_type_annotations_as_strings() {
         let func = first_func("def f(ctx, name: str = \"x\"): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].type_annotation.as_deref(), Some("str"));
     }
 
@@ -446,7 +453,7 @@ from typing import Literal
 def f(ctx, mode: Literal["a", "b"]): pass
 "#,
         );
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(
             args[0].allowed_values,
             vec!["a".to_string(), "b".to_string()]
@@ -456,7 +463,7 @@ def f(ctx, mode: Literal["a", "b"]): pass
     #[test]
     fn leaves_allowed_values_empty_for_non_literal_types() {
         let func = first_func("def f(ctx, name: str): pass\n");
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert!(args[0].allowed_values.is_empty());
     }
 
@@ -478,7 +485,7 @@ def f(ctx, mode: Mode): pass
         tmp.write_all(src.as_bytes()).unwrap();
         let m = crate::parser::parse_python_file(tmp.path()).unwrap();
         let mut enums = EnumTable::default();
-        enums.merge(EnumTable::from_module(&m));
+        enums.merge(EnumTable::from_module(&m, "tools.test"));
         // Pull out the function manually (skip the enum class above).
         let func = m
             .body
@@ -488,7 +495,7 @@ def f(ctx, mode: Mode): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &enums, &ConstTable::default(), &SourcesImports::default());
+        let args = extract_arguments(&func, &enums, &ConstTable::default(), &SourcesImports::default(), "tools.test");
         assert_eq!(
             args[0].allowed_values,
             vec!["fast".to_string(), "slow".to_string()]
@@ -517,7 +524,7 @@ def f(ctx, *, cpu: str = "1", dispatched: DispatchCommand): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources, "tools.test");
         assert_eq!(args.len(), 1, "expected `dispatched` to be filtered out, got {args:?}");
         assert_eq!(args[0].name, "cpu");
     }
@@ -542,7 +549,7 @@ def f(ctx, *, name: str = "x", dispatched: DC): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources, "tools.test");
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
@@ -567,7 +574,7 @@ def f(ctx, *, name: str = "x"): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources, "tools.test");
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
         // The annotation rendering hasn't lost the type tag.
@@ -593,7 +600,7 @@ def f(ctx, *, name: str = "x", dispatched: toolr.sources.DispatchCommand): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources, "tools.test");
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
     }
@@ -623,7 +630,7 @@ def f(ctx, *, cpu: str = "1", dispatched: Annotated[DispatchCommand, arg(help="x
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources, "tools.test");
         assert!(
             args.iter().all(|a| a.name != "dispatched"),
             "expected `dispatched` to be filtered out, got {args:?}"
@@ -650,7 +657,7 @@ def f(ctx, *, cpu: str = "1", dispatched: "DispatchCommand"): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources, "tools.test");
         assert!(
             args.iter().all(|a| a.name != "dispatched"),
             "expected `dispatched` to be filtered out, got {args:?}"
@@ -678,7 +685,7 @@ def f(ctx, *, cpu: str = "1", dispatched: "DC"): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources);
+        let args = extract_arguments(&func, &EnumTable::default(), &ConstTable::default(), &sources, "tools.test");
         assert!(
             args.iter().all(|a| a.name != "dispatched"),
             "expected `dispatched` to be filtered out, got {args:?}"
@@ -707,7 +714,7 @@ def f(ctx, *, mode: str = DEFAULT_MODE): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].default.as_deref(), Some("fast"));
     }
 
@@ -731,7 +738,7 @@ def f(ctx, *, retries: int = MAX_RETRIES, loud: bool = VERBOSE): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].default.as_deref(), Some("3"));
         assert_eq!(args[1].default.as_deref(), Some("true"));
     }
@@ -756,7 +763,7 @@ def f(ctx, *, path: str = compute_default()): pass
                 _ => None,
             })
             .unwrap();
-        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default());
+        let args = extract_arguments(&func, &EnumTable::default(), &consts, &SourcesImports::default(), "tools.test");
         assert_eq!(args[0].default.as_deref(), Some("<expr>"));
     }
 }

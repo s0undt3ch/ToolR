@@ -72,22 +72,22 @@ mod tests {
     fn primitives_resolve() {
         let (_, ann) = first_annotation("def f(x: int): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Int
         );
         let (_, ann) = first_annotation("def f(x: float): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Float
         );
         let (_, ann) = first_annotation("def f(x: bool): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Bool
         );
         let (_, ann) = first_annotation("def f(x: str): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Str
         );
     }
@@ -96,7 +96,7 @@ mod tests {
     fn bare_path_name_is_supported() {
         let (_, ann) = first_annotation("def f(x: Path): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Path
         );
     }
@@ -105,7 +105,7 @@ mod tests {
     fn pathlib_path_attribute_is_supported() {
         let (_, ann) = first_annotation("def f(x: pathlib.Path): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Path
         );
     }
@@ -117,7 +117,7 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::ResolvedPath
         );
     }
@@ -129,7 +129,7 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::ResolvedPath
         );
     }
@@ -141,7 +141,7 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::AbsolutePath
         );
     }
@@ -150,7 +150,7 @@ mod tests {
     fn unknown_dotted_name_errors_with_pointer_to_toolr_types() {
         let (_, ann) = first_annotation("def f(x: datetime.datetime): pass\n");
         let err =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).expect_err("should fail");
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").expect_err("should fail");
         let msg = err.to_string();
         assert!(msg.contains("datetime.datetime"), "msg was: {msg}");
         assert!(msg.contains("toolr.types"), "msg was: {msg}");
@@ -160,7 +160,7 @@ mod tests {
     fn list_of_int_resolves() {
         let (_, ann) = first_annotation("def f(x: list[int]): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::List(Box::new(SupportedType::Int))
         );
     }
@@ -169,7 +169,7 @@ mod tests {
     fn tuple_str_int_resolves_heterogeneous() {
         let (_, ann) = first_annotation("def f(x: tuple[str, int]): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Tuple(vec![SupportedType::Str, SupportedType::Int])
         );
     }
@@ -180,7 +180,7 @@ mod tests {
             "from typing import Literal\ndef f(x: Literal[\"a\", \"b\"]): pass\n",
         );
         let SupportedType::Literal(values) =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap()
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap()
         else {
             panic!("expected Literal");
         };
@@ -191,7 +191,7 @@ mod tests {
     fn optional_via_bin_or_with_none() {
         let (_, ann) = first_annotation("def f(x: int | None): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default()).unwrap(),
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
             SupportedType::Optional(Box::new(SupportedType::Int))
         );
     }
@@ -252,7 +252,7 @@ def f(commit_sha: CommitHash): pass
         let (_, ann) = first_annotation(src);
         let aliases = TypeAliasTable::from_module(&m);
         let resolved =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases).unwrap();
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases, "tools.test").unwrap();
         assert_eq!(
             resolved,
             SupportedType::Optional(Box::new(SupportedType::Str))
@@ -270,7 +270,7 @@ def f(hosts: HostList): pass
         let (_, ann) = first_annotation(src);
         let aliases = TypeAliasTable::from_module(&m);
         let resolved =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases).unwrap();
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases, "tools.test").unwrap();
         assert_eq!(resolved, SupportedType::List(Box::new(SupportedType::Str)));
     }
 
@@ -286,7 +286,7 @@ def f(x: A): pass
         let (_, ann) = first_annotation(src);
         let aliases = TypeAliasTable::from_module(&m);
         let err =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases)
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases, "tools.test")
                 .expect_err("cycle must error");
         let msg = err.to_string();
         assert!(msg.contains("cyclic"), "got: {msg}");
@@ -298,8 +298,8 @@ def f(x: A): pass
         let m = module(src);
         let (_, ann) = first_annotation(src);
         let mut enums = EnumTable::default();
-        enums.merge(EnumTable::from_module(&m));
-        let resolved = resolve(&ann, &enums, &TypeImports::default(), &TypeAliasTable::default()).unwrap();
+        enums.merge(EnumTable::from_module(&m, "tools.test"));
+        let resolved = resolve(&ann, &enums, &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap();
         assert_eq!(
             resolved,
             SupportedType::Enum {
@@ -429,7 +429,7 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
         let m = module(src);
         let imports = TypeImports::from_module(&m);
         let resolved =
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default()).unwrap();
+            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap();
         assert_eq!(resolved, SupportedType::Count);
     }
 }

@@ -127,7 +127,7 @@ fn resolve_one(
     {
         arg.metadata = md;
     }
-    match resolve(expr, enums, type_imports, aliases) {
+    match resolve(expr, enums, type_imports, aliases, module) {
         Ok(ty) => {
             // Post-resolution kind override: `toolr.types.Count` is the
             // only type that flips the inferred kind, since the type
@@ -188,25 +188,31 @@ fn follow_alias_for_arg_metadata(
     extract_arg_metadata(aliased, sections)
 }
 
-/// Resolve a parameter annotation to a [`SupportedType`].
+/// Resolve a parameter annotation to a [`SupportedType`]. `module` is
+/// the dotted path of the module the annotation was parsed from — it
+/// disambiguates enum classes that share a bare name across unrelated
+/// `tools/*.py` files (see [`EnumTable`]).
 pub fn resolve(
     annotation: &Expr,
     enums: &EnumTable,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
+    module: &str,
 ) -> Result<SupportedType, UnsupportedType> {
-    resolve_inner(annotation, enums, imports, aliases, &mut Vec::new())
+    resolve_inner(annotation, enums, imports, aliases, module, &mut Vec::new())
 }
 
 /// `seen` tracks names currently being expanded to break alias cycles
 /// (`A = B; B = A`). Capped depth gives a second line of defence.
 const MAX_ALIAS_DEPTH: usize = 16;
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_inner(
     annotation: &Expr,
     enums: &EnumTable,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
+    module: &str,
     seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
     if seen.len() >= MAX_ALIAS_DEPTH {
@@ -215,7 +221,7 @@ fn resolve_inner(
         ));
     }
     match annotation {
-        Expr::Name(n) => resolve_name(n.id.as_str(), enums, imports, aliases, seen),
+        Expr::Name(n) => resolve_name(n.id.as_str(), enums, imports, aliases, module, seen),
         Expr::Attribute(_) => {
             if let Some(toolr_name) = imports.resolve_attribute(annotation) {
                 return resolve_toolr_types_name(toolr_name);
@@ -229,17 +235,19 @@ fn resolve_inner(
             }
             Err(UnsupportedType::UnknownName(rendered))
         }
-        Expr::Subscript(sub) => resolve_subscript(sub, enums, imports, aliases, seen),
-        Expr::BinOp(op) => resolve_bin_op(op, enums, imports, aliases, seen),
+        Expr::Subscript(sub) => resolve_subscript(sub, enums, imports, aliases, module, seen),
+        Expr::BinOp(op) => resolve_bin_op(op, enums, imports, aliases, module, seen),
         _ => Err(UnsupportedType::UnknownName(annotation_to_label(annotation))),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_name(
     name: &str,
     enums: &EnumTable,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
+    module: &str,
     seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
     if let Some(canonical) = imports.resolve_direct(name) {
@@ -252,7 +260,7 @@ fn resolve_name(
         "bool" => Ok(SupportedType::Bool),
         "Path" => Ok(SupportedType::Path),
         _ => {
-            if let Some(values) = enums.lookup(name) {
+            if let Some(values) = enums.lookup(name, module) {
                 return Ok(SupportedType::Enum {
                     name: name.to_string(),
                     values: values.to_vec(),
@@ -268,7 +276,7 @@ fn resolve_name(
                     )));
                 }
                 seen.push(name.to_string());
-                let result = resolve_inner(aliased, enums, imports, aliases, seen);
+                let result = resolve_inner(aliased, enums, imports, aliases, module, seen);
                 seen.pop();
                 return result;
             }
@@ -294,11 +302,13 @@ pub(super) fn resolve_toolr_types_name(name: &str) -> Result<SupportedType, Unsu
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_subscript(
     sub: &ruff_python_ast::ExprSubscript,
     enums: &EnumTable,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
+    module: &str,
     seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
     let head = match sub.value.as_ref() {
@@ -316,7 +326,7 @@ fn resolve_subscript(
             }
         }
         "list" | "List" => {
-            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, seen)
+            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, module, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::List(Box::new(inner)))
         }
@@ -324,14 +334,14 @@ fn resolve_subscript(
             let parts = tuple_element_exprs(sub.slice.as_ref());
             let resolved: Result<Vec<_>, _> = parts
                 .into_iter()
-                .map(|elt| resolve_inner(elt, enums, imports, aliases, seen))
+                .map(|elt| resolve_inner(elt, enums, imports, aliases, module, seen))
                 .collect();
             Ok(SupportedType::Tuple(
                 resolved.map_err(|e| UnsupportedType::Inner(Box::new(e)))?,
             ))
         }
         "Optional" => {
-            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, seen)
+            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, module, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
@@ -343,7 +353,7 @@ fn resolve_subscript(
             let first = exprs
                 .first()
                 .ok_or_else(|| UnsupportedType::UnsupportedShape("Annotated[]".into()))?;
-            resolve_inner(first, enums, imports, aliases, seen)
+            resolve_inner(first, enums, imports, aliases, module, seen)
         }
         other => Err(UnsupportedType::UnsupportedShape(other.to_string())),
     }
@@ -354,6 +364,7 @@ fn resolve_bin_op(
     enums: &EnumTable,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
+    module: &str,
     seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
     if !matches!(op.op, ruff_python_ast::Operator::BitOr) {
@@ -366,12 +377,12 @@ fn resolve_bin_op(
     let none_rhs = matches!(rhs, Expr::NoneLiteral(_));
     match (none_lhs, none_rhs) {
         (false, true) => {
-            let inner = resolve_inner(lhs, enums, imports, aliases, seen)
+            let inner = resolve_inner(lhs, enums, imports, aliases, module, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
         (true, false) => {
-            let inner = resolve_inner(rhs, enums, imports, aliases, seen)
+            let inner = resolve_inner(rhs, enums, imports, aliases, module, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
