@@ -6,6 +6,49 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.29.0 - 2026-08-19
+
+### Notes
+
+- Fixed the built-in argparse scanner (`[tool.toolr.argparse.*]`) silently
+  dropping Django management commands that take no CLI arguments at all —
+  e.g. a `BaseCommand` subclass with no `add_arguments` method. The
+  scanner used "found zero `add_argument()` calls" as its only signal
+  for "this isn't a real command," which also matched genuine zero-arg
+  commands. A new opt-in `django = true` block setting recognises a
+  module-level `class Command(...)` or `Command = <Name>` alias to a
+  same-module class — Django's own loader contract — so zero-arg
+  commands are kept while stray helper modules are still excluded.
+  Plain argparse blocks (the default) are unaffected. Separately,
+  underscore-prefixed filenames (`_helpers.py`, `__init__.py`) are now
+  skipped outright for every block, Django or not — that convention is
+  plain Python, not Django-specific.
+
+A dispatcher's own flag (e.g. `--dry-run` on a `job` dispatcher wrapping
+Django management commands) typed *after* the dispatched subcommand name
+was silently forwarded to the wrapped command instead of being rejected —
+the dispatcher's own parameter kept its default, so a safety flag like
+`--dry-run` had no effect at all. `toolr <dispatcher> <leaf> ... --flag`
+now errors, pointing at the correct position, instead of silently
+executing for real ([#445](https://github.com/s0undt3ch/ToolR/issues/445)).
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(docs)* Drop navigation.tabs so all top-level pages stay reachable ([`befa20d`](https://github.com/s0undt3ch/ToolR/commit/befa20d0b9fe2702ad70fd35110e21774a8ed61a))
+- *(deps)* Correct aqua:s0undt3ch/ToolR pin to 0.28.0 ([`af9c93a`](https://github.com/s0undt3ch/ToolR/commit/af9c93a005a6203cde56fb00f3a05a3b0611e8b5))
+- *(argparse)* Keep zero-arg Django management commands in the scanner ([`a54dcc7`](https://github.com/s0undt3ch/ToolR/commit/a54dcc79d1e19e0beee3d7fb250ffb14cdb4c039))
+- *(argparse)* Gate Command-symbol detection behind an opt-in django flag ([`3698642`](https://github.com/s0undt3ch/ToolR/commit/3698642806537ce7597abd6038c16a38976d62fa))
+- *(argparse)* Make the underscore-filename skip unconditional ([`2a2db0b`](https://github.com/s0undt3ch/ToolR/commit/2a2db0bf210789d41925f167859c4c81560cd698))
+- *(dispatch)* Reject dispatcher flags leaked into a leaf's trailing args ([`142ba11`](https://github.com/s0undt3ch/ToolR/commit/142ba117beff849fc5760b257e9ad97a13bd17ae))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(argparse)* Rename is_command_class/defines_command_class to django-prefixed ([`5e634da`](https://github.com/s0undt3ch/ToolR/commit/5e634da0c0a91924ea69c755b9e53d75faf9b222))
+
+### <!-- 5 -->🎨 Styling
+
+- *(argparse)* Tighten inline comments to one-or-two-line why statements ([`274e7ec`](https://github.com/s0undt3ch/ToolR/commit/274e7ec3a3a8923dce4dc03d87f2d8b868bcbd87))
+- *(argparse)* Rewrap this PR's comments to the repo's 100/120 width policy ([`847039a`](https://github.com/s0undt3ch/ToolR/commit/847039a673ec5d4803ced07bbffa3c5303ec8501))
 ## 0.28.0 - 2026-08-17
 
 ### Notes
