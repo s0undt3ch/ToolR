@@ -26,7 +26,7 @@ prek = "0.4.14"
 # hooks backed by `toolr pre-commit <command>` in `tools/precommit/`).
 # CI jobs install it via the in-repo Setup ToolR action instead, which
 # also verifies the SLSA attestation.
-"aqua:s0undt3ch/ToolR" = "0.28.0"
+"aqua:s0undt3ch/ToolR" = "0.29.0"
 
 [env]
 _.python.venv = { path = ".venv", create = true, uv_create_args = ['--seed'] }
