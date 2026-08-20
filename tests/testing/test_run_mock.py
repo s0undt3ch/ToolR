@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+from unittest.mock import call
+
 import pytest
 
 from toolr.testing._run_mock import RunMock
@@ -37,6 +40,18 @@ def test_run_mock_records_calls():
 
     run_mock.assert_called_once_with(("git", "fetch"), stream_output=True, capture_output=True)
     assert run_mock.call_count == 1
+
+
+def test_run_mock_assert_called_once_ignores_args():
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="up to date\n")
+
+    run_mock(("git", "fetch"), stream_output=True, capture_output=True)
+
+    run_mock.assert_called_once()
+    run_mock(("git", "fetch"), stream_output=True, capture_output=True)
+    with pytest.raises(AssertionError):
+        run_mock.assert_called_once()
 
 
 def test_run_mock_forces_stdout_and_stderr_none_without_capture_output():
@@ -205,3 +220,70 @@ def test_run_mock_call_args_list_records_every_call_in_order():
         (("git", "status"),),
         (("git", "fetch"),),
     ]
+
+
+def test_run_mock_assert_called_ignores_args_and_call_count():
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="ok\n")
+
+    with pytest.raises(AssertionError):
+        run_mock.assert_called()
+
+    run_mock(("git", "status"), capture_output=True)
+    run_mock(("git", "fetch"), capture_output=True)
+
+    run_mock.assert_called()
+
+
+def test_run_mock_assert_has_calls_checks_a_call_subsequence():
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result(stdout="ok\n")
+
+    run_mock(("git", "status"), capture_output=True)
+    run_mock(("git", "fetch"), capture_output=True)
+    run_mock(("git", "push"), capture_output=True)
+
+    run_mock.assert_has_calls(
+        [
+            call(("git", "status"), capture_output=True),
+            call(("git", "push"), capture_output=True),
+        ],
+        any_order=True,
+    )
+    with pytest.raises(AssertionError):
+        run_mock.assert_has_calls([call(("git", "pull"), capture_output=True)])
+
+
+# `Mock`'s public assert/call surface, minus the names deliberately excluded
+# below. If a future Python adds a new one, this test fails until it's either
+# forwarded on `RunMock` or added to the exclusion with a reason — the
+# surface can't silently drift out of sync again.
+_MOCK_EXCLUDED_ATTRS = {
+    # Configured directly on `.mock` by design — see the class docstring.
+    "side_effect",
+    "return_value",
+    # Construction-time configuration, not assertion/call-inspection; not
+    # meaningful on an already-built `RunMock`.
+    "attach_mock",
+    "configure_mock",
+    "mock_add_spec",
+    # Only populated by calls to *attribute* children of the mock
+    # (`mock.foo()`), never by calls to the mock itself. `RunMock.__call__`
+    # only ever calls `self.mock(...)` directly, so this is always empty —
+    # `call_args_list`/`assert_has_calls` already cover every call RunMock
+    # can ever record.
+    "method_calls",
+    # Redundant with `call_args_list` for the same reason: with no attribute
+    # children ever called, `mock_calls` records exactly the same calls.
+    "mock_calls",
+}
+
+
+def test_run_mock_forwards_every_assertion_method():
+    mock_public_attrs = {name for name in dir(Mock()) if not name.startswith("_")}
+    run_mock_forwarded = {name for name in dir(RunMock) if not name.startswith("_")} - {"mock"}
+    missing = mock_public_attrs - _MOCK_EXCLUDED_ATTRS - run_mock_forwarded
+    assert not missing, (
+        f"Mock gained {missing!r} — forward it on RunMock or add it to "
+        "_MOCK_EXCLUDED_ATTRS with a reason"
+    )

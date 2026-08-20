@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Sequence
 from typing import Any
 from unittest.mock import Mock
 
@@ -44,12 +45,29 @@ def make_command_result(
 class RunMock:
     """Drop-in for `Context._run_impl`. Wraps a `Mock`, not a `MagicMock` subclass.
 
-    Forwards a fixed, explicit subset of `Mock`'s API — `assert_called_with`,
-    `assert_any_call`, `assert_called_once_with`, `assert_not_called`,
-    `call_args`, `call_args_list`, `call_count`, `called`, `reset_mock` —
-    not a blanket passthrough, so a call to anything else (including a
-    typo) raises `AttributeError` instead of silently succeeding. Reach
-    through to `.mock` directly for anything not in that list.
+    Deliberately wraps a `Mock` rather than subclassing it: forwards a
+    fixed, explicit subset of its API — `assert_called`, `assert_called_with`,
+    `assert_any_call`, `assert_called_once`, `assert_called_once_with`,
+    `assert_has_calls`, `assert_not_called`, `call_args`, `call_args_list`,
+    `call_count`, `called`, `reset_mock` — rather than a blanket passthrough.
+    `Mock`'s own `__getattr__` only guards names that *look like* a mistyped
+    assertion (a plain `Mock` already raises `AttributeError` for those, no
+    subclassing needed) — every other attribute silently auto-vivifies a fresh
+    child `Mock` on a `Mock`/`MagicMock` subclass instead of raising, so a
+    typo'd non-assertion call or configuration (e.g. a stray extra letter in
+    `call_count` or `reset_mock`) just never runs. Forwarding explicitly
+    closes that gap: any name not in the list above is a genuine
+    `AttributeError`, typo or not. Reach through to `.mock` directly for
+    anything not in that list — `side_effect`/`return_value` are configured
+    that way on purpose, so setting them on `run_mock` itself doesn't work
+    by accident either.
+
+    `test_run_mock_forwards_every_assertion_method` in
+    `tests/testing/test_run_mock.py` diffs this list against
+    `dir(Mock())` on every run — adding an `assert_*`/`call_*` method to a
+    future Python's `Mock` fails that test until it's forwarded here (or
+    added to the test's documented exclusion list), instead of only
+    surfacing the next time someone happens to need it.
 
     Configure it like any other `Mock` — set `.mock.return_value` or
     `.mock.side_effect` to a `CommandResult` (build one with
@@ -110,14 +128,23 @@ class RunMock:
     # Explicit, fixed forwarding to the underlying Mock — not a blanket
     # __getattr__, so a genuine typo raises AttributeError instead of
     # silently returning a fresh child Mock.
+    def assert_called(self) -> None:
+        self.mock.assert_called()
+
     def assert_called_with(self, *args: object, **kwargs: object) -> None:
         self.mock.assert_called_with(*args, **kwargs)
 
     def assert_any_call(self, *args: object, **kwargs: object) -> None:
         self.mock.assert_any_call(*args, **kwargs)
 
+    def assert_called_once(self) -> None:
+        self.mock.assert_called_once()
+
     def assert_called_once_with(self, *args: object, **kwargs: object) -> None:
         self.mock.assert_called_once_with(*args, **kwargs)
+
+    def assert_has_calls(self, calls: Sequence[Any], any_order: bool = False) -> None:
+        self.mock.assert_has_calls(calls, any_order=any_order)
 
     def assert_not_called(self) -> None:
         self.mock.assert_not_called()
