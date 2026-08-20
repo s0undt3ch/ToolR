@@ -93,6 +93,19 @@ pub struct ExecutionSpec {
     /// without per-arg type juggling on the Rust side.
     pub args: BTreeMap<String, serde_json::Value>,
     pub context: ContextSpec,
+    /// Enum class name → the dotted module that actually declares it,
+    /// for every `Enum`-typed argument on this command (peeling one
+    /// `Optional` wrapper). The runner's `get_type_hints` call is
+    /// against the *target function's own* module globals, which don't
+    /// contain a class that module only imports under `if
+    /// TYPE_CHECKING:` — this lets the runner import the real class
+    /// itself and inject it as `localns`, independent of whether the
+    /// target module's own guarded import ever executed. Empty when no
+    /// argument on this command is Enum-typed. Adding this field is a
+    /// non-breaking, optional addition — no `RUNNER_SCHEMA_VERSION`
+    /// bump needed (see that constant's doc comment).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub enum_modules: BTreeMap<String, String>,
     /// Set when the matched command is a dispatched leaf — the runner
     /// must construct a `DispatchCommand` from this payload and call
     /// `toolr._runner.invoke_dispatcher` instead of running `args` as
@@ -102,6 +115,27 @@ pub struct ExecutionSpec {
     /// its packed args, and the schema needed by `DispatchCommand`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispatch: Option<DispatchSpec>,
+}
+
+/// Collect `class name -> declaring module` for every `Enum`-typed
+/// argument on `arguments` (peeling one `Optional` wrapper). Shared by
+/// `build_spec` and `build_dispatch_spec` in the `toolr` binary crate.
+pub fn enum_modules_for(
+    arguments: &[crate::manifest::Argument],
+) -> BTreeMap<String, String> {
+    use crate::parser::SupportedType;
+    let mut out = BTreeMap::new();
+    for arg in arguments {
+        let ty = match &arg.resolved_type {
+            Some(SupportedType::Optional(inner)) => inner.as_ref(),
+            Some(other) => other,
+            None => continue,
+        };
+        if let SupportedType::Enum { name, module, .. } = ty {
+            out.insert(name.clone(), module.clone());
+        }
+    }
+    out
 }
 
 /// Dispatch payload conveyed to the Python runner.
@@ -197,6 +231,7 @@ impl ExecutionSpec {
                 default_timeout_secs: None,
                 default_no_output_timeout_secs: None,
             },
+            enum_modules: BTreeMap::new(),
             dispatch: None,
         }
     }

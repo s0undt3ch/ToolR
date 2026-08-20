@@ -11,6 +11,6 @@ pub use signals::wait_with_signals;
 pub use spawn::spawn_runner;
 pub use spec::{
     ArgSchemaSpec, CommandSchemaSpec, ContextSpec, DispatchSpec, ExecutionSpec,
-    RUNNER_SCHEMA_VERSION,
+    RUNNER_SCHEMA_VERSION, enum_modules_for,
 };
 pub use tempfile::write_spec_to_tempfile;
