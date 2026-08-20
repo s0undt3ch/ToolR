@@ -1200,14 +1200,14 @@ def cmd_b(ctx, *, database: Database = Database.REPLICA) -> None:
         assert_eq!(arg_b.default.as_deref(), Some("replica"));
     }
 
-    /// GH #454: three modules each declare an identically-shaped
+    /// Three modules each declare an identically-shaped
     /// `Environment(StrEnum)` (same members, same values) and a fourth
     /// module imports the class from one of them rather than declaring
-    /// its own. The importing module previously hit the #449 collision
-    /// guard — two-or-more cross-module defs with no local match — and
-    /// rejected the whole build with an unsupported-type error, even
-    /// though every candidate def serialises identically. Building must
-    /// succeed and the imported enum must still populate
+    /// its own. The importing module previously hit the cross-module
+    /// collision guard — two-or-more cross-module defs with no local
+    /// match — and rejected the whole build with an unsupported-type
+    /// error, even though every candidate def serialises identically.
+    /// Building must succeed and the imported enum must still populate
     /// `allowed_values`.
     #[test]
     fn imported_enum_with_identical_cross_module_defs_resolves() {
@@ -1280,8 +1280,8 @@ def analyse(ctx, *, env: Environment | None = None) -> None:
         );
     }
 
-    /// The general case #454's identical-members dedupe alone can't
-    /// handle: two *differently*-shaped same-named enum classes across
+    /// The general case an identical-members-only dedupe can't handle:
+    /// two *differently*-shaped same-named enum classes across
     /// modules, resolved correctly via a genuine explicit import rather
     /// than a lucky "only one candidate" guess. This is the case that
     /// motivated the real import-following resolver.

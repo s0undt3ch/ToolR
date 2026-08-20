@@ -470,7 +470,7 @@ def type_checking_enum_module(
     imports its Enum parameter type under `if TYPE_CHECKING:`, then
     return the importable target function.
 
-    This is the exact runtime shape #454's fix needs to handle: the
+    This is the exact runtime shape that needs handling: the
     class is real and never bound in the target module's globals at
     real import time, so a plain `get_type_hints(target)` call raises
     `NameError` (confirmed empirically during design) unless the

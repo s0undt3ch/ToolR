@@ -279,7 +279,7 @@ fn tab_completion_does_not_persist_manifest() {
     assert_eq!(mtime_before, mtime_after, "tab completion touched mtime");
 }
 
-/// GH #454, end-to-end through the real binary: a command imports an
+/// End-to-end through the real binary: a command imports an
 /// `Enum` from a sibling module (relative import) while an unrelated
 /// module elsewhere in the tree declares a same-named enum class. The
 /// auto-rebuild triggered by `toolr --help` must succeed (not hard-fail
@@ -320,8 +320,7 @@ def analyse(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
     )
     .unwrap();
     // Unrelated module declaring a same-named enum elsewhere in the
-    // tree -- this is exactly the shape that hard-failed the build
-    // before the fix (GH #454).
+    // tree -- this is exactly the shape that used to hard-fail the build.
     fs::write(
         tools.join("job.py"),
         r#""""Job module -- unrelated same-named enum."""

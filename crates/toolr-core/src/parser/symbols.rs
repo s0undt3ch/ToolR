@@ -103,7 +103,7 @@ impl EnumTable {
     ///    sibling module's class). Multiple import candidates (only
     ///    possible via a `try`/`except` dual-path import) resolve if
     ///    they all land on the same member set, else are ambiguous.
-    /// 3. No matching import at all: fall back to the pre-#454
+    /// 3. No matching import at all: fall back to the older
     ///    same-name-across-modules heuristic — an unambiguous single
     ///    cross-module definition, or several definitions that all
     ///    serialise identically, resolve; a genuine mismatch is
@@ -134,7 +134,7 @@ impl EnumTable {
             return dedupe_matches(matched);
         }
         // No explicit import at all for `class` in `current_module`:
-        // fall back to the pre-#454 same-name-across-modules heuristic.
+        // fall back to the older same-name-across-modules heuristic.
         // Only meaningful if some module somewhere literally declares a
         // class with this exact name.
         dedupe_matches(self.members.get(class).map(|defs| {
@@ -1042,7 +1042,7 @@ class Mode(StrEnum):
     #[test]
     fn resolve_def_prefers_explicit_import_over_guessing() {
         // Two modules declare a *different*-shaped `Database` class.
-        // Without an import this is the #449 ambiguous case; with an
+        // Without an import this is genuinely ambiguous; with an
         // explicit import naming one of them, it resolves to exactly
         // that one instead of erroring or guessing.
         let a = parse(
