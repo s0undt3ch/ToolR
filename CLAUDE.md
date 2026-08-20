@@ -86,6 +86,15 @@ prek run --all-files              # run every pre-commit hook
   captures `toolr` output into `docs/**/*.txt` from `docs/.fixtures/sample-repo/`.
 - **Regenerate skill refs after public-surface changes.** `cargo xtask build-skill-refs --check`
   runs first in `mise run test` and CI. Regen with `cargo xtask build-skill-refs` and commit.
+  "Public surface" means every `__all__` the generators walk — currently `toolr.__all__` and
+  `toolr.testing.__all__` (`crates/xtask/src/build_skill_refs/authoring.rs`). The check only
+  catches drift for `__all__` lists it already knows about: adding a **new** `__all__`-exporting
+  module (another `toolr.*` sub-package, a new skill's own reference set) needs a new generator
+  registered in `crates/xtask/src/build_skill_refs/mod.rs::run`, or the CLI/testing/whatever
+  surface it documents can silently drift with `--check` still green. When adding a name to an
+  existing `__all__`, also check by hand whether any skill's prose (not just its generated
+  `references/*.md`) mentions that API by name and needs updating — the generator only keeps the
+  reference tables current, not the skill's narrative sections.
 - **Stacked PRs use [git-spice](https://abhinav.github.io/git-spice/).** `git-spice branch create`
   and `git-spice branch submit --draft`. Don't `git checkout -b` + `git push` directly.
 - **Conventional Commits** (`feat(cli): …`, `fix(parser): …`, `docs(internals): …`).
