@@ -34,25 +34,125 @@ const TOOLR_PKG_INIT: &str = "crates/toolr-py/python/toolr/__init__.py";
 
 /// Build the `references/commands.md` file for the authoring skill.
 pub fn commands(repo_root: &Path) -> Result<Generated> {
-    let (init_source, init_module) = parse_with_source(&repo_root.join(TOOLR_PKG_INIT))?;
+    api_surface(
+        repo_root,
+        TOOLR_PKG_INIT,
+        "toolr",
+        "# Toolr command-authoring reference: API surface\n\n",
+        "toolr",
+        "toolr.__all__",
+        "skills/toolr-command-authoring/references/commands.md",
+    )
+}
+
+/// Path (under `repo_root`) of the `toolr.testing` package root.
+const TOOLR_TESTING_PKG_INIT: &str = "crates/toolr-py/python/toolr/testing/__init__.py";
+
+/// Build the `references/testing.md` file for the authoring skill,
+/// documenting everything exposed by `import toolr.testing` — the
+/// classes and factories a command's own test suite mocks `ctx.run`
+/// and drives `@command` functions with.
+pub fn testing_api(repo_root: &Path) -> Result<Generated> {
+    api_surface(
+        repo_root,
+        TOOLR_TESTING_PKG_INIT,
+        "toolr.testing",
+        "# Toolr command-authoring reference: testing API surface\n\n",
+        "toolr.testing",
+        "toolr.testing.__all__",
+        "skills/toolr-command-authoring/references/testing.md",
+    )
+}
+
+/// Path (under `repo_root`) of the file whose functions [`testing_examples`]
+/// extracts. Every name in [`TESTING_EXAMPLE_FUNCTIONS`] must be a
+/// module-level `def` here.
+const TESTING_EXAMPLE_SOURCE: &str = "tests/skill_examples/test_authoring_examples.py";
+
+/// Names of the module-level functions extracted, in the order they are
+/// rendered — the fake command under test, then the test that exercises it.
+const TESTING_EXAMPLE_FUNCTIONS: &[&str] = &["deploy", "test_deploy_checks_git_status"];
+
+/// Build the `references/testing-examples.md` file for the authoring
+/// skill: the source of `TESTING_EXAMPLE_FUNCTIONS`, copied verbatim from
+/// `TESTING_EXAMPLE_SOURCE` (a real, `pytest`-run test) rather than
+/// hand-typed into the skill. A hand-typed example can go stale or be
+/// wrong the moment it's written; this one fails `cargo test` first.
+pub fn testing_examples(repo_root: &Path) -> Result<Generated> {
+    let (source, module) = parse_with_source(&repo_root.join(TESTING_EXAMPLE_SOURCE))?;
+
+    let mut blocks = Vec::with_capacity(TESTING_EXAMPLE_FUNCTIONS.len());
+    for name in TESTING_EXAMPLE_FUNCTIONS {
+        let stmt = find_definition(&module, name).ok_or_else(|| {
+            anyhow!(
+                "`{name}` (listed in TESTING_EXAMPLE_FUNCTIONS) is not a module-level \
+                 definition in `{TESTING_EXAMPLE_SOURCE}` — it was renamed or removed; \
+                 update TESTING_EXAMPLE_FUNCTIONS to match",
+            )
+        })?;
+        // Module-level defs, unlike `render_class_members`'s nested methods,
+        // are already at column 0 — no `dedent` needed.
+        blocks.push(slice_source(&source, stmt));
+    }
+
+    let mut body = String::new();
+    body.push_str("# Toolr command-authoring reference: testing example\n\n");
+    body.push_str(DO_NOT_EDIT);
+    body.push_str("\n\n");
+    let _ = write!(
+        body,
+        "Copied verbatim from `{TESTING_EXAMPLE_SOURCE}`, a real test that runs under \
+         `uv run pytest`. If this drifts from the skill's prose, the source moved and \
+         `cargo xtask build-skill-refs` needs a re-run — the example is never hand-edited \
+         here.\n\n",
+    );
+    body.push_str("```python\n");
+    body.push_str(&blocks.join("\n\n\n"));
+    body.push_str("\n```\n");
+
+    Ok(Generated {
+        path: repo_root
+            .join("skills/toolr-command-authoring/references/testing-examples.md"),
+        body,
+    })
+}
+
+/// Shared implementation behind [`commands`] and [`testing_api`]: read
+/// `__all__` from `init_rel_path`, resolve each name's definition
+/// (following re-export chains through sub-modules), and render the
+/// result as a `references/*.md` file.
+#[allow(clippy::too_many_arguments)]
+fn api_surface(
+    repo_root: &Path,
+    init_rel_path: &str,
+    root_module: &str,
+    heading: &str,
+    import_module: &str,
+    all_source_desc: &str,
+    output_rel_path: &str,
+) -> Result<Generated> {
+    let (init_source, init_module) = parse_with_source(&repo_root.join(init_rel_path))?;
     let all_names = read_all_list(&init_module, &init_source)
-        .context("reading toolr.__all__ from crates/toolr-py/python/toolr/__init__.py")?;
+        .with_context(|| format!("reading {all_source_desc} from {init_rel_path}"))?;
     let init_imports = read_from_imports(&init_module, &init_source);
 
     let mut entries: Vec<Entry> = Vec::new();
     for name in &all_names {
-        entries.push(resolve_entry(name, repo_root, &init_imports, &init_source, &init_module)?);
+        entries.push(resolve_entry(
+            name,
+            root_module,
+            repo_root,
+            &init_imports,
+            &init_source,
+            &init_module,
+        )?);
     }
     // ASCII sort by name for stable output, irrespective of __all__'s
     // declared order.
     entries.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let body = render_commands(&entries);
-    Ok(Generated {
-        path: repo_root
-            .join("skills/toolr-command-authoring/references/commands.md"),
-        body,
-    })
+    let body = render_commands(&entries, heading, import_module, all_source_desc);
+    Ok(Generated { path: repo_root.join(output_rel_path), body })
 }
 
 /// Build the `references/docstrings.md` file for the authoring skill.
@@ -275,12 +375,13 @@ enum EntryKind {
 
 fn resolve_entry(
     name: &str,
+    root_module: &str,
     repo_root: &Path,
     init_imports: &BTreeMap<String, String>,
     init_source: &str,
     init_module: &ModModule,
 ) -> Result<Entry> {
-    if name == "__version__" {
+    if root_module == "toolr" && name == "__version__" {
         return Ok(Entry {
             name: name.to_string(),
             kind: EntryKind::Special,
@@ -301,7 +402,7 @@ fn resolve_entry(
     // name directly. The chain is bounded to a small depth to surface
     // cycles or unexpected layouts as a build error rather than an
     // infinite loop.
-    let mut current_module = "toolr".to_string();
+    let mut current_module = root_module.to_string();
     let mut current_source = init_source.to_string();
     let mut current_ast: ModModule = clone_module(init_module);
     let mut current_imports = init_imports.clone();
@@ -523,21 +624,27 @@ fn function_docstring(body: &[Stmt]) -> Option<String> {
 
 // --- Markdown rendering -----------------------------------------------------
 
-fn render_commands(entries: &[Entry]) -> String {
+fn render_commands(
+    entries: &[Entry],
+    heading: &str,
+    import_module: &str,
+    all_source_desc: &str,
+) -> String {
     let mut out = String::new();
-    out.push_str("# Toolr command-authoring reference: API surface\n\n");
+    out.push_str(heading);
     out.push_str(DO_NOT_EDIT);
     out.push_str("\n\n");
-    out.push_str(
-        "Every name exposed by `import toolr` is documented below. The list \
-        is generated from `toolr.__all__`; each entry is rendered from the \
+    let _ = write!(
+        out,
+        "Every name exposed by `import {import_module}` is documented below. The list \
+        is generated from `{all_source_desc}`; each entry is rendered from the \
         source file the package root re-exports it from. If a name you \
-        expect to see isn't here, add it to `toolr.__all__` and \
+        expect to see isn't here, add it to `{all_source_desc}` and \
         regenerate.\n\n",
     );
     out.push_str("## Importable surface\n\n");
     out.push_str("```python\n");
-    out.push_str("from toolr import (\n");
+    let _ = writeln!(out, "from {import_module} import (");
     for entry in entries {
         let _ = writeln!(out, "    {},", entry.name);
     }

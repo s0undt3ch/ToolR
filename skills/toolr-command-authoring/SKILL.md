@@ -180,6 +180,17 @@ make its registration a top-level, statically-visible declaration.
   which Google-style section headers toolr's docstring parser
   recognises and how each is rendered. Generated from the same
   `KNOWN_SECTION_HEADERS` table the parser reads at runtime.
+- [`references/testing.md`](references/testing.md) — every name
+  exposed by `import toolr.testing`. Signatures and docstrings for
+  `CommandsTester`, `ContextForTesting`, `RunMock`, `make_command_result`,
+  and `make_context`, regenerated from `toolr.testing.__all__` on every
+  release. Treat it as the source of truth for the testing API — the
+  section below is a summary, not the full contract.
+- [`references/testing-examples.md`](references/testing-examples.md) — a
+  worked `RunMock`/`make_context` example, copied verbatim from a real test
+  under `tests/skill_examples/` that runs in CI. Never hand-edited — if it
+  looks wrong, the source test is wrong (fix it and regenerate, don't patch
+  the reference).
 
 ## Local feedback loop
 
@@ -215,15 +226,41 @@ the `"$(toolr project venv path)/bin/python" -m pytest …` invocation.
 pytest plugin that appends the repo root to `sys.path` the moment pytest
 starts. Nothing to configure.
 
-Two testing layers are available for the `@command`-decorated functions
-themselves:
+`toolr.testing` provides the layers below for testing `@command`-decorated
+functions themselves. Full signatures and docstrings live in
+[`references/testing.md`](references/testing.md); this is a summary.
 
-- **`toolr.testing.CommandsTester`** — tests command *discovery* (that your
+- **`CommandsTester`** — tests command *discovery* (that your
   `@command_group`/`@command` decorators registered what you expect), without
   spawning the real CLI.
-- **`toolr.testing.make_context`** — builds a real, usable `Context` so you
-  can call a decorated function directly and assert on what it did with
-  `ctx.run`/`ctx.info`/`ctx.exit`, without going through the CLI at all.
+- **`make_context`** — builds a real, usable `ContextForTesting` (a `Context`
+  subclass) so you can call a decorated function directly and assert on what
+  it did with `ctx.run`/`ctx.info`/`ctx.exit`, without going through the CLI
+  at all. The returned context adds `stdout`/`stderr` properties reading back
+  everything written through `ctx.print`/`ctx.error`/`ctx.warn`/`ctx.debug`,
+  and a `.replace(**changes)` method for building a modified copy mid-test
+  (e.g. `ctx.replace(_run_impl=other_mock)`).
+- **`RunMock`** — the canonical double for `ctx.run`, passed to `make_context`
+  as the `run=` override. Wraps a plain `unittest.mock.Mock` (not
+  `MagicMock`), forwarding a fixed subset of `Mock`'s API
+  (`assert_called_with`, `assert_called_once`, etc.) so misuse fails loudly
+  rather than silently auto-mocking. Configure `.mock.return_value` or
+  `.mock.side_effect` with a `CommandResult` built by `make_command_result`.
+  `.mock.return_value` hands back the *same* result on every call and its
+  `stdout`/`stderr` streams are read-once — fine for a single `ctx.run` call,
+  but a command that calls `ctx.run` more than once needs `.mock.side_effect`
+  instead (a callable returning a fresh `make_command_result(...)` per call,
+  or a list of pre-built results).
+- **`make_command_result`** — factory for genuine `CommandResult` objects,
+  to configure a `RunMock` with.
+- **`DEFAULT_TEST_CONSOLE_WIDTH`** — the `width=` `make_context` gives its
+  captured consoles by default (1000 columns). Deliberately absurd: a
+  realistic width wraps any longish line, forcing every assertion on
+  `ctx.stdout`/`ctx.stderr` to account for rich's wrapping. Pass a narrower
+  `width=` explicitly only when the test is about wrapping itself.
+
+See [`references/testing-examples.md`](references/testing-examples.md) for a
+worked example wiring `RunMock` + `make_context` together.
 
 ## Packaging is a different problem
 

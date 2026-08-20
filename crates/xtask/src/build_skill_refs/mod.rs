@@ -32,6 +32,8 @@ pub fn run(check: bool) -> Result<()> {
     // entry independently.
     let outputs: Vec<Generated> = vec![
         authoring::commands(&root)?,
+        authoring::testing_api(&root)?,
+        authoring::testing_examples(&root)?,
         authoring::docstrings(&root)?,
         packaging::packaging(&root)?,
         ci_setup::action(&root)?,
