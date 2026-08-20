@@ -86,20 +86,7 @@ const TESTING_EXAMPLE_FUNCTIONS: &[&str] = &[
 /// wrong the moment it's written; this one fails `cargo test` first.
 pub fn testing_examples(repo_root: &Path) -> Result<Generated> {
     let (source, module) = parse_with_source(&repo_root.join(TESTING_EXAMPLE_SOURCE))?;
-
-    let mut blocks = Vec::with_capacity(TESTING_EXAMPLE_FUNCTIONS.len());
-    for name in TESTING_EXAMPLE_FUNCTIONS {
-        let stmt = find_definition(&module, name).ok_or_else(|| {
-            anyhow!(
-                "`{name}` (listed in TESTING_EXAMPLE_FUNCTIONS) is not a module-level \
-                 definition in `{TESTING_EXAMPLE_SOURCE}` — it was renamed or removed; \
-                 update TESTING_EXAMPLE_FUNCTIONS to match",
-            )
-        })?;
-        // Module-level defs, unlike `render_class_members`'s nested methods,
-        // are already at column 0 — no `dedent` needed.
-        blocks.push(slice_source(&source, stmt));
-    }
+    let blocks = extract_example_blocks(&module, &source, TESTING_EXAMPLE_FUNCTIONS)?;
 
     let mut body = String::new();
     body.push_str("# Toolr command-authoring reference: testing examples\n\n");
@@ -117,10 +104,30 @@ pub fn testing_examples(repo_root: &Path) -> Result<Generated> {
     body.push_str("\n```\n");
 
     Ok(Generated {
-        path: repo_root
-            .join("skills/toolr-command-authoring/references/testing-examples.md"),
+        path: repo_root.join("skills/toolr-command-authoring/references/testing-examples.md"),
         body,
     })
+}
+
+/// Look up each of `names` as a module-level definition in `module`, in
+/// order, and return its exact source text. Module-level defs, unlike
+/// `render_class_members`'s nested methods, are already at column 0 — no
+/// `dedent` needed. Errors loudly (rather than skipping) so a renamed or
+/// removed example function fails `cargo xtask build-skill-refs` instead
+/// of silently dropping out of the generated reference.
+fn extract_example_blocks(module: &ModModule, source: &str, names: &[&str]) -> Result<Vec<String>> {
+    let mut blocks = Vec::with_capacity(names.len());
+    for name in names {
+        let stmt = find_definition(module, name).ok_or_else(|| {
+            anyhow!(
+                "`{name}` (listed in TESTING_EXAMPLE_FUNCTIONS) is not a module-level \
+                 definition in `{TESTING_EXAMPLE_SOURCE}` — it was renamed or removed; \
+                 update TESTING_EXAMPLE_FUNCTIONS to match",
+            )
+        })?;
+        blocks.push(slice_source(source, stmt));
+    }
+    Ok(blocks)
 }
 
 /// Shared implementation behind [`commands`] and [`testing_api`]: read
@@ -144,14 +151,12 @@ fn api_surface(
 
     let mut entries: Vec<Entry> = Vec::new();
     for name in &all_names {
-        entries.push(resolve_entry(
-            name,
-            root_module,
-            repo_root,
-            &init_imports,
-            &init_source,
-            &init_module,
-        )?);
+        // Deliberately kept off `cargo fmt`'s preferred one-arg-per-line wrap: that
+        // shape puts the `?` alone on its own line, which llvm-cov then reports as
+        // an uncovered line even though the call executes on every iteration.
+        let entry =
+            resolve_entry(name, root_module, repo_root, &init_imports, &init_source, &init_module)?;
+        entries.push(entry);
     }
     // ASCII sort by name for stable output, irrespective of __all__'s
     // declared order.
@@ -248,8 +253,7 @@ pub fn docstrings(repo_root: &Path) -> Result<Generated> {
     );
 
     Ok(Generated {
-        path: repo_root
-            .join("skills/toolr-command-authoring/references/docstrings.md"),
+        path: repo_root.join("skills/toolr-command-authoring/references/docstrings.md"),
         body,
     })
 }
@@ -261,8 +265,8 @@ pub fn docstrings(repo_root: &Path) -> Result<Generated> {
 /// [`ruff_python_ast::Ranged`]-style TextRange offsets the parser
 /// attaches to each node.
 fn parse_with_source(path: &Path) -> Result<(String, ModModule)> {
-    let source = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let parsed = ruff_python_parser::parse_module(&source)
         .with_context(|| format!("parsing {}", path.display()))?;
     Ok((source, parsed.into_syntax()))
@@ -489,12 +493,7 @@ fn is_overload(def: &ruff_python_ast::StmtFunctionDef) -> bool {
     })
 }
 
-fn render_entry(
-    name: &str,
-    source_module: &str,
-    source: &str,
-    stmt: &Stmt,
-) -> Result<Entry> {
+fn render_entry(name: &str, source_module: &str, source: &str, stmt: &Stmt) -> Result<Entry> {
     let (kind, signature, docstring, members) = match stmt {
         Stmt::FunctionDef(def) => {
             let sig = function_signature(def, source);
@@ -689,9 +688,7 @@ fn render_entry_md(out: &mut String, entry: &Entry) {
         out.push_str(&render_docstring_block(doc));
         out.push('\n');
     } else {
-        out.push_str(
-            "_No docstring on the source definition._\n\n",
-        );
+        out.push_str("_No docstring on the source definition._\n\n");
     }
     for member in &entry.members {
         render_member_md(out, member);
@@ -910,5 +907,26 @@ mod tests {
             panic!("expected an unhandled-shape error");
         };
         assert!(err.to_string().contains("unhandled definition shape"));
+    }
+
+    #[test]
+    fn extract_example_blocks_returns_source_in_the_requested_order() {
+        let src = "def b():\n    pass\n\n\ndef a():\n    pass\n";
+        let m = module(src);
+        let blocks = extract_example_blocks(&m, src, &["a", "b"]).expect("both names resolve");
+        assert_eq!(blocks, vec!["def a():\n    pass".to_string(), "def b():\n    pass".to_string()]);
+    }
+
+    #[test]
+    fn extract_example_blocks_errors_on_a_renamed_or_removed_function() {
+        let src = "def deploy():\n    pass\n";
+        let m = module(src);
+        let result = extract_example_blocks(&m, src, &["deploy", "typo_name"]);
+        let Err(err) = result else {
+            panic!("expected a missing-definition error");
+        };
+        let message = err.to_string();
+        assert!(message.contains("typo_name"), "{message}");
+        assert!(message.contains("TESTING_EXAMPLE_FUNCTIONS"), "{message}");
     }
 }
