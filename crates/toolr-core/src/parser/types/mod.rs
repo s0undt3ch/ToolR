@@ -20,7 +20,7 @@ mod supported;
 
 pub use arg_metadata::extract_arg_metadata;
 pub use imports::{SourcesImports, TypeImports};
-pub use path_constraints::{PathConstraints, extract_path_constraints};
+pub use path_constraints::{extract_path_constraints, PathConstraints};
 pub use resolve::{resolve, resolve_arguments};
 pub use supported::{SupportedType, TypeResolutionError, UnsupportedType};
 
@@ -41,8 +41,8 @@ pub(super) fn is_toolr_arg_call(call: &ExprCall) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::resolve::resolve_toolr_types_name;
+    use super::*;
     use crate::parser::parse_python_file;
     use crate::parser::symbols::{ArgSectionTable, EnumTable, TypeAliasTable};
     use ruff_python_ast::{ModModule, Stmt};
@@ -72,22 +72,54 @@ mod tests {
     fn primitives_resolve() {
         let (_, ann) = first_annotation("def f(x: int): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Int
         );
         let (_, ann) = first_annotation("def f(x: float): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Float
         );
         let (_, ann) = first_annotation("def f(x: bool): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Bool
         );
         let (_, ann) = first_annotation("def f(x: str): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Str
         );
     }
@@ -96,7 +128,15 @@ mod tests {
     fn bare_path_name_is_supported() {
         let (_, ann) = first_annotation("def f(x: Path): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Path
         );
     }
@@ -105,7 +145,15 @@ mod tests {
     fn pathlib_path_attribute_is_supported() {
         let (_, ann) = first_annotation("def f(x: pathlib.Path): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Path
         );
     }
@@ -117,7 +165,15 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &imports,
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::ResolvedPath
         );
     }
@@ -129,7 +185,15 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &imports,
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::ResolvedPath
         );
     }
@@ -141,7 +205,15 @@ mod tests {
         let (_, ann) = first_annotation(src);
         let imports = TypeImports::from_module(&m);
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &imports,
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::AbsolutePath
         );
     }
@@ -149,8 +221,15 @@ mod tests {
     #[test]
     fn unknown_dotted_name_errors_with_pointer_to_toolr_types() {
         let (_, ann) = first_annotation("def f(x: datetime.datetime): pass\n");
-        let err =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").expect_err("should fail");
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .expect_err("should fail");
         let msg = err.to_string();
         assert!(msg.contains("datetime.datetime"), "msg was: {msg}");
         assert!(msg.contains("toolr.types"), "msg was: {msg}");
@@ -160,7 +239,15 @@ mod tests {
     fn list_of_int_resolves() {
         let (_, ann) = first_annotation("def f(x: list[int]): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::List(Box::new(SupportedType::Int))
         );
     }
@@ -169,19 +256,32 @@ mod tests {
     fn tuple_str_int_resolves_heterogeneous() {
         let (_, ann) = first_annotation("def f(x: tuple[str, int]): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Tuple(vec![SupportedType::Str, SupportedType::Int])
         );
     }
 
     #[test]
     fn literal_resolves_string_values() {
-        let (_, ann) = first_annotation(
-            "from typing import Literal\ndef f(x: Literal[\"a\", \"b\"]): pass\n",
-        );
-        let SupportedType::Literal(values) =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap()
-        else {
+        let (_, ann) =
+            first_annotation("from typing import Literal\ndef f(x: Literal[\"a\", \"b\"]): pass\n");
+        let SupportedType::Literal(values) = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .unwrap() else {
             panic!("expected Literal");
         };
         assert_eq!(values, vec!["a".to_string(), "b".to_string()]);
@@ -191,7 +291,15 @@ mod tests {
     fn optional_via_bin_or_with_none() {
         let (_, ann) = first_annotation("def f(x: int | None): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Optional(Box::new(SupportedType::Int))
         );
     }
@@ -200,7 +308,15 @@ mod tests {
     fn optional_via_bin_or_with_none_first() {
         let (_, ann) = first_annotation("def f(x: None | int): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Optional(Box::new(SupportedType::Int))
         );
     }
@@ -209,7 +325,15 @@ mod tests {
     fn optional_via_subscript() {
         let (_, ann) = first_annotation("def f(x: Optional[int]): pass\n");
         assert_eq!(
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            resolve(
+                &ann,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &TypeImports::default(),
+                &TypeAliasTable::default(),
+                "tools.test"
+            )
+            .unwrap(),
             SupportedType::Optional(Box::new(SupportedType::Int))
         );
     }
@@ -269,8 +393,15 @@ def f(commit_sha: CommitHash): pass
         let m = module(src);
         let (_, ann) = first_annotation(src);
         let aliases = TypeAliasTable::from_module(&m);
-        let resolved =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases, "tools.test").unwrap();
+        let resolved = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &aliases,
+            "tools.test",
+        )
+        .unwrap();
         assert_eq!(
             resolved,
             SupportedType::Optional(Box::new(SupportedType::Str))
@@ -287,8 +418,15 @@ def f(hosts: HostList): pass
         let m = module(src);
         let (_, ann) = first_annotation(src);
         let aliases = TypeAliasTable::from_module(&m);
-        let resolved =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases, "tools.test").unwrap();
+        let resolved = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &aliases,
+            "tools.test",
+        )
+        .unwrap();
         assert_eq!(resolved, SupportedType::List(Box::new(SupportedType::Str)));
     }
 
@@ -303,9 +441,15 @@ def f(x: A): pass
         let m = module(src);
         let (_, ann) = first_annotation(src);
         let aliases = TypeAliasTable::from_module(&m);
-        let err =
-            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &aliases, "tools.test")
-                .expect_err("cycle must error");
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &aliases,
+            "tools.test",
+        )
+        .expect_err("cycle must error");
         let msg = err.to_string();
         assert!(msg.contains("cyclic"), "got: {msg}");
     }
@@ -317,11 +461,20 @@ def f(x: A): pass
         let (_, ann) = first_annotation(src);
         let mut enums = EnumTable::default();
         enums.merge(EnumTable::from_module(&m, "tools.test"));
-        let resolved = resolve(&ann, &enums, &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap();
+        let resolved = resolve(
+            &ann,
+            &enums,
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .unwrap();
         assert_eq!(
             resolved,
             SupportedType::Enum {
                 name: "Mode".into(),
+                module: "tools.test".into(),
                 values: vec!["fast".into(), "slow".into()],
             }
         );
@@ -381,9 +534,8 @@ def f(x: A): pass
         // Python-side `arg()` raises a TypeError on this shape; the
         // AST parser is the second line of defence and should not
         // misinterpret a bare string as a single-element list.
-        let (_, ann) = first_annotation(
-            "def f(x: Annotated[bool, arg(conflicts_with=\"verbose\")]): pass\n",
-        );
+        let (_, ann) =
+            first_annotation("def f(x: Annotated[bool, arg(conflicts_with=\"verbose\")]): pass\n");
         let md = extract_arg_metadata(&ann, &ArgSectionTable::default());
         // Either the metadata is None (no recognised kwargs) or the
         // `conflicts_with` field stays empty — both are safe.
@@ -418,9 +570,8 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
 
     #[test]
     fn extract_arg_metadata_bare_string_help_section() {
-        let (_, ann) = first_annotation(
-            "def f(x: Annotated[bool, arg(help_section=\"Logging\")]): pass\n",
-        );
+        let (_, ann) =
+            first_annotation("def f(x: Annotated[bool, arg(help_section=\"Logging\")]): pass\n");
         let md = extract_arg_metadata(&ann, &ArgSectionTable::default()).unwrap();
         let section = md.help_section.unwrap();
         assert_eq!(section.title, "Logging");
@@ -440,14 +591,19 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
 
     #[test]
     fn count_resolves_to_supported_type() {
-        let (_, ann) = first_annotation(
-            "from toolr.types import Count\n\ndef f(x: Count): pass\n",
-        );
+        let (_, ann) = first_annotation("from toolr.types import Count\n\ndef f(x: Count): pass\n");
         let src = "from toolr.types import Count\n\ndef f(x: Count): pass\n";
         let m = module(src);
         let imports = TypeImports::from_module(&m);
-        let resolved =
-            resolve(&ann, &EnumTable::default(), &imports, &TypeAliasTable::default(), "tools.test").unwrap();
+        let resolved = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &imports,
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .unwrap();
         assert_eq!(resolved, SupportedType::Count);
     }
 }

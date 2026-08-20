@@ -10,8 +10,9 @@ use super::signatures::extract_arguments;
 use super::symbols::ArgSectionTable;
 use super::symbols::ConstTable;
 use super::symbols::EnumTable;
+use super::symbols::ImportTable;
 use super::symbols::TypeAliasTable;
-use super::types::{SourcesImports, TypeImports, TypeResolutionError, resolve_arguments};
+use super::types::{resolve_arguments, SourcesImports, TypeImports, TypeResolutionError};
 use crate::manifest::{Command, Origin};
 
 type GlobalVars = HashMap<String, String>;
@@ -25,6 +26,7 @@ pub fn extract_commands(
     module_path: &str,
     bindings: &[GroupBinding],
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     consts: &ConstTable,
     type_imports: &TypeImports,
     sources: &SourcesImports,
@@ -50,13 +52,19 @@ pub fn extract_commands(
             continue;
         };
         let (group_full_path, override_name) = match target {
-            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
+            CommandDecorator::LegacyVar {
+                var, explicit_name, ..
+            } => {
                 let Some(group_name) = by_var.get(var.as_str()) else {
                     continue;
                 };
                 (group_name.clone(), explicit_name)
             }
-            CommandDecorator::Direct { explicit_name, group, .. } => {
+            CommandDecorator::Direct {
+                explicit_name,
+                group,
+                ..
+            } => {
                 // `group=` is required on the direct form. If it's
                 // missing or the targeted group isn't registered
                 // anywhere, we still emit the command — the build-
@@ -71,6 +79,7 @@ pub fn extract_commands(
             override_name.as_deref(),
             module_path,
             enums,
+            all_imports,
             consts,
             type_imports,
             sources,
@@ -293,6 +302,7 @@ fn build_command(
     override_name: Option<&str>,
     module_path: &str,
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     consts: &ConstTable,
     type_imports: &TypeImports,
     sources: &SourcesImports,
@@ -313,7 +323,7 @@ fn build_command(
         .as_ref()
         .map(|d| d.full_description())
         .unwrap_or_default();
-    let mut arguments = extract_arguments(func, enums, consts, sources, module_path);
+    let mut arguments = extract_arguments(func, enums, all_imports, consts, sources, module_path);
     if let Some(d) = parsed.as_ref() {
         for arg in &mut arguments {
             if let Some(Some(help)) = d.params.get(&arg.name) {
@@ -325,6 +335,7 @@ fn build_command(
         func,
         &mut arguments,
         enums,
+        all_imports,
         type_imports,
         sources,
         aliases,
@@ -405,7 +416,20 @@ def generate_build_matrix(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &ConstTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &HashMap::new(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "generate-build-matrix");
         assert_eq!(commands[0].group, "ci");
@@ -422,7 +446,20 @@ def x(ctx):
 "#;
         let m = parse_src(src);
         let bindings = vec![];
-        let commands = extract_commands(&m, "tools.x", &bindings, &EnumTable::default(), &ConstTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(
+            &m,
+            "tools.x",
+            &bindings,
+            &EnumTable::default(),
+            &HashMap::new(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
         assert!(commands.is_empty());
     }
 
@@ -435,7 +472,20 @@ def bare_function(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &ConstTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &HashMap::new(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
         assert!(commands.is_empty());
     }
 
@@ -450,7 +500,20 @@ def hello(ctx):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &ConstTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &HashMap::new(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
         assert_eq!(commands[0].summary, "Say hello.");
     }
 
@@ -470,6 +533,7 @@ def check_run_build(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -499,6 +563,7 @@ def check_snippets(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -529,6 +594,7 @@ def check_snippets(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -565,6 +631,7 @@ def go(ctx, items: list[str] | None = None):
             "tools.repro",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -605,6 +672,7 @@ def go(ctx, pair: tuple[str, int] | None = None):
             "tools.repro",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -647,7 +715,11 @@ def do_thing(ctx):
             .unwrap();
         // The decorator resolves to no explicit name, flagged as a conflict.
         match command_decorator(&func.decorator_list).unwrap() {
-            CommandDecorator::LegacyVar { explicit_name, name_conflict, .. } => {
+            CommandDecorator::LegacyVar {
+                explicit_name,
+                name_conflict,
+                ..
+            } => {
                 assert_eq!(explicit_name, None);
                 assert!(name_conflict);
             }
@@ -677,7 +749,11 @@ def do_thing(ctx):
             })
             .unwrap();
         match command_decorator(&func.decorator_list).unwrap() {
-            CommandDecorator::Direct { explicit_name, name_conflict, .. } => {
+            CommandDecorator::Direct {
+                explicit_name,
+                name_conflict,
+                ..
+            } => {
                 assert_eq!(explicit_name, None);
                 assert!(name_conflict);
             }
@@ -704,6 +780,7 @@ def hello(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -731,6 +808,7 @@ def do_thing(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -750,7 +828,9 @@ def do_thing(ctx):
             .unwrap();
         let decorated = command_decorator(&func.decorator_list).unwrap();
         match decorated {
-            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
+            CommandDecorator::LegacyVar {
+                var, explicit_name, ..
+            } => {
                 assert_eq!(var, "group");
                 assert_eq!(explicit_name, None);
             }
@@ -776,6 +856,7 @@ def do_thing(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -794,7 +875,9 @@ def do_thing(ctx):
             .unwrap();
         let decorated = command_decorator(&func.decorator_list).unwrap();
         match decorated {
-            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
+            CommandDecorator::LegacyVar {
+                var, explicit_name, ..
+            } => {
                 assert_eq!(var, "group");
                 assert_eq!(explicit_name.as_deref(), Some("hello"));
             }
@@ -821,6 +904,7 @@ def collect_data(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -839,7 +923,9 @@ def collect_data(ctx):
             .unwrap();
         let decorated = command_decorator(&func.decorator_list).unwrap();
         match decorated {
-            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
+            CommandDecorator::LegacyVar {
+                var, explicit_name, ..
+            } => {
                 assert_eq!(var, "group");
                 assert_eq!(explicit_name.as_deref(), Some("collect"));
             }
@@ -867,6 +953,7 @@ def do_thing(ctx):
             "tools.ci",
             &bindings,
             &EnumTable::default(),
+            &HashMap::new(),
             &ConstTable::default(),
             &TypeImports::default(),
             &SourcesImports::default(),
@@ -885,7 +972,9 @@ def do_thing(ctx):
             .unwrap();
         let decorated = command_decorator(&func.decorator_list).unwrap();
         match decorated {
-            CommandDecorator::LegacyVar { var, explicit_name, .. } => {
+            CommandDecorator::LegacyVar {
+                var, explicit_name, ..
+            } => {
                 assert_eq!(var, "group");
                 assert_eq!(explicit_name, None);
             }
@@ -911,7 +1000,20 @@ def hello(ctx, name="world"):
 "#;
         let m = parse_src(src);
         let bindings = extract_groups(&m, "", &HashMap::new());
-        let commands = extract_commands(&m, "tools.ci", &bindings, &EnumTable::default(), &ConstTable::default(), &TypeImports::default(), &SourcesImports::default(), &TypeAliasTable::default(), &ArgSectionTable::default(), &HashMap::new(), &mut Vec::new());
+        let commands = extract_commands(
+            &m,
+            "tools.ci",
+            &bindings,
+            &EnumTable::default(),
+            &HashMap::new(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
         let name_arg = commands[0]
             .arguments
             .iter()

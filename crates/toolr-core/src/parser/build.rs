@@ -10,12 +10,12 @@ use crate::hash::hash_tools_dir;
 use crate::manifest::{ArgumentKind, Manifest, SCHEMA_VERSION};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
-    commands::{CommandNameConflict, detect_name_conflicts, extract_commands},
+    commands::{detect_name_conflicts, extract_commands, CommandNameConflict},
     groups::extract_groups,
     parse_python_file,
-    symbols::{ArgSectionTable, EnumTable, TypeAliasTable},
+    symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
 };
-use crate::third_party::{ThirdPartyError, discover_and_merge};
+use crate::third_party::{discover_and_merge, ThirdPartyError};
 
 /// Build the static portion of a manifest from a tools directory.
 ///
@@ -39,9 +39,16 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let mut enums = EnumTable::default();
     let mut aliases = TypeAliasTable::default();
     let mut sections = ArgSectionTable::default();
+    let mut all_imports: std::collections::HashMap<String, ImportTable> =
+        std::collections::HashMap::new();
     for path in &py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for(tools_dir, path);
+        let is_package = path.file_stem().map(|s| s == "__init__").unwrap_or(false);
+        all_imports.insert(
+            module_path.clone(),
+            ImportTable::from_module(&module, &module_path, is_package),
+        );
         enums.merge(EnumTable::from_module(&module, &module_path));
         aliases.merge(TypeAliasTable::from_module(&module));
         sections.merge(ArgSectionTable::from_module(&module));
@@ -79,6 +86,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
             &module_path,
             &bindings,
             &enums,
+            &all_imports,
             &consts,
             &type_imports,
             &sources_imports,
@@ -118,10 +126,11 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     // Validate that every command points at a registered group. Catches
     // typos in `@command(group="ci.helm-diff-pre-comment")` and missing
     // `command_group("…")` declarations.
-    let registered: HashSet<&str> =
-        all_groups.iter().map(|g| g.name.as_str()).collect::<HashSet<_>>();
-    let registered_paths: HashSet<String> =
-        all_groups.iter().map(|g| g.full_path()).collect();
+    let registered: HashSet<&str> = all_groups
+        .iter()
+        .map(|g| g.name.as_str())
+        .collect::<HashSet<_>>();
+    let registered_paths: HashSet<String> = all_groups.iter().map(|g| g.full_path()).collect();
     let mut unknown = Vec::new();
     for cmd in &all_commands {
         if cmd.group.is_empty() {
@@ -171,8 +180,8 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         .collect();
 
     let project_root = tools_dir.parent().unwrap_or(tools_dir);
-    let grafted = crate::argparse::run_for_project(project_root, &parents)
-        .map_err(BuildError::Argparse)?;
+    let grafted =
+        crate::argparse::run_for_project(project_root, &parents).map_err(BuildError::Argparse)?;
 
     // Splice grafted children into the manifest.
     for (_parent, mut children) in grafted.children_by_parent {
@@ -268,11 +277,17 @@ pub enum PositionalArityErrorKind {
     MultipleZeroOrOne { first: String, second: String },
     /// A `T | None` positional sits alongside `*args: T` — both compete
     /// for the trailing slot.
-    OptionalWithVarPositional { optional: String, var_positional: String },
+    OptionalWithVarPositional {
+        optional: String,
+        var_positional: String,
+    },
     /// A required positional (no default, not `T | None`) follows the
     /// zero-or-one slot. The parser can't backtrack to fill a required
     /// slot that comes after one we've already accepted as absent.
-    RequiredAfterZeroOrOne { required: String, zero_or_one: String },
+    RequiredAfterZeroOrOne {
+        required: String,
+        zero_or_one: String,
+    },
 }
 
 impl std::fmt::Display for PositionalArityErrorKind {
@@ -304,11 +319,7 @@ fn format_positional_arity_errors(errors: &[PositionalArityError]) -> String {
             s.push('\n');
         }
         use std::fmt::Write as _;
-        let _ = write!(
-            &mut s,
-            "  - {}::{}: {}",
-            err.module, err.command, err.kind,
-        );
+        let _ = write!(&mut s, "  - {}::{}: {}", err.module, err.command, err.kind,);
     }
     s
 }
@@ -471,9 +482,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
         curr[0] = i;
         for j in 1..=n {
             let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
-            curr[j] = (prev[j] + 1)
-                .min(curr[j - 1] + 1)
-                .min(prev[j - 1] + cost);
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -509,11 +518,7 @@ pub(crate) fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
             if e.path() == root {
                 return true;
             }
-            !e.file_type().is_dir()
-                || !e
-                    .file_name()
-                    .to_str()
-                    .is_some_and(|n| n.starts_with('.'))
+            !e.file_type().is_dir() || !e.file_name().to_str().is_some_and(|n| n.starts_with('.'))
         })
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x == "py"))
@@ -531,11 +536,7 @@ fn module_path_for(tools_dir: &Path, file: &Path) -> String {
 /// `prefix` as the leading namespace segment. `__init__.py` files
 /// collapse to the prefix itself (the package root). Other files become
 /// `<prefix>.<rel_no_ext_with_dots>`.
-pub(crate) fn module_path_for_prefix(
-    source_dir: &Path,
-    file: &Path,
-    prefix: &str,
-) -> String {
+pub(crate) fn module_path_for_prefix(source_dir: &Path, file: &Path, prefix: &str) -> String {
     let rel = file.strip_prefix(source_dir).unwrap_or(file);
     let mut parts: Vec<String> = rel
         .with_extension("")
@@ -674,7 +675,7 @@ mod tests {
     }
 
     use crate::third_party::{
-        FRAGMENT_SCHEMA_VERSION, FragmentCommand, FragmentGroup, ManifestFragment,
+        FragmentCommand, FragmentGroup, ManifestFragment, FRAGMENT_SCHEMA_VERSION,
     };
 
     #[test]
@@ -741,14 +742,27 @@ def hello(ctx):
         let tmp = TempDir::new().unwrap();
         let tools = tmp.path().join("tools");
         write(&tools, "ci.py", "x = 1\n");
-        write(&tools, ".venv/lib/python3.13/site-packages/pkg/__init__.py", "");
-        write(&tools, ".venv/lib/python3.13/site-packages/pkg/commands.py", "y = 2\n");
+        write(
+            &tools,
+            ".venv/lib/python3.13/site-packages/pkg/__init__.py",
+            "",
+        );
+        write(
+            &tools,
+            ".venv/lib/python3.13/site-packages/pkg/commands.py",
+            "y = 2\n",
+        );
         write(&tools, ".git/hooks/pre-commit.py", "z = 3\n");
 
         let files = list_python_files(&tools);
         let rels: Vec<String> = files
             .iter()
-            .map(|p| p.strip_prefix(&tools).unwrap().to_string_lossy().into_owned())
+            .map(|p| {
+                p.strip_prefix(&tools)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
             .collect();
         assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
     }
@@ -883,10 +897,7 @@ parent = "django"
             .find(|c| c.name == "migrate")
             .unwrap();
         assert_eq!(migrate.group, "django");
-        assert_eq!(
-            migrate.dispatched_from.as_deref(),
-            Some("argparse:django"),
-        );
+        assert_eq!(migrate.dispatched_from.as_deref(), Some("argparse:django"),);
         let django = manifest
             .commands
             .iter()
@@ -1115,7 +1126,10 @@ def f(ctx, name: str, alias: str | None = None) -> None:
         let f = m.commands.iter().find(|c| c.name == "f").unwrap();
         // `alias` should be Optional (flag), not a positional.
         let kinds: Vec<ArgumentKind> = f.arguments.iter().map(|a| a.kind).collect();
-        assert_eq!(kinds, vec![ArgumentKind::Positional, ArgumentKind::Optional]);
+        assert_eq!(
+            kinds,
+            vec![ArgumentKind::Positional, ArgumentKind::Optional]
+        );
     }
 
     /// GH #449: two unrelated modules each declaring a same-named enum
@@ -1163,12 +1177,26 @@ def cmd_b(ctx, *, database: Database = Database.REPLICA) -> None:
         let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
         let cmd_a = m.commands.iter().find(|c| c.name == "cmd-a").unwrap();
         let cmd_b = m.commands.iter().find(|c| c.name == "cmd-b").unwrap();
-        let arg_a = cmd_a.arguments.iter().find(|a| a.name == "database").unwrap();
-        let arg_b = cmd_b.arguments.iter().find(|a| a.name == "database").unwrap();
+        let arg_a = cmd_a
+            .arguments
+            .iter()
+            .find(|a| a.name == "database")
+            .unwrap();
+        let arg_b = cmd_b
+            .arguments
+            .iter()
+            .find(|a| a.name == "database")
+            .unwrap();
 
-        assert_eq!(arg_a.allowed_values, vec!["primary".to_string(), "standby".to_string()]);
+        assert_eq!(
+            arg_a.allowed_values,
+            vec!["primary".to_string(), "standby".to_string()]
+        );
         assert_eq!(arg_a.default.as_deref(), Some("primary"));
-        assert_eq!(arg_b.allowed_values, vec!["replica".to_string(), "archive".to_string()]);
+        assert_eq!(
+            arg_b.allowed_values,
+            vec!["replica".to_string(), "archive".to_string()]
+        );
         assert_eq!(arg_b.default.as_deref(), Some("replica"));
     }
 
@@ -1249,6 +1277,63 @@ def analyse(ctx, *, env: Environment | None = None) -> None:
         assert_eq!(
             arg.allowed_values,
             vec!["production".to_string(), "staging".to_string()]
+        );
+    }
+
+    /// The general case #454's identical-members dedupe alone can't
+    /// handle: two *differently*-shaped same-named enum classes across
+    /// modules, resolved correctly via a genuine explicit import rather
+    /// than a lucky "only one candidate" guess. This is the case that
+    /// motivated the real import-following resolver.
+    #[test]
+    fn imported_enum_with_differently_shaped_collision_resolves_via_import() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/module_a.py",
+            r#""""Module A."""
+import enum
+
+class Database(enum.StrEnum):
+    PRIMARY = "primary"
+    STANDBY = "standby"
+"#,
+        );
+        write(
+            tmp.path(),
+            "tools/module_b.py",
+            r#""""Module B."""
+import enum
+
+class Database(enum.StrEnum):
+    REPLICA = "replica"
+    ARCHIVE = "archive"
+"#,
+        );
+        write(
+            tmp.path(),
+            "tools/module_c.py",
+            r#""""Module C imports Database from module_b, not module_a."""
+from .module_b import Database
+
+group = command_group("c", "C", docstring=__doc__)
+
+@group.command
+def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
+    """Cmd C."""
+"#,
+        );
+
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let cmd_c = m.commands.iter().find(|c| c.name == "cmd-c").unwrap();
+        let arg = cmd_c
+            .arguments
+            .iter()
+            .find(|a| a.name == "database")
+            .unwrap();
+        assert_eq!(
+            arg.allowed_values,
+            vec!["replica".to_string(), "archive".to_string()]
         );
     }
 }

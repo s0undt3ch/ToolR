@@ -7,16 +7,14 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::parser::{list_python_files, module_path_for_prefix, parse_python_file};
 use crate::parser::{
-    commands::{CommandNameConflict, detect_name_conflicts, extract_commands},
+    commands::{detect_name_conflicts, extract_commands, CommandNameConflict},
     groups::extract_groups,
-    symbols::{ArgSectionTable, EnumTable, TypeAliasTable},
+    symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
     types::{SourcesImports, TypeImports, TypeResolutionError},
 };
-use crate::third_party::{
-    FragmentArgument, FragmentCommand, FragmentGroup, ManifestFragment,
-};
+use crate::parser::{list_python_files, module_path_for_prefix, parse_python_file};
+use crate::third_party::{FragmentArgument, FragmentCommand, FragmentGroup, ManifestFragment};
 
 /// Error type for `build_third_party_fragment`.
 #[derive(Debug, thiserror::Error)]
@@ -92,12 +90,19 @@ pub fn build_third_party_fragment(
     let mut enums = EnumTable::default();
     let mut aliases = TypeAliasTable::default();
     let mut sections = ArgSectionTable::default();
+    let mut all_imports: std::collections::HashMap<String, ImportTable> =
+        std::collections::HashMap::new();
     for path in &py_files {
         let module = parse_python_file(path).map_err(|e| BuildFragmentError::Parse {
             path: path.clone(),
             source: e,
         })?;
         let module_path = module_path_for_prefix(source_dir, path, package_name);
+        let is_package = path.file_stem().map(|s| s == "__init__").unwrap_or(false);
+        all_imports.insert(
+            module_path.clone(),
+            ImportTable::from_module(&module, &module_path, is_package),
+        );
         enums.merge(EnumTable::from_module(&module, &module_path));
         aliases.merge(TypeAliasTable::from_module(&module));
         sections.merge(ArgSectionTable::from_module(&module));
@@ -129,6 +134,7 @@ pub fn build_third_party_fragment(
             &module_path,
             &bindings,
             &enums,
+            &all_imports,
             &consts,
             &type_imports,
             &sources_imports,
@@ -173,7 +179,9 @@ pub fn build_third_party_fragment(
 
     // Sort: groups by name, commands by (group, name).
     all_groups.sort_by_key(|g| g.full_path());
-    all_commands.sort_by(|a, b| (a.group.as_str(), a.name.as_str()).cmp(&(b.group.as_str(), b.name.as_str())));
+    all_commands.sort_by(|a, b| {
+        (a.group.as_str(), a.name.as_str()).cmp(&(b.group.as_str(), b.name.as_str()))
+    });
 
     Ok(ManifestFragment {
         toolr_schema_version: schema_version,
@@ -253,8 +261,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         std::fs::create_dir_all(tmp.path().join("pkg")).unwrap();
         // No __init__.py.
-        let err =
-            build_third_party_fragment(&tmp.path().join("pkg"), "pkg", 1).unwrap_err();
+        let err = build_third_party_fragment(&tmp.path().join("pkg"), "pkg", 1).unwrap_err();
         assert!(matches!(err, BuildFragmentError::NamespacePackage { .. }));
     }
 
@@ -337,8 +344,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
             include_str!("../../../examples/plugin-package/src/toolr_example_plugin/commands.py"),
         );
 
-        let fragment =
-            build_third_party_fragment(&pkg, "toolr_example_plugin", 1).unwrap();
+        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin", 1).unwrap();
 
         // Load the committed reference fragment.
         let reference_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -352,7 +358,10 @@ def hello_command(ctx: Context, name: str = "World") -> None:
         )
         .expect("parse committed manifest");
 
-        assert_eq!(fragment, reference, "regenerated fragment differs from committed manifest");
+        assert_eq!(
+            fragment, reference,
+            "regenerated fragment differs from committed manifest"
+        );
     }
 
     /// A file that declares a group via an import path NOT under the
@@ -396,10 +405,20 @@ def subcmd(ctx):
 
         let fragment = build_third_party_fragment(&pkg, "mypkg", 1).unwrap();
         let group_names: Vec<&str> = fragment.groups.iter().map(|g| g.name.as_str()).collect();
-        assert!(group_names.contains(&"own"), "missing 'own' group; got {group_names:?}");
-        assert!(group_names.contains(&"subg"), "missing 'subg' group; got {group_names:?}");
+        assert!(
+            group_names.contains(&"own"),
+            "missing 'own' group; got {group_names:?}"
+        );
+        assert!(
+            group_names.contains(&"subg"),
+            "missing 'subg' group; got {group_names:?}"
+        );
         // Confirm modules are prefixed with the package, not "tools".
-        let modules: Vec<&str> = fragment.commands.iter().map(|c| c.module.as_str()).collect();
+        let modules: Vec<&str> = fragment
+            .commands
+            .iter()
+            .map(|c| c.module.as_str())
+            .collect();
         for m in &modules {
             assert!(m.starts_with("mypkg"), "unexpected module: {m}");
         }
@@ -487,8 +506,7 @@ def do_thing(ctx):
             include_str!("../../../examples/plugin-package/src/toolr_example_plugin/commands.py"),
         );
 
-        let fragment =
-            build_third_party_fragment(&pkg, "toolr_example_plugin", 1).unwrap();
+        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin", 1).unwrap();
         let serialised = serialise_fragment(&fragment).expect("serialise");
 
         let reference = std::fs::read_to_string(
