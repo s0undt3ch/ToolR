@@ -197,3 +197,17 @@ This confirms both (a) the runtime bug is real and (b) the `localns` fix works.
   static resolution right, since it removes Python's own def-time validation, but the resolver
   we're building already treats "must resolve" as a hard, always-on invariant, so this doesn't
   change scope — see prior point in this same review.
+
+## Correction found during implementation (Task 8)
+
+This design originally stated the `SupportedType::Enum.module` field would require bumping
+`RUNNER_SCHEMA_VERSION` (`crates/toolr-core/src/execute/spec.rs`) and `toolr-py`'s `SCHEMA_VERSION`
+in lock-step. That was wrong: those constants govern the *dispatch-time* JSON payload between the
+`toolr` binary and the Python runner subprocess (`ExecutionSpec`/`DispatchSpec` — raw argument
+*values*, not type schema). `SupportedType` is never part of that payload. The field actually lives
+in the *static build-time manifest* (`manifest/model.rs::Argument.resolved_type`), whose own
+`SCHEMA_VERSION` doc comment says "bump on breaking format changes" — and adding a
+`#[serde(default)]`-annotated field to an existing variant is non-breaking (old manifests without
+the field still deserialise; the field defaults to an empty string, and the field is only ever read
+for `Enum`-typed arguments where a normal rebuild will populate it correctly anyway). No version
+bump was needed anywhere; `#[serde(default)]` on the new field was sufficient.

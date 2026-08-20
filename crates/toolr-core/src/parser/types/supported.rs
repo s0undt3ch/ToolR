@@ -46,6 +46,11 @@ pub enum SupportedType {
     /// `TYPE_CHECKING`-guarded imports).
     Enum {
         name: String,
+        /// `#[serde(default)]` so a manifest built by a pre-#454 toolr
+        /// (no `module` field on this variant) still deserialises —
+        /// non-breaking addition, no `SCHEMA_VERSION` bump needed per
+        /// `manifest/model.rs`'s "bump on breaking format changes" rule.
+        #[serde(default)]
         module: String,
         values: Vec<String>,
     },

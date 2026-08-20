@@ -1335,5 +1335,16 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
             arg.allowed_values,
             vec!["replica".to_string(), "archive".to_string()]
         );
+        // The manifest's resolved_type carries the *declaring* module
+        // (module_b), not the importing module (module_c) -- this is
+        // what the Python runtime needs to lazily import the real
+        // class at coercion time, independent of the annotation's own
+        // module.
+        match &arg.resolved_type {
+            Some(crate::parser::types::SupportedType::Enum { module, .. }) => {
+                assert_eq!(module, "tools.module_b");
+            }
+            other => panic!("expected Enum resolved_type, got {other:?}"),
+        }
     }
 }
