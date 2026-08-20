@@ -196,6 +196,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn optional_via_bin_or_with_none_first() {
+        let (_, ann) = first_annotation("def f(x: None | int): pass\n");
+        assert_eq!(
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            SupportedType::Optional(Box::new(SupportedType::Int))
+        );
+    }
+
+    #[test]
+    fn optional_via_subscript() {
+        let (_, ann) = first_annotation("def f(x: Optional[int]): pass\n");
+        assert_eq!(
+            resolve(&ann, &EnumTable::default(), &TypeImports::default(), &TypeAliasTable::default(), "tools.test").unwrap(),
+            SupportedType::Optional(Box::new(SupportedType::Int))
+        );
+    }
+
     /// Pin every `toolr.types.X` name the rust side knows about.
     ///
     /// The python-side companion lives at `tests/test_types_module.py`

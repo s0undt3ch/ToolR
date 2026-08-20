@@ -454,6 +454,22 @@ class Database(StrEnum):
     }
 
     #[test]
+    fn single_definition_resolves_from_an_unrelated_module() {
+        let src = r#"
+from enum import StrEnum
+
+class Mode(StrEnum):
+    FAST = "fast"
+"#;
+        let table = EnumTable::from_module(&parse(src), "tools.module_a");
+
+        assert_eq!(
+            table.lookup("Mode", "tools.module_b").unwrap(),
+            vec!["fast".to_string()]
+        );
+    }
+
+    #[test]
     fn arg_section_collects_module_bindings() {
         let src = r#"
 LOGGING = arg_section("Logging Options", description="Control verbosity.")
