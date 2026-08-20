@@ -6,6 +6,43 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.30.0 - 2026-08-20
+
+### Notes
+
+- Fixed the manifest builder resolving enum CLI choices by bare class
+  name instead of by defining module, which meant two unrelated
+  `tools/*.py` modules declaring a same-named `Enum` subclass (e.g.
+  `Database`) clobbered each other's `--help` choices depending on
+  scan order. `allowed_values` and enum-attribute defaults now resolve
+  against the class actually in scope for each module ([#449](https://github.com/s0undt3ch/ToolR/issues/449)).
+- `toolr.testing.RunMock` now forwards `assert_called`, `assert_called_once`,
+  and `assert_has_calls`, closing gaps in its otherwise-explicit
+  `unittest.mock` API subset. A new test asserts the forwarded set stays in
+  sync with `Mock`'s own public API going forward.
+- `toolr.testing.make_context` now accepts a `width=` override for its
+  captured consoles, defaulting to a new `DEFAULT_TEST_CONSOLE_WIDTH`
+  (1000 columns) so `ctx.stdout`/`ctx.stderr` assertions never have to
+  account for rich wrapping a long line.
+
+### <!-- 0 -->🚀 Features
+
+- *(testing)* Forward assert_called and assert_has_calls on RunMock ([`754f075`](https://github.com/s0undt3ch/ToolR/commit/754f0750ef34d22946cec0e49f380b3ef3e3cd15))
+- *(testing)* Let make_context override captured-console width ([`93ae0e7`](https://github.com/s0undt3ch/ToolR/commit/93ae0e70fae6b612bcb3db6c16ba46b43de11e04))
+- *(xtask)* Extract toolr.testing's API and a worked example into skill refs ([`ceb5f35`](https://github.com/s0undt3ch/ToolR/commit/ceb5f35946f96ab86e9d981d613b73d9d14fbcb9))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(parser)* Key enum CLI choices by defining module, not bare class name ([`cd84b8a`](https://github.com/s0undt3ch/ToolR/commit/cd84b8a11a8467cfb148408067bac8c5425cdeab))
+
+### <!-- 3 -->📚 Documentation
+
+- *(testing)* Add a ctx.prompt/prompt_input= worked example ([`c0ba2dd`](https://github.com/s0undt3ch/ToolR/commit/c0ba2dd3725750770c458e0afb396e6dc9c46ef1))
+
+### <!-- 6 -->🧪 Testing
+
+- *(parser)* Cover the enum cross-module and Optional[T]/None|T resolution paths ([`5056623`](https://github.com/s0undt3ch/ToolR/commit/50566235850626a76e9427d51777d2c2e3fe536f))
+- *(xtask)* Cover testing_examples' renamed/removed-function error path ([`9eaf855`](https://github.com/s0undt3ch/ToolR/commit/9eaf855cdb81c41375257fd22e961e6880c330f1))
 ## 0.29.0 - 2026-08-19
 
 ### Notes
