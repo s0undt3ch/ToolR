@@ -251,6 +251,13 @@ pub struct ImportedFrom {
 #[derive(Debug, Default, Clone)]
 pub struct ImportTable {
     entries: HashMap<String, Vec<ImportedFrom>>,
+    star_import: bool,
+    /// Local names bound to a whole module by a bare `import X [as Y]`
+    /// statement (never a class). Used only to reject
+    /// `import foo.bar.baz` + `foo.bar.baz.X` attribute-chain usage in
+    /// a command-signature annotation with a specific, actionable
+    /// message — this table never resolves such a binding to a class.
+    module_bindings: HashMap<String, String>,
 }
 
 impl ImportTable {
@@ -272,6 +279,27 @@ impl ImportTable {
         match stmt {
             Stmt::ImportFrom(import) => {
                 self.collect_import_from(import, module_path, is_package, via_type_checking);
+            }
+            Stmt::Import(import) => {
+                for alias in &import.names {
+                    let local = alias
+                        .asname
+                        .as_ref()
+                        .map(|n| n.as_str().to_string())
+                        .unwrap_or_else(|| {
+                            // `import a.b.c` binds the top-level name `a`,
+                            // not `a.b.c` — matches real Python semantics.
+                            alias
+                                .name
+                                .as_str()
+                                .split('.')
+                                .next()
+                                .unwrap_or(alias.name.as_str())
+                                .to_string()
+                        });
+                    self.module_bindings
+                        .insert(local, alias.name.as_str().to_string());
+                }
             }
             Stmt::If(if_stmt) if is_type_checking_test(&if_stmt.test) => {
                 for inner in &if_stmt.body {
@@ -323,6 +351,7 @@ impl ImportTable {
         };
         for alias in &import.names {
             if alias.name.as_str() == "*" {
+                self.star_import = true;
                 continue;
             }
             let original_name = alias.name.as_str().to_string();
@@ -345,6 +374,22 @@ impl ImportTable {
     /// re-imported more than once in the same module.
     pub fn candidates(&self, name: &str) -> &[ImportedFrom] {
         self.entries.get(name).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Whether this module contains a `from ... import *`. Used to give
+    /// a specific "don't use star imports" message instead of the
+    /// generic unsupported-type error when a command-signature name
+    /// can't otherwise be resolved.
+    pub fn has_star_import(&self) -> bool {
+        self.star_import
+    }
+
+    /// If `name` is bound to a whole module by a bare `import X [as Y]`
+    /// statement, the dotted module it names. Used to reject
+    /// `foo.bar.baz.X`-style attribute-chain annotations with a message
+    /// pointing at `from foo.bar.baz import X` instead.
+    pub fn resolve_module_binding(&self, name: &str) -> Option<&str> {
+        self.module_bindings.get(name).map(String::as_str)
     }
 }
 
@@ -785,6 +830,34 @@ except ImportError:
         let src = "from tools.metrics._common import *\n";
         let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
         assert!(table.candidates("anything_at_all").is_empty());
+        assert!(table.has_star_import());
+    }
+
+    #[test]
+    fn import_table_no_star_import_by_default() {
+        let src = "from tools.metrics._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(!table.has_star_import());
+    }
+
+    #[test]
+    fn import_table_tracks_module_binding_for_bare_import() {
+        let src = "import tools.metrics._common\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert_eq!(
+            table.resolve_module_binding("tools"),
+            Some("tools.metrics._common")
+        );
+    }
+
+    #[test]
+    fn import_table_tracks_aliased_module_binding() {
+        let src = "import tools.metrics._common as common\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert_eq!(
+            table.resolve_module_binding("common"),
+            Some("tools.metrics._common")
+        );
     }
 
     #[test]

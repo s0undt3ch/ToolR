@@ -44,7 +44,7 @@ mod tests {
     use super::resolve::resolve_toolr_types_name;
     use super::*;
     use crate::parser::parse_python_file;
-    use crate::parser::symbols::{ArgSectionTable, EnumTable, TypeAliasTable};
+    use crate::parser::symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable};
     use ruff_python_ast::{ModModule, Stmt};
     use std::io::Write;
     use tempfile::NamedTempFile;
@@ -233,6 +233,53 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("datetime.datetime"), "msg was: {msg}");
         assert!(msg.contains("toolr.types"), "msg was: {msg}");
+    }
+
+    #[test]
+    fn star_import_in_scope_gets_specific_error() {
+        let src = "from tools.metrics._common import *\ndef f(x: Environment): pass\n";
+        let m = module(src);
+        let (_, ann) = first_annotation(src);
+        let import_table = ImportTable::from_module(&m, "tools.metrics.analyse", false);
+        let mut all_imports = std::collections::HashMap::new();
+        all_imports.insert("tools.metrics.analyse".to_string(), import_table);
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &all_imports,
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.metrics.analyse",
+        )
+        .expect_err("should fail");
+        let msg = err.to_string();
+        assert!(msg.contains("star import"), "msg was: {msg}");
+        assert!(msg.contains("Environment"), "msg was: {msg}");
+    }
+
+    #[test]
+    fn dotted_attribute_chain_gets_specific_error() {
+        let src =
+            "import tools.metrics._common\ndef f(x: tools.metrics._common.Environment): pass\n";
+        let m = module(src);
+        let (_, ann) = first_annotation(src);
+        let import_table = ImportTable::from_module(&m, "tools.metrics.analyse", false);
+        let mut all_imports = std::collections::HashMap::new();
+        all_imports.insert("tools.metrics.analyse".to_string(), import_table);
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &all_imports,
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.metrics.analyse",
+        )
+        .expect_err("should fail");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("from tools.metrics._common import Environment"),
+            "msg was: {msg}"
+        );
     }
 
     #[test]

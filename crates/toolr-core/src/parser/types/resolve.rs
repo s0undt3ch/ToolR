@@ -258,6 +258,24 @@ fn resolve_inner(
             if rendered == "pathlib.Path" {
                 return Ok(SupportedType::Path);
             }
+            // `import foo.bar.baz` + `foo.bar.baz.X` attribute-chain
+            // usage — rejected for arbitrary user classes (unlike
+            // `toolr.types`/`toolr.sources`'s own dotted-attribute
+            // support above, which is a fixed, narrow, already-tested
+            // surface). The root name being a tracked module binding is
+            // enough to know exactly what to suggest instead.
+            if let Some(root) = rendered.split('.').next() {
+                if let Some(bound_module) = all_imports
+                    .get(module)
+                    .and_then(|t| t.resolve_module_binding(root))
+                {
+                    let attr_name = rendered.rsplit('.').next().unwrap_or(&rendered);
+                    return Err(UnsupportedType::UnsupportedShape(format!(
+                        "`{rendered}` isn't supported as a type annotation — please \
+                         `from {bound_module} import {attr_name}` and use `{attr_name}` directly."
+                    )));
+                }
+            }
             Err(UnsupportedType::UnknownName(rendered))
         }
         Expr::Subscript(sub) => {
@@ -311,6 +329,19 @@ fn resolve_name(
                     resolve_inner(aliased, enums, all_imports, imports, aliases, module, seen);
                 seen.pop();
                 return result;
+            }
+            // A star import (`from ... import *`) in this module means
+            // we genuinely can't know whether `name` came from there —
+            // give a specific, actionable message instead of the
+            // generic "type not supported" text.
+            if all_imports
+                .get(module)
+                .is_some_and(ImportTable::has_star_import)
+            {
+                return Err(UnsupportedType::UnsupportedShape(format!(
+                    "`{name}` isn't resolvable because this module uses a star import \
+                     (`from ... import *`). Please import `{name}` explicitly instead."
+                )));
             }
             Err(UnsupportedType::UnknownName(name.to_string()))
         }
