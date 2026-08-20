@@ -1238,7 +1238,7 @@ from ._common import Environment
 group = command_group("metrics", "Metrics", docstring=__doc__)
 
 @group.command
-def analyse(ctx, *, env: Environment = Environment.PRODUCTION) -> None:
+def analyse(ctx, *, env: Environment | None = None) -> None:
     """Analyse."""
 "#,
         );

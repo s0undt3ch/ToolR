@@ -333,16 +333,34 @@ fn build_command(
         errors,
     );
     // Backfill `allowed_values` from `resolved_type` for arguments whose
-    // type annotation is a `Literal[...]` alias declared in another file.
-    // `extract_arguments` runs before `resolve_arguments` and only consults
-    // `EnumTable` for allowed-value collection, so a bare `Name("Mode")`
-    // where `Mode = Literal["fast", "slow"]` lives in another module
-    // would land here with `allowed_values: []`. After the resolver fills
-    // `resolved_type`, copy the Literal's values across.
+    // type annotation isn't a plain `Expr::Name` — `extract_arguments`
+    // runs before `resolve_arguments` and only consults `EnumTable` /
+    // `literal_values` on a bare name, so these land here with
+    // `allowed_values: []` even though the resolver went on to fill
+    // `resolved_type` with the answer:
+    //   - a `Name("Mode")` where `Mode = Literal["fast", "slow"]` lives
+    //     in another module (a type alias, not a bare Literal/Enum).
+    //   - `Environment | None` / `Optional[Environment]` — `BinOp` and
+    //     `Subscript` annotations, which `referenced_name` doesn't match
+    //     at all, so the enum/literal underneath never gets a look-in.
+    // Peel one `Optional` layer (the CLI-visible choices are the same
+    // whether or not the flag is required) and copy the inner
+    // `Literal`/`Enum` values across.
     for arg in &mut arguments {
         if arg.allowed_values.is_empty() {
-            if let Some(crate::parser::types::SupportedType::Literal(values)) = &arg.resolved_type {
-                arg.allowed_values = values.clone();
+            let inner = match &arg.resolved_type {
+                Some(crate::parser::types::SupportedType::Optional(inner)) => inner.as_ref(),
+                Some(other) => other,
+                None => continue,
+            };
+            match inner {
+                crate::parser::types::SupportedType::Literal(values) => {
+                    arg.allowed_values = values.clone();
+                }
+                crate::parser::types::SupportedType::Enum { values, .. } => {
+                    arg.allowed_values = values.clone();
+                }
+                _ => {}
             }
         }
     }
