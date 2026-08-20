@@ -71,6 +71,14 @@ prek run --all-files              # run every pre-commit hook
 - **Brainstorming writes the design, then the plan.** `/superpowers:brainstorming` saves to
   `specs/<YYYY-MM-DD>-<topic>-design.md`; `/superpowers:writing-plans` saves to
   `specs/<YYYY-MM-DD>-<topic>-plan.md`. Never `docs/superpowers/specs/`.
+- **Deciding a `0.X.0` vs `0.x.Y` release.** `tools/version.py::bump` takes the target version as
+  an explicit input — it doesn't compute one from commit history. Before a release, judge the bump
+  by reading `UNRELEASED.md`'s content and `git log <last-tag>..HEAD` (or the merged PRs since)
+  together: any `feat(...)` commit, or narrative text describing new/changed behavior rather than a
+  pure bug fix, means minor (`0.X.0`); a release containing only `fix(...)`/`docs(...)`/`chore(...)`
+  work is a patch (`0.x.Y`). Conventional Commit prefixes alone aren't sufficient — a PR can carry a
+  `feat` commit for internal refactoring with no user-visible new capability, and `UNRELEASED.md` is
+  what actually ships in the notes, so read both.
 
 ### Actions (how)
 
@@ -102,6 +110,14 @@ prek run --all-files              # run every pre-commit hook
 - **No `--no-verify`** without a stated reason in the commit body. Pre-commit failures are signals.
 - **Python tests: factory fixtures over bare helpers** for `tmp_path`-based setup. Keep test
   imports top-of-file.
+- **Regression tests must reproduce the reported shape exactly, not a simplified stand-in.**
+  If a fixture built to reproduce a bug report fails and the annotation/config shape looks
+  incidental to fix, don't simplify the fixture to make the test pass — that can silently mask a
+  second, real bug hiding behind the first (this happened during the #454 fix: weakening a test's
+  annotation from `Environment | None` to a non-Optional `Environment` made it pass, but hid an
+  unrelated `allowed_values`-goes-empty bug in the `Optional`-wrapping path that the original
+  report's exact shape would have caught). When a fixture built from a bug report doesn't pass,
+  treat that as a second finding to fix, not friction to remove.
 - **Archive specs as the last implementation step.** When the implementing PR is otherwise ready,
   `git mv specs/<…>-design.md specs/archive/<year>/` (and the matching `-plan.md`). The archive
   move is the final commit before opening the PR — same PR as the implementation, not a follow-up.
