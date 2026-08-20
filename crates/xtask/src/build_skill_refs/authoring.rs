@@ -70,8 +70,14 @@ pub fn testing_api(repo_root: &Path) -> Result<Generated> {
 const TESTING_EXAMPLE_SOURCE: &str = "tests/skill_examples/test_authoring_examples.py";
 
 /// Names of the module-level functions extracted, in the order they are
-/// rendered — the fake command under test, then the test that exercises it.
-const TESTING_EXAMPLE_FUNCTIONS: &[&str] = &["deploy", "test_deploy_checks_git_status"];
+/// rendered — each fake command under test immediately followed by the
+/// test that exercises it.
+const TESTING_EXAMPLE_FUNCTIONS: &[&str] = &[
+    "deploy",
+    "test_deploy_checks_git_status",
+    "confirm_deploy",
+    "test_confirm_deploy_aborts_without_confirmation",
+];
 
 /// Build the `references/testing-examples.md` file for the authoring
 /// skill: the source of `TESTING_EXAMPLE_FUNCTIONS`, copied verbatim from
@@ -96,7 +102,7 @@ pub fn testing_examples(repo_root: &Path) -> Result<Generated> {
     }
 
     let mut body = String::new();
-    body.push_str("# Toolr command-authoring reference: testing example\n\n");
+    body.push_str("# Toolr command-authoring reference: testing examples\n\n");
     body.push_str(DO_NOT_EDIT);
     body.push_str("\n\n");
     let _ = write!(

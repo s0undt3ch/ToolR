@@ -9,6 +9,8 @@ regenerated to match.
 
 from __future__ import annotations
 
+import pytest
+
 from toolr import Context
 from toolr.testing import RunMock
 from toolr.testing import make_command_result
@@ -36,3 +38,19 @@ def test_deploy_checks_git_status(tmp_path):
         timeout_secs=None,
         no_output_timeout_secs=None,
     )
+
+
+def confirm_deploy(ctx: Context) -> None:
+    if not ctx.prompt("Deploy to production?", bool, default=False):
+        ctx.error("Aborted.")
+        ctx.exit(1)
+    ctx.print("Deploying...")
+
+
+def test_confirm_deploy_aborts_without_confirmation(tmp_path):
+    ctx = make_context(repo_root=tmp_path, prompt_input="n\n")
+
+    with pytest.raises(SystemExit):
+        confirm_deploy(ctx)
+
+    assert "Aborted." in ctx.stderr

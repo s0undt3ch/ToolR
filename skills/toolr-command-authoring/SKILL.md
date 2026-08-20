@@ -186,9 +186,10 @@ make its registration a top-level, statically-visible declaration.
   and `make_context`, regenerated from `toolr.testing.__all__` on every
   release. Treat it as the source of truth for the testing API — the
   section below is a summary, not the full contract.
-- [`references/testing-examples.md`](references/testing-examples.md) — a
-  worked `RunMock`/`make_context` example, copied verbatim from a real test
-  under `tests/skill_examples/` that runs in CI. Never hand-edited — if it
+- [`references/testing-examples.md`](references/testing-examples.md) — worked
+  examples covering `RunMock`/`make_context` (mocking `ctx.run`) and
+  `prompt_input=` (mocking `ctx.prompt`), copied verbatim from real tests
+  under `tests/skill_examples/` that run in CI. Never hand-edited — if one
   looks wrong, the source test is wrong (fix it and regenerate, don't patch
   the reference).
 
@@ -239,7 +240,12 @@ functions themselves. Full signatures and docstrings live in
   at all. The returned context adds `stdout`/`stderr` properties reading back
   everything written through `ctx.print`/`ctx.error`/`ctx.warn`/`ctx.debug`,
   and a `.replace(**changes)` method for building a modified copy mid-test
-  (e.g. `ctx.replace(_run_impl=other_mock)`).
+  (e.g. `ctx.replace(_run_impl=other_mock)`). Besides `run=` (below), it takes
+  `chdir=` (override for `ctx.chdir`'s underlying `os.chdir`) and
+  `prompt_input=` (canned answer(s) for `ctx.prompt` — a `str` raises
+  `EOFError` once exhausted instead of hanging a test that over-reads it;
+  **does not cover `ctx.prompt(..., password=True)`**, which always reads
+  from the real TTY/stdin — patch `getpass.getpass` directly for that case).
 - **`RunMock`** — the canonical double for `ctx.run`, passed to `make_context`
   as the `run=` override. Wraps a plain `unittest.mock.Mock` (not
   `MagicMock`), forwarding a fixed subset of `Mock`'s API
@@ -259,8 +265,9 @@ functions themselves. Full signatures and docstrings live in
   `ctx.stdout`/`ctx.stderr` to account for rich's wrapping. Pass a narrower
   `width=` explicitly only when the test is about wrapping itself.
 
-See [`references/testing-examples.md`](references/testing-examples.md) for a
-worked example wiring `RunMock` + `make_context` together.
+See [`references/testing-examples.md`](references/testing-examples.md) for
+worked examples wiring `RunMock` + `make_context` together, and mocking a
+`ctx.prompt` confirmation with `prompt_input=`.
 
 ## Packaging is a different problem
 
