@@ -33,6 +33,7 @@ from packaging.version import Version
 
 from toolr._runner import SCHEMA_VERSION
 from toolr._runner import ContextSpec
+from toolr._runner import DispatchPayloadSpec
 from toolr._runner import RunnerSpec
 from toolr._runner import SpecError
 from toolr._runner import _build_context
@@ -44,6 +45,8 @@ from toolr._runner import load_spec
 from toolr._runner import load_spec_from_env
 from toolr._runner import main
 from toolr._runner import run
+from toolr.sources import CommandSchema
+from toolr.sources import DispatchCommand
 
 # --------------------------------------------------------------------------
 # Factory fixtures (mirrored from test_dispatch.py for test isolation).
@@ -531,6 +534,56 @@ def test_coerce_args_enum_modules_missing_class_is_skipped_silently() -> None:
 
     _, keyword = _coerce_args(_fn, {"x": "hello"}, enum_modules={"Bogus": "no.such.module"})
     assert keyword == {"x": "hello"}
+
+
+def test_coerce_args_enum_modules_class_missing_from_real_module_is_skipped() -> None:
+    """The named module imports fine but has no attribute by that name --
+    a different failure shape than a bad module path, and also
+    best-effort, not a new failure mode.
+    """
+
+    def _fn(ctx, x: str) -> None: ...
+
+    _, keyword = _coerce_args(_fn, {"x": "hello"}, enum_modules={"NoSuchClass": "pathlib"})
+    assert keyword == {"x": "hello"}
+
+
+def test_run_dispatch_branch_passes_enum_modules_to_coerce_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`run()`'s dispatched-leaf branch threads `spec.enum_modules` into
+    its own `_coerce_args` call for the parent's kwargs, same as the
+    plain (non-dispatch) branch.
+    """
+    captured: dict[str, object] = {}
+
+    def fake_dispatcher(ctx, *, dispatched: DispatchCommand) -> None:
+        captured["dispatched"] = dispatched
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_dispatcher)
+    spec = RunnerSpec(
+        schema_version=SCHEMA_VERSION,
+        group="demo",
+        command="parent",
+        module="tools.demo",
+        function="parent",
+        args={},
+        context=ContextSpec(
+            repo_root=str(tmp_path),
+            verbosity="normal",
+            timestamps=False,
+            log_level="INFO",
+        ),
+        enum_modules={"Environment": "pathlib"},
+        dispatch=DispatchPayloadSpec(
+            command="migrate",
+            command_args={"check": True},
+            schema=CommandSchema(name="migrate", summary="", description="", arguments=[]),
+        ),
+    )
+    assert run(spec) == 0
+    assert isinstance(captured["dispatched"], DispatchCommand)
+    assert captured["dispatched"].command == "migrate"
 
 
 # --------------------------------------------------------------------------

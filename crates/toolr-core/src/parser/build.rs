@@ -180,8 +180,8 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         .collect();
 
     let project_root = tools_dir.parent().unwrap_or(tools_dir);
-    let grafted =
-        crate::argparse::run_for_project(project_root, &parents).map_err(BuildError::Argparse)?;
+    let grafted = crate::argparse::run_for_project(project_root, &parents)
+        .map_err(BuildError::Argparse)?;
 
     // Splice grafted children into the manifest.
     for (_parent, mut children) in grafted.children_by_parent {

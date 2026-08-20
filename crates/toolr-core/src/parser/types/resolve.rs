@@ -222,6 +222,27 @@ pub fn resolve(
 /// (`A = B; B = A`). Capped depth gives a second line of defence.
 const MAX_ALIAS_DEPTH: usize = 16;
 
+/// `resolve_inner`, boxing an inner-type error as `UnsupportedType::Inner`.
+/// Kept as its own one-line-per-call-site function rather than inlining
+/// `resolve_inner(...).map_err(...)` at each of `resolve_subscript`'s
+/// `list`/`Optional` branches: with the extra `all_imports` argument,
+/// that call no longer fits on one line, and `cargo fmt` puts the
+/// trailing `.map_err(...)?;` alone on its own line — which `llvm-cov`
+/// then reports as uncovered even though it executes on every call.
+#[allow(clippy::too_many_arguments)]
+fn resolve_boxed(
+    annotation: &Expr,
+    enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
+    imports: &TypeImports,
+    aliases: &TypeAliasTable,
+    module: &str,
+    seen: &mut Vec<String>,
+) -> Result<SupportedType, UnsupportedType> {
+    resolve_inner(annotation, enums, all_imports, imports, aliases, module, seen)
+        .map_err(|e| UnsupportedType::Inner(Box::new(e)))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn resolve_inner(
     annotation: &Expr,
@@ -394,16 +415,7 @@ fn resolve_subscript(
             }
         }
         "list" | "List" => {
-            let inner = resolve_inner(
-                sub.slice.as_ref(),
-                enums,
-                all_imports,
-                imports,
-                aliases,
-                module,
-                seen,
-            )
-            .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
+            let inner = resolve_boxed(sub.slice.as_ref(), enums, all_imports, imports, aliases, module, seen)?;
             Ok(SupportedType::List(Box::new(inner)))
         }
         "tuple" | "Tuple" => {
@@ -417,16 +429,7 @@ fn resolve_subscript(
             ))
         }
         "Optional" => {
-            let inner = resolve_inner(
-                sub.slice.as_ref(),
-                enums,
-                all_imports,
-                imports,
-                aliases,
-                module,
-                seen,
-            )
-            .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
+            let inner = resolve_boxed(sub.slice.as_ref(), enums, all_imports, imports, aliases, module, seen)?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
         "Annotated" => {

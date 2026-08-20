@@ -333,21 +333,25 @@ impl ImportTable {
         is_package: bool,
         via_type_checking: bool,
     ) {
+        // Absolute imports (`level == 0`) always name a module in valid
+        // Python — `import.module` is `None` there only for a
+        // syntactically-invalid source, which `.map()` naturally passes
+        // through as `None` without a dedicated branch. Relative imports
+        // (`level > 0`) can genuinely fail to resolve (more leading dots
+        // than the importing module has path segments), which is what
+        // `resolve_relative_module` returns `None` for.
         let target_module = if import.level == 0 {
-            match import.module.as_ref().map(|m| m.as_str()) {
-                Some(m) => m.to_string(),
-                None => return,
-            }
+            import.module.as_ref().map(|m| m.to_string())
         } else {
-            let Some(m) = resolve_relative_module(
+            resolve_relative_module(
                 import.level,
                 import.module.as_ref().map(|m| m.as_str()),
                 module_path,
                 is_package,
-            ) else {
-                return;
-            };
-            m
+            )
+        };
+        let Some(target_module) = target_module else {
+            return;
         };
         for alias in &import.names {
             if alias.name.as_str() == "*" {
@@ -771,6 +775,28 @@ mod tests {
     }
 
     #[test]
+    fn import_table_ignores_relative_import_with_too_many_dots() {
+        // More leading dots than the importing module has path segments
+        // for: `resolve_relative_module` returns `None`, and the whole
+        // import statement is silently dropped rather than panicking.
+        let src = "from ... import shared\n";
+        let table = ImportTable::from_module(&parse(src), "tools.analyse", false);
+        assert!(table.candidates("shared").is_empty());
+    }
+
+    #[test]
+    fn import_table_ignores_relative_import_at_exact_package_boundary() {
+        // Dots exactly consume every path segment (no `?`-triggered
+        // underflow, unlike the too-many-dots case above) and there's
+        // no module suffix -- `resolve_relative_module` computes an
+        // empty target and returns `None` rather than an empty-string
+        // module.
+        let src = "from .. import shared\n";
+        let table = ImportTable::from_module(&parse(src), "tools.sub", false);
+        assert!(table.candidates("shared").is_empty());
+    }
+
+    #[test]
     fn import_table_resolves_relative_import_from_package_root() {
         let src = "from ._common import Environment\n";
         let table = ImportTable::from_module(&parse(src), "tools.metrics", true);
@@ -805,6 +831,15 @@ def helper():
     if TYPE_CHECKING:
         from tools.metrics._common import Environment
 "#;
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(table.candidates("Environment").is_empty());
+    }
+
+    #[test]
+    fn import_table_ignores_non_type_checking_if_guard() {
+        // A top-level `if` whose test isn't `TYPE_CHECKING` at all (here
+        // a plain boolean literal) must not be mistaken for one.
+        let src = "if True:\n    from tools.metrics._common import Environment\n";
         let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
         assert!(table.candidates("Environment").is_empty());
     }
@@ -1170,6 +1205,36 @@ class Mode(StrEnum):
             ImportTable::from_module(&parse("from tools.mod_a import X\n"), "tools.mod_b", false),
         );
         assert!(enums.lookup("X", "tools.mod_a", &all_imports).is_none());
+    }
+
+    #[test]
+    fn resolve_def_try_except_branches_with_identical_members_resolve() {
+        // Both try/except branches name a different module, but those
+        // modules declare byte-identical Environment shapes -- resolves
+        // to either, same as the cross-module dedupe case.
+        let a = parse("class Environment(enum.StrEnum):\n    PRODUCTION = \"production\"\n");
+        let b = parse("class Environment(enum.StrEnum):\n    PRODUCTION = \"production\"\n");
+        let mut enums = EnumTable::from_module(&a, "tools.metrics._common");
+        enums.merge(EnumTable::from_module(&b, "tools.metrics._legacy"));
+
+        let mut all_imports: HashMap<String, ImportTable> = HashMap::new();
+        all_imports.insert(
+            "tools.metrics.analyse".to_string(),
+            ImportTable::from_module(
+                &parse(
+                    "try:\n    from ._common import Environment\nexcept ImportError:\n    from ._legacy import Environment\n",
+                ),
+                "tools.metrics.analyse",
+                false,
+            ),
+        );
+
+        assert_eq!(
+            enums
+                .lookup("Environment", "tools.metrics.analyse", &all_imports)
+                .unwrap(),
+            ("tools.metrics._common".to_string(), vec!["production".to_string()])
+        );
     }
 
     #[test]

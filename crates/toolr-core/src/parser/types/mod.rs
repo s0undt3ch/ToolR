@@ -236,6 +236,41 @@ mod tests {
     }
 
     #[test]
+    fn non_name_attribute_subscript_binop_annotation_is_unsupported() {
+        // A number literal as an annotation isn't Name/Attribute/
+        // Subscript/BinOp -- hits resolve_inner's outer catch-all.
+        let (_, ann) = first_annotation("def f(x: 5): pass\n");
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .expect_err("should fail");
+        assert!(matches!(err, UnsupportedType::UnknownName(_)));
+    }
+
+    #[test]
+    fn subscript_with_non_name_attribute_head_is_unsupported() {
+        // `1[int]` is nonsensical but syntactically valid -- the
+        // subscript's own value is a number literal, not Name/Attribute,
+        // so `resolve_subscript` can't classify its head at all.
+        let (_, ann) = first_annotation("def f(x: 1[int]): pass\n");
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .expect_err("should fail");
+        assert!(matches!(err, UnsupportedType::UnsupportedShape(_)));
+    }
+
+    #[test]
     fn star_import_in_scope_gets_specific_error() {
         let src = "from tools.metrics._common import *\ndef f(x: Environment): pass\n";
         let m = module(src);
@@ -314,6 +349,36 @@ mod tests {
             .unwrap(),
             SupportedType::Tuple(vec![SupportedType::Str, SupportedType::Int])
         );
+    }
+
+    #[test]
+    fn list_of_unsupported_element_propagates_inner_error() {
+        let (_, ann) = first_annotation("def f(x: list[datetime.datetime]): pass\n");
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .expect_err("should fail");
+        assert!(matches!(err, UnsupportedType::Inner(_)));
+    }
+
+    #[test]
+    fn tuple_with_unsupported_element_propagates_inner_error() {
+        let (_, ann) = first_annotation("def f(x: tuple[datetime.datetime, int]): pass\n");
+        let err = resolve(
+            &ann,
+            &EnumTable::default(),
+            &std::collections::HashMap::new(),
+            &TypeImports::default(),
+            &TypeAliasTable::default(),
+            "tools.test",
+        )
+        .expect_err("should fail");
+        assert!(matches!(err, UnsupportedType::Inner(_)));
     }
 
     #[test]

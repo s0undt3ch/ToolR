@@ -267,4 +267,54 @@ mod tests {
     fn schema_version_constant_is_3() {
         assert_eq!(RUNNER_SCHEMA_VERSION, 3);
     }
+
+    fn arg_with_type(name: &str, ty: Option<crate::parser::SupportedType>) -> crate::manifest::Argument {
+        crate::manifest::Argument {
+            name: name.to_string(),
+            kind: crate::manifest::ArgumentKind::Optional,
+            help: String::new(),
+            default: None,
+            type_annotation: None,
+            resolved_type: ty,
+            allowed_values: vec![],
+            path_constraints: None,
+            metadata: crate::manifest::ArgMetadata::default(),
+            long_flag: None,
+        }
+    }
+
+    #[test]
+    fn enum_modules_for_collects_bare_and_optional_enum_args() {
+        use crate::parser::SupportedType;
+        let arguments = vec![
+            arg_with_type(
+                "env",
+                Some(SupportedType::Enum {
+                    name: "Environment".into(),
+                    module: "tools.metrics._common".into(),
+                    values: vec!["production".into()],
+                }),
+            ),
+            arg_with_type(
+                "mode",
+                Some(SupportedType::Optional(Box::new(SupportedType::Enum {
+                    name: "Mode".into(),
+                    module: "tools.metrics.modes".into(),
+                    values: vec!["fast".into()],
+                }))),
+            ),
+            arg_with_type("count", Some(SupportedType::Int)),
+            arg_with_type("untyped", None),
+        ];
+        let modules = enum_modules_for(&arguments);
+        assert_eq!(
+            modules.get("Environment").map(String::as_str),
+            Some("tools.metrics._common")
+        );
+        assert_eq!(
+            modules.get("Mode").map(String::as_str),
+            Some("tools.metrics.modes")
+        );
+        assert_eq!(modules.len(), 2);
+    }
 }
