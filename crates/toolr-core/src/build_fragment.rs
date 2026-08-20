@@ -97,7 +97,8 @@ pub fn build_third_party_fragment(
             path: path.clone(),
             source: e,
         })?;
-        enums.merge(EnumTable::from_module(&module));
+        let module_path = module_path_for_prefix(source_dir, path, package_name);
+        enums.merge(EnumTable::from_module(&module, &module_path));
         aliases.merge(TypeAliasTable::from_module(&module));
         sections.merge(ArgSectionTable::from_module(&module));
     }

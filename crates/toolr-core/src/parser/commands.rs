@@ -313,7 +313,7 @@ fn build_command(
         .as_ref()
         .map(|d| d.full_description())
         .unwrap_or_default();
-    let mut arguments = extract_arguments(func, enums, consts, sources);
+    let mut arguments = extract_arguments(func, enums, consts, sources, module_path);
     if let Some(d) = parsed.as_ref() {
         for arg in &mut arguments {
             if let Some(Some(help)) = d.params.get(&arg.name) {

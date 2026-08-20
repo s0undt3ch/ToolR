@@ -41,7 +41,8 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let mut sections = ArgSectionTable::default();
     for path in &py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
-        enums.merge(EnumTable::from_module(&module));
+        let module_path = module_path_for(tools_dir, path);
+        enums.merge(EnumTable::from_module(&module, &module_path));
         aliases.merge(TypeAliasTable::from_module(&module));
         sections.merge(ArgSectionTable::from_module(&module));
     }
@@ -1115,5 +1116,59 @@ def f(ctx, name: str, alias: str | None = None) -> None:
         // `alias` should be Optional (flag), not a positional.
         let kinds: Vec<ArgumentKind> = f.arguments.iter().map(|a| a.kind).collect();
         assert_eq!(kinds, vec![ArgumentKind::Positional, ArgumentKind::Optional]);
+    }
+
+    /// GH #449: two unrelated modules each declaring a same-named enum
+    /// class (`Database`, with different members) must not clobber each
+    /// other's `allowed_values` in the manifest — each command's flag
+    /// keeps the choices from *its own* module's enum.
+    #[test]
+    fn colliding_bare_enum_names_across_modules_resolve_independently() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/module_a.py",
+            r#""""Module A."""
+import enum
+
+group = command_group("a", "A", docstring=__doc__)
+
+class Database(enum.StrEnum):
+    PRIMARY = "primary"
+    STANDBY = "standby"
+
+@group.command
+def cmd_a(ctx, *, database: Database = Database.PRIMARY) -> None:
+    """Cmd A."""
+"#,
+        );
+        write(
+            tmp.path(),
+            "tools/module_b.py",
+            r#""""Module B."""
+import enum
+
+group = command_group("b", "B", docstring=__doc__)
+
+class Database(enum.StrEnum):
+    REPLICA = "replica"
+    ARCHIVE = "archive"
+
+@group.command
+def cmd_b(ctx, *, database: Database = Database.REPLICA) -> None:
+    """Cmd B."""
+"#,
+        );
+
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let cmd_a = m.commands.iter().find(|c| c.name == "cmd-a").unwrap();
+        let cmd_b = m.commands.iter().find(|c| c.name == "cmd-b").unwrap();
+        let arg_a = cmd_a.arguments.iter().find(|a| a.name == "database").unwrap();
+        let arg_b = cmd_b.arguments.iter().find(|a| a.name == "database").unwrap();
+
+        assert_eq!(arg_a.allowed_values, vec!["primary".to_string(), "standby".to_string()]);
+        assert_eq!(arg_a.default.as_deref(), Some("primary"));
+        assert_eq!(arg_b.allowed_values, vec!["replica".to_string(), "archive".to_string()]);
+        assert_eq!(arg_b.default.as_deref(), Some("replica"));
     }
 }
