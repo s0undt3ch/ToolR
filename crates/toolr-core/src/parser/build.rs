@@ -1171,4 +1171,84 @@ def cmd_b(ctx, *, database: Database = Database.REPLICA) -> None:
         assert_eq!(arg_b.allowed_values, vec!["replica".to_string(), "archive".to_string()]);
         assert_eq!(arg_b.default.as_deref(), Some("replica"));
     }
+
+    /// GH #454: three modules each declare an identically-shaped
+    /// `Environment(StrEnum)` (same members, same values) and a fourth
+    /// module imports the class from one of them rather than declaring
+    /// its own. The importing module previously hit the #449 collision
+    /// guard — two-or-more cross-module defs with no local match — and
+    /// rejected the whole build with an unsupported-type error, even
+    /// though every candidate def serialises identically. Building must
+    /// succeed and the imported enum must still populate
+    /// `allowed_values`.
+    #[test]
+    fn imported_enum_with_identical_cross_module_defs_resolves() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/job.py",
+            r#""""Job module — declares and uses Environment locally."""
+import enum
+
+group = command_group("job", "Job", docstring=__doc__)
+
+class Environment(enum.StrEnum):
+    PRODUCTION = "production"
+    STAGING = "staging"
+
+@group.command
+def run(ctx, *, env: Environment = Environment.PRODUCTION) -> None:
+    """Run."""
+"#,
+        );
+        write(
+            tmp.path(),
+            "tools/helm_diff_pr_comment.py",
+            r#""""Unrelated module with its own copy of the same enum shape."""
+import enum
+
+group = command_group("ci", "CI", docstring=__doc__)
+
+class Environment(enum.StrEnum):
+    PRODUCTION = "production"
+    STAGING = "staging"
+
+@group.command
+def comment(ctx, *, env: Environment = Environment.PRODUCTION) -> None:
+    """Comment."""
+"#,
+        );
+        write(
+            tmp.path(),
+            "tools/metrics/_common.py",
+            r#""""Shared metrics types."""
+import enum
+
+class Environment(enum.StrEnum):
+    PRODUCTION = "production"
+    STAGING = "staging"
+"#,
+        );
+        write(
+            tmp.path(),
+            "tools/metrics/analyse.py",
+            r#""""Metrics analysis — imports Environment from a sibling module."""
+from ._common import Environment
+
+group = command_group("metrics", "Metrics", docstring=__doc__)
+
+@group.command
+def analyse(ctx, *, env: Environment = Environment.PRODUCTION) -> None:
+    """Analyse."""
+"#,
+        );
+
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let analyse = m.commands.iter().find(|c| c.name == "analyse").unwrap();
+        let arg = analyse.arguments.iter().find(|a| a.name == "env").unwrap();
+        assert_eq!(
+            arg.allowed_values,
+            vec!["production".to_string(), "staging".to_string()]
+        );
+    }
 }

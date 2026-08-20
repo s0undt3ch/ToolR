@@ -23,6 +23,16 @@ struct EnumDef {
     members: Vec<EnumMember>,
 }
 
+/// Whether two enum definitions serialise identically — same members,
+/// same names, same values, same order. Order matters because it
+/// drives `allowed_values` display order in `--help`.
+fn same_members(a: &[EnumMember], b: &[EnumMember]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|(x, y)| x.name == y.name && x.value == y.value)
+}
+
 /// Mapping of local class name → enum members, for classes that look
 /// like an `Enum` subclass. Tracks both the member name (`ADD`) and
 /// its serialised value (`"add"`) so we can resolve attribute-style
@@ -66,10 +76,15 @@ impl EnumTable {
     /// `current_module`: a same-module definition always wins. Failing
     /// that, an unambiguous single cross-module definition (the common
     /// "enum lives in a shared module, imported elsewhere" case) is
-    /// used. Two or more different-module definitions with no local
-    /// match are genuinely ambiguous — the static parser doesn't track
-    /// which one, if any, was actually imported here — so this returns
-    /// `None` rather than silently picking one, surfacing as an
+    /// used. When there are several different-module definitions but
+    /// they all serialise to the same member set (e.g. the same
+    /// `Environment(StrEnum)` shape copy-pasted or re-exported across a
+    /// few modules), the static parser can't tell which one was
+    /// actually imported here, but it doesn't matter — any of them
+    /// produces the same `allowed_values` / member lookups, so this
+    /// resolves rather than rejecting a legitimate import (GH #454).
+    /// Only a genuine mismatch in member sets, with no local match, is
+    /// ambiguous — that returns `None`, surfacing as an
     /// unsupported-type error instead of a wrong result.
     fn resolve_def(&self, class: &str, current_module: &str) -> Option<&[EnumMember]> {
         let defs = self.members.get(class)?;
@@ -78,6 +93,13 @@ impl EnumTable {
         }
         match defs.as_slice() {
             [only] => Some(&only.members),
+            [first, rest @ ..]
+                if rest
+                    .iter()
+                    .all(|d| same_members(&d.members, &first.members)) =>
+            {
+                Some(&first.members)
+            }
             _ => None,
         }
     }
