@@ -70,12 +70,22 @@ class ContextForTesting(Context, frozen=True):
         return msgspec.structs.replace(self, **changes)
 
 
+#: Default `width=` for the captured consoles `make_context` builds. Rich
+#: wraps lines to fit the console width; a realistic terminal width (the
+#: default rich would otherwise fall back to off a non-terminal file, 80)
+#: would wrap any assertion-worthy line of output, forcing every test to
+#: either match wrapped text or otherwise account for wrapping. Wide enough
+#: that no message a command reasonably prints ever wraps.
+DEFAULT_TEST_CONSOLE_WIDTH = 1000
+
+
 def make_context(
     repo_root: Path,
     *,
     verbosity: ConsoleVerbosity = ConsoleVerbosity.NORMAL,
     default_timeout_secs: float | None = None,
     default_no_output_timeout_secs: float | None = None,
+    width: int = DEFAULT_TEST_CONSOLE_WIDTH,
     run: Callable[..., CommandResult[str] | CommandResult[bytes]] | None = None,
     chdir: Callable[[str | Path], None] | None = None,
     prompt_input: str | TextIO | None = None,
@@ -87,6 +97,10 @@ def make_context(
         verbosity: Value for `ctx.verbosity`.
         default_timeout_secs: Value for `ctx.default_timeout_secs`.
         default_no_output_timeout_secs: Value for `ctx.default_no_output_timeout_secs`.
+        width: Width of the captured `stdout`/`stderr` consoles, in columns. Defaults to
+            `DEFAULT_TEST_CONSOLE_WIDTH` — deliberately wide, so a test asserting on
+            `ctx.stdout`/`ctx.stderr` never has to account for rich wrapping a long line.
+            Narrow it only to test wrapping behavior itself.
         run: Override for `ctx.run`'s underlying implementation. Omit to keep the real
             subprocess runner.
         chdir: Override for `ctx.chdir`'s underlying implementation. Omit to keep the real
@@ -108,10 +122,10 @@ def make_context(
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
     console_stdout = Console(
-        file=stdout_buffer, stderr=False, force_terminal=False, theme=TOOLR_THEME
+        file=stdout_buffer, stderr=False, force_terminal=False, width=width, theme=TOOLR_THEME
     )
     console_stderr = Console(
-        file=stderr_buffer, stderr=True, force_terminal=False, theme=TOOLR_THEME
+        file=stderr_buffer, stderr=True, force_terminal=False, width=width, theme=TOOLR_THEME
     )
     parser = ArgumentParser(prog="toolr-test", add_help=False)
 

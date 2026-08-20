@@ -21,3 +21,7 @@ no scaffolding. Just write whatever should appear in the notes.
   and `assert_has_calls`, closing gaps in its otherwise-explicit
   `unittest.mock` API subset. A new test asserts the forwarded set stays in
   sync with `Mock`'s own public API going forward.
+- `toolr.testing.make_context` now accepts a `width=` override for its
+  captured consoles, defaulting to a new `DEFAULT_TEST_CONSOLE_WIDTH`
+  (1000 columns) so `ctx.stdout`/`ctx.stderr` assertions never have to
+  account for rich wrapping a long line.
