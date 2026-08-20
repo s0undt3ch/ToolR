@@ -1,4 +1,14 @@
 [tools]
+# CAUTION when re-running `mise lock`: the pinned CI mise (`MISE_VERSION` in
+# `.github/env`, currently v2026.5.18) has a bin-path bug for some aqua-backend
+# packages — it resolves the extracted binary path assuming a `-musl` dirname
+# even when the lockfile's default `linux-x64`/`linux-arm64` entry points at a
+# `-gnu` tarball, so the tool installs but is never found on PATH (CI fails
+# with e.g. "uv: command not found"). Confirmed for uv, prek, ruff, and this
+# repo's own toolr package; rumdl is unaffected. Until `MISE_VERSION` moves
+# past this, keep those tools' default Linux entries in `mise.lock` pointed at
+# the `-musl` artifact — re-check after any `mise lock` regen.
+#
 # All CPython versions the CI test matrix runs. The first entry is
 # the default (used for the project venv); the rest exist so
 # `mise.lock` carries pinned entries for them — CI's
@@ -26,7 +36,7 @@ prek = "0.4.14"
 # hooks backed by `toolr pre-commit <command>` in `tools/precommit/`).
 # CI jobs install it via the in-repo Setup ToolR action instead, which
 # also verifies the SLSA attestation.
-"aqua:s0undt3ch/ToolR" = "0.29.0"
+"aqua:s0undt3ch/ToolR" = "0.30.0"
 
 [env]
 _.python.venv = { path = ".venv", create = true, uv_create_args = ['--seed'] }

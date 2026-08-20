@@ -47,49 +47,49 @@ url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/3849249
 provenance = "github-attestations"
 
 [[tools."aqua:s0undt3ch/ToolR"]]
-version = "0.29.0"
+version = "0.30.0"
 backend = "aqua:s0undt3ch/ToolR"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-arm64"]
-checksum = "sha256:dd4f4df96a2c0d6df9d96d1c753a46c01b670297ff5f4033a665becdf53c7395"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.29.0/toolr-0.29.0-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/520612961"
+checksum = "sha256:d13ee4eb64303b66545510b54b3190ba616b16d73b3ba9935b2476d2c4f21020"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.30.0/toolr-0.30.0-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/522300468"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-arm64-musl"]
-checksum = "sha256:dd4f4df96a2c0d6df9d96d1c753a46c01b670297ff5f4033a665becdf53c7395"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.29.0/toolr-0.29.0-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/520612961"
+checksum = "sha256:d13ee4eb64303b66545510b54b3190ba616b16d73b3ba9935b2476d2c4f21020"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.30.0/toolr-0.30.0-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/522300468"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-x64"]
-checksum = "sha256:f73ac5b08b553ad8ad97d577db728582a934c77489c6d106f6c9c27da87dacab"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.29.0/toolr-0.29.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/520612954"
+checksum = "sha256:eec2f6d891e23a24291c7cf84c944da62554d5c0ba8765620186ac87c9cfbb0b"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.30.0/toolr-0.30.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/522300454"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-x64-musl"]
-checksum = "sha256:f73ac5b08b553ad8ad97d577db728582a934c77489c6d106f6c9c27da87dacab"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.29.0/toolr-0.29.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/520612954"
+checksum = "sha256:eec2f6d891e23a24291c7cf84c944da62554d5c0ba8765620186ac87c9cfbb0b"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.30.0/toolr-0.30.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/522300454"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.macos-arm64"]
-checksum = "sha256:99a263b4715a903af5802dd5d3b36c37cdb97d7290fce156848d780eb71d4b4c"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.29.0/toolr-0.29.0-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/520612945"
+checksum = "sha256:4ef4576fe121f4f5ad4cd705e799c060b225d01e8d07da2292fd4a92c3ae4d81"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.30.0/toolr-0.30.0-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/522300451"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.macos-x64"]
-checksum = "sha256:27a2541ad069f67d2078559c0d5b601a62a013d3b78b82d2ec8f37decf555d79"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.29.0/toolr-0.29.0-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/520612942"
+checksum = "sha256:08147e107b087d60de0a44c439991963772c59a64889f0ed945ffb9d323d77fc"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.30.0/toolr-0.30.0-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/522300452"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.windows-x64"]
-checksum = "sha256:1f57c42e5706ce7fa7ea09ba68262a670dcd1828e80cdf6ee88d2255a6cea8a8"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.29.0/toolr-0.29.0-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/520612951"
+checksum = "sha256:108441a1517b8ac5878d1cdc7a8e85e98e3422ea6a109b51277044b2a5ec40a5"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.30.0/toolr-0.30.0-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/522300457"
 provenance = "github-attestations"
 
 [[tools."cargo:cargo-edit"]]
@@ -434,9 +434,9 @@ version = "v0.2.55"
 backend = "aqua:rvben/rumdl"
 
 [tools.rumdl."platforms.linux-arm64"]
-checksum = "sha256:baed03dac3bf50565f4e1e461fb8162fcff58742034c6d643a1977d9025dfdb6"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169605"
+checksum = "sha256:144488f129c4d35eb22ae0dd93eb5018988228b442a31f163805cb92f71ceca9"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169609"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-arm64-musl"]
@@ -446,9 +446,9 @@ url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169605"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64"]
-checksum = "sha256:09c8f72cb57f1ff646d68b5ec2ef6a7b296e6d9f945093db2698c260e81d9f90"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169600"
+checksum = "sha256:7bddb23415f94c6503fe77f382d4c2398a2b36a78d936a434a8c71c3711da21b"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169598"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-musl"]
