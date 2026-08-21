@@ -45,6 +45,7 @@ jobs:
       pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
       pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
       test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
+      test-pythons-narrow: ${{ steps.generate-build-matrix.outputs.test-pythons-narrow }}
       run-full-bench: ${{ steps.generate-build-matrix.outputs.run-full-bench }}
       # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
       # reusable workflows can read them via `needs.prepare-ci.outputs.*`
@@ -395,7 +396,7 @@ jobs:
       display-name: Windows
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
-      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons-narrow }}
     permissions:
       contents: read
       id-token: write
@@ -414,7 +415,7 @@ jobs:
       display-name: macOS
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
-      pythons: ${{ needs.prepare-ci.outputs.test-pythons }}
+      pythons: ${{ needs.prepare-ci.outputs.test-pythons-narrow }}
     permissions:
       contents: read
       id-token: write
