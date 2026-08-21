@@ -70,6 +70,14 @@ def _cp_tag_to_dotted(tag: str) -> str:
 # the one shared wheel.
 TEST_PYTHONS = [_cp_tag_to_dotted(t) for t in ALL_CPYTHONS]
 
+# Windows and macOS runner-minutes cost far more than Linux, so PR builds
+# only exercise the latest CPython on those two OSes; Linux still gets
+# the full TEST_PYTHONS range on every build. Tied to `_select_workflow_mode`
+# (release mode) rather than a dedicated label, so it widens automatically
+# for the same triggers that already widen the wheel/archive matrix
+# (push to `main`, or a `full-build`-labelled PR).
+TEST_PYTHONS_NARROW = [TEST_PYTHONS[-1]]
+
 # The toolr binary wheel uses `bindings = "bin"` → produces a single
 # py3-none-<plat> wheel per platform. One cibuildwheel invocation
 # suffices regardless of CPython matrix.
@@ -283,7 +291,12 @@ def generate_build_matrix(
         every CPython >=3.11, so we build it once.
       - `test-pythons` — dotted-form CPython versions for the test matrix
         in `_test.yml` (the full supported range; every interpreter is
-        tested against the single shared abi3 wheel).
+        tested against the single shared abi3 wheel). Always the full
+        range — used as-is for `test-linux`.
+      - `test-pythons-narrow` — dotted-form CPython versions for
+        `test-windows`/`test-macos`: the latest CPython only, unless
+        `workflow` resolved to `release` (push to `main`, or a
+        `full-build`-labelled PR), in which case it's the full range too.
       - `run-full-bench` — `true`/`false`: whether ci.yml's macOS + Windows
         bench jobs run (push to `main` or a `full-bench`-labelled PR). The
         Linux bench always runs; this only gates the other two.
@@ -314,12 +327,15 @@ def generate_build_matrix(
             t for t in _BINARY_ARCHIVE_TRIPLES if t["triple"] in _CI_BINARY_ARCHIVE_TRIPLE_NAMES
         ]
 
+    test_pythons_narrow = TEST_PYTHONS if workflow == Workflow.RELEASE else TEST_PYTHONS_NARROW
+
     outputs: dict[str, object] = {
         "platform-matrix": _WHEEL_PLATFORM_MATRIX,
         "binary-archive-triples": binary_archive_triples,
         "pythons-binary": BINARY_WHEEL_PYTHONS,
         "pythons-py": ABI3_WHEEL_PYTHONS,
         "test-pythons": TEST_PYTHONS,
+        "test-pythons-narrow": test_pythons_narrow,
         "run-full-bench": run_full_bench,
     }
 
@@ -355,7 +371,8 @@ def generate_build_matrix(
             f"- toolr-py wheel: `{', '.join(ABI3_WHEEL_PYTHONS)}` "
             "(abi3 stable-ABI — one wheel covers all CPython >=3.11)\n"
         )
-        wfh.write(f"- Test interpreters: `{', '.join(TEST_PYTHONS)}`\n\n")
+        wfh.write(f"- Test interpreters (Linux): `{', '.join(TEST_PYTHONS)}`\n")
+        wfh.write(f"- Test interpreters (Windows/macOS): `{', '.join(test_pythons_narrow)}`\n\n")
         wfh.write("### Benchmarks\n\n")
         wfh.write(
             f"- Full suite (macOS + Windows): `{json.dumps(run_full_bench)}` — {bench_reason}\n\n"
