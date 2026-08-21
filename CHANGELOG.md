@@ -6,6 +6,58 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.31.0 - 2026-08-21
+
+### Notes
+
+Fixed #454, a regression from the #449 enum-collision fix: importing an `Enum`-typed class from a
+different module than the one declaring it could hard-fail `toolr project manifest rebuild` with
+"type is not supported" if another, unrelated module also declared a same-named enum class. The
+static parser now follows the actual import — relative imports, `__init__.py` re-exports,
+`as`-aliasing chains, and `try`/`except ImportError` dual-path imports all resolve to the class
+that's genuinely in scope, rather than guessing across same-named classes elsewhere. Two constructs
+that can never be resolved unambiguously — `from foo import *` and `import foo.bar` +
+`foo.bar.X`-style attribute-chain usage — now get a specific, actionable error instead of the
+generic "type is not supported" message.
+
+Also fixed: `Environment | None`-style `Optional`-wrapped `Enum`/`Literal` parameters previously
+built successfully but silently populated `allowed_values` as empty — no clap choice validation,
+nothing in `--help`.
+
+`if TYPE_CHECKING:`-guarded enum imports (module-level only) now work end-to-end, not just at
+build time — the runner lazily imports the real class at coercion time instead of relying on the
+target module's own (never-executed) guarded import, so the previous silent "whole command's
+argument coercion disabled" failure mode when one annotation was unresolvable no longer applies to
+these cases either.
+
+### <!-- 0 -->🚀 Features
+
+- *(parser)* Resolve command-signature enums through explicit imports ([`a1ba8fc`](https://github.com/s0undt3ch/ToolR/commit/a1ba8fc1d15d622f884947364370fba2b857f8a9))
+- *(parser)* Specific errors for star imports and attribute-chain usage ([`8b92e31`](https://github.com/s0undt3ch/ToolR/commit/8b92e31ffdf2898ff976a91700c38570513a9e9c))
+- *(runner)* Make TYPE_CHECKING-guarded enum imports work at runtime ([`c5ba349`](https://github.com/s0undt3ch/ToolR/commit/c5ba349736b67646dd687b22fd66e1fa0d463327))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(renovate)* Pin toolr release rule to full semver tags ([`fd04848`](https://github.com/s0undt3ch/ToolR/commit/fd0484877ecce963b844cba21f016faa248f1e6d))
+- *(ci)* Keep uv/prek/ruff/toolr on musl Linux artifacts in mise.lock ([`9103c50`](https://github.com/s0undt3ch/ToolR/commit/9103c5045de365dc5b16ba8608530e546fbd7f09))
+- *(parser)* Treat identically-shaped cross-module enum defs as unambiguous ([`e08f52c`](https://github.com/s0undt3ch/ToolR/commit/e08f52c75423d661e954276e078b02d6a2df3f3b))
+- *(parser)* Populate allowed_values for Optional-wrapped Enum/Literal args ([`7d97d51`](https://github.com/s0undt3ch/ToolR/commit/7d97d51f1c0ea987a00bc2da03f39e0fd60204fc))
+- *(parser)* Mark SupportedType::Enum.module serde-default, no version bump needed ([`abd5556`](https://github.com/s0undt3ch/ToolR/commit/abd55566dcda4f9b7b12a0b5b04ee464f54ccfc9))
+
+### <!-- 3 -->📚 Documentation
+
+- *(skills)* Add monitor-pr, a CI-babysitting loop for toolr PRs ([`11bc821`](https://github.com/s0undt3ch/ToolR/commit/11bc8216be77f1470409eca38104101cba20e43b))
+- *(claude)* Document version-bump judgment and regression-test discipline ([`a0d74c3`](https://github.com/s0undt3ch/ToolR/commit/a0d74c389fb1b9ee980b910503483e1081583f99))
+- *(comments)* Drop bare issue-number references from code comments ([`9e082c7`](https://github.com/s0undt3ch/ToolR/commit/9e082c7db53a3a075e023993845a47abe4f13b53))
+
+### <!-- 6 -->🧪 Testing
+
+- *(toolr)* End-to-end coverage for cross-module enum resolution ([`2f0579d`](https://github.com/s0undt3ch/ToolR/commit/2f0579d1cd71747ecba1aa3b9ef76c99641a92c4))
+- Close patch-coverage gaps flagged by codecov on this PR ([`0d91ea5`](https://github.com/s0undt3ch/ToolR/commit/0d91ea50ee33cbd55d94b6f7567cb4f448b30f4a))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(ci)* Bump pinned mise to v2026.8.10 ([`1a3d7cf`](https://github.com/s0undt3ch/ToolR/commit/1a3d7cfbfd9f3aa4ed7aa902723759fd5e51d04e))
 ## 0.30.0 - 2026-08-20
 
 ### Notes
