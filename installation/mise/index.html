@@ -2106,6 +2106,12 @@ global config with a tool you mostly use inside specific repos.</p>
 floating major.minor alias (<code>v0.30</code>) pointing at the same commit. Without
 the override, Renovate can resolve the shorter alias and propose <code>0.30</code>
 instead of <code>0.30.0</code>.</p>
+<p>If you also dogfood <code>toolr-py</code> from PyPI and want one Renovate rule to
+track both together, keep this <code>versioning</code> override on the <code>mise</code>
+(and <code>github-actions</code>) <code>matchManagers</code> only — don't apply it to a <code>pep621</code>
+rule in the same group. The regex can't parse a <code>&gt;=</code>-style range like
+<code>toolr-py&gt;=0.25.0</code>, so a <code>pep621</code> dependency matched by it stops getting
+updated at all, silently.</p>
 <h2 id="project-configuration">Project configuration<a class="headerlink" href="#project-configuration" title="Permanent link">&para;</a></h2>
 <h3 id="misetoml-recommended"><code>.mise.toml</code> (recommended)<a class="headerlink" href="#misetoml-recommended" title="Permanent link">&para;</a></h3>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">[tools]</span>
