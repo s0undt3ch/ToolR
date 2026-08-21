@@ -37,9 +37,21 @@ pub enum SupportedType {
     Count,
     /// `Literal["a", "b"]` — string validated against the allowed set.
     Literal(Vec<String>),
-    /// Enum subclass resolved via [`EnumTable`].
+    /// Enum subclass resolved via [`EnumTable`]. `module` is the
+    /// dotted path of the module that actually declares the class
+    /// (which may differ from the annotation's own module when the
+    /// class was imported) — the Python runtime needs it to lazily
+    /// import the real class at coercion time, independent of whether
+    /// the annotation's own module has it bound in its globals (see
+    /// `TYPE_CHECKING`-guarded imports).
     Enum {
         name: String,
+        /// `#[serde(default)]` so a manifest built by an older toolr
+        /// (no `module` field on this variant) still deserialises —
+        /// non-breaking addition, no `SCHEMA_VERSION` bump needed per
+        /// `manifest/model.rs`'s "bump on breaking format changes" rule.
+        #[serde(default)]
+        module: String,
         values: Vec<String>,
     },
     /// `list[T]` / `List[T]` — repeated keyword that appends.

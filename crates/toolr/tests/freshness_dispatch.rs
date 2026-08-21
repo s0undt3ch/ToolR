@@ -278,3 +278,93 @@ fn tab_completion_does_not_persist_manifest() {
     assert_eq!(before, after, "tab completion rewrote the manifest contents");
     assert_eq!(mtime_before, mtime_after, "tab completion touched mtime");
 }
+
+/// End-to-end through the real binary: a command imports an
+/// `Enum` from a sibling module (relative import) while an unrelated
+/// module elsewhere in the tree declares a same-named enum class. The
+/// auto-rebuild triggered by `toolr --help` must succeed (not hard-fail
+/// with "unsupported parameter types") and the persisted manifest must
+/// carry the resolved enum's allowed values.
+#[test]
+fn cross_module_enum_import_rebuilds_and_persists_allowed_values() {
+    let tmp = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+
+    let tools = tmp.path().join("tools");
+    fs::create_dir_all(tools.join("metrics")).unwrap();
+    fs::write(tools.join("metrics").join("__init__.py"), "").unwrap();
+    fs::write(
+        tools.join("metrics").join("_common.py"),
+        r#""""Shared metrics types."""
+import enum
+
+class Environment(enum.StrEnum):
+    PRODUCTION = "production"
+    STAGING = "staging"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        tools.join("metrics").join("analyse.py"),
+        r#""""Metrics analysis -- imports Environment from a sibling module."""
+from toolr import Context, command_group
+from ._common import Environment
+
+group = command_group("metrics", "Metrics")
+
+@group.command
+def analyse(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
+    """Analyse."""
+    ctx.print(env.value)
+"#,
+    )
+    .unwrap();
+    // Unrelated module declaring a same-named enum elsewhere in the
+    // tree -- this is exactly the shape that used to hard-fail the build.
+    fs::write(
+        tools.join("job.py"),
+        r#""""Job module -- unrelated same-named enum."""
+import enum
+from toolr import Context, command_group
+
+group = command_group("job", "Job")
+
+class Environment(enum.StrEnum):
+    PRODUCTION = "production"
+    STAGING = "staging"
+
+@group.command
+def run(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
+    """Run."""
+    ctx.print(env.value)
+"#,
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .arg("--help")
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "toolr --help failed: {output:?}\nstderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("unsupported parameter types"),
+        "manifest build hard-failed on the cross-module enum import:\n{stderr}"
+    );
+
+    let manifest = fs::read_to_string(tools.join(".toolr-manifest.json")).unwrap();
+    assert!(
+        manifest.contains("production") && manifest.contains("staging"),
+        "manifest missing the resolved enum's allowed values:\n{manifest}"
+    );
+    assert!(
+        manifest.contains("tools.metrics._common"),
+        "manifest missing the enum's declaring module (tools.metrics._common):\n{manifest}"
+    );
+}

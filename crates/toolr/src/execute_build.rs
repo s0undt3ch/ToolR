@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use toolr_core::execute::{
     ArgSchemaSpec, CommandSchemaSpec, ContextSpec, DispatchSpec, ExecutionSpec,
-    RUNNER_SCHEMA_VERSION,
+    RUNNER_SCHEMA_VERSION, enum_modules_for,
 };
 use toolr_core::manifest::{Argument, ArgumentKind, Command, Nargs};
 use toolr_core::parser::SupportedType;
@@ -54,6 +54,7 @@ pub fn build_spec(
             default_timeout_secs: output_opts.default_timeout_secs,
             default_no_output_timeout_secs: output_opts.default_no_output_timeout_secs,
         },
+        enum_modules: enum_modules_for(&cmd.arguments),
         dispatch: None,
     }
 }
@@ -145,6 +146,7 @@ pub fn build_dispatch_spec(
             default_timeout_secs: output_opts.default_timeout_secs,
             default_no_output_timeout_secs: output_opts.default_no_output_timeout_secs,
         },
+        enum_modules: enum_modules_for(&parent.arguments),
         dispatch: Some(DispatchSpec {
             command: packed.name,
             command_args: packed.args,

@@ -147,6 +147,13 @@ class RunnerSpec(msgspec.Struct, frozen=True):
     function: str
     args: dict[str, Any]
     context: ContextSpec
+    #: Enum class name -> the dotted module that actually declares it.
+    #: Lets `_coerce_args` import the real class itself and inject it
+    #: into `get_type_hints`'s `localns`, independent of whether the
+    #: target module's own import of that class (possibly guarded by
+    #: `if TYPE_CHECKING:`) ever executed. Mirrors
+    #: `ExecutionSpec::enum_modules` in `crates/toolr-core/src/execute/spec.rs`.
+    enum_modules: dict[str, str] = {}
     dispatch: DispatchPayloadSpec | None = None
 
 
@@ -358,8 +365,42 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
     raise TypeError(msg)
 
 
+def _localns_for_enum_modules(enum_modules: dict[str, str]) -> dict[str, Any]:
+    """Import each enum class named in ``enum_modules`` for ``localns``.
+
+    This is what makes a `TYPE_CHECKING`-only enum import actually work:
+    `get_type_hints` resolves annotation strings against the target
+    function's own module globals by default, which never contain a
+    class that module only imports under `if TYPE_CHECKING:` (that
+    branch never runs for real). Importing the real module here --
+    lazily, at coercion time, long after every module has finished its
+    own import phase -- sidesteps that entirely without forcing the
+    guarded block to execute at the target module's own import time
+    (which could import something else not meant to run, and could
+    reintroduce the circular-import problem `TYPE_CHECKING` exists to
+    avoid).
+
+    A class that fails to import is silently skipped -- `get_type_hints`
+    then raises its own `NameError` for that name, same as if this
+    function didn't exist. This is a best-effort assist, not a new
+    failure mode.
+    """
+    localns: dict[str, Any] = {}
+    for class_name, module_path in enum_modules.items():
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError:
+            continue
+        cls = getattr(module, class_name, None)
+        if cls is not None:
+            localns[class_name] = cls
+    return localns
+
+
 def _coerce_args(
-    target: Callable[..., Any], raw: dict[str, Any]
+    target: Callable[..., Any],
+    raw: dict[str, Any],
+    enum_modules: dict[str, str] | None = None,
 ) -> tuple[list[Any], dict[str, Any]]:
     """Coerce `raw` against `target`'s actual type hints.
 
@@ -373,9 +414,16 @@ def _coerce_args(
     Unknown keys (i.e. parameters that aren't on the function — shouldn't
     happen with a well-formed manifest, but defensive) pass through
     untouched so the function can raise a clear ``TypeError`` itself.
+
+    ``enum_modules`` (class name → declaring module, from
+    :class:`RunnerSpec`) is passed as ``get_type_hints``'s ``localns`` so
+    that succeeds even when an Enum-typed annotation is only bound in the
+    target module under ``if TYPE_CHECKING:`` — see
+    :func:`_localns_for_enum_modules`.
     """
+    localns = _localns_for_enum_modules(enum_modules) if enum_modules else None
     try:
-        hints = get_type_hints(target, include_extras=False)
+        hints = get_type_hints(target, localns=localns, include_extras=False)
     except Exception:  # noqa: BLE001 — best-effort; fall back to raw values.
         hints = {}
     sig = inspect.signature(target)
@@ -517,7 +565,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
             # child name/args/schema. Coerce the parent kwargs against
             # the parent's hints — `invoke_dispatcher` injects the
             # `DispatchCommand` keyword on top of those.
-            _, parent_kwargs = _coerce_args(target, spec.args)
+            _, parent_kwargs = _coerce_args(target, spec.args, spec.enum_modules)
             invoke_dispatcher(
                 ctx=ctx,
                 func=target,
@@ -527,7 +575,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
                 child_schema=spec.dispatch.schema,
             )
         else:
-            var_args, kw_args = _coerce_args(target, spec.args)
+            var_args, kw_args = _coerce_args(target, spec.args, spec.enum_modules)
             target(ctx, *var_args, **kw_args)
     except SystemExit as exc:
         code = exc.code

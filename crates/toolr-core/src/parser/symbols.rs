@@ -23,6 +23,31 @@ struct EnumDef {
     members: Vec<EnumMember>,
 }
 
+/// Whether two enum definitions serialise identically — same members,
+/// same names, same values, same order. Order matters because it
+/// drives `allowed_values` display order in `--help`.
+fn same_members(a: &[EnumMember], b: &[EnumMember]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|(x, y)| x.name == y.name && x.value == y.value)
+}
+
+/// Collapse a set of candidate resolutions to one: none found is `None`;
+/// exactly one is unambiguous; several that all serialise identically
+/// are treated as unambiguous too (picking any of them is observably
+/// the same); a genuine mismatch is ambiguous and returns `None`.
+fn dedupe_matches(matched: Vec<(String, &[EnumMember])>) -> Option<(String, &[EnumMember])> {
+    match matched.as_slice() {
+        [] => None,
+        [only] => Some(only.clone()),
+        [first, rest @ ..] if rest.iter().all(|(_, m)| same_members(m, first.1)) => {
+            Some(first.clone())
+        }
+        _ => None,
+    }
+}
+
 /// Mapping of local class name → enum members, for classes that look
 /// like an `Enum` subclass. Tracks both the member name (`ADD`) and
 /// its serialised value (`"add"`) so we can resolve attribute-style
@@ -53,45 +78,144 @@ impl EnumTable {
                 .filter_map(member_value)
                 .collect::<Vec<_>>();
             if !members.is_empty() {
-                table.members.entry(class.name.to_string()).or_default().push(EnumDef {
-                    module: module_path.to_string(),
-                    members,
-                });
+                table
+                    .members
+                    .entry(class.name.to_string())
+                    .or_default()
+                    .push(EnumDef {
+                        module: module_path.to_string(),
+                        members,
+                    });
             }
         }
         table
     }
 
     /// Pick the `class` definition that's actually visible from
-    /// `current_module`: a same-module definition always wins. Failing
-    /// that, an unambiguous single cross-module definition (the common
-    /// "enum lives in a shared module, imported elsewhere" case) is
-    /// used. Two or more different-module definitions with no local
-    /// match are genuinely ambiguous — the static parser doesn't track
-    /// which one, if any, was actually imported here — so this returns
-    /// `None` rather than silently picking one, surfacing as an
-    /// unsupported-type error instead of a wrong result.
-    fn resolve_def(&self, class: &str, current_module: &str) -> Option<&[EnumMember]> {
-        let defs = self.members.get(class)?;
-        if let Some(d) = defs.iter().find(|d| d.module == current_module) {
-            return Some(&d.members);
+    /// `current_module`, returning its declaring module alongside its
+    /// members. Resolution order:
+    ///
+    /// 1. A same-module definition always wins.
+    /// 2. `current_module`'s own explicit imports (`all_imports`) name a
+    ///    defining module for `class` — follow it, recursing through
+    ///    that module's own imports (cycle/depth guarded) when it's
+    ///    itself just a re-export (e.g. an `__init__.py` re-exporting a
+    ///    sibling module's class). Multiple import candidates (only
+    ///    possible via a `try`/`except` dual-path import) resolve if
+    ///    they all land on the same member set, else are ambiguous.
+    /// 3. No matching import at all: fall back to the older
+    ///    same-name-across-modules heuristic — an unambiguous single
+    ///    cross-module definition, or several definitions that all
+    ///    serialise identically, resolve; a genuine mismatch is
+    ///    ambiguous. This is the path for code the import scanner can't
+    ///    see (star imports, dotted-attribute-chain usage — both
+    ///    rejected outright at the call site instead, see
+    ///    `resolve_name`) or that simply predates real import tracking.
+    fn resolve_def(
+        &self,
+        class: &str,
+        current_module: &str,
+        all_imports: &HashMap<String, ImportTable>,
+    ) -> Option<(String, &[EnumMember])> {
+        if let Some(found) = self.declared_in(class, current_module) {
+            return Some(found);
         }
-        match defs.as_slice() {
-            [only] => Some(&only.members),
-            _ => None,
+        let empty = ImportTable::default();
+        let imports = all_imports.get(current_module).unwrap_or(&empty);
+        let candidates = imports.candidates(class);
+        if !candidates.is_empty() {
+            let matched: Vec<(String, &[EnumMember])> = candidates
+                .iter()
+                .filter_map(|c| {
+                    let mut seen = vec![(c.module.clone(), c.original_name.clone())];
+                    self.follow_import_chain(&c.original_name, &c.module, all_imports, &mut seen)
+                })
+                .collect();
+            return dedupe_matches(matched);
         }
+        // No explicit import at all for `class` in `current_module`:
+        // fall back to the older same-name-across-modules heuristic.
+        // Only meaningful if some module somewhere literally declares a
+        // class with this exact name.
+        dedupe_matches(self.members.get(class).map(|defs| {
+            defs.iter()
+                .map(|d| (d.module.clone(), d.members.as_slice()))
+                .collect()
+        })?)
     }
 
-    /// List of serialised values for `class`. Used for `allowed_values`.
-    pub fn lookup(&self, class: &str, current_module: &str) -> Option<Vec<String>> {
-        self.resolve_def(class, current_module)
-            .map(|m| m.iter().map(|em| em.value.clone()).collect())
+    /// A same-module `ClassDef` for `class`, if one exists — the one
+    /// resolution step that never depends on imports.
+    fn declared_in(&self, class: &str, module: &str) -> Option<(String, &[EnumMember])> {
+        self.members
+            .get(class)?
+            .iter()
+            .find(|d| d.module == module)
+            .map(|d| (d.module.clone(), d.members.as_slice()))
+    }
+
+    /// Follow an import candidate to its actual declaration, recursing
+    /// through further re-exports (e.g. an `__init__.py` re-exporting a
+    /// sibling module's class, or a chain of `as`-aliased re-imports).
+    /// Cycle/depth guarded via `seen`. Deliberately does **not** apply
+    /// the same-name-across-modules guessing heuristic at any point in
+    /// the chain — an explicit import that turns out to point nowhere
+    /// real must fail cleanly, not silently fall back to some unrelated
+    /// module's same-named class.
+    fn follow_import_chain(
+        &self,
+        class: &str,
+        module: &str,
+        all_imports: &HashMap<String, ImportTable>,
+        seen: &mut Vec<(String, String)>,
+    ) -> Option<(String, &[EnumMember])> {
+        if let Some(found) = self.declared_in(class, module) {
+            return Some(found);
+        }
+        let empty = ImportTable::default();
+        let imports = all_imports.get(module).unwrap_or(&empty);
+        let candidates = imports.candidates(class);
+        if candidates.is_empty() {
+            return None;
+        }
+        let matched: Vec<(String, &[EnumMember])> = candidates
+            .iter()
+            .filter_map(|c| {
+                let key = (c.module.clone(), c.original_name.clone());
+                if seen.contains(&key) || seen.len() > 8 {
+                    return None; // cycle or pathological depth
+                }
+                seen.push(key);
+                self.follow_import_chain(&c.original_name, &c.module, all_imports, seen)
+            })
+            .collect();
+        dedupe_matches(matched)
+    }
+
+    /// Declaring module and serialised values for `class`. Used for
+    /// `allowed_values` and for carrying the defining module onto
+    /// `SupportedType::Enum`.
+    pub fn lookup(
+        &self,
+        class: &str,
+        current_module: &str,
+        all_imports: &HashMap<String, ImportTable>,
+    ) -> Option<(String, Vec<String>)> {
+        self.resolve_def(class, current_module, all_imports)
+            .map(|(module, m)| (module, m.iter().map(|em| em.value.clone()).collect()))
     }
 
     /// Resolve `class.member` to its serialised value. Used when
     /// rendering enum-attribute defaults in `--help`.
-    pub fn lookup_member(&self, class: &str, member: &str, current_module: &str) -> Option<&str> {
-        self.resolve_def(class, current_module)?
+    pub fn lookup_member(
+        &self,
+        class: &str,
+        member: &str,
+        current_module: &str,
+        all_imports: &HashMap<String, ImportTable>,
+    ) -> Option<&str> {
+        self.resolve_def(class, current_module, all_imports)?
+            .1
             .iter()
             .find(|em| em.name == member)
             .map(|em| em.value.as_str())
@@ -101,6 +225,232 @@ impl EnumTable {
         for (name, defs) in other.members {
             self.members.entry(name).or_default().extend(defs);
         }
+    }
+}
+
+/// One module-level import statement that bound a name into scope,
+/// resolved to the absolute module it actually names.
+#[derive(Debug, Clone)]
+pub struct ImportedFrom {
+    pub module: String,
+    pub original_name: String,
+    pub via_type_checking: bool,
+}
+
+/// Every `from X import Y [as Z]` bound in a module's top-level scope —
+/// including relative imports, `TYPE_CHECKING`-guarded imports, and
+/// `try`/`except` dual-path imports. Deliberately does *not* track
+/// `import X` + attribute-chain usage (`X.Y`) as a resolvable source for
+/// arbitrary user classes — that shape is rejected outright for
+/// command-signature resolution (see `has_star_import` and the
+/// module-binding tracking used for that rejection).
+///
+/// Used by [`EnumTable::resolve_def`] so a class imported from a
+/// different module than the one declaring it resolves to exactly that
+/// module, rather than guessing across same-named classes elsewhere.
+#[derive(Debug, Default, Clone)]
+pub struct ImportTable {
+    entries: HashMap<String, Vec<ImportedFrom>>,
+    star_import: bool,
+    /// Local names bound to a whole module by a bare `import X [as Y]`
+    /// statement (never a class). Used only to reject
+    /// `import foo.bar.baz` + `foo.bar.baz.X` attribute-chain usage in
+    /// a command-signature annotation with a specific, actionable
+    /// message — this table never resolves such a binding to a class.
+    module_bindings: HashMap<String, String>,
+}
+
+impl ImportTable {
+    pub fn from_module(module: &ModModule, module_path: &str, is_package: bool) -> Self {
+        let mut table = Self::default();
+        for stmt in &module.body {
+            table.collect_stmt(stmt, module_path, is_package, false);
+        }
+        table
+    }
+
+    fn collect_stmt(
+        &mut self,
+        stmt: &Stmt,
+        module_path: &str,
+        is_package: bool,
+        via_type_checking: bool,
+    ) {
+        match stmt {
+            Stmt::ImportFrom(import) => {
+                self.collect_import_from(import, module_path, is_package, via_type_checking);
+            }
+            Stmt::Import(import) => {
+                for alias in &import.names {
+                    let local = alias
+                        .asname
+                        .as_ref()
+                        .map(|n| n.as_str().to_string())
+                        .unwrap_or_else(|| {
+                            // `import a.b.c` binds the top-level name `a`,
+                            // not `a.b.c` — matches real Python semantics.
+                            alias
+                                .name
+                                .as_str()
+                                .split('.')
+                                .next()
+                                .unwrap_or(alias.name.as_str())
+                                .to_string()
+                        });
+                    self.module_bindings
+                        .insert(local, alias.name.as_str().to_string());
+                }
+            }
+            Stmt::If(if_stmt) if is_type_checking_test(&if_stmt.test) => {
+                for inner in &if_stmt.body {
+                    self.collect_stmt(inner, module_path, is_package, true);
+                }
+                // Deliberately not walking elif_else_clauses: `else:` on a
+                // TYPE_CHECKING guard is real runtime code (the opposite
+                // branch), not another TYPE_CHECKING import source.
+            }
+            Stmt::Try(try_stmt) => {
+                for inner in &try_stmt.body {
+                    self.collect_stmt(inner, module_path, is_package, via_type_checking);
+                }
+                for handler in &try_stmt.handlers {
+                    let ruff_python_ast::ExceptHandler::ExceptHandler(h) = handler;
+                    for inner in &h.body {
+                        self.collect_stmt(inner, module_path, is_package, via_type_checking);
+                    }
+                }
+                // Deliberately not walking `orelse`/`finalbody` — see the
+                // design doc for why this stays out of scope.
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_import_from(
+        &mut self,
+        import: &ruff_python_ast::StmtImportFrom,
+        module_path: &str,
+        is_package: bool,
+        via_type_checking: bool,
+    ) {
+        // Absolute imports (`level == 0`) always name a module in valid
+        // Python — `import.module` is `None` there only for a
+        // syntactically-invalid source, which `.map()` naturally passes
+        // through as `None` without a dedicated branch. Relative imports
+        // (`level > 0`) can genuinely fail to resolve (more leading dots
+        // than the importing module has path segments), which is what
+        // `resolve_relative_module` returns `None` for.
+        let target_module = if import.level == 0 {
+            import.module.as_ref().map(|m| m.to_string())
+        } else {
+            resolve_relative_module(
+                import.level,
+                import.module.as_ref().map(|m| m.as_str()),
+                module_path,
+                is_package,
+            )
+        };
+        let Some(target_module) = target_module else {
+            return;
+        };
+        for alias in &import.names {
+            if alias.name.as_str() == "*" {
+                self.star_import = true;
+                continue;
+            }
+            let original_name = alias.name.as_str().to_string();
+            let local = alias
+                .asname
+                .as_ref()
+                .map(|n| n.as_str().to_string())
+                .unwrap_or_else(|| original_name.clone());
+            self.entries.entry(local).or_default().push(ImportedFrom {
+                module: target_module.clone(),
+                original_name,
+                via_type_checking,
+            });
+        }
+    }
+
+    /// All candidates bound to `name` by an explicit import. Empty if
+    /// `name` was never imported. More than one entry means either a
+    /// `try`/`except` dual-path import, or (rarely) the same name
+    /// re-imported more than once in the same module.
+    pub fn candidates(&self, name: &str) -> &[ImportedFrom] {
+        self.entries.get(name).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Whether this module contains a `from ... import *`. Used to give
+    /// a specific "don't use star imports" message instead of the
+    /// generic unsupported-type error when a command-signature name
+    /// can't otherwise be resolved.
+    pub fn has_star_import(&self) -> bool {
+        self.star_import
+    }
+
+    /// If `name` is bound to a whole module by a bare `import X [as Y]`
+    /// statement, the dotted module it names. Used to reject
+    /// `foo.bar.baz.X`-style attribute-chain annotations with a message
+    /// pointing at `from foo.bar.baz import X` instead.
+    pub fn resolve_module_binding(&self, name: &str) -> Option<&str> {
+        self.module_bindings.get(name).map(String::as_str)
+    }
+}
+
+/// Whether `expr` is exactly `TYPE_CHECKING` or `typing.TYPE_CHECKING`.
+/// Anything more complex (`TYPE_CHECKING and DEBUG`, `not TYPE_CHECKING`)
+/// isn't recognised — that's not the documented mypy/ruff-endorsed
+/// pattern, and treating it as "definitely a TYPE_CHECKING guard" would
+/// be guessing at intent.
+fn is_type_checking_test(expr: &Expr) -> bool {
+    match expr {
+        Expr::Name(n) => n.id.as_str() == "TYPE_CHECKING",
+        Expr::Attribute(a) => {
+            a.attr.as_str() == "TYPE_CHECKING"
+                && matches!(a.value.as_ref(), Expr::Name(n) if n.id.as_str() == "typing")
+        }
+        _ => false,
+    }
+}
+
+/// Resolve a relative import's absolute target module.
+///
+/// `level` is the dot-count (`from . import X` -> 1, `from .. import X`
+/// -> 2). `module` is the part after the dots (`None` for bare
+/// `from . import X`). `current_module` is the *importing* module's own
+/// dotted path, as computed by `module_path_for_prefix`. For a plain
+/// file, that path includes the file's own trailing segment, which one
+/// dot must drop to reach "this file's package" — so `level` segments
+/// are popped. For an `__init__.py`, `module_path_for_prefix` has
+/// already collapsed the path to the package itself (no trailing
+/// `__init__` segment to drop), so one dot means "this same package,"
+/// i.e. only `level - 1` segments are popped.
+fn resolve_relative_module(
+    level: u32,
+    module: Option<&str>,
+    current_module: &str,
+    is_package: bool,
+) -> Option<String> {
+    let pops = if is_package {
+        level.saturating_sub(1)
+    } else {
+        level
+    };
+    let mut segments: Vec<&str> = current_module.split('.').collect();
+    for _ in 0..pops {
+        segments.pop()?;
+    }
+    let mut out = segments.join(".");
+    if let Some(m) = module {
+        if !out.is_empty() {
+            out.push('.');
+        }
+        out.push_str(m);
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
     }
 }
 
@@ -361,6 +711,191 @@ mod tests {
     }
 
     #[test]
+    fn import_table_resolves_direct_absolute_import() {
+        let src = "from tools.metrics._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        let candidates = table.candidates("Environment");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].module, "tools.metrics._common");
+        assert_eq!(candidates[0].original_name, "Environment");
+        assert!(!candidates[0].via_type_checking);
+    }
+
+    #[test]
+    fn import_table_resolves_aliased_import() {
+        let src = "from tools.metrics._common import Environment as Env\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        let candidates = table.candidates("Env");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].module, "tools.metrics._common");
+        assert_eq!(candidates[0].original_name, "Environment");
+    }
+
+    #[test]
+    fn import_table_ignores_unrelated_names() {
+        let src = "from tools.metrics._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(table.candidates("SomethingElse").is_empty());
+    }
+
+    #[test]
+    fn import_table_handles_multiple_names_one_statement() {
+        let src = "from tools.metrics._common import Environment, Region as R\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert_eq!(
+            table.candidates("Environment")[0].module,
+            "tools.metrics._common"
+        );
+        assert_eq!(table.candidates("R")[0].original_name, "Region");
+    }
+
+    #[test]
+    fn import_table_resolves_relative_sibling_import() {
+        let src = "from ._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert_eq!(
+            table.candidates("Environment")[0].module,
+            "tools.metrics._common"
+        );
+    }
+
+    #[test]
+    fn import_table_resolves_relative_parent_import() {
+        // `from .. import shared` inside `tools.metrics.sub.analyse`
+        // binds the *submodule* `shared` living in the parent package
+        // `tools.metrics` — same bookkeeping shape as any other import
+        // (module = the package, original_name = what's imported from
+        // it). Task 6 is responsible for rejecting this as a class
+        // source when used in a command signature (it names a module,
+        // not a class).
+        let src = "from .. import shared\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.sub.analyse", false);
+        assert_eq!(table.candidates("shared")[0].module, "tools.metrics");
+        assert_eq!(table.candidates("shared")[0].original_name, "shared");
+    }
+
+    #[test]
+    fn import_table_ignores_relative_import_with_too_many_dots() {
+        // More leading dots than the importing module has path segments
+        // for: `resolve_relative_module` returns `None`, and the whole
+        // import statement is silently dropped rather than panicking.
+        let src = "from ... import shared\n";
+        let table = ImportTable::from_module(&parse(src), "tools.analyse", false);
+        assert!(table.candidates("shared").is_empty());
+    }
+
+    #[test]
+    fn import_table_ignores_relative_import_at_exact_package_boundary() {
+        // Dots exactly consume every path segment (no `?`-triggered
+        // underflow, unlike the too-many-dots case above) and there's
+        // no module suffix -- `resolve_relative_module` computes an
+        // empty target and returns `None` rather than an empty-string
+        // module.
+        let src = "from .. import shared\n";
+        let table = ImportTable::from_module(&parse(src), "tools.sub", false);
+        assert!(table.candidates("shared").is_empty());
+    }
+
+    #[test]
+    fn import_table_resolves_relative_import_from_package_root() {
+        let src = "from ._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics", true);
+        assert_eq!(
+            table.candidates("Environment")[0].module,
+            "tools.metrics._common"
+        );
+    }
+
+    #[test]
+    fn import_table_tags_type_checking_import() {
+        let src = "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from tools.metrics._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        let c = table.candidates("Environment");
+        assert_eq!(c.len(), 1);
+        assert!(c[0].via_type_checking);
+    }
+
+    #[test]
+    fn import_table_recognises_dotted_type_checking() {
+        let src = "import typing\nif typing.TYPE_CHECKING:\n    from tools.metrics._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(table.candidates("Environment")[0].via_type_checking);
+    }
+
+    #[test]
+    fn import_table_ignores_type_checking_nested_in_function() {
+        let src = r#"
+from typing import TYPE_CHECKING
+
+def helper():
+    if TYPE_CHECKING:
+        from tools.metrics._common import Environment
+"#;
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(table.candidates("Environment").is_empty());
+    }
+
+    #[test]
+    fn import_table_ignores_non_type_checking_if_guard() {
+        // A top-level `if` whose test isn't `TYPE_CHECKING` at all (here
+        // a plain boolean literal) must not be mistaken for one.
+        let src = "if True:\n    from tools.metrics._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(table.candidates("Environment").is_empty());
+    }
+
+    #[test]
+    fn import_table_collects_both_try_except_branches() {
+        let src = r#"
+try:
+    from tools.metrics._common import Environment
+except ImportError:
+    from tools.metrics._legacy import Environment
+"#;
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        let c = table.candidates("Environment");
+        assert_eq!(c.len(), 2);
+        let modules: Vec<&str> = c.iter().map(|i| i.module.as_str()).collect();
+        assert!(modules.contains(&"tools.metrics._common"));
+        assert!(modules.contains(&"tools.metrics._legacy"));
+    }
+
+    #[test]
+    fn import_table_records_star_import_presence() {
+        let src = "from tools.metrics._common import *\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(table.candidates("anything_at_all").is_empty());
+        assert!(table.has_star_import());
+    }
+
+    #[test]
+    fn import_table_no_star_import_by_default() {
+        let src = "from tools.metrics._common import Environment\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert!(!table.has_star_import());
+    }
+
+    #[test]
+    fn import_table_tracks_module_binding_for_bare_import() {
+        let src = "import tools.metrics._common\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert_eq!(
+            table.resolve_module_binding("tools"),
+            Some("tools.metrics._common")
+        );
+    }
+
+    #[test]
+    fn import_table_tracks_aliased_module_binding() {
+        let src = "import tools.metrics._common as common\n";
+        let table = ImportTable::from_module(&parse(src), "tools.metrics.analyse", false);
+        assert_eq!(
+            table.resolve_module_binding("common"),
+            Some("tools.metrics._common")
+        );
+    }
+
+    #[test]
     fn collects_string_enum_values() {
         let src = r#"
 from enum import StrEnum
@@ -370,7 +905,10 @@ class Mode(StrEnum):
     SLOW = "slow"
 "#;
         let table = EnumTable::from_module(&parse(src), "tools.example");
-        let vals = table.lookup("Mode", "tools.example").unwrap();
+        let (module, vals) = table
+            .lookup("Mode", "tools.example", &std::collections::HashMap::new())
+            .unwrap();
+        assert_eq!(module, "tools.example");
         assert_eq!(vals, vec!["fast".to_string(), "slow".to_string()]);
     }
 
@@ -384,13 +922,42 @@ class Operation(StrEnum):
     SUBTRACT = "subtract"
 "#;
         let table = EnumTable::from_module(&parse(src), "tools.example");
-        assert_eq!(table.lookup_member("Operation", "ADD", "tools.example"), Some("add"));
         assert_eq!(
-            table.lookup_member("Operation", "SUBTRACT", "tools.example"),
+            table.lookup_member(
+                "Operation",
+                "ADD",
+                "tools.example",
+                &std::collections::HashMap::new()
+            ),
+            Some("add")
+        );
+        assert_eq!(
+            table.lookup_member(
+                "Operation",
+                "SUBTRACT",
+                "tools.example",
+                &std::collections::HashMap::new()
+            ),
             Some("subtract")
         );
-        assert_eq!(table.lookup_member("Operation", "MISSING", "tools.example"), None);
-        assert_eq!(table.lookup_member("OtherClass", "ADD", "tools.example"), None);
+        assert_eq!(
+            table.lookup_member(
+                "Operation",
+                "MISSING",
+                "tools.example",
+                &std::collections::HashMap::new()
+            ),
+            None
+        );
+        assert_eq!(
+            table.lookup_member(
+                "OtherClass",
+                "ADD",
+                "tools.example",
+                &std::collections::HashMap::new()
+            ),
+            None
+        );
     }
 
     #[test]
@@ -404,8 +971,24 @@ class Code(IntEnum):
 "#;
         let table = EnumTable::from_module(&parse(src), "tools.example");
         // No string value, so we record the member's own name.
-        assert_eq!(table.lookup_member("Code", "OK", "tools.example"), Some("OK"));
-        assert_eq!(table.lookup_member("Code", "ERROR", "tools.example"), Some("ERROR"));
+        assert_eq!(
+            table.lookup_member(
+                "Code",
+                "OK",
+                "tools.example",
+                &std::collections::HashMap::new()
+            ),
+            Some("OK")
+        );
+        assert_eq!(
+            table.lookup_member(
+                "Code",
+                "ERROR",
+                "tools.example",
+                &std::collections::HashMap::new()
+            ),
+            Some("ERROR")
+        );
     }
 
     #[test]
@@ -415,7 +998,9 @@ class Foo:
     X = "x"
 "#;
         let table = EnumTable::from_module(&parse(src), "tools.example");
-        assert!(table.lookup("Foo", "tools.example").is_none());
+        assert!(table
+            .lookup("Foo", "tools.example", &std::collections::HashMap::new())
+            .is_none());
     }
 
     #[test]
@@ -440,17 +1025,35 @@ class Database(StrEnum):
         table.merge(EnumTable::from_module(&b, "tools.module_b"));
 
         assert_eq!(
-            table.lookup("Database", "tools.module_a").unwrap(),
-            vec!["primary".to_string()]
+            table
+                .lookup(
+                    "Database",
+                    "tools.module_a",
+                    &std::collections::HashMap::new()
+                )
+                .unwrap(),
+            ("tools.module_a".to_string(), vec!["primary".to_string()])
         );
         assert_eq!(
-            table.lookup("Database", "tools.module_b").unwrap(),
-            vec!["replica".to_string()]
+            table
+                .lookup(
+                    "Database",
+                    "tools.module_b",
+                    &std::collections::HashMap::new()
+                )
+                .unwrap(),
+            ("tools.module_b".to_string(), vec!["replica".to_string()])
         );
         // Neither module's definition wins from an unrelated module —
         // the collision is genuinely ambiguous, so this resolves to
         // nothing rather than silently picking one (GH #449).
-        assert!(table.lookup("Database", "tools.module_c").is_none());
+        assert!(table
+            .lookup(
+                "Database",
+                "tools.module_c",
+                &std::collections::HashMap::new()
+            )
+            .is_none());
     }
 
     #[test]
@@ -464,8 +1067,173 @@ class Mode(StrEnum):
         let table = EnumTable::from_module(&parse(src), "tools.module_a");
 
         assert_eq!(
-            table.lookup("Mode", "tools.module_b").unwrap(),
-            vec!["fast".to_string()]
+            table
+                .lookup("Mode", "tools.module_b", &std::collections::HashMap::new())
+                .unwrap(),
+            ("tools.module_a".to_string(), vec!["fast".to_string()])
+        );
+    }
+
+    #[test]
+    fn resolve_def_prefers_explicit_import_over_guessing() {
+        // Two modules declare a *different*-shaped `Database` class.
+        // Without an import this is genuinely ambiguous; with an
+        // explicit import naming one of them, it resolves to exactly
+        // that one instead of erroring or guessing.
+        let a = parse(
+            "from enum import StrEnum\nclass Database(StrEnum):\n    PRIMARY = \"primary\"\n",
+        );
+        let b = parse(
+            "from enum import StrEnum\nclass Database(StrEnum):\n    REPLICA = \"replica\"\n",
+        );
+        let mut table = EnumTable::from_module(&a, "tools.module_a");
+        table.merge(EnumTable::from_module(&b, "tools.module_b"));
+
+        let mut all_imports: HashMap<String, ImportTable> = HashMap::new();
+        all_imports.insert(
+            "tools.module_c".to_string(),
+            ImportTable::from_module(
+                &parse("from tools.module_b import Database\n"),
+                "tools.module_c",
+                false,
+            ),
+        );
+        assert_eq!(
+            table
+                .lookup("Database", "tools.module_c", &all_imports)
+                .unwrap(),
+            ("tools.module_b".to_string(), vec!["replica".to_string()])
+        );
+    }
+
+    #[test]
+    fn resolve_def_import_pointing_nowhere_known_is_none() {
+        let a = parse(
+            "from enum import StrEnum\nclass Database(StrEnum):\n    PRIMARY = \"primary\"\n",
+        );
+        let table = EnumTable::from_module(&a, "tools.module_a");
+        let mut all_imports: HashMap<String, ImportTable> = HashMap::new();
+        all_imports.insert(
+            "tools.module_c".to_string(),
+            ImportTable::from_module(
+                &parse("from tools.somewhere_else import Database\n"),
+                "tools.module_c",
+                false,
+            ),
+        );
+        assert!(table
+            .lookup("Database", "tools.module_c", &all_imports)
+            .is_none());
+    }
+
+    #[test]
+    fn resolve_def_follows_reexport_chain_through_init() {
+        // tools/metrics/_common.py declares Environment.
+        // tools/metrics/__init__.py does `from ._common import Environment`.
+        // tools/analyse.py does `from tools.metrics import Environment`.
+        let common = parse("class Environment(enum.StrEnum):\n    PRODUCTION = \"production\"\n");
+        let enums = EnumTable::from_module(&common, "tools.metrics._common");
+
+        let mut all_imports: HashMap<String, ImportTable> = HashMap::new();
+        all_imports.insert(
+            "tools.metrics".to_string(),
+            ImportTable::from_module(
+                &parse("from ._common import Environment\n"),
+                "tools.metrics",
+                true,
+            ),
+        );
+        all_imports.insert(
+            "tools.analyse".to_string(),
+            ImportTable::from_module(
+                &parse("from tools.metrics import Environment\n"),
+                "tools.analyse",
+                false,
+            ),
+        );
+
+        assert_eq!(
+            enums
+                .lookup("Environment", "tools.analyse", &all_imports)
+                .unwrap(),
+            (
+                "tools.metrics._common".to_string(),
+                vec!["production".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn resolve_def_follows_aliasing_chain() {
+        // mod1 imports Foo from tools.real and re-aliases it as Bar;
+        // mod2 imports Bar from mod1.
+        let real = parse("class Foo(enum.StrEnum):\n    A = \"a\"\n");
+        let enums = EnumTable::from_module(&real, "tools.real");
+
+        let mut all_imports: HashMap<String, ImportTable> = HashMap::new();
+        all_imports.insert(
+            "tools.mod1".to_string(),
+            ImportTable::from_module(
+                &parse("from tools.real import Foo as Bar\n"),
+                "tools.mod1",
+                false,
+            ),
+        );
+        all_imports.insert(
+            "tools.mod2".to_string(),
+            ImportTable::from_module(&parse("from tools.mod1 import Bar\n"), "tools.mod2", false),
+        );
+
+        assert_eq!(
+            enums.lookup("Bar", "tools.mod2", &all_imports).unwrap(),
+            ("tools.real".to_string(), vec!["a".to_string()])
+        );
+    }
+
+    #[test]
+    fn resolve_def_chain_cycle_guard_does_not_hang() {
+        // mod_a imports X from mod_b; mod_b imports X from mod_a. Neither
+        // declares X. Must terminate with None, not loop forever.
+        let enums = EnumTable::default();
+        let mut all_imports: HashMap<String, ImportTable> = HashMap::new();
+        all_imports.insert(
+            "tools.mod_a".to_string(),
+            ImportTable::from_module(&parse("from tools.mod_b import X\n"), "tools.mod_a", false),
+        );
+        all_imports.insert(
+            "tools.mod_b".to_string(),
+            ImportTable::from_module(&parse("from tools.mod_a import X\n"), "tools.mod_b", false),
+        );
+        assert!(enums.lookup("X", "tools.mod_a", &all_imports).is_none());
+    }
+
+    #[test]
+    fn resolve_def_try_except_branches_with_identical_members_resolve() {
+        // Both try/except branches name a different module, but those
+        // modules declare byte-identical Environment shapes -- resolves
+        // to either, same as the cross-module dedupe case.
+        let a = parse("class Environment(enum.StrEnum):\n    PRODUCTION = \"production\"\n");
+        let b = parse("class Environment(enum.StrEnum):\n    PRODUCTION = \"production\"\n");
+        let mut enums = EnumTable::from_module(&a, "tools.metrics._common");
+        enums.merge(EnumTable::from_module(&b, "tools.metrics._legacy"));
+
+        let mut all_imports: HashMap<String, ImportTable> = HashMap::new();
+        all_imports.insert(
+            "tools.metrics.analyse".to_string(),
+            ImportTable::from_module(
+                &parse(
+                    "try:\n    from ._common import Environment\nexcept ImportError:\n    from ._legacy import Environment\n",
+                ),
+                "tools.metrics.analyse",
+                false,
+            ),
+        );
+
+        assert_eq!(
+            enums
+                .lookup("Environment", "tools.metrics.analyse", &all_imports)
+                .unwrap(),
+            ("tools.metrics._common".to_string(), vec!["production".to_string()])
         );
     }
 

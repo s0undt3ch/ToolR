@@ -13,6 +13,7 @@ swallows-and-formats-stderr behaviour for unhandled exit codes.
 from __future__ import annotations
 
 import datetime as dt
+import importlib
 import ipaddress
 import json
 import os
@@ -24,6 +25,7 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
+from typing import Any
 from typing import Literal
 
 import pytest
@@ -31,6 +33,7 @@ from packaging.version import Version
 
 from toolr._runner import SCHEMA_VERSION
 from toolr._runner import ContextSpec
+from toolr._runner import DispatchPayloadSpec
 from toolr._runner import RunnerSpec
 from toolr._runner import SpecError
 from toolr._runner import _build_context
@@ -42,6 +45,8 @@ from toolr._runner import load_spec
 from toolr._runner import load_spec_from_env
 from toolr._runner import main
 from toolr._runner import run
+from toolr.sources import CommandSchema
+from toolr.sources import DispatchCommand
 
 # --------------------------------------------------------------------------
 # Factory fixtures (mirrored from test_dispatch.py for test isolation).
@@ -458,6 +463,127 @@ def test_coerce_args_skips_fill_in_for_non_optional_missing_params() -> None:
 
     _, keyword = _coerce_args(_fn, {})
     assert keyword == {}
+
+
+@pytest.fixture
+def type_checking_enum_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[[], Callable[..., Any]]:
+    """Factory: build an on-disk package whose command module only
+    imports its Enum parameter type under `if TYPE_CHECKING:`, then
+    return the importable target function.
+
+    This is the exact runtime shape that needs handling: the
+    class is real and never bound in the target module's globals at
+    real import time, so a plain `get_type_hints(target)` call raises
+    `NameError` (confirmed empirically during design) unless the
+    caller supplies `localns`.
+    """
+
+    def _make() -> Callable[..., Any]:
+        pkg_dir = tmp_path / "tc_pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "__init__.py").write_text("")
+        (pkg_dir / "_common.py").write_text(
+            "import enum\n\n\nclass Environment(enum.StrEnum):\n"
+            '    PRODUCTION = "production"\n    STAGING = "staging"\n'
+        )
+        (pkg_dir / "user.py").write_text(
+            "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n"
+            "    from ._common import Environment\n\n\n"
+            'def analyse(ctx, env: "Environment" = None):\n    return env\n'
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        user = importlib.import_module("tc_pkg.user")
+        return user.analyse
+
+    return _make
+
+
+def test_coerce_args_resolves_type_checking_only_enum_via_enum_modules(
+    type_checking_enum_module: Callable[[], Callable[..., Any]],
+) -> None:
+    target = type_checking_enum_module()
+    _, keyword = _coerce_args(
+        target,
+        {"env": "staging"},
+        enum_modules={"Environment": "tc_pkg._common"},
+    )
+    assert keyword["env"].value == "staging"
+
+
+def test_coerce_args_without_enum_modules_falls_back_to_raw_value(
+    type_checking_enum_module: Callable[[], Callable[..., Any]],
+) -> None:
+    """Without `enum_modules`, `get_type_hints` fails for the whole
+    function (NameError on the TYPE_CHECKING-only name) and the
+    existing blanket fallback passes the raw string through untouched
+    -- the pre-existing (if degraded) behaviour, not a crash.
+    """
+    target = type_checking_enum_module()
+    _, keyword = _coerce_args(target, {"env": "staging"})
+    assert keyword["env"] == "staging"
+
+
+def test_coerce_args_enum_modules_missing_class_is_skipped_silently() -> None:
+    """A module path in `enum_modules` that fails to import doesn't
+    raise -- it's a best-effort assist, not a new failure mode.
+    """
+
+    def _fn(ctx, x: str) -> None: ...
+
+    _, keyword = _coerce_args(_fn, {"x": "hello"}, enum_modules={"Bogus": "no.such.module"})
+    assert keyword == {"x": "hello"}
+
+
+def test_coerce_args_enum_modules_class_missing_from_real_module_is_skipped() -> None:
+    """The named module imports fine but has no attribute by that name --
+    a different failure shape than a bad module path, and also
+    best-effort, not a new failure mode.
+    """
+
+    def _fn(ctx, x: str) -> None: ...
+
+    _, keyword = _coerce_args(_fn, {"x": "hello"}, enum_modules={"NoSuchClass": "pathlib"})
+    assert keyword == {"x": "hello"}
+
+
+def test_run_dispatch_branch_passes_enum_modules_to_coerce_args(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`run()`'s dispatched-leaf branch threads `spec.enum_modules` into
+    its own `_coerce_args` call for the parent's kwargs, same as the
+    plain (non-dispatch) branch.
+    """
+    captured: dict[str, object] = {}
+
+    def fake_dispatcher(ctx, *, dispatched: DispatchCommand) -> None:
+        captured["dispatched"] = dispatched
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_dispatcher)
+    spec = RunnerSpec(
+        schema_version=SCHEMA_VERSION,
+        group="demo",
+        command="parent",
+        module="tools.demo",
+        function="parent",
+        args={},
+        context=ContextSpec(
+            repo_root=str(tmp_path),
+            verbosity="normal",
+            timestamps=False,
+            log_level="INFO",
+        ),
+        enum_modules={"Environment": "pathlib"},
+        dispatch=DispatchPayloadSpec(
+            command="migrate",
+            command_args={"check": True},
+            schema=CommandSchema(name="migrate", summary="", description="", arguments=[]),
+        ),
+    )
+    assert run(spec) == 0
+    assert isinstance(captured["dispatched"], DispatchCommand)
+    assert captured["dispatched"].command == "migrate"
 
 
 # --------------------------------------------------------------------------

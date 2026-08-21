@@ -13,6 +13,8 @@
 //! / [`EnumTable`] / [`ArgSectionTable`] symbol tables this module
 //! receives as parameters.
 
+use std::collections::HashMap;
+
 use ruff_python_ast::{Expr, StmtFunctionDef};
 
 use super::arg_metadata::extract_arg_metadata;
@@ -20,7 +22,7 @@ use super::path_constraints::extract_path_constraints;
 use super::supported::{SupportedType, TypeResolutionError, UnsupportedType};
 use super::{PathConstraints, SourcesImports, TypeImports};
 use crate::manifest::{ArgMetadata, Argument, ArgumentKind};
-use crate::parser::symbols::{ArgSectionTable, EnumTable, TypeAliasTable};
+use crate::parser::symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable};
 
 /// Walk a function's parameters and populate `resolved_type` on each
 /// matching [`Argument`]. Unsupported annotations are pushed to `errors`
@@ -31,6 +33,7 @@ pub fn resolve_arguments(
     func: &StmtFunctionDef,
     arguments: &mut [Argument],
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     type_imports: &TypeImports,
     sources: &SourcesImports,
     aliases: &TypeAliasTable,
@@ -47,6 +50,7 @@ pub fn resolve_arguments(
             p.parameter.annotation.as_deref(),
             &mut arguments[i],
             enums,
+            all_imports,
             type_imports,
             aliases,
             sections,
@@ -61,6 +65,7 @@ pub fn resolve_arguments(
             vararg.annotation.as_deref(),
             &mut arguments[i],
             enums,
+            all_imports,
             type_imports,
             aliases,
             sections,
@@ -84,6 +89,7 @@ pub fn resolve_arguments(
             p.parameter.annotation.as_deref(),
             &mut arguments[i],
             enums,
+            all_imports,
             type_imports,
             aliases,
             sections,
@@ -100,6 +106,7 @@ fn resolve_one(
     annotation: Option<&Expr>,
     arg: &mut Argument,
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     type_imports: &TypeImports,
     aliases: &TypeAliasTable,
     sections: &ArgSectionTable,
@@ -116,8 +123,8 @@ fn resolve_one(
     // Path constraints come from `Annotated[T, arg(...)]` metadata —
     // either directly on the parameter, or by following a module-level
     // type alias (e.g. `Foo = Annotated[Path, arg(must_exist=True)]`).
-    arg.path_constraints = extract_path_constraints(expr)
-        .or_else(|| follow_alias_for_path_constraints(expr, aliases));
+    arg.path_constraints =
+        extract_path_constraints(expr).or_else(|| follow_alias_for_path_constraints(expr, aliases));
     // Same drill for the broader clap metadata (aliases, conflicts,
     // env, help_section, ...). One harvest pass through every
     // `Annotated[T, arg(...)]` call on the parameter, optionally via a
@@ -127,7 +134,7 @@ fn resolve_one(
     {
         arg.metadata = md;
     }
-    match resolve(expr, enums, type_imports, aliases, module) {
+    match resolve(expr, enums, all_imports, type_imports, aliases, module) {
         Ok(ty) => {
             // Post-resolution kind override: `toolr.types.Count` is the
             // only type that flips the inferred kind, since the type
@@ -195,21 +202,52 @@ fn follow_alias_for_arg_metadata(
 pub fn resolve(
     annotation: &Expr,
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
     module: &str,
 ) -> Result<SupportedType, UnsupportedType> {
-    resolve_inner(annotation, enums, imports, aliases, module, &mut Vec::new())
+    resolve_inner(
+        annotation,
+        enums,
+        all_imports,
+        imports,
+        aliases,
+        module,
+        &mut Vec::new(),
+    )
 }
 
 /// `seen` tracks names currently being expanded to break alias cycles
 /// (`A = B; B = A`). Capped depth gives a second line of defence.
 const MAX_ALIAS_DEPTH: usize = 16;
 
+/// `resolve_inner`, boxing an inner-type error as `UnsupportedType::Inner`.
+/// Kept as its own one-line-per-call-site function rather than inlining
+/// `resolve_inner(...).map_err(...)` at each of `resolve_subscript`'s
+/// `list`/`Optional` branches: with the extra `all_imports` argument,
+/// that call no longer fits on one line, and `cargo fmt` puts the
+/// trailing `.map_err(...)?;` alone on its own line — which `llvm-cov`
+/// then reports as uncovered even though it executes on every call.
+#[allow(clippy::too_many_arguments)]
+fn resolve_boxed(
+    annotation: &Expr,
+    enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
+    imports: &TypeImports,
+    aliases: &TypeAliasTable,
+    module: &str,
+    seen: &mut Vec<String>,
+) -> Result<SupportedType, UnsupportedType> {
+    resolve_inner(annotation, enums, all_imports, imports, aliases, module, seen)
+        .map_err(|e| UnsupportedType::Inner(Box::new(e)))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn resolve_inner(
     annotation: &Expr,
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
     module: &str,
@@ -221,7 +259,15 @@ fn resolve_inner(
         ));
     }
     match annotation {
-        Expr::Name(n) => resolve_name(n.id.as_str(), enums, imports, aliases, module, seen),
+        Expr::Name(n) => resolve_name(
+            n.id.as_str(),
+            enums,
+            all_imports,
+            imports,
+            aliases,
+            module,
+            seen,
+        ),
         Expr::Attribute(_) => {
             if let Some(toolr_name) = imports.resolve_attribute(annotation) {
                 return resolve_toolr_types_name(toolr_name);
@@ -233,11 +279,33 @@ fn resolve_inner(
             if rendered == "pathlib.Path" {
                 return Ok(SupportedType::Path);
             }
+            // `import foo.bar.baz` + `foo.bar.baz.X` attribute-chain
+            // usage — rejected for arbitrary user classes (unlike
+            // `toolr.types`/`toolr.sources`'s own dotted-attribute
+            // support above, which is a fixed, narrow, already-tested
+            // surface). The root name being a tracked module binding is
+            // enough to know exactly what to suggest instead.
+            if let Some(root) = rendered.split('.').next() {
+                if let Some(bound_module) = all_imports
+                    .get(module)
+                    .and_then(|t| t.resolve_module_binding(root))
+                {
+                    let attr_name = rendered.rsplit('.').next().unwrap_or(&rendered);
+                    return Err(UnsupportedType::UnsupportedShape(format!(
+                        "`{rendered}` isn't supported as a type annotation — please \
+                         `from {bound_module} import {attr_name}` and use `{attr_name}` directly."
+                    )));
+                }
+            }
             Err(UnsupportedType::UnknownName(rendered))
         }
-        Expr::Subscript(sub) => resolve_subscript(sub, enums, imports, aliases, module, seen),
-        Expr::BinOp(op) => resolve_bin_op(op, enums, imports, aliases, module, seen),
-        _ => Err(UnsupportedType::UnknownName(annotation_to_label(annotation))),
+        Expr::Subscript(sub) => {
+            resolve_subscript(sub, enums, all_imports, imports, aliases, module, seen)
+        }
+        Expr::BinOp(op) => resolve_bin_op(op, enums, all_imports, imports, aliases, module, seen),
+        _ => Err(UnsupportedType::UnknownName(annotation_to_label(
+            annotation,
+        ))),
     }
 }
 
@@ -245,6 +313,7 @@ fn resolve_inner(
 fn resolve_name(
     name: &str,
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
     module: &str,
@@ -260,10 +329,11 @@ fn resolve_name(
         "bool" => Ok(SupportedType::Bool),
         "Path" => Ok(SupportedType::Path),
         _ => {
-            if let Some(values) = enums.lookup(name, module) {
+            if let Some((defining_module, values)) = enums.lookup(name, module, all_imports) {
                 return Ok(SupportedType::Enum {
                     name: name.to_string(),
-                    values: values.to_vec(),
+                    module: defining_module,
+                    values,
                 });
             }
             // Module-level type alias fallback: `Foo = Annotated[T, ...]`
@@ -276,9 +346,23 @@ fn resolve_name(
                     )));
                 }
                 seen.push(name.to_string());
-                let result = resolve_inner(aliased, enums, imports, aliases, module, seen);
+                let result =
+                    resolve_inner(aliased, enums, all_imports, imports, aliases, module, seen);
                 seen.pop();
                 return result;
+            }
+            // A star import (`from ... import *`) in this module means
+            // we genuinely can't know whether `name` came from there —
+            // give a specific, actionable message instead of the
+            // generic "type not supported" text.
+            if all_imports
+                .get(module)
+                .is_some_and(ImportTable::has_star_import)
+            {
+                return Err(UnsupportedType::UnsupportedShape(format!(
+                    "`{name}` isn't resolvable because this module uses a star import \
+                     (`from ... import *`). Please import `{name}` explicitly instead."
+                )));
             }
             Err(UnsupportedType::UnknownName(name.to_string()))
         }
@@ -306,6 +390,7 @@ pub(super) fn resolve_toolr_types_name(name: &str) -> Result<SupportedType, Unsu
 fn resolve_subscript(
     sub: &ruff_python_ast::ExprSubscript,
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
     module: &str,
@@ -314,7 +399,11 @@ fn resolve_subscript(
     let head = match sub.value.as_ref() {
         Expr::Name(n) => n.id.as_str(),
         Expr::Attribute(a) => a.attr.as_str(),
-        _ => return Err(UnsupportedType::UnsupportedShape(annotation_to_label(sub.value.as_ref()))),
+        _ => {
+            return Err(UnsupportedType::UnsupportedShape(annotation_to_label(
+                sub.value.as_ref(),
+            )))
+        }
     };
     match head {
         "Literal" => {
@@ -326,23 +415,21 @@ fn resolve_subscript(
             }
         }
         "list" | "List" => {
-            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, module, seen)
-                .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
+            let inner = resolve_boxed(sub.slice.as_ref(), enums, all_imports, imports, aliases, module, seen)?;
             Ok(SupportedType::List(Box::new(inner)))
         }
         "tuple" | "Tuple" => {
             let parts = tuple_element_exprs(sub.slice.as_ref());
             let resolved: Result<Vec<_>, _> = parts
                 .into_iter()
-                .map(|elt| resolve_inner(elt, enums, imports, aliases, module, seen))
+                .map(|elt| resolve_inner(elt, enums, all_imports, imports, aliases, module, seen))
                 .collect();
             Ok(SupportedType::Tuple(
                 resolved.map_err(|e| UnsupportedType::Inner(Box::new(e)))?,
             ))
         }
         "Optional" => {
-            let inner = resolve_inner(sub.slice.as_ref(), enums, imports, aliases, module, seen)
-                .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
+            let inner = resolve_boxed(sub.slice.as_ref(), enums, all_imports, imports, aliases, module, seen)?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
         "Annotated" => {
@@ -353,7 +440,7 @@ fn resolve_subscript(
             let first = exprs
                 .first()
                 .ok_or_else(|| UnsupportedType::UnsupportedShape("Annotated[]".into()))?;
-            resolve_inner(first, enums, imports, aliases, module, seen)
+            resolve_inner(first, enums, all_imports, imports, aliases, module, seen)
         }
         other => Err(UnsupportedType::UnsupportedShape(other.to_string())),
     }
@@ -362,6 +449,7 @@ fn resolve_subscript(
 fn resolve_bin_op(
     op: &ruff_python_ast::ExprBinOp,
     enums: &EnumTable,
+    all_imports: &HashMap<String, ImportTable>,
     imports: &TypeImports,
     aliases: &TypeAliasTable,
     module: &str,
@@ -377,12 +465,12 @@ fn resolve_bin_op(
     let none_rhs = matches!(rhs, Expr::NoneLiteral(_));
     match (none_lhs, none_rhs) {
         (false, true) => {
-            let inner = resolve_inner(lhs, enums, imports, aliases, module, seen)
+            let inner = resolve_inner(lhs, enums, all_imports, imports, aliases, module, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
         (true, false) => {
-            let inner = resolve_inner(rhs, enums, imports, aliases, module, seen)
+            let inner = resolve_inner(rhs, enums, all_imports, imports, aliases, module, seen)
                 .map_err(|e| UnsupportedType::Inner(Box::new(e)))?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
