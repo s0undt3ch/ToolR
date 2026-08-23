@@ -130,11 +130,8 @@
     },
     {
       // Same groupName as above keeps this in the same PR as the toolr-py
-      // lock bump — split into its own rule only because the versioning
-      // override below can't apply to the pep621 rule: `tools/pyproject.toml`
-      // carries a `>=0.25.0` range, and the regex versioning scheme can't
-      // parse a `>=` operator, so applying it there silently stops Renovate
-      // from touching that dependency at all (it happened once already).
+      // lock bump — split into its own rule only because this manager set
+      // (mise / github-actions) differs from the pep621 rule above.
       description: "Track our own toolr release in mise / GH Actions ASAP",
       groupName: "toolr release",
       matchManagers: ["mise", "github-actions"],
@@ -145,11 +142,6 @@
         "action.yml",
       ],
       matchPackageNames: ["aqua:s0undt3ch/ToolR", "s0undt3ch/ToolR"],
-      // GitHub Releases carry both a full `v0.30.0` tag and a floating
-      // `v0.30` major.minor alias pointing at the same commit. Without
-      // this, Renovate sometimes resolves the shorter alias and proposes
-      // `0.30` instead of `0.30.0` in `mise.toml`. Force full semver.
-      versioning: "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
       schedule: ["at any time"],
       // If a PR for this bump is already open and a *further* release
       // lands before it's merged, force-update the existing PR to the
