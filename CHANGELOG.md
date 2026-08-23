@@ -6,6 +6,20 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.31.1 - 2026-08-23
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(renovate)* Split toolr-py versioning from mise/gh-actions regex ([`77f0ae5`](https://github.com/s0undt3ch/ToolR/commit/77f0ae5076ab6aebb54e0a98fd055c2bae819b75))
+- *(deps)* Declare attrs as a toolr-py runtime dependency ([`c1e990f`](https://github.com/s0undt3ch/ToolR/commit/c1e990fe2a0288bb117c97043bc545c7a86a07d9))
+
+### <!-- 3 -->📚 Documentation
+
+- *(mise)* Warn against grouping regex versioning with pep621 ranges ([`8004411`](https://github.com/s0undt3ch/ToolR/commit/80044118628572918268dc462efeece0cc09a825))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(matrix)* Narrow PR Windows/macOS tests to latest Python only ([`b255c51`](https://github.com/s0undt3ch/ToolR/commit/b255c514c73cd07fda7049f9c629e530ef3440a9))
 ## 0.31.0 - 2026-08-21
 
 ### Notes
