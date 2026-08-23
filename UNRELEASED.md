@@ -10,3 +10,7 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+Removed the rolling-tag sync mechanism (`sync-rolling-tags.yml`, `toolr ci sync-rolling-tags`) that
+force-pushed floating `latest`/`vX`/`vX.Y` git tags on release. Consumers should pin GitHub Actions
+usage to an explicit released tag or commit SHA instead.

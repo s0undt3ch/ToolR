@@ -59,34 +59,6 @@ global config with a tool you mostly use inside specific repos.
 toolr --version
 ```
 
-### Keeping the pin fresh with Renovate
-
-If Renovate tracks your `.mise.toml` pin, add a `versioning` override for
-`aqua:s0undt3ch/ToolR` that only matches full `major.minor.patch` tags:
-
-```json5
-{
-  packageRules: [
-    {
-      matchPackageNames: ["aqua:s0undt3ch/ToolR"],
-      versioning: "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
-    },
-  ],
-}
-```
-
-GitHub Releases for toolr carry both the full tag (`v0.30.0`) and a
-floating major.minor alias (`v0.30`) pointing at the same commit. Without
-the override, Renovate can resolve the shorter alias and propose `0.30`
-instead of `0.30.0`.
-
-If you also dogfood `toolr-py` from PyPI and want one Renovate rule to
-track both together, keep this `versioning` override on the `mise`
-(and `github-actions`) `matchManagers` only — don't apply it to a `pep621`
-rule in the same group. The regex can't parse a `>=`-style range like
-`toolr-py>=0.25.0`, so a `pep621` dependency matched by it stops getting
-updated at all, silently.
-
 ## Project configuration
 
 ### `.mise.toml` (recommended)
