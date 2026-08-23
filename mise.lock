@@ -51,9 +51,9 @@ version = "0.31.1"
 backend = "aqua:s0undt3ch/ToolR"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-arm64"]
-checksum = "sha256:26d07a4247ee3ce7e5f36ca5f5ebe413728216bb703f5dc0cb8ca622e54c3271"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.31.1/toolr-0.31.1-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/526433028"
+checksum = "sha256:ac997124cdca0bb861c0742a2196dc84eab4dd866b7f5750b490a81d9919b0b1"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.31.1/toolr-0.31.1-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/526433041"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-arm64-musl"]
@@ -63,9 +63,9 @@ url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/52643304
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-x64"]
-checksum = "sha256:41466713b1b32cbf9dd6efaba0efc0e6d2963ba84c9dcae562db736dbddac39e"
-url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.31.1/toolr-0.31.1-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/526433044"
+checksum = "sha256:3185528d1d41a8d298bcebb7d79436364ab19d27d8792a4340a0740970334dd9"
+url = "https://github.com/s0undt3ch/ToolR/releases/download/v0.31.1/toolr-0.31.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/s0undt3ch/ToolR/releases/assets/526433046"
 provenance = "github-attestations"
 
 [tools."aqua:s0undt3ch/ToolR"."platforms.linux-x64-musl"]
