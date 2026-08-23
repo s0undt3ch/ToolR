@@ -6,6 +6,25 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.32.0 - 2026-08-23
+
+### Notes
+
+**BREAKING (GitHub Actions consumers):** removed the rolling-tag sync mechanism
+(`sync-rolling-tags.yml`, `toolr ci sync-rolling-tags`) that force-pushed floating `latest`/`vX`/`vX.Y`
+git tags on release. Those tags still exist but will no longer move — anyone with `uses:
+s0undt3ch/ToolR@latest`, `@v1`, or `@v1.2`-style pins is now frozen on whatever commit last synced,
+with no error to signal it. Pin to an explicit released tag or commit SHA instead (the recommended
+form has always been `uses: s0undt3ch/ToolR@<sha> # vX.Y.Z`, per the `toolr-ci-setup` skill).
+
+### <!-- 3 -->📚 Documentation
+
+- Flag rolling-tag removal as breaking for GH Actions consumers ([`ef21e6c`](https://github.com/s0undt3ch/ToolR/commit/ef21e6cd8ebf6ef5bcda157737e3a176b96795b6))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(ci)* Remove rolling-tag sync mechanism ([`8406975`](https://github.com/s0undt3ch/ToolR/commit/8406975a8056136c9215a13797386cb6d331025c))
+- *(docs)* Skip re-sync in mkdocs build step ([`570141a`](https://github.com/s0undt3ch/ToolR/commit/570141a192002dd8ee5834ce41e47a9c07fa46f2))
 ## 0.31.1 - 2026-08-23
 
 ### <!-- 1 -->🐛 Bug Fixes
