@@ -600,7 +600,9 @@ jobs:
         run: toolr pre-commit regen-doc-snippets --check
 
       - name: Build MkDocs site
-        run: uv run mkdocs build --strict
+        # --no-sync: a plain `uv run` re-syncs the workspace, undoing the
+        # --no-install-workspace + wheel-install steps above.
+        run: uv run --no-sync mkdocs build --strict
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
