@@ -1305,6 +1305,7 @@ requires-dist = [{ name = "toolr-py", editable = "crates/toolr-py" }]
 name = "toolr-py"
 source = { editable = "crates/toolr-py" }
 dependencies = [
+    { name = "attrs" },
     { name = "msgspec" },
     { name = "packaging" },
     { name = "rich" },
@@ -1312,6 +1313,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "attrs", specifier = ">=25.3.0" },
     { name = "msgspec", specifier = ">=0.19.0" },
     { name = "packaging", specifier = ">=26.2" },
     { name = "rich", specifier = ">=13.0.0" },
