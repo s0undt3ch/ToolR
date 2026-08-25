@@ -1710,15 +1710,15 @@ plus anything your <code>tools/*.py</code> files import) and a handful of
 toolr-specific options.</p>
 <p>A minimal file:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[project]</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;tools&quot;</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.0.0&quot;</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.11&quot;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"tools"</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"0.0.0"</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&gt;=3.11"</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="s2">&quot;toolr&quot;</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="s2">"toolr"</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">]</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="k">[tool.toolr]</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">venv-location</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;cache&quot;</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">venv-location</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"cache"</span>
 </span></code></pre></div>
 <p>That's enough for <code>toolr project venv sync</code> to materialise a working
 venv and for the binary to dispatch commands.</p>
@@ -1746,7 +1746,7 @@ informational; toolr doesn't read them.</p>
   containers) or you want the venv visible alongside the source.</li>
 </ul>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[tool.toolr]</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">venv-location</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;in-tree&quot;</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">venv-location</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"in-tree"</span>
 </span></code></pre></div>
 <p>The default <code>tools/.gitignore</code> written by <code>toolr project init</code> already
 excludes <code>.venv/</code>, so the in-tree venv won't leak into git.</p>
@@ -1765,10 +1765,10 @@ longer performs separate editable installs.</p>
 <p>A former <code>[tool.toolr] editable-install = ["./packages/foo"]</code> becomes a
 standard editable path dependency:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project]</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;foo&quot;</span><span class="p">]</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"foo"</span><span class="p">]</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">[tool.uv.sources]</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">foo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;./packages/foo&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">editable</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">foo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"./packages/foo"</span><span class="p">,</span><span class="w"> </span><span class="n">editable</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
 </span></code></pre></div>
 <p>A <code>tools/pyproject.toml</code> that still carries an <code>editable-install</code> key
 keeps loading — the key is ignored.</p>
@@ -1776,7 +1776,7 @@ keeps loading — the key is ignored.</p>
 <p>Explicit override of the venv's Python version. Falls back to
 <code>[project] requires-python</code> when unset.</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[tool.toolr]</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">python-version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;3.13&quot;</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">python-version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"3.13"</span>
 </span></code></pre></div>
 <p>Use this when your tools need a newer Python than your application
 code, or vice versa.</p>
@@ -1813,7 +1813,7 @@ the scaffold (skippable with <code>--no-sync</code>).</p>
 subcommands — they update the file and sync the venv in one step:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Add a package (spec formats: name, name@version, name&gt;=1.2, …)</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>add<span class="w"> </span>requests
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>add<span class="w"> </span><span class="s2">&quot;httpx&gt;=0.27&quot;</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>add<span class="w"> </span><span class="s2">"httpx&gt;=0.27"</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Remove a package (must already appear in tools/pyproject.toml)</span>
 </span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>remove<span class="w"> </span>requests
@@ -1830,7 +1830,7 @@ or <code>venv sync -P &lt;pkg&gt;</code> (specific):</p>
 </span></code></pre></div>
 <p>To re-lock without immediately applying (e.g. for review before
 committing), use <code>venv lock</code>:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>lock<span class="w"> </span>-U<span class="w">        </span><span class="c1"># re-resolve all; don&#39;t touch the venv</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>lock<span class="w"> </span>-U<span class="w">        </span><span class="c1"># re-resolve all; don't touch the venv</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>lock<span class="w"> </span>-P<span class="w"> </span>httpx<span class="w">  </span><span class="c1"># re-resolve httpx only</span>
 </span></code></pre></div>
 <h2 id="validating-your-configuration">Validating your configuration<a class="headerlink" href="#validating-your-configuration" title="Permanent link">&para;</a></h2>
