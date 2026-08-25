@@ -62,11 +62,10 @@ detect_triple() {
   uname_m="$(uname -m)"
   case "$uname_s" in
     Linux)
-      libc="gnu"
-      if [ -f /etc/alpine-release ]; then libc="musl"; fi
+      # Static musl binary, ships for every Linux release — runs on glibc hosts too.
       case "$uname_m" in
-        x86_64|amd64) printf 'x86_64-unknown-linux-%s' "$libc" ;;
-        aarch64|arm64) printf 'aarch64-unknown-linux-%s' "$libc" ;;
+        x86_64|amd64) printf 'x86_64-unknown-linux-musl' ;;
+        aarch64|arm64) printf 'aarch64-unknown-linux-musl' ;;
         *) err "unsupported Linux architecture: $uname_m" ;;
       esac
       ;;
