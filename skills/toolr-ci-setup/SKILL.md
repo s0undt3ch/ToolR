@@ -130,9 +130,10 @@ jobs:
       - run: toolr <group> <cmd>
 ```
 
-The action ships binaries for `x86_64`/`aarch64` Linux (glibc and
-musl), `x86_64`/`aarch64` macOS, and `x86_64` Windows. The right
-archive is selected automatically from `RUNNER_OS` + `uname -m`.
+The action ships binaries for `x86_64`/`aarch64` Linux (musl, static —
+runs on glibc hosts too), `x86_64`/`aarch64` macOS, and `x86_64`
+Windows. The right archive is selected automatically from `RUNNER_OS` +
+`uname -m`.
 
 For the *authoring* side — how the `tools/<file>.py` defining the
 command you're running is structured — see
