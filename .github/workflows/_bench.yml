@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$RUNNER_OS" in
-            Linux)   triple=x86_64-unknown-linux-gnu;  wheelplat=manylinux_x86_64 ;;
+            Linux)   triple=x86_64-unknown-linux-musl; wheelplat=manylinux_x86_64 ;;
             macOS)   triple=aarch64-apple-darwin;      wheelplat=macosx_arm64 ;;
             Windows) triple=x86_64-pc-windows-msvc;    wheelplat=win_amd64 ;;
             *) echo "unknown RUNNER_OS=$RUNNER_OS" >&2; exit 1 ;;

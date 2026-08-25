@@ -85,23 +85,17 @@ BINARY_WHEEL_PYTHONS = ["cp311"]
 # all of them; PR builds use the runner-native subset (see
 # `_CI_BINARY_ARCHIVE_TRIPLE_NAMES`).
 #
+# Linux ships musl-only: the static musl binary already runs on glibc
+# hosts, so a separate `-gnu` release asset only added ambiguity for
+# downstream tooling. `-gnu` triples stay buildable from source via
+# `cargo build --target x86_64-unknown-linux-gnu`; only the prebuilt
+# release archive is dropped.
+#
 # Every triple builds natively now: the matrix uses
 # architecture-matching GitHub runners and `*-linux-musl` works as a
 # native `rustup target add` + `musl-tools` build on `ubuntu-*` runners.
 # No docker, no `cross`.
 _BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
-    {
-        "triple": "x86_64-unknown-linux-gnu",
-        "runner": "ubuntu-latest",
-        "archive": "tar.gz",
-        "display-name": "Linux",
-    },
-    {
-        "triple": "aarch64-unknown-linux-gnu",
-        "runner": "ubuntu-24.04-arm",
-        "archive": "tar.gz",
-        "display-name": "Linux",
-    },
     {
         "triple": "x86_64-unknown-linux-musl",
         "runner": "ubuntu-latest",
@@ -140,7 +134,7 @@ _BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
 # possible.
 _CI_BINARY_ARCHIVE_TRIPLE_NAMES = frozenset(
     {
-        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
         "aarch64-apple-darwin",
         "x86_64-pc-windows-msvc",
     }

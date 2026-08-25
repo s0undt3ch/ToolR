@@ -153,11 +153,9 @@ runs:
         case "$RUNNER_OS" in
           Linux)
             arch=$(uname -m)
-            libc=gnu
-            [ -f /etc/alpine-release ] && libc=musl
             case "$arch" in
-              x86_64|amd64)  triple="x86_64-unknown-linux-${libc}" ;;
-              aarch64|arm64) triple="aarch64-unknown-linux-${libc}" ;;
+              x86_64|amd64)  triple="x86_64-unknown-linux-musl" ;;
+              aarch64|arm64) triple="aarch64-unknown-linux-musl" ;;
               *) echo "setup-toolr: unsupported Linux arch '$arch'" >&2; exit 1 ;;
             esac
             ext=tar.gz

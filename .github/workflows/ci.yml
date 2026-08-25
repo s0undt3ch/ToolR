@@ -189,11 +189,11 @@ jobs:
   build-binary-archive:
     name: Build (binary)
     # `prepare-ci.outputs.binary-archive-triples` (in ci mode) lists the
-    # runner-native triples — x86_64-unknown-linux-gnu, aarch64-apple-darwin,
+    # runner-native triples — x86_64-unknown-linux-musl, aarch64-apple-darwin,
     # x86_64-pc-windows-msvc — so downstream tests + the docs job can
     # download the standalone `toolr` binary as an artifact instead of
     # paying for a per-job `cargo build --release`. release.yml builds
-    # the same workflow with the full 7-triple matrix.
+    # the same workflow with the full 5-triple matrix.
     needs:
       - prepare-ci
       - prepare-release
@@ -557,10 +557,10 @@ jobs:
           fi
           uv pip install --force-reinstall "$wheel"
 
-      - name: Download toolr binary archive (linux-gnu)
+      - name: Download toolr binary archive (linux-musl)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: toolr-archive-x86_64-unknown-linux-gnu
+          name: toolr-archive-x86_64-unknown-linux-musl
           path: ${{ runner.temp }}/toolr-archive
 
       - name: Extract toolr binary

@@ -59,7 +59,6 @@ def test_install_sh_detects_host_triple_on_dry_run() -> None:
         triple_fragment in result.stderr
         for triple_fragment in (
             "apple-darwin",
-            "unknown-linux-gnu",
             "unknown-linux-musl",
         )
     ), result.stderr
