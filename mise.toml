@@ -29,7 +29,7 @@ gh = "2.98.0"
 # components the pre-commit hooks (clippy) and contributors
 # (rustfmt) need so the toolchain is identical everywhere.
 rust = { version = "1.98.0", profile = "minimal", components = "clippy,rustfmt" }
-uv = { version = "0.12.5" }
+uv = { version = "0.12.10" }
 prek = "0.4.14"
 "cargo:cargo-edit" = "0.13.13"
 # Dogfood: the released toolr binary drives repo automation (the prek
