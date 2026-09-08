@@ -41,6 +41,12 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Cargo's git-dependency checkouts (the ruff crates) can exceed
+      # Windows' 260-char MAX_PATH; core.longpaths lifts that limit.
+      - name: Enable git long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
         with:
