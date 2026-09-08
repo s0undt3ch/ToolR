@@ -561,49 +561,54 @@ fn render_entry(name: &str, source_module: &str, source: &str, stmt: &Stmt) -> R
 /// toolr's public `Struct` fields are all annotated.
 fn render_class_members(source_module: &str, source: &str, body: &[Stmt]) -> Result<Vec<Entry>> {
     let mut members = Vec::new();
-    for stmt in body {
-        match stmt {
+    let mut i = 0;
+    while i < body.len() {
+        match &body[i] {
             Stmt::FunctionDef(def) => {
                 let name = def.name.as_str();
-                if name != "__init__" && name.starts_with('_') {
-                    continue;
+                let keep = (name == "__init__" || !name.starts_with('_')) && !is_overload(def);
+                if keep {
+                    let sig = function_signature(def, source);
+                    let doc = function_docstring(&def.body);
+                    members.push(Entry {
+                        name: name.to_string(),
+                        kind: EntryKind::Function,
+                        source_module: source_module.to_string(),
+                        signature: Some(sig),
+                        docstring: doc,
+                        members: Vec::new(),
+                    });
                 }
-                if is_overload(def) {
-                    continue;
-                }
-                let sig = function_signature(def, source);
-                let doc = function_docstring(&def.body);
-                members.push(Entry {
-                    name: name.to_string(),
-                    kind: EntryKind::Function,
-                    source_module: source_module.to_string(),
-                    signature: Some(sig),
-                    docstring: doc,
-                    members: Vec::new(),
-                });
             }
             Stmt::AnnAssign(assign) => {
-                let Expr::Name(target) = assign.target.as_ref() else {
-                    continue;
+                let name = match assign.target.as_ref() {
+                    Expr::Name(target) => Some(target.id.as_str()),
+                    _ => None,
                 };
-                let name = target.id.as_str();
-                if name.starts_with('_') {
-                    continue;
+                let keep = name.is_some_and(|n| !n.starts_with('_'))
+                    && !assign.value.as_deref().is_some_and(is_init_false_field);
+                // An attribute-docstring convention: a bare string-literal
+                // statement immediately after the field. Consume it either
+                // way (even when the field itself is skipped) so it never
+                // gets misread as a stray module-level constant.
+                let trailing_doc = attribute_docstring(body.get(i + 1));
+                if trailing_doc.is_some() {
+                    i += 1;
                 }
-                if assign.value.as_deref().is_some_and(is_init_false_field) {
-                    continue;
+                if keep {
+                    members.push(Entry {
+                        name: name.expect("keep implies a Name target").to_string(),
+                        kind: EntryKind::Constant,
+                        source_module: source_module.to_string(),
+                        signature: Some(slice_source(source, assign)),
+                        docstring: trailing_doc,
+                        members: Vec::new(),
+                    });
                 }
-                members.push(Entry {
-                    name: name.to_string(),
-                    kind: EntryKind::Constant,
-                    source_module: source_module.to_string(),
-                    signature: Some(slice_source(source, assign)),
-                    docstring: None,
-                    members: Vec::new(),
-                });
             }
-            _ => continue,
+            _ => {}
         }
+        i += 1;
     }
     Ok(members)
 }
@@ -662,7 +667,27 @@ fn dedent(input: &str) -> String {
 
 fn function_docstring(body: &[Stmt]) -> Option<String> {
     let first = body.first()?;
-    let Stmt::Expr(expr_stmt) = first else {
+    string_literal_statement(first)
+}
+
+/// The attribute-docstring convention: a bare string-literal statement
+/// placed immediately after a field, e.g.:
+///
+/// ```python
+/// timeout_secs: float | None = None
+/// """Fallback used when the caller doesn't pass one."""
+/// ```
+///
+/// Not a language feature (nothing stores it at runtime) but recognised by
+/// Sphinx's `autodoc`/`napoleon` and most IDEs, and cheap for a static-AST
+/// tool like this one to read the same way `function_docstring` reads a
+/// `def`'s leading string literal.
+fn attribute_docstring(next: Option<&Stmt>) -> Option<String> {
+    string_literal_statement(next?)
+}
+
+fn string_literal_statement(stmt: &Stmt) -> Option<String> {
+    let Stmt::Expr(expr_stmt) = stmt else {
         return None;
     };
     let Expr::StringLiteral(lit) = expr_stmt.value.as_ref() else {
@@ -910,6 +935,45 @@ mod tests {
         let members = render_class_members("mod", src, &def.body).expect("renders members");
         let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, vec!["search_path"], "{names:?}");
+    }
+
+    #[test]
+    fn render_class_members_reads_trailing_attribute_docstring() {
+        let src = "class Widget(Struct, frozen=True):\n\
+             \x20   timeout_secs: float | None = None\n\
+             \x20   \"\"\"Fallback used when the caller doesn't pass one.\"\"\"\n\
+             \x20   size: int = 0\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Widget").expect("Widget found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["timeout_secs", "size"], "{names:?}");
+        assert_eq!(
+            members[0].docstring.as_deref(),
+            Some("Fallback used when the caller doesn't pass one.")
+        );
+        assert_eq!(members[1].docstring, None);
+    }
+
+    #[test]
+    fn render_class_members_consumes_trailing_docstring_even_for_a_skipped_field() {
+        // A docstring after a `_`-prefixed field must not be misread as the
+        // *next* field's docstring (the field itself is filtered, but the
+        // string statement following it is still consumed).
+        let src = "class Widget(Struct, frozen=True):\n\
+             \x20   _hidden: int = 0\n\
+             \x20   \"\"\"Internal only.\"\"\"\n\
+             \x20   size: int = 0\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Widget").expect("Widget found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["size"], "{names:?}");
+        assert_eq!(members[0].docstring, None);
     }
 
     #[test]

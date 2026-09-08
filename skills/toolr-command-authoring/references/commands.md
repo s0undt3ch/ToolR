@@ -109,10 +109,26 @@ verbosity: ConsoleVerbosity
 default_timeout_secs: float | None = None
 ```
 
+```text
+Fallback for `ctx.run(...)`'s `timeout_secs` when the caller doesn't pass one.
+
+Sourced from the rust front-end's `toolr --timeout-secs N` flag. `None` means
+no default — don't apply a watchdog.
+
+```
+
 #### `default_no_output_timeout_secs`
 
 ```python
 default_no_output_timeout_secs: float | None = None
+```
+
+```text
+Fallback for `ctx.run(...)`'s `no_output_timeout_secs` when the caller doesn't pass one.
+
+Sourced from the rust front-end's `toolr --no-output-timeout-secs N` flag. `None`
+means no default — don't apply a watchdog.
+
 ```
 
 #### `prompt`
