@@ -38,6 +38,12 @@ Tests then read it via :meth:`collected_command_groups`.
 
 ```
 
+#### `search_path`
+
+```python
+search_path: Path
+```
+
 #### `collected_command_groups`
 
 ```python

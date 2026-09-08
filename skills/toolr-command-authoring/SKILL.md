@@ -23,9 +23,11 @@ gets new subcommands under `toolr ...`.
 
 This skill teaches the **shape** of authoring toolr commands. For the
 **actual** surface of decorators, `Context` methods, and docstring
-conventions, consult the generated references in `references/` —
-they are rebuilt from toolr's own source on every release, so they
-cannot drift.
+conventions, consult the generated references —
+[`references/commands.md`](references/commands.md) and
+[`references/docstrings.md`](references/docstrings.md) — they are
+rebuilt from toolr's own source on every release, so they cannot
+drift.
 
 ## Workflow
 
@@ -101,9 +103,12 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
   object across all members or you'll silently create duplicate
   sections.
 - **Calling subprocesses.** Use `ctx.run(...)`; it inherits stderr
-  for TTY-aware tools and propagates timeouts.
+  for TTY-aware tools and propagates timeouts. Full signature (timeouts,
+  `capture_output`, streaming) in
+  [`references/commands.md#run`](references/commands.md#run).
 - **Referencing the repo root.** Use `ctx.repo_root` (a
-  `pathlib.Path`). It is toolr's discovered project root — do **not**
+  [`pathlib.Path`](references/commands.md#context)). It is toolr's
+  discovered project root — do **not**
   recompute it from `__file__` (`Path(__file__).parents[N]` and
   friends). That guess breaks the moment the file moves or the command
   is packaged as a plugin, and toolr already knows the answer.
