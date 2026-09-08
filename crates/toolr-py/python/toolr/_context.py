@@ -41,13 +41,18 @@ class Context(Struct, frozen=True):
     verbosity: ConsoleVerbosity
     _console_stderr: Console
     _console_stdout: Console
-    # Defaults sourced from the rust front-end's "Output Options" flags
-    # (`toolr --timeout-secs N` / `--no-output-timeout-secs N`). When
-    # set, `ctx.run(...)` uses them as fallbacks if the caller doesn't
-    # pass per-call `timeout_secs=` / `no_output_timeout_secs=`. `None`
-    # means "no default — don't apply a watchdog."
     default_timeout_secs: float | None = None
+    """Fallback for `ctx.run(...)`'s `timeout_secs` when the caller doesn't pass one.
+
+    Sourced from the rust front-end's `toolr --timeout-secs N` flag. `None` means
+    no default — don't apply a watchdog.
+    """
     default_no_output_timeout_secs: float | None = None
+    """Fallback for `ctx.run(...)`'s `no_output_timeout_secs` when the caller doesn't pass one.
+
+    Sourced from the rust front-end's `toolr --no-output-timeout-secs N` flag. `None`
+    means no default — don't apply a watchdog.
+    """
     # Frozen struct fields, not module globals, so tests can override real
     # subprocess/filesystem/stdin behavior per-instance without monkeypatching.
     _run_impl: Callable[..., CommandResult[str] | CommandResult[bytes]] = command.run

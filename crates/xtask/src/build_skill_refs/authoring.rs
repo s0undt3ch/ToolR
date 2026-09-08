@@ -376,6 +376,7 @@ struct Entry {
     members: Vec<Entry>,
 }
 
+#[derive(PartialEq, Eq)]
 enum EntryKind {
     Function,
     Class,
@@ -493,6 +494,27 @@ fn is_overload(def: &ruff_python_ast::StmtFunctionDef) -> bool {
     })
 }
 
+/// Whether a class-body field's default value is an `attrs.field(...)` /
+/// `field(...)` call carrying `init=False` — i.e. internal bookkeeping
+/// state the class's own author excluded from the constructor, not part
+/// of the public surface even though the name itself isn't `_`-prefixed
+/// (see `CommandsTester` in `toolr.testing`).
+fn is_init_false_field(value: &Expr) -> bool {
+    let Expr::Call(call) = value else {
+        return false;
+    };
+    let is_field_call = match call.func.as_ref() {
+        Expr::Name(n) => n.id.as_str() == "field",
+        Expr::Attribute(a) => a.attr.as_str() == "field",
+        _ => false,
+    };
+    is_field_call
+        && call.arguments.keywords.iter().any(|kw| {
+            kw.arg.as_ref().is_some_and(|arg| arg.as_str() == "init")
+                && matches!(&kw.value, Expr::BooleanLiteral(b) if !b.value)
+        })
+}
+
 fn render_entry(name: &str, source_module: &str, source: &str, stmt: &Stmt) -> Result<Entry> {
     let (kind, signature, docstring, members) = match stmt {
         Stmt::FunctionDef(def) => {
@@ -531,35 +553,62 @@ fn render_entry(name: &str, source_module: &str, source: &str, stmt: &Stmt) -> R
     })
 }
 
-/// Render a class's public methods (names not starting with `_`, except
-/// `__init__` when it carries its own docstring) as nested entries, in
-/// source order. Skips `@overload` stubs the same way `find_definition`
-/// does for module-level functions, and skips non-function members
-/// (fields are already visible in the class's own docstring/signature —
-/// walking `AnnAssign` too is a possible follow-up, not required here).
+/// Render a class's public methods and annotated fields (names not
+/// starting with `_`, except `__init__` when it carries its own
+/// docstring) as nested entries, in source order. Skips `@overload`
+/// stubs the same way `find_definition` does for module-level
+/// functions. Plain `Assign` fields (no type annotation) are skipped —
+/// toolr's public `Struct` fields are all annotated.
 fn render_class_members(source_module: &str, source: &str, body: &[Stmt]) -> Result<Vec<Entry>> {
     let mut members = Vec::new();
-    for stmt in body {
-        let Stmt::FunctionDef(def) = stmt else {
-            continue;
-        };
-        let name = def.name.as_str();
-        if name != "__init__" && name.starts_with('_') {
-            continue;
+    let mut i = 0;
+    while i < body.len() {
+        match &body[i] {
+            Stmt::FunctionDef(def) => {
+                let name = def.name.as_str();
+                let keep = (name == "__init__" || !name.starts_with('_')) && !is_overload(def);
+                if keep {
+                    let sig = function_signature(def, source);
+                    let doc = function_docstring(&def.body);
+                    members.push(Entry {
+                        name: name.to_string(),
+                        kind: EntryKind::Function,
+                        source_module: source_module.to_string(),
+                        signature: Some(sig),
+                        docstring: doc,
+                        members: Vec::new(),
+                    });
+                }
+            }
+            Stmt::AnnAssign(assign) => {
+                let name = match assign.target.as_ref() {
+                    Expr::Name(target) => Some(target.id.as_str()),
+                    _ => None,
+                };
+                let keep = name.is_some_and(|n| !n.starts_with('_'))
+                    && !assign.value.as_deref().is_some_and(is_init_false_field);
+                // An attribute-docstring convention: a bare string-literal
+                // statement immediately after the field. Consume it either
+                // way (even when the field itself is skipped) so it never
+                // gets misread as a stray module-level constant.
+                let trailing_doc = attribute_docstring(body.get(i + 1));
+                if trailing_doc.is_some() {
+                    i += 1;
+                }
+                if keep {
+                    members.push(Entry {
+                        name: name.expect("keep implies a Name target").to_string(),
+                        kind: EntryKind::Constant,
+                        source_module: source_module.to_string(),
+                        signature: Some(slice_source(source, assign)),
+                        docstring: trailing_doc,
+                        members: Vec::new(),
+                    });
+                }
+            }
+            _ => {}
         }
-        if is_overload(def) {
-            continue;
-        }
-        let sig = function_signature(def, source);
-        let doc = function_docstring(&def.body);
-        members.push(Entry {
-            name: name.to_string(),
-            kind: EntryKind::Function,
-            source_module: source_module.to_string(),
-            signature: Some(sig),
-            docstring: doc,
-            members: Vec::new(),
-        });
+        i += 1;
     }
     Ok(members)
 }
@@ -618,7 +667,27 @@ fn dedent(input: &str) -> String {
 
 fn function_docstring(body: &[Stmt]) -> Option<String> {
     let first = body.first()?;
-    let Stmt::Expr(expr_stmt) = first else {
+    string_literal_statement(first)
+}
+
+/// The attribute-docstring convention: a bare string-literal statement
+/// placed immediately after a field, e.g.:
+///
+/// ```python
+/// timeout_secs: float | None = None
+/// """Fallback used when the caller doesn't pass one."""
+/// ```
+///
+/// Not a language feature (nothing stores it at runtime) but recognised by
+/// Sphinx's `autodoc`/`napoleon` and most IDEs, and cheap for a static-AST
+/// tool like this one to read the same way `function_docstring` reads a
+/// `def`'s leading string literal.
+fn attribute_docstring(next: Option<&Stmt>) -> Option<String> {
+    string_literal_statement(next?)
+}
+
+fn string_literal_statement(stmt: &Stmt) -> Option<String> {
+    let Stmt::Expr(expr_stmt) = stmt else {
         return None;
     };
     let Expr::StringLiteral(lit) = expr_stmt.value.as_ref() else {
@@ -708,7 +777,11 @@ fn render_member_md(out: &mut String, member: &Entry) {
     if let Some(doc) = &member.docstring {
         out.push_str(&render_docstring_block(doc));
         out.push('\n');
-    } else {
+    } else if member.kind != EntryKind::Constant {
+        // Fields (EntryKind::Constant members) never carry a docstring --
+        // Python has no field-docstring syntax, so asserting "no docstring"
+        // reads as a defect when the field may well have a `#` comment
+        // above it in source. Only methods/classes get the disclaimer.
         out.push_str("_No docstring on the source definition._\n\n");
     }
 }
@@ -823,6 +896,99 @@ mod tests {
         let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, vec!["__init__", "render"], "{names:?}");
         assert_eq!(members[1].docstring.as_deref(), Some("Render the widget."));
+    }
+
+    #[test]
+    fn render_class_members_includes_public_annotated_fields_skips_private_and_unannotated() {
+        let src = "class Widget(Struct, frozen=True):\n\
+             \x20   name: str\n\
+             \x20   size: int | None = None\n\
+             \x20   _hidden: int = 0\n\
+             \x20   legacy = 1\n\
+             \x20   def render(self) -> str:\n\
+             \x20       \"\"\"Render the widget.\"\"\"\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Widget").expect("Widget found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["name", "size", "render"], "{names:?}");
+        assert_eq!(members[0].signature.as_deref(), Some("name: str"));
+        assert_eq!(
+            members[1].signature.as_deref(),
+            Some("size: int | None = None")
+        );
+    }
+
+    #[test]
+    fn render_class_members_skips_attrs_init_false_fields_keeps_real_constructor_field() {
+        let src = "@define(slots=True, frozen=True)\n\
+             class Widget:\n\
+             \x20   search_path: Path\n\
+             \x20   sys_path: list[str] = field(init=False, repr=False)\n\
+             \x20   cwd: Path = field(init=False, repr=False, factory=Path.cwd)\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Widget").expect("Widget found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["search_path"], "{names:?}");
+    }
+
+    #[test]
+    fn render_class_members_reads_trailing_attribute_docstring() {
+        let src = "class Widget(Struct, frozen=True):\n\
+             \x20   timeout_secs: float | None = None\n\
+             \x20   \"\"\"Fallback used when the caller doesn't pass one.\"\"\"\n\
+             \x20   size: int = 0\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Widget").expect("Widget found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["timeout_secs", "size"], "{names:?}");
+        assert_eq!(
+            members[0].docstring.as_deref(),
+            Some("Fallback used when the caller doesn't pass one.")
+        );
+        assert_eq!(members[1].docstring, None);
+    }
+
+    #[test]
+    fn render_class_members_consumes_trailing_docstring_even_for_a_skipped_field() {
+        // A docstring after a `_`-prefixed field must not be misread as the
+        // *next* field's docstring (the field itself is filtered, but the
+        // string statement following it is still consumed).
+        let src = "class Widget(Struct, frozen=True):\n\
+             \x20   _hidden: int = 0\n\
+             \x20   \"\"\"Internal only.\"\"\"\n\
+             \x20   size: int = 0\n";
+        let m = module(src);
+        let Stmt::ClassDef(def) = find_definition(&m, "Widget").expect("Widget found") else {
+            panic!("expected a class definition");
+        };
+        let members = render_class_members("mod", src, &def.body).expect("renders members");
+        let names: Vec<&str> = members.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["size"], "{names:?}");
+        assert_eq!(members[0].docstring, None);
+    }
+
+    #[test]
+    fn render_member_md_omits_no_docstring_disclaimer_for_fields() {
+        let member = Entry {
+            name: "repo_root".to_string(),
+            kind: EntryKind::Constant,
+            source_module: "mod".to_string(),
+            signature: Some("repo_root: pathlib.Path".to_string()),
+            docstring: None,
+            members: Vec::new(),
+        };
+        let mut out = String::new();
+        render_member_md(&mut out, &member);
+        assert!(!out.contains("No docstring"), "{out}");
     }
 
     #[test]

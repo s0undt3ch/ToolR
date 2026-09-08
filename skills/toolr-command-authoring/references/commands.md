@@ -61,6 +61,18 @@ Example::
 
 ```
 
+#### `title`
+
+```python
+title: str
+```
+
+#### `description`
+
+```python
+description: str | None = None
+```
+
 ### `Context`
 
 **Kind:** class &nbsp;·&nbsp; **Source:** `toolr._context`
@@ -71,6 +83,52 @@ class Context
 
 ```text
 Context object passed to every command group function as the first argument.
+```
+
+#### `repo_root`
+
+```python
+repo_root: pathlib.Path
+```
+
+#### `parser`
+
+```python
+parser: ArgumentParser
+```
+
+#### `verbosity`
+
+```python
+verbosity: ConsoleVerbosity
+```
+
+#### `default_timeout_secs`
+
+```python
+default_timeout_secs: float | None = None
+```
+
+```text
+Fallback for `ctx.run(...)`'s `timeout_secs` when the caller doesn't pass one.
+
+Sourced from the rust front-end's `toolr --timeout-secs N` flag. `None` means
+no default — don't apply a watchdog.
+
+```
+
+#### `default_no_output_timeout_secs`
+
+```python
+default_no_output_timeout_secs: float | None = None
+```
+
+```text
+Fallback for `ctx.run(...)`'s `no_output_timeout_secs` when the caller doesn't pass one.
+
+Sourced from the rust front-end's `toolr --no-output-timeout-secs N` flag. `None`
+means no default — don't apply a watchdog.
+
 ```
 
 #### `prompt`
@@ -278,6 +336,24 @@ class DispatchCommand
 ```
 
 _No docstring on the source definition._
+
+#### `command`
+
+```python
+command: str
+```
+
+#### `command_args`
+
+```python
+command_args: dict[str, Any]
+```
+
+#### `schema`
+
+```python
+schema: CommandSchema
+```
 
 #### `argv`
 
