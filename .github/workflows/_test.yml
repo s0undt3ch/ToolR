@@ -46,6 +46,12 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Cargo's git-dependency checkouts (the ruff crates) can exceed
+      # Windows' 260-char MAX_PATH; core.longpaths lifts that limit.
+      - name: Enable git long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
       # Derive the artifact identifiers we'll download below from the
       # matrix entry + the runner OS. Centralised here so the rest of the
       # job can reference `steps.artifacts.outputs.*` instead of repeating
