@@ -24,10 +24,11 @@ no scaffolding. Just write whatever should appear in the notes.
 
 ### Fixes
 
-- `DispatchCommand.argv` no longer emits a bare flag for a `nargs="+"` keyword
-  argument that has no values. A `repeated`/`"+"` argument with an empty list
-  in `command_args` used to reconstruct as a valueless flag, which argparse
-  rejects outright — this broke any dispatched command with two or more
-  `nargs="+"` keyword arguments (including mutually exclusive `nargs="+"`
-  pairs, which were unusable entirely). `nargs="*"` is unaffected: a valueless
-  `"*"` flag is legal argparse, so it's still forwarded bare. (#483)
+- `DispatchCommand.argv` no longer emits a bare flag for a `nargs="+"`/`"*"`
+  keyword argument that has no values. A `repeated` argument with an empty
+  list in `command_args` used to reconstruct as a valueless flag — argparse
+  rejects that outright for `"+"`, breaking any dispatched command with two
+  or more `nargs="+"` keyword arguments (including mutually exclusive
+  `nargs="+"` pairs, which were unusable entirely). The flag is now omitted
+  for an empty list on both arities, since `command_args` can't distinguish
+  "typed with zero values" from "never typed" for either one. (#483)
