@@ -145,6 +145,19 @@ def test_dispatch_command_holds_match():
             [ArgSchema(name="labels", kind="positional", help="", nargs="*")],
             ["a", "b", "c"],
         ),
+        # Empty "+" list omits the flag entirely — argparse rejects a valueless "+" (#483).
+        (
+            {"subscriber_ids": []},
+            [ArgSchema(name="subscriber_ids", kind="repeated", help="", nargs="+")],
+            [],
+        ),
+        # Empty "*" list omits the flag too — an unsupplied repeated arg and one
+        # typed with zero values are indistinguishable in command_args.
+        (
+            {"tags": []},
+            [ArgSchema(name="tags", kind="repeated", help="", nargs="*")],
+            [],
+        ),
     ],
 )
 def test_argv_reconstruction(args_in, schema_args, expected):
