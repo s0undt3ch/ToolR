@@ -21,3 +21,13 @@ no scaffolding. Just write whatever should appear in the notes.
   should resolve to). If you need a gnu build, `cargo build --target
   x86_64-unknown-linux-gnu` still works from source; `installation/install.sh`
   now always resolves Linux hosts to the musl asset.
+
+### Fixes
+
+- `DispatchCommand.argv` no longer emits a bare flag for a `nargs="+"` keyword
+  argument that has no values. A `repeated`/`"+"` argument with an empty list
+  in `command_args` used to reconstruct as a valueless flag, which argparse
+  rejects outright — this broke any dispatched command with two or more
+  `nargs="+"` keyword arguments (including mutually exclusive `nargs="+"`
+  pairs, which were unusable entirely). `nargs="*"` is unaffected: a valueless
+  `"*"` flag is legal argparse, so it's still forwarded bare. (#483)

@@ -382,7 +382,10 @@ For each argument in `schema.arguments` that appears in
   followed by all N values.
 - `repeated`, `nargs in ("+", "*")` → `--name value1 value2 ...`
   in one occurrence (argparse `nargs="+"`/`"*"` on a
-  keyword-style arg).
+  keyword-style arg). An empty list omits the flag entirely:
+  `command_args` can't distinguish "flag typed with no values"
+  from "flag never typed", so an empty list is treated as the
+  latter for both arities.
 - `repeated`, `nargs is None` (`action="append"`) →
   `--name value` once per element.
 

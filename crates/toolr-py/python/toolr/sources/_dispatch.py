@@ -61,7 +61,10 @@ class DispatchCommand(Struct, frozen=True):
           followed by all N values.
         - `repeated`, `nargs in ("+", "*")` → `--name value1 value2 ...`
           in one occurrence (argparse `nargs="+"`/`"*"` on a
-          keyword-style arg).
+          keyword-style arg). An empty list omits the flag entirely:
+          `command_args` can't distinguish "flag typed with no values"
+          from "flag never typed", so an empty list is treated as the
+          latter for both arities.
         - `repeated`, `nargs is None` (`action="append"`) →
           `--name value` once per element.
 
@@ -100,8 +103,9 @@ class DispatchCommand(Struct, frozen=True):
                     out.extend([_flag_for_arg(arg), str(value)])
             elif arg.kind == "repeated":
                 if arg.nargs in ("+", "*"):
-                    out.append(_flag_for_arg(arg))
-                    out.extend(str(element) for element in value)
+                    if value:
+                        out.append(_flag_for_arg(arg))
+                        out.extend(str(element) for element in value)
                 else:
                     for element in value:
                         out.extend([_flag_for_arg(arg), str(element)])
