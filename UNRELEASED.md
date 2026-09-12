@@ -34,6 +34,21 @@ no scaffolding. Just write whatever should appear in the notes.
   `stream_output`, `no_output_timeout_secs`, and `input` — all four require
   piping. (#485)
 
+- Tab completion now shows a one-line description next to each group/command
+  candidate, sourced from the group's title or the command's summary. fish
+  renders these natively (each `__complete` line is now `value<TAB>description`,
+  which fish already understands); zsh switches to a one-per-line listing via
+  `compadd -d` when there are 20 or fewer candidates, falling back to the
+  previous compact grid above that. bash has no per-candidate description
+  support, so its script now strips the description before handing
+  candidates to `compgen` — its completion behavior is otherwise unchanged.
+
+  An already-installed zsh or bash completion script predates this
+  `value<TAB>description` wire format and won't parse it correctly; re-run
+  `toolr self completion install <shell> --force` after upgrading. fish's
+  installed script needs no change — fish already splits candidates on tab
+  natively.
+
 ### Fixes
 
 - `DispatchCommand.argv` no longer emits a bare flag for a `nargs="+"`/`"*"`

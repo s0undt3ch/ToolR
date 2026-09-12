@@ -18,7 +18,7 @@ pub mod freshness;
 pub mod install;
 pub mod scripts;
 
-pub use engine::serve_completions;
+pub use engine::{Candidate, serve_completions, sort_and_dedup_by_value};
 pub use freshness::{ResolvedManifest, resolve_manifest_at_tab};
 pub use install::{InstallOptions, InstallOutcome, PriorState, install_path_for, install_script};
 pub use scripts::{Shell, completion_script};

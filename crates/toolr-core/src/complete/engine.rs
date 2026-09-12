@@ -2,14 +2,43 @@
 
 use crate::manifest::{Argument, ArgumentKind, Command, Manifest};
 
+/// A single completion candidate: the word to insert, plus an optional
+/// one-line description (a group's `title`, a command's `summary`, or a
+/// flag's `help`). Shells that support per-candidate descriptions (fish
+/// natively, zsh via `compadd -d`) render `description` alongside `value`;
+/// others ignore it. Empty `description` means none is available.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    pub value: String,
+    pub description: String,
+}
+
+impl Candidate {
+    pub fn new(value: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            // The wire format between `__complete` and the shell scripts is
+            // one `value<TAB>description` line per candidate — a literal
+            // tab or newline in a hand-written title/summary/help string
+            // would otherwise corrupt that framing (extra bogus candidates
+            // in zsh/fish, a misaligned description column).
+            description: description.into().replace(['\t', '\n', '\r'], " "),
+        }
+    }
+
+    pub(crate) fn bare(value: impl Into<String>) -> Self {
+        Self::new(value, String::new())
+    }
+}
+
 /// Compute the list of completion candidates for a tokenised command
 /// line. `tokens` is everything after `toolr` itself — for example
 /// `["ci", "hello", "--na"]`. The last token is treated as the
 /// in-progress word and is matched as a prefix; earlier tokens are
 /// matched exactly.
 ///
-/// The returned vector is alphabetically sorted and deduplicated.
-pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<String> {
+/// The returned vector is sorted by `value` and deduplicated on it.
+pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<Candidate> {
     let mut out = match classify(manifest, tokens) {
         Slot::Group { prefix } => {
             if is_flag_prefix(&prefix) {
@@ -30,24 +59,33 @@ pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<String> 
         Slot::Positional { argument, prefix } => values(argument, &prefix),
         Slot::None => Vec::new(),
     };
-    out.sort();
-    out.dedup();
+    sort_and_dedup_by_value(&mut out);
     out
+}
+
+/// Sort by `value` and drop later duplicates sharing one. Shared with the
+/// binary's own completion merging (root flags, built-in `self`/`project`
+/// entries) so every call site orders and dedups candidates the same way.
+pub fn sort_and_dedup_by_value(candidates: &mut Vec<Candidate>) {
+    candidates.sort_by(|a, b| a.value.cmp(&b.value));
+    candidates.dedup_by(|a, b| a.value == b.value);
 }
 
 fn is_flag_prefix(prefix: &str) -> bool {
     prefix.starts_with("--") || prefix == "-"
 }
 
+const HELP_DESCRIPTION: &str = "Print help";
+
 /// Group nodes (the root and any sub-group) carry no argument schema in
 /// the manifest, but clap injects `--help` on every subcommand. Offer it
 /// when the user has explicitly typed a flag prefix; binaries layer
 /// additional root-level flags on top via their own completion path.
-fn group_node_flags(prefix: &str) -> Vec<String> {
+fn group_node_flags(prefix: &str) -> Vec<Candidate> {
     ["--help"]
         .into_iter()
         .filter(|f| f.starts_with(prefix))
-        .map(str::to_string)
+        .map(|f| Candidate::new(f, HELP_DESCRIPTION))
         .collect()
 }
 
@@ -370,40 +408,43 @@ fn count_positionals_consumed(command: &Command, arg_tokens: &[String]) -> usize
     idx
 }
 
-/// Top-level group names matching `prefix`.
-fn groups(manifest: &Manifest, prefix: &str) -> Vec<String> {
+/// Top-level group names matching `prefix`, described by their `title`.
+fn groups(manifest: &Manifest, prefix: &str) -> Vec<Candidate> {
     manifest
         .groups
         .iter()
         .filter(|g| g.parent.is_none())
-        .map(|g| g.name.clone())
-        .filter(|name| name.starts_with(prefix))
+        .filter(|g| g.name.starts_with(prefix))
+        .map(|g| Candidate::new(g.name.clone(), g.title.clone()))
         .collect()
 }
 
 /// At the resolved group level, candidates are both *child groups*
 /// (their leaf name) and *direct commands*. Lets `toolr docker <Tab>`
 /// complete to `image`, `container`, plus any commands attached to
-/// `docker` itself.
-fn commands(manifest: &Manifest, group: &str, prefix: &str) -> Vec<String> {
-    let mut out: Vec<String> = manifest
+/// `docker` itself. Each is described by its group `title` or command
+/// `summary`.
+fn commands(manifest: &Manifest, group: &str, prefix: &str) -> Vec<Candidate> {
+    // Filter by prefix before cloning the description text, so a narrow
+    // prefix doesn't pay for summaries/titles it's about to discard.
+    let mut out: Vec<Candidate> = manifest
         .commands
         .iter()
-        .filter(|c| c.group == group)
-        .map(|c| c.name.clone())
+        .filter(|c| c.group == group && c.name.starts_with(prefix))
+        .map(|c| Candidate::new(c.name.clone(), c.summary.clone()))
         .collect();
     out.extend(
         manifest
             .groups
             .iter()
-            .filter(|g| g.parent.as_deref() == Some(group))
-            .map(|g| g.name.clone()),
+            .filter(|g| g.parent.as_deref() == Some(group) && g.name.starts_with(prefix))
+            .map(|g| Candidate::new(g.name.clone(), g.title.clone())),
     );
-    out.into_iter().filter(|name| name.starts_with(prefix)).collect()
+    out
 }
 
-fn flags(command: &Command, prefix: &str) -> Vec<String> {
-    let mut out: Vec<String> = command
+fn flags(command: &Command, prefix: &str) -> Vec<Candidate> {
+    let mut out: Vec<Candidate> = command
         .arguments
         .iter()
         .filter(|a| {
@@ -412,23 +453,28 @@ fn flags(command: &Command, prefix: &str) -> Vec<String> {
                 ArgumentKind::Positional | ArgumentKind::VarPositional | ArgumentKind::OptionalPositional
             ) || (a.kind == ArgumentKind::FixedArity && a.long_flag.is_none()))
         })
-        .map(|a| format!("--{}", a.name.replace('_', "-")))
+        .filter_map(|a| {
+            let value = format!("--{}", a.name.replace('_', "-"));
+            value
+                .starts_with(prefix)
+                .then(|| Candidate::new(value, a.help.clone()))
+        })
         .collect();
     // clap injects `--help` on every leaf, but only surface it when the
     // user is explicitly probing flags (`--`/`-` prefix). The empty-prefix
     // flag fallback that fires for argparse-style children still returns
     // only the command's own flags, so existing behavior is preserved.
-    if is_flag_prefix(prefix) {
-        out.push("--help".to_string());
+    if is_flag_prefix(prefix) && "--help".starts_with(prefix) {
+        out.push(Candidate::new("--help", HELP_DESCRIPTION));
     }
-    out.into_iter().filter(|flag| flag.starts_with(prefix)).collect()
+    out
 }
 
-fn values(argument: &Argument, prefix: &str) -> Vec<String> {
+fn values(argument: &Argument, prefix: &str) -> Vec<Candidate> {
     argument
         .allowed_values
         .iter()
         .filter(|v| v.starts_with(prefix))
-        .cloned()
+        .map(|v| Candidate::bare(v.clone()))
         .collect()
 }

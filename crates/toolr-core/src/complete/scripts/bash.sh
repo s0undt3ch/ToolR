@@ -19,12 +19,19 @@ _toolr_complete() {
     # element so the engine treats it as the prefix.
     local args=("${words[@]:1}")
 
-    local IFS=$'\n'
-    local candidates
-    candidates=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null) || return 0
+    local raw
+    raw=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null) || return 0
+    [[ -z "$raw" ]] && return 0
+
+    # Each line is `value<TAB>description` — bash has no per-candidate
+    # description support, so drop everything from the tab onward.
+    local values=() line
+    while IFS=$'\t' read -r line _; do
+        values+=("$line")
+    done <<< "$raw"
 
     # shellcheck disable=SC2207
-    COMPREPLY=($(compgen -W "$candidates" -- "$cur"))
+    COMPREPLY=($(compgen -W "${values[*]}" -- "$cur"))
 }
 
 complete -F _toolr_complete toolr
