@@ -1689,6 +1689,11 @@ exit does not raise. Inspect <code>result.returncode</code> yourself.</p>
 </span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">returncode</span><span class="p">,</span> <span class="s2">"git rev-parse failed"</span><span class="p">)</span>
 </span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">sha</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
 </span></code></pre></div>
+<p>For a command that needs a real terminal — <code>$EDITOR</code>, <code>sops</code>, a login
+prompt — pass <code>interactive=True</code> instead. It inherits stdin/stdout/stderr
+directly rather than piping them, so the child sees a TTY on all three.
+It's incompatible with <code>capture_output</code>, <code>stream_output</code>,
+<code>no_output_timeout_secs</code>, and <code>input</code> — all of those require piping.</p>
 <h2 id="working-directory">Working directory<a class="headerlink" href="#working-directory" title="Permanent link">&para;</a></h2>
 <p>Commands run with the working directory set to the <strong>repo root</strong>, no
 matter where you invoke <code>toolr</code> from — the same convention <code>make</code> and

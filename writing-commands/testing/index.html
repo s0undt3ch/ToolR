@@ -1901,7 +1901,8 @@ result (and its already-read stream) on every call, so it's only safe for a comm
 </span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="n">timeout_secs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="n">no_output_timeout_secs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="p">)</span>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="n">interactive</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="mocking-ctxchdir">Mocking <code>ctx.chdir</code><a class="headerlink" href="#mocking-ctxchdir" title="Permanent link">&para;</a></h3>
 <p><code>chdir()</code> calls the real <code>os.chdir</code> twice (enter and restore) by default — fine for most tests, but
