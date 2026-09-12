@@ -153,6 +153,7 @@ def test_run_uses_run_impl_override(parser, repo_root):
         capture_output=False,
         timeout_secs=None,
         no_output_timeout_secs=None,
+        interactive=False,
     )
 
 
@@ -174,3 +175,71 @@ def test_run_defaults_to_real_command_run(parser, repo_root):
     )
 
     assert ctx._run_impl is command.run
+
+
+def test_run_interactive_defaults_stream_output_to_false(parser, repo_root):
+    """interactive=True must not trip the stream_output incompatibility by default (#485)."""
+    fake_result = CommandResult(args=["echo", "hi"], stdout=None, stderr=None, returncode=0)
+    run_impl = Mock(return_value=fake_result)
+
+    console_stderr = Console(
+        file=io.StringIO(), stderr=True, force_terminal=False, theme=TOOLR_THEME
+    )
+    console_stdout = Console(
+        file=io.StringIO(), stderr=False, force_terminal=False, theme=TOOLR_THEME
+    )
+
+    ctx = Context(
+        repo_root=repo_root,
+        parser=parser,
+        verbosity=ConsoleVerbosity.NORMAL,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
+        _run_impl=run_impl,
+    )
+
+    ctx.run("echo", "hi", interactive=True)
+
+    run_impl.assert_called_once_with(
+        ("echo", "hi"),
+        stream_output=False,
+        capture_output=False,
+        timeout_secs=None,
+        no_output_timeout_secs=None,
+        interactive=True,
+    )
+
+
+def test_run_interactive_ignores_default_no_output_timeout_secs(parser, repo_root):
+    """A `--no-output-timeout-secs` set on the Context must not leak into
+    `interactive=True` calls — the caller didn't ask for that watchdog (#485)."""
+    fake_result = CommandResult(args=["echo", "hi"], stdout=None, stderr=None, returncode=0)
+    run_impl = Mock(return_value=fake_result)
+
+    console_stderr = Console(
+        file=io.StringIO(), stderr=True, force_terminal=False, theme=TOOLR_THEME
+    )
+    console_stdout = Console(
+        file=io.StringIO(), stderr=False, force_terminal=False, theme=TOOLR_THEME
+    )
+
+    ctx = Context(
+        repo_root=repo_root,
+        parser=parser,
+        verbosity=ConsoleVerbosity.NORMAL,
+        _console_stderr=console_stderr,
+        _console_stdout=console_stdout,
+        _run_impl=run_impl,
+        default_no_output_timeout_secs=30.0,
+    )
+
+    ctx.run("echo", "hi", interactive=True)
+
+    run_impl.assert_called_once_with(
+        ("echo", "hi"),
+        stream_output=False,
+        capture_output=False,
+        timeout_secs=None,
+        no_output_timeout_secs=None,
+        interactive=True,
+    )

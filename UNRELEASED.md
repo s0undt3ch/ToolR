@@ -22,6 +22,18 @@ no scaffolding. Just write whatever should appear in the notes.
   x86_64-unknown-linux-gnu` still works from source; `installation/install.sh`
   now always resolves Linux hosts to the musl asset.
 
+### Features
+
+- `ctx.run(...)` gains an `interactive: bool = False` parameter. It inherits
+  the real stdin/stdout/stderr instead of piping them, so a command that
+  needs a real terminal — `$EDITOR`, `sops`, a login prompt — sees a TTY on
+  all three streams. Previously the child's stdout/stderr were always piped
+  regardless of `stream_output`/`capture_output`, so any command that gates
+  on `isatty()` (full-screen editors especially) opened and immediately
+  exited. `interactive=True` is incompatible with `capture_output`,
+  `stream_output`, `no_output_timeout_secs`, and `input` — all four require
+  piping. (#485)
+
 ### Fixes
 
 - `DispatchCommand.argv` no longer emits a bare flag for a `nargs="+"`/`"*"`

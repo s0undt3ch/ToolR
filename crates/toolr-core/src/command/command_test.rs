@@ -803,4 +803,45 @@ mod test_suite {
             "expected spawn-failure prefix, got: {msg}",
         );
     }
+
+    #[test]
+    fn interactive_mode_defaults_to_false() {
+        let cfg = CommandConfig::new(vec!["echo".into()]);
+        assert!(!cfg.interactive);
+    }
+
+    #[test]
+    fn interactive_mode_ignores_capture_fds() -> Result<()> {
+        // #485: when `interactive` is set, the child's stdio is inherited
+        // directly from the parent — capture fds must be left untouched
+        // rather than fed through the pipe-and-copy path.
+        require_python!(python, "interactive_mode_ignores_capture_fds");
+
+        let mut stdout_file = NamedTempFile::new()?;
+        let stderr_file = NamedTempFile::new()?;
+        let stdout_fd = get_file_descriptor(stdout_file.as_file());
+        let stderr_fd = get_file_descriptor(stderr_file.as_file());
+
+        let config = CommandConfig {
+            args: vec![python, "-c".to_string(), "print('hello')".to_string()],
+            interactive: true,
+            stdout_fd: wrap_fd(stdout_fd),
+            stderr_fd: wrap_fd(stderr_fd),
+            ..Default::default()
+        };
+
+        let result = run_command_internal(config);
+        assert!(result.is_ok(), "Command failed: {result:?}");
+        assert_eq!(result.unwrap(), 0, "Command should return exit code 0");
+
+        stdout_file.seek(SeekFrom::Start(0))?;
+        let mut stdout_content = String::new();
+        stdout_file.read_to_string(&mut stdout_content)?;
+        assert!(
+            stdout_content.is_empty(),
+            "interactive mode must not write to the capture fd, got: {stdout_content:?}"
+        );
+
+        Ok(())
+    }
 }

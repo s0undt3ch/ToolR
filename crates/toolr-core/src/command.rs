@@ -121,6 +121,10 @@ pub struct CommandConfig {
     pub timeout_secs: Option<f64>,
     pub no_output_timeout_secs: Option<f64>,
     pub cwd: Option<PathBuf>,       // Current working directory
+    /// Inherit stdin/stdout/stderr directly from the parent instead of
+    /// piping them — required for interactive children (editors, prompts)
+    /// that check `isatty()` on any of the three streams.
+    pub interactive: bool,
 }
 
 impl Default for CommandConfig {
@@ -148,6 +152,7 @@ impl Default for CommandConfig {
             timeout_secs: None,
             no_output_timeout_secs: None,
             cwd: env::current_dir().ok(),  // Default to current working directory
+            interactive: false,
         }
     }
 }
@@ -205,10 +210,16 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
         command.stdin(Stdio::inherit());
     }
 
-    // For stdout and stderr, we'll always use pipes
-    // This allows us to handle them properly for timeout detection and redirection
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
+    // In interactive mode the child gets the parent's real stdout/stderr
+    // (so `isatty()` succeeds for editors/prompts) instead of pipes routed
+    // through the capture/streaming machinery below.
+    if config.interactive {
+        command.stdout(Stdio::inherit());
+        command.stderr(Stdio::inherit());
+    } else {
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+    }
 
     // Start the command
     let mut child = command.spawn().map_err(|e| {
@@ -226,9 +237,10 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
         }
     }
 
-    // Take stdout and stderr pipes
-    let stdout = child.stdout.take().expect("Failed to get stdout handle");
-    let stderr = child.stderr.take().expect("Failed to get stderr handle");
+    // Take stdout and stderr pipes — `None` in interactive mode, where
+    // stdio was inherited above rather than piped.
+    let stdout = (!config.interactive).then(|| child.stdout.take().expect("Failed to get stdout handle"));
+    let stderr = (!config.interactive).then(|| child.stderr.take().expect("Failed to get stderr handle"));
 
     // Track last output time for no_output_timeout_secs
     let last_output = Arc::new(Mutex::new(Instant::now()));
@@ -247,7 +259,7 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
     #[cfg(unix)]
     let sys_stdout_fd = config.sys_stdout_fd;
 
-    let stdout_thread = thread::spawn(move || {
+    let stdout_thread = stdout.map(|stdout| thread::spawn(move || {
         let mut buffer = [0; 8192];
         let mut reader = stdout;
 
@@ -325,7 +337,7 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                 Err(_) => break,
             }
         }
-    });
+    }));
 
     // Setup stderr handling - similar to stdout
     let last_output_clone = Arc::clone(&last_output);
@@ -341,7 +353,7 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
     #[cfg(unix)]
     let sys_stderr_fd = config.sys_stderr_fd;
 
-    let stderr_thread = thread::spawn(move || {
+    let stderr_thread = stderr.map(|stderr| thread::spawn(move || {
         let mut buffer = [0; 8192];
         let mut reader = stderr;
 
@@ -419,7 +431,7 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                 Err(_) => break,
             }
         }
-    });
+    }));
 
     // Wait for command completion with timeout handling
     let start_time = Instant::now();
@@ -468,9 +480,13 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
         }
     };
 
-    // Wait for stdout/stderr threads to finish
-    let _ = stdout_thread.join();
-    let _ = stderr_thread.join();
+    // Wait for stdout/stderr threads to finish (absent in interactive mode)
+    if let Some(t) = stdout_thread {
+        let _ = t.join();
+    }
+    if let Some(t) = stderr_thread {
+        let _ = t.join();
+    }
 
     // Get exit code and return it, regardless of value
     let returncode = status.code().unwrap_or(-1);

@@ -37,6 +37,12 @@ exit does not raise. Inspect `result.returncode` yourself.
 --8<-- "docs/writing-commands/files/example.py:34:45"
 ```
 
+For a command that needs a real terminal — `$EDITOR`, `sops`, a login
+prompt — pass `interactive=True` instead. It inherits stdin/stdout/stderr
+directly rather than piping them, so the child sees a TTY on all three.
+It's incompatible with `capture_output`, `stream_output`,
+`no_output_timeout_secs`, and `input` — all of those require piping.
+
 ## Working directory
 
 Commands run with the working directory set to the **repo root**, no

@@ -43,7 +43,7 @@ class CommandResult(Struct, Generic[T], frozen=True):
     returncode: int
 
 
-def run(  # noqa: PLR0915
+def run(  # noqa: PLR0913, PLR0915
     args: Sequence[str],
     *,
     cwd: str | pathlib.Path | None = None,
@@ -55,6 +55,7 @@ def run(  # noqa: PLR0915
     encoding: str | None = "utf-8",
     timeout_secs: float | None = None,
     no_output_timeout_secs: float | None = None,
+    interactive: bool = False,
 ) -> CommandResult[str] | CommandResult[bytes]:
     """
     Run a command in a subprocess.
@@ -70,6 +71,10 @@ def run(  # noqa: PLR0915
         encoding: Encoding to use for text output
         timeout_secs: Maximum time to wait for command completion
         no_output_timeout_secs: Maximum time to wait without output
+        interactive: Inherit the real stdin/stdout/stderr instead of piping them, so the
+            child sees a TTY on all three streams (needed for `$EDITOR`, `sops`, prompts,
+            etc). Incompatible with `capture_output`, `stream_output`, `no_output_timeout_secs`,
+            and `input` — all of those require piping.
 
     Returns:
         CommandResult object containing stdout, stderr, and return code
@@ -83,6 +88,20 @@ def run(  # noqa: PLR0915
     if stream_output and not text:
         err_msg = "stream_output=True requires text=True"
         raise ValueError(err_msg)
+
+    if interactive:
+        if capture_output:
+            err_msg = "interactive=True is incompatible with capture_output=True"
+            raise ValueError(err_msg)
+        if stream_output:
+            err_msg = "interactive=True is incompatible with stream_output=True"
+            raise ValueError(err_msg)
+        if no_output_timeout_secs is not None:
+            err_msg = "interactive=True is incompatible with no_output_timeout_secs"
+            raise ValueError(err_msg)
+        if input is not None:
+            err_msg = "interactive=True is incompatible with input"
+            raise ValueError(err_msg)
 
     if cwd is None:
         cwd = pathlib.Path.cwd()
@@ -150,6 +169,7 @@ def run(  # noqa: PLR0915
             sys_stderr_fd=sys_stderr_fd,
             timeout_secs=timeout_secs,
             no_output_timeout_secs=no_output_timeout_secs,
+            interactive=interactive,
         )
 
         if TYPE_CHECKING:

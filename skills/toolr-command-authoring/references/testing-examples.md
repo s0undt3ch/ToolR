@@ -25,6 +25,7 @@ def test_deploy_checks_git_status(tmp_path):
         capture_output=True,
         timeout_secs=None,
         no_output_timeout_secs=None,
+        interactive=False,
     )
 
 

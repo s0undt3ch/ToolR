@@ -256,10 +256,11 @@ Exit the command execution.
 def run(
     self,
     *cmdline: str,
-    stream_output: bool = True,
+    stream_output: bool | None = None,
     capture_output: bool = False,
     timeout_secs: float | None = None,
     no_output_timeout_secs: float | None = None,
+    interactive: bool = False,
     **kwargs: Any,
 ) -> CommandResult[str] | CommandResult[bytes]:
 ```
@@ -272,10 +273,16 @@ simpler interface for command functions.
 
 Args:
     cmdline: Command line to run
-    stream_output: Whether to stream output to stdout/stderr
+    stream_output: Whether to stream output to stdout/stderr. Defaults to `True`,
+        or to `False` when `interactive=True` (streaming is redundant once stdio
+        is inherited directly).
     capture_output: Whether to capture output to return
     timeout_secs: Maximum time to wait for command completion
     no_output_timeout_secs: Maximum time to wait without output
+    interactive: Inherit the real stdin/stdout/stderr instead of piping them, so the
+        child sees a TTY on all three streams (needed for `$EDITOR`, `sops`, prompts,
+        etc). Incompatible with `capture_output`, `stream_output`,
+        `no_output_timeout_secs`, and `input` — all of those require piping.
     kwargs: Additional keyword arguments passed to the internal runner.
 
 Returns:

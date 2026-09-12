@@ -388,3 +388,64 @@ def test_command_with_cwd(tmp_path, cat_command, cwd_command):
     result.stdout.seek(0)
     content = result.stdout.read()
     assert sub_content in content, f"Expected content '{sub_content}' in output: '{content}'"
+
+
+def test_interactive_incompatible_with_capture_output(echo_command):
+    with pytest.raises(
+        ValueError, match="interactive=True is incompatible with capture_output=True"
+    ):
+        run(echo_command("test"), interactive=True, capture_output=True)
+
+
+def test_interactive_incompatible_with_stream_output(echo_command):
+    with pytest.raises(
+        ValueError, match="interactive=True is incompatible with stream_output=True"
+    ):
+        run(echo_command("test"), interactive=True, stream_output=True)
+
+
+def test_interactive_incompatible_with_no_output_timeout_secs(echo_command):
+    with pytest.raises(
+        ValueError, match="interactive=True is incompatible with no_output_timeout_secs"
+    ):
+        run(echo_command("test"), interactive=True, no_output_timeout_secs=5.0)
+
+
+def test_interactive_incompatible_with_input(stdin_cat_command):
+    with pytest.raises(ValueError, match="interactive=True is incompatible with input"):
+        run(stdin_cat_command, interactive=True, input="test")
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="pty is POSIX-only")
+def test_interactive_inherits_a_real_tty():
+    """#485: an interactive child must see a real TTY on stdin/stdout/stderr."""
+    import pty  # POSIX-only module; importing at module level breaks Windows collection
+
+    pid, fd = pty.fork()
+    if pid == 0:
+        # `cmd` is built on its own line so a traceback from the `run(cmd, ...)`
+        # line below never quotes (and so never spuriously matches) these markers.
+        script = (
+            "from toolr.utils.command import run\n"
+            "cmd = ['bash', '-c', 'test -t 0 && echo IN_TTY; test -t 1 && echo OUT_TTY; test -t 2 && echo ERR_TTY']\n"
+            "run(cmd, interactive=True)\n"
+        )
+        os.execvp(sys.executable, [sys.executable, "-c", script])  # noqa: S606
+    else:
+        try:
+            output = b""
+            while True:
+                try:
+                    chunk = os.read(fd, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                output += chunk
+        finally:
+            os.waitpid(pid, 0)
+
+        decoded = output.decode()
+        assert "IN_TTY" in decoded, decoded
+        assert "OUT_TTY" in decoded, decoded
+        assert "ERR_TTY" in decoded, decoded
