@@ -6,6 +6,81 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.33.0 - 2026-09-12
+
+### Notes
+
+### Breaking
+
+- Linux release archives are now musl-only. The `x86_64-unknown-linux-gnu` and
+  `aarch64-unknown-linux-gnu` binaries are no longer published — the musl
+  builds are statically linked and run fine on glibc hosts, so shipping both
+  only created ambiguity for downstream packaging (aqua-registry's Renovate
+  updater disagreed with mise over which libc the plain `linux-x64` key
+  should resolve to). If you need a gnu build, `cargo build --target
+  x86_64-unknown-linux-gnu` still works from source; `installation/install.sh`
+  now always resolves Linux hosts to the musl asset.
+
+### Features
+
+- `ctx.run(...)` gains an `interactive: bool = False` parameter. It inherits
+  the real stdin/stdout/stderr instead of piping them, so a command that
+  needs a real terminal — `$EDITOR`, `sops`, a login prompt — sees a TTY on
+  all three streams. Previously the child's stdout/stderr were always piped
+  regardless of `stream_output`/`capture_output`, so any command that gates
+  on `isatty()` (full-screen editors especially) opened and immediately
+  exited. `interactive=True` is incompatible with `capture_output`,
+  `stream_output`, `no_output_timeout_secs`, and `input` — all four require
+  piping. (#485)
+
+- Tab completion now shows a one-line description next to each group/command
+  candidate, sourced from the group's title or the command's summary. fish
+  renders these natively (each `__complete` line is now `value<TAB>description`,
+  which fish already understands); zsh switches to a one-per-line listing via
+  `compadd -d` when there are 20 or fewer candidates, falling back to the
+  previous compact grid above that. bash has no per-candidate description
+  support, so its script now strips the description before handing
+  candidates to `compgen` — its completion behavior is otherwise unchanged.
+
+  An already-installed zsh or bash completion script predates this
+  `value<TAB>description` wire format and won't parse it correctly; re-run
+  `toolr self completion install <shell> --force` after upgrading. fish's
+  installed script needs no change — fish already splits candidates on tab
+  natively.
+
+### Fixes
+
+- `DispatchCommand.argv` no longer emits a bare flag for a `nargs="+"`/`"*"`
+  keyword argument that has no values. A `repeated` argument with an empty
+  list in `command_args` used to reconstruct as a valueless flag — argparse
+  rejects that outright for `"+"`, breaking any dispatched command with two
+  or more `nargs="+"` keyword arguments (including mutually exclusive
+  `nargs="+"` pairs, which were unusable entirely). The flag is now omitted
+  for an empty list on both arities, since `command_args` can't distinguish
+  "typed with zero values" from "never typed" for either one. (#483)
+
+### <!-- 0 -->🚀 Features
+
+- *(skill-refs)* Recognise attribute-docstring fields ([`c9236c5`](https://github.com/s0undt3ch/ToolR/commit/c9236c5b9d1b3cdf7b646033f3a30082139d56ad))
+- *(command)* Add interactive=True to ctx.run for real TTY passthrough ([`32dca8a`](https://github.com/s0undt3ch/ToolR/commit/32dca8a76be2421617b3f5658eda545fd692dc5c))
+- *(complete)* Show group/command descriptions in tab completion ([`f447390`](https://github.com/s0undt3ch/ToolR/commit/f447390120031b286172205dbc4993eff5373656))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(release)* Ship musl-only Linux binary archives ([`68cb10b`](https://github.com/s0undt3ch/ToolR/commit/68cb10b74fafdec0f0842f96a32fe7f32febff63))
+- *(action)* Resolve musl-only Linux triple in setup-toolr ([`f483214`](https://github.com/s0undt3ch/ToolR/commit/f483214f3d0212ad537e3aa7ec03b816243ad533))
+- *(ci)* Download the musl binary archive in _test.yml/_bench.yml ([`eb78cba`](https://github.com/s0undt3ch/ToolR/commit/eb78cba5f11f8076e75b1db1b6a3297523276bb1))
+- *(skill-refs)* Render class fields, link SKILL.md to their anchors ([`f74c456`](https://github.com/s0undt3ch/ToolR/commit/f74c4563b0bcb744886a5b7558600f330b55de7a))
+- *(ci)* Enable git core.longpaths on Windows CI runners ([`a60626c`](https://github.com/s0undt3ch/ToolR/commit/a60626ca829d0665898dd2c01c4ffc4b1cf887ec))
+- *(sources)* Omit empty nargs="+"/"*" flag in DispatchCommand.argv ([`9289b44`](https://github.com/s0undt3ch/ToolR/commit/9289b44b256667a0e0780ab88d3f659459fc201f))
+
+### <!-- 3 -->📚 Documentation
+
+- *(unreleased)* Fix stale nargs="*" claim in #483 release note ([`b8b2fad`](https://github.com/s0undt3ch/ToolR/commit/b8b2fad86123e5490f09f99932cc9166333579e4))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(mise)* Bump mise and pinned python patch versions ([`b763f14`](https://github.com/s0undt3ch/ToolR/commit/b763f14e8537a5540dc85632b6f7312107ecec47))
 ## 0.32.0 - 2026-08-23
 
 ### Notes
