@@ -43,7 +43,9 @@ def deploy(ctx, env: Literal["staging", "production"]):
     tmp
 }
 
-fn complete(tmp: &TempDir, args: &[&str]) -> String {
+/// Raw `__complete` stdout: one `value<TAB>description` line per
+/// candidate (description may be empty).
+fn complete_raw(tmp: &TempDir, args: &[&str]) -> String {
     let cwd = tmp.path().to_path_buf();
     let mut full: Vec<String> = vec!["__complete".into(), cwd.to_string_lossy().to_string()];
     for a in args {
@@ -64,12 +66,38 @@ fn complete(tmp: &TempDir, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
+/// Just the candidate values, one per line — for tests that don't care
+/// about descriptions.
+fn complete(tmp: &TempDir, args: &[&str]) -> String {
+    complete_raw(tmp, args)
+        .lines()
+        .map(|line| line.split('\t').next().unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[test]
 fn completes_groups_at_top_level() {
     let tmp = fixture();
     let stdout = complete(&tmp, &[""]);
     let lines: Vec<&str> = stdout.lines().collect();
     assert!(lines.contains(&"ci"), "missing ci in {stdout}");
+}
+
+#[test]
+fn completions_carry_a_description_after_the_tab() {
+    let tmp = fixture();
+    let stdout = complete_raw(&tmp, &[""]);
+    assert!(
+        stdout.lines().any(|line| line == "ci\tCI utilities"),
+        "expected `ci` described by its group title, got: {stdout}"
+    );
+
+    let stdout = complete_raw(&tmp, &["ci", "h"]);
+    assert!(
+        stdout.lines().any(|line| line == "hello\tSay hello."),
+        "expected `hello` described by its command summary, got: {stdout}"
+    );
 }
 
 #[test]
@@ -171,10 +199,13 @@ fn completes_builtins_when_no_tools_dir_anywhere() {
         String::from_utf8_lossy(&output.stderr),
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let lines: Vec<&str> = stdout.lines().collect();
+    let values: Vec<&str> = stdout
+        .lines()
+        .map(|line| line.split('\t').next().unwrap_or(line))
+        .collect();
     for expected in ["self", "project"] {
         assert!(
-            lines.contains(&expected),
+            values.contains(&expected),
             "missing built-in {expected} outside a toolr project; got: {stdout}",
         );
     }

@@ -6,9 +6,9 @@ use clap::ArgMatches;
 
 use crate::help::{self, HelpMode};
 use toolr_core::complete::{
-    InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell, completion_script,
-    install_script,
-    resolve_manifest_at_tab, serve_completions,
+    Candidate, InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell,
+    completion_script, install_script, resolve_manifest_at_tab, serve_completions,
+    sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{
@@ -546,7 +546,7 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     // `toolr --<TAB>` to surface them.
     merge_root_flags_at_top_level(&tokens, &mut candidates);
     for candidate in candidates {
-        println!("{candidate}");
+        println!("{}\t{}", candidate.value, candidate.description);
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -580,7 +580,7 @@ fn raw_complete_tokens(matches: &clap::ArgMatches) -> Option<Vec<String>> {
 /// When the user is completing a flag at the root (`toolr --<TAB>` or
 /// `toolr -<TAB>`), merge the binary's own root flags into the candidate
 /// list returned by the engine. No-op for any other slot.
-fn merge_root_flags_at_top_level(tokens: &[String], candidates: &mut Vec<String>) {
+fn merge_root_flags_at_top_level(tokens: &[String], candidates: &mut Vec<Candidate>) {
     let Some(prefix) = tokens.last() else {
         return;
     };
@@ -593,12 +593,11 @@ fn merge_root_flags_at_top_level(tokens: &[String], candidates: &mut Vec<String>
         return;
     }
     for flag in crate::builtin_completions::root_long_flags() {
-        if flag.starts_with(prefix.as_str()) {
+        if flag.value.starts_with(prefix.as_str()) {
             candidates.push(flag);
         }
     }
-    candidates.sort();
-    candidates.dedup();
+    sort_and_dedup_by_value(candidates);
 }
 
 fn empty_manifest_for_completion() -> Manifest {

@@ -18,6 +18,7 @@
 //! in `--help` and shouldn't be tab-completed either.
 
 use clap::{Arg, ArgAction, Command as ClapCommand};
+use toolr_core::complete::Candidate;
 use toolr_core::manifest::{
     ArgMetadata, Argument, ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION,
 };
@@ -157,7 +158,7 @@ fn derive_argument(arg: &Arg) -> Option<Argument> {
         // hyphenated long-flag stem, so it round-trips.
         name: arg.get_id().to_string(),
         kind,
-        help: String::new(),
+        help: arg.get_help().map(ToString::to_string).unwrap_or_default(),
         default: None,
         type_annotation: None,
         resolved_type: None,
@@ -179,21 +180,32 @@ fn about_text(cmd: &ClapCommand) -> String {
 /// as is `--help` (offered separately by
 /// [`toolr_core::complete::serve_completions`] at every group node). The
 /// list is sorted so the engine's downstream `sort()` is a no-op.
-pub fn root_long_flags() -> Vec<String> {
+pub fn root_long_flags() -> Vec<Candidate> {
     let root = crate::cli::build_command(&empty_manifest());
-    let mut flags: Vec<String> = root
+    let mut flags: Vec<Candidate> = root
         .get_arguments()
         .filter(|a| a.get_id() != "help" && !a.is_hide_set())
-        .filter_map(|a| a.get_long().map(|l| format!("--{l}")))
+        .filter_map(|a| {
+            a.get_long().map(|l| {
+                Candidate::new(
+                    format!("--{l}"),
+                    a.get_help().map(ToString::to_string).unwrap_or_default(),
+                )
+            })
+        })
         .collect();
-    flags.sort();
+    toolr_core::complete::sort_and_dedup_by_value(&mut flags);
     flags
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use toolr_core::complete::serve_completions;
+    use toolr_core::complete::{Candidate, serve_completions};
+
+    fn values(candidates: Vec<Candidate>) -> Vec<String> {
+        candidates.into_iter().map(|c| c.value).collect()
+    }
 
     fn merged_empty_manifest() -> Manifest {
         let (groups, commands) = built_in_completion_entries();
@@ -246,7 +258,7 @@ mod tests {
     #[test]
     fn top_level_offers_self_and_project() {
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&[""]));
+        let out = values(serve_completions(&m, &tokens(&[""])));
         assert!(out.contains(&"self".to_string()), "candidates: {out:?}");
         assert!(out.contains(&"project".to_string()), "candidates: {out:?}");
     }
@@ -256,7 +268,7 @@ mod tests {
         // Proves a `self` subcommand defined only in `cli.rs` surfaces
         // here without editing this file.
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&["self", ""]));
+        let out = values(serve_completions(&m, &tokens(&["self", ""])));
         for expected in ["build-manifest", "cache", "completion"] {
             assert!(
                 out.contains(&expected.to_string()),
@@ -268,7 +280,7 @@ mod tests {
     #[test]
     fn project_offers_known_subcommands() {
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&["project", ""]));
+        let out = values(serve_completions(&m, &tokens(&["project", ""])));
         for expected in ["init", "venv", "manifest"] {
             assert!(
                 out.contains(&expected.to_string()),
@@ -286,7 +298,7 @@ mod tests {
     #[test]
     fn project_venv_offers_run_path_shell_sync_lock_add_remove() {
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&["project", "venv", ""]));
+        let out = values(serve_completions(&m, &tokens(&["project", "venv", ""])));
         for expected in ["run", "path", "shell", "sync", "lock", "add", "remove"] {
             assert!(
                 out.contains(&expected.to_string()),
@@ -298,7 +310,7 @@ mod tests {
     #[test]
     fn project_venv_sync_offers_force_and_quiet_flags() {
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&["project", "venv", "sync", "--"]));
+        let out = values(serve_completions(&m, &tokens(&["project", "venv", "sync", "--"])));
         for expected in ["--force", "--quiet"] {
             assert!(
                 out.contains(&expected.to_string()),
@@ -310,7 +322,7 @@ mod tests {
     #[test]
     fn self_cache_offers_list_and_prune() {
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&["self", "cache", ""]));
+        let out = values(serve_completions(&m, &tokens(&["self", "cache", ""])));
         assert_eq!(out, vec!["list".to_string(), "prune".to_string()]);
     }
 
@@ -319,7 +331,7 @@ mod tests {
         // A leaf with an enum positional offers its possible values,
         // proving `allowed_values` is derived from clap's value_parser.
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&["self", "completion", "install", ""]));
+        let out = values(serve_completions(&m, &tokens(&["self", "completion", "install", ""])));
         assert_eq!(
             out,
             vec!["bash".to_string(), "fish".to_string(), "zsh".to_string()]
@@ -329,7 +341,7 @@ mod tests {
     #[test]
     fn self_cache_prune_offers_known_flags() {
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&["self", "cache", "prune", "--"]));
+        let out = values(serve_completions(&m, &tokens(&["self", "cache", "prune", "--"])));
         for expected in ["--all", "--stale-after-days", "--dry-run", "--yes"] {
             assert!(
                 out.contains(&expected.to_string()),
@@ -342,7 +354,7 @@ mod tests {
     fn project_init_offers_venv_location_values() {
         let m = merged_empty_manifest();
         let out =
-            serve_completions(&m, &tokens(&["project", "init", "--venv-location", ""]));
+            values(serve_completions(&m, &tokens(&["project", "init", "--venv-location", ""])));
         assert_eq!(out, vec!["cache".to_string(), "in-tree".to_string()]);
     }
 
@@ -353,7 +365,7 @@ mod tests {
         // The `__*` helpers are `.hide(true)` top-level subcommands and
         // must never appear as completion candidates.
         let m = merged_empty_manifest();
-        let out = serve_completions(&m, &tokens(&[""]));
+        let out = values(serve_completions(&m, &tokens(&[""])));
         for hidden in ["__complete", "__build-static-manifest", "__install-uv-now"] {
             assert!(
                 !out.contains(&hidden.to_string()),
@@ -364,7 +376,7 @@ mod tests {
 
     #[test]
     fn root_long_flags_are_sorted_and_exclude_help() {
-        let flags = root_long_flags();
+        let flags = values(root_long_flags());
         assert!(!flags.is_empty(), "expected some root flags");
         assert!(
             !flags.contains(&"--help".to_string()),

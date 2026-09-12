@@ -1,7 +1,13 @@
-use crate::complete::serve_completions;
+use crate::complete::{Candidate, serve_completions};
 use crate::manifest::{
     Argument, ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION,
 };
+
+/// Most existing assertions only care about candidate values, not their
+/// descriptions; keep them terse by projecting down to `Vec<String>`.
+fn values(candidates: Vec<Candidate>) -> Vec<String> {
+    candidates.into_iter().map(|c| c.value).collect()
+}
 
 fn fixture() -> Manifest {
     Manifest {
@@ -105,25 +111,59 @@ fn tokens(words: &[&str]) -> Vec<String> {
 
 #[test]
 fn empty_tokens_lists_all_groups() {
-    let out = serve_completions(&fixture(), &tokens(&[""]));
+    let out = values(serve_completions(&fixture(), &tokens(&[""])));
     assert_eq!(out, vec!["ci".to_string(), "data".to_string()]);
 }
 
 #[test]
+fn groups_carry_their_title_as_description() {
+    let out = serve_completions(&fixture(), &tokens(&[""]));
+    assert_eq!(
+        out,
+        vec![
+            Candidate::new("ci", "CI utilities"),
+            Candidate::new("data", "Data utilities"),
+        ]
+    );
+}
+
+#[test]
+fn commands_carry_their_summary_as_description() {
+    let out = serve_completions(&fixture(), &tokens(&["ci", "h"]));
+    assert_eq!(out, vec![Candidate::new("hello", "Say hello.")]);
+}
+
+#[test]
+fn candidate_description_strips_embedded_tabs_and_newlines() {
+    // A literal tab/newline would corrupt the one-line-per-candidate wire format.
+    let candidate = Candidate::new("x", "line one\nline two\twith a tab");
+    assert_eq!(candidate.description, "line one line two with a tab");
+}
+
+#[test]
+fn allowed_values_have_no_description() {
+    let out = serve_completions(&fixture(), &tokens(&["data", "load", ""]));
+    assert_eq!(
+        out,
+        vec![Candidate::bare("tall"), Candidate::bare("wide")]
+    );
+}
+
+#[test]
 fn group_prefix_filters_groups() {
-    let out = serve_completions(&fixture(), &tokens(&["c"]));
+    let out = values(serve_completions(&fixture(), &tokens(&["c"])));
     assert_eq!(out, vec!["ci".to_string()]);
 }
 
 #[test]
 fn after_group_lists_its_commands() {
-    let out = serve_completions(&fixture(), &tokens(&["ci", ""]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", ""])));
     assert_eq!(out, vec!["deploy".to_string(), "hello".to_string()]);
 }
 
 #[test]
 fn command_prefix_filters_commands() {
-    let out = serve_completions(&fixture(), &tokens(&["ci", "h"]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", "h"])));
     assert_eq!(out, vec!["hello".to_string()]);
 }
 
@@ -132,38 +172,38 @@ fn flag_prefix_lists_argument_flags() {
     // `--help` is offered alongside the command's own flags whenever the
     // user is explicitly probing flags (`--` prefix). clap injects it on
     // every leaf, so the engine reflects that.
-    let out = serve_completions(&fixture(), &tokens(&["ci", "hello", "--"]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", "hello", "--"])));
     assert_eq!(out, vec!["--help".to_string(), "--name".to_string()]);
 }
 
 #[test]
 fn flag_value_completes_to_allowed_values() {
-    let out = serve_completions(&fixture(), &tokens(&["ci", "deploy", "--env", ""]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", "deploy", "--env", ""])));
     assert_eq!(out, vec!["production".to_string(), "staging".to_string()]);
 }
 
 #[test]
 fn flag_value_partial_filters_allowed_values() {
-    let out = serve_completions(&fixture(), &tokens(&["ci", "deploy", "--env", "s"]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", "deploy", "--env", "s"])));
     assert_eq!(out, vec!["staging".to_string()]);
 }
 
 #[test]
 fn positional_value_completes_to_allowed_values() {
-    let out = serve_completions(&fixture(), &tokens(&["data", "load", ""]));
+    let out = values(serve_completions(&fixture(), &tokens(&["data", "load", ""])));
     assert_eq!(out, vec!["tall".to_string(), "wide".to_string()]);
 }
 
 #[test]
 fn unknown_group_returns_no_completions() {
-    let out = serve_completions(&fixture(), &tokens(&["nope", ""]));
+    let out = values(serve_completions(&fixture(), &tokens(&["nope", ""])));
     assert!(out.is_empty());
 }
 
 #[test]
 fn flag_without_allowed_values_returns_empty() {
     // `--name` has no allowed_values → shell falls back to filename completion.
-    let out = serve_completions(&fixture(), &tokens(&["ci", "hello", "--name", ""]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", "hello", "--name", ""])));
     assert!(out.is_empty());
 }
 
@@ -230,26 +270,26 @@ fn top_level_completion_lists_only_top_level_groups() {
     // `docker.image` is nested under `docker` — it must not appear at
     // the top level, otherwise the shell would offer it as a sibling
     // of `docker`.
-    let out = serve_completions(&nested_fixture(), &tokens(&[""]));
+    let out = values(serve_completions(&nested_fixture(), &tokens(&[""])));
     assert_eq!(out, vec!["docker".to_string()]);
 }
 
 #[test]
 fn nested_group_completion_lists_child_groups() {
-    let out = serve_completions(&nested_fixture(), &tokens(&["docker", ""]));
+    let out = values(serve_completions(&nested_fixture(), &tokens(&["docker", ""])));
     assert_eq!(out, vec!["container".to_string(), "image".to_string()]);
 }
 
 #[test]
 fn nested_command_completion_traverses_full_path() {
-    let out = serve_completions(&nested_fixture(), &tokens(&["docker", "image", ""]));
+    let out = values(serve_completions(&nested_fixture(), &tokens(&["docker", "image", ""])));
     assert_eq!(out, vec!["build".to_string()]);
 }
 
 #[test]
 fn nested_command_completion_filters_by_prefix() {
     let out =
-        serve_completions(&nested_fixture(), &tokens(&["docker", "container", "st"]));
+        values(serve_completions(&nested_fixture(), &tokens(&["docker", "container", "st"])));
     assert_eq!(out, vec!["start".to_string()]);
 }
 
@@ -260,7 +300,7 @@ fn root_flag_prefix_offers_help() {
     // `Slot::Group` and `groups()` filtered out anything that didn't
     // start with the literal prefix `--`. Group nodes carry no schema,
     // so the engine emits `--help` directly.
-    let out = serve_completions(&fixture(), &tokens(&["--"]));
+    let out = values(serve_completions(&fixture(), &tokens(&["--"])));
     assert_eq!(out, vec!["--help".to_string()]);
 }
 
@@ -268,7 +308,7 @@ fn root_flag_prefix_offers_help() {
 fn nested_group_flag_prefix_offers_help() {
     // Regression: `toolr docker --<TAB>` (sitting on a group, not a
     // leaf) also dropped to nothing. `--help` must still surface.
-    let out = serve_completions(&nested_fixture(), &tokens(&["docker", "--"]));
+    let out = values(serve_completions(&nested_fixture(), &tokens(&["docker", "--"])));
     assert_eq!(out, vec!["--help".to_string()]);
 }
 
@@ -276,7 +316,7 @@ fn nested_group_flag_prefix_offers_help() {
 fn root_single_dash_prefix_offers_help() {
     // `-` is a valid flag prefix even though no short alias is emitted
     // by this engine. It must still produce `--help`.
-    let out = serve_completions(&fixture(), &tokens(&["-"]));
+    let out = values(serve_completions(&fixture(), &tokens(&["-"])));
     assert_eq!(out, vec!["--help".to_string()]);
 }
 
@@ -284,7 +324,7 @@ fn root_single_dash_prefix_offers_help() {
 fn group_node_empty_prefix_does_not_offer_help() {
     // `toolr <TAB>` with an empty prefix must keep listing top-level
     // groups, not inject `--help`. Help is for explicit flag probes.
-    let out = serve_completions(&fixture(), &tokens(&[""]));
+    let out = values(serve_completions(&fixture(), &tokens(&[""])));
     assert_eq!(out, vec!["ci".to_string(), "data".to_string()]);
 }
 
@@ -292,7 +332,7 @@ fn group_node_empty_prefix_does_not_offer_help() {
 fn leaf_help_prefix_filters_to_help_only() {
     // `toolr ci hello --he<TAB>` should narrow to `--help` even though
     // the leaf has no `help` argument of its own.
-    let out = serve_completions(&fixture(), &tokens(&["ci", "hello", "--he"]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", "hello", "--he"])));
     assert_eq!(out, vec!["--help".to_string()]);
 }
 
@@ -383,7 +423,7 @@ fn dispatcher_fixture() -> Manifest {
 fn dispatcher_completion_lists_grafted_children() {
     // Regression for the dashtastic case: `toolr jenkins job <TAB>`
     // returned nothing even though `--help` showed the children.
-    let out = serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", ""]));
+    let out = values(serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", ""])));
     assert_eq!(
         out,
         vec!["delete_orphans".to_string(), "delete_stale".to_string()]
@@ -392,7 +432,7 @@ fn dispatcher_completion_lists_grafted_children() {
 
 #[test]
 fn dispatcher_completion_filters_children_by_prefix() {
-    let out = serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "delete_"]));
+    let out = values(serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "delete_"])));
     assert_eq!(
         out,
         vec!["delete_orphans".to_string(), "delete_stale".to_string()]
@@ -404,7 +444,7 @@ fn dispatcher_flag_prefix_lists_dispatcher_flags_not_children() {
     // `toolr jenkins job --<TAB>` must offer the dispatcher's own
     // flags, not the grafted child names. `--help` is added by the
     // engine because clap injects it on every subcommand.
-    let out = serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "--"]));
+    let out = values(serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "--"])));
     assert_eq!(
         out,
         vec!["--cpu".to_string(), "--dry-run".to_string(), "--help".to_string()]
@@ -415,10 +455,10 @@ fn dispatcher_flag_prefix_lists_dispatcher_flags_not_children() {
 fn dispatcher_completion_offers_children_after_parent_flag() {
     // `toolr jenkins job --dry-run <TAB>` should still suggest children
     // — the parent flag was consumed but no child has been picked yet.
-    let out = serve_completions(
+    let out = values(serve_completions(
         &dispatcher_fixture(),
         &tokens(&["jenkins", "job", "--dry-run", ""]),
-    );
+    ));
     assert_eq!(
         out,
         vec!["delete_orphans".to_string(), "delete_stale".to_string()]
@@ -429,10 +469,10 @@ fn dispatcher_completion_offers_children_after_parent_flag() {
 fn dispatcher_recurses_into_child_args_once_child_is_chosen() {
     // `toolr jenkins job delete_orphans <TAB>` — the child has a
     // positional with allowed values; surface them.
-    let out = serve_completions(
+    let out = values(serve_completions(
         &dispatcher_fixture(),
         &tokens(&["jenkins", "job", "delete_orphans", ""]),
-    );
+    ));
     assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
 }
 
@@ -440,10 +480,10 @@ fn dispatcher_recurses_into_child_args_once_child_is_chosen() {
 fn dispatcher_recurses_through_parent_flag_value_pair() {
     // `toolr jenkins job --cpu 200m delete_orphans <TAB>` must skip
     // both `--cpu` and its value when locating the chosen child.
-    let out = serve_completions(
+    let out = values(serve_completions(
         &dispatcher_fixture(),
         &tokens(&["jenkins", "job", "--cpu", "200m", "delete_orphans", ""]),
-    );
+    ));
     assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
 }
 
@@ -515,10 +555,10 @@ fn child_with_only_optional_flags_offers_flags_on_empty_prefix() {
     // the child has no positional schema, so the engine used to return
     // `Slot::None` and the shell saw nothing. Now we fall back to the
     // child's flag names.
-    let out = serve_completions(
+    let out = values(serve_completions(
         &flags_only_child_fixture(),
         &tokens(&["jenkins", "job", "delete_companyuser", ""]),
-    );
+    ));
     assert_eq!(
         out,
         vec![
@@ -533,10 +573,10 @@ fn child_with_only_optional_flags_offers_flags_on_empty_prefix() {
 fn child_flag_fallback_filters_by_prefix() {
     // `toolr jenkins job delete_companyuser --user<TAB>` must filter
     // to flags starting with `--user`.
-    let out = serve_completions(
+    let out = values(serve_completions(
         &flags_only_child_fixture(),
         &tokens(&["jenkins", "job", "delete_companyuser", "--user"]),
-    );
+    ));
     assert_eq!(
         out,
         vec!["--user-emails".to_string(), "--user-ids".to_string()]
@@ -548,7 +588,7 @@ fn leaf_with_only_flags_offers_flags_on_empty_prefix() {
     // The fallback should also apply to regular (non-dispatcher) leaf
     // commands. `toolr ci hello <TAB>` where `hello` has only `--name`
     // should suggest `--name`, not nothing.
-    let out = serve_completions(&fixture(), &tokens(&["ci", "hello", ""]));
+    let out = values(serve_completions(&fixture(), &tokens(&["ci", "hello", ""])));
     assert_eq!(out, vec!["--name".to_string()]);
 }
 
@@ -712,6 +752,18 @@ fn bash_script_invokes_toolr_complete() {
     let script = completion_script(Shell::Bash);
     assert!(script.contains("toolr __complete"));
     assert!(script.contains("complete -F _toolr_complete toolr"));
+}
+
+#[test]
+fn bash_script_strips_description_before_compgen() {
+    // Regression: `__complete` now prints `value<TAB>description` per line.
+    // bash has no per-candidate description support, so the script must
+    // split each line on the tab before handing values to `compgen -W` —
+    // otherwise the description text (and the tab itself) lands on the
+    // command line as part of the inserted candidate.
+    let script = completion_script(Shell::Bash);
+    assert!(script.contains("IFS=$'\\t'"));
+    assert!(!script.contains(r#"compgen -W "$candidates""#));
 }
 
 #[test]
@@ -1011,7 +1063,7 @@ fn optional_positional_is_a_completable_positional_slot() {
     let mut arg = empty_arg("maybe", ArgumentKind::OptionalPositional);
     arg.allowed_values = vec!["tall".into(), "wide".into()];
     let manifest = manifest_with_leaf_args(vec![arg]);
-    let out = serve_completions(&manifest, &tokens(&["cmd", "run", ""]));
+    let out = values(serve_completions(&manifest, &tokens(&["cmd", "run", ""])));
     assert_eq!(out, vec!["tall".to_string(), "wide".to_string()]);
 }
 
@@ -1020,7 +1072,7 @@ fn positional_fixed_arity_is_a_completable_positional_slot() {
     let mut arg = empty_arg("pair", ArgumentKind::FixedArity);
     arg.allowed_values = vec!["tall".into(), "wide".into()];
     let manifest = manifest_with_leaf_args(vec![arg]);
-    let out = serve_completions(&manifest, &tokens(&["cmd", "run", ""]));
+    let out = values(serve_completions(&manifest, &tokens(&["cmd", "run", ""])));
     assert_eq!(out, vec!["tall".to_string(), "wide".to_string()]);
 }
 
@@ -1029,6 +1081,6 @@ fn keyword_fixed_arity_offers_flag_completion() {
     let mut arg = empty_arg("pair", ArgumentKind::FixedArity);
     arg.long_flag = Some("--pair".to_string());
     let manifest = manifest_with_leaf_args(vec![arg]);
-    let out = serve_completions(&manifest, &tokens(&["cmd", "run", ""]));
+    let out = values(serve_completions(&manifest, &tokens(&["cmd", "run", ""])));
     assert_eq!(out, vec!["--pair".to_string()]);
 }
