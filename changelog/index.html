@@ -1433,15 +1433,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0321-dev42-2026-09-12" class="md-nav__link">
+  <a href="#0321-dev44-2026-09-12" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.32.1-dev42 - 2026-09-12
+        0.32.1-dev44 - 2026-09-12
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.32.1-dev42 - 2026-09-12">
+    <nav class="md-nav" aria-label="0.32.1-dev44 - 2026-09-12">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3895,15 +3895,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0321-dev42-2026-09-12" class="md-nav__link">
+  <a href="#0321-dev44-2026-09-12" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.32.1-dev42 - 2026-09-12
+        0.32.1-dev44 - 2026-09-12
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.32.1-dev42 - 2026-09-12">
+    <nav class="md-nav" aria-label="0.32.1-dev44 - 2026-09-12">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -6352,7 +6352,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0321-dev42-2026-09-12">0.32.1-dev42 - 2026-09-12<a class="headerlink" href="#0321-dev42-2026-09-12" title="Permanent link">&para;</a></h2>
+<h2 id="0321-dev44-2026-09-12">0.32.1-dev44 - 2026-09-12<a class="headerlink" href="#0321-dev44-2026-09-12" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="breaking">Breaking<a class="headerlink" href="#breaking" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6367,7 +6367,8 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 </ul>
 <h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>ctx.run(...)</code> gains an <code>interactive: bool = False</code> parameter. It inherits
+<li>
+<p><code>ctx.run(...)</code> gains an <code>interactive: bool = False</code> parameter. It inherits
   the real stdin/stdout/stderr instead of piping them, so a command that
   needs a real terminal — <code>$EDITOR</code>, <code>sops</code>, a login prompt — sees a TTY on
   all three streams. Previously the child's stdout/stderr were always piped
@@ -6375,8 +6376,24 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
   on <code>isatty()</code> (full-screen editors especially) opened and immediately
   exited. <code>interactive=True</code> is incompatible with <code>capture_output</code>,
   <code>stream_output</code>, <code>no_output_timeout_secs</code>, and <code>input</code> — all four require
-  piping. (#485)</li>
+  piping. (#485)</p>
+</li>
+<li>
+<p>Tab completion now shows a one-line description next to each group/command
+  candidate, sourced from the group's title or the command's summary. fish
+  renders these natively (each <code>__complete</code> line is now <code>value&lt;TAB&gt;description</code>,
+  which fish already understands); zsh switches to a one-per-line listing via
+  <code>compadd -d</code> when there are 20 or fewer candidates, falling back to the
+  previous compact grid above that. bash has no per-candidate description
+  support, so its script now strips the description before handing
+  candidates to <code>compgen</code> — its completion behavior is otherwise unchanged.</p>
+</li>
 </ul>
+<p>An already-installed zsh or bash completion script predates this
+  <code>value&lt;TAB&gt;description</code> wire format and won't parse it correctly; re-run
+  <code>toolr self completion install &lt;shell&gt; --force</code> after upgrading. fish's
+  installed script needs no change — fish already splits candidates on tab
+  natively.</p>
 <h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><code>DispatchCommand.argv</code> no longer emits a bare flag for a <code>nargs="+"</code>/<code>"*"</code>
@@ -6392,6 +6409,7 @@ to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 <ul>
 <li><em>(skill-refs)</em> Recognise attribute-docstring fields (<a href="https://github.com/s0undt3ch/ToolR/commit/c9236c5b9d1b3cdf7b646033f3a30082139d56ad"><code>c9236c5</code></a>)</li>
 <li><em>(command)</em> Add interactive=True to ctx.run for real TTY passthrough (<a href="https://github.com/s0undt3ch/ToolR/commit/32dca8a76be2421617b3f5658eda545fd692dc5c"><code>32dca8a</code></a>)</li>
+<li><em>(complete)</em> Show group/command descriptions in tab completion (<a href="https://github.com/s0undt3ch/ToolR/commit/f447390120031b286172205dbc4993eff5373656"><code>f447390</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
