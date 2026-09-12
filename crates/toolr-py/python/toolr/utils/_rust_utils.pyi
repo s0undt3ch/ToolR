@@ -22,6 +22,7 @@ def run_command_impl(
     sys_stderr_fd: int | None = ...,
     timeout_secs: float | None = ...,
     no_output_timeout_secs: float | None = ...,
+    interactive: bool = ...,
 ) -> int: ...
 
 # Docstring parsing types

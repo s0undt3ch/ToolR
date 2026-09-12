@@ -36,7 +36,8 @@ fn fd_to_handle(fd: i32) -> RawHandle {
     sys_stderr_fd = None,
     timeout_secs = None,
     no_output_timeout_secs = None,
-    cwd = None
+    cwd = None,
+    interactive = false
 ))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_command_impl(
@@ -50,6 +51,7 @@ pub(crate) fn run_command_impl(
     timeout_secs: Option<f64>,
     no_output_timeout_secs: Option<f64>,
     cwd: Option<String>,
+    interactive: bool,
 ) -> PyResult<i32> {
     // If one of the file descriptors is provided, both must be
     if (stdout_fd.is_some() && stderr_fd.is_none()) ||
@@ -103,6 +105,7 @@ pub(crate) fn run_command_impl(
         timeout_secs,
         no_output_timeout_secs,
         cwd: cwd_path,
+        interactive,
     };
 
     // Call the internal function and map errors to appropriate Python exceptions

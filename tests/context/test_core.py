@@ -33,6 +33,7 @@ def test_run_basic(ctx):
         capture_output=False,
         timeout_secs=None,
         no_output_timeout_secs=None,
+        interactive=False,
     )
     assert result.stdout == "output"
     assert result.returncode == 0
@@ -59,6 +60,7 @@ def test_run_with_options(ctx):
         capture_output=True,
         timeout_secs=10,
         no_output_timeout_secs=5,
+        interactive=False,
         custom_kwarg="value",
     )
 

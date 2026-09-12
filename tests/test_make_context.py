@@ -58,6 +58,7 @@ def test_make_context_run_param_wires_into_ctx_run(tmp_path):
         capture_output=True,
         timeout_secs=None,
         no_output_timeout_secs=None,
+        interactive=False,
     )
     # --8<-- [end:mock-run-example]
 
