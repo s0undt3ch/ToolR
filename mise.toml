@@ -19,9 +19,9 @@ python = ["3.14.7", "3.13.15", "3.12.14", "3.11.16"]
 actionlint = "1.7.12"
 shellcheck = "0.11.0"
 gitleaks = "8.30.1"
-ruff = "0.16.6"
+ruff = "0.16.7"
 typos = "1.50.1"
-rumdl = "v0.2.69"
+rumdl = "v0.2.73"
 gh = "2.100.0"
 # Without an explicit profile, mise inherits whatever profile the
 # machine's rustup is configured with — CI runners resolve to
@@ -30,7 +30,7 @@ gh = "2.100.0"
 # (rustfmt) need so the toolchain is identical everywhere.
 rust = { version = "1.98.1", profile = "minimal", components = "clippy,rustfmt" }
 uv = { version = "0.12.13" }
-prek = "0.5.2"
+prek = "0.5.3"
 "cargo:cargo-edit" = "0.13.13"
 # Dogfood: the released toolr binary drives repo automation (the prek
 # hooks backed by `toolr pre-commit <command>` in `tools/precommit/`).
