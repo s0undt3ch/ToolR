@@ -19,17 +19,17 @@ python = ["3.14.7", "3.13.15", "3.12.14", "3.11.16"]
 actionlint = "1.7.12"
 shellcheck = "0.11.0"
 gitleaks = "8.30.1"
-ruff = "0.16.7"
-typos = "1.50.1"
-rumdl = "v0.2.73"
-gh = "2.100.0"
+ruff = "0.16.8"
+typos = "1.50.2"
+rumdl = "v0.2.74"
+gh = "2.101.0"
 # Without an explicit profile, mise inherits whatever profile the
 # machine's rustup is configured with — CI runners resolve to
 # `minimal`, which ships no clippy. Pin the profile and add the
 # components the pre-commit hooks (clippy) and contributors
 # (rustfmt) need so the toolchain is identical everywhere.
 rust = { version = "1.98.1", profile = "minimal", components = "clippy,rustfmt" }
-uv = { version = "0.12.13" }
+uv = { version = "0.12.17" }
 prek = "0.5.3"
 "cargo:cargo-edit" = "0.13.13"
 # Dogfood: the released toolr binary drives repo automation (the prek
