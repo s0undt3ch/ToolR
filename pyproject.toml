@@ -40,34 +40,34 @@ toolr-plugin-example = { workspace = true }
 dev = [
     "toolr-plugin-example",
     "toolr-py",
-    "attrs>=25.3.0",
-    "coverage>=7.14.0",
-    "hypothesis>=6.152.9",
-    "pytest>=8.3.5",
+    "attrs>=26.1.0",
+    "coverage>=7.16.0",
+    "hypothesis>=6.168.0",
+    "pytest>=9.1.1",
     "pytest-skip-markers>=1.5.2",
-    "pytest-subtests>=0.14.2",
+    "pytest-subtests>=0.15.0",
     "pyyaml",
 ]
 docs = [
     "toolr-py",
     "markdown-include>=0.8.1",
     "mkdocs>=1.6.1",
-    "mkdocs-awesome-nav>=3.1.2",
-    "mkdocs-material>=9.6.16",
-    "mkdocstrings[python]>=1.0.4",
+    "mkdocs-awesome-nav>=3.3.0",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
 ]
 # The venv `mypy` the `s0undt3ch/pre-commit-hooks` mypy hook runs (binary
 # tools — ruff, typos, rumdl — live in mise.toml instead). The extra runtime
 # deps give mypy real packages to resolve imports against, replacing the stubs
 # the old `mirrors-mypy` hook pinned via `additional_dependencies`.
 pre-commit = [
-    "mypy>=1.11",
-    "attrs>=25.3.0",
-    "hypothesis>=6.152.9",
-    "msgspec>=0.19.0",
-    "pytest>=8.3.5",
-    "rich>=13.0.0",
-    "rich-argparse>=1.7.0",
+    "mypy>=2.3.1",
+    "attrs>=26.1.0",
+    "hypothesis>=6.168.0",
+    "msgspec>=0.21.1",
+    "pytest>=9.1.1",
+    "rich>=15.0.0",
+    "rich-argparse>=1.8.0",
 ]
 
 [tool.ruff]
