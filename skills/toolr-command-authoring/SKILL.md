@@ -141,6 +141,13 @@ manually started `threading.Thread` or a `ThreadPoolExecutor` worker — a
 helper that needs `ctx` inside one of those must still be passed it
 explicitly. It *does* propagate into `asyncio.create_task` children.
 
+Call `current_context()` inside a function body, not at module scope.
+`toolr.testing.CommandsTester`'s discovery import (and any bare `pytest`
+collection of a `tools/*.py` module outside a running toolr command) imports
+the module without a context set, so a module-level call raises
+`NoCurrentContextError` even though the same call works fine once toolr
+actually dispatches the command.
+
 To test a helper that calls `current_context()`, wrap the call in
 `toolr.testing.set_current_context(ctx)`:
 
