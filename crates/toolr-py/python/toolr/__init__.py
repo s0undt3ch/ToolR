@@ -21,6 +21,7 @@ except importlib.metadata.PackageNotFoundError:
     __version__ = "0.0.0.not-installed"
 
 from toolr._context import Context
+from toolr._context import current_context
 from toolr._decorators import MANIFEST_SCHEMA_VERSION
 from toolr._decorators import command
 from toolr._decorators import command_group
@@ -40,5 +41,6 @@ __all__ = [
     "arg_section",
     "command",
     "command_group",
+    "current_context",
     "report_on_import_errors",
 ]
