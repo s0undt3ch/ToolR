@@ -121,6 +121,38 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
   Either is fine — share helpers this way rather than with `sys.path`
   hacks.
 
+## Getting `ctx` inside a helper function
+
+An `@command`-decorated function always takes `ctx: Context` as its required
+first argument — that boundary doesn't change. A helper function it calls,
+though, is a different story: it has two valid ways to get at the `Context`,
+and picking between them is a per-helper choice, not a migration.
+
+- **Take `ctx` as a parameter.** The existing, still-supported pattern —
+  the caller passes its `ctx` down explicitly.
+- **Call `toolr.current_context()`.** Reads the `Context` of whichever
+  toolr command is currently executing, without threading a `ctx` parameter
+  through every call in between. Useful for helpers buried several layers
+  deep, or shared code that isn't always called from a command.
+
+`toolr.current_context()` raises `NoCurrentContextError` if nothing is
+currently running a toolr command. It also does **not** propagate into a
+manually started `threading.Thread` or a `ThreadPoolExecutor` worker — a
+helper that needs `ctx` inside one of those must still be passed it
+explicitly. It *does* propagate into `asyncio.create_task` children.
+
+To test a helper that calls `current_context()`, wrap the call in
+`toolr.testing.set_current_context(ctx)`:
+
+```python
+ctx = make_context(repo_root)
+with toolr.testing.set_current_context(ctx):
+    my_helper()
+```
+
+See [`references/commands.md#current_context`](references/commands.md#current_context)
+and [`references/testing.md#set_current_context`](references/testing.md#set_current_context).
+
 ## Runtime working directory
 
 Commands run with the working directory set to the **repo root**,
