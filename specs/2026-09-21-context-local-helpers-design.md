@@ -47,16 +47,29 @@ _current_ctx: ContextVar[Context] = ContextVar("toolr_current_context")
 def current_context() -> Context:
     """Return the `Context` of the toolr command currently executing.
 
-    Raises `RuntimeError` if called outside of a running command, at
-    import time, or from a thread/task that wasn't given the context
-    explicitly (see the `current_context` docs for why).
+    Raises `NoCurrentContextError` if called outside of a running command,
+    at import time before one has been set, or from a thread/task that
+    wasn't given the context explicitly (see the `current_context` docs
+    for why).
     """
 ```
 
 Implementation calls `_current_ctx.get()` and catches `LookupError`,
-re-raising as `RuntimeError` with a message naming all three ways this can
-happen (see "Error message" below). No `current_context_or_none()` variant —
-one function, it raises.
+re-raising as `NoCurrentContextError` (see "Exception type" below) with a
+message naming the ways this can happen (see "Error message" below). No
+`current_context_or_none()` variant — one function, it raises.
+
+### Exception type
+
+`toolr/_exc.py` already establishes `ToolrError` as the base for "you used
+the API wrong" errors (`SignatureParameterError`, `SignatureError` both
+subclass it). A bare `RuntimeError` would break `except ToolrError` for
+anyone handling toolr's user-facing errors uniformly, so add:
+
+```python
+class NoCurrentContextError(ToolrError):
+    """Raised by `current_context()` when no `Context` is set for this task/thread."""
+```
 
 ### Where the var gets set
 
@@ -69,12 +82,34 @@ conceptually, and construction should never have the side effect of
 mutating global state.
 
 ```python
-ctx = _build_context(spec)
-_current_ctx.set(ctx)
+ctx = _build_context(spec)          # line 554
+_current_ctx.set(ctx)               # new
+_append_repo_root(...)              # line 560
+_import_target(spec)                # line 561 — imports the tools.* module
 # ... call target function with ctx ...
 ```
 
-No reset needed on this path: the process exits after the one command runs.
+**Correction:** `_build_context()` runs before `_import_target()`, so with
+the var set at line 554 as shown, a module-level `current_context()` call
+inside the `tools/*.py` module being imported **succeeds** in production —
+it does not raise. There is no "fails at import time" case on the real
+dispatch path; module import happens *after* the context is set, not
+before. The only genuine import-time failure is `CommandsTester`'s
+discovery import (`testing/_discovery.py::_import_tools_modules`), which
+imports every `tools.*` module with no `Context` ever built or set, and any
+ad hoc `import tools.foo` done outside a toolr command/runner invocation
+(e.g. a bare `pytest` collection of a `tools/` module with no fixture
+involved). The error message below is corrected to reflect this.
+
+No reset needed on this path *given the current invariant that
+`_runner.py::run()` invokes the target function at most once per process*
+— confirmed no retry/multi-dispatch loop exists today. This is a named
+invariant, not a permanent guarantee: if a future change adds in-process
+retry or multi-command dispatch, `.set()` without a matching `.reset()`
+would silently leak the first command's `Context` into the second. A
+one-line comment at the `.set()` call site should say so explicitly, tying
+it to this invariant, so a future retry-adding PR trips over it instead of
+inheriting a silent bug.
 
 **Test path** (`toolr/testing/`): `make_context()` does **not** auto-set the
 contextvar. Building a `Context` object stays a pure, side-effect-free
@@ -101,28 +136,66 @@ def set_current_context(ctx: Context) -> Iterator[Context]:
     """
 ```
 
+**Convenience fixture.** Projects that call `set_current_context` in most of
+their tests can wrap it in a fixture instead of repeating the `with` block
+per test — the fixture's teardown phase is where `.reset(token)` runs, same
+as the plain `with` block, so it's cleanup-safe:
+
+```python
+@pytest.fixture
+def ambient_ctx(repo_root):
+    c = make_context(repo_root)
+    with set_current_context(c):
+        yield c
+```
+
+Tests then take `ambient_ctx` as a fixture parameter and get both a usable
+`Context` and a working `current_context()` for free. This is a pattern to
+document, not a new `toolr.testing` export — `make_context()` and
+`set_current_context()` stay the two primitives; project `conftest.py`
+files compose them.
+
+**Naming note:** don't call this fixture `ctx` if the project already has a
+plain `ctx` fixture (this repo's own `tests/context/conftest.py` does —
+`ctx`/`verbose_ctx`/`quiet_ctx`, built directly via `ContextForTesting(...)`,
+no `set_current_context` wiring). Those existing fixtures are staying as-is
+in this repo: `tests/context/` tests exercise `Context`'s own methods
+directly and never call `current_context()`, so they have no need for the
+wiring, and giving the new fixture a different name avoids clobbering an
+existing one that has different semantics (a plain `Context`-returner
+with no ambient side effect).
+
 A test that calls a command through `current_context()`-using helpers
-without this wrapper gets the `RuntimeError` from `current_context()` —
+without this wrapper gets the `NoCurrentContextError` from `current_context()` —
 same failure mode as forgetting to pass `ctx` to a helper that requires it
 explicitly, not a new one.
 
 ### Error message
 
-`current_context()`'s `RuntimeError` names all three ways it fires, since
-this message is the entire UX of the feature when it goes wrong:
+`current_context()`'s `NoCurrentContextError` names the ways it fires,
+ordered by likelihood in real usage, since this message is the entire UX
+of the feature when it goes wrong:
 
 ```text
 current_context() has no context to return. This happens when:
-  - called outside of a running toolr command (e.g. interactively, or from
-    a script that isn't a toolr command/runner invocation)
-  - called at import time (import happens before the command's Context
-    is built and set)
+  - called from code that isn't running inside a toolr command (e.g.
+    interactively, from a script invoked outside toolr's dispatch, or
+    from CommandsTester's module-discovery import, which imports
+    tools.* modules without running a command)
   - called from a thread or async task that wasn't given the context
     explicitly — see toolr.current_context's docs
 
 If testing a helper that calls this, wrap the call in
 toolr.testing.set_current_context(ctx).
 ```
+
+Note what this message deliberately does *not* claim: a module-level
+`current_context()` call inside a `tools/*.py` file does **not** fail at
+import time on the real dispatch path — `_runner.py` sets the context
+before importing the target module (see the correction above). It only
+fails when that same module is imported by something that never sets a
+context first, which today means `CommandsTester` discovery or a bare
+import outside dispatch — both covered by the first bullet.
 
 ### Limitations (documented, not solved)
 
@@ -166,9 +239,18 @@ names to an existing `__all__`.
 - `toolr.testing.set_current_context(ctx)` makes `current_context()` return
   `ctx` for the duration of the `with` block, and raises again after it
   exits (even if the block raised).
-- Nesting `set_current_context` (inner block temporarily overrides outer)
-  restores the outer value on exit — standard `ContextVar.set()`/`.reset()`
-  token behavior, verified with a test rather than assumed.
+- Nesting `set_current_context` (inner block temporarily overrides outer,
+  *sequentially* in the same task) restores the outer value on exit —
+  standard `ContextVar.set()`/`.reset()` token behavior, verified with a
+  test rather than assumed.
+- **Concurrent asyncio tasks each see their own context**, not each
+  other's: two coroutines started with `asyncio.gather()`, each entering
+  `set_current_context(ctx_a)` / `set_current_context(ctx_b)` inside its
+  own task, resolve `current_context()` independently. This is the
+  specific case `ContextVar` exists to get right (per the Limitations
+  section, contexts propagate into `asyncio.create_task` children), so
+  it's tested explicitly rather than only covered by the sequential
+  nesting case above.
 - A helper called via `current_context()` from inside an `@command` function
   invoked through `make_context()` + `set_current_context()` sees the same
   `Context` instance the command itself received.
@@ -191,4 +273,4 @@ territory per this repo's version-bump convention.
   the correct per-task answer for free.
 - Making `current_context()` fall back to some default/empty `Context`
   instead of raising. Rejected: a silently-wrong `Context` (empty repo_root,
-  no console) is worse than a loud, specific `RuntimeError`.
+  no console) is worse than a loud, specific `NoCurrentContextError`.
