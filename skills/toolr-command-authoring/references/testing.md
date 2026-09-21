@@ -14,6 +14,7 @@ from toolr.testing import (
     RunMock,
     make_command_result,
     make_context,
+    set_current_context,
 )
 ```
 
@@ -371,5 +372,27 @@ Args:
 Returns:
     A `ContextForTesting` — a `Context` subclass with `stdout`/`stderr`
     properties reading back what was written through its captured consoles.
+
+```
+
+### `set_current_context`
+
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr.testing._current_context`
+
+```python
+@contextmanager
+def set_current_context(ctx: Context) -> Iterator[Context]:
+```
+
+```text
+Make `ctx` the value `toolr.current_context()` returns for this block.
+
+Use when a command (or a helper it calls) reads `toolr.current_context()`
+instead of taking `ctx` as a parameter, and a test needs that call to
+resolve to a specific `Context` under test:
+
+    ctx = make_context(repo_root)
+    with toolr.testing.set_current_context(ctx):
+        my_command(ctx, ...)
 
 ```
