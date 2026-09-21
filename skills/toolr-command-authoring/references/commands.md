@@ -17,6 +17,7 @@ from toolr import (
     arg_section,
     command,
     command_group,
+    current_context,
     report_on_import_errors,
 )
 ```
@@ -630,6 +631,24 @@ Args:
 Returns:
     A CommandGroup instance
 
+
+```
+
+### `current_context`
+
+**Kind:** function &nbsp;·&nbsp; **Source:** `toolr._context`
+
+```python
+def current_context() -> Context:
+```
+
+```text
+Return the `Context` of the toolr command currently executing.
+
+Raises `NoCurrentContextError` if called from code that isn't running
+inside a toolr command, or from a thread/task that wasn't given the
+context explicitly — see `specs/2026-09-21-context-local-helpers-design.md`
+for the exact cases this covers.
 
 ```
 
