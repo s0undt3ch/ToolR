@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import NoReturn
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 
     from toolr.utils.command import CommandResult
 
+from toolr._exc import NoCurrentContextError
 from toolr.utils._console import ConsoleVerbosity
 
 
@@ -301,3 +303,32 @@ class Context(Struct, frozen=True):
         See [shutil.which][shutil.which] for more details.
         """
         return shutil.which(name, mode=mode, path=path)
+
+
+_current_ctx: ContextVar[Context] = ContextVar("toolr_current_context")
+
+
+def current_context() -> Context:
+    """Return the `Context` of the toolr command currently executing.
+
+    Raises `NoCurrentContextError` if called from code that isn't running
+    inside a toolr command, or from a thread/task that wasn't given the
+    context explicitly — see `specs/2026-09-21-context-local-helpers-design.md`
+    for the exact cases this covers.
+    """
+    try:
+        return _current_ctx.get()
+    except LookupError:
+        msg = (
+            "current_context() has no context to return. This happens when:\n"
+            "  - called from code that isn't running inside a toolr command (e.g.\n"
+            "    interactively, from a script invoked outside toolr's dispatch, or\n"
+            "    from CommandsTester's module-discovery import, which imports\n"
+            "    tools.* modules without running a command)\n"
+            "  - called from a thread or async task that wasn't given the context\n"
+            "    explicitly — see toolr.current_context's docs\n"
+            "\n"
+            "If testing a helper that calls this, wrap the call in\n"
+            "toolr.testing.set_current_context(ctx)."
+        )
+        raise NoCurrentContextError(msg) from None
