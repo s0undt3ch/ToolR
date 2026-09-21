@@ -312,9 +312,9 @@ def current_context() -> Context:
     """Return the `Context` of the toolr command currently executing.
 
     Raises `NoCurrentContextError` if called from code that isn't running
-    inside a toolr command, or from a thread/task that wasn't given the
-    context explicitly — see `specs/2026-09-21-context-local-helpers-design.md`
-    for the exact cases this covers.
+    inside a toolr command — for example, interactively, from a script
+    invoked outside toolr's dispatch, or during test collection — or from a
+    thread or async task that wasn't given the context explicitly.
     """
     try:
         return _current_ctx.get()
