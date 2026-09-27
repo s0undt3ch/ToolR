@@ -1886,4 +1886,22 @@ def read(ctx: Context, {signature}) -> None:
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].reason, unknown_keyword("foo", None));
     }
+
+    #[test]
+    fn alias_behind_a_star_import_from_an_unparsed_module_is_not_expanded() {
+        assert_tree_builds(&[
+            (
+                "tools/other.py",
+                "from typing import Annotated\n\nfrom toolr import arg\n\nTagged = Annotated[str, arg(foo=1)]\n",
+            ),
+            (
+                "tools/kw.py",
+                &kw_module(
+                    "from toolr import Context, command_group\nfrom mylib import *",
+                    "",
+                    "name: Tagged",
+                ),
+            ),
+        ]);
+    }
 }

@@ -635,11 +635,6 @@ impl TypeAliasTable {
         self.by_module.get(module_path)?.get(name)
     }
 
-    /// Whether `module_path` was recorded by [`Self::from_module_at`].
-    pub fn knows_module(&self, module_path: &str) -> bool {
-        self.by_module.contains_key(module_path)
-    }
-
     /// Returns the underlying annotation expression for `name`, if it
     /// was assigned via a module-level type alias.
     pub fn lookup(&self, name: &str) -> Option<&Expr> {

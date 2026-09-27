@@ -105,18 +105,11 @@ impl<'a> Walker<'a> {
         if imported.is_some() || !table.has_star_import() {
             return imported;
         }
-        let stars = table.star_import_modules();
-        if let Some(found) = stars.iter().find_map(|m| {
+        // Star imports from modules we never parsed stay unexpanded: guessing
+        // from the merged table could fail a legitimate build.
+        table.star_import_modules().iter().find_map(|m| {
             self.aliases.lookup_in(m, name).map(|target| (target, m.clone()))
-        }) {
-            return Some(found);
-        }
-        // A star import from a module we never parsed: stay permissive, like
-        // the bare-`arg` fallback, and use the merged table.
-        if stars.iter().any(|m| !self.aliases.knows_module(m)) {
-            return self.aliases.lookup(name).map(|target| (target, scope.to_string()));
-        }
-        None
+        })
     }
 }
 
