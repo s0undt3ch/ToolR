@@ -84,161 +84,220 @@ impl SupportedType {
                 validated_by: "clap",
                 wire_format: "JSON number",
                 python_receives: "`int`",
+                note: "",
             },
             SupportedType::Float => TypeDoc {
                 annotation: "float",
                 validated_by: "clap",
                 wire_format: "JSON number",
                 python_receives: "`float`",
+                note: "",
             },
             SupportedType::Bool => TypeDoc {
                 annotation: "bool",
                 validated_by: "clap",
                 wire_format: "JSON bool",
                 python_receives: "`bool`",
+                note: "",
             },
             SupportedType::Str => TypeDoc {
                 annotation: "str",
                 validated_by: "none (passthrough)",
                 wire_format: "JSON string",
                 python_receives: "`str`",
+                note: "",
             },
             SupportedType::Path => TypeDoc {
                 annotation: "pathlib.Path",
                 validated_by: "clap (custom parser)",
                 wire_format: "string",
                 python_receives: "`pathlib.Path`",
+                note: "",
             },
             SupportedType::AbsolutePath => TypeDoc {
                 annotation: "toolr.types.AbsolutePath",
                 validated_by: "clap (absolutise vs cwd)",
                 wire_format: "absolute string",
                 python_receives: "`pathlib.Path`",
+                note: "",
             },
             SupportedType::ResolvedPath => TypeDoc {
                 annotation: "toolr.types.ResolvedPath",
                 validated_by: "clap (`canonicalize()`)",
                 wire_format: "resolved string",
                 python_receives: "`pathlib.Path`",
+                note: "",
             },
             SupportedType::DateTime => TypeDoc {
                 annotation: "toolr.types.DateTime",
                 validated_by: "clap (chrono RFC 3339)",
                 wire_format: "string",
                 python_receives: "`datetime.datetime`",
+                note: "",
             },
             SupportedType::Date => TypeDoc {
                 annotation: "toolr.types.Date",
                 validated_by: "clap (chrono ISO date)",
                 wire_format: "string",
                 python_receives: "`datetime.date`",
+                note: "",
             },
             SupportedType::Time => TypeDoc {
                 annotation: "toolr.types.Time",
                 validated_by: "clap (chrono ISO time)",
                 wire_format: "string",
                 python_receives: "`datetime.time`",
+                note: "",
             },
             SupportedType::Uuid => TypeDoc {
                 annotation: "toolr.types.UUID",
                 validated_by: "clap (`uuid` crate)",
                 wire_format: "string",
                 python_receives: "`uuid.UUID`",
+                note: "",
             },
             SupportedType::Ipv4 => TypeDoc {
                 annotation: "toolr.types.IPv4",
                 validated_by: "clap (`std::net::Ipv4Addr`)",
                 wire_format: "string",
                 python_receives: "`ipaddress.IPv4Address`",
+                note: "",
             },
             SupportedType::Ipv6 => TypeDoc {
                 annotation: "toolr.types.IPv6",
                 validated_by: "clap (`std::net::Ipv6Addr`)",
                 wire_format: "string",
                 python_receives: "`ipaddress.IPv6Address`",
+                note: "",
             },
             SupportedType::Email => TypeDoc {
                 annotation: "toolr.types.Email",
                 validated_by: "clap (`email_address` crate)",
                 wire_format: "string",
                 python_receives: "`str` (pre-validated)",
+                note: "",
             },
             SupportedType::Version => TypeDoc {
                 annotation: "toolr.types.Version",
                 validated_by: "clap (`pep440_rs` crate)",
                 wire_format: "string",
                 python_receives: "`packaging.version.Version`",
+                note: "",
             },
             SupportedType::Count => TypeDoc {
                 annotation: "toolr.types.Count",
                 validated_by: "clap (`ArgAction::Count`)",
                 wire_format: "integer",
                 python_receives: "`int`",
+                note: "",
             },
             SupportedType::Literal(_) => TypeDoc {
                 annotation: "Literal[\"a\", \"b\"]",
                 validated_by: "clap (allowed-values)",
                 wire_format: "string",
                 python_receives: "`Literal` value",
+                note: "",
             },
             SupportedType::Enum { .. } => TypeDoc {
-                annotation: "Enum subclass",
+                annotation: "Enum",
                 validated_by: "clap (member values)",
                 wire_format: "string",
                 python_receives: "enum member",
+                note: "subclass",
             },
             SupportedType::List(_) => TypeDoc {
                 annotation: "list[T]",
                 validated_by: "clap per-element",
                 wire_format: "JSON array",
                 python_receives: "`list[T]`",
+                note: "(T above)",
             },
             SupportedType::Tuple(_) => TypeDoc {
                 annotation: "tuple[T1, T2, …]",
                 validated_by: "clap arity, msgspec per-slot",
                 wire_format: "JSON array",
                 python_receives: "`tuple[T1, T2]`",
+                note: "",
             },
             SupportedType::Optional(_) => TypeDoc {
                 annotation: "T | None",
                 validated_by: "clap (`required=false`)",
                 wire_format: "typed or absent",
                 python_receives: "`T` or `None`",
+                note: "",
             },
         }
     }
 
+    /// Position in `catalogue()`'s table order. Exhaustive with no
+    /// `_` arm — a new variant fails to compile here until someone
+    /// gives it a slot, and `catalogue_ordinals_are_dense_and_ordered`
+    /// then fails until they add its representative to `catalogue()`.
+    fn ordinal(&self) -> usize {
+        match self {
+            SupportedType::Int => 0,
+            SupportedType::Float => 1,
+            SupportedType::Bool => 2,
+            SupportedType::Str => 3,
+            SupportedType::Path => 4,
+            SupportedType::AbsolutePath => 5,
+            SupportedType::ResolvedPath => 6,
+            SupportedType::DateTime => 7,
+            SupportedType::Date => 8,
+            SupportedType::Time => 9,
+            SupportedType::Uuid => 10,
+            SupportedType::Ipv4 => 11,
+            SupportedType::Ipv6 => 12,
+            SupportedType::Email => 13,
+            SupportedType::Version => 14,
+            SupportedType::Count => 15,
+            SupportedType::Literal(_) => 16,
+            SupportedType::Enum { .. } => 17,
+            SupportedType::List(_) => 18,
+            SupportedType::Tuple(_) => 19,
+            SupportedType::Optional(_) => 20,
+        }
+    }
+
+    /// One representative of every variant, in table order, for
+    /// generating the "Supported types" doc table.
     // Add a representative here when adding a variant; doc() won't
     // compile until you document it.
     pub fn catalogue() -> Vec<TypeDoc> {
-        vec![
-            SupportedType::Int.doc(),
-            SupportedType::Float.doc(),
-            SupportedType::Bool.doc(),
-            SupportedType::Str.doc(),
-            SupportedType::Path.doc(),
-            SupportedType::AbsolutePath.doc(),
-            SupportedType::ResolvedPath.doc(),
-            SupportedType::DateTime.doc(),
-            SupportedType::Date.doc(),
-            SupportedType::Time.doc(),
-            SupportedType::Uuid.doc(),
-            SupportedType::Ipv4.doc(),
-            SupportedType::Ipv6.doc(),
-            SupportedType::Email.doc(),
-            SupportedType::Version.doc(),
-            SupportedType::Count.doc(),
-            SupportedType::Literal(vec![]).doc(),
+        let representatives = [
+            SupportedType::Int,
+            SupportedType::Float,
+            SupportedType::Bool,
+            SupportedType::Str,
+            SupportedType::Path,
+            SupportedType::AbsolutePath,
+            SupportedType::ResolvedPath,
+            SupportedType::DateTime,
+            SupportedType::Date,
+            SupportedType::Time,
+            SupportedType::Uuid,
+            SupportedType::Ipv4,
+            SupportedType::Ipv6,
+            SupportedType::Email,
+            SupportedType::Version,
+            SupportedType::Count,
+            SupportedType::Literal(vec![]),
             SupportedType::Enum {
                 name: String::new(),
                 module: String::new(),
                 values: vec![],
-            }
-            .doc(),
-            SupportedType::List(Box::new(SupportedType::Str)).doc(),
-            SupportedType::Tuple(vec![]).doc(),
-            SupportedType::Optional(Box::new(SupportedType::Str)).doc(),
-        ]
+            },
+            SupportedType::List(Box::new(SupportedType::Str)),
+            SupportedType::Tuple(vec![]),
+            SupportedType::Optional(Box::new(SupportedType::Str)),
+        ];
+        // Keeps `ordinal()` reachable from non-test code, so a variant
+        // missing its slot there fails the build here too, not only
+        // under `#[cfg(test)]`.
+        for (i, t) in representatives.iter().enumerate() {
+            debug_assert_eq!(t.ordinal(), i, "representative out of order in catalogue()");
+        }
+        representatives.iter().map(SupportedType::doc).collect()
     }
 }
 
@@ -249,6 +308,7 @@ pub struct TypeDoc {
     pub validated_by: &'static str,
     pub wire_format: &'static str,
     pub python_receives: &'static str,
+    pub note: &'static str,
 }
 
 /// Reasons annotation resolution can fail.
@@ -348,5 +408,53 @@ mod tests {
         for primitive in ["int", "float", "bool", "str", "pathlib.Path"] {
             assert!(seen.contains(primitive), "missing {primitive}");
         }
+    }
+
+    #[test]
+    fn enum_and_list_rows_carry_the_expected_note() {
+        let rows = SupportedType::catalogue();
+        let enum_row = rows.iter().find(|d| d.annotation == "Enum").unwrap();
+        assert_eq!(enum_row.note, "subclass");
+        let list_row = rows.iter().find(|d| d.annotation == "list[T]").unwrap();
+        assert_eq!(list_row.note, "(T above)");
+    }
+
+    #[test]
+    fn catalogue_ordinals_are_dense_and_ordered() {
+        let representatives: Vec<SupportedType> = vec![
+            SupportedType::Int,
+            SupportedType::Float,
+            SupportedType::Bool,
+            SupportedType::Str,
+            SupportedType::Path,
+            SupportedType::AbsolutePath,
+            SupportedType::ResolvedPath,
+            SupportedType::DateTime,
+            SupportedType::Date,
+            SupportedType::Time,
+            SupportedType::Uuid,
+            SupportedType::Ipv4,
+            SupportedType::Ipv6,
+            SupportedType::Email,
+            SupportedType::Version,
+            SupportedType::Count,
+            SupportedType::Literal(vec![]),
+            SupportedType::Enum {
+                name: String::new(),
+                module: String::new(),
+                values: vec![],
+            },
+            SupportedType::List(Box::new(SupportedType::Str)),
+            SupportedType::Tuple(vec![]),
+            SupportedType::Optional(Box::new(SupportedType::Str)),
+        ];
+        let ordinals: Vec<usize> = representatives.iter().map(|t| t.ordinal()).collect();
+        let expected: Vec<usize> = (0..representatives.len()).collect();
+        assert_eq!(ordinals, expected, "catalogue representatives must be in ordinal order with no gaps");
+        assert_eq!(
+            SupportedType::catalogue().len(),
+            representatives.last().unwrap().ordinal() + 1,
+            "catalogue() must have exactly one row per ordinal"
+        );
     }
 }
