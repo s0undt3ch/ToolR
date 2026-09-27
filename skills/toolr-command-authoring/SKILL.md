@@ -58,7 +58,8 @@ drift.
 5. **Document via Google-style docstring.** The first line is the
    short help (`toolr <group> --help`). The rest is the long help
    (`toolr <group> <cmd> --help`). `Args:` populates per-argument
-   help.
+   help. A command with no docstring is not rejected — it just ships
+   with empty `--help` text, so give every command one.
 6. **Try it.** `toolr <group> <cmd> --help` builds the manifest on
    the fly if it's stale (the freshness work landed in 0.20.0); on
    older toolr fall back to `toolr project manifest rebuild`. If the
@@ -106,7 +107,8 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
   object across all members or you'll silently create duplicate
   sections.
 - **Calling subprocesses.** Use `ctx.run(...)`; it inherits stderr
-  for TTY-aware tools and propagates timeouts. Full signature (timeouts,
+  for TTY-aware tools and propagates timeouts. It does not raise on a
+  nonzero exit — check `result.returncode`. Full signature (timeouts,
   `capture_output`, streaming) in
   [`references/commands.md#run`](references/commands.md#run).
 - **Referencing the repo root.** Use `ctx.repo_root` (a
@@ -327,18 +329,14 @@ worked examples wiring `RunMock` + `make_context` together, and mocking a
 
 If the user wants to **ship** an existing set of toolr commands as a
 distributable Python plugin (so other projects can `pip install` and
-get the commands), that is the
-[`toolr-command-packaging`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-packaging)
-skill's job. This skill does not cover wheel-building, manifest
-embedding, or PyPI publishing — invoke the packaging skill for that
-work.
+get the commands), that is the `toolr-command-packaging` skill's job.
+This skill does not cover wheel-building, manifest embedding, or PyPI
+publishing — invoke the packaging skill for that work.
 
 ## CI is a different problem
 
 If the user wants to **run** these commands in GitHub Actions
 (a caller workflow that installs toolr, sets up the venv, and
-runs `toolr <group> <cmd>`), that is the
-[`toolr-ci-setup`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-ci-setup)
-skill's job. This skill does not cover the `s0undt3ch/ToolR`
-action, pinning policy, or CI cache shapes — invoke the
-CI-setup skill for that work.
+runs `toolr <group> <cmd>`), that is the `toolr-ci-setup` skill's
+job. This skill does not cover the `s0undt3ch/ToolR` action, pinning
+policy, or CI cache shapes — invoke the CI-setup skill for that work.
