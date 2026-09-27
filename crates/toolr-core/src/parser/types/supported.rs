@@ -293,6 +293,13 @@ pub enum UnsupportedType {
     UnsupportedUnion(String),
     /// A subscript shape we don't handle (e.g. `dict[K, V]`).
     UnsupportedShape(String),
+    /// `arg(<keyword>=...)` where `arg()` has no such parameter.
+    UnknownArgKeyword {
+        keyword: String,
+        suggestion: Option<String>,
+    },
+    /// `arg(...)` called with a positional argument; it is keyword-only.
+    PositionalArgArgument,
 }
 
 /// A typed-annotation rejection with full context for diagnostic output.
@@ -336,6 +343,13 @@ impl std::fmt::Display for UnsupportedType {
             Self::Inner(inner) => inner.fmt(f),
             Self::UnsupportedUnion(s) => write!(f, "unsupported union `{s}`; only `T | None` is recognised."),
             Self::UnsupportedShape(s) => write!(f, "unsupported generic shape `{s}`."),
+            Self::UnknownArgKeyword { keyword, suggestion: Some(s) } => {
+                write!(f, "unknown `arg()` keyword `{keyword}` (did you mean `{s}`?)")
+            }
+            Self::UnknownArgKeyword { keyword, suggestion: None } => {
+                write!(f, "unknown `arg()` keyword `{keyword}`")
+            }
+            Self::PositionalArgArgument => write!(f, "`arg()` takes keyword arguments only"),
         }
     }
 }

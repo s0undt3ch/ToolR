@@ -31,7 +31,7 @@ pub enum BuildFragmentError {
         #[source]
         source: anyhow::Error,
     },
-    #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
+    #[error("invalid parameter declarations ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
     ConflictingCommandName(Vec<CommandNameConflict>),

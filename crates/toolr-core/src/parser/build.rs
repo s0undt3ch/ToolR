@@ -231,7 +231,7 @@ pub enum BuildError {
     Build(#[source] anyhow::Error),
     #[error("third-party merge error: {0}")]
     ThirdParty(#[from] ThirdPartyError),
-    #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
+    #[error("invalid parameter declarations ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
     UnknownGroupRefs(Vec<UnknownGroupRef>),
@@ -466,7 +466,7 @@ fn nearest_group(target: &str, registered: &HashSet<String>) -> Option<String> {
 }
 
 /// Plain Levenshtein distance (insert / delete / substitute).
-fn edit_distance(a: &str, b: &str) -> usize {
+pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let (m, n) = (a.len(), b.len());
@@ -569,6 +569,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 mod tests {
     use super::*;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
+    use crate::parser::types::UnsupportedType;
     use tempfile::TempDir;
 
     fn arg(kind: ArgumentKind, name: &str, long_flag: Option<&str>) -> Argument {
@@ -1346,5 +1347,253 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
             }
             other => panic!("expected Enum resolved_type, got {other:?}"),
         }
+    }
+
+    fn type_errors_for(files: &[(&str, &str)]) -> Vec<TypeResolutionError> {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        match build_static_manifest_inner(&tmp.path().join("tools")) {
+            Err(BuildError::UnsupportedTypes(errs)) => errs,
+            Err(other) => panic!("expected UnsupportedTypes, got {other}"),
+            Ok(_) => panic!("expected the build to fail"),
+        }
+    }
+
+    fn assert_builds(src: &str) {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "tools/kw.py", src);
+        if let Err(err) = build_static_manifest(&tmp.path().join("tools")) {
+            panic!("expected the build to succeed, got: {err}");
+        }
+    }
+
+    fn unknown_keyword(keyword: &str, suggestion: Option<&str>) -> UnsupportedType {
+        UnsupportedType::UnknownArgKeyword {
+            keyword: keyword.to_string(),
+            suggestion: suggestion.map(str::to_string),
+        }
+    }
+
+    /// The exact shape from issue #500.
+    const ISSUE_500_KW_PY: &str = r#"from pathlib import Path
+from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> None:
+    """Read a config."""
+    ctx.print(f"got {config}")
+"#;
+
+    #[test]
+    fn unknown_arg_keyword_path_must_exist_fails_build_suggesting_must_exist() {
+        let errs = type_errors_for(&[("tools/kw.py", ISSUE_500_KW_PY)]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        let err = &errs[0];
+        assert_eq!(err.module, "tools.kw");
+        assert_eq!(err.function, "read");
+        assert_eq!(err.argument, "config");
+        assert_eq!(
+            err.reason,
+            unknown_keyword("path_must_exist", Some("must_exist"))
+        );
+        let msg = BuildError::UnsupportedTypes(errs).to_string();
+        assert!(
+            msg.starts_with("invalid parameter declarations (1):"),
+            "got: {msg}"
+        );
+        assert!(
+            msg.contains("unknown `arg()` keyword `path_must_exist` (did you mean `must_exist`?)"),
+            "got: {msg}"
+        );
+    }
+
+    #[test]
+    fn unknown_arg_keyword_via_module_level_alias_is_reported() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from pathlib import Path
+from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+ConfigPath = Annotated[Path, arg(must_bee_file=True)]
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, config: ConfigPath) -> None:
+    """Read a config."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].argument, "config");
+        assert_eq!(
+            errs[0].reason,
+            unknown_keyword("must_bee_file", Some("must_be_file"))
+        );
+    }
+
+    #[test]
+    fn unknown_keyword_in_toolr_dot_arg_attribute_form_is_reported() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from pathlib import Path
+from typing import Annotated
+
+import toolr
+
+group = toolr.command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: toolr.Context, config: Annotated[Path, toolr.arg(path_must_be_dir=True)]) -> None:
+    """Read a config."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(
+            errs[0].reason,
+            unknown_keyword("path_must_be_dir", Some("must_be_dir"))
+        );
+    }
+
+    #[test]
+    fn every_bad_arg_keyword_in_the_build_is_reported_together() {
+        let errs = type_errors_for(&[
+            ("tools/kw.py", ISSUE_500_KW_PY),
+            (
+                "tools/other.py",
+                r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("other", "Other", description="Other.")
+
+
+@group.command
+def run(ctx: Context, *, name: Annotated[str, arg(foo=1)] = "x") -> None:
+    """Run."""
+"#,
+            ),
+        ]);
+        assert_eq!(errs.len(), 2, "{errs:?}");
+        let reasons: Vec<&UnsupportedType> = errs.iter().map(|e| &e.reason).collect();
+        assert!(reasons.contains(&&unknown_keyword("path_must_exist", Some("must_exist"))));
+        assert!(reasons.contains(&&unknown_keyword("foo", None)));
+        let msg = BuildError::UnsupportedTypes(errs).to_string();
+        assert!(
+            msg.starts_with("invalid parameter declarations (2):"),
+            "got: {msg}"
+        );
+        assert!(msg.contains("unknown `arg()` keyword `foo`"), "got: {msg}");
+        assert!(!msg.contains("`foo` (did you mean"), "got: {msg}");
+    }
+
+    #[test]
+    fn positional_argument_to_arg_is_reported() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, name: Annotated[str, arg("x")]) -> None:
+    """Read."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, UnsupportedType::PositionalArgArgument);
+        assert!(errs[0]
+            .to_string()
+            .ends_with("`arg()` takes keyword arguments only"));
+    }
+
+    #[test]
+    fn deprecated_arg_keyword_is_still_accepted() {
+        assert_builds(
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg(required=True)] = "x") -> None:
+    """Read."""
+"#,
+        );
+    }
+
+    #[test]
+    fn every_accepted_arg_keyword_builds() {
+        for keyword in crate::parser::types::ARG_KEYWORDS {
+            assert_builds(&format!(
+                r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg({keyword}=None)] = "x") -> None:
+    """Read."""
+"#
+            ));
+        }
+    }
+
+    #[test]
+    fn non_toolr_call_inside_annotated_is_not_checked() {
+        assert_builds(
+            r#"from typing import Annotated
+
+from toolr import Context, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+def other(**kwargs):
+    return kwargs
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, other(foo=1)] = "x") -> None:
+    """Read."""
+"#,
+        );
+    }
+
+    #[test]
+    fn splatted_arg_arguments_are_not_checked() {
+        assert_builds(
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+KWARGS = {"metavar": "NAME"}
+ARGS = ()
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg(*ARGS, **KWARGS)] = "x") -> None:
+    """Read."""
+"#,
+        );
     }
 }

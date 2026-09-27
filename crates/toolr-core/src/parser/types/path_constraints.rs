@@ -8,7 +8,7 @@
 use ruff_python_ast::Expr;
 use serde::{Deserialize, Serialize};
 
-use super::is_toolr_arg_call;
+use super::toolr_arg_calls;
 
 /// Filesystem constraints layered on top of a `Path`/`AbsolutePath`/
 /// `ResolvedPath` parameter, expressed via `arg(must_exist=True, ...)`
@@ -69,28 +69,9 @@ pub struct PathConstraintDoc {
 /// `None` if the annotation isn't `Annotated[...]` or carries no
 /// path-related arg() metadata.
 pub fn extract_path_constraints(annotation: &Expr) -> Option<PathConstraints> {
-    let Expr::Subscript(sub) = annotation else {
-        return None;
-    };
-    let head = match sub.value.as_ref() {
-        Expr::Name(n) => n.id.as_str(),
-        Expr::Attribute(a) => a.attr.as_str(),
-        _ => return None,
-    };
-    if head != "Annotated" {
-        return None;
-    }
-    let elts: Vec<&Expr> = match sub.slice.as_ref() {
-        Expr::Tuple(t) => t.elts.iter().collect(),
-        single => vec![single],
-    };
     let mut constraints = PathConstraints::default();
     let mut hit = false;
-    for elt in elts.iter().skip(1) {
-        let Expr::Call(call) = elt else { continue };
-        if !is_toolr_arg_call(call) {
-            continue;
-        }
+    for call in toolr_arg_calls(annotation) {
         for kw in &call.arguments.keywords {
             let Some(name) = kw.arg.as_ref().map(|n| n.as_str()) else {
                 continue;

@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 use ruff_python_ast::{Expr, StmtFunctionDef};
 
+use super::arg_keywords::check_arg_calls;
 use super::arg_metadata::extract_arg_metadata;
 use super::path_constraints::extract_path_constraints;
 use super::supported::{SupportedType, TypeResolutionError, UnsupportedType};
@@ -134,6 +135,17 @@ fn resolve_one(
     {
         arg.metadata = md;
     }
+    let mut arg_call_problems = check_arg_calls(expr);
+    arg_call_problems.extend(follow_alias_for_arg_call_problems(expr, aliases));
+    for reason in arg_call_problems {
+        errors.push(TypeResolutionError {
+            module: module.to_string(),
+            function: function.to_string(),
+            argument: arg.name.clone(),
+            annotation: arg.type_annotation.clone().unwrap_or_default(),
+            reason,
+        });
+    }
     match resolve(expr, enums, all_imports, type_imports, aliases, module) {
         Ok(ty) => {
             // Post-resolution kind override: `toolr.types.Count` is the
@@ -193,6 +205,11 @@ fn follow_alias_for_arg_metadata(
     let Expr::Name(name) = expr else { return None };
     let aliased = aliases.lookup(name.id.as_str())?;
     extract_arg_metadata(aliased, sections)
+}
+
+fn follow_alias_for_arg_call_problems(expr: &Expr, aliases: &TypeAliasTable) -> Vec<UnsupportedType> {
+    let Expr::Name(name) = expr else { return Vec::new() };
+    aliases.lookup(name.id.as_str()).map(check_arg_calls).unwrap_or_default()
 }
 
 /// Resolve a parameter annotation to a [`SupportedType`]. `module` is
