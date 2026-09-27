@@ -104,7 +104,7 @@ pub fn build_third_party_fragment(
             ImportTable::from_module(&module, &module_path, is_package),
         );
         enums.merge(EnumTable::from_module(&module, &module_path));
-        aliases.merge(TypeAliasTable::from_module(&module));
+        aliases.merge(TypeAliasTable::from_module_at(&module, &module_path));
         sections.merge(ArgSectionTable::from_module(&module));
     }
 

@@ -50,7 +50,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
             ImportTable::from_module(&module, &module_path, is_package),
         );
         enums.merge(EnumTable::from_module(&module, &module_path));
-        aliases.merge(TypeAliasTable::from_module(&module));
+        aliases.merge(TypeAliasTable::from_module_at(&module, &module_path));
         sections.merge(ArgSectionTable::from_module(&module));
     }
 
@@ -1748,6 +1748,101 @@ def read(ctx: Context, {signature}) -> None:
             "unknown `arg()` keyword `default`; the default comes from the parameter's default value",
         ] {
             assert!(msg.contains(needle), "missing {needle:?} in: {msg}");
+        }
+    }
+
+    #[test]
+    fn local_arg_function_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "def arg(**kw):\n    return kw",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn local_arg_assignment_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "arg = dict",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn local_arg_class_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "class arg:\n    def __init__(self, **kw):\n        self.kw = kw",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    fn assert_tree_builds(files: &[(&str, &str)]) {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        if let Err(err) = build_static_manifest(&tmp.path().join("tools")) {
+            panic!("expected the build to succeed, got: {err}");
+        }
+    }
+
+    #[test]
+    fn imported_alias_is_checked_against_its_defining_modules_imports() {
+        assert_tree_builds(&[
+            (
+                "tools/other.py",
+                "from typing import Annotated\n\nfrom mylib import arg\n\nTagged = Annotated[str, arg(foo=1)]\n",
+            ),
+            (
+                "tools/kw.py",
+                &kw_module(
+                    "from toolr import Context, arg, command_group\nfrom tools.other import Tagged",
+                    "",
+                    "name: Tagged",
+                ),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn alias_the_using_module_never_imported_is_not_expanded() {
+        assert_tree_builds(&[
+            (
+                "tools/other.py",
+                "from typing import Annotated\n\nfrom toolr import arg\n\nName = Annotated[str, arg(foo=1)]\n",
+            ),
+            (
+                "tools/kw.py",
+                &kw_module(
+                    "from toolr import Context, command_group\nfrom mylib import Name",
+                    "",
+                    "name: list[Name] | None = None",
+                ),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn alias_imported_from_a_sibling_module_is_checked() {
+        let common = "from pathlib import Path\nfrom typing import Annotated\n\nfrom toolr import arg\n\nConfigPath = Annotated[Path, arg(path_must_exist=True)]\n";
+        for import in [
+            "from tools.common import ConfigPath",
+            "from .common import ConfigPath",
+        ] {
+            let kw = kw_module(
+                &format!("from toolr import Context, command_group\n{import}"),
+                "",
+                "config: ConfigPath | None = None",
+            );
+            let errs = type_errors_for(&[("tools/common.py", common), ("tools/kw.py", &kw)]);
+            assert_eq!(errs.len(), 1, "{import}: {errs:?}");
+            assert_eq!(
+                errs[0].reason,
+                unknown_keyword("path_must_exist", Some("must_exist")),
+                "{import}"
+            );
         }
     }
 }

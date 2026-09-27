@@ -1,7 +1,7 @@
 //! Reject `arg(...)` calls the Python runtime would refuse, so a typo fails the
 //! manifest build instead of raising `TypeError` the first time the command runs.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use ruff_python_ast::{Expr, ExprCall, Operator};
 
@@ -37,46 +37,70 @@ fn is_arg_keyword(name: &str) -> bool {
 
 /// One [`UnsupportedType`] per unknown keyword, plus one per `arg()` call
 /// that passes positional arguments, for every toolr `arg()` call anywhere
-/// in the annotation, including through module-level aliases.
+/// in the annotation, including through aliases visible from `module`.
 pub(super) fn check_arg_calls(
     annotation: &Expr,
     aliases: &TypeAliasTable,
-    imports: Option<&ImportTable>,
+    all_imports: &HashMap<String, ImportTable>,
+    module: &str,
 ) -> Vec<UnsupportedType> {
-    let mut problems = Vec::new();
-    walk(annotation, aliases, imports, &mut HashSet::new(), &mut problems);
-    problems
+    let mut walker = Walker { aliases, all_imports, expanded: HashSet::new(), problems: Vec::new() };
+    walker.walk(annotation, module);
+    walker.problems
 }
 
-fn walk(
-    expr: &Expr,
-    aliases: &TypeAliasTable,
-    imports: Option<&ImportTable>,
-    expanded: &mut HashSet<String>,
-    problems: &mut Vec<UnsupportedType>,
-) {
-    match expr {
-        Expr::Call(call) if calls_toolr_arg(call, imports) => check_call(call, problems),
-        Expr::Subscript(sub) => {
-            walk(&sub.value, aliases, imports, expanded, problems);
-            walk(&sub.slice, aliases, imports, expanded, problems);
-        }
-        Expr::Tuple(t) => {
-            for elt in &t.elts {
-                walk(elt, aliases, imports, expanded, problems);
+struct Walker<'a> {
+    aliases: &'a TypeAliasTable,
+    all_imports: &'a HashMap<String, ImportTable>,
+    expanded: HashSet<(String, String)>,
+    problems: Vec<UnsupportedType>,
+}
+
+impl<'a> Walker<'a> {
+    /// `scope` is the module whose imports decide what names in `expr` mean.
+    fn walk(&mut self, expr: &Expr, scope: &str) {
+        match expr {
+            Expr::Call(call) if calls_toolr_arg(call, self.all_imports.get(scope)) => {
+                check_call(call, &mut self.problems)
             }
-        }
-        Expr::BinOp(b) if b.op == Operator::BitOr => {
-            walk(&b.left, aliases, imports, expanded, problems);
-            walk(&b.right, aliases, imports, expanded, problems);
-        }
-        // Each alias is expanded once, which also breaks `A = B; B = A` cycles.
-        Expr::Name(n) if expanded.insert(n.id.to_string()) => {
-            if let Some(target) = aliases.lookup(n.id.as_str()) {
-                walk(target, aliases, imports, expanded, problems);
+            Expr::Subscript(sub) => {
+                self.walk(&sub.value, scope);
+                self.walk(&sub.slice, scope);
             }
+            Expr::Tuple(t) => {
+                for elt in &t.elts {
+                    self.walk(elt, scope);
+                }
+            }
+            Expr::BinOp(b) if b.op == Operator::BitOr => {
+                self.walk(&b.left, scope);
+                self.walk(&b.right, scope);
+            }
+            Expr::Name(n) => {
+                let Some((target, defined_in)) = self.visible_alias(n.id.as_str(), scope) else {
+                    return;
+                };
+                // Each alias is expanded once, which also breaks `A = B; B = A` cycles.
+                if self.expanded.insert((defined_in.clone(), n.id.to_string())) {
+                    self.walk(target, &defined_in);
+                }
+            }
+            _ => {}
         }
-        _ => {}
+    }
+
+    /// The alias `name` refers to from `scope`: defined there, or imported
+    /// from the module that defines it. The merged table alone would also
+    /// match same-named aliases the module never imported.
+    fn visible_alias(&self, name: &str, scope: &str) -> Option<(&'a Expr, String)> {
+        if let Some(target) = self.aliases.lookup_in(scope, name) {
+            return Some((target, scope.to_string()));
+        }
+        self.all_imports.get(scope)?.candidates(name).iter().find_map(|c| {
+            self.aliases
+                .lookup_in(&c.module, &c.original_name)
+                .map(|target| (target, c.module.clone()))
+        })
     }
 }
 
@@ -110,15 +134,19 @@ fn is_toolr_module(module: &str) -> bool {
 fn calls_toolr_arg(call: &ExprCall, imports: Option<&ImportTable>) -> bool {
     match call.func.as_ref() {
         Expr::Name(n) => {
-            let candidates = imports.map_or(&[][..], |t| t.candidates(n.id.as_str()));
-            if candidates.is_empty() {
-                // Unresolvable binding (star import, alias from another module):
-                // keep treating the literal name `arg` as toolr's.
+            let Some(table) = imports else {
                 return n.id.as_str() == "arg";
+            };
+            let candidates = table.candidates(n.id.as_str());
+            if !candidates.is_empty() {
+                return candidates
+                    .iter()
+                    .any(|c| is_toolr_module(&c.module) && c.original_name == "arg");
             }
-            candidates
-                .iter()
-                .any(|c| is_toolr_module(&c.module) && c.original_name == "arg")
+            // Not imported by name: a local `def`/`class`/assignment isn't toolr's,
+            // but an unresolvable binding (e.g. a star import) keeps the literal
+            // name `arg` treated as toolr's.
+            !table.binds_locally(n.id.as_str()) && n.id.as_str() == "arg"
         }
         Expr::Attribute(a) if a.attr.as_str() == "arg" => {
             let mut root = a.value.as_ref();

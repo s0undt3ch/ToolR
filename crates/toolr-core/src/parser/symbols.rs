@@ -1,6 +1,6 @@
 //! Symbol table for resolving local type names to their declarations.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ruff_python_ast::{Expr, ModModule, Stmt, StmtAssign, StmtClassDef};
 
@@ -258,6 +258,9 @@ pub struct ImportTable {
     /// a command-signature annotation with a specific, actionable
     /// message — this table never resolves such a binding to a class.
     module_bindings: HashMap<String, String>,
+    /// Names the module binds itself at top level (`def`, `class`,
+    /// assignment), so a local `arg` isn't mistaken for toolr's.
+    local_names: HashSet<String>,
 }
 
 impl ImportTable {
@@ -299,6 +302,24 @@ impl ImportTable {
                         });
                     self.module_bindings
                         .insert(local, alias.name.as_str().to_string());
+                }
+            }
+            Stmt::FunctionDef(f) => {
+                self.local_names.insert(f.name.to_string());
+            }
+            Stmt::ClassDef(c) => {
+                self.local_names.insert(c.name.to_string());
+            }
+            Stmt::Assign(assign) => {
+                for target in &assign.targets {
+                    if let Expr::Name(n) = target {
+                        self.local_names.insert(n.id.to_string());
+                    }
+                }
+            }
+            Stmt::AnnAssign(assign) => {
+                if let Expr::Name(n) = assign.target.as_ref() {
+                    self.local_names.insert(n.id.to_string());
                 }
             }
             Stmt::If(if_stmt) if is_type_checking_test(&if_stmt.test) => {
@@ -394,6 +415,12 @@ impl ImportTable {
     /// pointing at `from foo.bar.baz import X` instead.
     pub fn resolve_module_binding(&self, name: &str) -> Option<&str> {
         self.module_bindings.get(name).map(String::as_str)
+    }
+
+    /// Whether the module binds `name` itself with a top-level `def`,
+    /// `class` or assignment.
+    pub fn binds_locally(&self, name: &str) -> bool {
+        self.local_names.contains(name)
     }
 }
 
@@ -540,6 +567,9 @@ fn literal_value(expr: &Expr) -> Option<String> {
 #[derive(Debug, Default, Clone)]
 pub struct TypeAliasTable {
     aliases: HashMap<String, Expr>,
+    /// The same aliases keyed by defining module, for checks that must
+    /// respect which module can actually see an alias.
+    by_module: HashMap<String, HashMap<String, Expr>>,
 }
 
 impl TypeAliasTable {
@@ -565,6 +595,22 @@ impl TypeAliasTable {
         table
     }
 
+    /// Like [`Self::from_module`], also recording `module_path` as the
+    /// aliases' defining module for [`Self::lookup_in`].
+    pub fn from_module_at(module: &ModModule, module_path: &str) -> Self {
+        let mut table = Self::from_module(module);
+        table
+            .by_module
+            .insert(module_path.to_string(), table.aliases.clone());
+        table
+    }
+
+    /// The alias `name` as defined in `module_path` itself; only
+    /// populated by [`Self::from_module_at`].
+    pub fn lookup_in(&self, module_path: &str, name: &str) -> Option<&Expr> {
+        self.by_module.get(module_path)?.get(name)
+    }
+
     /// Returns the underlying annotation expression for `name`, if it
     /// was assigned via a module-level type alias.
     pub fn lookup(&self, name: &str) -> Option<&Expr> {
@@ -573,6 +619,7 @@ impl TypeAliasTable {
 
     pub fn merge(&mut self, other: TypeAliasTable) {
         self.aliases.extend(other.aliases);
+        self.by_module.extend(other.by_module);
     }
 }
 

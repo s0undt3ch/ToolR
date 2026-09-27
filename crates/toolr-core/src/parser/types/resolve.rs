@@ -135,7 +135,7 @@ fn resolve_one(
     {
         arg.metadata = md;
     }
-    for reason in check_arg_calls(expr, aliases, all_imports.get(module)) {
+    for reason in check_arg_calls(expr, aliases, all_imports, module) {
         errors.push(TypeResolutionError {
             module: module.to_string(),
             function: function.to_string(),
