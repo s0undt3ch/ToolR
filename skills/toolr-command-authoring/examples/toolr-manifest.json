@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "static_hash": "bd32800ac4592c0ec26de6a9b12575238ba57e589898d1d656d6f314ef4e7423",
+  "static_hash": "b9d0561175a8018db224360ae1f6709a679477f032d726e0dbc797b7025a18be",
   "third_party_hash": "",
   "toolr_version": "<toolr-version>",
   "groups": [
     {
       "name": "db",
       "title": "Database lifecycle",
-      "description": "Database lifecycle commands.\n\nExercise: `arg_section` for grouping related flags in `--help`,\nthe string-attached `@command(group=...)` form, mixed positional\nand keyword-only arguments, and a Google-style docstring with\n`Args:` and `Examples:` sections.",
+      "description": "Database lifecycle commands.\n\nExercise: `arg_section` for grouping related flags in `--help`,\nmixed positional and keyword-only arguments, and a Google-style\ndocstring with `Args:` and `Examples:` sections.",
       "parent": null,
       "origin": "static"
     },
