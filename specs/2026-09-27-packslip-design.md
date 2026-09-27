@@ -97,7 +97,18 @@ signing identity, and mise remembers that identity and asks users to
 approve any change. The signer must stay
 `https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main`.
 
-- `needs: [prepare-release, publish-release]`.
+- `needs: [prepare-release, publish-release]`, with an `if:` that runs
+  the job when it isn't cancelled, `prepare-release` succeeded, and
+  `publish-release` either succeeded or failed:
+
+  ```yaml
+  if: >-
+    ${{ !cancelled()
+        && needs.prepare-release.result == 'success'
+        && (needs.publish-release.result == 'success'
+            || needs.publish-release.result == 'failure') }}
+  ```
+
 - `permissions: { contents: write, id-token: write }`. `attest: link`
   needs no `attestations: write`.
 - Added to `set-pipeline-exit-status.needs`.
@@ -105,10 +116,12 @@ approve any change. The signer must stay
 It is a separate job, not a step in `publish-release`, for these
 reasons:
 
-- When packslip fails, the GitHub release and PyPI publish have already
-  finished. No release ends up half-published.
-- "Re-run failed jobs" re-runs only this job. The job does not tag or
-  push, so a re-run is safe.
+- When packslip fails, the GitHub release already exists and nothing is
+  half-published. The job runs even if `publish-release` failed after
+  creating the release (for example, a PyPI outage). "Re-run failed jobs"
+  also re-runs `publish-release`, which fails harmlessly on the existing
+  tag; this job re-signs and replaces the asset (`--clobber`). "Re-run
+  this job" re-runs only this job.
 - The job gets the smallest set of permissions.
 
 The cost: if the job fails, the release has no bundle until someone
@@ -154,8 +167,9 @@ runner-native archives that CI already builds. It signs nothing
 publicly.
 
 - Downloads the `toolr-archive-*` artifacts.
-- Gets the CLI with `mise x github:jdx/packslip@1.3.0`. That version
-  must match the action pin in section 2. A comment next to each pin
+- Installs the CLI with `mise install github:jdx/packslip@1.3.0` and
+  runs it through `mise which`. That version must match the action pin in
+  section 2, and Renovate bumps both in one PR. A comment next to each pin
   names the other.
 - Runs a throwaway `packslip keygen`, then
   `packslip create --manifest .github/packslip.toml --key … --no-log`
@@ -200,7 +214,7 @@ way. That work lands first, as the PR below this one in the stack.
 | --- | --- | --- |
 | Archive layout or bin path changes | PR gate | Fix the layout or the manifest before merge. |
 | Skill added without a manifest entry | PR gate | Add the `[[resource]]` entry. |
-| Sigstore or Rekor outage at release | `publish-packslip` | Re-run the failed job. |
+| Sigstore or Rekor outage at release | `publish-packslip` | Re-run the failed job (or "Re-run failed jobs"; publish-release's tag-exists failure is expected). |
 | Wrong commit or version in the bundle | `publish-packslip` post-publish check | Delete the bundle asset, fix, and re-run. |
 | packslip action and CLI pins drift | Pins sit side by side with cross-reference comments | Bump both in one PR. |
 
