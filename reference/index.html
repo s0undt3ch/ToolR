@@ -1114,6 +1114,8 @@
       
         
       
+        
+      
     
     
     
@@ -1183,6 +1185,34 @@
     
   
     Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="current_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    current_context
   
 
     
@@ -1485,6 +1515,8 @@
 under <a href="https://github.com/s0undt3ch/ToolR/tree/main/crates/toolr-py/python/toolr"><code>crates/toolr-py/python/toolr/</code></a>.</p>
 <ul>
 <li><a href="context/"><code>Context</code></a> — passed to every command function as <code>ctx</code>.</li>
+<li><a href="current_context/"><code>current_context</code></a> — the <code>Context</code> of the command
+  currently executing, for helpers that aren't passed <code>ctx</code> directly.</li>
 <li><a href="command_group/"><code>command_group</code></a> — declared at module scope in
   <code>tools/*.py</code> files.</li>
 <li><a href="command/"><code>command</code></a> — string-path decorator for attaching

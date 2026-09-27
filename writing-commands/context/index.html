@@ -668,6 +668,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#getting-ctx-in-a-helper-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting ctx in a helper function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-full-surface" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1216,6 +1227,8 @@
       
         
       
+        
+      
     
     
     
@@ -1285,6 +1298,34 @@
     
   
     Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/current_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    current_context
   
 
     
@@ -1570,6 +1611,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#getting-ctx-in-a-helper-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting ctx in a helper function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-full-surface" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1726,6 +1778,13 @@ exception traceback.</p>
 </span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">answer</span><span class="p">:</span>
 </span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">"aborted"</span><span class="p">)</span>
 </span></code></pre></div>
+<h2 id="getting-ctx-in-a-helper-function">Getting <code>ctx</code> in a helper function<a class="headerlink" href="#getting-ctx-in-a-helper-function" title="Permanent link">&para;</a></h2>
+<p>A command function always takes <code>ctx</code> as its first parameter, but a
+helper it calls doesn't have to — it can take <code>ctx</code> as a parameter too,
+or call <a class="autorefs autorefs-internal" href="../../reference/current_context/#toolr.current_context"><code>toolr.current_context()</code></a> to fetch the
+<code>Context</code> of whichever command is currently running, without threading
+it through every call in between. See the reference page for when it
+raises and how it interacts with threads and <code>asyncio</code> tasks.</p>
 <h2 id="the-full-surface">The full surface<a class="headerlink" href="#the-full-surface" title="Permanent link">&para;</a></h2>
 <p>See <a class="autorefs autorefs-internal" href="../../reference/context/#toolr.Context"><code>Context</code></a> in the API reference for every method
 and attribute. Highlights:</p>
