@@ -1,6 +1,6 @@
 //! Symbol table for resolving local type names to their declarations.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use ruff_python_ast::{Expr, ModModule, Stmt, StmtAssign, StmtClassDef};
 
@@ -259,8 +259,15 @@ pub struct ImportTable {
     /// message — this table never resolves such a binding to a class.
     module_bindings: HashMap<String, String>,
     /// Names the module binds itself at top level (`def`, `class`,
-    /// assignment), so a local `arg` isn't mistaken for toolr's.
-    local_names: HashSet<String>,
+    /// assignment), so a local `arg` isn't mistaken for toolr's. Values
+    /// are binding positions (see `seq`); the last one is kept.
+    local_names: HashMap<String, usize>,
+    /// Position of the last `from ... import` binding of each name.
+    import_positions: HashMap<String, usize>,
+    /// Source modules of `from X import *`.
+    star_modules: Vec<String>,
+    /// Source-order counter shared by imports and local bindings.
+    seq: usize,
 }
 
 impl ImportTable {
@@ -305,21 +312,21 @@ impl ImportTable {
                 }
             }
             Stmt::FunctionDef(f) => {
-                self.local_names.insert(f.name.to_string());
+                self.bind_local(f.name.to_string());
             }
             Stmt::ClassDef(c) => {
-                self.local_names.insert(c.name.to_string());
+                self.bind_local(c.name.to_string());
             }
             Stmt::Assign(assign) => {
                 for target in &assign.targets {
                     if let Expr::Name(n) = target {
-                        self.local_names.insert(n.id.to_string());
+                        self.bind_local(n.id.to_string());
                     }
                 }
             }
             Stmt::AnnAssign(assign) => {
                 if let Expr::Name(n) = assign.target.as_ref() {
-                    self.local_names.insert(n.id.to_string());
+                    self.bind_local(n.id.to_string());
                 }
             }
             Stmt::If(if_stmt) if is_type_checking_test(&if_stmt.test) => {
@@ -377,6 +384,7 @@ impl ImportTable {
         for alias in &import.names {
             if alias.name.as_str() == "*" {
                 self.star_import = true;
+                self.star_modules.push(target_module.clone());
                 continue;
             }
             let original_name = alias.name.as_str().to_string();
@@ -385,6 +393,8 @@ impl ImportTable {
                 .as_ref()
                 .map(|n| n.as_str().to_string())
                 .unwrap_or_else(|| original_name.clone());
+            self.seq += 1;
+            self.import_positions.insert(local.clone(), self.seq);
             self.entries.entry(local).or_default().push(ImportedFrom {
                 module: target_module.clone(),
                 original_name,
@@ -417,10 +427,24 @@ impl ImportTable {
         self.module_bindings.get(name).map(String::as_str)
     }
 
-    /// Whether the module binds `name` itself with a top-level `def`,
-    /// `class` or assignment.
-    pub fn binds_locally(&self, name: &str) -> bool {
-        self.local_names.contains(name)
+    fn bind_local(&mut self, name: String) {
+        self.seq += 1;
+        self.local_names.insert(name, self.seq);
+    }
+
+    /// Whether the module's last top-level binding of `name` is its own
+    /// `def`, `class` or assignment rather than a `from ... import`.
+    pub fn local_binding_wins(&self, name: &str) -> bool {
+        match (self.local_names.get(name), self.import_positions.get(name)) {
+            (Some(local), Some(import)) => local > import,
+            (Some(_), None) => true,
+            _ => false,
+        }
+    }
+
+    /// Source modules of this module's `from X import *` statements.
+    pub fn star_import_modules(&self) -> &[String] {
+        &self.star_modules
     }
 }
 
@@ -609,6 +633,11 @@ impl TypeAliasTable {
     /// populated by [`Self::from_module_at`].
     pub fn lookup_in(&self, module_path: &str, name: &str) -> Option<&Expr> {
         self.by_module.get(module_path)?.get(name)
+    }
+
+    /// Whether `module_path` was recorded by [`Self::from_module_at`].
+    pub fn knows_module(&self, module_path: &str) -> bool {
+        self.by_module.contains_key(module_path)
     }
 
     /// Returns the underlying annotation expression for `name`, if it

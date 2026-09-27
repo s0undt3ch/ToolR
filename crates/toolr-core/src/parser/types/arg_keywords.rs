@@ -96,11 +96,27 @@ impl<'a> Walker<'a> {
         if let Some(target) = self.aliases.lookup_in(scope, name) {
             return Some((target, scope.to_string()));
         }
-        self.all_imports.get(scope)?.candidates(name).iter().find_map(|c| {
+        let table = self.all_imports.get(scope)?;
+        let imported = table.candidates(name).iter().find_map(|c| {
             self.aliases
                 .lookup_in(&c.module, &c.original_name)
                 .map(|target| (target, c.module.clone()))
-        })
+        });
+        if imported.is_some() || !table.has_star_import() {
+            return imported;
+        }
+        let stars = table.star_import_modules();
+        if let Some(found) = stars.iter().find_map(|m| {
+            self.aliases.lookup_in(m, name).map(|target| (target, m.clone()))
+        }) {
+            return Some(found);
+        }
+        // A star import from a module we never parsed: stay permissive, like
+        // the bare-`arg` fallback, and use the merged table.
+        if stars.iter().any(|m| !self.aliases.knows_module(m)) {
+            return self.aliases.lookup(name).map(|target| (target, scope.to_string()));
+        }
+        None
     }
 }
 
@@ -137,16 +153,18 @@ fn calls_toolr_arg(call: &ExprCall, imports: Option<&ImportTable>) -> bool {
             let Some(table) = imports else {
                 return n.id.as_str() == "arg";
             };
+            if table.local_binding_wins(n.id.as_str()) {
+                return false;
+            }
             let candidates = table.candidates(n.id.as_str());
             if !candidates.is_empty() {
                 return candidates
                     .iter()
                     .any(|c| is_toolr_module(&c.module) && c.original_name == "arg");
             }
-            // Not imported by name: a local `def`/`class`/assignment isn't toolr's,
-            // but an unresolvable binding (e.g. a star import) keeps the literal
+            // An unresolvable binding (e.g. a star import) keeps the literal
             // name `arg` treated as toolr's.
-            !table.binds_locally(n.id.as_str()) && n.id.as_str() == "arg"
+            n.id.as_str() == "arg"
         }
         Expr::Attribute(a) if a.attr.as_str() == "arg" => {
             let mut root = a.value.as_ref();

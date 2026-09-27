@@ -1845,4 +1845,45 @@ def read(ctx: Context, {signature}) -> None:
             );
         }
     }
+
+    #[test]
+    fn alias_pulled_in_by_a_star_import_is_checked() {
+        let common = "from pathlib import Path\nfrom typing import Annotated\n\nfrom toolr import arg\n\nConfigPath = Annotated[Path, arg(path_must_exist=True)]\n";
+        for import in ["from tools.common import *", "from .common import *"] {
+            let kw = kw_module(
+                &format!("from toolr import Context, command_group\n{import}"),
+                "",
+                "config: ConfigPath | None = None",
+            );
+            let errs = type_errors_for(&[("tools/common.py", common), ("tools/kw.py", &kw)]);
+            let flagged = errs
+                .iter()
+                .filter(|e| e.reason == unknown_keyword("path_must_exist", Some("must_exist")))
+                .count();
+            assert_eq!(flagged, 1, "{import}: {errs:?}");
+        }
+    }
+
+    #[test]
+    fn local_arg_def_after_toolr_import_is_not_checked() {
+        assert_builds(&kw_module(
+            TOOLR_IMPORTS,
+            "def arg(**kw):\n    return kw",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn toolr_import_after_local_arg_def_is_checked() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            &kw_module(
+                "from toolr import Context, command_group",
+                "def arg(**kw):\n    return kw\n\n\nfrom toolr import arg",
+                r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+            ),
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, unknown_keyword("foo", None));
+    }
 }
