@@ -80,6 +80,18 @@ PR; a public-surface change that forgets to regenerate the
 references cannot land. End users never run the regenerator — they
 consume what `skillshare` distributes.
 
+Every reference file traces back to one of three sources: code-derived
+tables (walked from `__all__` exports, the parser's argument-type and
+path-constraint catalogue, or Rust marker regions), named sections
+extracted from this docs tree, and copied examples such as
+`toolr-command-packaging/examples/pyproject.toml`. Whichever source it
+comes from, each skill directory is self-contained — everything an
+agent needs to act on the skill ships inside it, with no docs-site or
+GitHub round trip at use time. `cargo xtask build-skill-refs --check`
+enforces that: it fails on any link, URL to the toolr repo or docs
+site, or backticked repo path that leaves a skill's own directory, so
+that self-containment can't silently regress.
+
 ## See also
 
 - The skill source layout lives under

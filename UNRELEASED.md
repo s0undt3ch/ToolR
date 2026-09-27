@@ -20,3 +20,14 @@ additive: `@command`-decorated functions keep receiving `ctx` as their
 required first argument, and existing helpers that take `ctx` explicitly are
 unaffected. See `toolr.testing.set_current_context()` for testing helpers
 that use it.
+
+### Agent skills are now self-contained
+
+Each skill under `skills/` now carries everything it needs: the supported
+argument types and path constraints (generated from toolr's own parser), the
+argument-shape rules, the prek hook recipe, and the example plugin
+`pyproject.toml`. Installed skills no longer point agents at the docs site or
+GitHub. The docs' path-constraint table previously documented
+`arg(path_must_exist=...)`; the real keywords are `must_exist`,
+`must_be_file` and `must_be_dir`, and the docs now generate that table from the
+code.
