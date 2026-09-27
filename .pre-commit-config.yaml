@@ -143,8 +143,10 @@ repos:
             crates/toolr-core/src/docstrings\.rs|
             crates/toolr-core/src/manifest/model\.rs|
             crates/toolr-core/src/third_party/(model|glob)\.rs|
+            crates/toolr-core/src/parser/types/.*\.rs|
             action\.yml|
-            skills/.*/references/.*\.md
+            skills/.*/references/.*\.md|
+            docs/writing-commands/files/.*\.md
           )$
 
   - repo: local

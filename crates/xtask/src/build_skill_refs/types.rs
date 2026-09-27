@@ -18,22 +18,46 @@ fn escape_cell(s: &str) -> String {
     s.replace('|', "\\|")
 }
 
+/// Which renderer will read the generated table: a raw-Markdown/GFM
+/// reader (agents, this repo's own linter) or Python-Markdown's table
+/// extension, which splits a row on every literal `|` in the *source*
+/// text before any inline processing — so a `` `T \| None` `` code span
+/// comes out the other side as literal `T \| None`, backslash and all
+/// (Python-Markdown's inline code doesn't interpret backslash escapes).
+#[derive(Clone, Copy)]
+enum TableFlavor {
+    /// Read as GFM/CommonMark: `` `T \| None` `` renders as `T | None`.
+    Gfm,
+    /// Read by Python-Markdown's table extension: any annotation
+    /// containing `|` is emitted as raw HTML with an `&#124;` entity in
+    /// place of the pipe, since the entity (not a literal `|`) survives
+    /// the table extension's row-splitting untouched.
+    PythonMarkdownTable,
+}
+
 /// Render one row's annotation cell: the annotation wrapped in a code
-/// span (with `|` escaped inside it too), followed by the note (if
-/// any) as plain text after one space.
-fn render_annotation_cell(doc: &TypeDoc) -> String {
-    let annotation = escape_cell(doc.annotation);
+/// span (or raw HTML, for a `|`-bearing annotation under
+/// `PythonMarkdownTable`), followed by the note (if any) as plain text
+/// after one space.
+fn render_annotation_cell(doc: &TypeDoc, flavor: TableFlavor) -> String {
+    let cell = match flavor {
+        TableFlavor::Gfm => format!("`{}`", escape_cell(doc.annotation)),
+        TableFlavor::PythonMarkdownTable if doc.annotation.contains('|') => {
+            format!("<code>{}</code>", doc.annotation.replace('|', "&#124;"))
+        }
+        TableFlavor::PythonMarkdownTable => format!("`{}`", doc.annotation),
+    };
     if doc.note.is_empty() {
-        format!("`{annotation}`")
+        cell
     } else {
-        format!("`{annotation}` {}", doc.note)
+        format!("{cell} {}", doc.note)
     }
 }
 
 /// The `| Annotation | Validated by | Wire format | Python receives |`
 /// table shared by `references/types.md` and
 /// `docs/writing-commands/files/supported-types.md`.
-fn render_types_table() -> String {
+fn render_types_table(flavor: TableFlavor) -> String {
     let mut out = String::new();
     out.push_str("| Annotation | Validated by | Wire format | Python receives |\n");
     out.push_str("|---|---|---|---|\n");
@@ -41,7 +65,7 @@ fn render_types_table() -> String {
         let _ = writeln!(
             out,
             "| {} | {} | {} | {} |",
-            render_annotation_cell(&doc),
+            render_annotation_cell(&doc, flavor),
             escape_cell(doc.validated_by),
             escape_cell(doc.wire_format),
             escape_cell(doc.python_receives),
@@ -81,7 +105,7 @@ pub fn types_reference(repo_root: &Path) -> Result<Generated> {
     );
 
     body.push_str("## Types\n\n");
-    body.push_str(&render_types_table());
+    body.push_str(&render_types_table(TableFlavor::Gfm));
     body.push('\n');
 
     body.push_str("## Path constraints\n\n");
@@ -101,7 +125,7 @@ pub fn supported_types_snippet(repo_root: &Path) -> Result<Generated> {
     let mut body = String::new();
     body.push_str(DO_NOT_EDIT);
     body.push_str("\n\n");
-    body.push_str(&render_types_table());
+    body.push_str(&render_types_table(TableFlavor::PythonMarkdownTable));
 
     Ok(Generated {
         path: repo_root.join("docs/writing-commands/files/supported-types.md"),
@@ -140,7 +164,7 @@ mod tests {
             python_receives: "`int`",
             note: "",
         };
-        assert_eq!(render_annotation_cell(&doc), "`int`");
+        assert_eq!(render_annotation_cell(&doc, TableFlavor::Gfm), "`int`");
     }
 
     #[test]
@@ -152,25 +176,69 @@ mod tests {
             python_receives: "enum member",
             note: "subclass",
         };
-        assert_eq!(render_annotation_cell(&doc), "`Enum` subclass");
+        assert_eq!(
+            render_annotation_cell(&doc, TableFlavor::Gfm),
+            "`Enum` subclass"
+        );
     }
 
-    #[test]
-    fn render_annotation_cell_escapes_pipe_inside_code_span() {
-        let doc = TypeDoc {
+    fn pipe_bearing_doc() -> TypeDoc {
+        TypeDoc {
             annotation: "T | None",
             validated_by: "clap (`required=false`)",
             wire_format: "typed or absent",
             python_receives: "`T` or `None`",
             note: "",
+        }
+    }
+
+    #[test]
+    fn render_annotation_cell_gfm_escapes_pipe_inside_code_span() {
+        let doc = pipe_bearing_doc();
+        assert_eq!(
+            render_annotation_cell(&doc, TableFlavor::Gfm),
+            "`T \\| None`"
+        );
+    }
+
+    #[test]
+    fn render_annotation_cell_python_markdown_table_uses_html_entity() {
+        // Python-Markdown's table extension splits a row on every
+        // literal `|` before inline processing runs, so a backslash
+        // escape survives verbatim; only a non-`|` entity does not.
+        let doc = pipe_bearing_doc();
+        assert_eq!(
+            render_annotation_cell(&doc, TableFlavor::PythonMarkdownTable),
+            "<code>T &#124; None</code>"
+        );
+    }
+
+    #[test]
+    fn render_annotation_cell_python_markdown_table_keeps_code_span_without_pipe() {
+        let doc = TypeDoc {
+            annotation: "int",
+            validated_by: "clap",
+            wire_format: "JSON number",
+            python_receives: "`int`",
+            note: "",
         };
-        assert_eq!(render_annotation_cell(&doc), "`T \\| None`");
+        assert_eq!(
+            render_annotation_cell(&doc, TableFlavor::PythonMarkdownTable),
+            "`int`"
+        );
     }
 
     #[test]
     fn types_table_has_one_row_per_catalogue_entry() {
-        let table = render_types_table();
+        let table = render_types_table(TableFlavor::Gfm);
         assert_eq!(table.lines().count(), 2 + SupportedType::catalogue().len());
+    }
+
+    #[test]
+    fn types_table_python_markdown_flavor_uses_html_for_pipe_row() {
+        let table = render_types_table(TableFlavor::PythonMarkdownTable);
+        assert!(table.contains("<code>T &#124; None</code>"));
+        assert!(!table.contains("T \\| None"));
     }
 
     #[test]

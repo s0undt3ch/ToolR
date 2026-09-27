@@ -22,4 +22,4 @@
 | `Enum` subclass | clap (member values) | string | enum member |
 | `list[T]` (T above) | clap per-element | JSON array | `list[T]` |
 | `tuple[T1, T2, …]` | clap arity, msgspec per-slot | JSON array | `tuple[T1, T2]` |
-| `T \| None` | clap (`required=false`) | typed or absent | `T` or `None` |
+| <code>T &#124; None</code> | clap (`required=false`) | typed or absent | `T` or `None` |

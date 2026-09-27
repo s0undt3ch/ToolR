@@ -223,10 +223,11 @@ jobs:
           fi
 
       - name: Verify skill references and generated docs snippets are in sync
-        # Drift gate for the two in-tree agent skills
-        # (`toolr-command-authoring`, `toolr-command-packaging`) and the
-        # generated docs/writing-commands/files/*.md snippets they
-        # share tables with. Runs the same regenerator the prek hook
+        # Drift gate for the three in-tree agent skills
+        # (`toolr-command-authoring`, `toolr-command-packaging`,
+        # `toolr-ci-setup`) and the generated
+        # docs/writing-commands/files/*.md snippets some of them share
+        # tables with. Runs the same regenerator the prek hook
         # uses, then uses `git diff --exit-code` to fail-and-show on
         # drift. The printed diff makes it obvious WHAT regenerated
         # differently — much clearer in the CI log than the `--check`
