@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev59-2026-09-27" class="md-nav__link">
+  <a href="#0331-dev79-2026-09-27" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev59 - 2026-09-27
+        0.33.1-dev79 - 2026-09-27
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev59 - 2026-09-27">
+    <nav class="md-nav" aria-label="0.33.1-dev79 - 2026-09-27">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1501,6 +1501,17 @@
     <span class="md-ellipsis">
       
         Agent skills are now self-contained
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-toolr-with-mises-packslip-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install toolr with mise's packslip backend
       
     </span>
   </a>
@@ -4052,15 +4063,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev59-2026-09-27" class="md-nav__link">
+  <a href="#0331-dev79-2026-09-27" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev59 - 2026-09-27
+        0.33.1-dev79 - 2026-09-27
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev59 - 2026-09-27">
+    <nav class="md-nav" aria-label="0.33.1-dev79 - 2026-09-27">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4090,6 +4101,17 @@
     <span class="md-ellipsis">
       
         Agent skills are now self-contained
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-toolr-with-mises-packslip-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install toolr with mise's packslip backend
       
     </span>
   </a>
@@ -6636,7 +6658,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev59-2026-09-27">0.33.1-dev59 - 2026-09-27<a class="headerlink" href="#0331-dev59-2026-09-27" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev79-2026-09-27">0.33.1-dev79 - 2026-09-27<a class="headerlink" href="#0331-dev79-2026-09-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6655,6 +6677,12 @@ site or repository. The docs' path-constraint table previously documented
 <code>arg(path_must_exist=...)</code>; the real keywords are <code>must_exist</code>,
 <code>must_be_file</code> and <code>must_be_dir</code>, and the docs now generate that table from the
 code.</p>
+<h3 id="install-toolr-with-mises-packslip-backend">Install toolr with mise's packslip backend<a class="headerlink" href="#install-toolr-with-mises-packslip-backend" title="Permanent link">&para;</a></h3>
+<p>Releases now ship a signed <a href="https://packslip.dev/">packslip</a> manifest, so
+<code>mise use packslip:github.com/s0undt3ch/ToolR</code> installs toolr with signature
+and checksum verification, version-matched shell completions, and the three
+toolr agent skills (<code>mise skills sync</code>). The aqua backend remains available
+for releases published before packslip support.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6679,11 +6707,16 @@ code.</p>
 <li><em>(xtask)</em> Normalise CRLF sources before generating skill refs (<a href="https://github.com/s0undt3ch/ToolR/commit/ae8fe45ad9e5ab1b96a07c801f6d699fc0e7ceef"><code>ae8fe45</code></a>)</li>
 <li><em>(xtask)</em> Lint unquoted HTML href/src values in skills (<a href="https://github.com/s0undt3ch/ToolR/commit/5d00f7b8ed920212750e99abf096ec922525cd70"><code>5d00f7b</code></a>)</li>
 <li><em>(xtask)</em> Print self-containment violations with forward slashes on every OS (<a href="https://github.com/s0undt3ch/ToolR/commit/52b21fc93efcbe6acd16e42bdbfdced183967cbb"><code>52b21fc</code></a>)</li>
+<li><em>(packslip)</em> Harden packslip-check.sh path resolution and error handling (<a href="https://github.com/s0undt3ch/ToolR/commit/1f904b90e7818f67fb7996eae52ce14236d35fb4"><code>1f904b9</code></a>)</li>
+<li><em>(release)</em> Publish the packslip after a partial release failure and pin the verify identity (<a href="https://github.com/s0undt3ch/ToolR/commit/c0dffcde1a4b7b67e81910f99c41dd628b07d2c6"><code>c0dffcd</code></a>)</li>
+<li><em>(packslip)</em> Require each skill resource's repo path to be skills/<name> (<a href="https://github.com/s0undt3ch/ToolR/commit/72cf98191c7d8bc95dd424071f0c79b08ba15747"><code>72cf981</code></a>)</li>
+<li><em>(ci)</em> Satisfy mypy in tools/ci.py's generate-build-matrix (<a href="https://github.com/s0undt3ch/ToolR/commit/485e11f41ab89a3b1eadae830970eaf880b7cb83"><code>485e11f</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> Drop ordinal guard from type catalogue (<a href="https://github.com/s0undt3ch/ToolR/commit/b3fa5b658ca31d2c3299bfc254702472ede115da"><code>b3fa5b6</code></a>)</li>
 <li><em>(xtask)</em> Derive self-containment URL list from project metadata (<a href="https://github.com/s0undt3ch/ToolR/commit/a5d51a6cfee4f75e83a5f57c8fb893962e7b364f"><code>a5d51a6</code></a>)</li>
+<li><em>(ci)</em> Move the packslip manifest check into toolr ci packslip-check (<a href="https://github.com/s0undt3ch/ToolR/commit/254fa420d4b8d080be769bc2fc510f9dc227031a"><code>254fa42</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6704,6 +6737,12 @@ code.</p>
 <li>Separate never-accepted path_must_* spellings from deprecated kwargs (<a href="https://github.com/s0undt3ch/ToolR/commit/b7d89cb10bbff5a32d103690bcea083f12a38ee7"><code>b7d89cb</code></a>)</li>
 <li><em>(writing-commands)</em> Use the canonical @group.command form in single-file examples (<a href="https://github.com/s0undt3ch/ToolR/commit/c634aee0350d2884171b6675f4537d1de3aea686"><code>c634aee</code></a>)</li>
 <li><em>(internals)</em> The bound @group.command form is canonical, not deprecated (<a href="https://github.com/s0undt3ch/ToolR/commit/56ce228a10edfaad8da634410c6e067f4a8363f8"><code>56ce228</code></a>)</li>
+<li><em>(specs)</em> Add packslip release manifest design (<a href="https://github.com/s0undt3ch/ToolR/commit/e92a5c0530a74601c686c282b886370a0df4b046"><code>e92a5c0</code></a>)</li>
+<li><em>(specs)</em> Add packslip release manifest implementation plan (<a href="https://github.com/s0undt3ch/ToolR/commit/2733672b97aac36689ae709fdb61bc99fca6f2f3"><code>2733672</code></a>)</li>
+<li>Document installing toolr and its skills through mise's packslip backend (<a href="https://github.com/s0undt3ch/ToolR/commit/76b330e43177e9661b345515876f86c6288c87bc"><code>76b330e</code></a>)</li>
+<li><em>(mise)</em> Don't imply a version cut-over in the aqua fallback example (<a href="https://github.com/s0undt3ch/ToolR/commit/b976016e60776f5074937e3c2e5c33e6c330cf18"><code>b976016</code></a>)</li>
+<li><em>(packslip)</em> Fix release-age/identity wording and don't imply a pinned version exists yet (<a href="https://github.com/s0undt3ch/ToolR/commit/2799dc5145a316b721b035e892289a81eff03cda"><code>2799dc5</code></a>)</li>
+<li><em>(specs)</em> Document packslip partial-failure recovery and the CLI install path (<a href="https://github.com/s0undt3ch/ToolR/commit/ef87462759f23b0939d90bddc2d65e456dcd7509"><code>ef87462</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6715,6 +6754,13 @@ code.</p>
 <li><em>(specs)</em> Archive context-local-helpers design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/178063b07e32eb6901f03cbdc861f5c1c7e5e04a"><code>178063b</code></a>)</li>
 <li>Widen build-skill-refs hook inputs and fail on untracked generated files (<a href="https://github.com/s0undt3ch/ToolR/commit/d5c5c4dcf3a7221c9dd99e0f6ef5002453161de8"><code>d5c5c4d</code></a>)</li>
 <li><em>(specs)</em> Archive self-contained skills design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/64eab09c9e46d09f59ab510244bbaa2d66185348"><code>64eab09</code></a>)</li>
+<li><em>(packslip)</em> Add shared release manifest and offline check script (<a href="https://github.com/s0undt3ch/ToolR/commit/46c986ef0409707dbf65b44af8790f1ef33f5150"><code>46c986e</code></a>)</li>
+<li><em>(packslip)</em> Check the release manifest against CI-built archives on every PR (<a href="https://github.com/s0undt3ch/ToolR/commit/dfcd4fb5f33512f192a4467020e4d7818d665040"><code>dfcd4fb</code></a>)</li>
+<li><em>(release)</em> Sign and publish a packslip for each release (<a href="https://github.com/s0undt3ch/ToolR/commit/3a5220245de6c59ee60724fcba5f23019b7263fd"><code>3a52202</code></a>)</li>
+<li><em>(renovate)</em> Bump the packslip CLI pin together with the action (<a href="https://github.com/s0undt3ch/ToolR/commit/69d1feeeed20e97d4dd30100ae2b619bd34934c4"><code>69d1fee</code></a>)</li>
+<li><em>(specs)</em> Archive packslip design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/142e83a64abd64c51caea3e49bcc2f3fca7e6570"><code>142e83a</code></a>)</li>
+<li><em>(packslip)</em> Run the manifest check through toolr and verify the packslip CLI attestation (<a href="https://github.com/s0undt3ch/ToolR/commit/f54f68ccff111d04862a915ec638d855d6c0ff20"><code>f54f68c</code></a>)</li>
+<li><em>(packslip)</em> Bind the CLI attestation to its release tag (<a href="https://github.com/s0undt3ch/ToolR/commit/c20f4da158a3a8a7c57c52d88a3443da236819f6"><code>c20f4da</code></a>)</li>
 </ul>
 <h2 id="0330-2026-09-12">0.33.0 - 2026-09-12<a class="headerlink" href="#0330-2026-09-12" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

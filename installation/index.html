@@ -1702,16 +1702,19 @@ doesn't share its own venv with your tool scripts.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <p>Five first-class install paths.</p>
 <h3 id="mise">mise<a class="headerlink" href="#mise" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@latest
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mise<span class="w"> </span>use<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@latest
 </span></code></pre></div>
-<p>Pulls toolr from the
-<a href="https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR">aqua registry</a>
-via mise's built-in aqua backend — no plugin to register. For
+<p>Installs toolr from its signed <a href="https://packslip.dev/">packslip</a>
+manifest via mise's packslip backend — no plugin to register. mise
+verifies the release against the ToolR repository's signing identity
+and checks the digest and size of the downloaded archive. For
 projects that already pin tool versions via <code>.mise.toml</code>, this
 is the most-natural fit — toolr's version becomes part of your
-project's reproducible tool set. See the dedicated <a href="mise/">mise</a>
-page for <code>.mise.toml</code> / <code>.tool-versions</code> integration and
-task-runner examples.</p>
+project's reproducible tool set. Releases before packslip support
+have no manifest to install from; use
+<code>mise use aqua:s0undt3ch/ToolR@&lt;version&gt;</code> for those. See the
+dedicated <a href="mise/">mise</a> page for <code>.mise.toml</code> / <code>.tool-versions</code>
+integration and task-runner examples.</p>
 <h3 id="pip">pip<a class="headerlink" href="#pip" title="Permanent link">&para;</a></h3>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>toolr<span class="w">   </span><span class="c1"># Rust CLI binary</span>
 </span></code></pre></div>
