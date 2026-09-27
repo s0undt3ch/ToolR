@@ -127,6 +127,16 @@ if [ "$manifest_skills" != "$dir_skills" ]; then
   fail "skill resources" "manifest skill resources ($(echo "$manifest_skills" | tr '\n' ' ')) do not match skills/*/SKILL.md directories ($(echo "$dir_skills" | tr '\n' ' '))"
 fi
 
+if ! repo_violations=$(jq -r '
+  .predicate.resources[] |
+  select(.kind == "skill") |
+  select(.repo != "skills/\(.name)") |
+  "\(.name): repo is \(.repo // "null"), expected skills/\(.name)"
+' <<<"$statement" 2>&1); then
+  fail "skill repo paths" "$repo_violations"
+fi
+[ -z "$repo_violations" ] || fail "skill repo paths" "$repo_violations"
+
 while IFS= read -r name; do
   [ -n "$name" ] || continue
   skill_file="skills/$name/SKILL.md"
