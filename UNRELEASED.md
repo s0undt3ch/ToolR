@@ -39,3 +39,17 @@ Releases now ship a signed [packslip](https://packslip.dev/) manifest, so
 and checksum verification, version-matched shell completions, and the three
 toolr agent skills (`mise skills sync`). The aqua backend remains available
 for releases published before packslip support.
+
+### Unknown `arg()` keywords now fail the manifest build
+
+A misspelled or unsupported `arg()` keyword, such as
+`arg(path_must_exist=True)`, and any positional argument passed to `arg()` now
+fail the manifest build with the module, function and argument, plus a
+"did you mean" hint where one fits (`path_must_exist` suggests `must_exist`).
+The check also covers `toolr self build-manifest`, so a plugin can't ship a
+manifest containing a command that can never run. Before, the parser silently
+dropped the keyword: the command showed up in `--help` and then failed with a
+`TypeError` the first time it ran. No command that worked before is affected.
+The build-error heading for these failures, and for unsupported parameter
+types, now reads "invalid parameter declarations" instead of "unsupported
+parameter types". ([#500](https://github.com/s0undt3ch/ToolR/issues/500))
