@@ -354,7 +354,8 @@ fn is_repo_url(url: &str) -> bool {
         .any(|p| rest.starts_with(&p.to_ascii_lowercase()))
 }
 
-/// Values of raw HTML `href=` / `src=` attributes, with their byte ranges.
+/// Values of raw HTML `href=` / `src=` attributes, quoted or not, with
+/// their byte ranges.
 fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> {
     let lower = text.to_ascii_lowercase();
     let mut out = Vec::new();
@@ -366,16 +367,22 @@ fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> {
             if at > 0 && !lower.as_bytes()[at - 1].is_ascii_whitespace() {
                 continue;
             }
-            let Some(quote) = text[from..]
-                .chars()
-                .next()
-                .filter(|c| *c == '"' || *c == '\'')
-            else {
-                continue;
-            };
-            let start = from + 1;
-            let Some(len) = text[start..].find(quote) else {
-                continue;
+            let (start, len) = match text[from..].chars().next() {
+                Some(quote @ ('"' | '\'')) => {
+                    let Some(len) = text[from + 1..].find(quote) else {
+                        continue;
+                    };
+                    (from + 1, len)
+                }
+                _ => {
+                    let len = text[from..]
+                        .find(|c: char| c.is_whitespace() || c == '>')
+                        .unwrap_or(text.len() - from);
+                    if len == 0 {
+                        continue;
+                    }
+                    (from, len)
+                }
             };
             out.push((start..start + len, text[start..start + len].to_string()));
             from = start + len;
@@ -660,5 +667,76 @@ mod tests {
         );
         assert!(rules("`<a href=\"../../x.md\">`\n", &[]).is_empty());
         assert!(rules("```html\n<a href=\"../../x.md\">\n```\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn loose_files_directly_under_skills_are_not_a_skill() {
+        lint_repo(
+            "loose",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/notes.md", "[a](../../docs/x.md)\n"),
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn non_utf8_files_are_skipped() {
+        let root = temp_repo("non-utf8", &[("skills/x/SKILL.md", "ok\n")]);
+        std::fs::create_dir_all(root.join("skills/x/examples")).unwrap();
+        std::fs::write(
+            root.join("skills/x/examples/latin1.txt"),
+            b"\xff\xfe https://toolr.readthedocs.io/\n",
+        )
+        .unwrap();
+        let out = lint(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        out.unwrap();
+    }
+
+    #[test]
+    fn unmatched_backtick_run_does_not_hide_a_later_code_span() {
+        assert_eq!(rules("``unclosed `docs/x.md`\n", &[]), ["repo-path"]);
+    }
+
+    #[test]
+    fn anchor_mailto_and_empty_targets_pass() {
+        assert!(rules("[a](#x) [b](mailto:a@b.c) [c]()\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn dot_slash_link_to_own_file_passes() {
+        assert!(rules("[a](./references/x.md)\n", &["s/references/x.md"]).is_empty());
+    }
+
+    #[test]
+    fn absolute_path_link_is_flagged() {
+        assert_eq!(rules("[a](/etc/x.md)\n", &[]), ["link-escapes-skill"]);
+    }
+
+    #[test]
+    fn attribute_names_merely_ending_in_href_are_not_links() {
+        assert!(rules("<a data-href=\"../../x.md\">x</a>\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn unquoted_html_attribute_values_are_linted() {
+        let body = "<a href=../../docs/x.md>x</a>\n<img src=https://toolr.readthedocs.io/a.png alt=x>\n";
+        assert_eq!(rules(body, &[]), ["link-escapes-skill", "repo-url"]);
+        assert!(rules("<a href=>x</a>\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn unterminated_quoted_attribute_is_not_a_target() {
+        assert!(rules("<a href=\"../../x.md\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn http_prefixed_words_do_not_stop_the_url_scan() {
+        assert_eq!(
+            rules("httpx and https://toolr.readthedocs.io/x\n", &[]),
+            ["repo-url"]
+        );
     }
 }
