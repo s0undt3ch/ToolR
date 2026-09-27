@@ -68,11 +68,15 @@ def multiply(ctx: Context, a: int, b: int, verbose: bool = False) -> NoReturn:
         ctx.info(result)
 
 
+# --8<-- [start:operation-enum]
 class Operation(StrEnum):
     ADD = "add"
     SUBTRACT = "subtract"
     MULTIPLY = "multiply"
     DIVIDE = "divide"
+
+
+# --8<-- [end:operation-enum]
 
 
 @command(group="example")

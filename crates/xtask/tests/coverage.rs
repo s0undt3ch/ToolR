@@ -231,6 +231,8 @@ fn arguments_reference_is_extracted_and_link_free() {
     .expect("run `cargo xtask build-skill-refs`");
     assert!(body.contains("## Positional arguments"));
     assert!(body.contains("must_be_file=True"));
+    assert!(body.contains("class Operation(StrEnum):"));
     assert!(!body.contains("--8<--"), "unexpanded include");
     assert!(!body.contains(".md)"), "docs-page link survived");
+    assert!(!body.contains("matrix above"), "dangling out-of-section pointer");
 }

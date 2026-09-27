@@ -151,8 +151,12 @@ behaves the same as `Literal[...]` — the choices are the enum
 members, the resolved value is the enum instance:
 
 ```python
---8<-- "docs/writing-commands/files/docstrings-example.py:71:75"
+--8<-- "docs/writing-commands/files/docstrings-example.py:operation-enum"
 ```
+
+Annotate the parameter with the enum type directly, e.g.
+`operation: Operation`, the same way you would with any other
+supported type.
 
 ## `list[T]` for repeated values
 
@@ -231,8 +235,9 @@ def diff(ctx: Context, base: CommitHash = None) -> None: ...
 
 Both `show` and `diff` end up with the same `--sha` / `--base`
 treatment, with the alias's `arg(...)` metadata applied to each.
-Aliases compose with any of the types in the matrix above
-(`list[…]`, `Literal[…]`, `T | None`, `toolr.types.*`).
+Aliases compose with any supported type (see the supported-types
+table), including `list[…]`, `Literal[…]`, `T | None`, and
+`toolr.types.*`.
 
 ## Heterogeneous tuples
 
