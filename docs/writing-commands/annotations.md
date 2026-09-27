@@ -143,8 +143,9 @@ These still parse but emit a `ToolrDeprecationWarning`:
 - `nargs=` — use `T | None` / `*args: T` / `tuple[T1, T2]`.
 - `action=` — `bool` infers flag, `list[T]` infers append, `Count` infers count.
 - `group=` — use `conflicts_with=[…]` for mutex, `help_section=` for display grouping.
-- `path_must_exist=` / `path_must_be_file=` / `path_must_be_dir=` —
-  never existed as accepted spellings; the real (and only) names are
-  `must_exist=` / `must_be_file=` / `must_be_dir=`.
+
+Not accepted: `path_must_exist=` / `path_must_be_file=` /
+`path_must_be_dir=`. These spellings never parsed; the real (and only)
+names are `must_exist=` / `must_be_file=` / `must_be_dir=`.
 
 Next: [Nested groups →](nesting.md)

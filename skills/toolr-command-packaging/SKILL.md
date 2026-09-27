@@ -84,7 +84,7 @@ When multiple sources contribute commands with the same name: a
 project's own `tools/` commands always win over a plugin's; a
 plugin can add commands to an existing group rather than creating a
 duplicate; and two plugins that register the same group/command pair
-fail the manifest build.
+fail the consuming project's manifest build.
 
 ## Verifying after install
 
