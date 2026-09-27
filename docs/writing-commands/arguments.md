@@ -215,21 +215,21 @@ static parser follows the alias to its underlying type:
 ```python
 from typing import Annotated, TypeAlias
 
-from toolr import Context, arg, command, command_group
+from toolr import Context, arg, command_group
 
 CommitHash: TypeAlias = Annotated[
     str | None,
     arg(help="A 40-char git SHA, or None for HEAD."),
 ]
 
-command_group("git", title="Git helpers")
+git = command_group("git", title="Git helpers")
 
 
-@command(group="git")
+@git.command
 def show(ctx: Context, sha: CommitHash = None) -> None: ...
 
 
-@command(group="git")
+@git.command
 def diff(ctx: Context, base: CommitHash = None) -> None: ...
 ```
 

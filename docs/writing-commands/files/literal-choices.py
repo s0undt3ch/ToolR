@@ -3,13 +3,12 @@ from __future__ import annotations
 from typing import Literal
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("logs", title="Logs", description="Logging utilities")
+logs = command_group("logs", title="Logs", description="Logging utilities")
 
 
-@command(group="logs")
+@logs.command
 def set_level(
     ctx: Context,
     level: Literal["debug", "info", "warning", "error"] = "info",

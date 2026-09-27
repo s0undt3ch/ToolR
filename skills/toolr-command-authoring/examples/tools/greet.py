@@ -35,6 +35,8 @@ def hello(ctx: Context, who: str = "world", *, loud: bool = False) -> None:
     ctx.info(msg)
 
 
+# String-keyed form, shown for contrast with `hello`; normally used
+# when the command lives in a different file from its group.
 @command("shout", group="greet")
 def shout(ctx: Context, message: Annotated[str, arg(metavar="MSG")]) -> None:
     """Shout a message in all caps.

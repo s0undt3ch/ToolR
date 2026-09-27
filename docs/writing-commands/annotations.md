@@ -9,12 +9,12 @@ a call to [`arg(...)`][toolr.arg].
 
 ```python
 from typing import Annotated
-from toolr import arg, command, command_group
+from toolr import arg, command_group
 
-command_group("git", title="Git helpers")
+git = command_group("git", title="Git helpers")
 
 
-@command(group="git")
+@git.command
 def show(
     ctx,
     sha: Annotated[str, arg(aliases=["-s"], metavar="SHA", env="GIT_SHA")] = "HEAD",
@@ -40,7 +40,7 @@ def show(
 ## Aliases (short flags + alternate long flags)
 
 ```python
-@command(group="git")
+@git.command
 def diff(
     ctx,
     base: Annotated[str, arg(aliases=["-b", "--from"])] = "HEAD~1",
@@ -94,17 +94,17 @@ Group related flags under a named heading by declaring an
 member's annotation at it:
 
 ```python
-from toolr import arg, arg_section, command, command_group
+from toolr import arg, arg_section, command_group
 
 LOGGING = arg_section(
     "Logging Options",
     description="Control verbosity and output format.",
 )
 
-command_group("deploy", title="Deploy")
+deploy = command_group("deploy", title="Deploy")
 
 
-@command(group="deploy")
+@deploy.command
 def push(
     ctx,
     target: str,

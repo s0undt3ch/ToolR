@@ -35,10 +35,10 @@ When the dotted name reads awkwardly, spell the parent out explicitly:
 
 ```python
 command_group("docker", title="Docker")
-command_group("image", parent="docker", description="Image subcommands")
+image = command_group("image", parent="docker", description="Image subcommands")
 
 
-@command(group="docker.image")
+@image.command
 def build(ctx, tag: str) -> None: ...
 ```
 
@@ -61,10 +61,10 @@ command_group("ci", docstring=__doc__)
 
 ```python
 # tools/helm.py
-command_group("ci.helm-diff", description="Helm diff helpers")
+helm_diff = command_group("ci.helm-diff", description="Helm diff helpers")
 
 
-@command(group="ci.helm-diff")
+@helm_diff.command
 def backend(ctx, env: str) -> None: ...
 ```
 

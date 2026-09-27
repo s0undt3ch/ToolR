@@ -22,13 +22,12 @@ from typing import NoReturn
 
 from toolr import Context
 from toolr import arg
-from toolr import command
 from toolr import command_group
 
-command_group("example", title="Example", docstring=__doc__)
+example = command_group("example", title="Example", docstring=__doc__)
 
 
-@command(group="example")
+@example.command
 def hello(ctx: Context) -> NoReturn:
     """
     Say hello.
@@ -38,7 +37,7 @@ def hello(ctx: Context) -> NoReturn:
     ctx.info("Hello, world!")
 
 
-@command("goodbye", group="example")
+@example.command("goodbye")
 def say_goodbye(ctx: Context, name: str | None = None) -> NoReturn:
     """
     Say goodbye.
@@ -51,7 +50,7 @@ def say_goodbye(ctx: Context, name: str | None = None) -> NoReturn:
     ctx.info(f"Goodbye, {name}!")
 
 
-@command(group="example")
+@example.command
 def multiply(ctx: Context, a: int, b: int, verbose: bool = False) -> NoReturn:
     """
     Multiply two numbers.
@@ -79,7 +78,7 @@ class Operation(StrEnum):
 # --8<-- [end:operation-enum]
 
 
-@command(group="example")
+@example.command
 def math(
     ctx: Context,
     a: int,
@@ -120,7 +119,7 @@ def math(
         ctx.info(value)
 
 
-@command(group="example")
+@example.command
 def py_version(ctx: Context) -> NoReturn:
     """
     Show Python version.

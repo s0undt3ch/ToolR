@@ -1,9 +1,8 @@
 """Database lifecycle commands.
 
 Exercise: ``arg_section`` for grouping related flags in ``--help``,
-the string-attached ``@command(group=...)`` form, mixed positional
-and keyword-only arguments, and a Google-style docstring with
-``Args:`` and ``Examples:`` sections.
+mixed positional and keyword-only arguments, and a Google-style
+docstring with ``Args:`` and ``Examples:`` sections.
 """
 
 from __future__ import annotations
@@ -13,10 +12,9 @@ from typing import Annotated
 from toolr import Context
 from toolr import arg
 from toolr import arg_section
-from toolr import command
 from toolr import command_group
 
-command_group("db", "Database lifecycle", docstring=__doc__)
+db = command_group("db", "Database lifecycle", docstring=__doc__)
 
 DESTRUCTIVE = arg_section(
     "Destructive options",
@@ -24,7 +22,7 @@ DESTRUCTIVE = arg_section(
 )
 
 
-@command(group="db")
+@db.command
 def reset(
     ctx: Context,
     *,

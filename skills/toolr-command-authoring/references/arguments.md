@@ -14,13 +14,12 @@ for shell completion.
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("math", "Math Commands", "Basic mathematical operations")
+math = command_group("math", "Math Commands", "Basic mathematical operations")
 
 
-@command(group="math")
+@math.command
 def add(ctx: Context, a: int, b: int):
     """Add two numbers together.
 
@@ -97,13 +96,12 @@ hint dictates the value type:
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("greeting", "Greeting Commands", "Commands for greeting users")
+greeting = command_group("greeting", "Greeting Commands", "Commands for greeting users")
 
 
-@command(group="greeting")
+@greeting.command
 def hello(ctx: Context, name: str = "World"):
     """Say hello.
 
@@ -138,13 +136,12 @@ A `bool` annotation with a default of `False` is declared as a flag:
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("example", "Example Commands", "Example command group")
+example = command_group("example", "Example Commands", "Example command group")
 
 
-@command(group="example")
+@example.command
 def process(ctx: Context, verbose: bool = False, dry_run: bool = False):
     """Process something with optional flags.
 
@@ -174,13 +171,12 @@ from __future__ import annotations
 from typing import Literal
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("logs", title="Logs", description="Logging utilities")
+logs = command_group("logs", title="Logs", description="Logging utilities")
 
 
-@command(group="logs")
+@logs.command
 def set_level(
     ctx: Context,
     level: Literal["debug", "info", "warning", "error"] = "info",
@@ -238,13 +234,12 @@ multiple times (each invocation appends).
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("files", "File Commands", "File operations")
+files = command_group("files", "File Commands", "File operations")
 
 
-@command(group="files")
+@files.command
 def process_files(ctx: Context, files: list[str]):
     """Process multiple files.
 
@@ -264,13 +259,12 @@ annotation on the parameter is the element type.
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("files", "File Commands", "File operations")
+files = command_group("files", "File Commands", "File operations")
 
 
-@command(group="files")
+@files.command
 def process_files(ctx: Context, *files: str):
     """Process multiple files.
 
@@ -324,21 +318,21 @@ static parser follows the alias to its underlying type:
 ```python
 from typing import Annotated, TypeAlias
 
-from toolr import Context, arg, command, command_group
+from toolr import Context, arg, command_group
 
 CommitHash: TypeAlias = Annotated[
     str | None,
     arg(help="A 40-char git SHA, or None for HEAD."),
 ]
 
-command_group("git", title="Git helpers")
+git = command_group("git", title="Git helpers")
 
 
-@command(group="git")
+@git.command
 def show(ctx: Context, sha: CommitHash = None) -> None: ...
 
 
-@command(group="git")
+@git.command
 def diff(ctx: Context, base: CommitHash = None) -> None: ...
 ```
 

@@ -73,12 +73,12 @@ A canonical single-file command:
 ```python
 """Long-form group description, used as the group's `--help` long text."""
 
-from toolr import Context, arg, command, command_group
+from toolr import Context, arg, command_group
 
-command_group("greet", "Say hello in various ways", docstring=__doc__)
+greet = command_group("greet", "Say hello in various ways", docstring=__doc__)
 
 
-@command(group="greet")
+@greet.command
 def hello(ctx: Context, who: str = "world", *, loud: bool = False) -> None:
     """Print a greeting.
 

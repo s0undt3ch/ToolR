@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("docker", title="Docker", description="Container utilities")
-command_group("docker.image", description="Image subcommands")
-command_group("docker.container", description="Container subcommands")
+docker = command_group("docker", title="Docker", description="Container utilities")
+docker_image = command_group("docker.image", description="Image subcommands")
+docker_container = command_group("docker.container", description="Container subcommands")
 
 
-@command(group="docker.image")
+@docker_image.command
 def build(ctx: Context, tag: str) -> None:
     """Build a docker image.
 
@@ -21,7 +20,7 @@ def build(ctx: Context, tag: str) -> None:
     ctx.print(f"would build image: {tag}")
 
 
-@command(group="docker.container")
+@docker_container.command
 def start(ctx: Context, name: str) -> None:
     """Start a stopped container.
 

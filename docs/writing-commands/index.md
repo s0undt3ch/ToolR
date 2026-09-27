@@ -4,7 +4,7 @@ The authoring guide for tools-authors. Read in order, or jump to the
 section you need:
 
 1. [Groups & commands](groups.md) — declaring a `command_group` and
-   attaching commands to it via `@command(group="…")`.
+   attaching commands to it via `@group.command`.
 2. [Arguments](arguments.md) — turning function parameters into CLI
    arguments via type hints (positional / optional / flag /
    `Literal[...]` / `Enum`).
