@@ -1739,12 +1739,12 @@ defaults, mutually-exclusive groups, grouped <code>--help</code> sections, files
 constraints — wrap the parameter's type with <code>typing.Annotated[...]</code> and
 a call to <a class="autorefs autorefs-internal" href="../../reference/arg/#toolr.arg"><code>arg(...)</code></a>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr</span><span class="w"> </span><span class="kn">import</span> <span class="n">arg</span><span class="p">,</span> <span class="n">command</span><span class="p">,</span> <span class="n">command_group</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr</span><span class="w"> </span><span class="kn">import</span> <span class="n">arg</span><span class="p">,</span> <span class="n">command_group</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">command_group</span><span class="p">(</span><span class="s2">"git"</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">"Git helpers"</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">git</span> <span class="o">=</span> <span class="n">command_group</span><span class="p">(</span><span class="s2">"git"</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">"Git helpers"</span><span class="p">)</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nd">@command</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">"git"</span><span class="p">)</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nd">@git</span><span class="o">.</span><span class="n">command</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">show</span><span class="p">(</span>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">ctx</span><span class="p">,</span>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">sha</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">arg</span><span class="p">(</span><span class="n">aliases</span><span class="o">=</span><span class="p">[</span><span class="s2">"-s"</span><span class="p">],</span> <span class="n">metavar</span><span class="o">=</span><span class="s2">"SHA"</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="s2">"GIT_SHA"</span><span class="p">)]</span> <span class="o">=</span> <span class="s2">"HEAD"</span><span class="p">,</span>
@@ -1792,21 +1792,21 @@ a call to <a class="autorefs autorefs-internal" href="../../reference/arg/#toolr
 <td>If this flag is set, every name listed must also be set.</td>
 </tr>
 <tr>
-<td><code>path_must_exist=True</code></td>
-<td>Reject paths that don't exist (Path types only).</td>
+<td><code>must_exist=True</code></td>
+<td>Reject paths that don't exist on disk (Path types only).</td>
 </tr>
 <tr>
-<td><code>path_must_be_file=True</code></td>
-<td>Reject non-files; implies <code>path_must_exist</code>.</td>
+<td><code>must_be_file=True</code></td>
+<td>Reject anything that isn't a regular file; implies <code>must_exist</code>.</td>
 </tr>
 <tr>
-<td><code>path_must_be_dir=True</code></td>
-<td>Reject non-dirs; implies <code>path_must_exist</code>.</td>
+<td><code>must_be_dir=True</code></td>
+<td>Reject anything that isn't a directory; implies <code>must_exist</code>.</td>
 </tr>
 </tbody>
 </table>
 <h2 id="aliases-short-flags-alternate-long-flags">Aliases (short flags + alternate long flags)<a class="headerlink" href="#aliases-short-flags-alternate-long-flags" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@command</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">"git"</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@git</span><span class="o">.</span><span class="n">command</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">diff</span><span class="p">(</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">ctx</span><span class="p">,</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">base</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">arg</span><span class="p">(</span><span class="n">aliases</span><span class="o">=</span><span class="p">[</span><span class="s2">"-b"</span><span class="p">,</span> <span class="s2">"--from"</span><span class="p">])]</span> <span class="o">=</span> <span class="s2">"HEAD~1"</span><span class="p">,</span>
@@ -1844,17 +1844,17 @@ the list must also be set. Useful for paired options like
 Group related flags under a named heading by declaring an
 <a class="autorefs autorefs-internal" href="../../reference/arg_section/#toolr.arg_section"><code>arg_section</code></a> at module scope, then pointing each
 member's annotation at it:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr</span><span class="w"> </span><span class="kn">import</span> <span class="n">arg</span><span class="p">,</span> <span class="n">arg_section</span><span class="p">,</span> <span class="n">command</span><span class="p">,</span> <span class="n">command_group</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr</span><span class="w"> </span><span class="kn">import</span> <span class="n">arg</span><span class="p">,</span> <span class="n">arg_section</span><span class="p">,</span> <span class="n">command_group</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">LOGGING</span> <span class="o">=</span> <span class="n">arg_section</span><span class="p">(</span>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="s2">"Logging Options"</span><span class="p">,</span>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">"Control verbosity and output format."</span><span class="p">,</span>
 </span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">)</span>
 </span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">command_group</span><span class="p">(</span><span class="s2">"deploy"</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">"Deploy"</span><span class="p">)</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">deploy</span> <span class="o">=</span> <span class="n">command_group</span><span class="p">(</span><span class="s2">"deploy"</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">"Deploy"</span><span class="p">)</span>
 </span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
 </span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="nd">@command</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">"deploy"</span><span class="p">)</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="nd">@deploy</span><span class="o">.</span><span class="n">command</span>
 </span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">push</span><span class="p">(</span>
 </span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="n">ctx</span><span class="p">,</span>
 </span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -1883,8 +1883,10 @@ description, a bare string is accepted:</p>
 <li><code>nargs=</code> — use <code>T | None</code> / <code>*args: T</code> / <code>tuple[T1, T2]</code>.</li>
 <li><code>action=</code> — <code>bool</code> infers flag, <code>list[T]</code> infers append, <code>Count</code> infers count.</li>
 <li><code>group=</code> — use <code>conflicts_with=[…]</code> for mutex, <code>help_section=</code> for display grouping.</li>
-<li><code>must_exist=</code> / <code>must_be_file=</code> / <code>must_be_dir=</code> — rename to <code>path_must_exist</code> / <code>path_must_be_file</code> / <code>path_must_be_dir</code>.</li>
 </ul>
+<p>Not accepted: <code>path_must_exist=</code> / <code>path_must_be_file=</code> /
+<code>path_must_be_dir=</code>. These spellings never parsed; the real (and only)
+names are <code>must_exist=</code> / <code>must_be_file=</code> / <code>must_be_dir=</code>.</p>
 <p>Next: <a href="../nesting/">Nested groups →</a></p>
 
 

@@ -1871,10 +1871,12 @@ the auto-rebuild doesn't already cover.</p>
 Pure AST traversal — never imports user code, so it's safe to run
 without a working venv. Captures:</p>
 <ul>
-<li><code>command_group(...)</code> declarations (including the deprecated
-  binding-style <code>var = command_group(...)</code>).</li>
-<li><code>@command(group="…")</code> decorations (and the deprecated
-  <code>@&lt;binding&gt;.command</code> decorator).</li>
+<li><code>command_group(...)</code> declarations, bound (<code>var = command_group(...)</code>)
+  or not, plus the deprecated nested <code>parent.command_group("child", ...)</code>
+  method form.</li>
+<li><code>@&lt;binding&gt;.command</code> decorations (the canonical single-file form) and
+  standalone <code>@command(group="…")</code> decorations (for commands in a
+  different file from their group).</li>
 <li>Function signatures (positional vs keyword, defaults, annotations).</li>
 <li>Google-style docstrings (summary, description, <code>Args:</code> block).</li>
 <li>Local <code>Literal[...]</code> and <code>enum.Enum</code> definitions (resolved across

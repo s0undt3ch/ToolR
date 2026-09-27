@@ -1621,7 +1621,10 @@ list.</p>
   <code>conflicts_with</code>, <code>requires</code>, and <code>help_section</code> all flow from the
   Python annotation through the static parser into clap. Path
   constraints renamed to <code>path_must_exist</code> / <code>path_must_be_file</code> /
-  <code>path_must_be_dir</code>. Old names accepted with a deprecation warning.</li>
+  <code>path_must_be_dir</code>. Old names accepted with a deprecation warning.
+  <strong>Correction:</strong> the <code>path_must_*</code> rename was later reverted; the
+  accepted names are <code>must_exist</code> / <code>must_be_file</code> / <code>must_be_dir</code>
+  (see the <a href="../annotations/">annotations reference</a>).</li>
 <li>Positional <code>int</code> / <code>float</code> coercion: typed clap value-parsers
   serialise typed JSON, msgspec validates against function hints on
   the Python side.</li>

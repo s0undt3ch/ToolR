@@ -1716,11 +1716,33 @@ toolr's own source by <code>cargo xtask build-skill-refs</code>:</p>
   repository-root <code>action.yml</code>, so the inputs/outputs surface the
   skill points agents at cannot drift from what the action
   actually accepts.</li>
+<li><code>toolr-command-authoring/references/types.md</code> is rebuilt from
+  the parser's own argument-type and path-constraint catalogue in
+  <code>crates/toolr-core/src/parser/types/path_constraints.rs</code>.</li>
+<li><code>toolr-command-authoring/references/arguments.md</code> is rebuilt
+  from the <code>arg-shapes</code> section of
+  <code>docs/writing-commands/arguments.md</code>.</li>
+<li><code>toolr-ci-setup/references/prek-hook.md</code> and
+  <code>toolr-command-packaging/references/prek-hook.md</code> are both
+  rebuilt from the <code>prek-hook</code> section of <code>docs/third-party.md</code>.</li>
+<li><code>toolr-command-packaging/examples/pyproject.toml</code> is copied from
+  <code>examples/plugin-package/pyproject.toml</code>, the reference plugin.</li>
 </ul>
 <p>A <code>cargo xtask build-skill-refs --check</code> gate runs in CI on every
 PR; a public-surface change that forgets to regenerate the
 references cannot land. End users never run the regenerator — they
 consume what <code>skillshare</code> distributes.</p>
+<p>Every reference file traces back to one of three sources: code-derived
+tables (walked from <code>__all__</code> exports, the parser's argument-type and
+path-constraint catalogue, or Rust marker regions), named sections
+extracted from this docs tree, and copied examples such as
+<code>toolr-command-packaging/examples/pyproject.toml</code>. Whichever source it
+comes from, each skill directory is self-contained — everything an
+agent needs to act on the skill ships inside it, with no toolr docs-site
+or repository round trip at use time. <code>cargo xtask build-skill-refs --check</code>
+enforces that: it fails on any link, URL to the toolr repo or docs
+site, or backticked repo path that leaves a skill's own directory, so
+that self-containment can't silently regress.</p>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The skill source layout lives under

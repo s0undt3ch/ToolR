@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from toolr import Context
-from toolr import command
 from toolr import command_group
 
-command_group("example", "Example Commands", "Example command group")
+example = command_group("example", "Example Commands", "Example command group")
 
 
-@command(group="example")
+@example.command
 def process(ctx: Context, verbose: bool = False, dry_run: bool = False):
     """Process something with optional flags.
 
