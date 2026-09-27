@@ -7,16 +7,14 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use super::docs_section::{Fence, code_span_end, find_links, is_reference_definition};
-use super::normalize_newlines;
+use super::{normalize_newlines, read_text};
 
 const DESIGN: &str = "specs/archive/2026/2026-09-27-skills-self-contained-design.md";
 
-// Compared case-insensitively.
-const REPO_URLS: [&str; 3] = [
-    "github.com/s0undt3ch/ToolR",
-    "raw.githubusercontent.com/s0undt3ch/",
-    "toolr.readthedocs.io",
-];
+const CARGO_TOML: &str = "Cargo.toml";
+const REPOSITORY_KEY: [&str; 3] = ["workspace", "package", "repository"];
+const PYPROJECT: &str = "crates/toolr/pyproject.toml";
+const DOCUMENTATION_KEY: [&str; 3] = ["project", "urls", "Documentation"];
 
 const REPO_PATHS: [&str; 5] = ["docs/", "crates/", "examples/", "specs/", "skills/"];
 
@@ -30,6 +28,7 @@ pub struct Violation {
 
 /// Lint every file each skill under `skills/` ships.
 pub fn lint(repo_root: &Path) -> Result<()> {
+    let urls = repo_urls(repo_root)?;
     let skills_root = repo_root.join("skills");
     let mut violations = Vec::new();
     for skill_dir in sorted_entries(&skills_root)? {
@@ -50,9 +49,9 @@ pub fn lint(repo_root: &Path) -> Result<()> {
                 continue;
             }
             let found = if rel.extension().is_some_and(|e| e == "md") {
-                lint_file(&skill_dir, &rel, &body, &|p: &Path| p.exists())
+                lint_file(&skill_dir, &rel, &body, &|p: &Path| p.exists(), &urls)
             } else {
-                lint_text(&body)
+                lint_text(&body, &urls)
             };
             let shown = path.strip_prefix(repo_root).unwrap_or(&path).to_path_buf();
             violations.extend(found.into_iter().map(|v| Violation {
@@ -70,6 +69,64 @@ pub fn lint(repo_root: &Path) -> Result<()> {
         .collect::<Vec<_>>()
         .join("\n");
     bail!("{listing}\nskills must be self-contained; see {DESIGN}");
+}
+
+/// Scheme-less, lowercased prefixes of every URL that leads back to this
+/// repository or its docs, read from the project metadata that already
+/// names them.
+fn repo_urls(repo_root: &Path) -> Result<Vec<String>> {
+    let repository = metadata_string(repo_root, CARGO_TOML, &REPOSITORY_KEY)?;
+    let rest = scheme_less(&repository);
+    let rest = rest.strip_suffix(".git").unwrap_or(&rest);
+    let [host, owner, repo] = rest.split('/').collect::<Vec<_>>()[..] else {
+        bail!(not_github(&repository));
+    };
+    if host != "github.com" || owner.is_empty() || repo.is_empty() {
+        bail!(not_github(&repository));
+    }
+    let docs = metadata_string(repo_root, PYPROJECT, &DOCUMENTATION_KEY)?;
+    let docs_host = scheme_less(&docs)
+        .split('/')
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    if docs_host.is_empty() {
+        bail!(
+            "{PYPROJECT}: `{}` has no host: {docs}",
+            DOCUMENTATION_KEY.join(".")
+        );
+    }
+    Ok(vec![
+        format!("github.com/{owner}/{repo}"),
+        format!("raw.githubusercontent.com/{owner}/"),
+        docs_host,
+    ])
+}
+
+fn not_github(url: &str) -> String {
+    format!(
+        "{CARGO_TOML}: `{}` is not a github.com/<owner>/<repo> URL: {url}",
+        REPOSITORY_KEY.join(".")
+    )
+}
+
+fn scheme_less(url: &str) -> String {
+    let url = url.to_ascii_lowercase();
+    let rest = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
+    let rest = rest.strip_prefix("www.").unwrap_or(rest);
+    rest.trim_end_matches('/').to_string()
+}
+
+fn metadata_string(repo_root: &Path, rel: &str, key: &[&str]) -> Result<String> {
+    let text = read_text(&repo_root.join(rel))?;
+    let table: toml::Table = toml::from_str(&text).with_context(|| format!("parsing {rel}"))?;
+    let (last, parents) = key.split_last().expect("key is non-empty");
+    parents
+        .iter()
+        .try_fold(&table, |t, k| t.get(*k)?.as_table())
+        .and_then(|t| t.get(*last)?.as_str())
+        .map(str::to_string)
+        .with_context(|| format!("{rel}: no string `{}`", key.join(".")))
 }
 
 fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
@@ -101,13 +158,13 @@ fn collect_shipped(skill_dir: &Path, rel: &Path, out: &mut Vec<PathBuf>) -> Resu
 
 /// Non-Markdown files have no link syntax to resolve; only a repo URL
 /// anywhere in them can send an agent back to this repository.
-fn lint_text(body: &str) -> Vec<Violation> {
+fn lint_text(body: &str, urls: &[String]) -> Vec<Violation> {
     body.lines()
         .enumerate()
         .flat_map(|(i, line)| {
             bare_urls(line)
                 .into_iter()
-                .filter(|(_, url)| is_repo_url(url))
+                .filter(|(_, url)| is_repo_url(url, urls))
                 .map(move |(_, url)| Violation {
                     file: PathBuf::new(),
                     line: i + 1,
@@ -125,12 +182,14 @@ fn lint_file(
     rel: &Path,
     body: &str,
     exists: &dyn Fn(&Path) -> bool,
+    urls: &[String],
 ) -> Vec<Violation> {
     let (paragraphs, definitions) = split(body);
     let mut lint = FileLint {
         skill_dir,
         file_dir: rel.parent().unwrap_or(Path::new("")),
         exists,
+        urls,
         found: Vec::new(),
     };
     let mut used: Vec<&str> = Vec::new();
@@ -192,7 +251,7 @@ fn lint_file(
         let masked =
             String::from_utf8(masked).expect("masking only overwrites ASCII-delimited spans");
         for (pos, url) in bare_urls(&masked) {
-            if is_repo_url(url) {
+            if is_repo_url(url, urls) {
                 lint.flag(line_of(pos), "repo-url", url);
             }
         }
@@ -261,6 +320,7 @@ struct FileLint<'a> {
     skill_dir: &'a Path,
     file_dir: &'a Path,
     exists: &'a dyn Fn(&Path) -> bool,
+    urls: &'a [String],
     found: Vec<Violation>,
 }
 
@@ -304,7 +364,7 @@ impl FileLint<'_> {
             return;
         }
         if target.contains("://") {
-            if is_repo_url(target) {
+            if is_repo_url(target, self.urls) {
                 self.flag(line, "repo-url", target);
             }
             return;
@@ -345,13 +405,12 @@ fn normalize_label(label: &str) -> String {
         .to_lowercase()
 }
 
-fn is_repo_url(url: &str) -> bool {
+/// `urls` come from [`repo_urls`], already lowercased and scheme-less.
+fn is_repo_url(url: &str, urls: &[String]) -> bool {
     let url = url.to_ascii_lowercase();
     let rest = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
     let rest = rest.strip_prefix("www.").unwrap_or(rest);
-    REPO_URLS
-        .iter()
-        .any(|p| rest.starts_with(&p.to_ascii_lowercase()))
+    urls.iter().any(|p| rest.starts_with(p.as_str()))
 }
 
 /// Values of raw HTML `href=` / `src=` attributes, quoted or not, with
@@ -420,12 +479,21 @@ mod tests {
 
     use super::*;
 
-    /// A throwaway repo root holding `files` (repo-relative path, body).
+    const CARGO_TOML: &str =
+        "[workspace.package]\nrepository = \"https://github.com/s0undt3ch/toolr\"\n";
+    const PYPROJECT: &str = "[project.urls]\nDocumentation = \"https://toolr.readthedocs.io\"\n";
+
+    /// A throwaway repo root holding this repo's URL metadata, then `files`
+    /// (repo-relative path, body), which may override it.
     fn temp_repo(tag: &str, files: &[(&str, &str)]) -> PathBuf {
         let root =
             std::env::temp_dir().join(format!("xtask-self-contained-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        for (rel, body) in files {
+        let meta = [
+            ("Cargo.toml", CARGO_TOML),
+            ("crates/toolr/pyproject.toml", PYPROJECT),
+        ];
+        for (rel, body) in meta.iter().chain(files) {
             let path = root.join(rel);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, body).unwrap();
@@ -440,11 +508,27 @@ mod tests {
         out
     }
 
+    fn urls() -> Vec<String> {
+        [
+            "github.com/s0undt3ch/toolr",
+            "raw.githubusercontent.com/s0undt3ch/",
+            "toolr.readthedocs.io",
+        ]
+        .map(String::from)
+        .to_vec()
+    }
+
     fn rules_in(rel: &str, body: &str, paths: &'static [&'static str]) -> Vec<&'static str> {
-        lint_file(Path::new("s"), Path::new(rel), body, &exists_in(paths))
-            .into_iter()
-            .map(|v| v.rule)
-            .collect()
+        lint_file(
+            Path::new("s"),
+            Path::new(rel),
+            body,
+            &exists_in(paths),
+            &urls(),
+        )
+        .into_iter()
+        .map(|v| v.rule)
+        .collect()
     }
 
     fn exists_in(paths: &'static [&'static str]) -> impl Fn(&Path) -> bool {
@@ -457,6 +541,7 @@ mod tests {
             Path::new("SKILL.md"),
             body,
             &exists_in(paths),
+            &urls(),
         )
         .into_iter()
         .map(|v| v.rule)
@@ -511,7 +596,13 @@ mod tests {
     #[test]
     fn wrapped_link_reports_its_own_line() {
         let body = "Intro.\n\nSome [wrapped\ntext](../out.md) here.\n";
-        let v = lint_file(Path::new("s"), Path::new("SKILL.md"), body, &exists_in(&[]));
+        let v = lint_file(
+            Path::new("s"),
+            Path::new("SKILL.md"),
+            body,
+            &exists_in(&[]),
+            &urls(),
+        );
         assert_eq!((v[0].rule, v[0].line), ("link-escapes-skill", 3));
     }
 
@@ -722,7 +813,8 @@ mod tests {
 
     #[test]
     fn unquoted_html_attribute_values_are_linted() {
-        let body = "<a href=../../docs/x.md>x</a>\n<img src=https://toolr.readthedocs.io/a.png alt=x>\n";
+        let body =
+            "<a href=../../docs/x.md>x</a>\n<img src=https://toolr.readthedocs.io/a.png alt=x>\n";
         assert_eq!(rules(body, &[]), ["link-escapes-skill", "repo-url"]);
         assert!(rules("<a href=>x</a>\n", &[]).is_empty());
     }
@@ -737,6 +829,159 @@ mod tests {
         assert_eq!(
             rules("httpx and https://toolr.readthedocs.io/x\n", &[]),
             ["repo-url"]
+        );
+    }
+
+    fn urls_for(tag: &str, files: &[(&str, &str)]) -> Result<Vec<String>> {
+        let root = temp_repo(tag, files);
+        let out = repo_urls(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        out
+    }
+
+    #[test]
+    fn repo_urls_derive_from_this_repo_metadata() {
+        assert_eq!(
+            repo_urls(&super::super::repo_root().unwrap()).unwrap(),
+            urls()
+        );
+    }
+
+    #[test]
+    fn repo_urls_follow_the_project_metadata() {
+        let got = urls_for(
+            "urls-other",
+            &[
+                (
+                    "Cargo.toml",
+                    "[workspace.package]\nrepository = \"https://www.GitHub.com/Acme/Widget.git/\"\n",
+                ),
+                (
+                    "crates/toolr/pyproject.toml",
+                    "[project.urls]\nDocumentation = \"https://Docs.Acme.dev/widget/\"\n",
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            got,
+            [
+                "github.com/acme/widget",
+                "raw.githubusercontent.com/acme/",
+                "docs.acme.dev"
+            ]
+        );
+    }
+
+    #[test]
+    fn lint_flags_the_urls_the_metadata_names() {
+        let err = lint_repo(
+            "urls-lint",
+            &[
+                (
+                    "Cargo.toml",
+                    "[workspace.package]\nrepository = \"https://github.com/acme/widget\"\n",
+                ),
+                (
+                    "skills/x/SKILL.md",
+                    "https://github.com/acme/widget/x https://github.com/s0undt3ch/toolr\n",
+                ),
+            ],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("repo-url: https://github.com/acme/widget/x"),
+            "{err}"
+        );
+        assert!(!err.contains("s0undt3ch/toolr"), "{err}");
+    }
+
+    #[test]
+    fn missing_repository_key_is_an_error_naming_file_and_key() {
+        let err = format!(
+            "{:#}",
+            urls_for(
+                "urls-no-repo",
+                &[("Cargo.toml", "[workspace.package]\nversion = \"1\"\n")]
+            )
+            .unwrap_err()
+        );
+        assert!(
+            err.contains("Cargo.toml: no string `workspace.package.repository`"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn missing_documentation_url_is_an_error_naming_file_and_key() {
+        let err = format!(
+            "{:#}",
+            urls_for(
+                "urls-no-docs",
+                &[("crates/toolr/pyproject.toml", "[project]\nname = \"x\"\n")]
+            )
+            .unwrap_err()
+        );
+        assert!(
+            err.contains("crates/toolr/pyproject.toml: no string `project.urls.Documentation`"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn missing_or_invalid_metadata_file_is_an_error() {
+        let root = temp_repo("urls-no-file", &[]);
+        std::fs::remove_file(root.join("Cargo.toml")).unwrap();
+        let missing = format!("{:#}", repo_urls(&root).unwrap_err());
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(
+            missing.contains("reading ") && missing.contains("Cargo.toml"),
+            "{missing}"
+        );
+
+        let bad = format!(
+            "{:#}",
+            urls_for("urls-bad-toml", &[("Cargo.toml", "[x\n")]).unwrap_err()
+        );
+        assert!(bad.contains("parsing Cargo.toml"), "{bad}");
+    }
+
+    #[test]
+    fn repository_that_is_not_a_github_repo_url_is_an_error() {
+        for url in [
+            "https://gitlab.com/a/b",
+            "https://github.com/a",
+            "https://github.com/a/b/c",
+        ] {
+            let cargo = format!("[workspace.package]\nrepository = \"{url}\"\n");
+            let err = format!(
+                "{:#}",
+                urls_for("urls-not-gh", &[("Cargo.toml", &cargo)]).unwrap_err()
+            );
+            assert!(
+                err.contains("Cargo.toml: `workspace.package.repository` is not a github.com/<owner>/<repo> URL"),
+                "{url}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn documentation_url_without_a_host_is_an_error() {
+        let err = format!(
+            "{:#}",
+            urls_for(
+                "urls-no-host",
+                &[(
+                    "crates/toolr/pyproject.toml",
+                    "[project.urls]\nDocumentation = \"https:///x\"\n"
+                )]
+            )
+            .unwrap_err()
+        );
+        assert!(
+            err.contains("crates/toolr/pyproject.toml: `project.urls.Documentation` has no host"),
+            "{err}"
         );
     }
 }
