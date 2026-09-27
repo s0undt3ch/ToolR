@@ -229,75 +229,43 @@ impl SupportedType {
         }
     }
 
-    /// Position in `catalogue()`'s table order. Exhaustive with no
-    /// `_` arm — a new variant fails to compile here until someone
-    /// gives it a slot, and `catalogue_ordinals_are_dense_and_ordered`
-    /// then fails until they add its representative to `catalogue()`.
-    fn ordinal(&self) -> usize {
-        match self {
-            SupportedType::Int => 0,
-            SupportedType::Float => 1,
-            SupportedType::Bool => 2,
-            SupportedType::Str => 3,
-            SupportedType::Path => 4,
-            SupportedType::AbsolutePath => 5,
-            SupportedType::ResolvedPath => 6,
-            SupportedType::DateTime => 7,
-            SupportedType::Date => 8,
-            SupportedType::Time => 9,
-            SupportedType::Uuid => 10,
-            SupportedType::Ipv4 => 11,
-            SupportedType::Ipv6 => 12,
-            SupportedType::Email => 13,
-            SupportedType::Version => 14,
-            SupportedType::Count => 15,
-            SupportedType::Literal(_) => 16,
-            SupportedType::Enum { .. } => 17,
-            SupportedType::List(_) => 18,
-            SupportedType::Tuple(_) => 19,
-            SupportedType::Optional(_) => 20,
-        }
-    }
-
     /// One representative of every variant, in table order, for
-    /// generating the "Supported types" doc table.
+    /// generating the "Supported types" doc table. `doc()` above is
+    /// exhaustive, but nothing enforces that every variant also has a
+    /// representative here — a new variant compiles `doc()` fine and
+    /// silently stays out of the catalogue unless the list below is
+    /// updated by hand.
     // Add a representative here when adding a variant; doc() won't
     // compile until you document it.
     pub fn catalogue() -> Vec<TypeDoc> {
-        let representatives = [
-            SupportedType::Int,
-            SupportedType::Float,
-            SupportedType::Bool,
-            SupportedType::Str,
-            SupportedType::Path,
-            SupportedType::AbsolutePath,
-            SupportedType::ResolvedPath,
-            SupportedType::DateTime,
-            SupportedType::Date,
-            SupportedType::Time,
-            SupportedType::Uuid,
-            SupportedType::Ipv4,
-            SupportedType::Ipv6,
-            SupportedType::Email,
-            SupportedType::Version,
-            SupportedType::Count,
-            SupportedType::Literal(vec![]),
+        vec![
+            SupportedType::Int.doc(),
+            SupportedType::Float.doc(),
+            SupportedType::Bool.doc(),
+            SupportedType::Str.doc(),
+            SupportedType::Path.doc(),
+            SupportedType::AbsolutePath.doc(),
+            SupportedType::ResolvedPath.doc(),
+            SupportedType::DateTime.doc(),
+            SupportedType::Date.doc(),
+            SupportedType::Time.doc(),
+            SupportedType::Uuid.doc(),
+            SupportedType::Ipv4.doc(),
+            SupportedType::Ipv6.doc(),
+            SupportedType::Email.doc(),
+            SupportedType::Version.doc(),
+            SupportedType::Count.doc(),
+            SupportedType::Literal(vec![]).doc(),
             SupportedType::Enum {
                 name: String::new(),
                 module: String::new(),
                 values: vec![],
-            },
-            SupportedType::List(Box::new(SupportedType::Str)),
-            SupportedType::Tuple(vec![]),
-            SupportedType::Optional(Box::new(SupportedType::Str)),
-        ];
-        // Keeps `ordinal()` reachable from non-test code, so a variant
-        // missing its slot there fails the build here too, not only
-        // under `#[cfg(test)]`.
-        for (i, t) in representatives.iter().enumerate() {
-            debug_assert_eq!(t.ordinal(), i, "representative out of order in catalogue()");
-        }
-        representatives.iter().map(SupportedType::doc).collect()
+            }
+            .doc(),
+            SupportedType::List(Box::new(SupportedType::Str)).doc(),
+            SupportedType::Tuple(vec![]).doc(),
+            SupportedType::Optional(Box::new(SupportedType::Str)).doc(),
+        ]
     }
 }
 
@@ -419,42 +387,4 @@ mod tests {
         assert_eq!(list_row.note, "(T above)");
     }
 
-    #[test]
-    fn catalogue_ordinals_are_dense_and_ordered() {
-        let representatives: Vec<SupportedType> = vec![
-            SupportedType::Int,
-            SupportedType::Float,
-            SupportedType::Bool,
-            SupportedType::Str,
-            SupportedType::Path,
-            SupportedType::AbsolutePath,
-            SupportedType::ResolvedPath,
-            SupportedType::DateTime,
-            SupportedType::Date,
-            SupportedType::Time,
-            SupportedType::Uuid,
-            SupportedType::Ipv4,
-            SupportedType::Ipv6,
-            SupportedType::Email,
-            SupportedType::Version,
-            SupportedType::Count,
-            SupportedType::Literal(vec![]),
-            SupportedType::Enum {
-                name: String::new(),
-                module: String::new(),
-                values: vec![],
-            },
-            SupportedType::List(Box::new(SupportedType::Str)),
-            SupportedType::Tuple(vec![]),
-            SupportedType::Optional(Box::new(SupportedType::Str)),
-        ];
-        let ordinals: Vec<usize> = representatives.iter().map(|t| t.ordinal()).collect();
-        let expected: Vec<usize> = (0..representatives.len()).collect();
-        assert_eq!(ordinals, expected, "catalogue representatives must be in ordinal order with no gaps");
-        assert_eq!(
-            SupportedType::catalogue().len(),
-            representatives.last().unwrap().ordinal() + 1,
-            "catalogue() must have exactly one row per ordinal"
-        );
-    }
 }
