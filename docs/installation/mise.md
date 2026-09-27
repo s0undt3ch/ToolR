@@ -48,13 +48,13 @@ a broken pin.
 ### Install machine-wide
 
 If you'd rather have one `toolr` available across every directory
-without per-project pinning, add `--global`:
+without per-project pinning, add `-g`:
 
 ```sh
 mise use -g packslip:github.com/s0undt3ch/ToolR@latest
 ```
 
-`--global` writes to `~/.config/mise/config.toml` (or whatever
+`-g` (`--global`) writes to `~/.config/mise/config.toml` (or whatever
 mise resolves for your platform). Per-project `.mise.toml` pins
 still override the global entry when present, so this is a safe
 "have toolr on PATH everywhere" knob — it just clutters the
@@ -73,7 +73,7 @@ from. For those, use mise's aqua backend, unchanged from before
 packslip landed:
 
 ```sh
-mise use aqua:s0undt3ch/ToolR@0.19.0
+mise use aqua:s0undt3ch/ToolR@<version>
 ```
 
 The aqua registry entry pulls the same signed GitHub release archives
