@@ -65,10 +65,18 @@ pub fn lint(repo_root: &Path) -> Result<()> {
     }
     let listing = violations
         .iter()
-        .map(|v| format!("{}:{}: {}: {}", v.file.display(), v.line, v.rule, v.target))
+        .map(|v| format!("{}:{}: {}: {}", slash_path(&v.file), v.line, v.rule, v.target))
         .collect::<Vec<_>>()
         .join("\n");
     bail!("{listing}\nskills must be self-contained; see {DESIGN}");
+}
+
+// Repo-relative paths print the same on every OS, so CI logs and tests match.
+fn slash_path(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// Scheme-less, lowercased prefixes of every URL that leads back to this
