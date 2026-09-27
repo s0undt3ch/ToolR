@@ -74,6 +74,17 @@ toolr's own source by `cargo xtask build-skill-refs`:
   repository-root `action.yml`, so the inputs/outputs surface the
   skill points agents at cannot drift from what the action
   actually accepts.
+- `toolr-command-authoring/references/types.md` is rebuilt from
+  the parser's own argument-type and path-constraint catalogue in
+  `crates/toolr-core/src/parser/types/path_constraints.rs`.
+- `toolr-command-authoring/references/arguments.md` is rebuilt
+  from the `arg-shapes` section of
+  `docs/writing-commands/arguments.md`.
+- `toolr-ci-setup/references/prek-hook.md` and
+  `toolr-command-packaging/references/prek-hook.md` are both
+  rebuilt from the `prek-hook` section of `docs/third-party.md`.
+- `toolr-command-packaging/examples/pyproject.toml` is copied from
+  `examples/plugin-package/pyproject.toml`, the reference plugin.
 
 A `cargo xtask build-skill-refs --check` gate runs in CI on every
 PR; a public-surface change that forgets to regenerate the
@@ -86,8 +97,8 @@ path-constraint catalogue, or Rust marker regions), named sections
 extracted from this docs tree, and copied examples such as
 `toolr-command-packaging/examples/pyproject.toml`. Whichever source it
 comes from, each skill directory is self-contained — everything an
-agent needs to act on the skill ships inside it, with no docs-site or
-GitHub round trip at use time. `cargo xtask build-skill-refs --check`
+agent needs to act on the skill ships inside it, with no toolr docs-site
+or repository round trip at use time. `cargo xtask build-skill-refs --check`
 enforces that: it fails on any link, URL to the toolr repo or docs
 site, or backticked repo path that leaves a skill's own directory, so
 that self-containment can't silently regress.
