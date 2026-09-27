@@ -1,10 +1,11 @@
 # mise
 
-[mise](https://mise.jdx.dev/) is a polyglot tool-version manager.
-`toolr` is published in the
-[aqua registry](https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR)
-and mise installs it directly via its built-in aqua backend — no
-plugin to register, no repository to clone.
+[mise](https://mise.jdx.dev/) is a polyglot tool-version manager. Every
+toolr release ships a signed
+[packslip](https://packslip.dev/) manifest, and mise's packslip backend
+installs directly from it — no plugin to register, no repository to
+clone. Releases published before packslip support use mise's aqua
+backend instead; see "Aqua fallback" below.
 
 ## Why
 
@@ -15,8 +16,9 @@ plugin to register, no repository to clone.
   `toolr` release.
 - **Multi-version side-by-side.** Install several releases at once;
   switch with `mise use toolr@X.Y.Z`.
-- **Supply-chain verified.** The aqua registry entry pulls the
-  signed GitHub release archives with SHA-256 verification built in.
+- **Supply-chain verified.** mise checks the packslip's signature
+  against toolr's release workflow identity and verifies the checksum
+  of every archive it downloads, before anything lands on disk.
 
 ## Install toolr
 
@@ -27,10 +29,10 @@ plugin to register, no repository to clone.
 
 ```sh
 # Latest release
-mise use aqua:s0undt3ch/ToolR@latest
+mise use packslip:github.com/s0undt3ch/ToolR@latest
 
 # Pin a specific version
-mise use aqua:s0undt3ch/ToolR@0.20.0
+mise use packslip:github.com/s0undt3ch/ToolR@0.20.0
 ```
 
 This is the form the README and quickstart show. It matches
@@ -38,13 +40,18 @@ toolr's design as a project-level tool — every repo declares its
 own `toolr` version, so `.mise.toml` is the single source of truth
 for "which toolr does this project run with?".
 
+mise defaults to a 24-hour minimum release age before it will install
+a version it hasn't seen before (configurable per tool), so a version
+tagged moments ago may not resolve immediately — that's expected, not
+a broken pin.
+
 ### Install machine-wide
 
 If you'd rather have one `toolr` available across every directory
 without per-project pinning, add `--global`:
 
 ```sh
-mise use --global aqua:s0undt3ch/ToolR@latest
+mise use -g packslip:github.com/s0undt3ch/ToolR@latest
 ```
 
 `--global` writes to `~/.config/mise/config.toml` (or whatever
@@ -59,13 +66,27 @@ global config with a tool you mostly use inside specific repos.
 toolr --version
 ```
 
+### Aqua fallback
+
+Releases before packslip support have no packslip manifest to install
+from. For those, use mise's aqua backend, unchanged from before
+packslip landed:
+
+```sh
+mise use aqua:s0undt3ch/ToolR@0.19.0
+```
+
+The aqua registry entry pulls the same signed GitHub release archives
+with SHA-256 verification built in; it just can't check the packslip
+signature a pre-packslip release never published.
+
 ## Project configuration
 
 ### `.mise.toml` (recommended)
 
 ```toml
 [tools]
-"aqua:s0undt3ch/ToolR" = "0.20.0"
+"packslip:github.com/s0undt3ch/ToolR" = "0.20.0"
 ```
 
 Then run `mise install` from the project root. mise resolves the
@@ -74,7 +95,7 @@ version from `.mise.toml` and installs it on demand.
 ### `.tool-versions` (asdf-style, legacy)
 
 ```text
-aqua:s0undt3ch/ToolR 0.20.0
+packslip:github.com/s0undt3ch/ToolR 0.20.0
 ```
 
 mise also reads asdf's `.tool-versions` files, so existing asdf
@@ -83,11 +104,11 @@ users can keep their pin format unchanged.
 ## Combining with mise tasks
 
 `mise` can run repo-scoped tasks. Once `toolr` is on PATH via the
-aqua backend, wire it into tasks like any other binary:
+packslip backend, wire it into tasks like any other binary:
 
 ```toml
 [tools]
-"aqua:s0undt3ch/ToolR" = "0.20.0"
+"packslip:github.com/s0undt3ch/ToolR" = "0.20.0"
 
 [tasks.test]
 description = "Run tests"
@@ -135,12 +156,6 @@ changed it exits in tens of milliseconds without spawning uv. When
 the lock file has moved, it runs `uv sync --quiet` exactly once and
 updates the stamp.
 
-The recipe works identically for every project, regardless of
-whether `[tool.toolr] venv-location` is `cache` (the default, under
-`$XDG_CACHE_HOME/toolr/<repo-key>/venv/`) or `in-tree`
-(`tools/.venv/`) — the freshness stamp lives inside the venv either
-way, and the recipe never hard-codes a venv path.
-
 ### Unattended-mode guards
 
 `--quiet` does more than suppress output: it also tells `toolr` that
@@ -185,19 +200,19 @@ post-`cd` work.
 
 ```sh
 # List all upstream versions
-mise ls-remote aqua:s0undt3ch/ToolR
+mise ls-remote packslip:github.com/s0undt3ch/ToolR
 
 # List locally installed versions
-mise ls aqua:s0undt3ch/ToolR
+mise ls packslip:github.com/s0undt3ch/ToolR
 
 # Show the active version in the current directory
-mise current aqua:s0undt3ch/ToolR
+mise current packslip:github.com/s0undt3ch/ToolR
 
 # Show the install dir for a version
-mise where aqua:s0undt3ch/ToolR
+mise where packslip:github.com/s0undt3ch/ToolR
 
 # Uninstall a version
-mise uninstall aqua:s0undt3ch/ToolR@0.20.0
+mise uninstall packslip:github.com/s0undt3ch/ToolR@0.20.0
 ```
 
 ## Troubleshooting
@@ -213,14 +228,15 @@ eval "$(mise activate bash)"   # or zsh / fish
 Or invoke through mise directly:
 
 ```sh
-mise exec aqua:s0undt3ch/ToolR -- toolr --help
+mise exec packslip:github.com/s0undt3ch/ToolR -- toolr --help
 ```
 
 ### `no aqua-registry found for s0undt3ch/ToolR`
 
-mise's aqua backend resolves entries against the latest published
-aqua-registry release, not against `main`. If the entry was added
-recently it may not yet be in a release tag. Check
+This applies to the aqua fallback only. mise's aqua backend resolves
+entries against the latest published aqua-registry release, not
+against `main`. If the entry was added recently it may not yet be in
+a release tag. Check
 [aqua-registry releases](https://github.com/aquaproj/aqua-registry/releases)
 and bump mise (or wait for its registry cache to refresh) once a
 release containing the entry has shipped.
@@ -228,14 +244,14 @@ release containing the entry has shipped.
 ### Debug an install
 
 ```sh
-mise --verbose use aqua:s0undt3ch/ToolR
+mise --verbose use packslip:github.com/s0undt3ch/ToolR
 ```
 
 ### Reinstall
 
 ```sh
-mise uninstall aqua:s0undt3ch/ToolR@0.20.0
-mise install aqua:s0undt3ch/ToolR@0.20.0
+mise uninstall packslip:github.com/s0undt3ch/ToolR@0.20.0
+mise install packslip:github.com/s0undt3ch/ToolR@0.20.0
 ```
 
 ## Migrating from the in-tree plugin
@@ -243,16 +259,17 @@ mise install aqua:s0undt3ch/ToolR@0.20.0
 Earlier toolr revisions shipped an asdf-style plugin at
 `installation/mise/` that was installed via
 `mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise`.
-That plugin has been **removed** in favour of the aqua-backed install
-described above. Migrate with:
+That plugin has been **removed** in favour of the backends described
+above: packslip for current releases, aqua as the fallback for
+releases before packslip support. Migrate with:
 
 ```sh
 mise plugin uninstall toolr
-mise use aqua:s0undt3ch/ToolR@latest         # per-project
+mise use packslip:github.com/s0undt3ch/ToolR@latest         # per-project
 # or:
-mise use --global aqua:s0undt3ch/ToolR@latest   # machine-wide
+mise use --global packslip:github.com/s0undt3ch/ToolR@latest   # machine-wide
 ```
 
-The aqua backend installs the **same standalone binary** the
-in-tree plugin used to fetch (the GitHub release archives), so the
-runtime behaviour is identical.
+Both backends install the **same standalone binary** the in-tree
+plugin used to fetch (the GitHub release archives), so the runtime
+behaviour is identical.

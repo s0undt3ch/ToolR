@@ -174,7 +174,7 @@ publicly.
 ### 4. Skill self-containment
 
 With a `repo:` source, a consumer gets only `skills/<name>/`. This work
-depends on `2026-09-27-skills-self-contained-design.md`, which makes
+depends on `archive/2026/2026-09-27-skills-self-contained-design.md`, which makes
 each skill directory work on its own and adds a gate to keep it that
 way. That work lands first, as the PR below this one in the stack.
 
