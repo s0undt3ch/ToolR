@@ -18,6 +18,7 @@ So ``run()`` no longer chdirs or warns; this module only covers the append.
 
 from __future__ import annotations
 
+import contextvars
 import os
 import sys
 import textwrap
@@ -96,7 +97,9 @@ def test_run_imports_tools_from_a_subdirectory(
     try:
         monkeypatch.chdir(sub)
         spec = _spec(repo, "tools.probe", "record")
-        rc = run(spec)
+        # copy_context() keeps `run()`'s `_current_ctx.set()` out of the test
+        # session's own context, where it would leak into later tests.
+        rc = contextvars.copy_context().run(run, spec)
         assert rc == 0
         # Deferred import is intentional: the `tools` package is created at
         # runtime and only becomes importable after `run()` appends repo_root.

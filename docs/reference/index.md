@@ -4,6 +4,8 @@ The user-facing Python API. For internal-only modules see the source
 under [`crates/toolr-py/python/toolr/`](https://github.com/s0undt3ch/ToolR/tree/main/crates/toolr-py/python/toolr).
 
 - [`Context`](context.md) — passed to every command function as `ctx`.
+- [`current_context`](current_context.md) — the `Context` of the command
+  currently executing, for helpers that aren't passed `ctx` directly.
 - [`command_group`](command_group.md) — declared at module scope in
   `tools/*.py` files.
 - [`command`](command.md) — string-path decorator for attaching

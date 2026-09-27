@@ -24,6 +24,10 @@ class SignatureError(SignatureParameterError):
         super().__init__(message)
 
 
+class NoCurrentContextError(ToolrError):
+    """Raised by `current_context()` when no `Context` is set for the running task/thread."""
+
+
 class ToolrDeprecationWarning(DeprecationWarning):
     """Warning emitted for toolr APIs scheduled for removal in 1.0.
 

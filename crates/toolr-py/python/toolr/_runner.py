@@ -42,6 +42,7 @@ import msgspec
 from packaging.version import Version
 
 from toolr._context import Context
+from toolr._context import _current_ctx
 from toolr._exc import ToolrDeprecationWarning
 from toolr.sources import CommandSchema
 from toolr.sources import DispatchCommand
@@ -552,6 +553,9 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     repo_root = Path(spec.context.repo_root)
     try:
         ctx = _build_context(spec)
+        # Before `_import_target`, so a module-level `current_context()` in a
+        # `tools/*.py` works too. No `.reset()`: `run()` dispatches once per process.
+        _current_ctx.set(ctx)
         # `''` is gone from sys.path (the interpreter ran with `-P`), so make
         # `import tools.*` resolve regardless of where toolr was invoked. The
         # working directory is already repo_root (the Rust side spawned the

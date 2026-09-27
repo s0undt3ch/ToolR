@@ -10,3 +10,13 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+### `toolr.current_context()`
+
+Added `toolr.current_context()`, a `contextvars`-backed accessor a
+command-authoring helper can call to get the `Context` of the toolr command
+currently executing, without it being passed as a parameter. Purely
+additive: `@command`-decorated functions keep receiving `ctx` as their
+required first argument, and existing helpers that take `ctx` explicitly are
+unaffected. See `toolr.testing.set_current_context()` for testing helpers
+that use it.

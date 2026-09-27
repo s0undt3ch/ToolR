@@ -74,6 +74,15 @@ exception traceback.
 --8<-- "docs/writing-commands/files/example.py:48:58"
 ```
 
+## Getting `ctx` in a helper function
+
+A command function always takes `ctx` as its first parameter, but a
+helper it calls doesn't have to — it can take `ctx` as a parameter too,
+or call [`toolr.current_context()`][toolr.current_context] to fetch the
+`Context` of whichever command is currently running, without threading
+it through every call in between. See the reference page for when it
+raises and how it interacts with threads and `asyncio` tasks.
+
 ## The full surface
 
 See [`Context`][toolr.Context] in the API reference for every method

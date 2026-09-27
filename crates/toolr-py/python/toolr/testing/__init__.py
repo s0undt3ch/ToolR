@@ -10,6 +10,9 @@
   objects to configure it with. See `_run_mock`.
 - `DEFAULT_TEST_CONSOLE_WIDTH` — the console width `make_context` defaults
   to, deliberately wide so captured output never wraps. See `_make_context`.
+- `set_current_context` — make `toolr.current_context()` resolve to a given
+  `Context` for a `with` block, for testing helpers that read it instead of
+  taking `ctx` as a parameter. See `_current_context`.
 
 The pytest plugin (`_pytest_plugin`) that makes `import tools.*` resolve
 under pytest lives here too, registered via the `pytest11` entry point in
@@ -18,6 +21,7 @@ under pytest lives here too, registered via the `pytest11` entry point in
 
 from __future__ import annotations
 
+from toolr.testing._current_context import set_current_context
 from toolr.testing._discovery import CommandsTester
 from toolr.testing._make_context import DEFAULT_TEST_CONSOLE_WIDTH
 from toolr.testing._make_context import ContextForTesting
@@ -32,4 +36,5 @@ __all__ = [
     "RunMock",
     "make_command_result",
     "make_context",
+    "set_current_context",
 ]

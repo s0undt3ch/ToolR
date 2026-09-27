@@ -12,6 +12,7 @@ swallows-and-formats-stderr behaviour for unhandled exit codes.
 
 from __future__ import annotations
 
+import contextvars
 import datetime as dt
 import importlib
 import ipaddress
@@ -47,6 +48,12 @@ from toolr._runner import main
 from toolr._runner import run
 from toolr.sources import CommandSchema
 from toolr.sources import DispatchCommand
+
+
+def _run_isolated(spec: RunnerSpec) -> int:
+    """`run()` in a copied context — its `_current_ctx.set()` must not leak into later tests."""
+    return contextvars.copy_context().run(run, spec)
+
 
 # --------------------------------------------------------------------------
 # Factory fixtures (mirrored from test_dispatch.py for test isolation).
@@ -581,7 +588,7 @@ def test_run_dispatch_branch_passes_enum_modules_to_coerce_args(
             schema=CommandSchema(name="migrate", summary="", description="", arguments=[]),
         ),
     )
-    assert run(spec) == 0
+    assert _run_isolated(spec) == 0
     assert isinstance(captured["dispatched"], DispatchCommand)
     assert captured["dispatched"].command == "migrate"
 
@@ -601,7 +608,7 @@ def test_run_returns_zero_on_systemexit_none(
         raise SystemExit  # SystemExit(None)
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    rc = run(_runner_spec(repo_root=tmp_path))
+    rc = _run_isolated(_runner_spec(repo_root=tmp_path))
     assert rc == 0
     assert captured == {"called": True}
 
@@ -616,7 +623,7 @@ def test_run_treats_string_exit_code_as_failure(
         raise SystemExit(msg)
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    rc = run(_runner_spec(repo_root=tmp_path))
+    rc = _run_isolated(_runner_spec(repo_root=tmp_path))
     assert rc == 1
     assert "bailing out" in capsys.readouterr().err
 
@@ -635,7 +642,7 @@ def test_run_returns_2_for_spec_error_from_coercion(
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
     spec = _runner_spec(args={"level": "trace"}, repo_root=tmp_path)
-    rc = run(spec)
+    rc = _run_isolated(spec)
     assert rc == 2
     assert "invalid value for `--level`" in capsys.readouterr().err
 
@@ -644,7 +651,7 @@ def test_run_returns_0_on_clean_completion(monkeypatch: pytest.MonkeyPatch, tmp_
     def fake_target(ctx, **_kw) -> None: ...
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    assert run(_runner_spec(repo_root=tmp_path)) == 0
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 0
 
 
 def test_run_returns_integer_exit_code_from_systemexit(
@@ -654,7 +661,7 @@ def test_run_returns_integer_exit_code_from_systemexit(
         raise SystemExit(7)
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    assert run(_runner_spec(repo_root=tmp_path)) == 7
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 7
 
 
 def test_run_returns_1_on_unhandled_exception(
@@ -667,7 +674,7 @@ def test_run_returns_1_on_unhandled_exception(
         raise RuntimeError(msg)
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    assert run(_runner_spec(repo_root=tmp_path)) == 1
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
     err = capsys.readouterr().err
     assert "RuntimeError" in err
     assert "kaboom" in err
@@ -685,7 +692,7 @@ def test_run_returns_130_on_keyboard_interrupt(
         raise KeyboardInterrupt
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    assert run(_runner_spec(repo_root=tmp_path)) == 130
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 130
     # No traceback noise — Ctrl-C is expected user behaviour, not a bug.
     assert capsys.readouterr().err == ""
 
@@ -709,7 +716,7 @@ def test_run_emits_missing_dep_hint_for_function_body_importerror(
         raise ImportError(msg, name="optional_pkg")
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    assert run(_runner_spec(repo_root=tmp_path)) == 1
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
     err = capsys.readouterr().err
     assert "ImportError" in err
     assert "`optional_pkg`" in err
@@ -736,7 +743,7 @@ def test_run_emits_missing_dep_hint_for_transitive_importerror_via_spec_error(
         raise SpecError(msg) from cause
 
     monkeypatch.setattr("toolr._runner._import_target", fake_import_target)
-    assert run(_runner_spec(repo_root=tmp_path)) == 2
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 2
     err = capsys.readouterr().err
     assert "toolr runner: failed to import tools.demo" in err
     assert "`transitive_dep`" in err
@@ -758,7 +765,7 @@ def test_run_falls_back_to_generic_hint_when_importerror_has_no_name(
         raise ImportError(msg)
 
     monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
-    assert run(_runner_spec(repo_root=tmp_path)) == 1
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
     err = capsys.readouterr().err
     assert "this module" in err
     assert "toolr project venv sync" in err
