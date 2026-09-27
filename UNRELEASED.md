@@ -46,6 +46,10 @@ A misspelled or unsupported `arg()` keyword, such as
 `arg(path_must_exist=True)`, and any positional argument passed to `arg()` now
 fail the manifest build with the module, function and argument, plus a
 "did you mean" hint where one fits (`path_must_exist` suggests `must_exist`).
+Argparse-style `help=`, `type=` and `default=` instead point at where toolr
+takes that information from. The check follows `arg()` calls nested in
+`X | None`, `Optional[...]` and `list[...]` annotations and through
+module-level aliases.
 The check also covers `toolr self build-manifest`, so a plugin can't ship a
 manifest containing a command that can never run. Before, the parser silently
 dropped the keyword: the command showed up in `--help` and then failed with a
