@@ -1208,4 +1208,88 @@ mod tests {
             "{err}"
         );
     }
+
+    #[test]
+    fn end_marker_before_start_marker_is_an_error() {
+        let err = find_section("--8<-- [end:s]\nx\n--8<-- [start:s]\n", "s")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("comes before"), "{err}");
+    }
+
+    #[test]
+    fn self_including_snippet_hits_the_depth_limit() {
+        let err = transform("--8<-- \"a.md\"\n", &fake(&[("a.md", "--8<-- \"a.md\"\n")]))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("nested deeper than 8"), "{err}");
+    }
+
+    #[test]
+    fn admonition_without_a_kind_is_an_error() {
+        let err = transform("!!!\n    Body.\n", &fake(&[])).unwrap_err().to_string();
+        assert!(err.contains("line 1: admonition without a kind"), "{err}");
+    }
+
+    #[test]
+    fn admonition_with_empty_title_uses_the_kind_alone() {
+        let out = transform("!!! note \"\"\n    Body.\n", &fake(&[])).unwrap();
+        assert_eq!(out, "> **Note:** Body.\n");
+    }
+
+    #[test]
+    fn code_span_end_skips_shorter_backtick_runs() {
+        assert_eq!(code_span_end(b"`a``b", 0), None);
+        assert_eq!(code_span_end(b"``a`b``c", 0), Some(7));
+        let src = "A `` b ` c `` and [x](y.md)\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), "A `` b ` c `` and x\n");
+    }
+
+    #[test]
+    fn trailing_attr_list_after_code_span_is_dropped() {
+        let out = transform("x `a` {#b}\n", &fake(&[])).unwrap();
+        assert_eq!(out, "x `a`\n");
+    }
+
+    #[test]
+    fn trailing_attr_list_after_unmatched_backtick_is_dropped() {
+        let out = transform("x ` a {#b}\n", &fake(&[])).unwrap();
+        assert_eq!(out, "x ` a\n");
+    }
+
+    #[test]
+    fn attr_list_lookalike_inside_code_span_is_kept() {
+        let src = "`{#a}` }\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
+    }
+
+    #[test]
+    fn escaped_brackets_are_not_links() {
+        let src = "Price \\[x\\] ok [a](b.md)\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), "Price \\[x\\] ok a\n");
+    }
+
+    #[test]
+    fn escaped_bracket_inside_link_text_does_not_close_it() {
+        let out = transform("[a \\] b](c.md)\n", &fake(&[])).unwrap();
+        assert_eq!(out, "a \\] b\n");
+    }
+
+    #[test]
+    fn unmatched_backtick_inside_link_text_is_literal() {
+        let out = transform("[a ` b](c.md)\n", &fake(&[])).unwrap();
+        assert_eq!(out, "a ` b\n");
+    }
+
+    #[test]
+    fn unterminated_reference_label_is_left_alone() {
+        let src = "[a][b\nc]\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
+    }
+
+    #[test]
+    fn unclosed_colon_attr_list_is_kept() {
+        let src = "a {: b\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
+    }
 }
