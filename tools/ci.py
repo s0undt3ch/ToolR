@@ -10,6 +10,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
+from rich.pretty import Pretty
+
 from toolr import Context
 from toolr import command_group
 
@@ -305,7 +307,8 @@ def generate_build_matrix(
             always the complete set.
     """
     if workflow is None:
-        workflow, reason = _select_workflow_mode()
+        mode, reason = _select_workflow_mode()
+        workflow = Workflow(mode)
     else:
         reason = f"caller forced `--workflow {workflow}`."
 
@@ -370,7 +373,7 @@ def generate_build_matrix(
         )
 
     ctx.info(f"Emitting build matrix outputs for workflow={workflow!r} (reason: {reason})")
-    ctx.print(outputs)
+    ctx.print(Pretty(outputs))
     with open(github_output, "a") as f:
         f.writelines(f"{key}={json.dumps(value)}\n" for key, value in outputs.items())
 
