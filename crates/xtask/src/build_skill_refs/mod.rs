@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 
 mod authoring;
 mod ci_setup;
+mod docs_section;
 mod packaging;
 mod types;
 
