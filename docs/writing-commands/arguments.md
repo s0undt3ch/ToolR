@@ -14,30 +14,10 @@ Toolr enforces a closed set of parameter types. Anything outside this
 table is rejected at manifest-build time with an error pointing at
 [`toolr.types`](#richer-types-via-toolrtypes) as the extension namespace.
 
-| Annotation | Validated by | Wire format | Python receives |
-|---|---|---|---|
-| `int` | clap | JSON number | `int` |
-| `float` | clap | JSON number | `float` |
-| `bool` | clap | JSON bool | `bool` |
-| `str` | none (passthrough) | JSON string | `str` |
-| `pathlib.Path` | clap (custom parser) | string | `pathlib.Path` |
-| `toolr.types.AbsolutePath` | clap (absolutise vs cwd) | absolute string | `pathlib.Path` |
-| `toolr.types.ResolvedPath` | clap (`canonicalize()`) | resolved string | `pathlib.Path` |
-| `toolr.types.DateTime` | clap (chrono RFC 3339) | string | `datetime.datetime` |
-| `toolr.types.Date` | clap (chrono ISO date) | string | `datetime.date` |
-| `toolr.types.Time` | clap (chrono ISO time) | string | `datetime.time` |
-| `toolr.types.UUID` | clap (`uuid` crate) | string | `uuid.UUID` |
-| `toolr.types.IPv4` | clap (`std::net::Ipv4Addr`) | string | `ipaddress.IPv4Address` |
-| `toolr.types.IPv6` | clap (`std::net::Ipv6Addr`) | string | `ipaddress.IPv6Address` |
-| `toolr.types.Email` | clap (`email_address` crate) | string | `str` (pre-validated) |
-| `toolr.types.Version` | clap (`pep440_rs` crate) | string | `packaging.version.Version` |
-| `toolr.types.Count` | clap (`ArgAction::Count`) | integer | `int` |
-| `Literal["a", "b"]` | clap (allowed-values) | string | `Literal` value |
-| `Enum` subclass | clap (member values) | string | enum member |
-| `list[T]` (T above) | clap per-element | JSON array | `list[T]` |
-| `tuple[T1, T2, …]` | clap arity, msgspec per-slot | JSON array | `tuple[T1, T2]` |
-| `*args: T` | clap (trailing variadic) | JSON array | splatted `T...` |
-| `T \| None` | clap (`required=false`) | typed or absent | `T` or `None` |
+--8<-- "docs/writing-commands/files/supported-types.md"
+
+Variadic `*args: T` accepts any `T` above; see the [`*args` for variadic
+positionals](#args-for-variadic-positionals) section below.
 
 Bad input fails fast at the clap parse layer — no Python spawn:
 
@@ -195,11 +175,7 @@ annotation on the parameter is the element type.
 variants) accept additional opt-in filesystem checks through
 `Annotated[Path, arg(...)]`:
 
-| Constraint | Effect |
-|---|---|
-| `arg(path_must_exist=True)` | reject paths that don't exist on disk |
-| `arg(path_must_be_file=True)` | reject anything that isn't a regular file (implies `path_must_exist`) |
-| `arg(path_must_be_dir=True)` | reject anything that isn't a directory (implies `path_must_exist`) |
+--8<-- "docs/writing-commands/files/path-constraints.md"
 
 ```python
 from pathlib import Path
@@ -208,8 +184,8 @@ from toolr import arg
 
 def read_config(
     ctx: Context,
-    config: Annotated[Path, arg(path_must_be_file=True)],
-    workdir: Annotated[Path, arg(path_must_be_dir=True)],
+    config: Annotated[Path, arg(must_be_file=True)],
+    workdir: Annotated[Path, arg(must_be_dir=True)],
 ) -> None:
     ...
 ```

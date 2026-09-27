@@ -30,7 +30,10 @@ fn build_skill_refs_is_byte_stable_across_runs() {
     let generated_paths = [
         workspace.join("skills/toolr-command-authoring/references/commands.md"),
         workspace.join("skills/toolr-command-authoring/references/docstrings.md"),
+        workspace.join("skills/toolr-command-authoring/references/types.md"),
         workspace.join("skills/toolr-command-packaging/references/packaging.md"),
+        workspace.join("docs/writing-commands/files/supported-types.md"),
+        workspace.join("docs/writing-commands/files/path-constraints.md"),
     ];
 
     // Snapshot the committed bytes so we can restore them at the end

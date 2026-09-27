@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 mod authoring;
 mod ci_setup;
 mod packaging;
+mod types;
 
 /// One regenerated file, ready to either write to disk or compare
 /// against the committed version when `--check` is in effect.
@@ -35,6 +36,9 @@ pub fn run(check: bool) -> Result<()> {
         authoring::testing_api(&root)?,
         authoring::testing_examples(&root)?,
         authoring::docstrings(&root)?,
+        types::types_reference(&root)?,
+        types::supported_types_snippet(&root)?,
+        types::path_constraints_snippet(&root)?,
         packaging::packaging(&root)?,
         ci_setup::action(&root)?,
     ];

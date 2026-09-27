@@ -222,20 +222,21 @@ jobs:
             exit 1
           fi
 
-      - name: Verify skills/*/references/*.md are in sync
+      - name: Verify skill references and generated docs snippets are in sync
         # Drift gate for the two in-tree agent skills
-        # (`toolr-command-authoring`, `toolr-command-packaging`).
-        # Runs the same regenerator the prek hook uses, then uses
-        # `git diff --exit-code` to fail-and-show on drift. The
-        # printed diff makes it obvious WHAT regenerated differently
-        # — much clearer in the CI log than the `--check` path's
-        # bare exit-1. Hosted here so a single workspace build
+        # (`toolr-command-authoring`, `toolr-command-packaging`) and the
+        # generated docs/writing-commands/files/*.md snippets they
+        # share tables with. Runs the same regenerator the prek hook
+        # uses, then uses `git diff --exit-code` to fail-and-show on
+        # drift. The printed diff makes it obvious WHAT regenerated
+        # differently — much clearer in the CI log than the `--check`
+        # path's bare exit-1. Hosted here so a single workspace build
         # covers both the example-plugin gate above and this one.
         shell: bash
         run: |
           cargo xtask build-skill-refs
-          if ! git diff --exit-code -- skills; then
-            echo "::error::skills/*/references/*.md drifted from generator output (see diff above)" >&2
+          if ! git diff --exit-code -- skills docs/writing-commands/files; then
+            echo "::error::skill references and generated docs snippets drifted from generator output (see diff above)" >&2
             echo "::error::run 'cargo xtask build-skill-refs' locally and commit the result" >&2
             exit 1
           fi

@@ -192,3 +192,33 @@ fn extract_backticked_names_in_tables(body: &str) -> Vec<String> {
     }
     names
 }
+
+#[test]
+fn types_reference_lists_every_toolr_types_name() {
+    let workspace = workspace_root();
+    let body = fs::read_to_string(
+        workspace.join("skills/toolr-command-authoring/references/types.md"),
+    )
+    .expect("types.md must exist; run `cargo xtask build-skill-refs`");
+    let init = fs::read_to_string(
+        workspace.join("crates/toolr-py/python/toolr/types/__init__.py"),
+    )
+    .unwrap();
+    for name in extract_dunder_all(&init).expect("parse toolr.types.__all__") {
+        assert!(
+            body.contains(&format!("`toolr.types.{name}`")),
+            "types.md has no row for toolr.types.{name}",
+        );
+    }
+}
+
+#[test]
+fn path_constraints_snippet_uses_real_keywords() {
+    let workspace = workspace_root();
+    let body = fs::read_to_string(
+        workspace.join("docs/writing-commands/files/path-constraints.md"),
+    )
+    .unwrap();
+    assert!(body.contains("`arg(must_exist=True)`"));
+    assert!(!body.contains("path_must_"), "stale docs keyword leaked in");
+}
