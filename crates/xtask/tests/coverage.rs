@@ -222,3 +222,15 @@ fn path_constraints_snippet_uses_real_keywords() {
     assert!(body.contains("`arg(must_exist=True)`"));
     assert!(!body.contains("path_must_"), "stale docs keyword leaked in");
 }
+
+#[test]
+fn arguments_reference_is_extracted_and_link_free() {
+    let body = fs::read_to_string(
+        workspace_root().join("skills/toolr-command-authoring/references/arguments.md"),
+    )
+    .expect("run `cargo xtask build-skill-refs`");
+    assert!(body.contains("## Positional arguments"));
+    assert!(body.contains("must_be_file=True"));
+    assert!(!body.contains("--8<--"), "unexpanded include");
+    assert!(!body.contains(".md)"), "docs-page link survived");
+}

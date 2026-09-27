@@ -52,17 +52,20 @@ unchanged. It tells you exactly three things on top of that.
    --source-dir <pkg-src> --package <pkg-name> --check` exits
    non-zero when the committed manifest doesn't match what the
    builder would produce from the current source. Run it on every
-   PR. A prek hook is a good local complement. The
+   PR. A [prek hook](references/prek-hook.md) is a good local
+   complement. The
    [`toolr-ci-setup`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-ci-setup)
    skill shows the canonical workflow.
 
 ## The canonical worked example
 
-`examples/plugin-package/` in the toolr repository is the reference
+The example plugin package in the toolr repository is the reference
 plugin. It is a real hatchling-built package, ships
 `src/toolr_example_plugin/toolr-manifest.json`, and CI builds it
-end-to-end on every run. Read its `pyproject.toml` if you want a
-known-good wheel-include configuration to copy.
+end-to-end on every run. See
+[examples/pyproject.toml](examples/pyproject.toml), a copy shipped
+with this skill, if you want a known-good wheel-include configuration
+to copy.
 
 The structure is:
 
@@ -144,6 +147,9 @@ the JSON, not the `pyproject.toml`.
   Generated from `toolr-core`'s own serde types via
   `cargo xtask build-skill-refs`; cannot drift out of sync with
   what the loader actually accepts.
+- [`references/prek-hook.md`](references/prek-hook.md) — the
+  pre-commit hook that gates a stale manifest locally, extracted
+  from the docs.
 
 ## Authoring is a different problem
 

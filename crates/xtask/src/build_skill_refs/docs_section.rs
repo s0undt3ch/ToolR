@@ -16,8 +16,6 @@ const MAX_INCLUDE_DEPTH: usize = 8;
 
 /// Read `repo_root/doc_rel`, find `section`, and render it. Includes
 /// resolve against `repo_root`, matching `pymdownx.snippets`' `base_path: .`.
-// Only reachable from tests until the docs-backed generators register it.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn extract(repo_root: &Path, doc_rel: &str, section: &str) -> Result<String> {
     let doc_path = repo_root.join(doc_rel);
     let doc = std::fs::read_to_string(&doc_path)

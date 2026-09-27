@@ -249,8 +249,8 @@ for the file-configured equivalent.
   none of those are committed (or if your `tools/` layout is
   non-standard), the key never stabilises. Commit the lock files
   alongside `tools/pyproject.toml`. Local complement to the CI gate:
-  the `--check` recipe above works equally well as a prek hook in
-  your `pre-commit` config.
+  the `--check` recipe above works equally well as a
+  [prek hook](references/prek-hook.md) in your `pre-commit` config.
 
 ## Authoring and packaging are different problems
 

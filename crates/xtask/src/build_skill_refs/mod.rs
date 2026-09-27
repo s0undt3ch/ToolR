@@ -12,6 +12,7 @@ mod authoring;
 mod ci_setup;
 mod docs_section;
 mod packaging;
+mod sections;
 mod types;
 
 /// One regenerated file, ready to either write to disk or compare
@@ -32,7 +33,7 @@ pub fn run(check: bool) -> Result<()> {
     // The registry. Each entry contributes one `references/*.md` file.
     // Order is presentational only — `apply` writes (or compares) each
     // entry independently.
-    let outputs: Vec<Generated> = vec![
+    let mut outputs: Vec<Generated> = vec![
         authoring::commands(&root)?,
         authoring::testing_api(&root)?,
         authoring::testing_examples(&root)?,
@@ -42,7 +43,10 @@ pub fn run(check: bool) -> Result<()> {
         types::path_constraints_snippet(&root)?,
         packaging::packaging(&root)?,
         ci_setup::action(&root)?,
+        sections::arguments_reference(&root)?,
+        sections::packaging_example(&root)?,
     ];
+    outputs.extend(sections::prek_hook_references(&root)?);
 
     apply(outputs, check)
 }

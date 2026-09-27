@@ -50,8 +50,11 @@ drift.
    if you want a `pathlib.Path`. Defaults make arguments optional;
    `Annotated[T, arg(...)]` adds clap metadata (`aliases`, `metavar`,
    `help_section`, `must_exist`, etc.). See
-   [`docs/writing-commands/arguments.md`](../../docs/writing-commands/arguments.md)
-   for the full supported-type table.
+   [`references/types.md`](references/types.md) for the full
+   supported-type table and
+   [`references/arguments.md`](references/arguments.md) for how each
+   shape (positionals, flags, `list[T]`, `*args`, tuples, `Count`) is
+   declared.
 5. **Document via Google-style docstring.** The first line is the
    short help (`toolr <group> --help`). The rest is the long help
    (`toolr <group> <cmd> --help`). `Args:` populates per-argument
@@ -216,6 +219,13 @@ make its registration a top-level, statically-visible declaration.
 
 ## References
 
+- [`references/types.md`](references/types.md) — the supported
+  parameter-type table and path-constraint keywords, generated from
+  toolr's own type catalogue.
+- [`references/arguments.md`](references/arguments.md) — how each
+  parameter shape (positionals, `T | None`, flags, `Literal`/enums,
+  `list[T]`, `*args`, path constraints, module-level aliases, tuples,
+  `Count`) becomes a CLI argument, extracted from the docs.
 - [`references/commands.md`](references/commands.md) — every name
   exposed by `import toolr`. Signatures, defaults, annotations, and
   docstrings, regenerated from `toolr.__all__` on every release.
