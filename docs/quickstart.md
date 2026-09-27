@@ -21,14 +21,15 @@ Five first-class install paths — pick whichever matches your environment.
 ### mise
 
 ```sh
-mise use aqua:s0undt3ch/ToolR@latest
+mise use packslip:github.com/s0undt3ch/ToolR@latest
 ```
 
-Pulls toolr from the
-[aqua registry](https://github.com/aquaproj/aqua-registry/tree/main/pkgs/s0undt3ch/ToolR)
-via mise's built-in aqua backend — no plugin to register. For
+Installs toolr from its signed [packslip](https://packslip.dev/)
+manifest via mise's packslip backend — no plugin to register. For
 projects that already pin tool versions via `.mise.toml`, this is
-the most-natural fit. See [installation/mise](installation/mise.md).
+the most-natural fit. Releases before packslip support have no
+manifest to install from; use `mise use aqua:s0undt3ch/ToolR@<version>`
+for those. See [installation/mise](installation/mise.md).
 
 ### pip
 

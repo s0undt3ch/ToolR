@@ -466,6 +466,93 @@ jobs:
           packages-dir: dist/
           verbose: true
 
+  # Keep this job inline in release.yml: Sigstore records the calling
+  # workflow file as the signing identity, and mise pins that identity.
+  publish-packslip:
+    name: Publish packslip
+    # Runs even if publish-release failed after creating the release (e.g. a
+    # PyPI outage); an earlier failure makes the tag checkout or download fail
+    # loudly. "Re-run failed jobs" re-runs publish-release too, which fails
+    # harmlessly on the existing tag, and this job re-signs with --clobber.
+    if: >-
+      ${{ !cancelled()
+          && needs.prepare-release.result == 'success'
+          && (needs.publish-release.result == 'success'
+              || needs.publish-release.result == 'failure') }}
+    needs:
+      - prepare-release
+      - publish-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      ARCHIVE_PATTERNS: toolr-*-*-apple-darwin.tar.gz toolr-*-*-linux-musl.tar.gz toolr-*-*-windows-msvc.zip
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ needs.prepare-release.outputs.release-version }}
+          persist-credentials: false
+
+      - name: Resolve the release commit
+        id: source
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
+        run: |
+          set -euo pipefail
+          echo "commit=$(git rev-parse "v${RELEASE_VERSION}^{commit}")" >> "$GITHUB_OUTPUT"
+
+      # Version must match the `github:jdx/packslip@1.3.0` pin in ci.yml.
+      # The action uploads with `gh release upload --clobber`, so a re-run
+      # re-signs and replaces the existing packslip.sigstore.json asset.
+      - name: Sign and upload the packslip
+        id: packslip
+        uses: jdx/packslip@4920350c39c234c7a969f9775040bd02829f1923 # v1.3.0
+        with:
+          tag: v${{ needs.prepare-release.outputs.release-version }}
+          version: ${{ needs.prepare-release.outputs.release-version }}
+          commit: ${{ steps.source.outputs.commit }}
+          manifest: .github/packslip.toml
+          download: ${{ env.ARCHIVE_PATTERNS }}
+          attest: link
+
+      - name: Verify the published packslip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare-release.outputs.release-version }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          set -euo pipefail
+          cd "$(mktemp -d)"
+          read -ra patterns <<<"$ARCHIVE_PATTERNS"
+          download_args=(-p packslip.sigstore.json)
+          for p in "${patterns[@]}"; do
+            download_args+=(-p "$p")
+          done
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" "${download_args[@]}"
+          artifacts=()
+          for p in "${patterns[@]}"; do
+            # shellcheck disable=SC2206 # unquoted on purpose: glob each pattern
+            matches=($p)
+            for f in "${matches[@]}"; do
+              artifacts+=(--artifact "$f")
+            done
+          done
+          # Hard-coded, not derived from github.workflow_ref: this catches a
+          # signer change that mise users would have to re-approve.
+          packslip verify packslip.sigstore.json \
+            --identity https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main \
+            --issuer https://token.actions.githubusercontent.com \
+            "${artifacts[@]}"
+          packslip show packslip.sigstore.json \
+            | jq -e --arg v "$VERSION" --arg c "$COMMIT" \
+                '.predicate.version == $v and .predicate.source.commit == $c'
+
   set-pipeline-exit-status:
     environment: release
     permissions: {}
@@ -487,6 +574,7 @@ jobs:
       - build-py-wheel-windows
       - prepare-ci
       - prepare-release
+      - publish-packslip
       - publish-release
       - test-distribution-linux
       - test-distribution-macos

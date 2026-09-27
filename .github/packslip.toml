@@ -1,0 +1,24 @@
+# Adding a skill under skills/ means adding a [[resource]] entry below.
+# The `toolr ci packslip-check` PR gate fails when the two disagree.
+
+bin = ["toolr"]
+
+[[resource]]
+kind = "completion"
+shells = ["bash", "zsh", "fish"]
+exec = ["toolr", "self", "completion", "print", "{shell}"]
+
+[[resource]]
+kind = "skill"
+name = "toolr-ci-setup"
+repo = "skills/toolr-ci-setup"
+
+[[resource]]
+kind = "skill"
+name = "toolr-command-authoring"
+repo = "skills/toolr-command-authoring"
+
+[[resource]]
+kind = "skill"
+name = "toolr-command-packaging"
+repo = "skills/toolr-command-packaging"

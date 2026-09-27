@@ -1,15 +1,16 @@
 # Agent skills
 
-Toolr ships two in-tree **agent skills** for LLM coding assistants
+Toolr ships three in-tree **agent skills** for LLM coding assistants
 (Claude Code, Copilot CLI, Gemini, etc.). Skills bundle a trigger,
 hand-written conceptual prose, and a set of generated references
 into a single package that downstream agents load on demand.
 
 The skills live under `skills/` in the toolr repo and are distributed
-via [`skillshare`](https://github.com/skillsharehub/skillshare) from
-this repository. Once installed, an agent working in your codebase
-picks them up automatically when its prompt mentions toolr-shaped
-intent.
+via [`skillshare`](https://github.com/skillsharehub/skillshare) or via
+mise, through the same signed [packslip](https://packslip.dev/)
+manifest that installs the `toolr` binary — see "Via mise" below. Once
+installed, an agent working in your codebase picks them up
+automatically when its prompt mentions toolr-shaped intent.
 
 ## Skills
 
@@ -19,11 +20,11 @@ intent.
 | **`toolr-command-packaging`** | Shipping an already-written set of toolr commands as a distributable Python plugin. | Generating `toolr-manifest.json` via `toolr self build-manifest`, including it in the wheel, wiring `--check` as a CI gate. |
 | **`toolr-ci-setup`** | Wiring `s0undt3ch/ToolR` into a caller repo's GitHub Actions workflow. | The action's inputs and outputs, recommended pin form, two canonical recipes (run a command; gate `--check`), common failure modes. |
 
-The two triggers are scoped so authoring requests never fire the
-packaging skill and vice versa. If you're unsure which one you need,
-the rule of thumb is: **authoring is about extending toolr in your
-own repo; packaging is about shipping commands so other repos can
-install them.**
+The `toolr-command-authoring` and `toolr-command-packaging` triggers
+are scoped so authoring requests never fire the packaging skill and
+vice versa. If you're unsure which one you need, the rule of thumb
+is: **authoring is about extending toolr in your own repo; packaging
+is about shipping commands so other repos can install them.**
 
 ## Installation
 
@@ -47,13 +48,63 @@ Substitute your platform's skill-install command if you're not on
 Claude Code-compatible and the references files are plain Markdown
 that any platform can ingest.
 
+## Via mise
+
+If your project already installs `toolr` through mise's
+[packslip backend](installation/mise.md), the same signed manifest
+declares the three skills, so mise can sync them alongside the
+binary — an alternative to `skillshare` for projects that already
+manage their toolr version through mise:
+
+```sh
+# List downloaded skills for every tool active in the project, not just toolr
+mise skills ls
+
+# Sync the declared skills into a local directory
+mise skills sync --dir .agents/skills
+```
+
+The skills mise syncs match the `toolr` version active as of the last
+`mise skills sync` — the packslip pins skill content to a release
+commit. Without `auto_sync`, re-run `mise skills sync` yourself after
+a version change; even with `auto_sync`, the sync runs after
+`mise install` and `mise use`, not on every `cd`, and an already-running
+agent may need to reload its skills to see the update.
+
+mise can also do this automatically whenever a tool installs or
+updates, via an opt-in `[settings.skills]` block:
+
+```toml
+[settings.skills]
+dir = ".agents/skills"
+auto_sync = true
+prune = true
+```
+
+As [jdx's packslip announcement](https://jdx.dev/posts/2026-09-05-introducing-packslip/)
+puts it: auto-sync means a tool install or update can change what
+your agent reads next session. A verified packslip signature tells
+you where the instructions came from — not that they're the right
+instructions for your project. Review a skill's content before
+turning `auto_sync` on, the same way you'd review any dependency
+bump.
+
+Tab completion follows the same version binding: `mise completion
+zsh --tool toolr --install` (bash and fish are also supported) wires
+up completions that match the `toolr` version active in the current
+directory, and prints the one-time shell setup it still needs. Only
+bash and zsh pick up a per-directory version change on the next
+completion; fish loads its completion once per shell session, so a
+version switch needs a new shell to take effect there.
+
 ## Managing installed skills
 
 Listing, updating, pinning, and removing installed skills is
-`skillshare`'s job — see the
+`skillshare`'s or mise's job, depending on which one you installed
+through — see the
 [`skillshare` documentation](https://github.com/skillsharehub/skillshare)
-for the full command surface. Toolr ships the skills; how you
-manage them on your machine is owned upstream.
+or `mise skills --help` for the full command surface. Toolr ships the
+skills; how you manage them on your machine is owned upstream.
 
 ## How the references stay correct
 
@@ -89,7 +140,7 @@ toolr's own source by `cargo xtask build-skill-refs`:
 A `cargo xtask build-skill-refs --check` gate runs in CI on every
 PR; a public-surface change that forgets to regenerate the
 references cannot land. End users never run the regenerator — they
-consume what `skillshare` distributes.
+consume what `skillshare` or mise's packslip backend distributes.
 
 Every reference file traces back to one of three sources: code-derived
 tables (walked from `__all__` exports, the parser's argument-type and

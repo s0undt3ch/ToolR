@@ -31,3 +31,11 @@ site or repository. The docs' path-constraint table previously documented
 `arg(path_must_exist=...)`; the real keywords are `must_exist`,
 `must_be_file` and `must_be_dir`, and the docs now generate that table from the
 code.
+
+### Install toolr with mise's packslip backend
+
+Releases now ship a signed [packslip](https://packslip.dev/) manifest, so
+`mise use packslip:github.com/s0undt3ch/ToolR` installs toolr with signature
+and checksum verification, version-matched shell completions, and the three
+toolr agent skills (`mise skills sync`). The aqua backend remains available
+for releases published before packslip support.
