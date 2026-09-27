@@ -10,9 +10,8 @@ use super::docs_section::{Fence, code_span_end, find_links, is_reference_definit
 
 const DESIGN: &str = "specs/archive/2026/2026-09-27-skills-self-contained-design.md";
 
-// Compared lowercased; the brief lists both spellings of the repo name.
-const REPO_URLS: [&str; 4] = [
-    "github.com/s0undt3ch/toolr",
+// Compared case-insensitively.
+const REPO_URLS: [&str; 3] = [
     "github.com/s0undt3ch/ToolR",
     "raw.githubusercontent.com/s0undt3ch/",
     "toolr.readthedocs.io",
@@ -28,7 +27,7 @@ pub struct Violation {
     pub rule: &'static str,
 }
 
-/// Lint every shipped Markdown file of every skill under `skills/`.
+/// Lint every file each skill under `skills/` ships.
 pub fn lint(repo_root: &Path) -> Result<()> {
     let skills_root = repo_root.join("skills");
     let mut violations = Vec::new();
@@ -36,26 +35,28 @@ pub fn lint(repo_root: &Path) -> Result<()> {
         if !skill_dir.is_dir() {
             continue;
         }
-        let mut files = vec![PathBuf::from("SKILL.md")];
-        for sub in ["references", "examples"] {
-            collect_md(&skill_dir, Path::new(sub), &mut files)?;
-        }
+        let mut files = Vec::new();
+        collect_shipped(&skill_dir, Path::new(""), &mut files)?;
         for rel in files {
             let path = skill_dir.join(&rel);
-            if !path.is_file() {
+            let bytes =
+                std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+            let Ok(body) = String::from_utf8(bytes) else {
+                continue;
+            };
+            if body.contains('\0') {
                 continue;
             }
-            let body = std::fs::read_to_string(&path)
-                .with_context(|| format!("reading {}", path.display()))?;
-            let shown = path.strip_prefix(repo_root).unwrap_or(&path).to_path_buf();
-            violations.extend(
+            let found = if rel.extension().is_some_and(|e| e == "md") {
                 lint_file(&skill_dir, &rel, &body, &|p: &Path| p.exists())
-                    .into_iter()
-                    .map(|v| Violation {
-                        file: shown.clone(),
-                        ..v
-                    }),
-            );
+            } else {
+                lint_text(&body)
+            };
+            let shown = path.strip_prefix(repo_root).unwrap_or(&path).to_path_buf();
+            violations.extend(found.into_iter().map(|v| Violation {
+                file: shown.clone(),
+                ..v
+            }));
         }
     }
     if violations.is_empty() {
@@ -79,24 +80,40 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
-fn collect_md(skill_dir: &Path, rel: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    let dir = skill_dir.join(rel);
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    for path in sorted_entries(&dir)? {
+/// Every file under `rel` that ships with the skill: all of it except
+/// `README.md`, `REVIEW.md` and `tests/`, which are for maintainers.
+fn collect_shipped(skill_dir: &Path, rel: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    for path in sorted_entries(&skill_dir.join(rel))? {
         let name = path.file_name().unwrap_or_default();
         let child = rel.join(name);
         if path.is_dir() {
-            collect_md(skill_dir, &child, out)?;
-        } else if path.extension().is_some_and(|e| e == "md")
-            && name != "README.md"
-            && name != "REVIEW.md"
-        {
+            if name != "tests" {
+                collect_shipped(skill_dir, &child, out)?;
+            }
+        } else if name != "README.md" && name != "REVIEW.md" {
             out.push(child);
         }
     }
     Ok(())
+}
+
+/// Non-Markdown files have no link syntax to resolve; only a repo URL
+/// anywhere in them can send an agent back to this repository.
+fn lint_text(body: &str) -> Vec<Violation> {
+    body.lines()
+        .enumerate()
+        .flat_map(|(i, line)| {
+            bare_urls(line)
+                .into_iter()
+                .filter(|(_, url)| is_repo_url(url))
+                .map(move |(_, url)| Violation {
+                    file: PathBuf::new(),
+                    line: i + 1,
+                    target: url.to_string(),
+                    rule: "repo-url",
+                })
+        })
+        .collect()
 }
 
 /// Lint one file's body. `rel` is the file's path inside `skill_dir`;
@@ -155,14 +172,20 @@ fn lint_file(
                 continue;
             };
             masked[i..end].fill(b' ');
+            // Only the first token: later ones (`cat docs/x`) are as likely
+            // to be the user's own project paths.
             let token = text[i + run..end - run]
                 .split_whitespace()
                 .next()
                 .unwrap_or("");
-            if REPO_PATHS.iter().any(|p| token.starts_with(p)) && !lint.inside(Path::new(token)) {
+            if lint.repo_path(token) {
                 lint.flag(line_of(i), "repo-path", token);
             }
             i = end;
+        }
+        for (range, value) in html_targets(&String::from_utf8_lossy(&masked)) {
+            lint.target(line_of(range.start), &value);
+            masked[range].fill(b' ');
         }
         let masked =
             String::from_utf8(masked).expect("masking only overwrites ASCII-delimited spans");
@@ -254,8 +277,28 @@ impl FileLint<'_> {
         normalize(rel).is_some_and(|p| (self.exists)(&self.skill_dir.join(p)))
     }
 
+    /// A backticked token naming a path in this repository rather than in
+    /// the skill or in the user's project.
+    fn repo_path(&self, token: &str) -> bool {
+        let mut token = token;
+        while let Some(rest) = token.strip_prefix("./") {
+            token = rest;
+        }
+        if token.starts_with("../") {
+            return normalize(&self.file_dir.join(token)).is_none();
+        }
+        REPO_PATHS.iter().any(|p| token.starts_with(p)) && !self.inside(Path::new(token))
+    }
+
     fn target(&mut self, line: usize, target: &str) {
         if target.is_empty() || target.starts_with('#') || target.starts_with("mailto:") {
+            return;
+        }
+        if target
+            .get(..5)
+            .is_some_and(|s| s.eq_ignore_ascii_case("file:"))
+        {
+            self.flag(line, "link-escapes-skill", target);
             return;
         }
         if target.contains("://") {
@@ -309,6 +352,37 @@ fn is_repo_url(url: &str) -> bool {
         .any(|p| rest.starts_with(&p.to_ascii_lowercase()))
 }
 
+/// Values of raw HTML `href=` / `src=` attributes, with their byte ranges.
+fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> {
+    let lower = text.to_ascii_lowercase();
+    let mut out = Vec::new();
+    for attr in ["href=", "src="] {
+        let mut from = 0;
+        while let Some(k) = lower[from..].find(attr) {
+            let at = from + k;
+            from = at + attr.len();
+            if at > 0 && !lower.as_bytes()[at - 1].is_ascii_whitespace() {
+                continue;
+            }
+            let Some(quote) = text[from..]
+                .chars()
+                .next()
+                .filter(|c| *c == '"' || *c == '\'')
+            else {
+                continue;
+            };
+            let start = from + 1;
+            let Some(len) = text[start..].find(quote) else {
+                continue;
+            };
+            out.push((start..start + len, text[start..start + len].to_string()));
+            from = start + len;
+        }
+    }
+    out.sort_by_key(|(r, _)| r.start);
+    out
+}
+
 /// `http(s)://` tokens in `text`, with their byte offsets.
 fn bare_urls(text: &str) -> Vec<(usize, &str)> {
     let lower = text.to_ascii_lowercase();
@@ -333,9 +407,36 @@ fn bare_urls(text: &str) -> Vec<(usize, &str)> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use super::*;
+
+    /// A throwaway repo root holding `files` (repo-relative path, body).
+    fn temp_repo(tag: &str, files: &[(&str, &str)]) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("xtask-self-contained-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for (rel, body) in files {
+            let path = root.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, body).unwrap();
+        }
+        root
+    }
+
+    fn lint_repo(tag: &str, files: &[(&str, &str)]) -> Result<()> {
+        let root = temp_repo(tag, files);
+        let out = lint(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        out
+    }
+
+    fn rules_in(rel: &str, body: &str, paths: &'static [&'static str]) -> Vec<&'static str> {
+        lint_file(Path::new("s"), Path::new(rel), body, &exists_in(paths))
+            .into_iter()
+            .map(|v| v.rule)
+            .collect()
+    }
 
     fn exists_in(paths: &'static [&'static str]) -> impl Fn(&Path) -> bool {
         move |p: &Path| paths.iter().any(|x| Path::new(x) == p)
@@ -424,5 +525,117 @@ mod tests {
     #[test]
     fn repo_url_in_inline_code_is_ignored() {
         assert!(rules("`https://github.com/s0undt3ch/ToolR`\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn repo_url_in_example_python_is_flagged() {
+        let err = lint_repo(
+            "py",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                (
+                    "skills/x/examples/tools/a.py",
+                    "# ok\n# see https://github.com/s0undt3ch/ToolR/x\n",
+                ),
+            ],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains(
+                "skills/x/examples/tools/a.py:2: repo-url: https://github.com/s0undt3ch/ToolR/x"
+            ),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn sibling_markdown_is_linted() {
+        let err = lint_repo(
+            "sibling",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/workflow.md", "Read `docs/x.md`.\n"),
+            ],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("skills/x/workflow.md:1: repo-path: docs/x.md"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn readme_review_tests_and_binary_files_are_skipped() {
+        let bad = "[a](../../docs/x.md) https://toolr.readthedocs.io/\n";
+        lint_repo(
+            "skipped",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/README.md", bad),
+                ("skills/x/REVIEW.md", bad),
+                ("skills/x/tests/t.md", bad),
+                ("skills/x/examples/tests/t.py", bad),
+                ("skills/x/examples/README.md", bad),
+                (
+                    "skills/x/examples/blob.bin",
+                    "\0\0https://toolr.readthedocs.io/\n",
+                ),
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn dot_slash_repo_path_is_flagged() {
+        assert_eq!(rules("`./docs/x.md`\n", &[]), ["repo-path"]);
+        assert!(rules("`./examples/a.py`\n", &["s/examples/a.py"]).is_empty());
+    }
+
+    #[test]
+    fn parent_relative_backticked_path_escaping_skill_is_flagged() {
+        assert_eq!(
+            rules_in("references/r.md", "`../../docs/x.md`\n", &[]),
+            ["repo-path"]
+        );
+        assert!(rules_in("references/r.md", "`../examples/a.py`\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn only_the_first_backticked_token_is_checked() {
+        assert!(rules("`cat docs/x.md`\n", &[]).is_empty());
+    }
+
+    #[test]
+    fn file_scheme_links_are_flagged() {
+        assert_eq!(
+            rules("[a](file:///etc/x.md)\n", &[]),
+            ["link-escapes-skill"]
+        );
+        assert_eq!(
+            rules("[a](FILE:x.md)\n", &["s/x.md"]),
+            ["link-escapes-skill"]
+        );
+    }
+
+    #[test]
+    fn raw_html_href_and_src_are_linted() {
+        let body =
+            "<a href=\"../../docs/x.md\">x</a>\n<img src='https://toolr.readthedocs.io/a.png'>\n";
+        assert_eq!(rules(body, &[]), ["link-escapes-skill", "repo-url"]);
+    }
+
+    #[test]
+    fn raw_html_to_own_file_or_in_code_passes() {
+        assert!(
+            rules(
+                "<a href=\"references/x.md\">x</a>\n",
+                &["s/references/x.md"]
+            )
+            .is_empty()
+        );
+        assert!(rules("`<a href=\"../../x.md\">`\n", &[]).is_empty());
+        assert!(rules("```html\n<a href=\"../../x.md\">\n```\n", &[]).is_empty());
     }
 }
