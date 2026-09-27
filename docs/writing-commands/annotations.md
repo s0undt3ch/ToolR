@@ -33,9 +33,9 @@ def show(
 | `display_order=N` | Lower values render first in `--help`. |
 | `conflicts_with=[...]` | Mutex relationships: at most one of these flags per invocation. |
 | `requires=[...]` | If this flag is set, every name listed must also be set. |
-| `path_must_exist=True` | Reject paths that don't exist (Path types only). |
-| `path_must_be_file=True` | Reject non-files; implies `path_must_exist`. |
-| `path_must_be_dir=True` | Reject non-dirs; implies `path_must_exist`. |
+| `must_exist=True` | Reject paths that don't exist on disk (Path types only). |
+| `must_be_file=True` | Reject anything that isn't a regular file; implies `must_exist`. |
+| `must_be_dir=True` | Reject anything that isn't a directory; implies `must_exist`. |
 
 ## Aliases (short flags + alternate long flags)
 
@@ -143,6 +143,8 @@ These still parse but emit a `ToolrDeprecationWarning`:
 - `nargs=` — use `T | None` / `*args: T` / `tuple[T1, T2]`.
 - `action=` — `bool` infers flag, `list[T]` infers append, `Count` infers count.
 - `group=` — use `conflicts_with=[…]` for mutex, `help_section=` for display grouping.
-- `must_exist=` / `must_be_file=` / `must_be_dir=` — rename to `path_must_exist` / `path_must_be_file` / `path_must_be_dir`.
+- `path_must_exist=` / `path_must_be_file=` / `path_must_be_dir=` —
+  never existed as accepted spellings; the real (and only) names are
+  `must_exist=` / `must_be_file=` / `must_be_dir=`.
 
 Next: [Nested groups →](nesting.md)
