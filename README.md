@@ -37,9 +37,9 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
   the wheel. Discovery is a glob + JSON parse; no Python import to find them.
 - **Signed releases.** Every release archive ships with a SLSA build-provenance attestation, and
   every release publishes a signed [packslip](https://packslip.dev/) manifest that mise verifies
-  against toolr's release workflow identity. The install scripts verify the attestation by default
-  (requires the `gh` CLI); pass `--verify-attestation=skip` to bypass, accepting the supply-chain
-  risk.
+  against the ToolR repository's signing identity, remembering the release workflow after the
+  first install. The install scripts verify the attestation by default (requires the `gh` CLI);
+  pass `--verify-attestation=skip` to bypass, accepting the supply-chain risk.
 
 ## Two wheels, two roles
 
@@ -61,17 +61,18 @@ Five first-class install paths.
 mise use packslip:github.com/s0undt3ch/ToolR@latest
 
 # Pin a version
-mise use packslip:github.com/s0undt3ch/ToolR@0.20.0
+mise use packslip:github.com/s0undt3ch/ToolR@X.Y.Z
 
 # Install machine-wide instead of per-project
 mise use -g packslip:github.com/s0undt3ch/ToolR@latest
 ```
 
 Installs toolr from its signed [packslip](https://packslip.dev/) manifest via mise's packslip
-backend — no plugin to register. mise verifies the manifest's signature against toolr's release
-workflow identity and checks each archive's checksum before installing it. For projects that
-already pin tool versions via `.mise.toml`, toolr's version becomes part of your project's
-reproducible tool set. Releases before packslip support have no manifest to install from; use
+backend — no plugin to register. mise verifies the release against the ToolR repository's signing
+identity, remembering the release workflow after the first install, and checks the digest and size
+of the archive for your platform before unpacking it. For projects that already pin tool versions
+via `.mise.toml`, toolr's version becomes part of your project's reproducible tool set. Releases
+before packslip support have no manifest to install from; use
 `mise use aqua:s0undt3ch/ToolR@<version>` for those.
 See [docs/installation/mise/](https://toolr.readthedocs.io/latest/installation/mise/).
 

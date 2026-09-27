@@ -15,10 +15,11 @@ backend instead; see "Aqua fallback" below.
   `.tool-versions` and everyone on the project ends up on the same
   `toolr` release.
 - **Multi-version side-by-side.** Install several releases at once;
-  switch with `mise use toolr@X.Y.Z`.
-- **Supply-chain verified.** mise checks the packslip's signature
-  against toolr's release workflow identity and verifies the checksum
-  of every archive it downloads, before anything lands on disk.
+  switch with `mise use packslip:github.com/s0undt3ch/ToolR@X.Y.Z`.
+- **Supply-chain verified.** mise verifies the release against the
+  ToolR repository's signing identity, remembering the release
+  workflow after the first install, and checks the digest and size
+  of the archive for your platform before unpacking it.
 
 ## Install toolr
 
@@ -32,7 +33,7 @@ backend instead; see "Aqua fallback" below.
 mise use packslip:github.com/s0undt3ch/ToolR@latest
 
 # Pin a specific version
-mise use packslip:github.com/s0undt3ch/ToolR@0.20.0
+mise use packslip:github.com/s0undt3ch/ToolR@X.Y.Z
 ```
 
 This is the form the README and quickstart show. It matches
@@ -40,10 +41,10 @@ toolr's design as a project-level tool — every repo declares its
 own `toolr` version, so `.mise.toml` is the single source of truth
 for "which toolr does this project run with?".
 
-mise defaults to a 24-hour minimum release age before it will install
-a version it hasn't seen before (configurable per tool), so a version
-tagged moments ago may not resolve immediately — that's expected, not
-a broken pin.
+mise defaults to a 24-hour minimum release age when selecting new
+versions (configurable per tool with `minimum_release_age`; set it to
+`"0"` on the tool to bypass), so a version tagged moments ago may not
+resolve immediately — that's expected, not a broken pin.
 
 ### Install machine-wide
 
@@ -86,7 +87,7 @@ signature a pre-packslip release never published.
 
 ```toml
 [tools]
-"packslip:github.com/s0undt3ch/ToolR" = "0.20.0"
+"packslip:github.com/s0undt3ch/ToolR" = "X.Y.Z"
 ```
 
 Then run `mise install` from the project root. mise resolves the
@@ -95,7 +96,7 @@ version from `.mise.toml` and installs it on demand.
 ### `.tool-versions` (asdf-style, legacy)
 
 ```text
-packslip:github.com/s0undt3ch/ToolR 0.20.0
+packslip:github.com/s0undt3ch/ToolR X.Y.Z
 ```
 
 mise also reads asdf's `.tool-versions` files, so existing asdf
@@ -108,7 +109,7 @@ packslip backend, wire it into tasks like any other binary:
 
 ```toml
 [tools]
-"packslip:github.com/s0undt3ch/ToolR" = "0.20.0"
+"packslip:github.com/s0undt3ch/ToolR" = "X.Y.Z"
 
 [tasks.test]
 description = "Run tests"
@@ -155,6 +156,12 @@ honours its own freshness stamp internally, so when nothing has
 changed it exits in tens of milliseconds without spawning uv. When
 the lock file has moved, it runs `uv sync --quiet` exactly once and
 updates the stamp.
+
+The recipe works identically for every project, regardless of
+whether `[tool.toolr] venv-location` is `cache` (the default, under
+`$XDG_CACHE_HOME/toolr/<repo-key>/venv/`) or `in-tree`
+(`tools/.venv/`) — the freshness stamp lives inside the venv either
+way, and the recipe never hard-codes a venv path.
 
 ### Unattended-mode guards
 
@@ -212,7 +219,7 @@ mise current packslip:github.com/s0undt3ch/ToolR
 mise where packslip:github.com/s0undt3ch/ToolR
 
 # Uninstall a version
-mise uninstall packslip:github.com/s0undt3ch/ToolR@0.20.0
+mise uninstall packslip:github.com/s0undt3ch/ToolR@X.Y.Z
 ```
 
 ## Troubleshooting
@@ -250,8 +257,8 @@ mise --verbose use packslip:github.com/s0undt3ch/ToolR
 ### Reinstall
 
 ```sh
-mise uninstall packslip:github.com/s0undt3ch/ToolR@0.20.0
-mise install packslip:github.com/s0undt3ch/ToolR@0.20.0
+mise uninstall packslip:github.com/s0undt3ch/ToolR@X.Y.Z
+mise install packslip:github.com/s0undt3ch/ToolR@X.Y.Z
 ```
 
 ## Migrating from the in-tree plugin
@@ -267,7 +274,7 @@ releases before packslip support. Migrate with:
 mise plugin uninstall toolr
 mise use packslip:github.com/s0undt3ch/ToolR@latest         # per-project
 # or:
-mise use --global packslip:github.com/s0undt3ch/ToolR@latest   # machine-wide
+mise use -g packslip:github.com/s0undt3ch/ToolR@latest   # machine-wide
 ```
 
 Both backends install the **same standalone binary** the in-tree

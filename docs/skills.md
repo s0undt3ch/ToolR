@@ -57,16 +57,19 @@ binary — an alternative to `skillshare` for projects that already
 manage their toolr version through mise:
 
 ```sh
-# List what the active toolr release's packslip declares
+# List downloaded skills for every tool active in the project, not just toolr
 mise skills ls
 
 # Sync the declared skills into a local directory
 mise skills sync --dir .agents/skills
 ```
 
-The skills mise syncs always match the `toolr` version active in the
-current project — the packslip pins skill content to a release
-commit, so there's no separate version to track.
+The skills mise syncs match the `toolr` version active as of the last
+`mise skills sync` — the packslip pins skill content to a release
+commit. Without `auto_sync`, re-run `mise skills sync` yourself after
+a version change; even with `auto_sync`, the sync runs after
+`mise install` and `mise use`, not on every `cd`, and an already-running
+agent may need to reload its skills to see the update.
 
 mise can also do this automatically whenever a tool installs or
 updates, via an opt-in `[settings.skills]` block:
@@ -87,10 +90,12 @@ turning `auto_sync` on, the same way you'd review any dependency
 bump.
 
 Tab completion follows the same version binding: `mise completion
-zsh --tool toolr --install` (bash, fish, and PowerShell are also
-supported) wires up completions that match the `toolr` version active
-in the current directory, and prints the one-time shell setup it
-still needs.
+zsh --tool toolr --install` (bash and fish are also supported) wires
+up completions that match the `toolr` version active in the current
+directory, and prints the one-time shell setup it still needs. Only
+bash and zsh pick up a per-directory version change on the next
+completion; fish loads its completion once per shell session, so a
+version switch needs a new shell to take effect there.
 
 ## Managing installed skills
 
