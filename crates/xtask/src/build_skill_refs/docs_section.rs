@@ -240,15 +240,25 @@ fn is_prose(text: &str) -> bool {
 }
 
 fn flush_paragraph(para: &mut Vec<Item>, out: &mut Vec<String>) -> Result<()> {
-    let Some(first) = para.first() else {
+    if para.is_empty() {
         return Ok(());
+    }
+    // Spliced include lines all carry their directive's line number, so a
+    // line can't be derived by counting newlines from the first item.
+    let mut joined = String::new();
+    let mut starts: Vec<(usize, usize)> = Vec::with_capacity(para.len());
+    for (n, item) in para.iter().enumerate() {
+        if n > 0 {
+            joined.push('\n');
+        }
+        starts.push((joined.len(), item.lineno));
+        joined.push_str(&item.text);
+    }
+    let line_of = |pos: usize| {
+        let k = starts.partition_point(|(off, _)| *off <= pos);
+        starts[k.saturating_sub(1)].1
     };
-    let joined = para
-        .iter()
-        .map(|i| i.text.as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let rewritten = rewrite_links(&joined, first.lineno)?;
+    let rewritten = rewrite_links(&joined, &line_of)?;
     for line in rewritten.split('\n') {
         let line = strip_attr_lists(line);
         if !line.trim().is_empty() {
@@ -400,7 +410,7 @@ fn admonition_label(line: &str, lineno: usize) -> Result<String> {
     if title.is_empty() {
         return Ok(kind);
     }
-    Ok(format!("{kind} — {}", rewrite_links(title, lineno)?))
+    Ok(format!("{kind} — {}", rewrite_links(title, &|_| lineno)?))
 }
 
 fn blockquote(label: &str, body: &[String]) -> Vec<String> {
@@ -488,8 +498,16 @@ fn in_code_span(text: &str, pos: usize) -> bool {
 ///
 /// A `](` that no `[` opens is an error, since it means a link this
 /// scanner failed to recognise.
+// Consumed by the skill link lint; only tests call it until that lands.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn find_links(text: &str, first_lineno: usize) -> Result<Vec<Link>> {
-    let line_of = |pos: usize| first_lineno + text[..pos].matches('\n').count();
+    scan_links(text, &|pos| {
+        first_lineno + text[..pos].matches('\n').count()
+    })
+}
+
+/// [`find_links`] with a caller-supplied byte-offset-to-line mapping.
+fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>> {
     let bytes = text.as_bytes();
     let mut links = Vec::new();
     let mut i = 0;
@@ -545,6 +563,9 @@ pub(super) fn find_links(text: &str, first_lineno: usize) -> Result<Vec<Link>> {
                     .filter(|k| rest[*k..].starts_with(closer))
                     .map(|k| close + 2 + k);
                 let Some(target_end) = target_end else {
+                    if open == b'(' {
+                        bail!("line {}: unterminated link target", line_of(close));
+                    }
                     i += 1;
                     continue;
                 };
@@ -589,10 +610,10 @@ fn is_remote(target: &str) -> bool {
 /// so they collapse to their text; remote inline links still resolve and
 /// stay. Reference links always collapse: their definitions (or, for
 /// mkdocstrings autorefs, the API page) don't travel with the section.
-fn rewrite_links(text: &str, first_lineno: usize) -> Result<String> {
+fn rewrite_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<String> {
     let mut out = String::with_capacity(text.len());
     let mut last = 0;
-    for link in find_links(text, first_lineno)? {
+    for link in scan_links(text, line_of)? {
         if !link.reference && is_remote(&link.target) {
             continue;
         }
@@ -1020,5 +1041,23 @@ mod tests {
     fn ordinary_braces_are_kept() {
         let src = "Keep {braces} here and `{#x}`\n";
         assert_eq!(transform(src, &fake(&[])).unwrap(), src);
+    }
+
+    #[test]
+    fn error_after_include_names_the_page_line() {
+        let src = "--8<-- \"s.md\"\ny](z.md)\n";
+        let err = transform(src, &fake(&[("s.md", "a\nb\nc\n")]))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("line 2:"), "{err}");
+    }
+
+    #[test]
+    fn unterminated_link_target_is_reported_as_such() {
+        let err = transform("[a](b\n", &fake(&[])).unwrap_err().to_string();
+        assert!(
+            err.contains("line 1") && err.contains("unterminated link target"),
+            "{err}"
+        );
     }
 }
