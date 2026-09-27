@@ -268,7 +268,7 @@ fn flush_paragraph(para: &mut Vec<Item>, out: &mut Vec<String>) -> Result<()> {
 }
 
 /// `[label]: target` at the start of a line (up to 3 spaces of indent).
-fn is_reference_definition(text: &str) -> bool {
+pub(super) fn is_reference_definition(text: &str) -> bool {
     let t = text.trim_start();
     if text.len() - t.len() > 3 {
         return false;
@@ -281,14 +281,14 @@ fn is_reference_definition(text: &str) -> bool {
 }
 
 #[derive(Clone, Copy)]
-struct Fence {
+pub(super) struct Fence {
     ch: char,
     len: usize,
     line: usize,
 }
 
 impl Fence {
-    fn opened_by(trimmed: &str, line: usize) -> Option<Self> {
+    pub(super) fn opened_by(trimmed: &str, line: usize) -> Option<Self> {
         let ch = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
         let len = trimmed.chars().take_while(|c| *c == ch).count();
         // CommonMark: a backtick fence's info string can't contain a
@@ -299,7 +299,7 @@ impl Fence {
         Some(Self { ch, len, line })
     }
 
-    fn closed_by(self, trimmed: &str) -> bool {
+    pub(super) fn closed_by(self, trimmed: &str) -> bool {
         let t = trimmed.trim_end();
         t.len() >= self.len && t.chars().all(|c| c == self.ch)
     }
@@ -506,7 +506,7 @@ pub(super) struct Link {
 
 /// Byte index just past the code span opening at `i`, or `None` when the
 /// backtick run at `i` has no matching close (and so is literal text).
-fn code_span_end(bytes: &[u8], i: usize) -> Option<usize> {
+pub(super) fn code_span_end(bytes: &[u8], i: usize) -> Option<usize> {
     let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
     let mut j = i + run;
     while j < bytes.len() {
@@ -549,8 +549,6 @@ fn in_code_span(text: &str, pos: usize) -> bool {
 ///
 /// A `](` that no `[` opens is an error, since it means a link this
 /// scanner failed to recognise.
-// Consumed by the skill link lint; only tests call it until that lands.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn find_links(text: &str, first_lineno: usize) -> Result<Vec<Link>> {
     scan_links(text, &|pos| {
         first_lineno + text[..pos].matches('\n').count()

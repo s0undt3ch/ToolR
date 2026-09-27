@@ -29,7 +29,7 @@ fn render(repo_root: &Path, doc_rel: &str, section: &str, title: &str) -> Result
     body.push_str(DO_NOT_EDIT);
     body.push_str("\n\n");
     body.push_str(&format!(
-        "Extracted from `{doc_rel}` (section `{section}`).\n\n"
+        "Extracted from {doc_rel} in the toolr repository (section `{section}`).\n\n"
     ));
     body.push_str(&extracted);
     Ok(body)

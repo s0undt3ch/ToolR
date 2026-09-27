@@ -13,6 +13,7 @@ mod ci_setup;
 mod docs_section;
 mod packaging;
 mod sections;
+mod self_contained;
 mod types;
 
 /// One regenerated file, ready to either write to disk or compare
@@ -48,7 +49,8 @@ pub fn run(check: bool) -> Result<()> {
     ];
     outputs.extend(sections::prek_hook_references(&root)?);
 
-    apply(outputs, check)
+    apply(outputs, check)?;
+    self_contained::lint(&root)
 }
 
 /// Either write each [`Generated`] to disk or, in `--check` mode,
