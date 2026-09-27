@@ -1,5 +1,5 @@
 # Adding a skill under skills/ means adding a [[resource]] entry below.
-# The packslip-check PR gate fails when the two disagree.
+# The `toolr ci packslip-check` PR gate fails when the two disagree.
 
 bin = ["toolr"]
 

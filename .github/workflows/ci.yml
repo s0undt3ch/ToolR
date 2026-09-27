@@ -247,17 +247,43 @@ jobs:
           cache: true
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|packslip-check|${{ runner.os }}|${{ runner.arch }}
 
-      - name: Check the release manifest against the built archives
+      - name: Setup ToolR
+        id: setup-toolr
+        uses: ./
+        with:
+          version: latest
+          cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|packslip-check
+
+      - name: Install the packslip CLI
+        id: packslip
         env:
           # Must match the `jdx/packslip` action pin in release.yml; Renovate
           # bumps both in one PR.
           PACKSLIP_VERSION: 1.3.0
+          GH_TOKEN: ${{ github.token }}
+        # mise verifies GitHub artifact attestations only when it finds some:
+        # none found (or an API error) falls through to an unverified install,
+        # and it pins no signer workflow. So verify the release asset
+        # fail-closed, then require mise's (possibly cache-restored) binary to
+        # be byte-identical to the verified one.
         run: |
           set -euo pipefail
+          name="packslip-v${PACKSLIP_VERSION}-linux-x64"
+          dir="$RUNNER_TEMP/packslip-release"
+          gh release download "v${PACKSLIP_VERSION}" --repo jdx/packslip \
+            --pattern "$name.tar.xz" --dir "$dir"
+          gh attestation verify "$dir/$name.tar.xz" --repo jdx/packslip \
+            --signer-workflow jdx/packslip/.github/workflows/release.yml
+          tar -xJf "$dir/$name.tar.xz" -C "$dir"
           mise install "github:jdx/packslip@${PACKSLIP_VERSION}"
-          PACKSLIP="$(mise which -t "github:jdx/packslip@${PACKSLIP_VERSION}" packslip)"
-          export PACKSLIP
-          .github/scripts/packslip-check.sh "$RUNNER_TEMP/archives"
+          packslip="$(mise which -t "github:jdx/packslip@${PACKSLIP_VERSION}" packslip)"
+          cmp "$dir/$name/packslip" "$packslip"
+          echo "path=$packslip" >> "$GITHUB_OUTPUT"
+
+      - name: Check the release manifest against the built archives
+        env:
+          PACKSLIP: ${{ steps.packslip.outputs.path }}
+        run: toolr ci packslip-check "$RUNNER_TEMP/archives" --packslip "$PACKSLIP"
 
   # The example plugin is pure Python — one universal wheel covers
   # every Test matrix entry on every OS. Build it once here and let the
