@@ -44,7 +44,13 @@ pub(super) fn check_arg_calls(
     all_imports: &HashMap<String, ImportTable>,
     module: &str,
 ) -> Vec<UnsupportedType> {
-    let mut walker = Walker { aliases, all_imports, expanded: HashSet::new(), problems: Vec::new() };
+    let mut walker = Walker {
+        aliases,
+        all_imports,
+        no_imports: ImportTable::default(),
+        expanded: HashSet::new(),
+        problems: Vec::new(),
+    };
     walker.walk(annotation, module);
     walker.problems
 }
@@ -52,15 +58,21 @@ pub(super) fn check_arg_calls(
 struct Walker<'a> {
     aliases: &'a TypeAliasTable,
     all_imports: &'a HashMap<String, ImportTable>,
+    /// Stands in for a module missing from `all_imports`.
+    no_imports: ImportTable,
     expanded: HashSet<(String, String)>,
     problems: Vec<UnsupportedType>,
 }
 
 impl<'a> Walker<'a> {
+    fn imports_for(&self, scope: &str) -> &ImportTable {
+        self.all_imports.get(scope).unwrap_or(&self.no_imports)
+    }
+
     /// `scope` is the module whose imports decide what names in `expr` mean.
     fn walk(&mut self, expr: &Expr, scope: &str) {
         match expr {
-            Expr::Call(call) if calls_toolr_arg(call, self.all_imports.get(scope)) => {
+            Expr::Call(call) if calls_toolr_arg(call, self.imports_for(scope)) => {
                 check_call(call, &mut self.problems)
             }
             Expr::Subscript(sub) => {
@@ -96,7 +108,7 @@ impl<'a> Walker<'a> {
         if let Some(target) = self.aliases.lookup_in(scope, name) {
             return Some((target, scope.to_string()));
         }
-        let table = self.all_imports.get(scope)?;
+        let table = self.imports_for(scope);
         let imported = table.candidates(name).iter().find_map(|c| {
             self.aliases
                 .lookup_in(&c.module, &c.original_name)
@@ -140,12 +152,9 @@ fn is_toolr_module(module: &str) -> bool {
 }
 
 /// Whether `call` resolves to `toolr.arg`, judged from this module's imports.
-fn calls_toolr_arg(call: &ExprCall, imports: Option<&ImportTable>) -> bool {
+fn calls_toolr_arg(call: &ExprCall, table: &ImportTable) -> bool {
     match call.func.as_ref() {
         Expr::Name(n) => {
-            let Some(table) = imports else {
-                return n.id.as_str() == "arg";
-            };
             if table.local_binding_wins(n.id.as_str()) {
                 return false;
             }
@@ -164,7 +173,7 @@ fn calls_toolr_arg(call: &ExprCall, imports: Option<&ImportTable>) -> bool {
             while let Expr::Attribute(inner) = root {
                 root = inner.value.as_ref();
             }
-            let (Expr::Name(r), Some(table)) = (root, imports) else {
+            let Expr::Name(r) = root else {
                 return false;
             };
             table.resolve_module_binding(r.id.as_str()).is_some_and(is_toolr_module)
@@ -225,6 +234,7 @@ mod tests {
     #[test]
     fn arg_keywords_match_python_signature() {
         let path = signature_py();
+        let shown = path.display();
         let module = parse_python_file(&path).unwrap();
         let func = module
             .body
@@ -233,21 +243,19 @@ mod tests {
                 Stmt::FunctionDef(f) if f.name.as_str() == "arg" => Some(f),
                 _ => None,
             })
-            .unwrap_or_else(|| panic!("no `def arg` in {}", path.display()));
+            .unwrap_or_else(|| panic!("no `def arg` in {shown}"));
         let params = func.parameters.as_ref();
         // The positional-argument and unknown-keyword checks both rely on
         // `arg` being `def arg(*, ...)` with no `**kwargs`.
         assert!(
             params.posonlyargs.is_empty() && params.args.is_empty() && params.vararg.is_none(),
-            "`arg()` in {} now accepts positional arguments; update \
+            "`arg()` in {shown} now accepts positional arguments; update \
              `check_arg_calls` in crates/toolr-core/src/parser/types/arg_keywords.rs",
-            path.display()
         );
         assert!(
             params.kwarg.is_none(),
-            "`arg()` in {} now accepts `**kwargs`; the unknown-keyword check in \
+            "`arg()` in {shown} now accepts `**kwargs`; the unknown-keyword check in \
              crates/toolr-core/src/parser/types/arg_keywords.rs no longer holds",
-            path.display()
         );
         let python: BTreeSet<&str> = params
             .kwonlyargs
@@ -265,8 +273,7 @@ mod tests {
             rust,
             "`arg()` keyword drift: update ACTIVE_ARG_KEYWORDS / DEPRECATED_ARG_KEYWORDS in \
              crates/toolr-core/src/parser/types/arg_keywords.rs and the `arg` signature in \
-             {} together",
-            path.display()
+             {shown} together",
         );
         assert_eq!(
             rust_list.len(),

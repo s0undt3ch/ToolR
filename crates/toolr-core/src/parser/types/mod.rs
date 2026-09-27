@@ -747,4 +747,26 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
         .unwrap();
         assert_eq!(resolved, SupportedType::Count);
     }
+
+    #[test]
+    fn toolr_arg_calls_accepts_qualified_annotated_head() {
+        let (_, ann) = first_annotation(
+            "def f(x: typing.Annotated[Path, arg(must_exist=True)]): pass\n",
+        );
+        assert_eq!(toolr_arg_calls(&ann).len(), 1);
+        assert!(extract_path_constraints(&ann).is_some_and(|c| c.must_exist));
+    }
+
+    #[test]
+    fn toolr_arg_calls_ignores_non_annotated_subscripts() {
+        for src in [
+            "def f(x: registry[0][int]): pass\n",
+            "def f(x: list[arg(must_exist=True)]): pass\n",
+            "def f(x: Annotated[Path]): pass\n",
+        ] {
+            let (_, ann) = first_annotation(src);
+            assert!(toolr_arg_calls(&ann).is_empty(), "{src}");
+            assert_eq!(extract_path_constraints(&ann), None, "{src}");
+        }
+    }
 }

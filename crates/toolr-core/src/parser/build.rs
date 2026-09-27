@@ -1354,19 +1354,16 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
         for (name, contents) in files {
             write(tmp.path(), name, contents);
         }
-        match build_static_manifest_inner(&tmp.path().join("tools")) {
-            Err(BuildError::UnsupportedTypes(errs)) => errs,
-            Err(other) => panic!("expected UnsupportedTypes, got {other}"),
-            Ok(_) => panic!("expected the build to fail"),
-        }
+        let err = build_static_manifest_inner(&tmp.path().join("tools"))
+            .expect_err("expected the build to fail");
+        let BuildError::UnsupportedTypes(errs) = err else { unreachable!("expected UnsupportedTypes") };
+        errs
     }
 
     fn assert_builds(src: &str) {
         let tmp = TempDir::new().unwrap();
         write(tmp.path(), "tools/kw.py", src);
-        if let Err(err) = build_static_manifest(&tmp.path().join("tools")) {
-            panic!("expected the build to succeed, got: {err}");
-        }
+        build_static_manifest(&tmp.path().join("tools")).expect("expected the build to succeed");
     }
 
     fn unknown_keyword(keyword: &str, suggestion: Option<&str>) -> UnsupportedType {
@@ -1770,6 +1767,15 @@ def read(ctx: Context, {signature}) -> None:
     }
 
     #[test]
+    fn local_arg_annotated_assignment_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "arg: type = dict",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
     fn local_arg_class_is_not_checked() {
         assert_builds(&kw_module(
             "from toolr import Context, command_group",
@@ -1783,9 +1789,7 @@ def read(ctx: Context, {signature}) -> None:
         for (name, contents) in files {
             write(tmp.path(), name, contents);
         }
-        if let Err(err) = build_static_manifest(&tmp.path().join("tools")) {
-            panic!("expected the build to succeed, got: {err}");
-        }
+        build_static_manifest(&tmp.path().join("tools")).expect("expected the build to succeed");
     }
 
     #[test]
@@ -1903,5 +1907,30 @@ def read(ctx: Context, {signature}) -> None:
                 ),
             ),
         ]);
+    }
+
+    #[test]
+    fn bare_arg_behind_a_toolr_star_import_is_checked() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            &kw_module(
+                "from toolr import *",
+                "",
+                "config: Annotated[Path, arg(path_must_exist=True)]",
+            ),
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, unknown_keyword("path_must_exist", Some("must_exist")));
+    }
+
+    #[test]
+    fn non_arg_calls_inside_annotated_are_not_checked() {
+        for call in ["make().arg(foo=1)", "mylib.other(foo=1)", "FACTORIES[0](foo=1)"] {
+            assert_builds(&kw_module(
+                "from toolr import Context, command_group\nimport mylib\nfrom mylib import FACTORIES, make",
+                "",
+                &format!(r#"*, name: Annotated[str, {call}] = "x""#),
+            ));
+        }
     }
 }
