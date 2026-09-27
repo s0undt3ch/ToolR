@@ -283,7 +283,7 @@ fn tab_completion_does_not_persist_manifest() {
 /// `Enum` from a sibling module (relative import) while an unrelated
 /// module elsewhere in the tree declares a same-named enum class. The
 /// auto-rebuild triggered by `toolr --help` must succeed (not hard-fail
-/// with "unsupported parameter types") and the persisted manifest must
+/// with "invalid parameter declarations") and the persisted manifest must
 /// carry the resolved enum's allowed values.
 #[test]
 fn cross_module_enum_import_rebuilds_and_persists_allowed_values() {
@@ -354,7 +354,7 @@ def run(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        !stderr.contains("unsupported parameter types"),
+        !stderr.contains("invalid parameter declarations"),
         "manifest build hard-failed on the cross-module enum import:\n{stderr}"
     );
 
@@ -367,4 +367,67 @@ def run(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
         manifest.contains("tools.metrics._common"),
         "manifest missing the enum's declaring module (tools.metrics._common):\n{manifest}"
     );
+}
+
+/// Issue #500: an unknown `arg()` keyword used to build fine and only
+/// fail with `TypeError` when the command ran.
+#[test]
+fn unknown_arg_keyword_fails_the_manifest_build() {
+    let tmp = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+    fs::write(
+        tmp.path().join("tools").join("kw.py"),
+        r#"from pathlib import Path
+from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> None:
+    """Read a config."""
+    ctx.print(f"got {config}")
+"#,
+    )
+    .unwrap();
+
+    // Dispatch falls back to the cached manifest, so `kw` never appears.
+    let help = Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["kw", "read", "--help"])
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    assert!(
+        !help.status.success(),
+        "`kw read --help` succeeded: {help:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&help.stderr).contains("a fresh build failed"),
+        "{help:?}"
+    );
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["project", "manifest", "rebuild"])
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "build unexpectedly succeeded: {output:?}"
+    );
+    for needle in [
+        "invalid parameter declarations (1):",
+        "tools.kw::read argument `config`",
+        "unknown `arg()` keyword `path_must_exist` (did you mean `must_exist`?)",
+    ] {
+        assert!(
+            stderr.contains(needle),
+            "stderr missing {needle:?}:\n{stderr}"
+        );
+    }
 }
