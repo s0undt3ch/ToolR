@@ -32,6 +32,36 @@ impl PathConstraints {
     pub fn requires_existence(&self) -> bool {
         self.must_exist || self.must_be_file || self.must_be_dir
     }
+
+    /// Doc-table rows for the `arg(must_exist=..., ...)` keywords.
+    pub fn catalogue() -> Vec<PathConstraintDoc> {
+        let PathConstraints {
+            must_exist: _,
+            must_be_file: _,
+            must_be_dir: _,
+        } = PathConstraints::default();
+        vec![
+            PathConstraintDoc {
+                keyword: "must_exist",
+                effect: "reject paths that don't exist on disk",
+            },
+            PathConstraintDoc {
+                keyword: "must_be_file",
+                effect: "reject anything that isn't a regular file (implies `must_exist`)",
+            },
+            PathConstraintDoc {
+                keyword: "must_be_dir",
+                effect: "reject anything that isn't a directory (implies `must_exist`)",
+            },
+        ]
+    }
+}
+
+/// One row of the path-constraint keyword doc table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PathConstraintDoc {
+    pub keyword: &'static str,
+    pub effect: &'static str,
 }
 
 /// Walk an `Annotated[T, arg(...), ...]` annotation and extract
@@ -84,4 +114,16 @@ pub fn extract_path_constraints(annotation: &Expr) -> Option<PathConstraints> {
         }
     }
     if hit { Some(constraints) } else { None }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_catalogue_lists_every_field_by_its_real_keyword() {
+        let keywords: Vec<&str> =
+            PathConstraints::catalogue().iter().map(|d| d.keyword).collect();
+        assert_eq!(keywords, ["must_exist", "must_be_file", "must_be_dir"]);
+    }
 }
