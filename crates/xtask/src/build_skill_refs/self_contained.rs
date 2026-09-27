@@ -7,6 +7,7 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use super::docs_section::{Fence, code_span_end, find_links, is_reference_definition};
+use super::normalize_newlines;
 
 const DESIGN: &str = "specs/archive/2026/2026-09-27-skills-self-contained-design.md";
 
@@ -44,6 +45,7 @@ pub fn lint(repo_root: &Path) -> Result<()> {
             let Ok(body) = String::from_utf8(bytes) else {
                 continue;
             };
+            let body = normalize_newlines(&body);
             if body.contains('\0') {
                 continue;
             }
@@ -547,6 +549,27 @@ mod tests {
             ),
             "{err}"
         );
+    }
+
+    #[test]
+    fn crlf_skill_files_lint_identically_to_lf() {
+        let md = "Intro.\n\nSome [wrapped\ntext](../out.md) here.\n\n```\n`docs/x`\n```\nRead `docs/y.md`.\n";
+        let py = "# ok\n# see https://github.com/s0undt3ch/ToolR/x\n";
+        let run = |tag: &str, eol: &str| {
+            lint_repo(
+                tag,
+                &[
+                    ("skills/x/SKILL.md", &md.replace('\n', eol)),
+                    ("skills/x/examples/a.py", &py.replace('\n', eol)),
+                ],
+            )
+            .unwrap_err()
+            .to_string()
+        };
+        let lf = run("eol-lf", "\n");
+        assert!(lf.contains("SKILL.md:3: link-escapes-skill"), "{lf}");
+        assert_eq!(run("eol-crlf", "\r\n").replace("eol-crlf", "eol-lf"), lf);
+        assert_eq!(run("eol-cr", "\r").replace("eol-cr", "eol-lf"), lf);
     }
 
     #[test]

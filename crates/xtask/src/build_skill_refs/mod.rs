@@ -27,6 +27,19 @@ pub struct Generated {
     pub body: String,
 }
 
+/// A Windows checkout hands sources over with CRLF; every generated body
+/// and every lint result must match the LF one byte for byte.
+pub(super) fn normalize_newlines(text: &str) -> String {
+    text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+/// Read a source file as text with its newlines normalised.
+pub(super) fn read_text(path: &Path) -> Result<String> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    Ok(normalize_newlines(&text))
+}
+
 /// Entry point invoked by `main`.
 pub fn run(check: bool) -> Result<()> {
     let root = repo_root()?;

@@ -22,3 +22,10 @@ skills/*/references/*.md text eol=lf
 # manifest whose JSON values contain `\r\n` and no longer match the
 # LF-canonical committed snapshot.
 skills/*/examples/**/*.py text eol=lf
+
+# The rest of the generator's outputs: `docs/writing-commands/files/*.md`
+# (`types::*_snippet`) and the packaging skill's copied `pyproject.toml`.
+# The snippet sources beside them are LF too so the directory is uniform;
+# xtask normalises CRLF on read either way.
+docs/writing-commands/files/* text eol=lf
+skills/*/examples/pyproject.toml text eol=lf
