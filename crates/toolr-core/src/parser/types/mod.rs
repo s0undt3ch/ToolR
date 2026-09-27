@@ -19,7 +19,7 @@ mod path_constraints;
 mod resolve;
 mod supported;
 
-pub use arg_keywords::ARG_KEYWORDS;
+pub use arg_keywords::{ACTIVE_ARG_KEYWORDS, DEPRECATED_ARG_KEYWORDS};
 pub use arg_metadata::extract_arg_metadata;
 pub use imports::{SourcesImports, TypeImports};
 pub use path_constraints::{extract_path_constraints, PathConstraintDoc, PathConstraints};

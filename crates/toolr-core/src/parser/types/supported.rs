@@ -343,11 +343,13 @@ impl std::fmt::Display for UnsupportedType {
             Self::Inner(inner) => inner.fmt(f),
             Self::UnsupportedUnion(s) => write!(f, "unsupported union `{s}`; only `T | None` is recognised."),
             Self::UnsupportedShape(s) => write!(f, "unsupported generic shape `{s}`."),
-            Self::UnknownArgKeyword { keyword, suggestion: Some(s) } => {
-                write!(f, "unknown `arg()` keyword `{keyword}` (did you mean `{s}`?)")
-            }
-            Self::UnknownArgKeyword { keyword, suggestion: None } => {
-                write!(f, "unknown `arg()` keyword `{keyword}`")
+            Self::UnknownArgKeyword { keyword, suggestion } => {
+                write!(f, "unknown `arg()` keyword `{keyword}`")?;
+                match (super::arg_keywords::argparse_hint(keyword), suggestion) {
+                    (Some(hint), _) => write!(f, "; {hint}"),
+                    (None, Some(s)) => write!(f, " (did you mean `{s}`?)"),
+                    (None, None) => Ok(()),
+                }
             }
             Self::PositionalArgArgument => write!(f, "`arg()` takes keyword arguments only"),
         }
