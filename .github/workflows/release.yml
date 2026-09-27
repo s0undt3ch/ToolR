@@ -470,6 +470,15 @@ jobs:
   # workflow file as the signing identity, and mise pins that identity.
   publish-packslip:
     name: Publish packslip
+    # Runs even if publish-release failed after creating the release (e.g. a
+    # PyPI outage); an earlier failure makes the tag checkout or download fail
+    # loudly. "Re-run failed jobs" re-runs publish-release too, which fails
+    # harmlessly on the existing tag, and this job re-signs with --clobber.
+    if: >-
+      ${{ !cancelled()
+          && needs.prepare-release.result == 'success'
+          && (needs.publish-release.result == 'success'
+              || needs.publish-release.result == 'failure') }}
     needs:
       - prepare-release
       - publish-release
@@ -477,6 +486,8 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    env:
+      ARCHIVE_PATTERNS: toolr-*-*-apple-darwin.tar.gz toolr-*-*-linux-musl.tar.gz toolr-*-*-windows-msvc.zip
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -507,7 +518,7 @@ jobs:
           version: ${{ needs.prepare-release.outputs.release-version }}
           commit: ${{ steps.source.outputs.commit }}
           manifest: .github/packslip.toml
-          download: toolr-*-*-apple-darwin.tar.gz toolr-*-*-linux-musl.tar.gz toolr-*-*-windows-msvc.zip
+          download: ${{ env.ARCHIVE_PATTERNS }}
           attest: link
 
       - name: Verify the published packslip
@@ -515,21 +526,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare-release.outputs.release-version }}
           COMMIT: ${{ steps.source.outputs.commit }}
-          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
           cd "$(mktemp -d)"
-          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" \
-            -p packslip.sigstore.json \
-            -p 'toolr-*-*-apple-darwin.tar.gz' \
-            -p 'toolr-*-*-linux-musl.tar.gz' \
-            -p 'toolr-*-*-windows-msvc.zip'
-          artifacts=()
-          for f in toolr-*-*-apple-darwin.tar.gz toolr-*-*-linux-musl.tar.gz toolr-*-*-windows-msvc.zip; do
-            artifacts+=(--artifact "$f")
+          read -ra patterns <<<"$ARCHIVE_PATTERNS"
+          download_args=(-p packslip.sigstore.json)
+          for p in "${patterns[@]}"; do
+            download_args+=(-p "$p")
           done
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" "${download_args[@]}"
+          artifacts=()
+          for p in "${patterns[@]}"; do
+            # shellcheck disable=SC2206 # unquoted on purpose: glob each pattern
+            matches=($p)
+            for f in "${matches[@]}"; do
+              artifacts+=(--artifact "$f")
+            done
+          done
+          # Hard-coded, not derived from github.workflow_ref: this catches a
+          # signer change that mise users would have to re-approve.
           packslip verify packslip.sigstore.json \
-            --identity "https://github.com/${WORKFLOW_REF}" \
+            --identity https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main \
             --issuer https://token.actions.githubusercontent.com \
             "${artifacts[@]}"
           packslip show packslip.sigstore.json \
