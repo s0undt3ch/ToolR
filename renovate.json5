@@ -32,6 +32,26 @@
     schedule: ["before 6am on the first day of the month"],
   },
 
+  // The packslip CLI pin in ci.yml, and the version named in release.yml's
+  // cross-reference comment, have no native manager.
+  customManagers: [
+    {
+      customType: "regex",
+      description: "Track the packslip CLI pin next to the jdx/packslip action",
+      managerFilePatterns: [
+        "/^\\.github/workflows/ci\\.yml$/",
+        "/^\\.github/workflows/release\\.yml$/",
+      ],
+      matchStrings: [
+        "PACKSLIP_VERSION: (?<currentValue>\\d+\\.\\d+\\.\\d+)",
+        "github:jdx/packslip@(?<currentValue>\\d+\\.\\d+\\.\\d+)",
+      ],
+      depNameTemplate: "jdx/packslip",
+      datasourceTemplate: "github-tags",
+      extractVersionTemplate: "^v?(?<version>.*)$",
+    },
+  ],
+
   assignees: ["s0undt3ch"],
   labels: ["dependencies"],
 
@@ -89,6 +109,14 @@
       description: "Group all GitHub Actions updates",
       groupName: "github-actions",
       matchManagers: ["github-actions"],
+    },
+    {
+      // Same group as the actions so the packslip CLI pin and the
+      // jdx/packslip action pin always move in one PR.
+      description: "Group the packslip CLI pin with GitHub Actions",
+      groupName: "github-actions",
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["jdx/packslip"],
     },
     {
       // mise CLI tools (the pre-commit-hook binaries + prek) — group them so

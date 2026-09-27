@@ -248,11 +248,14 @@ jobs:
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|packslip-check|${{ runner.os }}|${{ runner.arch }}
 
       - name: Check the release manifest against the built archives
+        env:
+          # Must match the `jdx/packslip` action pin in release.yml; Renovate
+          # bumps both in one PR.
+          PACKSLIP_VERSION: 1.3.0
         run: |
           set -euo pipefail
-          # Version pin must match the `jdx/packslip` action pin in release.yml.
-          mise install github:jdx/packslip@1.3.0
-          PACKSLIP="$(mise which -t github:jdx/packslip@1.3.0 packslip)"
+          mise install "github:jdx/packslip@${PACKSLIP_VERSION}"
+          PACKSLIP="$(mise which -t "github:jdx/packslip@${PACKSLIP_VERSION}" packslip)"
           export PACKSLIP
           .github/scripts/packslip-check.sh "$RUNNER_TEMP/archives"
 
