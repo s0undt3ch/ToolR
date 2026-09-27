@@ -273,7 +273,9 @@ jobs:
           gh release download "v${PACKSLIP_VERSION}" --repo jdx/packslip \
             --pattern "$name.tar.xz" --dir "$dir"
           gh attestation verify "$dir/$name.tar.xz" --repo jdx/packslip \
-            --signer-workflow jdx/packslip/.github/workflows/release.yml
+            --signer-workflow jdx/packslip/.github/workflows/release.yml \
+            --source-ref "refs/tags/v${PACKSLIP_VERSION}" \
+            --deny-self-hosted-runners
           tar -xJf "$dir/$name.tar.xz" -C "$dir"
           mise install "github:jdx/packslip@${PACKSLIP_VERSION}"
           packslip="$(mise which -t "github:jdx/packslip@${PACKSLIP_VERSION}" packslip)"
