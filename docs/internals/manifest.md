@@ -141,10 +141,12 @@ Built from `tools/**/*.py` via the `ruff_python_parser` Rust crate.
 Pure AST traversal — never imports user code, so it's safe to run
 without a working venv. Captures:
 
-- `command_group(...)` declarations (including the deprecated
-  binding-style `var = command_group(...)`).
-- `@command(group="…")` decorations (and the deprecated
-  `@<binding>.command` decorator).
+- `command_group(...)` declarations, bound (`var = command_group(...)`)
+  or not, plus the deprecated nested `parent.command_group("child", ...)`
+  method form.
+- `@<binding>.command` decorations (the canonical single-file form) and
+  standalone `@command(group="…")` decorations (for commands in a
+  different file from their group).
 - Function signatures (positional vs keyword, defaults, annotations).
 - Google-style docstrings (summary, description, `Args:` block).
 - Local `Literal[...]` and `enum.Enum` definitions (resolved across

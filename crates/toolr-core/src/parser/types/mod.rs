@@ -20,9 +20,9 @@ mod supported;
 
 pub use arg_metadata::extract_arg_metadata;
 pub use imports::{SourcesImports, TypeImports};
-pub use path_constraints::{extract_path_constraints, PathConstraints};
+pub use path_constraints::{extract_path_constraints, PathConstraintDoc, PathConstraints};
 pub use resolve::{resolve, resolve_arguments};
-pub use supported::{SupportedType, TypeResolutionError, UnsupportedType};
+pub use supported::{SupportedType, TypeDoc, TypeResolutionError, UnsupportedType};
 
 use ruff_python_ast::{Expr, ExprCall};
 

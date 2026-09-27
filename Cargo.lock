@@ -3071,6 +3071,7 @@ dependencies = [
  "ruff_text_size",
  "serde",
  "serde_yaml_ng",
+ "toml",
  "toolr-core",
 ]
 

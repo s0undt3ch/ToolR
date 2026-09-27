@@ -143,6 +143,7 @@ drifted.
 
 ### Pre-commit hook
 
+<!-- --8<-- [start:prek-hook] -->
 Add this to `.pre-commit-config.yaml` in your plugin's repo to
 prevent committing a stale manifest:
 
@@ -158,6 +159,7 @@ prevent committing a stale manifest:
 ```
 
 Replace `my_pkg` and the `files` pattern to match your package.
+<!-- --8<-- [end:prek-hook] -->
 
 ### CI check
 

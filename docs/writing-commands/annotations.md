@@ -9,12 +9,12 @@ a call to [`arg(...)`][toolr.arg].
 
 ```python
 from typing import Annotated
-from toolr import arg, command, command_group
+from toolr import arg, command_group
 
-command_group("git", title="Git helpers")
+git = command_group("git", title="Git helpers")
 
 
-@command(group="git")
+@git.command
 def show(
     ctx,
     sha: Annotated[str, arg(aliases=["-s"], metavar="SHA", env="GIT_SHA")] = "HEAD",
@@ -33,14 +33,14 @@ def show(
 | `display_order=N` | Lower values render first in `--help`. |
 | `conflicts_with=[...]` | Mutex relationships: at most one of these flags per invocation. |
 | `requires=[...]` | If this flag is set, every name listed must also be set. |
-| `path_must_exist=True` | Reject paths that don't exist (Path types only). |
-| `path_must_be_file=True` | Reject non-files; implies `path_must_exist`. |
-| `path_must_be_dir=True` | Reject non-dirs; implies `path_must_exist`. |
+| `must_exist=True` | Reject paths that don't exist on disk (Path types only). |
+| `must_be_file=True` | Reject anything that isn't a regular file; implies `must_exist`. |
+| `must_be_dir=True` | Reject anything that isn't a directory; implies `must_exist`. |
 
 ## Aliases (short flags + alternate long flags)
 
 ```python
-@command(group="git")
+@git.command
 def diff(
     ctx,
     base: Annotated[str, arg(aliases=["-b", "--from"])] = "HEAD~1",
@@ -94,17 +94,17 @@ Group related flags under a named heading by declaring an
 member's annotation at it:
 
 ```python
-from toolr import arg, arg_section, command, command_group
+from toolr import arg, arg_section, command_group
 
 LOGGING = arg_section(
     "Logging Options",
     description="Control verbosity and output format.",
 )
 
-command_group("deploy", title="Deploy")
+deploy = command_group("deploy", title="Deploy")
 
 
-@command(group="deploy")
+@deploy.command
 def push(
     ctx,
     target: str,
@@ -143,6 +143,9 @@ These still parse but emit a `ToolrDeprecationWarning`:
 - `nargs=` — use `T | None` / `*args: T` / `tuple[T1, T2]`.
 - `action=` — `bool` infers flag, `list[T]` infers append, `Count` infers count.
 - `group=` — use `conflicts_with=[…]` for mutex, `help_section=` for display grouping.
-- `must_exist=` / `must_be_file=` / `must_be_dir=` — rename to `path_must_exist` / `path_must_be_file` / `path_must_be_dir`.
+
+Not accepted: `path_must_exist=` / `path_must_be_file=` /
+`path_must_be_dir=`. These spellings never parsed; the real (and only)
+names are `must_exist=` / `must_be_file=` / `must_be_dir=`.
 
 Next: [Nested groups →](nesting.md)

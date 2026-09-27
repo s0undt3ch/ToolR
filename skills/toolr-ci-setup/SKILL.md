@@ -46,13 +46,10 @@ or argument shapes.
 ## What this skill does not cover
 
 - Authoring or editing the `tools/*.py` commands the workflow runs —
-  see the
-  [`toolr-command-authoring`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-authoring)
-  skill.
+  see the `toolr-command-authoring` skill.
 - Building or shipping a toolr plugin wheel — see the
-  [`toolr-command-packaging`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-packaging)
-  skill. This skill only covers the *CI gate* side
-  (`--check`), not manifest generation itself.
+  `toolr-command-packaging` skill. This skill only covers the
+  *CI gate* side (`--check`), not manifest generation itself.
 - Non-action install paths in CI (manual `curl | sh` fallback,
   `mise-action`, self-hosted runner image baking). Use the action.
 - Toolr's own internal `.github/actions/*` sub-actions
@@ -136,8 +133,8 @@ Windows. The right archive is selected automatically from `RUNNER_OS` +
 `uname -m`.
 
 For the *authoring* side — how the `tools/<file>.py` defining the
-command you're running is structured — see
-[`toolr-command-authoring`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-authoring).
+command you're running is structured — see the `toolr-command-authoring`
+skill.
 
 ## Recipe 2 — Gate plugin manifests with `--check`
 
@@ -168,9 +165,8 @@ Replace `src/my_plugin` with your plugin source directory and
 
 For the *generation* side — how to produce `toolr-manifest.json`
 in the first place, what schema it follows, and how to include it
-in the wheel — see
-[`toolr-command-packaging`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-packaging) —
-this skill only owns the `--check` gate side.
+in the wheel — see the `toolr-command-packaging` skill; this skill
+only owns the `--check` gate side.
 
 ## Recipe 3 — Run a command-package's tests in CI
 
@@ -227,9 +223,13 @@ stable, in-checkout path is exactly what the `tools/.venv` cache
   ```
 
 `TOOLR_VENV_LOCATION` accepts `in-tree` or `cache`; a typo is a hard
-error rather than a silent fallback. See the [`venv-location`
-reference](https://github.com/s0undt3ch/toolr/blob/main/docs/project-config.md#venv-location)
-for the file-configured equivalent.
+error rather than a silent fallback. The file-configured equivalent
+lives in the repository's `tools/pyproject.toml`:
+
+```toml
+[tool.toolr]
+venv-location = "in-tree"
+```
 
 ## Common failure modes
 
@@ -249,15 +249,14 @@ for the file-configured equivalent.
   none of those are committed (or if your `tools/` layout is
   non-standard), the key never stabilises. Commit the lock files
   alongside `tools/pyproject.toml`. Local complement to the CI gate:
-  the `--check` recipe above works equally well as a prek hook in
-  your `pre-commit` config.
+  the `--check` recipe above works equally well as a
+  [prek hook](references/prek-hook.md) in your `pre-commit` config.
 
 ## Authoring and packaging are different problems
 
 If you haven't written the toolr commands yet, this skill cannot
-help you produce them. Invoke
-[`toolr-command-authoring`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-authoring)
+help you produce them. Invoke the `toolr-command-authoring` skill
 to write them, then come back here to wire the workflow. For
-shipping commands as a distributable plugin, see
-[`toolr-command-packaging`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-packaging) —
-this skill only owns the `--check` gate side.
+shipping commands as a distributable plugin, see the
+`toolr-command-packaging` skill; this skill only owns the `--check`
+gate side.

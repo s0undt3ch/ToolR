@@ -10,7 +10,11 @@ use anyhow::{Context, Result};
 
 mod authoring;
 mod ci_setup;
+mod docs_section;
 mod packaging;
+mod sections;
+mod self_contained;
+mod types;
 
 /// One regenerated file, ready to either write to disk or compare
 /// against the committed version when `--check` is in effect.
@@ -23,6 +27,19 @@ pub struct Generated {
     pub body: String,
 }
 
+/// A Windows checkout hands sources over with CRLF; every generated body
+/// and every lint result must match the LF one byte for byte.
+pub(super) fn normalize_newlines(text: &str) -> String {
+    text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+/// Read a source file as text with its newlines normalised.
+pub(super) fn read_text(path: &Path) -> Result<String> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    Ok(normalize_newlines(&text))
+}
+
 /// Entry point invoked by `main`.
 pub fn run(check: bool) -> Result<()> {
     let root = repo_root()?;
@@ -30,16 +47,23 @@ pub fn run(check: bool) -> Result<()> {
     // The registry. Each entry contributes one `references/*.md` file.
     // Order is presentational only — `apply` writes (or compares) each
     // entry independently.
-    let outputs: Vec<Generated> = vec![
+    let mut outputs: Vec<Generated> = vec![
         authoring::commands(&root)?,
         authoring::testing_api(&root)?,
         authoring::testing_examples(&root)?,
         authoring::docstrings(&root)?,
+        types::types_reference(&root)?,
+        types::supported_types_snippet(&root)?,
+        types::path_constraints_snippet(&root)?,
         packaging::packaging(&root)?,
         ci_setup::action(&root)?,
+        sections::arguments_reference(&root)?,
+        sections::packaging_example(&root)?,
     ];
+    outputs.extend(sections::prek_hook_references(&root)?);
 
-    apply(outputs, check)
+    apply(outputs, check)?;
+    self_contained::lint(&root)
 }
 
 /// Either write each [`Generated`] to disk or, in `--check` mode,

@@ -73,6 +73,210 @@ impl SupportedType {
             other => (other, false),
         }
     }
+
+    /// Doc-table row for this variant, matching the "Supported types"
+    /// table in `docs/writing-commands/arguments.md`. Exhaustive with
+    /// no `_` arm so a new variant fails to compile until documented.
+    pub fn doc(&self) -> TypeDoc {
+        match self {
+            SupportedType::Int => TypeDoc {
+                annotation: "int",
+                validated_by: "clap",
+                wire_format: "JSON number",
+                python_receives: "`int`",
+                note: "",
+            },
+            SupportedType::Float => TypeDoc {
+                annotation: "float",
+                validated_by: "clap",
+                wire_format: "JSON number",
+                python_receives: "`float`",
+                note: "",
+            },
+            SupportedType::Bool => TypeDoc {
+                annotation: "bool",
+                validated_by: "clap",
+                wire_format: "JSON bool",
+                python_receives: "`bool`",
+                note: "",
+            },
+            SupportedType::Str => TypeDoc {
+                annotation: "str",
+                validated_by: "none (passthrough)",
+                wire_format: "JSON string",
+                python_receives: "`str`",
+                note: "",
+            },
+            SupportedType::Path => TypeDoc {
+                annotation: "pathlib.Path",
+                validated_by: "clap (custom parser)",
+                wire_format: "string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
+            SupportedType::AbsolutePath => TypeDoc {
+                annotation: "toolr.types.AbsolutePath",
+                validated_by: "clap (absolutise vs cwd)",
+                wire_format: "absolute string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
+            SupportedType::ResolvedPath => TypeDoc {
+                annotation: "toolr.types.ResolvedPath",
+                validated_by: "clap (`canonicalize()`)",
+                wire_format: "resolved string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
+            SupportedType::DateTime => TypeDoc {
+                annotation: "toolr.types.DateTime",
+                validated_by: "clap (chrono RFC 3339)",
+                wire_format: "string",
+                python_receives: "`datetime.datetime`",
+                note: "",
+            },
+            SupportedType::Date => TypeDoc {
+                annotation: "toolr.types.Date",
+                validated_by: "clap (chrono ISO date)",
+                wire_format: "string",
+                python_receives: "`datetime.date`",
+                note: "",
+            },
+            SupportedType::Time => TypeDoc {
+                annotation: "toolr.types.Time",
+                validated_by: "clap (chrono ISO time)",
+                wire_format: "string",
+                python_receives: "`datetime.time`",
+                note: "",
+            },
+            SupportedType::Uuid => TypeDoc {
+                annotation: "toolr.types.UUID",
+                validated_by: "clap (`uuid` crate)",
+                wire_format: "string",
+                python_receives: "`uuid.UUID`",
+                note: "",
+            },
+            SupportedType::Ipv4 => TypeDoc {
+                annotation: "toolr.types.IPv4",
+                validated_by: "clap (`std::net::Ipv4Addr`)",
+                wire_format: "string",
+                python_receives: "`ipaddress.IPv4Address`",
+                note: "",
+            },
+            SupportedType::Ipv6 => TypeDoc {
+                annotation: "toolr.types.IPv6",
+                validated_by: "clap (`std::net::Ipv6Addr`)",
+                wire_format: "string",
+                python_receives: "`ipaddress.IPv6Address`",
+                note: "",
+            },
+            SupportedType::Email => TypeDoc {
+                annotation: "toolr.types.Email",
+                validated_by: "clap (`email_address` crate)",
+                wire_format: "string",
+                python_receives: "`str` (pre-validated)",
+                note: "",
+            },
+            SupportedType::Version => TypeDoc {
+                annotation: "toolr.types.Version",
+                validated_by: "clap (`pep440_rs` crate)",
+                wire_format: "string",
+                python_receives: "`packaging.version.Version`",
+                note: "",
+            },
+            SupportedType::Count => TypeDoc {
+                annotation: "toolr.types.Count",
+                validated_by: "clap (`ArgAction::Count`)",
+                wire_format: "integer",
+                python_receives: "`int`",
+                note: "",
+            },
+            SupportedType::Literal(_) => TypeDoc {
+                annotation: "Literal[\"a\", \"b\"]",
+                validated_by: "clap (allowed-values)",
+                wire_format: "string",
+                python_receives: "`Literal` value",
+                note: "",
+            },
+            SupportedType::Enum { .. } => TypeDoc {
+                annotation: "Enum",
+                validated_by: "clap (member values)",
+                wire_format: "string",
+                python_receives: "enum member",
+                note: "subclass",
+            },
+            SupportedType::List(_) => TypeDoc {
+                annotation: "list[T]",
+                validated_by: "clap per-element",
+                wire_format: "JSON array",
+                python_receives: "`list[T]`",
+                note: "(T above)",
+            },
+            SupportedType::Tuple(_) => TypeDoc {
+                annotation: "tuple[T1, T2, …]",
+                validated_by: "clap arity, msgspec per-slot",
+                wire_format: "JSON array",
+                python_receives: "`tuple[T1, T2]`",
+                note: "",
+            },
+            SupportedType::Optional(_) => TypeDoc {
+                annotation: "T | None",
+                validated_by: "clap (`required=false`)",
+                wire_format: "typed or absent",
+                python_receives: "`T` or `None`",
+                note: "",
+            },
+        }
+    }
+
+    /// One representative of every variant, in table order, for
+    /// generating the "Supported types" doc table. `doc()` above is
+    /// exhaustive, but nothing enforces that every variant also has a
+    /// representative here — a new variant compiles `doc()` fine and
+    /// silently stays out of the catalogue unless the list below is
+    /// updated by hand.
+    // Add a representative here when adding a variant; doc() won't
+    // compile until you document it.
+    pub fn catalogue() -> Vec<TypeDoc> {
+        vec![
+            SupportedType::Int.doc(),
+            SupportedType::Float.doc(),
+            SupportedType::Bool.doc(),
+            SupportedType::Str.doc(),
+            SupportedType::Path.doc(),
+            SupportedType::AbsolutePath.doc(),
+            SupportedType::ResolvedPath.doc(),
+            SupportedType::DateTime.doc(),
+            SupportedType::Date.doc(),
+            SupportedType::Time.doc(),
+            SupportedType::Uuid.doc(),
+            SupportedType::Ipv4.doc(),
+            SupportedType::Ipv6.doc(),
+            SupportedType::Email.doc(),
+            SupportedType::Version.doc(),
+            SupportedType::Count.doc(),
+            SupportedType::Literal(vec![]).doc(),
+            SupportedType::Enum {
+                name: String::new(),
+                module: String::new(),
+                values: vec![],
+            }
+            .doc(),
+            SupportedType::List(Box::new(SupportedType::Str)).doc(),
+            SupportedType::Tuple(vec![]).doc(),
+            SupportedType::Optional(Box::new(SupportedType::Str)).doc(),
+        ]
+    }
+}
+
+/// One row of the "Supported types" doc table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TypeDoc {
+    pub annotation: &'static str,
+    pub validated_by: &'static str,
+    pub wire_format: &'static str,
+    pub python_receives: &'static str,
+    pub note: &'static str,
 }
 
 /// Reasons annotation resolution can fail.
@@ -134,4 +338,53 @@ impl std::fmt::Display for UnsupportedType {
             Self::UnsupportedShape(s) => write!(f, "unsupported generic shape `{s}`."),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalogue_covers_every_toolr_types_name() {
+        // Same list as `toolr_types_names_match_python_surface` in mod.rs,
+        // which is itself pinned to tests/test_types_module.py.
+        let names = [
+            "AbsolutePath", "Count", "Date", "DateTime", "Email", "IPv4",
+            "IPv6", "ResolvedPath", "Time", "UUID", "Version",
+        ];
+        let annotations: Vec<&str> =
+            SupportedType::catalogue().iter().map(|d| d.annotation).collect();
+        for name in names {
+            let want = format!("toolr.types.{name}");
+            assert!(
+                annotations.iter().any(|a| *a == want),
+                "catalogue has no row for `{want}`",
+            );
+        }
+    }
+
+    #[test]
+    fn catalogue_rows_are_unique_and_complete() {
+        let rows = SupportedType::catalogue();
+        let mut seen = std::collections::BTreeSet::new();
+        for row in &rows {
+            assert!(seen.insert(row.annotation), "duplicate row {}", row.annotation);
+            for field in [row.validated_by, row.wire_format, row.python_receives] {
+                assert!(!field.is_empty(), "empty column in {}", row.annotation);
+            }
+        }
+        for primitive in ["int", "float", "bool", "str", "pathlib.Path"] {
+            assert!(seen.contains(primitive), "missing {primitive}");
+        }
+    }
+
+    #[test]
+    fn enum_and_list_rows_carry_the_expected_note() {
+        let rows = SupportedType::catalogue();
+        let enum_row = rows.iter().find(|d| d.annotation == "Enum").unwrap();
+        assert_eq!(enum_row.note, "subclass");
+        let list_row = rows.iter().find(|d| d.annotation == "list[T]").unwrap();
+        assert_eq!(list_row.note, "(T above)");
+    }
+
 }

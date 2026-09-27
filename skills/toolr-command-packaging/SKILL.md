@@ -19,11 +19,11 @@ description: |
 # Packaging toolr commands as a distributable plugin
 
 You are taking a set of already-written toolr commands and shipping
-them as a pip-installable Python plugin so other projects can
-`pip install <your-package>` and get the commands. If the commands
-don't exist yet, that is the
-[`toolr-command-authoring`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-authoring)
-skill's job — invoke it first.
+them as a distributable Python plugin so other toolr projects can
+install it into their tools venv with `toolr project venv add
+<your-package>` and get the commands. If the commands don't exist
+yet, that is the `toolr-command-authoring` skill's job — invoke it
+first.
 
 This skill is **strictly the toolr-specific delta on regular Python
 packaging**. It does not re-teach build backends, wheel layout, or
@@ -52,17 +52,18 @@ unchanged. It tells you exactly three things on top of that.
    --source-dir <pkg-src> --package <pkg-name> --check` exits
    non-zero when the committed manifest doesn't match what the
    builder would produce from the current source. Run it on every
-   PR. A prek hook is a good local complement. The
-   [`toolr-ci-setup`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-ci-setup)
-   skill shows the canonical workflow.
+   PR. A [prek hook](references/prek-hook.md) is a good local
+   complement. The `toolr-ci-setup` skill shows the canonical workflow.
 
 ## The canonical worked example
 
-`examples/plugin-package/` in the toolr repository is the reference
+The example plugin package in the toolr repository is the reference
 plugin. It is a real hatchling-built package, ships
 `src/toolr_example_plugin/toolr-manifest.json`, and CI builds it
-end-to-end on every run. Read its `pyproject.toml` if you want a
-known-good wheel-include configuration to copy.
+end-to-end on every run. See
+[examples/pyproject.toml](examples/pyproject.toml), a copy shipped
+with this skill, if you want a known-good wheel-include configuration
+to copy.
 
 The structure is:
 
@@ -76,6 +77,14 @@ plugin-package/
         ├── commands.py         # @command / @command_group definitions
         └── toolr-manifest.json # generated; committed; checked in CI
 ```
+
+## Command resolution
+
+When multiple sources contribute commands with the same name: a
+project's own `tools/` commands always win over a plugin's; a
+plugin can add commands to an existing group rather than creating a
+duplicate; and two plugins that register the same group/command pair
+fail the consuming project's manifest build.
 
 ## Verifying after install
 
@@ -144,12 +153,13 @@ the JSON, not the `pyproject.toml`.
   Generated from `toolr-core`'s own serde types via
   `cargo xtask build-skill-refs`; cannot drift out of sync with
   what the loader actually accepts.
+- [`references/prek-hook.md`](references/prek-hook.md) — the
+  pre-commit hook that gates a stale manifest locally, extracted
+  from the docs.
 
 ## Authoring is a different problem
 
 If you haven't written the toolr commands yet, this skill cannot
-help you. Invoke the
-[`toolr-command-authoring`](https://github.com/s0undt3ch/toolr/tree/main/skills/toolr-command-authoring)
-skill first to get the commands working in a project's `tools/`
-tree, then come back here when you're ready to ship them as a
-plugin.
+help you. Invoke the `toolr-command-authoring` skill first to get
+the commands working in a project's `tools/` tree, then come back
+here when you're ready to ship them as a plugin.

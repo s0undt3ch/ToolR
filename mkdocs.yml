@@ -31,6 +31,10 @@ theme:
 docs_dir: docs
 site_dir: site
 
+# These are pymdownx.snippets includes, not standalone pages.
+exclude_docs: |
+  writing-commands/files/*.md
+
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
