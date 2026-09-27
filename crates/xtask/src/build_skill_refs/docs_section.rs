@@ -114,8 +114,16 @@ fn render(
         .collect();
     let mut out = Vec::new();
     let mut fence: Option<Fence> = None;
+    let mut para: Vec<Item> = Vec::new();
 
     while let Some(item) = queue.pop_front() {
+        // Prose is buffered per paragraph so a link whose text wraps onto
+        // the next source line is still seen as one link.
+        if fence.is_none() && is_prose(&item.text) {
+            para.push(item);
+            continue;
+        }
+        flush_paragraph(&mut para, &mut out)?;
         let Item {
             text,
             lineno,
@@ -138,7 +146,7 @@ fn render(
             continue;
         }
 
-        if let Some(open) = Fence::opened_by(trimmed) {
+        if let Some(open) = Fence::opened_by(trimmed, lineno) {
             fence = Some(open);
             out.push(text);
             continue;
@@ -166,12 +174,12 @@ fn render(
             bail!("line {lineno}: unsupported snippet syntax: {}", text.trim());
         }
 
-        for (prefix, what) in [
-            ("???", "collapsible admonition"),
-            ("=== \"", "content tab"),
-            ("<details", "raw <details> block"),
-            ("<div", "raw <div> block"),
-        ] {
+        // The reference links that use it have already been flattened.
+        if is_reference_definition(&text) {
+            continue;
+        }
+
+        for (prefix, what) in UNSUPPORTED {
             if trimmed.starts_with(prefix) {
                 bail!("line {lineno}: unsupported {what}: {}", text.trim());
             }
@@ -203,27 +211,84 @@ fn render(
             continue;
         }
 
-        let had_content = !text.trim().is_empty();
-        let line = strip_attr_lists(&rewrite_links(&text, lineno)?);
-        if had_content && line.trim().is_empty() {
-            continue;
-        }
-        out.push(line);
+        debug_assert!(text.trim().is_empty(), "only blank lines reach here");
+        out.push(String::new());
+    }
+    flush_paragraph(&mut para, &mut out)?;
+    if let Some(open) = fence {
+        bail!("line {}: unclosed code fence", open.line);
     }
     Ok(out)
+}
+
+const UNSUPPORTED: [(&str, &str); 4] = [
+    ("???", "collapsible admonition"),
+    ("=== \"", "content tab"),
+    ("<details", "raw <details> block"),
+    ("<div", "raw <div> block"),
+];
+
+/// A line that only needs the inline transforms (links, attr lists).
+fn is_prose(text: &str) -> bool {
+    let t = text.trim_start();
+    !t.is_empty()
+        && Fence::opened_by(t, 0).is_none()
+        && !text.contains("--8<--")
+        && !t.starts_with("!!!")
+        && !is_reference_definition(text)
+        && !UNSUPPORTED.iter().any(|(p, _)| t.starts_with(p))
+}
+
+fn flush_paragraph(para: &mut Vec<Item>, out: &mut Vec<String>) -> Result<()> {
+    let Some(first) = para.first() else {
+        return Ok(());
+    };
+    let joined = para
+        .iter()
+        .map(|i| i.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let rewritten = rewrite_links(&joined, first.lineno)?;
+    for line in rewritten.split('\n') {
+        let line = strip_attr_lists(line);
+        if !line.trim().is_empty() {
+            out.push(line);
+        }
+    }
+    para.clear();
+    Ok(())
+}
+
+/// `[label]: target` at the start of a line (up to 3 spaces of indent).
+fn is_reference_definition(text: &str) -> bool {
+    let t = text.trim_start();
+    if text.len() - t.len() > 3 {
+        return false;
+    }
+    let Some(rest) = t.strip_prefix('[') else {
+        return false;
+    };
+    rest.find("]:")
+        .is_some_and(|k| k > 0 && !rest[..k].contains(['[', ']']))
 }
 
 #[derive(Clone, Copy)]
 struct Fence {
     ch: char,
     len: usize,
+    line: usize,
 }
 
 impl Fence {
-    fn opened_by(trimmed: &str) -> Option<Self> {
+    fn opened_by(trimmed: &str, line: usize) -> Option<Self> {
         let ch = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
         let len = trimmed.chars().take_while(|c| *c == ch).count();
-        (len >= 3).then_some(Self { ch, len })
+        // CommonMark: a backtick fence's info string can't contain a
+        // backtick, so "```x``` more" is inline code in prose.
+        if len < 3 || (ch == '`' && trimmed[len..].contains('`')) {
+            return None;
+        }
+        Some(Self { ch, len, line })
     }
 
     fn closed_by(self, trimmed: &str) -> bool {
@@ -349,7 +414,7 @@ fn blockquote(label: &str, body: &[String]) -> Vec<String> {
     let head = format!("> **{label}:**");
     match body.split_first() {
         Some((first, rest))
-            if !first.trim().is_empty() && Fence::opened_by(first.trim_start()).is_none() =>
+            if !first.trim().is_empty() && Fence::opened_by(first.trim_start(), 0).is_none() =>
         {
             std::iter::once(format!("{head} {first}"))
                 .chain(rest.iter().map(quote))
@@ -361,13 +426,21 @@ fn blockquote(label: &str, body: &[String]) -> Vec<String> {
     }
 }
 
-/// A Markdown inline link or image found on one line.
+/// A Markdown link or image found in a run of prose.
 pub(super) struct Link {
-    /// Byte range of the whole construct, `!` included for images.
+    /// Byte range of the whole construct in the scanned text, `!` included
+    /// for images. For a link that wraps lines, the range contains the `\n`.
     pub span: Range<usize>,
+    /// Link text, verbatim; it keeps any `\n` from a wrapped link.
     pub text: String,
+    /// Inline target (`(target)`), or the reference label for `[text][ref]`
+    /// and `[text][]` (empty for the collapsed form).
     pub target: String,
     pub image: bool,
+    /// `[text][ref]` / `[text][]` rather than `[text](target)`.
+    pub reference: bool,
+    /// 1-based line the link starts on.
+    pub lineno: usize,
 }
 
 /// Byte index just past the code span opening at `i`, or `None` when the
@@ -389,10 +462,35 @@ fn code_span_end(bytes: &[u8], i: usize) -> Option<usize> {
     None
 }
 
-/// Find inline links and images on a line of prose, skipping code spans.
-/// The caller is responsible for not feeding it lines inside fences.
-pub(super) fn find_links(line: &str, lineno: usize) -> Result<Vec<Link>> {
-    let bytes = line.as_bytes();
+fn in_code_span(text: &str, pos: usize) -> bool {
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < pos {
+        if bytes[i] == b'`' {
+            let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
+            match code_span_end(bytes, i) {
+                Some(end) if end > pos => return true,
+                Some(end) => i = end,
+                None => i += run,
+            }
+        } else {
+            i += 1;
+        }
+    }
+    false
+}
+
+/// Find inline and reference-style links and images in prose, skipping
+/// code spans. `text` should be a whole paragraph (lines joined with `\n`,
+/// first line numbered `first_lineno`): link text may wrap across source
+/// lines, so a line-at-a-time scan would see only half a link. The caller
+/// is responsible for not feeding it text inside fences.
+///
+/// A `](` that no `[` opens is an error, since it means a link this
+/// scanner failed to recognise.
+pub(super) fn find_links(text: &str, first_lineno: usize) -> Result<Vec<Link>> {
+    let line_of = |pos: usize| first_lineno + text[..pos].matches('\n').count();
+    let bytes = text.as_bytes();
     let mut links = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
@@ -401,6 +499,9 @@ pub(super) fn find_links(line: &str, lineno: usize) -> Result<Vec<Link>> {
             b'`' => {
                 let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
                 i = code_span_end(bytes, i).unwrap_or(i + run);
+            }
+            b']' if bytes.get(i + 1) == Some(&b'(') => {
+                bail!("line {}: `](` without a matching `[`", line_of(i));
             }
             b'[' => {
                 let mut depth = 1;
@@ -430,28 +531,47 @@ pub(super) fn find_links(line: &str, lineno: usize) -> Result<Vec<Link>> {
                     j += 1;
                 }
                 let close = j;
-                let target_end = (close + 1 < bytes.len() && bytes[close + 1] == b'(')
-                    .then(|| line[close + 2..].find(')').map(|k| close + 2 + k))
-                    .flatten();
+                let (open, closer) = match bytes.get(close + 1) {
+                    Some(b'(') => (b'(', ')'),
+                    Some(b'[') => (b'[', ']'),
+                    _ => {
+                        i += 1;
+                        continue;
+                    }
+                };
+                let rest = &text[close + 2..];
+                let target_end = rest
+                    .find([closer, '\n'])
+                    .filter(|k| rest[*k..].starts_with(closer))
+                    .map(|k| close + 2 + k);
                 let Some(target_end) = target_end else {
                     i += 1;
                     continue;
                 };
                 if nested {
-                    bail!("line {lineno}: nested brackets in link text are not supported");
+                    bail!(
+                        "line {}: nested brackets in link text are not supported",
+                        line_of(i)
+                    );
                 }
                 let image = i > 0 && bytes[i - 1] == b'!';
-                let raw = line[close + 2..target_end].trim();
-                let target = raw.split_whitespace().next().unwrap_or("");
-                let target = target
-                    .strip_prefix('<')
-                    .and_then(|t| t.strip_suffix('>'))
-                    .unwrap_or(target);
+                let raw = text[close + 2..target_end].trim();
+                let target = if open == b'(' {
+                    let t = raw.split_whitespace().next().unwrap_or("");
+                    t.strip_prefix('<')
+                        .and_then(|t| t.strip_suffix('>'))
+                        .unwrap_or(t)
+                } else {
+                    raw
+                };
+                let start = if image { i - 1 } else { i };
                 links.push(Link {
-                    span: (if image { i - 1 } else { i })..target_end + 1,
-                    text: line[i + 1..close].to_string(),
+                    span: start..target_end + 1,
+                    text: text[i + 1..close].to_string(),
                     target: target.to_string(),
                     image,
+                    reference: open == b'[',
+                    lineno: line_of(start),
                 });
                 i = target_end + 1;
             }
@@ -466,32 +586,34 @@ fn is_remote(target: &str) -> bool {
 }
 
 /// Docs-internal links would dangle once the text leaves the docs site,
-/// so they collapse to their text; remote links still resolve and stay.
-fn rewrite_links(line: &str, lineno: usize) -> Result<String> {
-    let mut out = String::with_capacity(line.len());
+/// so they collapse to their text; remote inline links still resolve and
+/// stay. Reference links always collapse: their definitions (or, for
+/// mkdocstrings autorefs, the API page) don't travel with the section.
+fn rewrite_links(text: &str, first_lineno: usize) -> Result<String> {
+    let mut out = String::with_capacity(text.len());
     let mut last = 0;
-    for link in find_links(line, lineno)? {
-        if is_remote(&link.target) {
+    for link in find_links(text, first_lineno)? {
+        if !link.reference && is_remote(&link.target) {
             continue;
         }
         if link.image {
             bail!(
-                "line {lineno}: local image `{}` can't ship in a skill reference",
+                "line {}: image `{}` can't ship in a skill reference",
+                link.lineno,
                 link.target
             );
         }
-        out.push_str(&line[last..link.span.start]);
+        out.push_str(&text[last..link.span.start]);
         out.push_str(&link.text);
         last = link.span.end;
     }
-    out.push_str(&line[last..]);
+    out.push_str(&text[last..]);
     Ok(out)
 }
 
 fn strip_attr_lists(line: &str) -> String {
     let bytes = line.as_bytes();
     let mut out = String::with_capacity(line.len());
-    let mut removed = false;
     let mut last = 0;
     let mut i = 0;
     while i < bytes.len() {
@@ -505,17 +627,28 @@ fn strip_attr_lists(line: &str) -> String {
                 out.push_str(line[last..i].trim_end());
                 last = i + k + 1;
                 i = last;
-                removed = true;
                 continue;
             }
         }
         i += 1;
     }
-    if !removed {
-        return line.to_string();
-    }
+    let removed = last > 0;
     out.push_str(&line[last..]);
-    out.trim_end().to_string()
+    let mut out = if removed {
+        out.trim_end().to_string()
+    } else {
+        out
+    };
+    // attr_list also accepts the colon-less `{#id}` / `{ .class }` spelling,
+    // but only as a trailing block, where it can't be ordinary braces.
+    let t = out.trim_end();
+    if let Some(open) = t.strip_suffix('}').and_then(|b| b.rfind('{')) {
+        let inner = t[open + 1..t.len() - 1].trim();
+        if (inner.starts_with('#') || inner.starts_with('.')) && !in_code_span(t, open) {
+            out = t[..open].trim_end().to_string();
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -806,5 +939,86 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
         let err = format!("{:#}", out.unwrap_err());
         assert!(err.contains("line 5"), "{err}");
+    }
+
+    #[test]
+    fn link_wrapped_across_lines_is_flattened() {
+        let src = "See the [`*args` for variadic\npositionals](#args) section.\n";
+        let out = transform(src, &fake(&[])).unwrap();
+        assert_eq!(out, "See the `*args` for variadic\npositionals section.\n");
+    }
+
+    #[test]
+    fn wrapped_link_to_other_page_is_flattened() {
+        let src = "Runs (see [Project configuration → sync\ninteraction](project-config.md#x)).\n";
+        let out = transform(src, &fake(&[])).unwrap();
+        assert_eq!(
+            out,
+            "Runs (see Project configuration → sync\ninteraction).\n"
+        );
+    }
+
+    #[test]
+    fn unmatched_close_bracket_paren_is_an_error() {
+        let err = transform("Fine.\n\nx\ny](z.md)\n", &fake(&[]))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("line 4"), "{err}");
+    }
+
+    #[test]
+    fn reference_links_and_autorefs_are_flattened() {
+        let src = "Receives a [`Context`][toolr.Context] and [x][].\n";
+        let out = transform(src, &fake(&[])).unwrap();
+        assert_eq!(out, "Receives a `Context` and x.\n");
+    }
+
+    #[test]
+    fn reference_definitions_are_dropped() {
+        let src = "A [PEP][pep-420] ref.\n\n[pep-420]: https://peps.python.org/pep-0420/\n[l]: other.md\n";
+        let out = transform(src, &fake(&[])).unwrap();
+        assert_eq!(out, "A PEP ref.\n");
+    }
+
+    #[test]
+    fn find_links_reports_reference_links() {
+        let links = find_links("a [b][c.d] e\n[f][]", 3).unwrap();
+        assert_eq!(links.len(), 2);
+        assert!(links[0].reference && links[1].reference);
+        assert_eq!(links[0].target, "c.d");
+        assert_eq!(links[1].target, "");
+        assert_eq!((links[0].lineno, links[1].lineno), (3, 4));
+    }
+
+    #[test]
+    fn reference_image_is_rejected() {
+        assert!(transform("![d][img]\n", &fake(&[])).is_err());
+    }
+
+    #[test]
+    fn unclosed_fence_is_an_error_naming_the_opener() {
+        let err = transform("a\n\n```python\nx = 1\n", &fake(&[]))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("line 3") && err.contains("unclosed"), "{err}");
+    }
+
+    #[test]
+    fn inline_triple_backtick_code_is_not_a_fence() {
+        let src = "```x``` and [a](b.md)\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), "```x``` and a\n");
+    }
+
+    #[test]
+    fn colonless_trailing_attr_lists_are_dropped() {
+        let src = "### Output Options {#output-options}\n\nTitle { .cls }\n\n{#only}\n";
+        let out = transform(src, &fake(&[])).unwrap();
+        assert_eq!(out, "### Output Options\n\nTitle\n");
+    }
+
+    #[test]
+    fn ordinary_braces_are_kept() {
+        let src = "Keep {braces} here and `{#x}`\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
     }
 }
