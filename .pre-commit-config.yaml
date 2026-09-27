@@ -124,8 +124,11 @@ repos:
         # bouncing the commit with a confusing diff.
         #
         # The actual drift gate lives in CI (`_test.yml` runs
-        # `cargo xtask build-skill-refs --check`) — even contributors
-        # who skip prek hooks can't land regenerator drift.
+        # `cargo xtask build-skill-refs` then fails on any `git diff`
+        # or untracked file under skills/ and the generated docs
+        # snippets) — even contributors who skip prek hooks can't
+        # land regenerator drift. Runs after `regen-doc-snippets`
+        # above so it reads freshly captured snippets.
         entry: cargo xtask build-skill-refs
         language: system
         pass_filenames: false
@@ -134,8 +137,11 @@ repos:
         # authoring generator walks, the toolr-core docstrings table
         # and manifest models the packaging generator embeds, the
         # root `action.yml` that drives the toolr-ci-setup reference,
-        # and the committed references themselves (so hand-edits are
-        # caught).
+        # the docs pages and snippet files whose sections are
+        # extracted into skill references, the example plugin's
+        # pyproject.toml the packaging example is copied from, and
+        # everything under skills/ (hand-edits to generated files, and
+        # the self-containment lint over every shipped file).
         files: >
           (?x)^(
             crates/xtask/.*\.rs|
@@ -145,8 +151,11 @@ repos:
             crates/toolr-core/src/third_party/(model|glob)\.rs|
             crates/toolr-core/src/parser/types/.*\.rs|
             action\.yml|
-            skills/.*/references/.*\.md|
-            docs/writing-commands/files/.*\.md
+            docs/writing-commands/arguments\.md|
+            docs/writing-commands/files/.*|
+            docs/third-party\.md|
+            examples/plugin-package/pyproject\.toml|
+            skills/.*
           )$
 
   - repo: local

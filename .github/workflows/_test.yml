@@ -241,6 +241,15 @@ jobs:
             echo "::error::run 'cargo xtask build-skill-refs' locally and commit the result" >&2
             exit 1
           fi
+          # `git diff` only sees tracked files; a newly generated file
+          # nobody committed would slip past it.
+          untracked=$(git status --porcelain --untracked-files=all -- skills docs/writing-commands/files | grep '^??' || true)
+          if [ -n "$untracked" ]; then
+            echo "$untracked" >&2
+            echo "::error::the generator produced files that are not committed (listed above)" >&2
+            echo "::error::run 'cargo xtask build-skill-refs' locally and commit the result" >&2
+            exit 1
+          fi
 
       - name: Run Python Tests
         env:
