@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev81-2026-09-27" class="md-nav__link">
+  <a href="#0331-dev91-2026-09-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev81 - 2026-09-27
+        0.33.1-dev91 - 2026-09-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev81 - 2026-09-27">
+    <nav class="md-nav" aria-label="0.33.1-dev91 - 2026-09-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1512,6 +1512,17 @@
     <span class="md-ellipsis">
       
         Install toolr with mise's packslip backend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unknown-arg-keywords-now-fail-the-manifest-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unknown arg() keywords now fail the manifest build
       
     </span>
   </a>
@@ -4063,15 +4074,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev81-2026-09-27" class="md-nav__link">
+  <a href="#0331-dev91-2026-09-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev81 - 2026-09-27
+        0.33.1-dev91 - 2026-09-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev81 - 2026-09-27">
+    <nav class="md-nav" aria-label="0.33.1-dev91 - 2026-09-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4112,6 +4123,17 @@
     <span class="md-ellipsis">
       
         Install toolr with mise's packslip backend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unknown-arg-keywords-now-fail-the-manifest-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unknown arg() keywords now fail the manifest build
       
     </span>
   </a>
@@ -6658,7 +6680,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev81-2026-09-27">0.33.1-dev81 - 2026-09-27<a class="headerlink" href="#0331-dev81-2026-09-27" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev91-2026-09-28">0.33.1-dev91 - 2026-09-28<a class="headerlink" href="#0331-dev91-2026-09-28" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6683,6 +6705,22 @@ code.</p>
 and checksum verification, version-matched shell completions, and the three
 toolr agent skills (<code>mise skills sync</code>). The aqua backend remains available
 for releases published before packslip support.</p>
+<h3 id="unknown-arg-keywords-now-fail-the-manifest-build">Unknown <code>arg()</code> keywords now fail the manifest build<a class="headerlink" href="#unknown-arg-keywords-now-fail-the-manifest-build" title="Permanent link">&para;</a></h3>
+<p>A misspelled or unsupported <code>arg()</code> keyword, such as
+<code>arg(path_must_exist=True)</code>, and any positional argument passed to <code>arg()</code> now
+fail the manifest build with the module, function and argument, plus a
+"did you mean" hint where one fits (<code>path_must_exist</code> suggests <code>must_exist</code>).
+Argparse-style <code>help=</code>, <code>type=</code> and <code>default=</code> instead point at where toolr
+takes that information from. The check follows <code>arg()</code> calls nested in
+<code>X | None</code>, <code>Optional[...]</code> and <code>list[...]</code> annotations and through
+module-level aliases.
+The check also covers <code>toolr self build-manifest</code>, so a plugin can't ship a
+manifest containing a command that can never run. Before, the parser silently
+dropped the keyword: the command showed up in <code>--help</code> and then failed with a
+<code>TypeError</code> the first time it ran. No command that worked before is affected.
+The build-error heading for these failures, and for unsupported parameter
+types, now reads "invalid parameter declarations" instead of "unsupported
+parameter types". (<a href="https://github.com/s0undt3ch/ToolR/issues/500">#500</a>)</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6711,6 +6749,11 @@ for releases published before packslip support.</p>
 <li><em>(release)</em> Publish the packslip after a partial release failure and pin the verify identity (<a href="https://github.com/s0undt3ch/ToolR/commit/c0dffcde1a4b7b67e81910f99c41dd628b07d2c6"><code>c0dffcd</code></a>)</li>
 <li><em>(packslip)</em> Require each skill resource's repo path to be skills/<name> (<a href="https://github.com/s0undt3ch/ToolR/commit/72cf98191c7d8bc95dd424071f0c79b08ba15747"><code>72cf981</code></a>)</li>
 <li><em>(ci)</em> Satisfy mypy in tools/ci.py's generate-build-matrix (<a href="https://github.com/s0undt3ch/ToolR/commit/485e11f41ab89a3b1eadae830970eaf880b7cb83"><code>485e11f</code></a>)</li>
+<li><em>(parser)</em> Reject unknown arg() keywords at manifest build (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/91ec5e7a7d2f784bc52475a676c5fb0bb81f7b7a"><code>91ec5e7</code></a>)</li>
+<li><em>(parser)</em> Check nested and aliased arg() calls, only toolr's (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/3e9914b791fcd9e24223e18b795407443bc9811a"><code>3e9914b</code></a>)</li>
+<li><em>(parser)</em> Scope arg() checks to what each module can see (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/cd09eff64efb8edcffb55e9589400ad2dbf2c2d2"><code>cd09eff</code></a>)</li>
+<li><em>(parser)</em> Follow star-imported aliases and binding order in arg() check (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/eb8bc5244ee843e90886fe5056dbe3c6cbcaf52d"><code>eb8bc52</code></a>)</li>
+<li><em>(parser)</em> Don't guess aliases behind unparsed star imports (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/70f0dd762cdcce8e3d7bbaaee902af4dbf80c57d"><code>70f0dd7</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6743,11 +6786,15 @@ for releases published before packslip support.</p>
 <li><em>(mise)</em> Don't imply a version cut-over in the aqua fallback example (<a href="https://github.com/s0undt3ch/ToolR/commit/b976016e60776f5074937e3c2e5c33e6c330cf18"><code>b976016</code></a>)</li>
 <li><em>(packslip)</em> Fix release-age/identity wording and don't imply a pinned version exists yet (<a href="https://github.com/s0undt3ch/ToolR/commit/2799dc5145a316b721b035e892289a81eff03cda"><code>2799dc5</code></a>)</li>
 <li><em>(specs)</em> Document packslip partial-failure recovery and the CLI install path (<a href="https://github.com/s0undt3ch/ToolR/commit/ef87462759f23b0939d90bddc2d65e456dcd7509"><code>ef87462</code></a>)</li>
+<li>Note that unknown arg() keywords now fail the manifest build (<a href="https://github.com/s0undt3ch/ToolR/commit/9045e7d82030c96f5e535c44d376d4e2a0ec5fd6"><code>9045e7d</code></a>)</li>
+<li>Note nested arg() checks and argparse-keyword hints (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/26f0d0a10257c367b81e6483fcfa18b478cd5131"><code>26f0d0a</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(xtask)</em> Cover docs-section extraction edge cases and generator error paths (<a href="https://github.com/s0undt3ch/ToolR/commit/c07fda2a5dd4b9e858545d8273641b2e6a98550b"><code>c07fda2</code></a>)</li>
 <li><em>(skills)</em> Regenerate the authoring examples manifest snapshot (<a href="https://github.com/s0undt3ch/ToolR/commit/743b875691b244367215b59d3d90ec351b41d9c1"><code>743b875</code></a>)</li>
+<li><em>(cli)</em> Cover unknown arg() keywords failing the manifest build (<a href="https://github.com/s0undt3ch/ToolR/commit/0d4ce23cc80b556248629157ce146cfe33afb68f"><code>0d4ce23</code></a>)</li>
+<li><em>(parser)</em> Cover the arg() check's remaining branches (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/935b9fc3955ab4403d056ffa3b1017701dc6a918"><code>935b9fc</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
