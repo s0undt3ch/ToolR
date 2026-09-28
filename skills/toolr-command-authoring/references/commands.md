@@ -343,7 +343,24 @@ See [shutil.which][shutil.which] for more details.
 class DispatchCommand
 ```
 
-_No docstring on the source definition._
+```text
+The payload a dispatcher command receives for a grafted external command.
+
+Declare it as a keyword-only parameter on a toolr command
+(``*, dispatched: DispatchCommand``). toolr finds the parameter by its
+annotation, so any name works. That command then becomes the dispatcher
+for every command an external source (a ``[tool.toolr.argparse.<block>]``
+table in ``tools/pyproject.toml``) attaches under it. On each invocation
+toolr fills in:
+
+- ``command``: the invoked command's name (its source file's stem).
+- ``command_args``: the parsed arguments, keyed by argument name.
+- ``schema``: the command's scanned argument schema.
+
+``argv`` rebuilds ``command_args`` into an argument vector for the
+upstream tool.
+
+```
 
 #### `command`
 

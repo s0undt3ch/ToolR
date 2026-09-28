@@ -58,6 +58,7 @@ pub fn run(check: bool) -> Result<()> {
         packaging::packaging(&root)?,
         ci_setup::action(&root)?,
         sections::arguments_reference(&root)?,
+        sections::external_sources_reference(&root)?,
         sections::packaging_example(&root)?,
     ];
     outputs.extend(sections::prek_hook_references(&root)?);

@@ -116,7 +116,16 @@ fn render(
         // Prose is buffered per paragraph so a link whose text wraps onto
         // the next source line is still seen as one link.
         if fence.is_none() && is_prose(&item.text) {
+            // A heading ends the paragraph before it and never continues
+            // into the next line, as in CommonMark.
+            let heading = is_atx_heading(&item.text);
+            if heading {
+                flush_paragraph(&mut para, &mut out)?;
+            }
             para.push(item);
+            if heading {
+                flush_paragraph(&mut para, &mut out)?;
+            }
             continue;
         }
         flush_paragraph(&mut para, &mut out)?;
@@ -188,7 +197,7 @@ fn render(
             let label = admonition_label(&text, lineno)?;
             let mut body: Vec<Item> = Vec::new();
             while let Some(next) = queue.front() {
-                if next.text.trim().is_empty() || next.text.starts_with("    ") {
+                if next.text.trim().is_empty() || admonition_body_line(&next.text).is_some() {
                     body.push(queue.pop_front().expect("front was Some"));
                 } else {
                     break;
@@ -199,7 +208,7 @@ fn render(
             }
             let body_src: String = body
                 .iter()
-                .map(|b| format!("{}\n", b.text.strip_prefix("    ").unwrap_or("")))
+                .map(|b| format!("{}\n", admonition_body_line(&b.text).unwrap_or("")))
                 .collect();
             let body_line = body.first().map_or(lineno + 1, |b| b.lineno);
             let rendered = render(&body_src, resolve, body_line, depth)?;
@@ -241,27 +250,75 @@ fn flush_paragraph(para: &mut Vec<Item>, out: &mut Vec<String>) -> Result<()> {
     }
     // Spliced include lines all carry their directive's line number, so a
     // line can't be derived by counting newlines from the first item.
-    let mut joined = String::new();
-    let mut starts: Vec<(usize, usize)> = Vec::with_capacity(para.len());
-    for (n, item) in para.iter().enumerate() {
-        if n > 0 {
-            joined.push('\n');
-        }
-        starts.push((joined.len(), item.lineno));
-        joined.push_str(&item.text);
-    }
-    let line_of = |pos: usize| {
-        let k = starts.partition_point(|(off, _)| *off <= pos);
-        starts[k.saturating_sub(1)].1
-    };
-    let rewritten = rewrite_links(&joined, &line_of)?;
-    for line in rewritten.split('\n') {
-        let line = strip_attr_lists(line);
-        if !line.trim().is_empty() {
-            out.push(line);
-        }
-    }
+    let linenos: Vec<usize> = para.iter().map(|item| item.lineno).collect();
+    let joined = para
+        .iter()
+        .map(|item| item.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let starts = line_starts(&joined, &linenos);
+    let line_of = |pos: usize| line_at(&starts, pos);
+    reject_local_html(&joined, &line_of)?;
+    // Attribute lists never span lines, so stripping keeps one line per item.
+    let stripped = strip_attr_lists(&joined, &line_of)?;
+    let starts = line_starts(&stripped, &linenos);
+    let rewritten = rewrite_links(&stripped, &|pos| line_at(&starts, pos))?;
+    out.extend(
+        rewritten
+            .split('\n')
+            .filter(|line| !line.trim().is_empty())
+            .map(str::to_string),
+    );
     para.clear();
+    Ok(())
+}
+
+fn line_starts(text: &str, linenos: &[usize]) -> Vec<(usize, usize)> {
+    let mut offset = 0;
+    text.split('\n')
+        .zip(linenos)
+        .map(|(line, lineno)| {
+            let start = offset;
+            offset += line.len() + 1;
+            (start, *lineno)
+        })
+        .collect()
+}
+
+fn line_at(starts: &[(usize, usize)], pos: usize) -> usize {
+    let k = starts.partition_point(|(off, _)| *off <= pos);
+    starts[k.saturating_sub(1)].1
+}
+
+/// A local `href`/`src` in raw HTML would dangle in a skill; catch it here
+/// with the page's line rather than later in the self-containment gate.
+fn reject_local_html(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<()> {
+    let mut masked = text.as_bytes().to_vec();
+    let mut i = 0;
+    while i < masked.len() {
+        if masked[i] != b'`' {
+            i += 1;
+            continue;
+        }
+        let run = masked[i..].iter().take_while(|b| **b == b'`').count();
+        match code_span_end(text.as_bytes(), i) {
+            Some(end) => {
+                masked[i..end].fill(b' ');
+                i = end;
+            }
+            None => i += run,
+        }
+    }
+    let masked = String::from_utf8(masked).expect("masking only overwrites ASCII-delimited spans");
+    if let Some((range, target)) = html_targets(&masked)
+        .into_iter()
+        .find(|(_, target)| !is_remote(target))
+    {
+        bail!(
+            "line {}: raw HTML target `{target}` can't ship in a skill reference",
+            line_of(range.start)
+        );
+    }
     Ok(())
 }
 
@@ -350,10 +407,14 @@ fn parse_include(trimmed: &str, lineno: usize) -> Result<Option<Include>> {
         if name.is_empty() || name.parse::<usize>().is_ok() {
             bail!("line {lineno}: unsupported snippet include form: {trimmed}");
         }
-        return Ok(Some(Include {
-            path: path.to_string(),
-            kind: IncludeKind::Named(name.to_string()),
-        }));
+        // Anything else that isn't a valid section name belongs to the
+        // path, as in pymdownx.snippets (`C:\x.py` is one path).
+        if is_section_name(name) {
+            return Ok(Some(Include {
+                path: path.to_string(),
+                kind: IncludeKind::Named(name.to_string()),
+            }));
+        }
     }
     Ok(Some(Include {
         path: inner.to_string(),
@@ -364,7 +425,8 @@ fn parse_include(trimmed: &str, lineno: usize) -> Result<Option<Include>> {
 /// Generated `.md` snippets carry their own `DO_NOT_EDIT` header line;
 /// splicing it into the middle of a skill reference reads as if the
 /// reference itself broke off mid-page, so it's dropped on include.
-const DO_NOT_EDIT: &str = "<!-- generated by `cargo xtask build-skill-refs`; do not edit by hand -->";
+const DO_NOT_EDIT: &str =
+    "<!-- generated by `cargo xtask build-skill-refs`; do not edit by hand -->";
 
 fn strip_leading_do_not_edit(path: &str, content: String) -> String {
     if !path.ends_with(".md") {
@@ -397,7 +459,9 @@ fn load(
                     lines.len(),
                 );
             }
-            Ok(lines[*a - 1..*b].iter().map(|l| (*l).to_string()).collect())
+            Ok(dedent(
+                lines[*a - 1..*b].iter().map(|l| (*l).to_string()).collect(),
+            ))
         }
         IncludeKind::Named(name) => {
             let (_, body) = locate_section(&content, name).map_err(|e| {
@@ -413,9 +477,42 @@ fn load(
             while lines.last().is_some_and(|l| l.trim().is_empty()) {
                 lines.pop();
             }
-            Ok(lines)
+            Ok(dedent(lines))
         }
     }
+}
+
+/// pymdownx.snippets' section-name pattern, `[a-z][-_0-9a-z]*`, matched
+/// case-insensitively.
+fn is_section_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Python's `textwrap.dedent`, which `dedent_subsections: true` in
+/// `mkdocs.yml` applies to line-range and named-section includes.
+fn dedent(lines: Vec<String>) -> Vec<String> {
+    let common = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| &l[..l.len() - l.trim_start().len()])
+        .reduce(|a, b| {
+            let n = a.bytes().zip(b.bytes()).take_while(|(x, y)| x == y).count();
+            &a[..n]
+        })
+        .unwrap_or("")
+        .len();
+    lines
+        .into_iter()
+        .map(|l| {
+            if l.trim().is_empty() {
+                String::new()
+            } else {
+                l[common..].to_string()
+            }
+        })
+        .collect()
 }
 
 fn indented(indent: &str, lines: Vec<String>) -> impl DoubleEndedIterator<Item = String> + '_ {
@@ -462,6 +559,12 @@ fn admonition_label(line: &str, lineno: usize) -> Result<String> {
     Ok(format!("{kind} — {}", rewrite_links(title, &|_| lineno)?))
 }
 
+/// Python-Markdown accepts either four spaces or a tab as the indent.
+fn admonition_body_line(line: &str) -> Option<&str> {
+    line.strip_prefix("    ")
+        .or_else(|| line.strip_prefix('\t'))
+}
+
 fn blockquote(label: &str, body: &[String]) -> Vec<String> {
     let quote = |l: &String| {
         if l.is_empty() {
@@ -471,18 +574,58 @@ fn blockquote(label: &str, body: &[String]) -> Vec<String> {
         }
     };
     let head = format!("> **{label}:**");
-    match body.split_first() {
-        Some((first, rest))
-            if !first.trim().is_empty() && Fence::opened_by(first.trim_start(), 0).is_none() =>
-        {
-            std::iter::once(format!("{head} {first}"))
-                .chain(rest.iter().map(quote))
-                .collect()
-        }
-        _ => std::iter::once(head)
+    let Some((first, rest)) = body.split_first() else {
+        return vec![head];
+    };
+    if first.trim().is_empty() || Fence::opened_by(first.trim_start(), 0).is_some() {
+        return std::iter::once(head)
             .chain(body.iter().map(quote))
-            .collect(),
+            .collect();
     }
+    // Other block-level lines need a blank line after the label, or they
+    // read as part of the label's paragraph.
+    if starts_block(first) {
+        return [head, ">".to_string()]
+            .into_iter()
+            .chain(body.iter().map(quote))
+            .collect();
+    }
+    std::iter::once(format!("{head} {first}"))
+        .chain(rest.iter().map(quote))
+        .collect()
+}
+
+/// A line that opens a block of its own, so it can't share a line with
+/// an admonition's label.
+fn starts_block(line: &str) -> bool {
+    let t = line.trim_start();
+    if is_atx_heading(t) || t.starts_with(['|', '>']) {
+        return true;
+    }
+    if let Some(rest) = t.strip_prefix(['-', '*', '+']) {
+        return rest.is_empty() || rest.starts_with([' ', '\t']);
+    }
+    let digits = t.bytes().take_while(u8::is_ascii_digit).count();
+    (1..=9).contains(&digits)
+        && t[digits..].starts_with(['.', ')'])
+        && t[digits + 1..]
+            .chars()
+            .next()
+            .is_none_or(|c| c == ' ' || c == '\t')
+}
+
+/// CommonMark ATX heading: one to six `#`, then a space, tab or line end.
+fn is_atx_heading(line: &str) -> bool {
+    let t = line.trim_start();
+    if line.len() - t.len() > 3 {
+        return false;
+    }
+    let hashes = t.bytes().take_while(|b| *b == b'#').count();
+    (1..=6).contains(&hashes)
+        && t[hashes..]
+            .chars()
+            .next()
+            .is_none_or(|c| c == ' ' || c == '\t')
 }
 
 /// A Markdown link or image found in a run of prose.
@@ -519,24 +662,6 @@ pub(super) fn code_span_end(bytes: &[u8], i: usize) -> Option<usize> {
         }
     }
     None
-}
-
-fn in_code_span(text: &str, pos: usize) -> bool {
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < pos {
-        if bytes[i] == b'`' {
-            let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
-            match code_span_end(bytes, i) {
-                Some(end) if end > pos => return true,
-                Some(end) => i = end,
-                None => i += run,
-            }
-        } else {
-            i += 1;
-        }
-    }
-    false
 }
 
 /// Find inline and reference-style links and images in prose, skipping
@@ -605,10 +730,13 @@ fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>>
                     }
                 };
                 let rest = &text[close + 2..];
-                let target_end = rest
-                    .find([closer, '\n'])
-                    .filter(|k| rest[*k..].starts_with(closer))
-                    .map(|k| close + 2 + k);
+                let target_end = if open == b'(' {
+                    inline_target_end(rest)
+                } else {
+                    rest.find([closer, '\n'])
+                        .filter(|k| rest[*k..].starts_with(closer))
+                }
+                .map(|k| close + 2 + k);
                 let Some(target_end) = target_end else {
                     if open == b'(' {
                         bail!("line {}: unterminated link target", line_of(close));
@@ -622,7 +750,7 @@ fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>>
                         line_of(i)
                     );
                 }
-                let image = i > 0 && bytes[i - 1] == b'!';
+                let image = i > 0 && bytes[i - 1] == b'!' && !is_escaped(bytes, i - 1);
                 let raw = text[close + 2..target_end].trim();
                 let target = if open == b'(' {
                     let t = raw.split_whitespace().next().unwrap_or("");
@@ -647,6 +775,107 @@ fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>>
         }
     }
     Ok(links)
+}
+
+/// An odd run of backslashes before `at` escapes the byte there.
+fn is_escaped(bytes: &[u8], at: usize) -> bool {
+    bytes[..at]
+        .iter()
+        .rev()
+        .take_while(|b| **b == b'\\')
+        .count()
+        % 2
+        == 1
+}
+
+/// Offset in `rest` (the text after `](`) of the `)` that closes an inline
+/// link: a destination with balanced parentheses or in `<…>`, then an
+/// optional `"…"`, `'…'` or `(…)` title, which may itself contain `)`.
+fn inline_target_end(rest: &str) -> Option<usize> {
+    let b = rest.as_bytes();
+    let skip_blanks = |mut i: usize| {
+        while b.get(i).is_some_and(|c| *c == b' ' || *c == b'\t') {
+            i += 1;
+        }
+        i
+    };
+    // Past the byte equal to `close`, honouring escapes; `None` at a line end.
+    let past = |mut i: usize, close: u8| {
+        while let Some(&c) = b.get(i) {
+            match c {
+                b'\n' => return None,
+                b'\\' => i += 2,
+                _ if c == close => return Some(i + 1),
+                _ => i += 1,
+            }
+        }
+        None
+    };
+    let mut i = skip_blanks(0);
+    if b.get(i) == Some(&b'<') {
+        i = past(i + 1, b'>')?;
+    } else {
+        let mut depth = 0usize;
+        while let Some(&c) = b.get(i) {
+            match c {
+                b'\\' => i += 1,
+                b'(' => depth += 1,
+                b')' if depth == 0 => break,
+                b')' => depth -= 1,
+                b' ' | b'\t' | b'\n' => break,
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+    i = skip_blanks(i);
+    if let Some(close) = match b.get(i) {
+        Some(b'"') => Some(b'"'),
+        Some(b'\'') => Some(b'\''),
+        Some(b'(') => Some(b')'),
+        _ => None,
+    } {
+        i = skip_blanks(past(i + 1, close)?);
+    }
+    (b.get(i) == Some(&b')')).then_some(i)
+}
+
+/// Values of raw HTML `href=` / `src=` attributes, quoted or not, with
+/// their byte ranges.
+pub(super) fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> {
+    let lower = text.to_ascii_lowercase();
+    let mut out = Vec::new();
+    for attr in ["href=", "src="] {
+        let mut from = 0;
+        while let Some(k) = lower[from..].find(attr) {
+            let at = from + k;
+            from = at + attr.len();
+            if at > 0 && !lower.as_bytes()[at - 1].is_ascii_whitespace() {
+                continue;
+            }
+            let (start, len) = match text[from..].chars().next() {
+                Some(quote @ ('"' | '\'')) => {
+                    let Some(len) = text[from + 1..].find(quote) else {
+                        continue;
+                    };
+                    (from + 1, len)
+                }
+                _ => {
+                    let len = text[from..]
+                        .find(|c: char| c.is_whitespace() || c == '>')
+                        .unwrap_or(text.len() - from);
+                    if len == 0 {
+                        continue;
+                    }
+                    (from, len)
+                }
+            };
+            out.push((start..start + len, text[start..start + len].to_string()));
+            from = start + len;
+        }
+    }
+    out.sort_by_key(|(r, _)| r.start);
+    out
 }
 
 fn is_remote(target: &str) -> bool {
@@ -679,44 +908,126 @@ fn rewrite_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<String>
     Ok(out)
 }
 
-fn strip_attr_lists(line: &str) -> String {
-    let bytes = line.as_bytes();
-    let mut out = String::with_capacity(line.len());
-    let mut last = 0;
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'`' {
-            let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
-            i = code_span_end(bytes, i).unwrap_or(i + run);
-            continue;
+/// Drop the `{…}` blocks Python-Markdown's `attr_list` would consume and
+/// keep every other `{…}` as the literal text mkdocs renders. It consumes
+/// one right after a link or code span, one trailing a heading, and a
+/// paragraph's last line when that line is nothing else.
+fn strip_attr_lists(para: &str, line_of: &dyn Fn(usize) -> usize) -> Result<String> {
+    let link_ends: Vec<usize> = scan_links(para, line_of)?
+        .iter()
+        .map(|link| link.span.end)
+        .collect();
+    let lines: Vec<&str> = para.split('\n').collect();
+    let heading = lines.len() == 1 && is_atx_heading(lines[0]);
+    let mut out = Vec::with_capacity(lines.len());
+    let mut base = 0;
+    for (n, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        let closes_para = n > 0 && n + 1 == lines.len();
+        if closes_para && attr_list_len(trimmed) == Some(trimmed.len()) {
+            out.push(String::new());
+        } else {
+            let ctx = AttrLine {
+                line,
+                base,
+                heading,
+                link_ends: &link_ends,
+                lineno: line_of(base),
+            };
+            out.push(ctx.strip()?);
         }
-        if bytes[i..].starts_with(b"{:") {
-            if let Some(k) = line[i..].find('}') {
-                out.push_str(line[last..i].trim_end());
-                last = i + k + 1;
-                i = last;
+        base += line.len() + 1;
+    }
+    Ok(out.join("\n"))
+}
+
+struct AttrLine<'a> {
+    line: &'a str,
+    /// Offset of `line` in the paragraph, which `link_ends` is relative to.
+    base: usize,
+    heading: bool,
+    link_ends: &'a [usize],
+    lineno: usize,
+}
+
+impl AttrLine<'_> {
+    fn strip(&self) -> Result<String> {
+        let line = self.line;
+        let bytes = line.as_bytes();
+        let mut code_end = None;
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'`' {
+                let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
+                match code_span_end(bytes, i) {
+                    Some(end) => {
+                        code_end = Some(end);
+                        i = end;
+                    }
+                    None => i += run,
+                }
                 continue;
             }
+            if bytes[i] == b'{' && !is_escaped(bytes, i) {
+                if let Some(len) = attr_list_len(&line[i..]) {
+                    if let Some(kept) = self.apply(i, len, code_end == Some(i))? {
+                        return Ok(kept);
+                    }
+                }
+            }
+            i += 1;
         }
-        i += 1;
+        Ok(line.to_string())
     }
-    let removed = last > 0;
-    out.push_str(&line[last..]);
-    let mut out = if removed {
-        out.trim_end().to_string()
-    } else {
-        out
-    };
-    // attr_list also accepts the colon-less `{#id}` / `{ .class }` spelling,
-    // but only as a trailing block, where it can't be ordinary braces.
-    let t = out.trim_end();
-    if let Some(open) = t.strip_suffix('}').and_then(|b| b.rfind('{')) {
-        let inner = t[open + 1..t.len() - 1].trim();
-        if (inner.starts_with('#') || inner.starts_with('.')) && !in_code_span(t, open) {
-            out = t[..open].trim_end().to_string();
+
+    /// The line with the attribute list at `at..at + len` removed, or
+    /// `None` when `attr_list` leaves it as literal text.
+    fn apply(&self, at: usize, len: usize, after_code: bool) -> Result<Option<String>> {
+        let line = self.line;
+        let end = at + len;
+        let prev = line[..at].chars().next_back();
+        let trailing = line[end..].trim().is_empty();
+        let inline = after_code || self.link_ends.contains(&(self.base + at));
+        let in_heading = self.heading && trailing && prev.is_some_and(|c| c == ' ' || c == '\t');
+        let in_cell = line.trim_start().starts_with('|')
+            && prev.is_some_and(|c| c == ' ' || c == '\t')
+            && (trailing || line[end..].trim_start().starts_with('|'));
+        let after_other = matches!(prev, Some('*' | '_' | '>'));
+        if !(inline || in_heading || in_cell || after_other) {
+            return Ok(None);
         }
+        let what = &line[at..end];
+        if in_cell || after_other {
+            bail!(
+                "line {}: unsupported attribute list placement: {what}",
+                self.lineno
+            );
+        }
+        // attr_list reads to the line's last `}`, so the content holds any
+        // braces between; what that yields isn't worth mirroring.
+        if what[1..what.len() - 1].contains(['{', '}']) {
+            bail!("line {}: ambiguous attribute list: {what}", self.lineno);
+        }
+        if in_heading {
+            return Ok(Some(line[..at].trim_end().to_string()));
+        }
+        Ok(Some(format!("{}{}", &line[..at], &line[end..])))
     }
-    out
+}
+
+/// Length of the Python-Markdown attribute list opening `text`: `{`, an
+/// optional `:`, content that starts with neither `}` nor a space, and the
+/// line's last `}`.
+fn attr_list_len(text: &str) -> Option<usize> {
+    let rest = text.strip_prefix('{')?;
+    let rest = rest.strip_prefix(':').unwrap_or(rest);
+    let content = rest.trim_start_matches(' ');
+    if content.starts_with('}') || content.is_empty() {
+        return None;
+    }
+    let line_end = text.find('\n').unwrap_or(text.len());
+    let close = text[..line_end].rfind('}')?;
+    (close > text.len() - content.len()).then_some(close + 1)
 }
 
 #[cfg(test)]
@@ -849,7 +1160,8 @@ mod tests {
 
     #[test]
     fn named_include_duplicate_name_is_an_error() {
-        let file = "# --8<-- [start:x]\na\n# --8<-- [end:x]\n# --8<-- [start:x]\nb\n# --8<-- [end:x]\n";
+        let file =
+            "# --8<-- [start:x]\na\n# --8<-- [end:x]\n# --8<-- [start:x]\nb\n# --8<-- [end:x]\n";
         assert!(transform("--8<-- \"f.py:x\"\n", &fake(&[("f.py", file)])).is_err());
     }
 
@@ -971,21 +1283,28 @@ mod tests {
     }
 
     #[test]
-    fn attr_list_is_dropped() {
-        let src = "Heading text {: #custom }\n";
-        assert_eq!(transform(src, &fake(&[])).unwrap(), "Heading text\n");
+    fn heading_attr_list_is_dropped_and_prose_one_kept() {
+        let src = "## Heading text {: #custom }\n\nPara text {: #p }\n";
+        let out = transform(src, &fake(&[])).unwrap();
+        assert_eq!(out, "## Heading text\n\nPara text {: #p }\n");
     }
 
     #[test]
     fn attr_list_and_links_next_to_non_ascii_text() {
-        let src = "Título — [ç](é.md) {: #t }\n";
+        let src = "Título — [ç](é.md){: #t }\n";
         assert_eq!(transform(src, &fake(&[])).unwrap(), "Título — ç\n");
     }
 
     #[test]
-    fn attr_list_line_is_dropped() {
+    fn attr_list_line_closing_a_paragraph_is_dropped() {
+        let src = "Para.\n{: .note }\n\nNext.\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), "Para.\n\nNext.\n");
+    }
+
+    #[test]
+    fn attr_list_line_mid_paragraph_is_kept() {
         let src = "Para.\n{: .note }\nNext.\n";
-        assert_eq!(transform(src, &fake(&[])).unwrap(), "Para.\nNext.\n");
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
     }
 
     #[test]
@@ -1179,10 +1498,16 @@ mod tests {
     }
 
     #[test]
-    fn colonless_trailing_attr_lists_are_dropped() {
+    fn colonless_attr_list_is_dropped_only_where_attr_list_applies() {
         let src = "### Output Options {#output-options}\n\nTitle { .cls }\n\n{#only}\n";
         let out = transform(src, &fake(&[])).unwrap();
-        assert_eq!(out, "### Output Options\n\nTitle\n");
+        assert_eq!(out, "### Output Options\n\nTitle { .cls }\n\n{#only}\n");
+    }
+
+    #[test]
+    fn trailing_prose_braces_are_kept() {
+        let src = "Para one\nlast {#x}\n\nratio {.5}\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
     }
 
     #[test]
@@ -1227,7 +1552,9 @@ mod tests {
 
     #[test]
     fn admonition_without_a_kind_is_an_error() {
-        let err = transform("!!!\n    Body.\n", &fake(&[])).unwrap_err().to_string();
+        let err = transform("!!!\n    Body.\n", &fake(&[]))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("line 1: admonition without a kind"), "{err}");
     }
 
@@ -1246,15 +1573,21 @@ mod tests {
     }
 
     #[test]
-    fn trailing_attr_list_after_code_span_is_dropped() {
-        let out = transform("x `a` {#b}\n", &fake(&[])).unwrap();
-        assert_eq!(out, "x `a`\n");
+    fn attr_list_right_after_code_span_is_dropped() {
+        let out = transform("x `a`{#b} y\n", &fake(&[])).unwrap();
+        assert_eq!(out, "x `a` y\n");
     }
 
     #[test]
-    fn trailing_attr_list_after_unmatched_backtick_is_dropped() {
-        let out = transform("x ` a {#b}\n", &fake(&[])).unwrap();
-        assert_eq!(out, "x ` a\n");
+    fn attr_list_after_a_space_following_code_is_kept() {
+        let src = "x `a` {#b}\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
+    }
+
+    #[test]
+    fn attr_list_after_unmatched_backtick_is_kept() {
+        let src = "x ` a {#b}\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
     }
 
     #[test]
@@ -1291,5 +1624,158 @@ mod tests {
     fn unclosed_colon_attr_list_is_kept() {
         let src = "a {: b\n";
         assert_eq!(transform(src, &fake(&[])).unwrap(), src);
+    }
+
+    #[test]
+    fn admonition_starting_with_a_block_puts_the_label_on_its_own_line() {
+        for (body, first) in [
+            ("    - a\n    - b\n", "> - a"),
+            ("    1. a\n", "> 1. a"),
+            ("    | A |\n    |---|\n", "> | A |"),
+            ("    ## Heading\n", "> ## Heading"),
+            ("    !!! tip\n        Inner.\n", "> > **Tip:** Inner."),
+        ] {
+            let out = transform(&format!("!!! note\n{body}"), &fake(&[])).unwrap();
+            assert!(
+                out.starts_with(&format!("> **Note:**\n>\n{first}\n")),
+                "{body:?} -> {out:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn admonition_starting_with_prose_that_looks_list_like_stays_inline() {
+        let out = transform("!!! note\n    -dash and 2024. year\n", &fake(&[])).unwrap();
+        assert_eq!(out, "> **Note:** -dash and 2024. year\n");
+    }
+
+    #[test]
+    fn link_title_containing_a_paren_keeps_the_whole_link() {
+        for src in [
+            "[a](b.md \"x (y)\") z\n",
+            "[a](b.md 'x (y)') z\n",
+            "[a](b.md (x \\) y)) z\n",
+            "[a](<b c.md> \"t\") z\n",
+        ] {
+            assert_eq!(transform(src, &fake(&[])).unwrap(), "a z\n", "{src:?}");
+        }
+    }
+
+    #[test]
+    fn link_destination_with_balanced_parens_is_one_target() {
+        let links = find_links("[a](https://x/f(1)) z", 1).unwrap();
+        assert_eq!(links[0].target, "https://x/f(1)");
+    }
+
+    #[test]
+    fn unterminated_link_title_is_an_error() {
+        let err = transform("[a](b.md \"x\n", &fake(&[]))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unterminated link target"), "{err}");
+    }
+
+    #[test]
+    fn tab_indented_admonition_body_is_recognised() {
+        let out = transform("!!! note\n\tLine one.\n\tLine two.\n\nAfter.\n", &fake(&[])).unwrap();
+        assert_eq!(out, "> **Note:** Line one.\n> Line two.\n\nAfter.\n");
+    }
+
+    #[test]
+    fn escaped_image_marker_is_a_plain_link() {
+        let out = transform("\\![x](y.png)\n", &fake(&[])).unwrap();
+        assert_eq!(out, "\\!x\n");
+    }
+
+    #[test]
+    fn escaped_backslash_before_image_still_leaves_an_image() {
+        assert!(transform("\\\\![x](y.png)\n", &fake(&[])).is_err());
+    }
+
+    #[test]
+    fn heading_is_its_own_paragraph_for_link_scanning() {
+        let src = "# H [a\n](b.md)\n";
+        let err = transform(src, &fake(&[])).unwrap_err().to_string();
+        assert!(
+            err.contains("line 2") && err.contains("without a matching"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn heading_followed_by_prose_renders_both() {
+        let out = transform("# H\n[a](b.md) c\n", &fake(&[])).unwrap();
+        assert_eq!(out, "# H\na c\n");
+    }
+
+    #[test]
+    fn ranged_and_named_includes_are_dedented() {
+        let file = "class A:\n    # --8<-- [start:x]\n    def f(self):\n\n        pass\n    # --8<-- [end:x]\n";
+        let src = "```python\n--8<-- \"f.py:x\"\n```\n";
+        let out = transform(src, &fake(&[("f.py", file)])).unwrap();
+        assert_eq!(out, "```python\ndef f(self):\n\n    pass\n```\n");
+        let src = "```python\n--8<-- \"f.py:3:5\"\n```\n";
+        let out = transform(src, &fake(&[("f.py", file)])).unwrap();
+        assert_eq!(out, "```python\ndef f(self):\n\n    pass\n```\n");
+    }
+
+    #[test]
+    fn whole_file_include_is_not_dedented() {
+        let src = "```python\n--8<-- \"f.py\"\n```\n";
+        let out = transform(src, &fake(&[("f.py", "    x = 1\n")])).unwrap();
+        assert_eq!(out, "```python\n    x = 1\n```\n");
+    }
+
+    #[test]
+    fn local_raw_html_targets_are_rejected() {
+        for src in ["See <img src=\"a.png\">.\n", "<a href='x.md'>x</a>\n"] {
+            let err = transform(src, &fake(&[])).unwrap_err().to_string();
+            assert!(
+                err.contains("line 1") && err.contains("raw HTML target"),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn remote_and_code_span_raw_html_is_kept() {
+        let src = "<a href=\"https://x.org\">x</a> and `<img src=\"a.png\">`\n";
+        assert_eq!(transform(src, &fake(&[])).unwrap(), src);
+    }
+
+    #[test]
+    fn windows_absolute_path_include_is_one_path() {
+        let files = [("C:\\x.py", "a\n")];
+        let out = transform("```python\n--8<-- \"C:\\x.py\"\n```\n", &fake(&files)).unwrap();
+        assert_eq!(out, "```python\na\n```\n");
+    }
+
+    #[test]
+    fn named_include_after_a_windows_path_still_names_the_section() {
+        let file = "# --8<-- [start:sec]\nb\n# --8<-- [end:sec]\n";
+        let files = [("C:\\x.py", file)];
+        let out = transform("```python\n--8<-- \"C:\\x.py:sec\"\n```\n", &fake(&files)).unwrap();
+        assert_eq!(out, "```python\nb\n```\n");
+    }
+
+    #[test]
+    fn attr_lists_attr_list_would_mishandle_are_errors() {
+        for (src, what) in [
+            ("| a {#c} |\n", "placement"),
+            ("**b**{.c} x\n", "placement"),
+            ("`x`{a} {b}\n", "ambiguous"),
+        ] {
+            let err = transform(src, &fake(&[])).unwrap_err().to_string();
+            assert!(
+                err.contains("line 1") && err.contains(what),
+                "{src:?}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn attr_list_after_a_remote_link_is_dropped() {
+        let out = transform("[l](https://x.org){: .k } rest\n", &fake(&[])).unwrap();
+        assert_eq!(out, "[l](https://x.org) rest\n");
     }
 }

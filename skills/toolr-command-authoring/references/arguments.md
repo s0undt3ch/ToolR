@@ -77,10 +77,10 @@ clear error rather than confusing runtime behavior:
 
 | Rule | Why |
 |---|---|
-| At most **one** `T \| None` positional per command. | clap can't disambiguate two trailing optionals — which arg fills which slot? |
-| Required positionals must appear **before** the `T \| None` slot. | Once the parser accepts "no value here" it can't backtrack to fill a required slot that comes later. |
-| `T \| None` and `*args: T` cannot coexist. | Both compete for the trailing slot. |
-| Fixed-arity `tuple[T1, T2, …]` positionals **may** precede a `T \| None` slot. | Tuples have deterministic arity, so there's no ambiguity. |
+| At most **one** <code>T &#124; None</code> positional per command. | clap can't disambiguate two trailing optionals — which arg fills which slot? |
+| Required positionals must appear **before** the <code>T &#124; None</code> slot. | Once the parser accepts "no value here" it can't backtrack to fill a required slot that comes later. |
+| <code>T &#124; None</code> and `*args: T` cannot coexist. | Both compete for the trailing slot. |
+| Fixed-arity `tuple[T1, T2, …]` positionals **may** precede a <code>T &#124; None</code> slot. | Tuples have deterministic arity, so there's no ambiguity. |
 
 `T | None` **with** a default (e.g. `name: str | None = None`) is a
 keyword `--flag` instead — see Optional arguments

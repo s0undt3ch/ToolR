@@ -49,6 +49,22 @@ pub fn arguments_reference(repo_root: &Path) -> Result<Generated> {
     })
 }
 
+/// Build `skills/toolr-command-authoring/references/external-sources.md`
+/// from `docs/writing-commands/external-sources.md`'s `external-sources`
+/// section.
+pub fn external_sources_reference(repo_root: &Path) -> Result<Generated> {
+    let body = render(
+        repo_root,
+        "docs/writing-commands/external-sources.md",
+        "external-sources",
+        "External command sources",
+    )?;
+    Ok(Generated {
+        path: repo_root.join("skills/toolr-command-authoring/references/external-sources.md"),
+        body,
+    })
+}
+
 /// Build the `prek-hook.md` reference for both the `toolr-ci-setup`
 /// and `toolr-command-packaging` skills, from `docs/third-party.md`'s
 /// `prek-hook` section.
@@ -99,6 +115,17 @@ mod tests {
         let err = format!("{:#}", arguments_reference(&missing_root()).err().unwrap());
         assert!(
             err.contains("extracting `arg-shapes` from docs/writing-commands/arguments.md"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn external_sources_reference_names_the_section_it_failed_to_extract() {
+        let err = format!("{:#}", external_sources_reference(&missing_root()).err().unwrap());
+        assert!(
+            err.contains(
+                "extracting `external-sources` from docs/writing-commands/external-sources.md"
+            ),
             "{err}"
         );
     }

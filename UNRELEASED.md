@@ -32,6 +32,16 @@ site or repository. The docs' path-constraint table previously documented
 `must_be_file` and `must_be_dir`, and the docs now generate that table from the
 code.
 
+### The authoring skill covers external command sources
+
+The `toolr-command-authoring` skill now teaches agents how to put existing
+argparse scripts and Django management commands behind a `DispatchCommand`
+dispatcher, instead of rewriting each one as a toolr command. It ships the
+configuration table and worked examples from the docs, and `DispatchCommand`
+now has a docstring. The external sources docs gain a plain-argparse example.
+They now also say that a script's subparser arguments merge into its single
+command, and list the payload's `schema` field.
+
 ### Install toolr with mise's packslip backend
 
 Releases now ship a signed [packslip](https://packslip.dev/) manifest, so
