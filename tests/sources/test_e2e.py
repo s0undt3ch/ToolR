@@ -32,6 +32,7 @@ def project_with_dispatcher_and_command(tmp_path: Path) -> Path:
 
             @group.command
             def django(ctx: Context, *, dispatched: DispatchCommand) -> int:
+                "Do it."
                 payload = {
                     "command": dispatched.command,
                     "command_args": dispatched.command_args,
@@ -172,11 +173,13 @@ def test_e2e_same_source_attached_to_two_parents(tmp_path: Path, toolr_bin: Path
 
         @django_grp.command
         def django(ctx: Context, *, dispatched: DispatchCommand) -> int:
+            "Do it."
             print(f"local:{dispatched.command}")
             return 0
 
         @jenkins_grp.command
         def jenkins(ctx: Context, *, dispatched: DispatchCommand) -> int:
+            "Do it."
             print(f"jenkins:{dispatched.command}")
             return 0
         """
@@ -256,6 +259,7 @@ def test_e2e_collision_across_sources_fails_build(tmp_path: Path, toolr_bin: Pat
 
         @group.command
         def django(ctx: Context, *, dispatched: DispatchCommand) -> int:
+            "Do it."
             return 0
         """
         ).strip()
@@ -366,6 +370,7 @@ def test_e2e_dispatcher_outer_flags(tmp_path: Path, toolr_bin: Path) -> None:
             ram: str = "4Gi",
             dispatched: DispatchCommand,
         ) -> int:
+            "Do it."
             payload = {
                 "cpu": cpu,
                 "ram": ram,

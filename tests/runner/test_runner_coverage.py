@@ -871,6 +871,7 @@ def test_main_module_invocation_clean_exit(tmp_path: Path) -> None:
 
             @group.command
             def noop(ctx) -> None:
+                "Do it."
                 pass
             """
         )

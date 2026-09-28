@@ -16,6 +16,11 @@ in toolr 1.0 and continues to emit `ToolrDeprecationWarning`.
 from __future__ import annotations
 
 import logging
+import os
+import re
+import subprocess
+import sys
+import textwrap
 import warnings
 from collections.abc import Iterator
 
@@ -80,7 +85,8 @@ def test_group_command_decorator_returns_callable_unchanged():
         warnings.simplefilter("error", ToolrDeprecationWarning)
 
         @g.command
-        def f(ctx) -> None: ...
+        def f(ctx) -> None:
+            """Do it."""
 
     # The decorator's only contract is "return the function unchanged";
     # the static parser is what records the metadata downstream. Asserting
@@ -95,7 +101,8 @@ def test_group_command_with_explicit_name_returns_decorator():
         decorator = g.command("my-cmd")
     assert callable(decorator)
 
-    def f(ctx) -> None: ...
+    def f(ctx) -> None:
+        """Do it."""
 
     assert decorator(f) is f
 
@@ -104,7 +111,8 @@ def test_group_command_with_name_keyword_registers_under_that_name():
     g = command_group("legacy", "Legacy", description="Legacy group for tests")
 
     @g.command(name="collect")
-    def collect_data(ctx) -> None: ...
+    def collect_data(ctx) -> None:
+        """Do it."""
 
     commands = g.get_commands()
     # The `name=` keyword wins over the hyphenated function name.
@@ -116,7 +124,8 @@ def test_group_command_empty_parens_registers_under_function_name():
     g = command_group("legacy", "Legacy", description="Legacy group for tests")
 
     @g.command()
-    def collect_data(ctx) -> None: ...
+    def collect_data(ctx) -> None:
+        """Do it."""
 
     assert "collect-data" in g.get_commands()
 
@@ -125,12 +134,14 @@ def test_group_command_duplicate_name_overrides_and_logs(caplog: pytest.LogCaptu
     g = command_group("legacy", "Legacy", description="Legacy group for tests")
 
     @g.command(name="dup")
-    def first(ctx) -> None: ...
+    def first(ctx) -> None:
+        """Do it."""
 
     with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
 
         @g.command(name="dup")
-        def second(ctx) -> None: ...
+        def second(ctx) -> None:
+            """Do it."""
 
     # The second registration overrides the first under the same name.
     assert g.get_commands()["dup"].__name__ == "second"
@@ -164,7 +175,8 @@ def test_parent_command_group_method_still_emits_deprecation():
 
 def test_command_bare_form_returns_function_unchanged():
     @command
-    def f(ctx) -> None: ...
+    def f(ctx) -> None:
+        """Do it."""
 
     assert f.__name__ == "f"
 
@@ -172,7 +184,8 @@ def test_command_bare_form_returns_function_unchanged():
 def test_command_bare_form_rejects_kwargs_via_typeerror():
     # `@command def f(): ...` is the no-paren form; passing kwargs in
     # that shape is a usage error caught at decoration time.
-    def f(ctx) -> None: ...
+    def f(ctx) -> None:
+        """Do it."""
 
     with pytest.raises(TypeError, match="kwargs"):
         command(f, group="ci")
@@ -187,7 +200,8 @@ def test_command_parameterised_form_returns_passthrough_decorator():
     decorator = command(group="ci")
     assert callable(decorator)
 
-    def f(ctx) -> None: ...
+    def f(ctx) -> None:
+        """Do it."""
 
     assert decorator(f) is f
 
@@ -198,7 +212,8 @@ def test_command_parameterised_form_with_string_first_arg():
     decorator = command("rename-me", group="ci")
     assert callable(decorator)
 
-    def f(ctx) -> None: ...
+    def f(ctx) -> None:
+        """Do it."""
 
     assert decorator(f) is f
 
@@ -209,7 +224,8 @@ def test_command_parameterised_form_with_name_keyword():
     decorator = command(name="rename-me", group="ci")
     assert callable(decorator)
 
-    def f(ctx) -> None: ...
+    def f(ctx) -> None:
+        """Do it."""
 
     assert decorator(f) is f
 
@@ -339,3 +355,111 @@ def test_command_group_returns_existing_instance_on_second_call(
     with caplog.at_level(logging.DEBUG, logger="toolr._decorators"):
         second = command_group("ci", "CI", description="CI")
     assert second is first
+
+
+# --------------------------------------------------------------------
+# Commands must have a docstring summary (#501)
+# --------------------------------------------------------------------
+
+
+def _bare(ctx) -> None:
+    pass
+
+
+def _empty(ctx) -> None:
+    """"""
+
+
+def _blank(ctx) -> None:
+    """ """
+
+
+def _sections_only(ctx, name: str) -> None:
+    """
+    Args:
+        name: Who to greet.
+    """
+
+
+@pytest.fixture(params=[_bare, _empty, _blank, _sections_only], ids=lambda f: f.__name__)
+def undocumented(request: pytest.FixtureRequest):
+    """Each docstring shape that gives a command no summary line."""
+    return request.param
+
+
+@pytest.mark.parametrize(
+    "register",
+    [
+        pytest.param(
+            lambda f: command_group("doc", "Doc", description="Doc").command(f), id="group-bare"
+        ),
+        pytest.param(
+            # A lambda so the group registers inside the test, where the
+            # autouse fixture isolates the registry, not at collection.
+            lambda f: command_group("doc", "Doc", description="Doc").command("x")(f),  # noqa: PLW0108
+            id="group-named",
+        ),
+        pytest.param(command, id="command-bare"),
+        pytest.param(command(group="doc"), id="command-grouped"),
+    ],
+)
+def test_command_without_docstring_summary_is_rejected(register, undocumented):
+    with pytest.raises(
+        ValueError,
+        match=re.escape(f"{undocumented.__module__}::{undocumented.__qualname__}: add a docstring"),
+    ):
+        register(undocumented)
+
+
+def test_command_with_docstring_summary_is_accepted():
+    def documented(ctx) -> None:
+        """Has a summary."""
+
+    g = command_group("doc", "Doc", description="Doc")
+    assert g.command(documented) is documented
+    assert command(documented) is documented
+
+
+@pytest.mark.parametrize(
+    ("flags", "env"),
+    [
+        pytest.param(["-OO"], {}, id="flag"),
+        pytest.param([], {"PYTHONOPTIMIZE": "2"}, id="env"),
+    ],
+)
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        pytest.param(
+            """
+            from toolr import command_group
+
+            command_group("doc", "Doc", docstring=__doc__)
+            """,
+            id="group-docstring",
+        ),
+        pytest.param(
+            """
+            from toolr import command
+
+            @command
+            def documented(ctx):
+                \"\"\"Has a summary.\"\"\"
+            """,
+            id="command",
+        ),
+    ],
+)
+def test_stripped_docstrings_are_refused(flags, env, declaration):
+    # Under `-OO` every docstring is gone, so a documented command looks
+    # undocumented; refuse outright rather than skip the check.
+    script = '"""Module docs."""\n' + textwrap.dedent(declaration)
+    result = subprocess.run(  # noqa: S603  # the interpreter and script are test-controlled
+        [sys.executable, *flags, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, **env},
+    )
+    assert result.returncode != 0
+    assert "toolr can't run under `python -OO` or `PYTHONOPTIMIZE=2`" in result.stderr

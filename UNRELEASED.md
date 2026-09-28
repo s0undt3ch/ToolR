@@ -76,6 +76,15 @@ with only sections such as `Args:`. The error names the module and function of
 every offending command. Before, such a command built with an empty `--help`
 summary, although the docs already said it was rejected. The check applies to
 `toolr project manifest rebuild`, the automatic rebuild of a stale manifest, and
-`toolr self build-manifest`. Commands grafted from argparse sources are not
-affected. To fix a failing build, give each listed command a one-line docstring.
+`toolr self build-manifest`. The `@command` decorators apply the same rule at
+import time and raise a `ValueError`, so a `toolr.testing.CommandsTester`
+discovery test fails the same way the build does. Commands grafted from
+argparse sources are not affected. To fix a failing build, give each listed
+command a one-line docstring.
+
+toolr now also refuses to run under `python -OO` or `PYTHONOPTIMIZE=2`, which
+strip every docstring. Declaring a command, or a group described by its
+docstring, raises a `RuntimeError` saying so. Before, a group declared with
+`docstring=__doc__` failed there with a misleading "must pass either docstring
+or description" error.
 ([#501](https://github.com/s0undt3ch/ToolR/issues/501))

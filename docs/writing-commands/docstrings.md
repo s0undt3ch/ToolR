@@ -63,6 +63,12 @@ commands without a docstring (1):
 
 This applies to `toolr project manifest rebuild`, to the automatic rebuild
 when the manifest is stale, and to `toolr self build-manifest` for plugins.
-Add a one-line summary and you're good.
+The `@command` decorators apply the same rule when the module is imported, so
+a `toolr.testing.CommandsTester` discovery test fails the same way, with a
+`ValueError` naming the command. Add a one-line summary and you're good.
+
+toolr refuses to run under `python -OO` or `PYTHONOPTIMIZE=2`. Both strip
+every docstring, and toolr describes commands and groups by theirs, so the
+decorators raise a `RuntimeError` instead.
 
 Next: [Using `ctx` →](context.md)

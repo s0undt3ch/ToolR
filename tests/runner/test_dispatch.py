@@ -97,6 +97,7 @@ def test_runner_invokes_target_function(
 
         @group.command
         def hello(ctx, name: str = "world") -> None:
+            "Do it."
             ctx.print(f"hi {name}")
         """
     )
@@ -119,6 +120,7 @@ def test_runner_propagates_nonzero_exit_via_ctx_exit(
 
         @group.command
         def boom(ctx) -> None:
+            "Do it."
             ctx.exit(7, "failing on purpose")
         """
     )
@@ -140,6 +142,7 @@ def test_runner_propagates_exception_as_exit_1(
 
         @group.command
         def crash(ctx) -> None:
+            "Do it."
             raise RuntimeError("crashed")
         """
     )

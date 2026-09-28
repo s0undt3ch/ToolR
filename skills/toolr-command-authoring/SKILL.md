@@ -62,7 +62,7 @@ drift.
    (`toolr <group> <cmd> --help`). `Args:` populates per-argument
    help. Every command needs a docstring with a summary line. One with
    no docstring, a blank one, or only an `Args:` section fails the
-   manifest build.
+   manifest build, and raises `ValueError` when its module is imported.
 6. **Try it.** `toolr <group> <cmd> --help` builds the manifest on
    the fly if it's stale (the freshness work landed in 0.20.0); on
    older toolr fall back to `toolr project manifest rebuild`. If the

@@ -191,6 +191,7 @@ def test_real_world_tool_structure(commands_tester):
 
     @ci_group.command("validate")
     def ci_validate(ctx: Context):
+        "Do it."
         return "Validating CI config"
 
     # Deployment under CI
