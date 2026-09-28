@@ -5,7 +5,9 @@ description: |
   adding, editing, or refactoring a toolr command, group, or context
   hook; when introducing a new `tools/` directory; when wiring
   `@command`, `@command_group`, `@arg`, or `@arg_section` decorators;
-  when configuring a command's docstring-driven `--help`; or when
+  when configuring a command's docstring-driven `--help`; when
+  exposing existing argparse scripts or Django management commands
+  through toolr (`DispatchCommand`, `[tool.toolr.argparse.*]`); or when
   debugging "command not found" / "manifest stale" errors against
   toolr. Triggers on phrases like "add a toolr command", "extend
   toolr", "wire a new toolr group", "toolr tools/", `@command_group`,
@@ -125,6 +127,13 @@ Add this to `tools/greet.py`, then `toolr greet hello --help` works.
   or relative (`from . import helpers`, `from .helpers import render`).
   Either is fine — share helpers this way rather than with `sys.path`
   hacks.
+- **Wrapping existing argparse tools.** Don't rewrite a pile of
+  argparse scripts or Django management commands as toolr commands.
+  Write one dispatcher command that takes a keyword-only
+  `DispatchCommand` parameter. Then add a `[tool.toolr.argparse.<block>]`
+  table in `tools/pyproject.toml` that scans the files and attaches them
+  under it. Each file becomes one command, named after its stem. See
+  [`references/external-sources.md`](references/external-sources.md).
 
 ## Getting `ctx` inside a helper function
 
@@ -228,6 +237,11 @@ make its registration a top-level, statically-visible declaration.
   parameter shape (positionals, `T | None`, flags, `Literal`/enums,
   `list[T]`, `*args`, path constraints, module-level aliases, tuples,
   `Count`) becomes a CLI argument, extracted from the docs.
+- [`references/external-sources.md`](references/external-sources.md) —
+  grafting existing argparse scripts or Django management commands
+  under a `DispatchCommand` dispatcher: the config table, the payload
+  fields, and worked Django and plain-argparse examples, extracted from
+  the docs.
 - [`references/commands.md`](references/commands.md) — every name
   exposed by `import toolr`. Signatures, defaults, annotations, and
   docstrings, regenerated from `toolr.__all__` on every release.

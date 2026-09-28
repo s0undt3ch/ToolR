@@ -19,6 +19,9 @@ should_activate:
   - "Debug why my new toolr command isn't showing up in --help"
   - "How do I declare an arg_section so my logging flags group together?"
   - "Convert this argparse script into a toolr command"
+  - "Wire our Django management commands into toolr"
+  - "Expose the argparse scripts under scripts/ as toolr commands without rewriting them"
+  - "How do I use DispatchCommand in a toolr dispatcher?"
 
 should_not_activate:
   # Packaging is a separate skill.
