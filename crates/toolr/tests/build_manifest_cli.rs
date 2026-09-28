@@ -172,3 +172,53 @@ fn python_flag_is_no_longer_accepted() {
         "expected unknown-arg error; got: {stderr}"
     );
 }
+
+/// Issue #500, plugin side: a bad `arg()` keyword must not reach a
+/// shipped `toolr-manifest.json`.
+#[test]
+fn unknown_arg_keyword_fails_plugin_build() {
+    let tmp = TempDir::new().unwrap();
+    let pkg = tmp.path().join("mypkg");
+    write(&pkg, "__init__.py", "");
+    write(
+        &pkg,
+        "kw.py",
+        r#"from pathlib import Path
+from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> None:
+    """Read a config."""
+    ctx.print(f"got {config}")
+"#,
+    );
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["self", "build-manifest", "--source-dir"])
+        .arg(&pkg)
+        .args(["--package", "mypkg"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "build unexpectedly succeeded: {stderr}"
+    );
+    assert!(
+        stderr.contains("invalid parameter declarations (1):")
+            && stderr.contains("mypkg.kw::read argument `config`")
+            && stderr
+                .contains("unknown `arg()` keyword `path_must_exist` (did you mean `must_exist`?)"),
+        "stderr: {stderr}"
+    );
+    assert!(
+        !pkg.join("toolr-manifest.json").exists(),
+        "manifest was written"
+    );
+}

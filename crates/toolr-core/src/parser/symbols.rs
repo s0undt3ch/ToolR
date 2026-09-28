@@ -258,6 +258,16 @@ pub struct ImportTable {
     /// a command-signature annotation with a specific, actionable
     /// message — this table never resolves such a binding to a class.
     module_bindings: HashMap<String, String>,
+    /// Names the module binds itself at top level (`def`, `class`,
+    /// assignment), so a local `arg` isn't mistaken for toolr's. Values
+    /// are binding positions (see `seq`); the last one is kept.
+    local_names: HashMap<String, usize>,
+    /// Position of the last `from ... import` binding of each name.
+    import_positions: HashMap<String, usize>,
+    /// Source modules of `from X import *`.
+    star_modules: Vec<String>,
+    /// Source-order counter shared by imports and local bindings.
+    seq: usize,
 }
 
 impl ImportTable {
@@ -299,6 +309,24 @@ impl ImportTable {
                         });
                     self.module_bindings
                         .insert(local, alias.name.as_str().to_string());
+                }
+            }
+            Stmt::FunctionDef(f) => {
+                self.bind_local(f.name.to_string());
+            }
+            Stmt::ClassDef(c) => {
+                self.bind_local(c.name.to_string());
+            }
+            Stmt::Assign(assign) => {
+                for target in &assign.targets {
+                    if let Expr::Name(n) = target {
+                        self.bind_local(n.id.to_string());
+                    }
+                }
+            }
+            Stmt::AnnAssign(assign) => {
+                if let Expr::Name(n) = assign.target.as_ref() {
+                    self.bind_local(n.id.to_string());
                 }
             }
             Stmt::If(if_stmt) if is_type_checking_test(&if_stmt.test) => {
@@ -356,6 +384,7 @@ impl ImportTable {
         for alias in &import.names {
             if alias.name.as_str() == "*" {
                 self.star_import = true;
+                self.star_modules.push(target_module.clone());
                 continue;
             }
             let original_name = alias.name.as_str().to_string();
@@ -364,6 +393,8 @@ impl ImportTable {
                 .as_ref()
                 .map(|n| n.as_str().to_string())
                 .unwrap_or_else(|| original_name.clone());
+            self.seq += 1;
+            self.import_positions.insert(local.clone(), self.seq);
             self.entries.entry(local).or_default().push(ImportedFrom {
                 module: target_module.clone(),
                 original_name,
@@ -394,6 +425,26 @@ impl ImportTable {
     /// pointing at `from foo.bar.baz import X` instead.
     pub fn resolve_module_binding(&self, name: &str) -> Option<&str> {
         self.module_bindings.get(name).map(String::as_str)
+    }
+
+    fn bind_local(&mut self, name: String) {
+        self.seq += 1;
+        self.local_names.insert(name, self.seq);
+    }
+
+    /// Whether the module's last top-level binding of `name` is its own
+    /// `def`, `class` or assignment rather than a `from ... import`.
+    pub fn local_binding_wins(&self, name: &str) -> bool {
+        match (self.local_names.get(name), self.import_positions.get(name)) {
+            (Some(local), Some(import)) => local > import,
+            (Some(_), None) => true,
+            _ => false,
+        }
+    }
+
+    /// Source modules of this module's `from X import *` statements.
+    pub fn star_import_modules(&self) -> &[String] {
+        &self.star_modules
     }
 }
 
@@ -540,6 +591,9 @@ fn literal_value(expr: &Expr) -> Option<String> {
 #[derive(Debug, Default, Clone)]
 pub struct TypeAliasTable {
     aliases: HashMap<String, Expr>,
+    /// The same aliases keyed by defining module, for checks that must
+    /// respect which module can actually see an alias.
+    by_module: HashMap<String, HashMap<String, Expr>>,
 }
 
 impl TypeAliasTable {
@@ -565,6 +619,22 @@ impl TypeAliasTable {
         table
     }
 
+    /// Like [`Self::from_module`], also recording `module_path` as the
+    /// aliases' defining module for [`Self::lookup_in`].
+    pub fn from_module_at(module: &ModModule, module_path: &str) -> Self {
+        let mut table = Self::from_module(module);
+        table
+            .by_module
+            .insert(module_path.to_string(), table.aliases.clone());
+        table
+    }
+
+    /// The alias `name` as defined in `module_path` itself; only
+    /// populated by [`Self::from_module_at`].
+    pub fn lookup_in(&self, module_path: &str, name: &str) -> Option<&Expr> {
+        self.by_module.get(module_path)?.get(name)
+    }
+
     /// Returns the underlying annotation expression for `name`, if it
     /// was assigned via a module-level type alias.
     pub fn lookup(&self, name: &str) -> Option<&Expr> {
@@ -573,6 +643,7 @@ impl TypeAliasTable {
 
     pub fn merge(&mut self, other: TypeAliasTable) {
         self.aliases.extend(other.aliases);
+        self.by_module.extend(other.by_module);
     }
 }
 

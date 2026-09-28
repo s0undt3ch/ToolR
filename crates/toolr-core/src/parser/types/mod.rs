@@ -11,6 +11,7 @@
 //! ResolvedPath as RP` style aliases without doing a full symbol-table
 //! pass over the file.
 
+mod arg_keywords;
 mod arg_metadata;
 mod imports;
 mod literals;
@@ -18,6 +19,7 @@ mod path_constraints;
 mod resolve;
 mod supported;
 
+pub use arg_keywords::{ACTIVE_ARG_KEYWORDS, DEPRECATED_ARG_KEYWORDS};
 pub use arg_metadata::extract_arg_metadata;
 pub use imports::{SourcesImports, TypeImports};
 pub use path_constraints::{extract_path_constraints, PathConstraintDoc, PathConstraints};
@@ -37,6 +39,33 @@ pub(super) fn is_toolr_arg_call(call: &ExprCall) -> bool {
         Expr::Attribute(a) => a.attr.as_str() == "arg",
         _ => false,
     }
+}
+
+/// The toolr `arg(...)` calls among an `Annotated[T, ...]` annotation's
+/// metadata elements; empty for any other annotation shape.
+pub(super) fn toolr_arg_calls(annotation: &Expr) -> Vec<&ExprCall> {
+    let Expr::Subscript(sub) = annotation else {
+        return Vec::new();
+    };
+    let head = match sub.value.as_ref() {
+        Expr::Name(n) => n.id.as_str(),
+        Expr::Attribute(a) => a.attr.as_str(),
+        _ => return Vec::new(),
+    };
+    if head != "Annotated" {
+        return Vec::new();
+    }
+    let elts: Vec<&Expr> = match sub.slice.as_ref() {
+        Expr::Tuple(t) => t.elts.iter().collect(),
+        single => vec![single],
+    };
+    elts.into_iter()
+        .skip(1)
+        .filter_map(|elt| match elt {
+            Expr::Call(call) if is_toolr_arg_call(call) => Some(call),
+            _ => None,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -717,5 +746,27 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
         )
         .unwrap();
         assert_eq!(resolved, SupportedType::Count);
+    }
+
+    #[test]
+    fn toolr_arg_calls_accepts_qualified_annotated_head() {
+        let (_, ann) = first_annotation(
+            "def f(x: typing.Annotated[Path, arg(must_exist=True)]): pass\n",
+        );
+        assert_eq!(toolr_arg_calls(&ann).len(), 1);
+        assert!(extract_path_constraints(&ann).is_some_and(|c| c.must_exist));
+    }
+
+    #[test]
+    fn toolr_arg_calls_ignores_non_annotated_subscripts() {
+        for src in [
+            "def f(x: registry[0][int]): pass\n",
+            "def f(x: list[arg(must_exist=True)]): pass\n",
+            "def f(x: Annotated[Path]): pass\n",
+        ] {
+            let (_, ann) = first_annotation(src);
+            assert!(toolr_arg_calls(&ann).is_empty(), "{src}");
+            assert_eq!(extract_path_constraints(&ann), None, "{src}");
+        }
     }
 }

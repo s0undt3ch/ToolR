@@ -50,7 +50,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
             ImportTable::from_module(&module, &module_path, is_package),
         );
         enums.merge(EnumTable::from_module(&module, &module_path));
-        aliases.merge(TypeAliasTable::from_module(&module));
+        aliases.merge(TypeAliasTable::from_module_at(&module, &module_path));
         sections.merge(ArgSectionTable::from_module(&module));
     }
 
@@ -231,7 +231,7 @@ pub enum BuildError {
     Build(#[source] anyhow::Error),
     #[error("third-party merge error: {0}")]
     ThirdParty(#[from] ThirdPartyError),
-    #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
+    #[error("invalid parameter declarations ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
     UnknownGroupRefs(Vec<UnknownGroupRef>),
@@ -466,7 +466,7 @@ fn nearest_group(target: &str, registered: &HashSet<String>) -> Option<String> {
 }
 
 /// Plain Levenshtein distance (insert / delete / substitute).
-fn edit_distance(a: &str, b: &str) -> usize {
+pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let (m, n) = (a.len(), b.len());
@@ -569,6 +569,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 mod tests {
     use super::*;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
+    use crate::parser::types::UnsupportedType;
     use tempfile::TempDir;
 
     fn arg(kind: ArgumentKind, name: &str, long_flag: Option<&str>) -> Argument {
@@ -1345,6 +1346,591 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
                 assert_eq!(module, "tools.module_b");
             }
             other => panic!("expected Enum resolved_type, got {other:?}"),
+        }
+    }
+
+    fn type_errors_for(files: &[(&str, &str)]) -> Vec<TypeResolutionError> {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        let err = build_static_manifest_inner(&tmp.path().join("tools"))
+            .expect_err("expected the build to fail");
+        let BuildError::UnsupportedTypes(errs) = err else { unreachable!("expected UnsupportedTypes") };
+        errs
+    }
+
+    fn assert_builds(src: &str) {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "tools/kw.py", src);
+        build_static_manifest(&tmp.path().join("tools")).expect("expected the build to succeed");
+    }
+
+    fn unknown_keyword(keyword: &str, suggestion: Option<&str>) -> UnsupportedType {
+        UnsupportedType::UnknownArgKeyword {
+            keyword: keyword.to_string(),
+            suggestion: suggestion.map(str::to_string),
+        }
+    }
+
+    /// The exact shape from issue #500.
+    const ISSUE_500_KW_PY: &str = r#"from pathlib import Path
+from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> None:
+    """Read a config."""
+    ctx.print(f"got {config}")
+"#;
+
+    #[test]
+    fn unknown_arg_keyword_path_must_exist_fails_build_suggesting_must_exist() {
+        let errs = type_errors_for(&[("tools/kw.py", ISSUE_500_KW_PY)]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        let err = &errs[0];
+        assert_eq!(err.module, "tools.kw");
+        assert_eq!(err.function, "read");
+        assert_eq!(err.argument, "config");
+        assert_eq!(
+            err.reason,
+            unknown_keyword("path_must_exist", Some("must_exist"))
+        );
+        let msg = BuildError::UnsupportedTypes(errs).to_string();
+        assert!(
+            msg.starts_with("invalid parameter declarations (1):"),
+            "got: {msg}"
+        );
+        assert!(
+            msg.contains("unknown `arg()` keyword `path_must_exist` (did you mean `must_exist`?)"),
+            "got: {msg}"
+        );
+    }
+
+    #[test]
+    fn unknown_arg_keyword_via_module_level_alias_is_reported() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from pathlib import Path
+from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+ConfigPath = Annotated[Path, arg(must_bee_file=True)]
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, config: ConfigPath) -> None:
+    """Read a config."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].argument, "config");
+        assert_eq!(
+            errs[0].reason,
+            unknown_keyword("must_bee_file", Some("must_be_file"))
+        );
+    }
+
+    #[test]
+    fn unknown_keyword_in_toolr_dot_arg_attribute_form_is_reported() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from pathlib import Path
+from typing import Annotated
+
+import toolr
+
+group = toolr.command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: toolr.Context, config: Annotated[Path, toolr.arg(path_must_be_dir=True)]) -> None:
+    """Read a config."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(
+            errs[0].reason,
+            unknown_keyword("path_must_be_dir", Some("must_be_dir"))
+        );
+    }
+
+    #[test]
+    fn every_bad_arg_keyword_in_the_build_is_reported_together() {
+        let errs = type_errors_for(&[
+            ("tools/kw.py", ISSUE_500_KW_PY),
+            (
+                "tools/other.py",
+                r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("other", "Other", description="Other.")
+
+
+@group.command
+def run(ctx: Context, *, name: Annotated[str, arg(foo=1)] = "x") -> None:
+    """Run."""
+"#,
+            ),
+        ]);
+        assert_eq!(errs.len(), 2, "{errs:?}");
+        let reasons: Vec<&UnsupportedType> = errs.iter().map(|e| &e.reason).collect();
+        assert!(reasons.contains(&&unknown_keyword("path_must_exist", Some("must_exist"))));
+        assert!(reasons.contains(&&unknown_keyword("foo", None)));
+        let msg = BuildError::UnsupportedTypes(errs).to_string();
+        assert!(
+            msg.starts_with("invalid parameter declarations (2):"),
+            "got: {msg}"
+        );
+        assert!(msg.contains("unknown `arg()` keyword `foo`"), "got: {msg}");
+        assert!(!msg.contains("`foo` (did you mean"), "got: {msg}");
+    }
+
+    #[test]
+    fn positional_argument_to_arg_is_reported() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, name: Annotated[str, arg("x")]) -> None:
+    """Read."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, UnsupportedType::PositionalArgArgument);
+        assert!(errs[0]
+            .to_string()
+            .ends_with("`arg()` takes keyword arguments only"));
+    }
+
+    #[test]
+    fn deprecated_arg_keyword_is_still_accepted() {
+        assert_builds(
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg(required=True)] = "x") -> None:
+    """Read."""
+"#,
+        );
+    }
+
+    #[test]
+    fn every_accepted_arg_keyword_builds() {
+        for keyword in crate::parser::types::ACTIVE_ARG_KEYWORDS
+            .iter()
+            .chain(crate::parser::types::DEPRECATED_ARG_KEYWORDS)
+        {
+            assert_builds(&format!(
+                r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg({keyword}=None)] = "x") -> None:
+    """Read."""
+"#
+            ));
+        }
+    }
+
+    #[test]
+    fn non_toolr_call_inside_annotated_is_not_checked() {
+        assert_builds(
+            r#"from typing import Annotated
+
+from toolr import Context, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+def other(**kwargs):
+    return kwargs
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, other(foo=1)] = "x") -> None:
+    """Read."""
+"#,
+        );
+    }
+
+    #[test]
+    fn splatted_arg_arguments_are_not_checked() {
+        assert_builds(
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+KWARGS = {"metavar": "NAME"}
+ARGS = ()
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg(*ARGS, **KWARGS)] = "x") -> None:
+    """Read."""
+"#,
+        );
+    }
+
+    fn kw_module(imports: &str, prelude: &str, signature: &str) -> String {
+        format!(
+            r#"from pathlib import Path
+from typing import Annotated, Optional
+
+{imports}
+
+{prelude}
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, {signature}) -> None:
+    """Read a config."""
+"#
+        )
+    }
+
+    const TOOLR_IMPORTS: &str = "from toolr import Context, arg, command_group";
+
+    fn assert_path_must_exist_flagged(src: &str) {
+        let errs = type_errors_for(&[("tools/kw.py", src)]);
+        let flagged: Vec<&TypeResolutionError> = errs
+            .iter()
+            .filter(|e| e.reason == unknown_keyword("path_must_exist", Some("must_exist")))
+            .collect();
+        assert_eq!(flagged.len(), 1, "{errs:?}");
+        assert_eq!(flagged[0].function, "read");
+    }
+
+    #[test]
+    fn unknown_arg_keyword_in_annotated_or_none_with_none_default_is_reported() {
+        assert_path_must_exist_flagged(&kw_module(
+            TOOLR_IMPORTS,
+            "",
+            "config: Annotated[Path, arg(path_must_exist=True)] | None = None",
+        ));
+    }
+
+    #[test]
+    fn unknown_arg_keyword_in_optional_annotated_is_reported() {
+        assert_path_must_exist_flagged(&kw_module(
+            TOOLR_IMPORTS,
+            "",
+            "config: Optional[Annotated[Path, arg(path_must_exist=True)]] = None",
+        ));
+    }
+
+    #[test]
+    fn unknown_arg_keyword_in_list_of_annotated_is_reported() {
+        assert_path_must_exist_flagged(&kw_module(
+            TOOLR_IMPORTS,
+            "",
+            "configs: list[Annotated[Path, arg(path_must_exist=True)]]",
+        ));
+    }
+
+    #[test]
+    fn unknown_arg_keyword_in_alias_or_none_is_reported() {
+        assert_path_must_exist_flagged(&kw_module(
+            TOOLR_IMPORTS,
+            "ConfigPath = Annotated[Path, arg(path_must_exist=True)]",
+            "config: ConfigPath | None = None",
+        ));
+    }
+
+    #[test]
+    fn unknown_arg_keyword_through_alias_chain_is_reported() {
+        assert_path_must_exist_flagged(&kw_module(
+            TOOLR_IMPORTS,
+            "ConfigPath = Annotated[Path, arg(path_must_exist=True)]\nSettingsPath = ConfigPath",
+            "config: SettingsPath",
+        ));
+    }
+
+    #[test]
+    fn cyclic_alias_does_not_hang_the_arg_check() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            &kw_module(TOOLR_IMPORTS, "A = B\nB = A", "config: A"),
+        )]);
+        assert!(
+            errs.iter().all(|e| !matches!(e.reason, UnsupportedType::UnknownArgKeyword { .. })),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn renamed_toolr_arg_import_is_checked() {
+        assert_path_must_exist_flagged(&kw_module(
+            "from toolr import Context, command_group\nfrom toolr import arg as a",
+            "",
+            "config: Annotated[Path, a(path_must_exist=True)]",
+        ));
+    }
+
+    #[test]
+    fn toolr_module_alias_and_submodule_arg_calls_are_checked() {
+        assert_path_must_exist_flagged(&kw_module(
+            "import toolr as t\nfrom toolr import Context, command_group",
+            "",
+            "config: Annotated[Path, t.arg(path_must_exist=True)]",
+        ));
+        assert_path_must_exist_flagged(&kw_module(
+            "import toolr.utils\nfrom toolr import Context, command_group",
+            "",
+            "config: Annotated[Path, toolr.utils.arg(path_must_exist=True)]",
+        ));
+    }
+
+    #[test]
+    fn foreign_arg_attribute_call_is_not_checked() {
+        assert_builds(&kw_module(
+            "import mylib\nfrom toolr import Context, command_group",
+            "",
+            r#"*, name: Annotated[str, mylib.arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn foreign_bare_arg_import_is_not_checked() {
+        assert_builds(&kw_module(
+            "from mylib import arg\nfrom toolr import Context, command_group",
+            "",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn argparse_style_keywords_get_a_targeted_hint() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            &kw_module(
+                TOOLR_IMPORTS,
+                "",
+                r#"*, name: Annotated[str, arg(help="Name.", type=str, default="x")] = "x""#,
+            ),
+        )]);
+        assert_eq!(errs.len(), 3, "{errs:?}");
+        let msg = BuildError::UnsupportedTypes(errs).to_string();
+        assert!(!msg.contains("did you mean"), "got: {msg}");
+        for needle in [
+            "unknown `arg()` keyword `help`; help text comes from the docstring's `Args:` section",
+            "unknown `arg()` keyword `type`; the type comes from the annotation",
+            "unknown `arg()` keyword `default`; the default comes from the parameter's default value",
+        ] {
+            assert!(msg.contains(needle), "missing {needle:?} in: {msg}");
+        }
+    }
+
+    #[test]
+    fn local_arg_function_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "def arg(**kw):\n    return kw",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn local_arg_assignment_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "arg = dict",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn local_arg_annotated_assignment_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "arg: type = dict",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn local_arg_class_is_not_checked() {
+        assert_builds(&kw_module(
+            "from toolr import Context, command_group",
+            "class arg:\n    def __init__(self, **kw):\n        self.kw = kw",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    fn assert_tree_builds(files: &[(&str, &str)]) {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        build_static_manifest(&tmp.path().join("tools")).expect("expected the build to succeed");
+    }
+
+    #[test]
+    fn imported_alias_is_checked_against_its_defining_modules_imports() {
+        assert_tree_builds(&[
+            (
+                "tools/other.py",
+                "from typing import Annotated\n\nfrom mylib import arg\n\nTagged = Annotated[str, arg(foo=1)]\n",
+            ),
+            (
+                "tools/kw.py",
+                &kw_module(
+                    "from toolr import Context, arg, command_group\nfrom tools.other import Tagged",
+                    "",
+                    "name: Tagged",
+                ),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn alias_the_using_module_never_imported_is_not_expanded() {
+        assert_tree_builds(&[
+            (
+                "tools/other.py",
+                "from typing import Annotated\n\nfrom toolr import arg\n\nName = Annotated[str, arg(foo=1)]\n",
+            ),
+            (
+                "tools/kw.py",
+                &kw_module(
+                    "from toolr import Context, command_group\nfrom mylib import Name",
+                    "",
+                    "name: list[Name] | None = None",
+                ),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn alias_imported_from_a_sibling_module_is_checked() {
+        let common = "from pathlib import Path\nfrom typing import Annotated\n\nfrom toolr import arg\n\nConfigPath = Annotated[Path, arg(path_must_exist=True)]\n";
+        for import in [
+            "from tools.common import ConfigPath",
+            "from .common import ConfigPath",
+        ] {
+            let kw = kw_module(
+                &format!("from toolr import Context, command_group\n{import}"),
+                "",
+                "config: ConfigPath | None = None",
+            );
+            let errs = type_errors_for(&[("tools/common.py", common), ("tools/kw.py", &kw)]);
+            assert_eq!(errs.len(), 1, "{import}: {errs:?}");
+            assert_eq!(
+                errs[0].reason,
+                unknown_keyword("path_must_exist", Some("must_exist")),
+                "{import}"
+            );
+        }
+    }
+
+    #[test]
+    fn alias_pulled_in_by_a_star_import_is_checked() {
+        let common = "from pathlib import Path\nfrom typing import Annotated\n\nfrom toolr import arg\n\nConfigPath = Annotated[Path, arg(path_must_exist=True)]\n";
+        for import in ["from tools.common import *", "from .common import *"] {
+            let kw = kw_module(
+                &format!("from toolr import Context, command_group\n{import}"),
+                "",
+                "config: ConfigPath | None = None",
+            );
+            let errs = type_errors_for(&[("tools/common.py", common), ("tools/kw.py", &kw)]);
+            let flagged = errs
+                .iter()
+                .filter(|e| e.reason == unknown_keyword("path_must_exist", Some("must_exist")))
+                .count();
+            assert_eq!(flagged, 1, "{import}: {errs:?}");
+        }
+    }
+
+    #[test]
+    fn local_arg_def_after_toolr_import_is_not_checked() {
+        assert_builds(&kw_module(
+            TOOLR_IMPORTS,
+            "def arg(**kw):\n    return kw",
+            r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+        ));
+    }
+
+    #[test]
+    fn toolr_import_after_local_arg_def_is_checked() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            &kw_module(
+                "from toolr import Context, command_group",
+                "def arg(**kw):\n    return kw\n\n\nfrom toolr import arg",
+                r#"*, name: Annotated[str, arg(foo=1)] = "x""#,
+            ),
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, unknown_keyword("foo", None));
+    }
+
+    #[test]
+    fn alias_behind_a_star_import_from_an_unparsed_module_is_not_expanded() {
+        assert_tree_builds(&[
+            (
+                "tools/other.py",
+                "from typing import Annotated\n\nfrom toolr import arg\n\nTagged = Annotated[str, arg(foo=1)]\n",
+            ),
+            (
+                "tools/kw.py",
+                &kw_module(
+                    "from toolr import Context, command_group\nfrom mylib import *",
+                    "",
+                    "name: Tagged",
+                ),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn bare_arg_behind_a_toolr_star_import_is_checked() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            &kw_module(
+                "from toolr import *",
+                "",
+                "config: Annotated[Path, arg(path_must_exist=True)]",
+            ),
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, unknown_keyword("path_must_exist", Some("must_exist")));
+    }
+
+    #[test]
+    fn non_arg_calls_inside_annotated_are_not_checked() {
+        for call in ["make().arg(foo=1)", "mylib.other(foo=1)", "FACTORIES[0](foo=1)"] {
+            assert_builds(&kw_module(
+                "from toolr import Context, command_group\nimport mylib\nfrom mylib import FACTORIES, make",
+                "",
+                &format!(r#"*, name: Annotated[str, {call}] = "x""#),
+            ));
         }
     }
 }

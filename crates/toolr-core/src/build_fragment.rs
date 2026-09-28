@@ -31,7 +31,7 @@ pub enum BuildFragmentError {
         #[source]
         source: anyhow::Error,
     },
-    #[error("unsupported parameter types ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
+    #[error("invalid parameter declarations ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
     ConflictingCommandName(Vec<CommandNameConflict>),
@@ -104,7 +104,7 @@ pub fn build_third_party_fragment(
             ImportTable::from_module(&module, &module_path, is_package),
         );
         enums.merge(EnumTable::from_module(&module, &module_path));
-        aliases.merge(TypeAliasTable::from_module(&module));
+        aliases.merge(TypeAliasTable::from_module_at(&module, &module_path));
         sections.merge(ArgSectionTable::from_module(&module));
     }
 

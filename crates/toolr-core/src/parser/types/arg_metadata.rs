@@ -9,7 +9,7 @@
 
 use ruff_python_ast::{Expr, ExprCall};
 
-use super::is_toolr_arg_call;
+use super::toolr_arg_calls;
 use super::literals::{literal_str, literal_str_list, literal_u32};
 use crate::manifest::{ArgMetadata, HelpSection};
 use crate::parser::symbols::ArgSectionTable;
@@ -22,28 +22,9 @@ pub fn extract_arg_metadata(
     annotation: &Expr,
     sections: &ArgSectionTable,
 ) -> Option<ArgMetadata> {
-    let Expr::Subscript(sub) = annotation else {
-        return None;
-    };
-    let head = match sub.value.as_ref() {
-        Expr::Name(n) => n.id.as_str(),
-        Expr::Attribute(a) => a.attr.as_str(),
-        _ => return None,
-    };
-    if head != "Annotated" {
-        return None;
-    }
-    let elts: Vec<&Expr> = match sub.slice.as_ref() {
-        Expr::Tuple(t) => t.elts.iter().collect(),
-        single => vec![single],
-    };
     let mut md = ArgMetadata::default();
     let mut hit = false;
-    for elt in elts.iter().skip(1) {
-        let Expr::Call(call) = elt else { continue };
-        if !is_toolr_arg_call(call) {
-            continue;
-        }
+    for call in toolr_arg_calls(annotation) {
         for kw in &call.arguments.keywords {
             let Some(name) = kw.arg.as_ref().map(|n| n.as_str()) else {
                 continue;

@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 use ruff_python_ast::{Expr, StmtFunctionDef};
 
+use super::arg_keywords::check_arg_calls;
 use super::arg_metadata::extract_arg_metadata;
 use super::path_constraints::extract_path_constraints;
 use super::supported::{SupportedType, TypeResolutionError, UnsupportedType};
@@ -133,6 +134,15 @@ fn resolve_one(
         .or_else(|| follow_alias_for_arg_metadata(expr, aliases, sections))
     {
         arg.metadata = md;
+    }
+    for reason in check_arg_calls(expr, aliases, all_imports, module) {
+        errors.push(TypeResolutionError {
+            module: module.to_string(),
+            function: function.to_string(),
+            argument: arg.name.clone(),
+            annotation: arg.type_annotation.clone().unwrap_or_default(),
+            reason,
+        });
     }
     match resolve(expr, enums, all_imports, type_imports, aliases, module) {
         Ok(ty) => {
