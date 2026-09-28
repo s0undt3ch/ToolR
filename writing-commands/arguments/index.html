@@ -2132,19 +2132,19 @@ clear error rather than confusing runtime behavior:</p>
 </thead>
 <tbody>
 <tr>
-<td>At most <strong>one</strong> <code>T \| None</code> positional per command.</td>
+<td>At most <strong>one</strong> <code>T &#124; None</code> positional per command.</td>
 <td>clap can't disambiguate two trailing optionals — which arg fills which slot?</td>
 </tr>
 <tr>
-<td>Required positionals must appear <strong>before</strong> the <code>T \| None</code> slot.</td>
+<td>Required positionals must appear <strong>before</strong> the <code>T &#124; None</code> slot.</td>
 <td>Once the parser accepts "no value here" it can't backtrack to fill a required slot that comes later.</td>
 </tr>
 <tr>
-<td><code>T \| None</code> and <code>*args: T</code> cannot coexist.</td>
+<td><code>T &#124; None</code> and <code>*args: T</code> cannot coexist.</td>
 <td>Both compete for the trailing slot.</td>
 </tr>
 <tr>
-<td>Fixed-arity <code>tuple[T1, T2, …]</code> positionals <strong>may</strong> precede a <code>T \| None</code> slot.</td>
+<td>Fixed-arity <code>tuple[T1, T2, …]</code> positionals <strong>may</strong> precede a <code>T &#124; None</code> slot.</td>
 <td>Tuples have deterministic arity, so there's no ambiguity.</td>
 </tr>
 </tbody>

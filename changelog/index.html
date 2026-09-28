@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev93-2026-09-28" class="md-nav__link">
+  <a href="#0331-dev96-2026-09-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev93 - 2026-09-28
+        0.33.1-dev96 - 2026-09-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev93 - 2026-09-28">
+    <nav class="md-nav" aria-label="0.33.1-dev96 - 2026-09-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1501,6 +1501,17 @@
     <span class="md-ellipsis">
       
         Agent skills are now self-contained
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-authoring-skill-covers-external-command-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The authoring skill covers external command sources
       
     </span>
   </a>
@@ -4074,15 +4085,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev93-2026-09-28" class="md-nav__link">
+  <a href="#0331-dev96-2026-09-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev93 - 2026-09-28
+        0.33.1-dev96 - 2026-09-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev93 - 2026-09-28">
+    <nav class="md-nav" aria-label="0.33.1-dev96 - 2026-09-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4112,6 +4123,17 @@
     <span class="md-ellipsis">
       
         Agent skills are now self-contained
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-authoring-skill-covers-external-command-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The authoring skill covers external command sources
       
     </span>
   </a>
@@ -6680,7 +6702,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev93-2026-09-28">0.33.1-dev93 - 2026-09-28<a class="headerlink" href="#0331-dev93-2026-09-28" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev96-2026-09-28">0.33.1-dev96 - 2026-09-28<a class="headerlink" href="#0331-dev96-2026-09-28" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6699,6 +6721,14 @@ site or repository. The docs' path-constraint table previously documented
 <code>arg(path_must_exist=...)</code>; the real keywords are <code>must_exist</code>,
 <code>must_be_file</code> and <code>must_be_dir</code>, and the docs now generate that table from the
 code.</p>
+<h3 id="the-authoring-skill-covers-external-command-sources">The authoring skill covers external command sources<a class="headerlink" href="#the-authoring-skill-covers-external-command-sources" title="Permanent link">&para;</a></h3>
+<p>The <code>toolr-command-authoring</code> skill now teaches agents how to put existing
+argparse scripts and Django management commands behind a <code>DispatchCommand</code>
+dispatcher, instead of rewriting each one as a toolr command. It ships the
+configuration table and worked examples from the docs, and <code>DispatchCommand</code>
+now has a docstring. The external sources docs gain a plain-argparse example.
+They now also say that a script's subparser arguments merge into its single
+command, and list the payload's <code>schema</code> field.</p>
 <h3 id="install-toolr-with-mises-packslip-backend">Install toolr with mise's packslip backend<a class="headerlink" href="#install-toolr-with-mises-packslip-backend" title="Permanent link">&para;</a></h3>
 <p>Releases now ship a signed <a href="https://packslip.dev/">packslip</a> manifest, so
 <code>mise use packslip:github.com/s0undt3ch/ToolR</code> installs toolr with signature
@@ -6754,6 +6784,7 @@ parameter types". (<a href="https://github.com/s0undt3ch/ToolR/issues/500">#500<
 <li><em>(parser)</em> Scope arg() checks to what each module can see (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/cd09eff64efb8edcffb55e9589400ad2dbf2c2d2"><code>cd09eff</code></a>)</li>
 <li><em>(parser)</em> Follow star-imported aliases and binding order in arg() check (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/eb8bc5244ee843e90886fe5056dbe3c6cbcaf52d"><code>eb8bc52</code></a>)</li>
 <li><em>(parser)</em> Don't guess aliases behind unparsed star imports (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/70f0dd762cdcce8e3d7bbaaee902af4dbf80c57d"><code>70f0dd7</code></a>)</li>
+<li><em>(xtask)</em> Make the docs section extractor faithful to mkdocs (#505) (<a href="https://github.com/s0undt3ch/ToolR/commit/92db6021862dd1c66c910a171f4c9cae509c18bc"><code>92db602</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6788,6 +6819,7 @@ parameter types". (<a href="https://github.com/s0undt3ch/ToolR/issues/500">#500<
 <li><em>(specs)</em> Document packslip partial-failure recovery and the CLI install path (<a href="https://github.com/s0undt3ch/ToolR/commit/ef87462759f23b0939d90bddc2d65e456dcd7509"><code>ef87462</code></a>)</li>
 <li>Note that unknown arg() keywords now fail the manifest build (<a href="https://github.com/s0undt3ch/ToolR/commit/9045e7d82030c96f5e535c44d376d4e2a0ec5fd6"><code>9045e7d</code></a>)</li>
 <li>Note nested arg() checks and argparse-keyword hints (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/26f0d0a10257c367b81e6483fcfa18b478cd5131"><code>26f0d0a</code></a>)</li>
+<li><em>(skills)</em> Cover external command sources in the authoring skill (#507) (<a href="https://github.com/s0undt3ch/ToolR/commit/bcb8c78e3ea11cb9a5612a9b6f4432705548ca71"><code>bcb8c78</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
