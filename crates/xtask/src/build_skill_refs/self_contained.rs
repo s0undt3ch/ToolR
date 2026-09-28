@@ -6,7 +6,9 @@ use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use super::docs_section::{Fence, code_span_end, find_links, is_reference_definition};
+use super::docs_section::{
+    Fence, code_span_end, find_links, html_targets, is_reference_definition,
+};
 use super::{normalize_newlines, read_text};
 
 const DESIGN: &str = "specs/archive/2026/2026-09-27-skills-self-contained-design.md";
@@ -419,44 +421,6 @@ fn is_repo_url(url: &str, urls: &[String]) -> bool {
     let rest = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
     let rest = rest.strip_prefix("www.").unwrap_or(rest);
     urls.iter().any(|p| rest.starts_with(p.as_str()))
-}
-
-/// Values of raw HTML `href=` / `src=` attributes, quoted or not, with
-/// their byte ranges.
-fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> {
-    let lower = text.to_ascii_lowercase();
-    let mut out = Vec::new();
-    for attr in ["href=", "src="] {
-        let mut from = 0;
-        while let Some(k) = lower[from..].find(attr) {
-            let at = from + k;
-            from = at + attr.len();
-            if at > 0 && !lower.as_bytes()[at - 1].is_ascii_whitespace() {
-                continue;
-            }
-            let (start, len) = match text[from..].chars().next() {
-                Some(quote @ ('"' | '\'')) => {
-                    let Some(len) = text[from + 1..].find(quote) else {
-                        continue;
-                    };
-                    (from + 1, len)
-                }
-                _ => {
-                    let len = text[from..]
-                        .find(|c: char| c.is_whitespace() || c == '>')
-                        .unwrap_or(text.len() - from);
-                    if len == 0 {
-                        continue;
-                    }
-                    (from, len)
-                }
-            };
-            out.push((start..start + len, text[start..start + len].to_string()));
-            from = start + len;
-        }
-    }
-    out.sort_by_key(|(r, _)| r.start);
-    out
 }
 
 /// `http(s)://` tokens in `text`, with their byte offsets.
