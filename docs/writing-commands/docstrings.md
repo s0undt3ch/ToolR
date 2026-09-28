@@ -51,8 +51,18 @@ Note the asymmetry between `-h` and `--help`:
 
 ## Failing without a docstring
 
-A command function with no docstring is rejected at manifest-build
-time: toolr refuses to ship undocumented commands. Add a one-line
-summary and you're good.
+toolr refuses to build a manifest that contains an undocumented command.
+Every `@command` needs a docstring whose first line is a summary. The build
+fails when a command has no docstring, an empty or blank one, or one with only
+sections such as `Args:`. The error lists every offending command:
+
+```text
+commands without a docstring (1):
+  - tools.deploy::rollback: add a docstring. Its first line is the command's `--help` summary.
+```
+
+This applies to `toolr project manifest rebuild`, to the automatic rebuild
+when the manifest is stale, and to `toolr self build-manifest` for plugins.
+Add a one-line summary and you're good.
 
 Next: [Using `ctx` →](context.md)

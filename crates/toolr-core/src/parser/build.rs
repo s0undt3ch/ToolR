@@ -10,7 +10,10 @@ use crate::hash::hash_tools_dir;
 use crate::manifest::{ArgumentKind, Manifest, SCHEMA_VERSION};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
-    commands::{detect_name_conflicts, extract_commands, CommandNameConflict},
+    commands::{
+        detect_name_conflicts, extract_commands, format_missing_docstrings, missing_docstrings,
+        CommandNameConflict, MissingDocstring,
+    },
     groups::extract_groups,
     parse_python_file,
     symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
@@ -116,6 +119,11 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
 
     if !type_errors.is_empty() {
         return Err(BuildError::UnsupportedTypes(type_errors));
+    }
+
+    let undocumented = missing_docstrings(&all_commands);
+    if !undocumented.is_empty() {
+        return Err(BuildError::MissingDocstrings(undocumented));
     }
 
     let arity_errors = validate_positional_arity(&all_commands);
@@ -233,6 +241,8 @@ pub enum BuildError {
     ThirdParty(#[from] ThirdPartyError),
     #[error("invalid parameter declarations ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
+    #[error("commands without a docstring ({count}):\n{details}", count = .0.len(), details = format_missing_docstrings(.0))]
+    MissingDocstrings(Vec<MissingDocstring>),
     #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
     UnknownGroupRefs(Vec<UnknownGroupRef>),
     #[error("invalid positional arity ({count}):\n{details}", count = .0.len(), details = format_positional_arity_errors(.0))]
@@ -1358,6 +1368,67 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
             .expect_err("expected the build to fail");
         let BuildError::UnsupportedTypes(errs) = err else { unreachable!("expected UnsupportedTypes") };
         errs
+    }
+
+    fn missing_docstrings_for(files: &[(&str, &str)]) -> Vec<MissingDocstring> {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        let err = build_static_manifest_inner(&tmp.path().join("tools"))
+            .expect_err("expected the build to fail");
+        let BuildError::MissingDocstrings(missing) = err else {
+            unreachable!("expected MissingDocstrings, got {err}")
+        };
+        missing
+    }
+
+    /// Every docstring shape that leaves a command without a `--help`
+    /// summary line (#501).
+    const UNDOCUMENTED_PY: &str = r#"from toolr import Context, command_group
+
+group = command_group("doc", "Doc test", description="Doc test.")
+
+
+@group.command
+def bare(ctx: Context) -> None:
+    ctx.print("no docstring")
+
+
+@group.command
+def empty(ctx: Context) -> None:
+    """"""
+
+
+@group.command
+def blank(ctx: Context) -> None:
+    """   """
+
+
+@group.command
+def sections_only(ctx: Context, name: str) -> None:
+    """
+    Args:
+        name: Who to greet.
+    """
+
+
+@group.command
+def documented(ctx: Context) -> None:
+    """Has a summary."""
+"#;
+
+    #[test]
+    fn commands_without_a_docstring_summary_fail_the_build() {
+        let missing = missing_docstrings_for(&[("tools/doc.py", UNDOCUMENTED_PY)]);
+        let functions: Vec<&str> = missing.iter().map(|m| m.function.as_str()).collect();
+        assert_eq!(functions, ["bare", "empty", "blank", "sections_only"]);
+        assert!(missing.iter().all(|m| m.module == "tools.doc"), "{missing:?}");
+        let msg = BuildError::MissingDocstrings(missing).to_string();
+        assert!(
+            msg.starts_with("commands without a docstring (4):\n  - tools.doc::bare: "),
+            "got: {msg}"
+        );
     }
 
     fn assert_builds(src: &str) {

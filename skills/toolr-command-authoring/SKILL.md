@@ -60,8 +60,9 @@ drift.
 5. **Document via Google-style docstring.** The first line is the
    short help (`toolr <group> --help`). The rest is the long help
    (`toolr <group> <cmd> --help`). `Args:` populates per-argument
-   help. A command with no docstring is not rejected — it just ships
-   with empty `--help` text, so give every command one.
+   help. Every command needs a docstring with a summary line. One with
+   no docstring, a blank one, or only an `Args:` section fails the
+   manifest build.
 6. **Try it.** `toolr <group> <cmd> --help` builds the manifest on
    the fly if it's stale (the freshness work landed in 0.20.0); on
    older toolr fall back to `toolr project manifest rebuild`. If the

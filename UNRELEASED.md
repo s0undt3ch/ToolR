@@ -67,3 +67,15 @@ dropped the keyword: the command showed up in `--help` and then failed with a
 The build-error heading for these failures, and for unsupported parameter
 types, now reads "invalid parameter declarations" instead of "unsupported
 parameter types". ([#500](https://github.com/s0undt3ch/ToolR/issues/500))
+
+### Commands without a docstring now fail the manifest build
+
+**Breaking.** A `@command` whose docstring gives no summary line now fails the
+manifest build. That covers a missing docstring, an empty or blank one, and one
+with only sections such as `Args:`. The error names the module and function of
+every offending command. Before, such a command built with an empty `--help`
+summary, although the docs already said it was rejected. The check applies to
+`toolr project manifest rebuild`, the automatic rebuild of a stale manifest, and
+`toolr self build-manifest`. Commands grafted from argparse sources are not
+affected. To fix a failing build, give each listed command a one-line docstring.
+([#501](https://github.com/s0undt3ch/ToolR/issues/501))

@@ -431,3 +431,45 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
         );
     }
 }
+
+/// Issue #501: a command without a docstring used to build with an empty
+/// `--help` summary.
+#[test]
+fn command_without_a_docstring_fails_the_manifest_build() {
+    let tmp = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+    fs::write(
+        tmp.path().join("tools").join("doc.py"),
+        r#"from toolr import Context, command_group
+
+group = command_group("doc", "Doc test", description="Doc test.")
+
+
+@group.command
+def bare(ctx: Context) -> None:
+    ctx.print("no docstring")
+"#,
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["project", "manifest", "rebuild"])
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "build unexpectedly succeeded: {output:?}"
+    );
+    for needle in [
+        "commands without a docstring (1):",
+        "tools.doc::bare: add a docstring.",
+    ] {
+        assert!(
+            stderr.contains(needle),
+            "stderr missing {needle:?}:\n{stderr}"
+        );
+    }
+}

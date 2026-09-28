@@ -222,3 +222,47 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
         "manifest was written"
     );
 }
+
+/// Issue #501, plugin side: a command without a docstring must not reach a
+/// shipped `toolr-manifest.json`.
+#[test]
+fn command_without_a_docstring_fails_plugin_build() {
+    let tmp = TempDir::new().unwrap();
+    let pkg = tmp.path().join("mypkg");
+    write(&pkg, "__init__.py", "");
+    write(
+        &pkg,
+        "doc.py",
+        r#"from toolr import Context, command_group
+
+group = command_group("doc", "Doc test", description="Doc test.")
+
+
+@group.command
+def bare(ctx: Context) -> None:
+    ctx.print("no docstring")
+"#,
+    );
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .args(["self", "build-manifest", "--source-dir"])
+        .arg(&pkg)
+        .args(["--package", "mypkg"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "build unexpectedly succeeded: {stderr}"
+    );
+    assert!(
+        stderr.contains("commands without a docstring (1):")
+            && stderr.contains("mypkg.doc::bare: add a docstring."),
+        "stderr: {stderr}"
+    );
+    assert!(
+        !pkg.join("toolr-manifest.json").exists(),
+        "manifest was written"
+    );
+}
