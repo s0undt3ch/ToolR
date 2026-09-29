@@ -134,8 +134,9 @@ Rejected:
   `crates/toolr-py/python/toolr/utils/_signature.py`.
 - The parser drops them from the known-keyword set. An author who still writes one gets the #500
   unknown-keyword build error, with a type hint in place of "did you mean":
-  `` unknown `arg()` keyword `must_be_file`: use `toolr.types.FilePath` ``. `must_exist` points
-  at `ResolvedPath`, and `must_be_dir` at `DirectoryPath`.
+  `` unknown `arg()` keyword `must_be_file`; use `toolr.types.FilePath` instead ``. `must_exist`
+  points at `ResolvedPath`, and `must_be_dir` at `DirectoryPath`. The dropped `path_must_*`
+  spellings from #500 get the same hints.
 - `PathConstraints` goes entirely. It is not read or written, and there is no migration from it.
 
 There is no deprecation period, including for local code: toolr is pre-1.0, and the error names the
@@ -158,9 +159,11 @@ The docs say this.
 `path_constraints` field goes away, and the argument types gain five new variants.
 
 Today `load_manifest` accepts any version up to the current one, and freshness doesn't look at the
-version. So on its own a bump changes nothing. A cached v1 manifest would keep loading, and its
-`path_constraints` would be silently ignored. So the bump comes with enforcement: freshness treats
-`schema_version != SCHEMA_VERSION` as stale, and the next run rebuilds the cache. The user does
+schema version. A released upgrade already forces a rebuild, because `compare` in
+`crates/toolr-core/src/freshness/compare.rs` treats a `toolr_version` mismatch as stale (#420).
+But a dev build keeps the same version string across commits, and there a cached v1 manifest would
+keep loading with its `path_constraints` silently ignored. So `compare` also treats
+`schema_version != SCHEMA_VERSION` as stale, next to the `toolr_version` check. The user does
 nothing. If `tools/` still uses `arg(must_*)`, the rebuild fails with the unknown-keyword error.
 
 ### Plugin fragments are unaffected
@@ -204,10 +207,15 @@ Rust:
 - `crates/toolr-core/src/parser/types/resolve.rs`: map the five names.
 - `crates/toolr/src/value_parsers.rs`: replace the `PathConstraints` knob on `path_parser` with a
   per-type check enum. Set completion hints from the type.
+- `SupportedType::is_path()`: an exhaustive `match` in `supported.rs`. `execute_build.rs` uses it
+  in `extract_scalar`, `extract_many` and `arg_has_relative_cli_path` in place of the three
+  hand-written `Path | AbsolutePath | ResolvedPath` patterns. Each of those has a `_` arm, so a
+  missed path variant would fall to `get_one::<String>` on a `PathBuf` value, and clap panics at
+  run time.
 - `crates/toolr-core/src/parser/types/path_constraints.rs`: delete. `arg_keywords.rs`: drop the
   three keywords and add their type hints to the unknown-keyword error.
 - `crates/toolr-core/src/manifest/model.rs`: drop `path_constraints` and bump `SCHEMA_VERSION` to 2.
-- `crates/toolr-core/src/complete/freshness.rs`: treat a manifest schema mismatch as stale.
+- `crates/toolr-core/src/freshness/compare.rs`: treat a manifest schema mismatch as stale.
 - `crates/toolr-core/src/third_party/merge.rs`: drop the `path_constraints: None` line.
 - `crates/toolr/Cargo.toml`: add `libc.workspace = true`, for `access(2)` on Unix.
 - `crates/xtask/src/build_skill_refs/types.rs` and `mod.rs`: remove `path_constraints_snippet` and
@@ -247,7 +255,9 @@ Docs, skills and notes:
   like real annotations (see the regression-test rule in `CLAUDE.md`).
 - Schema enforcement: a v1 local manifest is reported stale and gets rebuilt.
 - Unknown-keyword error: each of the three removed keywords produces its type hint.
-- `crates/toolr/tests/`: an `assert_cmd` end-to-end run per type, for one accept and one reject.
+- `crates/toolr/tests/`: an `assert_cmd` run per type against a pre-built manifest, for one
+  rejection. The accepted value is covered by the `execute_build.rs` extraction tests and the
+  runner coercion test. Running the full accept path needs a Python venv.
 - pytest: the command body receives a `pathlib.Path` for every type, including in `list[T]`.
 - A static typing check (mypy on a snippet in the test suite) shows that `FilePath` is
   accepted where `Path` is expected, and a bare `Path` is rejected where `FilePath` is expected.
