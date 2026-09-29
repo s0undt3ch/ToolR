@@ -78,3 +78,13 @@ fn executable_path_rejects_a_non_executable_file() {
     let tool = tool.to_str().unwrap();
     assert_rejected("executable_path", tool, &format!("path is not executable: {tool}"));
 }
+
+#[cfg(windows)]
+#[test]
+fn executable_path_rejects_an_extension_outside_pathext() {
+    let tmp = TempDir::new().unwrap();
+    let tool = tmp.path().join("tool.txt");
+    fs::write(&tool, "").unwrap();
+    let tool = tool.to_str().unwrap();
+    assert_rejected("executable_path", tool, &format!("path is not executable: {tool}"));
+}

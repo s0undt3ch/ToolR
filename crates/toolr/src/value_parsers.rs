@@ -157,9 +157,9 @@ fn path_parser(form: PathForm, check: PathCheck) -> ValueParser {
                 {
                     return Err(format!("path does not exist: {s}"));
                 }
-                typed
-                    .canonicalize()
-                    .map_err(|e| format!("invalid path `{s}`: {e}"))?
+                // `dunce` drops Windows' `\\?\` verbatim prefix when the plain
+                // form is valid; elsewhere it is `std::fs::canonicalize`.
+                dunce::canonicalize(typed).map_err(|e| format!("invalid path `{s}`: {e}"))?
             }
         };
         check_path(&path, check, s)?;
@@ -353,7 +353,7 @@ mod tests {
         fs::write(tmp.path().join("f.txt"), "x").unwrap();
         let typed = tmp.path().join("sub").join("..").join("f.txt");
         let got = parse(&SupportedType::FilePath, s(&typed)).unwrap();
-        assert_eq!(got, tmp.path().join("f.txt").canonicalize().unwrap());
+        assert_eq!(got, dunce::canonicalize(tmp.path().join("f.txt")).unwrap());
     }
 
     #[test]
@@ -406,7 +406,7 @@ mod tests {
         let link = tmp.path().join("link");
         std::os::unix::fs::symlink(&real, &link).unwrap();
         let got = parse(&SupportedType::DirectoryPath, s(&link)).unwrap();
-        assert_eq!(got, real.canonicalize().unwrap());
+        assert_eq!(got, dunce::canonicalize(real).unwrap());
     }
 
     #[cfg(unix)]
@@ -437,7 +437,7 @@ mod tests {
     fn writable_directory_path_accepts_a_fresh_temp_dir() {
         let tmp = TempDir::new().unwrap();
         let got = parse(&SupportedType::WritableDirectoryPath, s(tmp.path())).unwrap();
-        assert_eq!(got, tmp.path().canonicalize().unwrap());
+        assert_eq!(got, dunce::canonicalize(tmp.path()).unwrap());
     }
 
     #[cfg(unix)]
@@ -754,6 +754,53 @@ mod tests {
                 .get_one::<i64>("v")
                 .unwrap(),
             5
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn canonical_types_hand_back_plain_paths_on_windows() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("f.txt");
+        fs::write(&file, "x").unwrap();
+        for (ty, value) in [
+            (SupportedType::ResolvedPath, tmp.path()),
+            (SupportedType::FilePath, file.as_path()),
+            (SupportedType::DirectoryPath, tmp.path()),
+            (SupportedType::WritableDirectoryPath, tmp.path()),
+        ] {
+            let got = parse(&ty, s(value)).unwrap();
+            let shown = got.to_string_lossy().into_owned();
+            assert!(!shown.starts_with(r"\\?\"), "{ty:?} got a verbatim path: {shown}");
+            assert!(got.is_absolute(), "{ty:?} got: {shown}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn file_path_on_windows_resolves_forward_slashes_and_dot_dot() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join("sub")).unwrap();
+        let file = tmp.path().join("f.txt");
+        fs::write(&file, "x").unwrap();
+        let typed = format!("{}/sub/../f.txt", s(tmp.path()));
+        let got = parse(&SupportedType::FilePath, &typed).unwrap();
+        assert_eq!(got, dunce::canonicalize(&file).unwrap());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn executable_path_on_windows_follows_pathext() {
+        let tmp = TempDir::new().unwrap();
+        let exe = tmp.path().join("tool.exe");
+        let txt = tmp.path().join("tool.txt");
+        fs::write(&exe, "").unwrap();
+        fs::write(&txt, "").unwrap();
+        assert!(parse(&SupportedType::ExecutablePath, s(&exe)).is_ok());
+        let err = parse(&SupportedType::ExecutablePath, s(&txt)).unwrap_err();
+        assert!(
+            err.contains(&format!("path is not executable: {}", s(&txt))),
+            "got: {err}"
         );
     }
 }
