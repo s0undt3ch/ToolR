@@ -34,13 +34,3 @@ Toolr enforces a closed set of parameter types. Anything outside this set is rej
 | `list[T]` (T above) | clap per-element | JSON array | `list[T]` |
 | `tuple[T1, T2, …]` | clap arity, msgspec per-slot | JSON array | `tuple[T1, T2]` |
 | `T \| None` | clap (`required=false`) | typed or absent | `T` or `None` |
-
-## Path constraints
-
-| Constraint | Effect |
-|---|---|
-| `arg(must_exist=True)` | reject paths that don't exist on disk |
-| `arg(must_be_file=True)` | reject anything that isn't a regular file (implies `must_exist`) |
-| `arg(must_be_dir=True)` | reject anything that isn't a directory (implies `must_exist`) |
-
-Apply them with `Annotated[Path, arg(must_be_file=True)]`; they apply to `pathlib.Path`, `toolr.types.AbsolutePath` and `toolr.types.ResolvedPath`.

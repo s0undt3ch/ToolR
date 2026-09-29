@@ -163,7 +163,6 @@ fn derive_argument(arg: &Arg) -> Option<Argument> {
         type_annotation: None,
         resolved_type: None,
         allowed_values,
-        path_constraints: None,
         metadata: ArgMetadata::default(),
         long_flag: None,
     })

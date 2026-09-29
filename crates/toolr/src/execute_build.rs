@@ -550,7 +550,6 @@ mod tests {
                 default: Some("world".into()),
                 type_annotation: None,
                 resolved_type: None,
-                path_constraints: None,
                 allowed_values: vec![],
                 metadata: toolr_core::manifest::ArgMetadata::default(),
                 long_flag: None,
@@ -635,7 +634,6 @@ mod tests {
                 default: None,
                 type_annotation: None,
                 resolved_type: None,
-                path_constraints: None,
                 allowed_values: vec![],
                 metadata: toolr_core::manifest::ArgMetadata::default(),
                 long_flag: None,
@@ -668,7 +666,6 @@ mod tests {
             default: None,
             type_annotation: None,
             resolved_type: Some(ty),
-            path_constraints: None,
             allowed_values: vec![],
             metadata: toolr_core::manifest::ArgMetadata::default(),
             long_flag: None,
@@ -1073,7 +1070,6 @@ mod tests {
             type_annotation: None,
             resolved_type: Some(ty),
             allowed_values: vec![],
-            path_constraints: None,
             metadata: Default::default(),
             long_flag: None,
         }
@@ -1104,7 +1100,7 @@ mod tests {
             };
             let arg = path_arg(ty.clone(), ArgumentKind::Optional);
             let clap_cmd = clap::Command::new("t").arg(
-                crate::value_parsers::apply_value_parser(Arg::new("p").long("p"), &ty, None),
+                crate::value_parsers::apply_value_parser(Arg::new("p").long("p"), &ty),
             );
             let matches = clap_cmd.try_get_matches_from(["t", "--p", &value]).unwrap();
             let got = extract_scalar(&arg, &matches);
@@ -1119,7 +1115,7 @@ mod tests {
         let ty = SupportedType::List(Box::new(SupportedType::DirectoryPath));
         let arg = path_arg(ty.clone(), ArgumentKind::Repeated);
         let clap_cmd = clap::Command::new("t").arg(
-            crate::value_parsers::apply_value_parser(Arg::new("p").long("p"), &ty, None)
+            crate::value_parsers::apply_value_parser(Arg::new("p").long("p"), &ty)
                 .action(ArgAction::Append),
         );
         let matches = clap_cmd
@@ -1157,7 +1153,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1258,7 +1253,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1304,7 +1298,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1324,7 +1317,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1446,7 +1438,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }
@@ -1480,7 +1471,6 @@ mod dispatched_pack_tests {
             type_annotation: Some("str".into()),
             resolved_type: None,
             allowed_values: vec!["a".into(), "b".into()],
-            path_constraints: None,
             metadata,
             long_flag: None,
         };
@@ -1504,7 +1494,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: toolr_core::manifest::ArgMetadata { nargs, ..Default::default() },
                 long_flag: None,
             }
@@ -1529,7 +1518,6 @@ mod dispatched_pack_tests {
             type_annotation: None,
             resolved_type: None,
             allowed_values: vec![],
-            path_constraints: None,
             metadata: Default::default(),
             long_flag: None,
         }
@@ -1577,7 +1565,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],

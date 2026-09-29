@@ -17,13 +17,11 @@ use email_address::EmailAddress;
 use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
-use toolr_core::parser::{PathConstraints, SupportedType};
+use toolr_core::parser::SupportedType;
 
 /// Attach the right `value_parser` to a clap `Arg` for the given
 /// supported type. `Optional(T)` is unwrapped automatically — the
 /// optionality is expressed via `required=false` on the caller side.
-/// `path_constraints` layers on top of any path-flavoured type to add
-/// `must_exist` / `must_be_file` / `must_be_dir` checks.
 ///
 /// **Wire format contract:** all the "validated complex" types
 /// (DateTime, UUID, IP, Email, ...) return their value as a **String**
@@ -32,18 +30,12 @@ use toolr_core::parser::{PathConstraints, SupportedType};
 /// types get clap-stored as `PathBuf` because the parser also does
 /// resolution (absolutize / canonicalize) before handing the value
 /// off. `extract_value` mirrors this split when reading.
-pub fn apply_value_parser(
-    arg: Arg,
-    ty: &SupportedType,
-    path_constraints: Option<&PathConstraints>,
-) -> Arg {
+pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
     let inner = unwrap_optional(ty);
-    let pc = path_constraints.copied().unwrap_or_default();
     // Path / Email types carry shell-completion hints derived from the
-    // type itself; path constraints refine them further (must_be_dir →
-    // DirPath, must_be_file → FilePath).
+    // type itself (a `DirectoryPath` completes directories, a `FilePath` files).
     let arg = match path_rule(inner) {
-        Some((_, check)) => arg.value_hint(path_hint(with_legacy_constraints(check, pc))),
+        Some((_, check)) => arg.value_hint(path_hint(check)),
         None if matches!(inner, SupportedType::Email) => arg.value_hint(ValueHint::EmailAddress),
         None => arg,
     };
@@ -61,7 +53,7 @@ pub fn apply_value_parser(
         | SupportedType::ExecutablePath
         | SupportedType::WritableDirectoryPath => {
             let (form, check) = path_rule(inner).expect("path variant has a rule");
-            arg.value_parser(path_parser(form, with_legacy_constraints(check, pc)))
+            arg.value_parser(path_parser(form, check))
         }
         SupportedType::DateTime => arg.value_parser(datetime_parser()),
         SupportedType::Date => arg.value_parser(date_parser()),
@@ -78,7 +70,7 @@ pub fn apply_value_parser(
         SupportedType::Enum { values, .. } => arg.value_parser(values.clone()),
         // For collection kinds we configure the *element* parser; clap's
         // `num_args` / `Append` semantics are set by the caller.
-        SupportedType::List(elem) => apply_value_parser(arg, elem, path_constraints),
+        SupportedType::List(elem) => apply_value_parser(arg, elem),
         // Heterogeneous tuples: clap can't apply a per-slot value_parser
         // for the same Arg, so we constrain the *arity* and let msgspec
         // coerce each slot to the right type against the function's
@@ -140,21 +132,6 @@ fn path_rule(ty: &SupportedType) -> Option<(PathForm, PathCheck)> {
         SupportedType::WritableDirectoryPath => (PathForm::Canonical, PathCheck::WritableDir),
         _ => return None,
     })
-}
-
-// Removed with `PathConstraints` in the next task.
-fn with_legacy_constraints(check: PathCheck, pc: PathConstraints) -> PathCheck {
-    if check != PathCheck::None {
-        check
-    } else if pc.must_be_dir {
-        PathCheck::Dir
-    } else if pc.must_be_file {
-        PathCheck::File
-    } else if pc.must_exist {
-        PathCheck::Exists
-    } else {
-        PathCheck::None
-    }
 }
 
 fn path_hint(check: PathCheck) -> ValueHint {
@@ -332,11 +309,7 @@ mod tests {
     use clap::Command;
 
     fn build_command_with(ty: &SupportedType) -> Command {
-        Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty, None))
-    }
-
-    fn build_command_with_constraints(ty: &SupportedType, pc: PathConstraints) -> Command {
-        Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty, Some(&pc)))
+        Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty))
     }
 
     use std::fs;
@@ -538,7 +511,7 @@ mod tests {
             (SupportedType::ExecutablePath, ValueHint::ExecutablePath),
             (SupportedType::WritableDirectoryPath, ValueHint::DirPath),
         ] {
-            let arg = apply_value_parser(Arg::new("v").long("v"), &ty, None);
+            let arg = apply_value_parser(Arg::new("v").long("v"), &ty);
             assert_eq!(arg.get_value_hint(), hint, "{ty:?}");
         }
     }
@@ -548,7 +521,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let missing = tmp.path().join("missing.toml");
         let cmd = Command::new("test").arg(
-            apply_value_parser(Arg::new("v").long("v"), &SupportedType::FilePath, None)
+            apply_value_parser(Arg::new("v").long("v"), &SupportedType::FilePath)
                 .default_value(s(&missing).to_string()),
         );
         let err = cmd.try_get_matches_from(["test"]).unwrap_err();
@@ -561,9 +534,8 @@ mod tests {
         let file = tmp.path().join("f.txt");
         fs::write(&file, "x").unwrap();
         let ty = SupportedType::List(Box::new(SupportedType::FilePath));
-        let cmd = Command::new("test").arg(
-            apply_value_parser(Arg::new("v").long("v"), &ty, None).action(clap::ArgAction::Append),
-        );
+        let cmd = Command::new("test")
+            .arg(apply_value_parser(Arg::new("v").long("v"), &ty).action(clap::ArgAction::Append));
         let err = cmd
             .try_get_matches_from(["test", "--v", s(&file), "--v", s(tmp.path())])
             .unwrap_err();
@@ -714,54 +686,6 @@ mod tests {
             ])
             .is_err()
         );
-    }
-
-    #[test]
-    fn path_with_must_exist_rejects_missing() {
-        let pc = PathConstraints {
-            must_exist: true,
-            ..Default::default()
-        };
-        let cmd = build_command_with_constraints(&SupportedType::Path, pc);
-        let err = cmd
-            .try_get_matches_from(["test", "--v", "/does/not/exist/xyz123"])
-            .unwrap_err();
-        assert!(
-            err.to_string().contains("does not exist"),
-            "got: {err}"
-        );
-    }
-
-    #[test]
-    fn path_with_must_be_file_rejects_directory() {
-        let pc = PathConstraints {
-            must_be_file: true,
-            ..Default::default()
-        };
-        let cmd = build_command_with_constraints(&SupportedType::Path, pc);
-        let tmp = std::env::temp_dir();
-        let err = cmd
-            .try_get_matches_from(["test", "--v", tmp.to_str().unwrap()])
-            .unwrap_err();
-        assert!(
-            err.to_string().contains("not a regular file"),
-            "got: {err}"
-        );
-    }
-
-    #[test]
-    fn path_with_must_be_dir_accepts_directory() {
-        let pc = PathConstraints {
-            must_be_dir: true,
-            ..Default::default()
-        };
-        let cmd = build_command_with_constraints(&SupportedType::Path, pc);
-        let tmp = std::env::temp_dir();
-        let m = cmd
-            .try_get_matches_from(["test", "--v", tmp.to_str().unwrap()])
-            .unwrap();
-        let got = m.get_one::<PathBuf>("v").unwrap();
-        assert!(got.is_dir());
     }
 
     #[test]

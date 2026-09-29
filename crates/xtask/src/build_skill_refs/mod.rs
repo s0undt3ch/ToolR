@@ -54,7 +54,6 @@ pub fn run(check: bool) -> Result<()> {
         authoring::docstrings(&root)?,
         types::types_reference(&root)?,
         types::supported_types_snippet(&root)?,
-        types::path_constraints_snippet(&root)?,
         packaging::packaging(&root)?,
         ci_setup::action(&root)?,
         sections::arguments_reference(&root)?,

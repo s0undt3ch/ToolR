@@ -372,7 +372,6 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
         type_annotation,
         resolved_type: None,
         allowed_values: choices,
-        path_constraints: None,
         metadata,
         long_flag,
     }
@@ -642,7 +641,6 @@ pub fn with_common_args(mut scanned: ScannedCommand, common: &[CommonArg]) -> Sc
             type_annotation: None,
             resolved_type: None,
             allowed_values: c.choices.clone().unwrap_or_default(),
-            path_constraints: None,
             metadata: Default::default(),
             // common_args declared in `[tool.toolr.argparse.<name>]`
             // are toolr-config inputs, not scanned source — there's no
@@ -1013,7 +1011,6 @@ def add_arguments(self, parser):
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: Some("--verbosity".into()),
             }],

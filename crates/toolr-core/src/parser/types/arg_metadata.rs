@@ -4,8 +4,8 @@
 //! `arg(...)` calls inside an `Annotated[...]` wrapper carry the
 //! aliases, metavar, env-fallback, conflicts/requires lists, hide
 //! flag, display order, and help-section assignment that get plumbed
-//! through to clap. This module reads them; `path_constraints.rs`
-//! reads the orthogonal filesystem-check kwargs from the same call.
+//! through to clap. This module reads them; `arg_keywords.rs`
+//! checks the same calls for keywords the runtime would refuse.
 
 use ruff_python_ast::{Expr, ExprCall};
 

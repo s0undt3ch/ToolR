@@ -126,8 +126,8 @@ toolr's own source by `cargo xtask build-skill-refs`:
   skill points agents at cannot drift from what the action
   actually accepts.
 - `toolr-command-authoring/references/types.md` is rebuilt from
-  the parser's own argument-type and path-constraint catalogue in
-  `crates/toolr-core/src/parser/types/path_constraints.rs`.
+  the parser's own argument-type catalogue in
+  `crates/toolr-core/src/parser/types/supported.rs`.
 - `toolr-command-authoring/references/arguments.md` is rebuilt
   from the `arg-shapes` section of
   `docs/writing-commands/arguments.md`.

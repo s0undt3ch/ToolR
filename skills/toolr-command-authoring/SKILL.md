@@ -51,7 +51,9 @@ drift.
    stays a `str` even though it looks path-like; annotate `root: Path`
    if you want a `pathlib.Path`. Defaults make arguments optional;
    `Annotated[T, arg(...)]` adds clap metadata (`aliases`, `metavar`,
-   `help_section`, `must_exist`, etc.). See
+   `help_section`, etc.). Path checks come from
+   the `toolr.types` path types (`FilePath`, `DirectoryPath`, ...), not
+   `arg()`. See
    [`references/types.md`](references/types.md) for the full
    supported-type table and
    [`references/arguments.md`](references/arguments.md) for how each

@@ -176,35 +176,53 @@ annotation on the parameter is the element type.
 --8<-- "docs/writing-commands/files/files-star-args.py"
 ```
 
-## Path constraints
+## Path types
 
-`pathlib.Path` (and its `toolr.types.AbsolutePath` / `ResolvedPath`
-variants) accept additional opt-in filesystem checks through
-`Annotated[Path, arg(...)]`:
+Pick a `toolr.types` path type to say what a path argument must be. The binary checks the path
+while it parses the command line, before any Python starts. Your function always receives a
+`pathlib.Path`.
 
---8<-- "docs/writing-commands/files/path-constraints.md"
+| Type | Rejects the value unless | Value your function receives |
+|---|---|---|
+| `pathlib.Path` | (no check) | as typed |
+| `toolr.types.AbsolutePath` | (no check) | joined to the working directory |
+| `toolr.types.NewPath` | the path does not exist, and its parent directory does | absolute |
+| `toolr.types.ResolvedPath` | the path exists | canonical |
+| `toolr.types.FilePath` | the path is a regular file | canonical |
+| `toolr.types.DirectoryPath` | the path is a directory | canonical |
+| `toolr.types.ExecutablePath` | the path is a file the process can execute | canonical |
+| `toolr.types.WritableDirectoryPath` | the path is a directory the process can write to | canonical |
+
+"Canonical" means absolute, with symlinks and `..` resolved, so a symlink to a directory counts as
+a `DirectoryPath`.
 
 ```python
-from pathlib import Path
-from typing import Annotated
-from toolr import arg
+from toolr import Context
+from toolr.types import FilePath, NewPath
 
-def read_config(
-    ctx: Context,
-    config: Annotated[Path, arg(must_be_file=True)],
-    workdir: Annotated[Path, arg(must_be_dir=True)],
-) -> None:
+
+def convert(ctx: Context, config: FilePath, output: NewPath) -> None:
     ...
 ```
 
-The constraints fire at clap-parse time — bad invocations error in
-microseconds with a precise message:
-
 ```sh
-$ toolr fs read /tmp/missing.txt /tmp
-error: invalid value '/tmp/missing.txt' for '<config>':
-path does not exist: /tmp/missing.txt
+$ toolr fs convert /tmp/missing.toml out.json
+error: invalid value '/tmp/missing.toml' for '<config>': path does not exist: /tmp/missing.toml
 ```
+
+The types are `typing.NewType`s, so a type checker tells them apart: a `FilePath` can go where a
+`Path` is expected, but a bare `Path` can't go where a `FilePath` is. A path derived from one, such
+as `config.parent / "x"`, keeps its type for the type checker, but nothing checked it. Treat
+derived paths as unchecked.
+
+Three limits:
+
+- The executable and writable checks are advisory. The file can change between the check and the
+  moment your command uses it.
+- The checks run in the toolr binary only. Calling the function directly, for example in a test
+  built with `toolr.testing.make_context`, checks nothing.
+- A default written as an expression, such as `config: FilePath = Path("pyproject.toml")`, isn't
+  checked. A string default, `config: FilePath = "pyproject.toml"`, is.
 
 ## Module-level type aliases
 

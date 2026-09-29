@@ -277,7 +277,6 @@ mod tests {
             type_annotation: None,
             resolved_type: ty,
             allowed_values: vec![],
-            path_constraints: None,
             metadata: crate::manifest::ArgMetadata::default(),
             long_flag: None,
         }

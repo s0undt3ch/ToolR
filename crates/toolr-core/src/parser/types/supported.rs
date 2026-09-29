@@ -515,7 +515,7 @@ impl std::fmt::Display for UnsupportedType {
             Self::UnsupportedShape(s) => write!(f, "unsupported generic shape `{s}`."),
             Self::UnknownArgKeyword { keyword, suggestion } => {
                 write!(f, "unknown `arg()` keyword `{keyword}`")?;
-                match (super::arg_keywords::argparse_hint(keyword), suggestion) {
+                match (super::arg_keywords::keyword_hint(keyword), suggestion) {
                     (Some(hint), _) => write!(f, "; {hint}"),
                     (None, Some(s)) => write!(f, " (did you mean `{s}`?)"),
                     (None, None) => Ok(()),
