@@ -891,8 +891,14 @@ mod tests {
     }
 
     #[test]
-    fn attribute_names_merely_ending_in_href_are_not_links() {
-        assert!(rules("<a data-href=\"../../x.md\">x</a>\n", &[]).is_empty());
+    fn prefixed_href_and_src_attributes_are_linted() {
+        let body = "<a data-href=\"../../x.md\">x</a>\n<img data-src=../../y.png>\n<use xlink:href='../../z.svg'/>\n";
+        assert_eq!(rules(body, &[]), ["link-escapes-skill"; 3]);
+    }
+
+    #[test]
+    fn srcset_and_names_merely_ending_in_href_are_not_targets() {
+        assert!(rules("<img srcset=\"../../a.png 2x\"> <a xhref=\"../../x.md\">\n", &[]).is_empty());
     }
 
     #[test]

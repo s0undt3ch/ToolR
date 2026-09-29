@@ -841,16 +841,27 @@ fn inline_target_end(rest: &str) -> Option<usize> {
 }
 
 /// Values of raw HTML `href=` / `src=` attributes, quoted or not, with
-/// their byte ranges.
+/// their byte ranges. Prefixed names such as `data-src` and `xlink:href`
+/// count too; `srcset` doesn't, since its value isn't a single URL.
 pub(super) fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> {
     let lower = text.to_ascii_lowercase();
+    let bytes = lower.as_bytes();
     let mut out = Vec::new();
     for attr in ["href=", "src="] {
         let mut from = 0;
         while let Some(k) = lower[from..].find(attr) {
             let at = from + k;
             from = at + attr.len();
-            if at > 0 && !lower.as_bytes()[at - 1].is_ascii_whitespace() {
+            let name_start = at
+                - bytes[..at]
+                    .iter()
+                    .rev()
+                    .take_while(|b| b.is_ascii_alphanumeric() || b"-_:.".contains(b))
+                    .count();
+            let prefixed = name_start < at && b"-:".contains(&bytes[at - 1]);
+            if (name_start < at && !prefixed)
+                || (name_start > 0 && !bytes[name_start - 1].is_ascii_whitespace())
+            {
                 continue;
             }
             let (start, len) = match text[from..].chars().next() {
@@ -861,9 +872,13 @@ pub(super) fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> 
                     (from + 1, len)
                 }
                 _ => {
-                    let len = text[from..]
+                    let mut len = text[from..]
                         .find(|c: char| c.is_whitespace() || c == '>')
                         .unwrap_or(text.len() - from);
+                    // `<a href=x.md/>`: the `/` closes the tag, it isn't part of the value.
+                    if text[from..from + len].ends_with('/') && text[from + len..].starts_with('>') {
+                        len -= 1;
+                    }
                     if len == 0 {
                         continue;
                     }
@@ -1735,6 +1750,18 @@ mod tests {
                 "{err}"
             );
         }
+    }
+
+    #[test]
+    fn unquoted_html_target_stops_before_a_self_closing_slash() {
+        assert_eq!(html_targets("<a href=x.md/>"), [(8..12, "x.md".to_string())]);
+        assert_eq!(html_targets("<a href=d/ >"), [(8..10, "d/".to_string())]);
+    }
+
+    #[test]
+    fn prefixed_local_raw_html_target_is_rejected() {
+        let err = transform("<img data-src=\"a.png\">\n", &fake(&[])).unwrap_err().to_string();
+        assert!(err.contains("raw HTML target `a.png`"), "{err}");
     }
 
     #[test]
