@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
@@ -37,10 +38,24 @@ pub fn lint(repo_root: &Path) -> Result<()> {
         if !skill_dir.is_dir() {
             continue;
         }
-        let mut files = Vec::new();
-        collect_shipped(&skill_dir, Path::new(""), &mut files)?;
-        for rel in files {
+        for rel in shipped_files(&skill_dir)? {
             let path = skill_dir.join(&rel);
+            let shown = path.strip_prefix(repo_root).unwrap_or(&path).to_path_buf();
+            // Listed in the index but deleted from the worktree: nothing ships.
+            let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() {
+                let target = std::fs::read_link(&path)
+                    .with_context(|| format!("reading link {}", path.display()))?;
+                violations.push(Violation {
+                    file: shown,
+                    line: 1,
+                    target: slash_path(&target),
+                    rule: "symlink",
+                });
+                continue;
+            }
             let bytes =
                 std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
             let Ok(body) = String::from_utf8(bytes) else {
@@ -55,7 +70,6 @@ pub fn lint(repo_root: &Path) -> Result<()> {
             } else {
                 lint_text(&body, &urls)
             };
-            let shown = path.strip_prefix(repo_root).unwrap_or(&path).to_path_buf();
             violations.extend(found.into_iter().map(|v| Violation {
                 file: shown.clone(),
                 ..v
@@ -149,21 +163,35 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
-/// Every file under `rel` that ships with the skill: all of it except
-/// `README.md`, `REVIEW.md` and `tests/`, which are for maintainers.
-fn collect_shipped(skill_dir: &Path, rel: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    for path in sorted_entries(&skill_dir.join(rel))? {
-        let name = path.file_name().unwrap_or_default();
-        let child = rel.join(name);
-        if path.is_dir() {
-            if name != "tests" {
-                collect_shipped(skill_dir, &child, out)?;
-            }
-        } else if name != "README.md" && name != "REVIEW.md" {
-            out.push(child);
-        }
+/// Every file the skill would ship if committed now, relative to
+/// `skill_dir`: tracked or untracked but not gitignored, so a local `.venv/`
+/// is left out. `README.md`, `REVIEW.md` and the skill-root `tests/` are for
+/// maintainers. Symlinks are listed, not followed.
+fn shipped_files(skill_dir: &Path) -> Result<Vec<PathBuf>> {
+    let out = Command::new("git")
+        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."])
+        .current_dir(skill_dir)
+        .output()
+        .with_context(|| format!("running git ls-files in {}", skill_dir.display()))?;
+    if !out.status.success() {
+        bail!(
+            "git ls-files in {} failed: {}",
+            skill_dir.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
-    Ok(())
+    let mut files: Vec<PathBuf> = String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|rel| !rel.is_empty() && !rel.starts_with("tests/"))
+        .map(PathBuf::from)
+        .filter(|rel| {
+            let name = rel.file_name().unwrap_or_default();
+            name != "README.md" && name != "REVIEW.md"
+        })
+        .collect();
+    files.sort();
+    files.dedup();
+    Ok(files)
 }
 
 /// Non-Markdown files have no link syntax to resolve; only a repo URL
@@ -470,6 +498,12 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, body).unwrap();
         }
+        let git = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        assert!(git.success());
         root
     }
 
@@ -669,7 +703,6 @@ mod tests {
                 ("skills/x/README.md", bad),
                 ("skills/x/REVIEW.md", bad),
                 ("skills/x/tests/t.md", bad),
-                ("skills/x/examples/tests/t.py", bad),
                 ("skills/x/examples/README.md", bad),
                 (
                     "skills/x/examples/blob.bin",
@@ -678,6 +711,75 @@ mod tests {
             ],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn nested_tests_directory_ships_and_is_linted() {
+        let err = lint_repo(
+            "nested-tests",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/examples/tests/t.py", "# https://toolr.readthedocs.io/\n"),
+            ],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("skills/x/examples/tests/t.py:1: repo-url"), "{err}");
+    }
+
+    #[test]
+    fn gitignored_files_do_not_ship_and_are_not_linted() {
+        let bad = "[a](../../docs/x.md) https://toolr.readthedocs.io/\n";
+        lint_repo(
+            "ignored",
+            &[
+                (".gitignore", ".venv/\n"),
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/examples/.venv/lib/x.md", bad),
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tracked_file_deleted_from_the_worktree_is_skipped() {
+        let root = temp_repo(
+            "deleted",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/gone.md", "[a](../../docs/x.md)\n"),
+            ],
+        );
+        let added = std::process::Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        assert!(added.success());
+        std::fs::remove_file(root.join("skills/x/gone.md")).unwrap();
+        let out = lint(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        out.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_flagged_not_followed() {
+        let root = temp_repo(
+            "symlink",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("outside/leak.md", "[a](../../docs/x.md)\n"),
+            ],
+        );
+        let skill = root.join("skills/x");
+        std::os::unix::fs::symlink("../../outside", skill.join("outside")).unwrap();
+        std::os::unix::fs::symlink(".", skill.join("loop")).unwrap();
+        let err = lint(&root).unwrap_err().to_string();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(err.contains("skills/x/loop:1: symlink: ."), "{err}");
+        assert!(err.contains("skills/x/outside:1: symlink: ../../outside"), "{err}");
+        assert!(!err.contains("leak.md"), "{err}");
     }
 
     #[test]
