@@ -672,14 +672,35 @@ pub(super) fn code_span_end(bytes: &[u8], i: usize) -> Option<usize> {
 ///
 /// A `](` that no `[` opens is an error, since it means a link this
 /// scanner failed to recognise.
-pub(super) fn find_links(text: &str, first_lineno: usize) -> Result<Vec<Link>> {
+pub(super) fn find_links(text: &str, first_lineno: usize) -> Result<Vec<Link>, LinkError> {
     scan_links(text, &|pos| {
         first_lineno + text[..pos].matches('\n').count()
     })
 }
 
+/// A link the scanner can't read, at the line it sits on.
+#[derive(Debug)]
+pub(super) struct LinkError {
+    pub line: usize,
+    pub message: String,
+}
+
+impl std::fmt::Display for LinkError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "line {}: {}", self.line, self.message)
+    }
+}
+
+impl std::error::Error for LinkError {}
+
 /// [`find_links`] with a caller-supplied byte-offset-to-line mapping.
-fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>> {
+fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>, LinkError> {
+    let fail = |pos: usize, message: &str| {
+        Err(LinkError {
+            line: line_of(pos),
+            message: message.to_string(),
+        })
+    };
     let bytes = text.as_bytes();
     let mut links = Vec::new();
     let mut i = 0;
@@ -691,7 +712,7 @@ fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>>
                 i = code_span_end(bytes, i).unwrap_or(i + run);
             }
             b']' if bytes.get(i + 1) == Some(&b'(') => {
-                bail!("line {}: `](` without a matching `[`", line_of(i));
+                return fail(i, "`](` without a matching `[`");
             }
             b'[' => {
                 let mut depth = 1;
@@ -739,16 +760,13 @@ fn scan_links(text: &str, line_of: &dyn Fn(usize) -> usize) -> Result<Vec<Link>>
                 .map(|k| close + 2 + k);
                 let Some(target_end) = target_end else {
                     if open == b'(' {
-                        bail!("line {}: unterminated link target", line_of(close));
+                        return fail(close, "unterminated link target");
                     }
                     i += 1;
                     continue;
                 };
                 if nested {
-                    bail!(
-                        "line {}: nested brackets in link text are not supported",
-                        line_of(i)
-                    );
+                    return fail(i, "nested brackets in link text are not supported");
                 }
                 let image = i > 0 && bytes[i - 1] == b'!' && !is_escaped(bytes, i - 1);
                 let raw = text[close + 2..target_end].trim();

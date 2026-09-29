@@ -235,7 +235,7 @@ fn lint_file(
         let links = match find_links(text, *first) {
             Ok(links) => links,
             Err(e) => {
-                lint.flag(*first, "malformed-markdown", &format!("{e:#}"));
+                lint.flag(e.line, "malformed-markdown", &e.message);
                 continue;
             }
         };
@@ -626,6 +626,14 @@ mod tests {
     #[test]
     fn malformed_markdown_is_reported_not_swallowed() {
         assert_eq!(rules("a ](b)\n", &[]), ["malformed-markdown"]);
+    }
+
+    #[test]
+    fn malformed_markdown_reports_the_offending_line() {
+        let body = "Intro.\n\nfirst\nsecond\nthird ](b)\n";
+        let v = lint_file(Path::new("s"), Path::new("SKILL.md"), body, &exists_in(&[]), &urls());
+        assert_eq!((v[0].rule, v[0].line), ("malformed-markdown", 5));
+        assert_eq!(v[0].target, "`](` without a matching `[`");
     }
 
     #[test]
