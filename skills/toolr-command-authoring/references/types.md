@@ -14,7 +14,12 @@ Toolr enforces a closed set of parameter types. Anything outside this set is rej
 | `str` | none (passthrough) | JSON string | `str` |
 | `pathlib.Path` | clap (custom parser) | string | `pathlib.Path` |
 | `toolr.types.AbsolutePath` | clap (absolutise vs cwd) | absolute string | `pathlib.Path` |
+| `toolr.types.NewPath` | clap (must not exist; parent dir must) | absolute string | `pathlib.Path` |
 | `toolr.types.ResolvedPath` | clap (`canonicalize()`) | resolved string | `pathlib.Path` |
+| `toolr.types.FilePath` | clap (`canonicalize()`, regular file) | resolved string | `pathlib.Path` |
+| `toolr.types.DirectoryPath` | clap (`canonicalize()`, directory) | resolved string | `pathlib.Path` |
+| `toolr.types.ExecutablePath` | clap (`canonicalize()`, executable file) | resolved string | `pathlib.Path` |
+| `toolr.types.WritableDirectoryPath` | clap (`canonicalize()`, writable directory) | resolved string | `pathlib.Path` |
 | `toolr.types.DateTime` | clap (chrono RFC 3339) | string | `datetime.datetime` |
 | `toolr.types.Date` | clap (chrono ISO date) | string | `datetime.date` |
 | `toolr.types.Time` | clap (chrono ISO time) | string | `datetime.time` |
@@ -29,13 +34,3 @@ Toolr enforces a closed set of parameter types. Anything outside this set is rej
 | `list[T]` (T above) | clap per-element | JSON array | `list[T]` |
 | `tuple[T1, T2, …]` | clap arity, msgspec per-slot | JSON array | `tuple[T1, T2]` |
 | `T \| None` | clap (`required=false`) | typed or absent | `T` or `None` |
-
-## Path constraints
-
-| Constraint | Effect |
-|---|---|
-| `arg(must_exist=True)` | reject paths that don't exist on disk |
-| `arg(must_be_file=True)` | reject anything that isn't a regular file (implies `must_exist`) |
-| `arg(must_be_dir=True)` | reject anything that isn't a directory (implies `must_exist`) |
-
-Apply them with `Annotated[Path, arg(must_be_file=True)]`; they apply to `pathlib.Path`, `toolr.types.AbsolutePath` and `toolr.types.ResolvedPath`.

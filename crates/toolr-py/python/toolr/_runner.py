@@ -22,6 +22,7 @@ import inspect
 import ipaddress
 import os
 import pathlib
+import re
 import stat
 import sys
 import traceback
@@ -301,6 +302,26 @@ def _build_context(spec: RunnerSpec) -> Context:
     )
 
 
+_UNKNOWN_ARG_KEYWORD = re.compile(r"arg\(\) got an unexpected keyword argument '(?P<keyword>\w+)'")
+
+
+def _unknown_arg_keyword_error(exc: TypeError, where: str) -> SpecError | None:
+    """A clear error for stale code passing a keyword `arg()` no longer takes.
+
+    The static build rejects such code, but a cached manifest or a plugin
+    fragment built by an older toolr still reaches the runner.
+    """
+    match = _UNKNOWN_ARG_KEYWORD.match(str(exc))
+    if match is None:
+        return None
+    msg = (
+        f"{where}: `arg()` has no `{match['keyword']}` keyword. "
+        "Run `toolr project manifest rebuild` to see the replacement; "
+        "if the module ships in a plugin, rebuild the plugin against this toolr release."
+    )
+    return SpecError(msg)
+
+
 def _import_target(spec: RunnerSpec) -> Any:
     """Import ``spec.module`` and return the attribute named ``spec.function``."""
     try:
@@ -311,6 +332,11 @@ def _import_target(spec: RunnerSpec) -> Any:
     except ImportError as exc:
         msg = f"failed to import {spec.module}: {exc}"
         raise SpecError(msg) from exc
+    except TypeError as exc:
+        error = _unknown_arg_keyword_error(exc, f"failed to import {spec.module}")
+        if error is None:
+            raise
+        raise error from exc
     try:
         return getattr(module, spec.function)
     except AttributeError as exc:
@@ -398,6 +424,28 @@ def _localns_for_enum_modules(enum_modules: dict[str, str]) -> dict[str, Any]:
     return localns
 
 
+def _hints_and_signature(
+    target: Callable[..., Any],
+    localns: dict[str, Any] | None,
+) -> tuple[dict[str, Any], inspect.Signature]:
+    """Resolve ``target``'s type hints (best-effort) and its signature.
+
+    Postponed or lazy (3.14+) annotations only evaluate here, so a stale
+    `arg()` keyword surfaces here rather than at import.
+    """
+    where = f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}"
+    try:
+        hints = get_type_hints(target, localns=localns, include_extras=False)
+    except TypeError as exc:
+        error = _unknown_arg_keyword_error(exc, where)
+        if error is not None:
+            raise error from exc
+        hints = {}
+    except Exception:  # noqa: BLE001 — best-effort; fall back to raw values.
+        hints = {}
+    return hints, inspect.signature(target)
+
+
 def _coerce_args(
     target: Callable[..., Any],
     raw: dict[str, Any],
@@ -423,11 +471,7 @@ def _coerce_args(
     :func:`_localns_for_enum_modules`.
     """
     localns = _localns_for_enum_modules(enum_modules) if enum_modules else None
-    try:
-        hints = get_type_hints(target, localns=localns, include_extras=False)
-    except Exception:  # noqa: BLE001 — best-effort; fall back to raw values.
-        hints = {}
-    sig = inspect.signature(target)
+    hints, sig = _hints_and_signature(target, localns)
     var_positional_name = next(
         (name for name, p in sig.parameters.items() if p.kind == p.VAR_POSITIONAL),
         None,

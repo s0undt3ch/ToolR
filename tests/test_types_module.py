@@ -13,8 +13,10 @@ from __future__ import annotations
 import datetime
 import ipaddress
 import pathlib
+import typing
 import uuid
 
+import pytest
 from packaging.version import Version as _Version
 
 import toolr.types
@@ -28,13 +30,18 @@ EXPECTED_TOOLR_TYPES_NAMES = {
     "Count",
     "Date",
     "DateTime",
+    "DirectoryPath",
     "Email",
+    "ExecutablePath",
+    "FilePath",
     "IPv4",
     "IPv6",
+    "NewPath",
     "ResolvedPath",
     "Time",
     "UUID",
     "Version",
+    "WritableDirectoryPath",
 }
 
 
@@ -47,9 +54,28 @@ def test_every_expected_name_is_importable() -> None:
         assert hasattr(toolr.types, name), f"{name} missing from toolr.types"
 
 
-def test_path_aliases_resolve_to_pathlib_path() -> None:
-    assert toolr.types.AbsolutePath is pathlib.Path
-    assert toolr.types.ResolvedPath is pathlib.Path
+PATH_TYPE_PARENTS = {
+    "AbsolutePath": pathlib.Path,
+    "NewPath": toolr.types.AbsolutePath,
+    "ResolvedPath": pathlib.Path,
+    "FilePath": toolr.types.ResolvedPath,
+    "DirectoryPath": toolr.types.ResolvedPath,
+    "ExecutablePath": toolr.types.FilePath,
+    "WritableDirectoryPath": toolr.types.DirectoryPath,
+}
+
+
+@pytest.mark.parametrize(("name", "parent"), PATH_TYPE_PARENTS.items(), ids=PATH_TYPE_PARENTS)
+def test_path_types_are_newtypes_over_their_parent(name, parent) -> None:
+    path_type = getattr(toolr.types, name)
+    assert isinstance(path_type, typing.NewType)
+    assert path_type.__supertype__ is parent
+
+
+def test_path_types_hand_back_the_path_they_are_given() -> None:
+    value = pathlib.Path("x")
+    for name in PATH_TYPE_PARENTS:
+        assert getattr(toolr.types, name)(value) is value
 
 
 def test_datetime_aliases_resolve_to_stdlib() -> None:

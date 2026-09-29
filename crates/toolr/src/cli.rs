@@ -769,7 +769,7 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
             if let Some(arity) = crate::value_parsers::tuple_arity(ty) {
                 a = a.num_args(arity);
             }
-            a = crate::value_parsers::apply_value_parser(a, ty, arg.path_constraints.as_ref());
+            a = crate::value_parsers::apply_value_parser(a, ty);
         } else if !arg.allowed_values.is_empty() {
             a = a.value_parser(arg.allowed_values.clone());
         }
@@ -839,7 +839,6 @@ mod cli_tree_tests {
             type_annotation: None,
             resolved_type: None,
             allowed_values: vec![],
-            path_constraints: None,
             metadata: Default::default(),
             long_flag: None,
         }

@@ -25,7 +25,7 @@ fn version_flag_works_with_no_project() {
 #[test]
 fn help_lists_groups_from_manifest() {
     let json = r#"{
-        "schema_version": 1,
+        "schema_version": 2,
         "static_hash": "h",
         "third_party_hash": "",
         "groups": [
@@ -104,7 +104,7 @@ def hello(ctx, name: str = "world") -> None:
     )
     .unwrap();
     let manifest = r#"{
-        "schema_version": 1, "static_hash": "h", "third_party_hash": "",
+        "schema_version": 2, "static_hash": "h", "third_party_hash": "",
         "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
         "commands": [{
             "name": "hello", "group": "demo", "module": "tools.demo",
@@ -242,7 +242,7 @@ fn preflight_fixture(
 
     let manifest = format!(
         r#"{{
-            "schema_version": 1,
+            "schema_version": 2,
             "static_hash": "{static_hash}", "third_party_hash": "{third_party_hash}",
             "toolr_version": "{toolr_version}",
             "groups": [{{
@@ -447,7 +447,7 @@ def boom(ctx) -> None:
     )
     .unwrap();
     let manifest = r#"{
-        "schema_version": 1, "static_hash": "h", "third_party_hash": "",
+        "schema_version": 2, "static_hash": "h", "third_party_hash": "",
         "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
         "commands": [{
             "name": "boom", "group": "demo", "module": "tools.demo",

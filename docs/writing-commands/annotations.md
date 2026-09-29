@@ -33,9 +33,6 @@ def show(
 | `display_order=N` | Lower values render first in `--help`. |
 | `conflicts_with=[...]` | Mutex relationships: at most one of these flags per invocation. |
 | `requires=[...]` | If this flag is set, every name listed must also be set. |
-| `must_exist=True` | Reject paths that don't exist on disk (Path types only). |
-| `must_be_file=True` | Reject anything that isn't a regular file; implies `must_exist`. |
-| `must_be_dir=True` | Reject anything that isn't a directory; implies `must_exist`. |
 
 ## Aliases (short flags + alternate long flags)
 
@@ -144,8 +141,10 @@ These still parse but emit a `ToolrDeprecationWarning`:
 - `action=` — `bool` infers flag, `list[T]` infers append, `Count` infers count.
 - `group=` — use `conflicts_with=[…]` for mutex, `help_section=` for display grouping.
 
-Not accepted: `path_must_exist=` / `path_must_be_file=` /
-`path_must_be_dir=`. These spellings never parsed; the real (and only)
-names are `must_exist=` / `must_be_file=` / `must_be_dir=`.
+Removed: `must_exist=`, `must_be_file=` and `must_be_dir=` (and the `path_must_*` spellings). The
+build fails with a hint naming the replacement: use `toolr.types.ResolvedPath`, `FilePath` or
+`DirectoryPath`. A plugin that still uses them fails when you run one of its commands, with an
+error saying `arg()` has no such keyword. Rebuild it against this release
+(`toolr self build-manifest --check` in its CI catches it). See [Path types](arguments.md#path-types).
 
 Next: [Nested groups →](nesting.md)

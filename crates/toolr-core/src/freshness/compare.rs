@@ -39,7 +39,10 @@ pub enum FreshnessVerdict {
 /// `Some(venv)` it escalates to `ThirdPartyDrift`, since the venv can
 /// be re-globbed. With `None` it stays at `StaticDrift` — escalating
 /// further would make callers discard cached third-party entries with
-/// nothing to replace them.
+/// nothing to replace them. A `schema_version` other than
+/// `SCHEMA_VERSION` is treated the same way. A dev build keeps its
+/// version string across commits, so this catches a schema change that
+/// the version check can't.
 ///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
 /// third-party entries. On `ThirdPartyDrift`, call
@@ -57,7 +60,9 @@ pub fn compare(
     // Checked first, no I/O: a version mismatch is decided before either
     // hash is computed, so it never pays for a walk/glob it's going to
     // discard the result of.
-    if cached.toolr_version != env!("CARGO_PKG_VERSION") {
+    if cached.toolr_version != env!("CARGO_PKG_VERSION")
+        || cached.schema_version != crate::manifest::SCHEMA_VERSION
+    {
         let verdict = if venv_dir.is_some() {
             FreshnessVerdict::ThirdPartyDrift
         } else {

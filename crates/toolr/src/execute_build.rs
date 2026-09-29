@@ -411,11 +411,7 @@ fn extract_scalar(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
             serde_json::Number::from_f64(*f).map(Value::Number)
         }),
         Some(SupportedType::Bool) => matches.get_one::<bool>(name).map(|b| Value::Bool(*b)),
-        Some(
-            SupportedType::Path
-            | SupportedType::AbsolutePath
-            | SupportedType::ResolvedPath,
-        ) => matches
+        Some(ty) if ty.is_path() => matches
             .get_one::<std::path::PathBuf>(name)
             .map(|p| Value::String(p.to_string_lossy().into_owned())),
         // Everything else — strings (incl. enum / literal / email /
@@ -444,11 +440,7 @@ fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
             .get_many::<bool>(name)
             .map(|iter| iter.map(|b| Value::Bool(*b)).collect())
             .unwrap_or_default(),
-        Some(
-            SupportedType::Path
-            | SupportedType::AbsolutePath
-            | SupportedType::ResolvedPath,
-        ) => matches
+        Some(ty) if ty.is_path() => matches
             .get_many::<std::path::PathBuf>(name)
             .map(|iter| {
                 iter.map(|p| Value::String(p.to_string_lossy().into_owned()))
@@ -465,16 +457,13 @@ fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
 /// True when `arg` is a path-typed argument whose value the user typed on
 /// the command line (not a default) and that value is a relative path.
 ///
-/// Type-driven: only `SupportedType::Path` / `AbsolutePath` / `ResolvedPath`
-/// count — never a `str` arg that merely looks path-like. Source-precise:
-/// `ValueSource::CommandLine` only, so a relative *default* never warns.
+/// Type-driven: only path types (`SupportedType::is_path`) count — never a `str` arg
+/// that merely looks path-like. Source-precise: `ValueSource::CommandLine` only, so a
+/// relative *default* never warns.
 fn arg_has_relative_cli_path(arg: &Argument, matches: &ArgMatches) -> bool {
     use clap::parser::ValueSource;
 
-    let is_path = matches!(
-        scalar_element_type(arg),
-        Some(SupportedType::Path | SupportedType::AbsolutePath | SupportedType::ResolvedPath)
-    );
+    let is_path = scalar_element_type(arg).is_some_and(SupportedType::is_path);
     if !is_path {
         return false;
     }
@@ -561,7 +550,6 @@ mod tests {
                 default: Some("world".into()),
                 type_annotation: None,
                 resolved_type: None,
-                path_constraints: None,
                 allowed_values: vec![],
                 metadata: toolr_core::manifest::ArgMetadata::default(),
                 long_flag: None,
@@ -646,7 +634,6 @@ mod tests {
                 default: None,
                 type_annotation: None,
                 resolved_type: None,
-                path_constraints: None,
                 allowed_values: vec![],
                 metadata: toolr_core::manifest::ArgMetadata::default(),
                 long_flag: None,
@@ -679,7 +666,6 @@ mod tests {
             default: None,
             type_annotation: None,
             resolved_type: Some(ty),
-            path_constraints: None,
             allowed_values: vec![],
             metadata: toolr_core::manifest::ArgMetadata::default(),
             long_flag: None,
@@ -1071,6 +1057,72 @@ mod tests {
         assert!(opts.default_timeout_secs.is_none());
         assert!(opts.default_no_output_timeout_secs.is_none());
     }
+
+    use toolr_core::parser::SupportedType;
+    use toolr_core::parser::types::SupportedTypeKind;
+
+    fn path_arg(ty: SupportedType, kind: ArgumentKind) -> Argument {
+        Argument {
+            name: "p".into(),
+            kind,
+            help: String::new(),
+            default: None,
+            type_annotation: None,
+            resolved_type: Some(ty),
+            allowed_values: vec![],
+            metadata: Default::default(),
+            long_flag: None,
+        }
+    }
+
+    #[test]
+    fn every_path_kind_is_read_back_as_a_string_path() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().to_str().unwrap().to_string();
+        let file = tmp.path().join("f.exe");
+        std::fs::write(&file, "x").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let file = file.to_str().unwrap().to_string();
+        let new = tmp.path().join("new").to_str().unwrap().to_string();
+        for kind in SupportedTypeKind::ALL {
+            let ty = kind.representative();
+            if !ty.is_path() {
+                continue;
+            }
+            let value = match ty {
+                SupportedType::NewPath => new.clone(),
+                SupportedType::FilePath | SupportedType::ExecutablePath => file.clone(),
+                _ => dir.clone(),
+            };
+            let arg = path_arg(ty.clone(), ArgumentKind::Optional);
+            let clap_cmd = clap::Command::new("t").arg(
+                crate::value_parsers::apply_value_parser(Arg::new("p").long("p"), &ty),
+            );
+            let matches = clap_cmd.try_get_matches_from(["t", "--p", &value]).unwrap();
+            let got = extract_scalar(&arg, &matches);
+            assert!(matches!(got, Some(Value::String(_))), "{kind:?} got {got:?}");
+        }
+    }
+
+    #[test]
+    fn list_of_directory_paths_is_read_back_as_strings() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+        let ty = SupportedType::List(Box::new(SupportedType::DirectoryPath));
+        let arg = path_arg(ty.clone(), ArgumentKind::Repeated);
+        let clap_cmd = clap::Command::new("t").arg(
+            crate::value_parsers::apply_value_parser(Arg::new("p").long("p"), &ty)
+                .action(ArgAction::Append),
+        );
+        let matches = clap_cmd
+            .try_get_matches_from(["t", "--p", dir, "--p", dir])
+            .unwrap();
+        assert_eq!(extract_many(&arg, &matches).len(), 2);
+    }
 }
 
 #[cfg(test)]
@@ -1101,7 +1153,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1202,7 +1253,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1248,7 +1298,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1268,7 +1317,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1390,7 +1438,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }
@@ -1424,7 +1471,6 @@ mod dispatched_pack_tests {
             type_annotation: Some("str".into()),
             resolved_type: None,
             allowed_values: vec!["a".into(), "b".into()],
-            path_constraints: None,
             metadata,
             long_flag: None,
         };
@@ -1448,7 +1494,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: toolr_core::manifest::ArgMetadata { nargs, ..Default::default() },
                 long_flag: None,
             }
@@ -1473,7 +1518,6 @@ mod dispatched_pack_tests {
             type_annotation: None,
             resolved_type: None,
             allowed_values: vec![],
-            path_constraints: None,
             metadata: Default::default(),
             long_flag: None,
         }
@@ -1521,7 +1565,6 @@ mod dispatched_pack_tests {
                 type_annotation: None,
                 resolved_type: None,
                 allowed_values: vec![],
-                path_constraints: None,
                 metadata: Default::default(),
                 long_flag: None,
             }],
@@ -1534,4 +1577,5 @@ mod dispatched_pack_tests {
         let packed = pack_child_args(&cmd, &matches);
         assert!(!packed.args.contains_key("label"));
     }
+
 }

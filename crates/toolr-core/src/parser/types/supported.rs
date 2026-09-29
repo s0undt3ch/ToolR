@@ -12,12 +12,22 @@ pub enum SupportedType {
     Int,
     Float,
     Bool,
-    /// `pathlib.Path` — string passes through unchanged.
+    /// `pathlib.Path`: string passes through unchanged.
     Path,
-    /// `toolr.types.AbsolutePath` — absolutised against cwd, no fs check.
+    /// `toolr.types.AbsolutePath`: absolutised against cwd, no fs check.
     AbsolutePath,
-    /// `toolr.types.ResolvedPath` — canonicalised, must exist.
+    /// `toolr.types.NewPath`: absolutised; must not exist, parent dir must.
+    NewPath,
+    /// `toolr.types.ResolvedPath`: canonicalised, must exist.
     ResolvedPath,
+    /// `toolr.types.FilePath`: canonicalised, must be a regular file.
+    FilePath,
+    /// `toolr.types.DirectoryPath`: canonicalised, must be a directory.
+    DirectoryPath,
+    /// `toolr.types.ExecutablePath`: canonicalised, executable regular file.
+    ExecutablePath,
+    /// `toolr.types.WritableDirectoryPath`: canonicalised, writable directory.
+    WritableDirectoryPath,
     DateTime,
     Date,
     Time,
@@ -74,6 +84,40 @@ impl SupportedType {
         }
     }
 
+    /// Whether clap stores this type's value as a `PathBuf`. Exhaustive, so
+    /// a new variant must decide; `execute_build.rs` relies on this to read
+    /// path values back with the right type.
+    pub fn is_path(&self) -> bool {
+        match self {
+            SupportedType::Path
+            | SupportedType::AbsolutePath
+            | SupportedType::NewPath
+            | SupportedType::ResolvedPath
+            | SupportedType::FilePath
+            | SupportedType::DirectoryPath
+            | SupportedType::ExecutablePath
+            | SupportedType::WritableDirectoryPath => true,
+            SupportedType::Str
+            | SupportedType::Int
+            | SupportedType::Float
+            | SupportedType::Bool
+            | SupportedType::DateTime
+            | SupportedType::Date
+            | SupportedType::Time
+            | SupportedType::Uuid
+            | SupportedType::Ipv4
+            | SupportedType::Ipv6
+            | SupportedType::Email
+            | SupportedType::Version
+            | SupportedType::Count
+            | SupportedType::Literal(_)
+            | SupportedType::Enum { .. }
+            | SupportedType::List(_)
+            | SupportedType::Tuple(_)
+            | SupportedType::Optional(_) => false,
+        }
+    }
+
     /// Doc-table row for this variant, matching the "Supported types"
     /// table in `docs/writing-commands/arguments.md`. Exhaustive with
     /// no `_` arm so a new variant fails to compile until documented.
@@ -121,9 +165,44 @@ impl SupportedType {
                 python_receives: "`pathlib.Path`",
                 note: "",
             },
+            SupportedType::NewPath => TypeDoc {
+                annotation: "toolr.types.NewPath",
+                validated_by: "clap (must not exist; parent dir must)",
+                wire_format: "absolute string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
             SupportedType::ResolvedPath => TypeDoc {
                 annotation: "toolr.types.ResolvedPath",
                 validated_by: "clap (`canonicalize()`)",
+                wire_format: "resolved string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
+            SupportedType::FilePath => TypeDoc {
+                annotation: "toolr.types.FilePath",
+                validated_by: "clap (`canonicalize()`, regular file)",
+                wire_format: "resolved string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
+            SupportedType::DirectoryPath => TypeDoc {
+                annotation: "toolr.types.DirectoryPath",
+                validated_by: "clap (`canonicalize()`, directory)",
+                wire_format: "resolved string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
+            SupportedType::ExecutablePath => TypeDoc {
+                annotation: "toolr.types.ExecutablePath",
+                validated_by: "clap (`canonicalize()`, executable file)",
+                wire_format: "resolved string",
+                python_receives: "`pathlib.Path`",
+                note: "",
+            },
+            SupportedType::WritableDirectoryPath => TypeDoc {
+                annotation: "toolr.types.WritableDirectoryPath",
+                validated_by: "clap (`canonicalize()`, writable directory)",
                 wire_format: "resolved string",
                 python_receives: "`pathlib.Path`",
                 note: "",
@@ -242,7 +321,12 @@ impl SupportedType {
             SupportedType::Bool => SupportedTypeKind::Bool,
             SupportedType::Path => SupportedTypeKind::Path,
             SupportedType::AbsolutePath => SupportedTypeKind::AbsolutePath,
+            SupportedType::NewPath => SupportedTypeKind::NewPath,
             SupportedType::ResolvedPath => SupportedTypeKind::ResolvedPath,
+            SupportedType::FilePath => SupportedTypeKind::FilePath,
+            SupportedType::DirectoryPath => SupportedTypeKind::DirectoryPath,
+            SupportedType::ExecutablePath => SupportedTypeKind::ExecutablePath,
+            SupportedType::WritableDirectoryPath => SupportedTypeKind::WritableDirectoryPath,
             SupportedType::DateTime => SupportedTypeKind::DateTime,
             SupportedType::Date => SupportedTypeKind::Date,
             SupportedType::Time => SupportedTypeKind::Time,
@@ -294,7 +378,12 @@ supported_type_kinds!(
     Str,
     Path,
     AbsolutePath,
+    NewPath,
     ResolvedPath,
+    FilePath,
+    DirectoryPath,
+    ExecutablePath,
+    WritableDirectoryPath,
     DateTime,
     Date,
     Time,
@@ -322,7 +411,12 @@ impl SupportedTypeKind {
             SupportedTypeKind::Str => SupportedType::Str,
             SupportedTypeKind::Path => SupportedType::Path,
             SupportedTypeKind::AbsolutePath => SupportedType::AbsolutePath,
+            SupportedTypeKind::NewPath => SupportedType::NewPath,
             SupportedTypeKind::ResolvedPath => SupportedType::ResolvedPath,
+            SupportedTypeKind::FilePath => SupportedType::FilePath,
+            SupportedTypeKind::DirectoryPath => SupportedType::DirectoryPath,
+            SupportedTypeKind::ExecutablePath => SupportedType::ExecutablePath,
+            SupportedTypeKind::WritableDirectoryPath => SupportedType::WritableDirectoryPath,
             SupportedTypeKind::DateTime => SupportedType::DateTime,
             SupportedTypeKind::Date => SupportedType::Date,
             SupportedTypeKind::Time => SupportedType::Time,
@@ -421,7 +515,7 @@ impl std::fmt::Display for UnsupportedType {
             Self::UnsupportedShape(s) => write!(f, "unsupported generic shape `{s}`."),
             Self::UnknownArgKeyword { keyword, suggestion } => {
                 write!(f, "unknown `arg()` keyword `{keyword}`")?;
-                match (super::arg_keywords::argparse_hint(keyword), suggestion) {
+                match (super::arg_keywords::keyword_hint(keyword), suggestion) {
                     (Some(hint), _) => write!(f, "; {hint}"),
                     (None, Some(s)) => write!(f, " (did you mean `{s}`?)"),
                     (None, None) => Ok(()),
@@ -437,12 +531,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn is_path_is_true_exactly_for_the_path_kinds() {
+        let paths: Vec<SupportedTypeKind> = SupportedTypeKind::ALL
+            .iter()
+            .copied()
+            .filter(|k| k.representative().is_path())
+            .collect();
+        assert_eq!(
+            paths,
+            [
+                SupportedTypeKind::Path,
+                SupportedTypeKind::AbsolutePath,
+                SupportedTypeKind::NewPath,
+                SupportedTypeKind::ResolvedPath,
+                SupportedTypeKind::FilePath,
+                SupportedTypeKind::DirectoryPath,
+                SupportedTypeKind::ExecutablePath,
+                SupportedTypeKind::WritableDirectoryPath,
+            ]
+        );
+    }
+
+    #[test]
     fn catalogue_covers_every_toolr_types_name() {
         // Same list as `toolr_types_names_match_python_surface` in mod.rs,
         // which is itself pinned to tests/test_types_module.py.
         let names = [
-            "AbsolutePath", "Count", "Date", "DateTime", "Email", "IPv4",
-            "IPv6", "ResolvedPath", "Time", "UUID", "Version",
+            "AbsolutePath", "Count", "Date", "DateTime", "DirectoryPath", "Email",
+            "ExecutablePath", "FilePath", "IPv4", "IPv6", "NewPath", "ResolvedPath",
+            "Time", "UUID", "Version", "WritableDirectoryPath",
         ];
         let annotations: Vec<&str> =
             SupportedType::catalogue().iter().map(|d| d.annotation).collect();

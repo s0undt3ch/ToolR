@@ -423,7 +423,7 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
     for needle in [
         "invalid parameter declarations (1):",
         "tools.kw::read argument `config`",
-        "unknown `arg()` keyword `path_must_exist` (did you mean `must_exist`?)",
+        "unknown `arg()` keyword `path_must_exist`; use `toolr.types.ResolvedPath` instead",
     ] {
         assert!(
             stderr.contains(needle),

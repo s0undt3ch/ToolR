@@ -1,12 +1,12 @@
-//! Generators for the supported-type and path-constraint catalogues,
-//! shared by `references/types.md` and the two docs snippets so the
-//! skill and the docs can't drift from each other.
+//! Generators for the supported-type catalogue, shared by
+//! `references/types.md` and the docs snippet so the skill and the docs
+//! can't drift from each other.
 
 use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::Result;
-use toolr_core::parser::types::{PathConstraintDoc, PathConstraints, SupportedType, TypeDoc};
+use toolr_core::parser::types::{SupportedType, TypeDoc};
 
 use super::Generated;
 
@@ -74,24 +74,6 @@ fn render_types_table(flavor: TableFlavor) -> String {
     out
 }
 
-/// The `| Constraint | Effect |` table shared by `references/types.md`
-/// and `docs/writing-commands/files/path-constraints.md`.
-fn render_path_table() -> String {
-    let mut out = String::new();
-    out.push_str("| Constraint | Effect |\n");
-    out.push_str("|---|---|\n");
-    for doc in PathConstraints::catalogue() {
-        let PathConstraintDoc { keyword, effect } = doc;
-        let _ = writeln!(out, "| `arg({keyword}=True)` | {} |", escape_cell(effect));
-    }
-    out
-}
-
-/// Sentence linking the path-constraint table to the types it applies to.
-const PATH_CONSTRAINT_APPLIES_TO: &str = "Apply them with \
-`Annotated[Path, arg(must_be_file=True)]`; they apply to `pathlib.Path`, \
-`toolr.types.AbsolutePath` and `toolr.types.ResolvedPath`.";
-
 /// Build `skills/toolr-command-authoring/references/types.md`.
 pub fn types_reference(repo_root: &Path) -> Result<Generated> {
     let mut body = String::new();
@@ -106,13 +88,6 @@ pub fn types_reference(repo_root: &Path) -> Result<Generated> {
 
     body.push_str("## Types\n\n");
     body.push_str(&render_types_table(TableFlavor::Gfm));
-    body.push('\n');
-
-    body.push_str("## Path constraints\n\n");
-    body.push_str(&render_path_table());
-    body.push('\n');
-    body.push_str(PATH_CONSTRAINT_APPLIES_TO);
-    body.push('\n');
 
     Ok(Generated {
         path: repo_root.join("skills/toolr-command-authoring/references/types.md"),
@@ -129,19 +104,6 @@ pub fn supported_types_snippet(repo_root: &Path) -> Result<Generated> {
 
     Ok(Generated {
         path: repo_root.join("docs/writing-commands/files/supported-types.md"),
-        body,
-    })
-}
-
-/// Build `docs/writing-commands/files/path-constraints.md`.
-pub fn path_constraints_snippet(repo_root: &Path) -> Result<Generated> {
-    let mut body = String::new();
-    body.push_str(DO_NOT_EDIT);
-    body.push_str("\n\n");
-    body.push_str(&render_path_table());
-
-    Ok(Generated {
-        path: repo_root.join("docs/writing-commands/files/path-constraints.md"),
         body,
     })
 }
@@ -239,14 +201,5 @@ mod tests {
         let table = render_types_table(TableFlavor::PythonMarkdownTable);
         assert!(table.contains("<code>T &#124; None</code>"));
         assert!(!table.contains("T \\| None"));
-    }
-
-    #[test]
-    fn path_table_uses_real_arg_keywords() {
-        let table = render_path_table();
-        assert!(table.contains("`arg(must_exist=True)`"));
-        assert!(table.contains("`arg(must_be_file=True)`"));
-        assert!(table.contains("`arg(must_be_dir=True)`"));
-        assert!(!table.contains("path_must_"));
     }
 }

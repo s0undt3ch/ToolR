@@ -80,6 +80,9 @@ each `non-exhaustive patterns: … not covered` error names the next `match` to 
    `supported_type_kinds!` list at the position its table row should take.
 4. `SupportedTypeKind::representative()`: return a value of the new variant.
 5. `apply_value_parser` in `crates/toolr/src/value_parsers.rs`: choose the clap value parser.
+6. `SupportedType::is_path()`: say whether clap stores the value as a `PathBuf`. For a path type,
+   also add its `(PathForm, PathCheck)` to `path_rule` in `crates/toolr/src/value_parsers.rs`.
+   A test fails if the two disagree.
 
 The compiler doesn't check the rest. Tests catch some of it, but not all:
 

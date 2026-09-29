@@ -90,10 +90,6 @@ class ArgumentAnnotation(Struct, frozen=True):
     display_order: int | None = None
     conflicts_with: list[str] | None = None
     requires: list[str] | None = None
-    # Path constraints — only meaningful for Path-typed parameters.
-    must_exist: bool = False
-    must_be_file: bool = False
-    must_be_dir: bool = False
     # Deprecated kwargs — kept on the struct so existing call sites
     # don't TypeError, but every one of them emits a
     # `ToolrDeprecationWarning` from `arg()`.
@@ -201,9 +197,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
     display_order: int | None = None,
     conflicts_with: _StrCollection | None = None,
     requires: _StrCollection | None = None,
-    must_exist: bool = False,
-    must_be_file: bool = False,
-    must_be_dir: bool = False,
     # Deprecated legacy kwargs. Each emits a `ToolrDeprecationWarning`
     # and (when applicable) maps onto the new field internally.
     required: bool | None = None,
@@ -234,12 +227,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
             together with this one.
         requires: Names of other parameters that must also be set when
             this one is.
-        must_exist: For path-typed params: reject paths that don't
-            exist on disk. Useful for "input file" style arguments.
-        must_be_file: For path-typed params: also require the path
-            is a regular file. Implies ``must_exist=True``.
-        must_be_dir: For path-typed params: also require the path
-            is a directory. Implies ``must_exist=True``.
         required: **Deprecated.** Removed in 1.0. Use ``T | None`` or
             ``*args: T`` to express optional / zero-or-more.
         action: **Deprecated.** Removed in 1.0. ``bool`` defaults imply
@@ -304,9 +291,6 @@ def arg(  # noqa: PLR0913 — kwargs surface mirrors the clap features we expose
         display_order=display_order,
         conflicts_with=conflicts_with,
         requires=requires,
-        must_exist=must_exist,
-        must_be_file=must_be_file,
-        must_be_dir=must_be_dir,
         required=required,
         action=action,
         choices=choices,

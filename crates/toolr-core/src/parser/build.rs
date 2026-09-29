@@ -591,7 +591,6 @@ mod tests {
             type_annotation: None,
             resolved_type: None,
             allowed_values: vec![],
-            path_constraints: None,
             metadata: ArgMetadata::default(),
             long_flag: long_flag.map(str::to_string),
         }
@@ -1431,6 +1430,64 @@ def documented(ctx: Context) -> None:
         );
     }
 
+    #[test]
+    fn path_state_types_resolve_bare_in_containers_and_as_varargs() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/paths.py",
+            r#"from toolr import Context, command_group
+from toolr.types import DirectoryPath, ExecutablePath, FilePath, NewPath, WritableDirectoryPath
+
+group = command_group("paths", "Paths", description="Paths.")
+
+
+@group.command
+def run(
+    ctx: Context,
+    config: FilePath,
+    *rest: ExecutablePath,
+    inputs: list[DirectoryPath],
+    output: NewPath | None = None,
+    scratch: WritableDirectoryPath | None = None,
+) -> None:
+    """Run.
+
+    Args:
+        config: Config file.
+        rest: Tools to run.
+        inputs: Input dirs.
+        output: Output file.
+        scratch: Scratch dir.
+    """
+"#,
+        );
+        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let cmd = manifest.commands.iter().find(|c| c.name == "run").unwrap();
+        let ty = |name: &str| {
+            cmd.arguments
+                .iter()
+                .find(|a| a.name == name)
+                .unwrap_or_else(|| panic!("no argument {name}"))
+                .resolved_type
+                .clone()
+        };
+        assert_eq!(ty("config"), Some(SupportedType::FilePath));
+        assert_eq!(ty("rest"), Some(SupportedType::ExecutablePath));
+        assert_eq!(
+            ty("inputs"),
+            Some(SupportedType::List(Box::new(SupportedType::DirectoryPath)))
+        );
+        assert_eq!(
+            ty("output"),
+            Some(SupportedType::Optional(Box::new(SupportedType::NewPath)))
+        );
+        assert_eq!(
+            ty("scratch"),
+            Some(SupportedType::Optional(Box::new(SupportedType::WritableDirectoryPath)))
+        );
+    }
+
     fn assert_builds(src: &str) {
         let tmp = TempDir::new().unwrap();
         write(tmp.path(), "tools/kw.py", src);
@@ -1460,24 +1517,23 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
 "#;
 
     #[test]
-    fn unknown_arg_keyword_path_must_exist_fails_build_suggesting_must_exist() {
+    fn unknown_arg_keyword_path_must_exist_fails_build_pointing_at_resolved_path() {
         let errs = type_errors_for(&[("tools/kw.py", ISSUE_500_KW_PY)]);
         assert_eq!(errs.len(), 1, "{errs:?}");
         let err = &errs[0];
         assert_eq!(err.module, "tools.kw");
         assert_eq!(err.function, "read");
         assert_eq!(err.argument, "config");
-        assert_eq!(
-            err.reason,
-            unknown_keyword("path_must_exist", Some("must_exist"))
-        );
+        assert_eq!(err.reason, unknown_keyword("path_must_exist", None));
         let msg = BuildError::UnsupportedTypes(errs).to_string();
         assert!(
             msg.starts_with("invalid parameter declarations (1):"),
             "got: {msg}"
         );
         assert!(
-            msg.contains("unknown `arg()` keyword `path_must_exist` (did you mean `must_exist`?)"),
+            msg.contains(
+                "unknown `arg()` keyword `path_must_exist`; use `toolr.types.ResolvedPath` instead"
+            ),
             "got: {msg}"
         );
     }
@@ -1491,7 +1547,7 @@ from typing import Annotated
 
 from toolr import Context, arg, command_group
 
-ConfigPath = Annotated[Path, arg(must_bee_file=True)]
+ConfigPath = Annotated[Path, arg(must_be_file=True)]
 
 group = command_group("kw", "Kwarg test", description="Kwarg test.")
 
@@ -1503,10 +1559,10 @@ def read(ctx: Context, config: ConfigPath) -> None:
         )]);
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].argument, "config");
-        assert_eq!(
-            errs[0].reason,
-            unknown_keyword("must_bee_file", Some("must_be_file"))
-        );
+        assert_eq!(errs[0].reason, unknown_keyword("must_be_file", None));
+        assert!(errs[0].to_string().ends_with(
+            "unknown `arg()` keyword `must_be_file`; use `toolr.types.FilePath` instead"
+        ));
     }
 
     #[test]
@@ -1527,10 +1583,30 @@ def read(ctx: toolr.Context, config: Annotated[Path, toolr.arg(path_must_be_dir=
 "#,
         )]);
         assert_eq!(errs.len(), 1, "{errs:?}");
-        assert_eq!(
-            errs[0].reason,
-            unknown_keyword("path_must_be_dir", Some("must_be_dir"))
-        );
+        assert_eq!(errs[0].reason, unknown_keyword("path_must_be_dir", None));
+    }
+
+    #[test]
+    fn misspelt_active_arg_keyword_suggests_the_real_one() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg(metvar="NAME")] = "x") -> None:
+    """Read."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, unknown_keyword("metvar", Some("metavar")));
+        assert!(errs[0]
+            .to_string()
+            .ends_with("unknown `arg()` keyword `metvar` (did you mean `metavar`?)"));
     }
 
     #[test]
@@ -1554,7 +1630,7 @@ def run(ctx: Context, *, name: Annotated[str, arg(foo=1)] = "x") -> None:
         ]);
         assert_eq!(errs.len(), 2, "{errs:?}");
         let reasons: Vec<&UnsupportedType> = errs.iter().map(|e| &e.reason).collect();
-        assert!(reasons.contains(&&unknown_keyword("path_must_exist", Some("must_exist"))));
+        assert!(reasons.contains(&&unknown_keyword("path_must_exist", None)));
         assert!(reasons.contains(&&unknown_keyword("foo", None)));
         let msg = BuildError::UnsupportedTypes(errs).to_string();
         assert!(
@@ -1693,7 +1769,7 @@ def read(ctx: Context, {signature}) -> None:
         let errs = type_errors_for(&[("tools/kw.py", src)]);
         let flagged: Vec<&TypeResolutionError> = errs
             .iter()
-            .filter(|e| e.reason == unknown_keyword("path_must_exist", Some("must_exist")))
+            .filter(|e| e.reason == unknown_keyword("path_must_exist", None))
             .collect();
         assert_eq!(flagged.len(), 1, "{errs:?}");
         assert_eq!(flagged[0].function, "read");
@@ -1915,7 +1991,7 @@ def read(ctx: Context, {signature}) -> None:
             assert_eq!(errs.len(), 1, "{import}: {errs:?}");
             assert_eq!(
                 errs[0].reason,
-                unknown_keyword("path_must_exist", Some("must_exist")),
+                unknown_keyword("path_must_exist", None),
                 "{import}"
             );
         }
@@ -1933,7 +2009,7 @@ def read(ctx: Context, {signature}) -> None:
             let errs = type_errors_for(&[("tools/common.py", common), ("tools/kw.py", &kw)]);
             let flagged = errs
                 .iter()
-                .filter(|e| e.reason == unknown_keyword("path_must_exist", Some("must_exist")))
+                .filter(|e| e.reason == unknown_keyword("path_must_exist", None))
                 .count();
             assert_eq!(flagged, 1, "{import}: {errs:?}");
         }
@@ -1991,7 +2067,7 @@ def read(ctx: Context, {signature}) -> None:
             ),
         )]);
         assert_eq!(errs.len(), 1, "{errs:?}");
-        assert_eq!(errs[0].reason, unknown_keyword("path_must_exist", Some("must_exist")));
+        assert_eq!(errs[0].reason, unknown_keyword("path_must_exist", None));
     }
 
     #[test]

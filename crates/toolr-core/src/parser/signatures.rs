@@ -115,7 +115,6 @@ fn build_argument(
         default: default.map(|d| literal_default(d, enums, all_imports, consts, module)),
         type_annotation: annotation.map(annotation_to_string),
         resolved_type: None,
-        path_constraints: None,
         allowed_values,
         metadata: crate::manifest::ArgMetadata::default(),
         // Native toolr commands built from Python function signatures

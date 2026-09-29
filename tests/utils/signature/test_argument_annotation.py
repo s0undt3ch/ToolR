@@ -126,7 +126,6 @@ def test_arg_accepts_help_section_and_other_new_kwargs():
         conflicts_with=["quiet"],
         requires=["log_file"],
         help_section=section,
-        must_be_file=True,
     )
     assert annotation.env == "DEPLOY_TOKEN"
     assert annotation.hide is True
@@ -134,7 +133,6 @@ def test_arg_accepts_help_section_and_other_new_kwargs():
     assert annotation.conflicts_with == ["quiet"]
     assert annotation.requires == ["log_file"]
     assert annotation.help_section is section
-    assert annotation.must_be_file is True
 
 
 @pytest.mark.parametrize(
@@ -152,12 +150,11 @@ def test_legacy_kwargs_emit_deprecation_warning(kwargs):
         arg(**kwargs)
 
 
-def test_path_constraint_kwargs_land_on_annotation():
-    """`must_exist` / `must_be_file` / `must_be_dir` are first-class fields."""
-    annotation = arg(must_exist=True, must_be_dir=True)
-    assert annotation.must_exist is True
-    assert annotation.must_be_dir is True
-    assert annotation.must_be_file is False
+@pytest.mark.parametrize("kwarg", ["must_exist", "must_be_file", "must_be_dir"])
+def test_removed_path_constraint_kwargs_are_rejected(kwarg):
+    """The path checks moved to `toolr.types`; `arg()` no longer takes them."""
+    with pytest.raises(TypeError, match=kwarg):
+        arg(**{kwarg: True})
 
 
 @pytest.mark.parametrize("kwarg", ["aliases", "conflicts_with", "requires"])

@@ -2,11 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::parser::{PathConstraints, SupportedType};
+use crate::parser::SupportedType;
 
 // region: SkillRefSchemaVersion
 /// Current manifest schema version. Bump on breaking format changes.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 // endregion: SkillRefSchemaVersion
 
 // region: SkillRefManifest
@@ -126,13 +126,6 @@ pub struct Argument {
     /// For Literal[...] / Enum-backed args, the allowed value strings.
     #[serde(default)]
     pub allowed_values: Vec<String>,
-    /// Path-constraint metadata harvested from
-    /// `Annotated[Path, arg(must_exist=True, ...)]`. Applied by
-    /// the path value-parsers in `src/bin/toolr/value_parsers.rs`.
-    /// `None` when no constraint flags were set; ignored for non-path
-    /// types.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub path_constraints: Option<PathConstraints>,
     /// Additional clap-flavoured metadata harvested from
     /// `Annotated[T, arg(...)]`. The CLI builder consumes each field
     /// independently; unset fields are no-ops. Skipped during

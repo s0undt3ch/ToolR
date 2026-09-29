@@ -18,7 +18,7 @@ Python imports involved in the hot path.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "static_hash": "<blake3 hex>",
   "third_party_hash": "<blake3 hex>",
   "toolr_version": "<CARGO_PKG_VERSION>",
@@ -28,7 +28,9 @@ Python imports involved in the hot path.
 ```
 
 - **`schema_version`** — single integer; toolr refuses to load a
-  manifest with a higher schema than it understands.
+  manifest with a higher schema than it understands. Version 2 removed
+  `path_constraints`. A cache with any other schema version is rebuilt
+  on the next run.
 - **`static_hash`** — blake3 over the sorted `(path, contents)` of
   every `tools/**/*.py` file. Drives static-layer rebuilds.
 - **`third_party_hash`** — blake3 over the sorted set of
@@ -99,7 +101,6 @@ Python imports involved in the hot path.
   "default": null,
   "type_annotation": "str",
   "resolved_type": { "kind": "str" },
-  "path_constraints": null,
   "allowed_values": []
 }
 ```
@@ -123,15 +124,16 @@ Python imports involved in the hot path.
   { "kind": "literal", "value": ["a", "b"] }
   { "kind": "enum", "value": { "name": "Operation", "values": ["add", "subtract"] } }
   { "kind": "optional", "value": { "kind": "path" } }
+  { "kind": "file_path" }
   ```
 
   See `src/parser/types.rs` for the full enum. `null` means the type
   layer couldn't resolve a supported type — third-party fragments
   built against the legacy schema fall through to string semantics.
-- **`path_constraints`** — for path-typed parameters annotated with
-  `arg(must_exist=True, ...)`. Object with optional `must_exist`,
-  `must_be_file`, `must_be_dir` booleans. `null` when no constraints
-  were declared.
+  Path types (`path`, `absolute_path`, `new_path`, `resolved_path`,
+  `file_path`, `directory_path`, `executable_path`,
+  `writable_directory_path`) name their filesystem check, if any, in
+  the kind itself.
 - **`allowed_values`** — for `Literal[...]` / `Enum` types, the
   values clap validates against. Also used by tab completion.
 

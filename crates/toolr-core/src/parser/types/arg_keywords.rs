@@ -23,9 +23,6 @@ pub const ACTIVE_ARG_KEYWORDS: &[&str] = &[
     "display_order",
     "conflicts_with",
     "requires",
-    "must_exist",
-    "must_be_file",
-    "must_be_dir",
 ];
 
 /// Deprecated `toolr.arg()` keywords: still accepted, never suggested.
@@ -135,7 +132,7 @@ fn check_call(call: &ExprCall, problems: &mut Vec<UnsupportedType>) {
             continue;
         };
         if !is_arg_keyword(name) {
-            let suggestion = match argparse_hint(name) {
+            let suggestion = match keyword_hint(name) {
                 Some(_) => None,
                 None => suggest_arg_keyword(name),
             };
@@ -186,15 +183,9 @@ fn calls_toolr_arg(call: &ExprCall, table: &ImportTable) -> bool {
     }
 }
 
-/// `path_<keyword>` maps to `<keyword>` (the dropped `path_must_*`
-/// spellings); otherwise the nearest active keyword within the same
-/// `(len / 3).max(2)` edit distance the unknown-group hint uses.
+/// The nearest active keyword within the same `(len / 3).max(2)` edit distance the
+/// unknown-group hint uses.
 pub(super) fn suggest_arg_keyword(keyword: &str) -> Option<String> {
-    if let Some(rest) = keyword.strip_prefix("path_") {
-        if ACTIVE_ARG_KEYWORDS.contains(&rest) {
-            return Some(rest.to_string());
-        }
-    }
     let max = (keyword.len() / 3).max(2);
     let mut best: Option<(usize, &str)> = None;
     for candidate in ACTIVE_ARG_KEYWORDS {
@@ -206,8 +197,16 @@ pub(super) fn suggest_arg_keyword(keyword: &str) -> Option<String> {
     best.map(|(_, s)| s.to_string())
 }
 
-/// Where toolr takes what an argparse-style `arg()` keyword would have set.
-pub(super) fn argparse_hint(keyword: &str) -> Option<&'static str> {
+/// Where toolr takes what an `arg()` keyword it doesn't accept would have set:
+/// the path checks now live in `toolr.types`, and argparse-style keywords
+/// come from the signature.
+pub(super) fn keyword_hint(keyword: &str) -> Option<&'static str> {
+    match keyword.strip_prefix("path_").unwrap_or(keyword) {
+        "must_exist" => return Some("use `toolr.types.ResolvedPath` instead"),
+        "must_be_file" => return Some("use `toolr.types.FilePath` instead"),
+        "must_be_dir" => return Some("use `toolr.types.DirectoryPath` instead"),
+        _ => {}
+    }
     match keyword {
         "help" => Some("help text comes from the docstring's `Args:` section"),
         "type" => Some("the type comes from the annotation"),
@@ -283,22 +282,28 @@ mod tests {
     }
 
     #[test]
-    fn suggestion_strips_path_prefix() {
-        assert_eq!(
-            suggest_arg_keyword("path_must_exist").as_deref(),
-            Some("must_exist")
-        );
-        assert_eq!(
-            suggest_arg_keyword("path_must_be_dir").as_deref(),
-            Some("must_be_dir")
-        );
+    fn removed_path_keywords_point_at_the_path_types() {
+        for (keyword, hint) in [
+            ("must_exist", "use `toolr.types.ResolvedPath` instead"),
+            ("path_must_exist", "use `toolr.types.ResolvedPath` instead"),
+            ("must_be_file", "use `toolr.types.FilePath` instead"),
+            ("path_must_be_file", "use `toolr.types.FilePath` instead"),
+            ("must_be_dir", "use `toolr.types.DirectoryPath` instead"),
+            (
+                "path_must_be_dir",
+                "use `toolr.types.DirectoryPath` instead",
+            ),
+        ] {
+            assert_eq!(keyword_hint(keyword), Some(hint), "{keyword}");
+            assert_eq!(suggest_arg_keyword(keyword), None, "{keyword}");
+        }
     }
 
     #[test]
     fn suggestion_within_edit_distance_two() {
         assert_eq!(
-            suggest_arg_keyword("must_bee_file").as_deref(),
-            Some("must_be_file")
+            suggest_arg_keyword("conflict_with").as_deref(),
+            Some("conflicts_with")
         );
         assert_eq!(suggest_arg_keyword("metvar").as_deref(), Some("metavar"));
         assert_eq!(suggest_arg_keyword("alias").as_deref(), Some("aliases"));
@@ -330,9 +335,9 @@ mod tests {
     #[test]
     fn argparse_keywords_get_a_hint_instead_of_a_suggestion() {
         for keyword in ["help", "type", "default"] {
-            assert!(argparse_hint(keyword).is_some(), "{keyword}");
+            assert!(keyword_hint(keyword).is_some(), "{keyword}");
             assert_eq!(suggest_arg_keyword(keyword), None, "{keyword}");
         }
-        assert_eq!(argparse_hint("metavar"), None);
+        assert_eq!(keyword_hint("metavar"), None);
     }
 }

@@ -128,7 +128,6 @@ fn argument_from_fragment(
         // schema extension will let fragments record their own
         // SupportedType.
         resolved_type: None,
-        path_constraints: None,
         allowed_values: fa.allowed_values,
         metadata: crate::manifest::ArgMetadata::default(),
         // Third-party manifest fragments aren't argparse-grafted, so

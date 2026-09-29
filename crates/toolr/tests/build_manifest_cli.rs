@@ -213,8 +213,9 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
     assert!(
         stderr.contains("invalid parameter declarations (1):")
             && stderr.contains("mypkg.kw::read argument `config`")
-            && stderr
-                .contains("unknown `arg()` keyword `path_must_exist` (did you mean `must_exist`?)"),
+            && stderr.contains(
+                "unknown `arg()` keyword `path_must_exist`; use `toolr.types.ResolvedPath` instead"
+            ),
         "stderr: {stderr}"
     );
     assert!(

@@ -19,9 +19,8 @@ use ruff_python_ast::{Expr, StmtFunctionDef};
 
 use super::arg_keywords::check_arg_calls;
 use super::arg_metadata::extract_arg_metadata;
-use super::path_constraints::extract_path_constraints;
 use super::supported::{SupportedType, TypeResolutionError, UnsupportedType};
-use super::{PathConstraints, SourcesImports, TypeImports};
+use super::{SourcesImports, TypeImports};
 use crate::manifest::{ArgMetadata, Argument, ArgumentKind};
 use crate::parser::symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable};
 
@@ -121,11 +120,6 @@ fn resolve_one(
         // python registry still imposes its own runtime checks.
         return;
     };
-    // Path constraints come from `Annotated[T, arg(...)]` metadata —
-    // either directly on the parameter, or by following a module-level
-    // type alias (e.g. `Foo = Annotated[Path, arg(must_exist=True)]`).
-    arg.path_constraints =
-        extract_path_constraints(expr).or_else(|| follow_alias_for_path_constraints(expr, aliases));
     // Same drill for the broader clap metadata (aliases, conflicts,
     // env, help_section, ...). One harvest pass through every
     // `Annotated[T, arg(...)]` call on the parameter, optionally via a
@@ -184,15 +178,6 @@ fn is_count_type(ty: &SupportedType) -> bool {
 
 fn is_optional_list_or_tuple(ty: &SupportedType) -> bool {
     matches!(ty, SupportedType::Optional(inner) if matches!(inner.as_ref(), SupportedType::List(_) | SupportedType::Tuple(_)))
-}
-
-fn follow_alias_for_path_constraints(
-    expr: &Expr,
-    aliases: &TypeAliasTable,
-) -> Option<PathConstraints> {
-    let Expr::Name(name) = expr else { return None };
-    let aliased = aliases.lookup(name.id.as_str())?;
-    extract_path_constraints(aliased)
 }
 
 fn follow_alias_for_arg_metadata(
@@ -389,6 +374,11 @@ pub(super) fn resolve_toolr_types_name(name: &str) -> Result<SupportedType, Unsu
         "IPv6" => Ok(SupportedType::Ipv6),
         "AbsolutePath" => Ok(SupportedType::AbsolutePath),
         "ResolvedPath" => Ok(SupportedType::ResolvedPath),
+        "NewPath" => Ok(SupportedType::NewPath),
+        "FilePath" => Ok(SupportedType::FilePath),
+        "DirectoryPath" => Ok(SupportedType::DirectoryPath),
+        "ExecutablePath" => Ok(SupportedType::ExecutablePath),
+        "WritableDirectoryPath" => Ok(SupportedType::WritableDirectoryPath),
         "Email" => Ok(SupportedType::Email),
         "Version" => Ok(SupportedType::Version),
         "Count" => Ok(SupportedType::Count),

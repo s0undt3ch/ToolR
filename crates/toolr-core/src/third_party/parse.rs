@@ -67,8 +67,9 @@ pub enum ThirdPartyError {
 /// Parse one fragment file, validating `toolr_schema_version` matches
 /// `FRAGMENT_SCHEMA_VERSION`. Returns the ready-to-merge fragment.
 ///
-/// There are no schema migrations: the only accepted version is the
-/// current one. A future migration function is the day-v2-ships change.
+/// Every version from 1 up to `FRAGMENT_SCHEMA_VERSION` is accepted and
+/// deserialised as-is; a newer one is an error. There are no schema
+/// migrations yet. A future migration function is the day-v2-ships change.
 pub fn parse_fragment(path: &Path) -> Result<ManifestFragment, ThirdPartyError> {
     let bytes = fs::read(path).map_err(|e| ThirdPartyError::Io {
         path: path.to_path_buf(),
@@ -98,10 +99,10 @@ pub fn parse_fragment(path: &Path) -> Result<ManifestFragment, ThirdPartyError> 
         });
     }
 
-    // At this point `version == FRAGMENT_SCHEMA_VERSION`: the `>= 1` filter
-    // above rejects 0/older as MissingVersion and the check just above
-    // rejects anything newer. There are no migrations — when a v2 schema
-    // ships, reintroduce a migration step here for the older versions.
+    // At this point `1 <= version <= FRAGMENT_SCHEMA_VERSION`: the `>= 1`
+    // filter above rejects 0 as MissingVersion and the check just above
+    // rejects anything newer. There are no migrations, so older versions
+    // deserialise as-is; when a v2 schema ships, add a migration step here.
 
     serde_json::from_value(raw).map_err(|e| ThirdPartyError::Json {
         path: path.to_path_buf(),

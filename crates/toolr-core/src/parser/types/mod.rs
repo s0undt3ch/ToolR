@@ -15,14 +15,12 @@ mod arg_keywords;
 mod arg_metadata;
 mod imports;
 mod literals;
-mod path_constraints;
 mod resolve;
 mod supported;
 
 pub use arg_keywords::{ACTIVE_ARG_KEYWORDS, DEPRECATED_ARG_KEYWORDS};
 pub use arg_metadata::extract_arg_metadata;
 pub use imports::{SourcesImports, TypeImports};
-pub use path_constraints::{extract_path_constraints, PathConstraintDoc, PathConstraints};
 pub use resolve::{resolve, resolve_arguments};
 pub use supported::{
     SupportedType, SupportedTypeKind, TypeDoc, TypeResolutionError, UnsupportedType,
@@ -30,8 +28,8 @@ pub use supported::{
 
 use ruff_python_ast::{Expr, ExprCall};
 
-/// Predicate shared between the path-constraints and arg-metadata
-/// extractors: is this call expression a `toolr.arg(...)` call (or
+/// Predicate shared between the arg-metadata extractor and the `arg()`
+/// keyword checks: is this call expression a `toolr.arg(...)` call (or
 /// `<alias>.arg(...)` after aliasing)? The two extractors live in
 /// sibling modules but both need to filter `Annotated[...]` elements
 /// down to just the toolr-flavoured ones.
@@ -494,13 +492,18 @@ mod tests {
             "Count",
             "Date",
             "DateTime",
+            "DirectoryPath",
             "Email",
+            "ExecutablePath",
+            "FilePath",
             "IPv4",
             "IPv6",
+            "NewPath",
             "ResolvedPath",
             "Time",
             "UUID",
             "Version",
+            "WritableDirectoryPath",
         ];
         for name in names {
             assert!(
@@ -722,17 +725,6 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
     }
 
     #[test]
-    fn path_constraints_extract_from_must_kwargs() {
-        let (_, ann) = first_annotation(
-            "def f(x: Annotated[Path, arg(must_exist=True, must_be_file=True)]): pass\n",
-        );
-        let pc = extract_path_constraints(&ann).unwrap();
-        assert!(pc.must_exist);
-        assert!(pc.must_be_file);
-        assert!(!pc.must_be_dir);
-    }
-
-    #[test]
     fn count_resolves_to_supported_type() {
         let (_, ann) = first_annotation("from toolr.types import Count\n\ndef f(x: Count): pass\n");
         let src = "from toolr.types import Count\n\ndef f(x: Count): pass\n";
@@ -756,7 +748,6 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
             "def f(x: typing.Annotated[Path, arg(must_exist=True)]): pass\n",
         );
         assert_eq!(toolr_arg_calls(&ann).len(), 1);
-        assert!(extract_path_constraints(&ann).is_some_and(|c| c.must_exist));
     }
 
     #[test]
@@ -768,7 +759,6 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
         ] {
             let (_, ann) = first_annotation(src);
             assert!(toolr_arg_calls(&ann).is_empty(), "{src}");
-            assert_eq!(extract_path_constraints(&ann), None, "{src}");
         }
     }
 }

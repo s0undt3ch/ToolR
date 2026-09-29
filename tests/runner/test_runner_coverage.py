@@ -257,6 +257,105 @@ def test_import_target_returns_callable_attribute() -> None:
     assert target is os.getcwd
 
 
+@pytest.fixture
+def importable_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[str, str], str]:
+    """Write ``source`` as module ``name`` on a temporary ``sys.path`` entry."""
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    def _make(name: str, source: str) -> str:
+        (tmp_path / f"{name}.py").write_text(textwrap.dedent(source))
+        return name
+
+    return _make
+
+
+def test_import_target_reports_unknown_arg_keyword_as_spec_error(
+    importable_module: Callable[[str, str], str],
+) -> None:
+    # A module written for an older toolr: `must_exist` was removed from `arg()`.
+    module = importable_module(
+        "stale_arg_keyword_mod",
+        """
+        from pathlib import Path
+        from typing import Annotated
+
+        from toolr import arg
+
+        ConfigPath = Annotated[Path, arg(must_exist=True)]
+        """,
+    )
+    spec = _runner_spec(module=module, function="anything")
+    with pytest.raises(SpecError, match=r"`arg\(\)` has no `must_exist` keyword") as excinfo:
+        _import_target(spec)
+    assert "toolr project manifest rebuild" in str(excinfo.value)
+    assert "rebuild the plugin" in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, TypeError)
+
+
+@pytest.mark.parametrize("future_import", [False, True], ids=["eager", "future-annotations"])
+def test_run_reports_unknown_arg_keyword_in_a_parameter_annotation(
+    importable_module: Callable[[str, str], str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    future_import: bool,
+) -> None:
+    # The shape plugins actually write: the keyword inline on the parameter.
+    # With postponed (or, on 3.14+, lazy) annotations, the import succeeds and
+    # the `TypeError` only surfaces when the runner resolves the hints.
+    prelude = "from __future__ import annotations\n" if future_import else ""
+    module = importable_module(
+        f"stale_param_kw_{'future' if future_import else 'eager'}",
+        prelude
+        + textwrap.dedent(
+            """
+            from pathlib import Path
+            from typing import Annotated
+
+            from toolr import arg
+
+            CALLED = []
+
+
+            def read(ctx, config: Annotated[Path, arg(must_exist=True)]) -> None:
+                CALLED.append(config)
+            """
+        ),
+    )
+    spec = _runner_spec(
+        module=module, function="read", args={"config": "/missing.toml"}, repo_root=tmp_path
+    )
+    assert _run_isolated(spec) == 2
+    assert "`arg()` has no `must_exist` keyword" in capsys.readouterr().err
+    # Below 3.14 the eager variant never finishes importing, so it isn't in `sys.modules`.
+    assert getattr(sys.modules.get(module), "CALLED", []) == []
+
+
+def test_coerce_args_falls_back_to_raw_values_on_an_unrelated_hint_type_error(
+    importable_module: Callable[[str, str], str],
+) -> None:
+    module = importable_module(
+        "unrelated_hint_type_error_mod",
+        """
+        from __future__ import annotations
+
+
+        def read(ctx, count: len(5)) -> None: ...
+        """,
+    )
+    target = importlib.import_module(module).read
+    _, keyword = _coerce_args(target, {"count": "3"})
+    assert keyword == {"count": "3"}
+
+
+def test_import_target_leaves_other_import_time_type_errors_alone(
+    importable_module: Callable[[str, str], str],
+) -> None:
+    module = importable_module("unrelated_type_error_mod", "len(5)\n")
+    spec = _runner_spec(module=module, function="anything")
+    with pytest.raises(TypeError, match=r"has no len\(\)"):
+        _import_target(spec)
+
+
 # --------------------------------------------------------------------------
 # _unwrap_annotated
 # --------------------------------------------------------------------------

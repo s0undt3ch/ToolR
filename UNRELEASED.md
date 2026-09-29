@@ -24,13 +24,10 @@ that use it.
 ### Agent skills are now self-contained
 
 Each skill under `skills/` now carries everything it needs: the supported
-argument types and path constraints (generated from toolr's own parser), the
+argument types (generated from toolr's own parser), the
 argument-shape rules, the prek hook recipe, and the example plugin
 `pyproject.toml`. Installed skills no longer point agents at the toolr docs
-site or repository. The docs' path-constraint table previously documented
-`arg(path_must_exist=...)`; the real keywords are `must_exist`,
-`must_be_file` and `must_be_dir`, and the docs now generate that table from the
-code.
+site or repository. The generated tables include the `toolr.types` path types.
 
 ### The authoring skill covers external command sources
 
@@ -55,7 +52,7 @@ for releases published before packslip support.
 A misspelled or unsupported `arg()` keyword, such as
 `arg(path_must_exist=True)`, and any positional argument passed to `arg()` now
 fail the manifest build with the module, function and argument, plus a
-"did you mean" hint where one fits (`path_must_exist` suggests `must_exist`).
+"did you mean" hint where one fits (`path_must_exist` points at `toolr.types.ResolvedPath`).
 Argparse-style `help=`, `type=` and `default=` instead point at where toolr
 takes that information from. The check follows `arg()` calls nested in
 `X | None`, `Optional[...]` and `list[...]` annotations and through
@@ -108,3 +105,36 @@ The `log-debug` and `log-info` console styles, and the `stdout`/`stderr` level
 labels, no longer use Rich's `dim` modifier. On many terminal palettes `dim`
 turned the blue and cyan into near-illegible grey. The named ANSI colours still
 follow the terminal's own light or dark palette.
+
+### Path types replace `arg(must_*)`
+
+`toolr.types` gains path types that say what a path argument must be. The toolr binary checks each
+one while it parses the command line, and your command always receives a `pathlib.Path`:
+
+- `NewPath`: must not exist; its parent directory must.
+- `FilePath`, `DirectoryPath`: must exist as that kind; canonicalised.
+- `ExecutablePath`, `WritableDirectoryPath`: as above, plus executable or writable.
+
+All seven path types, including the existing `AbsolutePath` and `ResolvedPath`, are now
+`typing.NewType`s rather than plain aliases, so type checkers tell them apart. **Typing-level
+break:** passing a bare `Path` where one of them is expected is now a type error.
+
+**Breaking:** `arg(must_exist=…)`, `arg(must_be_file=…)` and `arg(must_be_dir=…)` are removed. The
+manifest build fails and names the replacement:
+
+| Before | After |
+|---|---|
+| `Annotated[Path, arg(must_exist=True)]` | `ResolvedPath` |
+| `Annotated[Path, arg(must_be_file=True)]` | `FilePath` |
+| `Annotated[Path, arg(must_be_dir=True)]` | `DirectoryPath` |
+
+A plugin that still uses them fails when you run one of its commands, with an error saying
+`arg()` has no such keyword. Rebuild it against this release (`toolr self build-manifest --check`
+in its CI catches it). A command from a stale local manifest cache fails the same way.
+
+The local manifest schema is now version 2. An existing cache is rebuilt on the next run; there is
+nothing to do. Plugin commands don't run the path checks yet (#520).
+
+On Windows, `ResolvedPath` and the other canonical path types now hand your command a plain path
+(`C:\Users\...`) instead of a verbatim one (`\\?\C:\Users\...`), which `pathlib` treated as a
+different drive.
