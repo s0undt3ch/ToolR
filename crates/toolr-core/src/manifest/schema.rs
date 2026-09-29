@@ -51,6 +51,7 @@ impl SupportedType {
 }
 
 impl Argument {
+    /// The highest of its kind's, resolved type's and metadata's minimum schema.
     pub fn min_schema_with(&self, since: &impl Fn(SupportedTypeKind) -> u32) -> u32 {
         let Argument {
             name: _,
@@ -74,6 +75,7 @@ impl Argument {
 }
 
 impl ArgMetadata {
+    /// The highest of its `nargs` and help section's minimum schema.
     pub fn min_schema(&self) -> u32 {
         let ArgMetadata {
             aliases: _,
@@ -95,6 +97,7 @@ impl ArgMetadata {
 }
 
 impl HelpSection {
+    /// Every field is ignorable by an old reader, so only the shape floor.
     pub fn min_schema(&self) -> u32 {
         let HelpSection {
             title: _,
@@ -105,6 +108,7 @@ impl HelpSection {
 }
 
 impl Group {
+    /// Every field is ignorable by an old reader, so only the shape floor.
     pub fn min_schema(&self) -> u32 {
         let Group {
             name: _,
@@ -118,6 +122,7 @@ impl Group {
 }
 
 impl Command {
+    /// The highest minimum schema across its arguments.
     pub fn min_schema_with(&self, since: &impl Fn(SupportedTypeKind) -> u32) -> u32 {
         let Command {
             name: _,
@@ -146,7 +151,7 @@ mod tests {
     };
     use crate::parser::types::{SupportedType as T, SupportedTypeKind as K};
 
-    // A new variant must be added here by hand, so the golden table fails until it is.
+    // `argument_kind_index` is exhaustive, so a new variant won't compile until it has a slot here.
     const ARGUMENT_KINDS: [ArgumentKind; 8] = [
         ArgumentKind::Positional,
         ArgumentKind::Optional,
@@ -158,8 +163,34 @@ mod tests {
         ArgumentKind::OptionalPositional,
     ];
 
-    // A new variant must be added here by hand; `Fixed(1)` stands for every `Fixed(n)`.
+    // `nargs_index` is exhaustive, so a new variant won't compile until it has a slot here;
+    // `Fixed(1)` stands for every `Fixed(n)`.
     const NARGS: [Nargs; 3] = [Nargs::Plus, Nargs::Star, Nargs::Fixed(1)];
+
+    // Bump the arm count and add the variant to `ARGUMENT_KINDS` and the golden table.
+    const ARGUMENT_KIND_ARMS: usize = 8;
+    fn argument_kind_index(k: ArgumentKind) -> usize {
+        match k {
+            ArgumentKind::Positional => 0,
+            ArgumentKind::Optional => 1,
+            ArgumentKind::Flag => 2,
+            ArgumentKind::Repeated => 3,
+            ArgumentKind::VarPositional => 4,
+            ArgumentKind::Count => 5,
+            ArgumentKind::FixedArity => 6,
+            ArgumentKind::OptionalPositional => 7,
+        }
+    }
+
+    // Bump the arm count and add the variant to `NARGS` and the golden table.
+    const NARGS_ARMS: usize = 3;
+    fn nargs_index(n: Nargs) -> usize {
+        match n {
+            Nargs::Plus => 0,
+            Nargs::Star => 1,
+            Nargs::Fixed(_) => 2,
+        }
+    }
 
     fn email_is_newer(k: K) -> u32 {
         if k == K::Email { 3 } else { 2 }
@@ -191,6 +222,18 @@ mod tests {
             origin: Origin::ThirdParty,
             dispatched_from: None,
             is_dispatcher: false,
+        }
+    }
+
+    #[test]
+    fn variant_lists_cover_every_variant() {
+        assert_eq!(ARGUMENT_KINDS.len(), ARGUMENT_KIND_ARMS);
+        for k in ARGUMENT_KINDS {
+            assert_eq!(ARGUMENT_KINDS[argument_kind_index(k)], k);
+        }
+        assert_eq!(NARGS.len(), NARGS_ARMS);
+        for n in NARGS {
+            assert_eq!(NARGS[nargs_index(n)], n);
         }
     }
 
