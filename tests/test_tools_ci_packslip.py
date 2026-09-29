@@ -27,6 +27,7 @@ from tools.ci import packslip_check
 
 from toolr.testing import make_command_result
 from toolr.testing import make_context
+from toolr.types import ResolvedPath
 from toolr.utils.command import CommandResult
 
 SKILL_NAMES = ("alpha", "beta")
@@ -329,7 +330,7 @@ def test_every_failure_is_reported(statement: StatementFactory, tmp_path: Path) 
 
 
 @pytest.fixture
-def archive_dir(tmp_path: Path) -> Callable[..., Path]:
+def archive_dir(tmp_path: Path) -> Callable[..., ResolvedPath]:
     """Factory: a dir of fake toolr release archives, one ``toolr`` binary each."""
 
     def _make(
@@ -338,7 +339,7 @@ def archive_dir(tmp_path: Path) -> Callable[..., Path]:
             "toolr-0.0.0-aarch64-apple-darwin.tar.gz",
             "toolr-0.0.0-x86_64-pc-windows-msvc.zip",
         ),
-    ) -> Path:
+    ) -> ResolvedPath:
         out = tmp_path / "archives"
         out.mkdir()
         for name in names:
@@ -352,18 +353,18 @@ def archive_dir(tmp_path: Path) -> Callable[..., Path]:
                 with tarfile.open(out / name, "w:gz") as tf:
                     tf.add(binary, arcname=f"{stem}/toolr")
             (out / f"{name}.sha256").write_text("0" * 64)
-        return out
+        return ResolvedPath(out)
 
     return _make
 
 
 @pytest.fixture
-def fake_packslip(tmp_path: Path) -> Path:
+def fake_packslip(tmp_path: Path) -> ResolvedPath:
     path = tmp_path / "bin" / "packslip"
     path.parent.mkdir()
     path.write_text("#!/bin/sh\n")
     path.chmod(0o755)
-    return path
+    return ResolvedPath(path)
 
 
 @pytest.fixture
@@ -400,8 +401,8 @@ def _stub_packslip(
 def test_command_passes(
     statement: StatementFactory,
     repo_root: Path,
-    archive_dir: Callable[..., Path],
-    fake_packslip: Path,
+    archive_dir: Callable[..., ResolvedPath],
+    fake_packslip: ResolvedPath,
 ) -> None:
     calls: list[tuple[str, ...]] = []
     stub = _stub_packslip(statement())
@@ -429,8 +430,8 @@ def test_command_passes(
 def test_command_names_the_failing_packslip_step(
     statement: StatementFactory,
     repo_root: Path,
-    archive_dir: Callable[..., Path],
-    fake_packslip: Path,
+    archive_dir: Callable[..., ResolvedPath],
+    fake_packslip: ResolvedPath,
     sub: str,
 ) -> None:
     ctx = make_context(repo_root, run=_stub_packslip(statement(), fail=sub))
@@ -443,8 +444,8 @@ def test_command_names_the_failing_packslip_step(
 def test_command_reports_statement_failures(
     statement: StatementFactory,
     repo_root: Path,
-    archive_dir: Callable[..., Path],
-    fake_packslip: Path,
+    archive_dir: Callable[..., ResolvedPath],
+    fake_packslip: ResolvedPath,
 ) -> None:
     ctx = make_context(repo_root, run=_stub_packslip(statement(resources=[])))
     with pytest.raises(SystemExit) as exc:
@@ -458,7 +459,7 @@ def test_command_reports_statement_failures(
 
 
 def test_command_fails_without_archives(
-    repo_root: Path, archive_dir: Callable[..., Path], fake_packslip: Path
+    repo_root: Path, archive_dir: Callable[..., ResolvedPath], fake_packslip: ResolvedPath
 ) -> None:
     ctx = make_context(repo_root, run=_stub_packslip({}))
     with pytest.raises(SystemExit):
@@ -466,7 +467,9 @@ def test_command_fails_without_archives(
     assert "packslip-check: archives failed: no *.tar.gz or *.zip files found in" in ctx.stderr
 
 
-def test_command_fails_when_archive_dir_is_a_file(repo_root: Path, fake_packslip: Path) -> None:
+def test_command_fails_when_archive_dir_is_a_file(
+    repo_root: Path, fake_packslip: ResolvedPath
+) -> None:
     ctx = make_context(repo_root, run=_stub_packslip({}))
     with pytest.raises(SystemExit):
         packslip_check(ctx, fake_packslip, packslip=fake_packslip)
@@ -475,17 +478,17 @@ def test_command_fails_when_archive_dir_is_a_file(repo_root: Path, fake_packslip
 
 
 def test_command_fails_when_packslip_is_not_a_file(
-    repo_root: Path, archive_dir: Callable[..., Path]
+    repo_root: Path, archive_dir: Callable[..., ResolvedPath]
 ) -> None:
     ctx = make_context(repo_root, run=_stub_packslip({}))
     with pytest.raises(SystemExit):
-        packslip_check(ctx, archive_dir(), packslip=repo_root)
+        packslip_check(ctx, archive_dir(), packslip=ResolvedPath(repo_root))
     assert "packslip-check: packslip failed:" in ctx.stderr
     assert "is not a file" in ctx.stderr
 
 
 def test_command_fails_without_packslip_on_path(
-    repo_root: Path, archive_dir: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+    repo_root: Path, archive_dir: Callable[..., ResolvedPath], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("PATH", str(repo_root / "empty-bin"))
     ctx = make_context(repo_root, run=_stub_packslip({}))
@@ -495,7 +498,7 @@ def test_command_fails_without_packslip_on_path(
 
 
 def test_command_fails_without_manifest(
-    repo_root: Path, archive_dir: Callable[..., Path], fake_packslip: Path
+    repo_root: Path, archive_dir: Callable[..., ResolvedPath], fake_packslip: ResolvedPath
 ) -> None:
     (repo_root / ".github" / "packslip.toml").unlink()
     ctx = make_context(repo_root, run=_stub_packslip({}))
@@ -507,8 +510,8 @@ def test_command_fails_without_manifest(
 def test_command_uses_explicit_manifest(
     statement: StatementFactory,
     repo_root: Path,
-    archive_dir: Callable[..., Path],
-    fake_packslip: Path,
+    archive_dir: Callable[..., ResolvedPath],
+    fake_packslip: ResolvedPath,
     tmp_path: Path,
 ) -> None:
     calls: list[tuple[str, ...]] = []
@@ -524,14 +527,14 @@ def test_command_uses_explicit_manifest(
         make_context(repo_root, run=_run),
         archive_dir(),
         packslip=fake_packslip,
-        manifest=other,
+        manifest=ResolvedPath(other),
     )
     create = next(c for c in calls if c[1:2] == ("create",))
     assert create[create.index("--manifest") + 1] == str(other)
 
 
 def test_command_fails_on_non_json_show_output(
-    repo_root: Path, archive_dir: Callable[..., Path], fake_packslip: Path
+    repo_root: Path, archive_dir: Callable[..., ResolvedPath], fake_packslip: ResolvedPath
 ) -> None:
     stub = _stub_packslip({})
 
@@ -562,7 +565,7 @@ def _packslip_runs() -> bool:
     not _packslip_runs(),
     reason="packslip CLI not runnable from PATH (e.g. `mise x github:jdx/packslip@<version> -- pytest`)",
 )
-def test_command_end_to_end_with_real_packslip(archive_dir: Callable[..., Path]) -> None:
+def test_command_end_to_end_with_real_packslip(archive_dir: Callable[..., ResolvedPath]) -> None:
     ctx = make_context(REPO_ROOT)
     packslip_check(ctx, archive_dir())
     assert "packslip-check: ok" in ctx.stdout

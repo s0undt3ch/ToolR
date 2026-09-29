@@ -51,9 +51,10 @@ drift.
    stays a `str` even though it looks path-like; annotate `root: Path`
    if you want a `pathlib.Path`. Defaults make arguments optional;
    `Annotated[T, arg(...)]` adds clap metadata (`aliases`, `metavar`,
-   `help_section`, etc.). Path checks come from
-   the `toolr.types` path types (`FilePath`, `DirectoryPath`, ...), not
-   `arg()`. See
+   `help_section`, etc.). For a path argument, pick a `toolr.types`
+   path type (`FilePath`, `DirectoryPath`, `NewPath`, `ExecutablePath`,
+   `WritableDirectoryPath`, `ResolvedPath`, `AbsolutePath`); `arg()` no
+   longer takes `must_*`. See
    [`references/types.md`](references/types.md) for the full
    supported-type table and
    [`references/arguments.md`](references/arguments.md) for how each
@@ -234,11 +235,11 @@ make its registration a top-level, statically-visible declaration.
 ## References
 
 - [`references/types.md`](references/types.md) — the supported
-  parameter-type table and path-constraint keywords, generated from
+  parameter-type table and the path types, generated from
   toolr's own type catalogue.
 - [`references/arguments.md`](references/arguments.md) — how each
   parameter shape (positionals, `T | None`, flags, `Literal`/enums,
-  `list[T]`, `*args`, path constraints, module-level aliases, tuples,
+  `list[T]`, `*args`, path types, module-level aliases, tuples,
   `Count`) becomes a CLI argument, extracted from the docs.
 - [`references/external-sources.md`](references/external-sources.md) —
   grafting existing argparse scripts or Django management commands
