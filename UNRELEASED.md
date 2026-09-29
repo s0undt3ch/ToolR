@@ -134,3 +134,7 @@ in its CI catches it). A command from a stale local manifest cache fails the sam
 
 The local manifest schema is now version 2. An existing cache is rebuilt on the next run; there is
 nothing to do. Plugin commands don't run the path checks yet (#520).
+
+On Windows, `ResolvedPath` and the other canonical path types now hand your command a plain path
+(`C:\Users\...`) instead of a verbatim one (`\\?\C:\Users\...`), which `pathlib` treated as a
+different drive.
