@@ -22,6 +22,7 @@ import inspect
 import ipaddress
 import os
 import pathlib
+import re
 import stat
 import sys
 import traceback
@@ -301,6 +302,9 @@ def _build_context(spec: RunnerSpec) -> Context:
     )
 
 
+_UNKNOWN_ARG_KEYWORD = re.compile(r"arg\(\) got an unexpected keyword argument '(?P<keyword>\w+)'")
+
+
 def _import_target(spec: RunnerSpec) -> Any:
     """Import ``spec.module`` and return the attribute named ``spec.function``."""
     try:
@@ -310,6 +314,18 @@ def _import_target(spec: RunnerSpec) -> Any:
         module = importlib.import_module(spec.module)  # nosemgrep
     except ImportError as exc:
         msg = f"failed to import {spec.module}: {exc}"
+        raise SpecError(msg) from exc
+    except TypeError as exc:
+        # Stale code (e.g. a plugin built for an older toolr) that the static
+        # build never saw: a cached manifest or a plugin fragment.
+        match = _UNKNOWN_ARG_KEYWORD.match(str(exc))
+        if match is None:
+            raise
+        msg = (
+            f"failed to import {spec.module}: `arg()` has no `{match['keyword']}` keyword. "
+            "Run `toolr project manifest rebuild` to see the replacement; "
+            "if the module ships in a plugin, rebuild the plugin against this toolr release."
+        )
         raise SpecError(msg) from exc
     try:
         return getattr(module, spec.function)

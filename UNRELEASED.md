@@ -128,8 +128,9 @@ manifest build fails and names the replacement:
 | `Annotated[Path, arg(must_be_file=True)]` | `FilePath` |
 | `Annotated[Path, arg(must_be_dir=True)]` | `DirectoryPath` |
 
-A plugin that still uses them fails with a `TypeError` when its command module is imported;
-rebuild it against this release (`toolr self build-manifest --check` in its CI catches it).
+A plugin that still uses them fails when you run one of its commands, with an error saying
+`arg()` has no such keyword. Rebuild it against this release (`toolr self build-manifest --check`
+in its CI catches it). A command from a stale local manifest cache fails the same way.
 
 The local manifest schema is now version 2. An existing cache is rebuilt on the next run; there is
 nothing to do. Plugin commands don't run the path checks yet (#520).

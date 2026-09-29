@@ -257,6 +257,50 @@ def test_import_target_returns_callable_attribute() -> None:
     assert target is os.getcwd
 
 
+@pytest.fixture
+def importable_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[str, str], str]:
+    """Write ``source`` as module ``name`` on a temporary ``sys.path`` entry."""
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    def _make(name: str, source: str) -> str:
+        (tmp_path / f"{name}.py").write_text(textwrap.dedent(source))
+        return name
+
+    return _make
+
+
+def test_import_target_reports_unknown_arg_keyword_as_spec_error(
+    importable_module: Callable[[str, str], str],
+) -> None:
+    # A module written for an older toolr: `must_exist` was removed from `arg()`.
+    module = importable_module(
+        "stale_arg_keyword_mod",
+        """
+        from pathlib import Path
+        from typing import Annotated
+
+        from toolr import arg
+
+        ConfigPath = Annotated[Path, arg(must_exist=True)]
+        """,
+    )
+    spec = _runner_spec(module=module, function="anything")
+    with pytest.raises(SpecError, match=r"`arg\(\)` has no `must_exist` keyword") as excinfo:
+        _import_target(spec)
+    assert "toolr project manifest rebuild" in str(excinfo.value)
+    assert "rebuild the plugin" in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, TypeError)
+
+
+def test_import_target_leaves_other_import_time_type_errors_alone(
+    importable_module: Callable[[str, str], str],
+) -> None:
+    module = importable_module("unrelated_type_error_mod", "len(5)\n")
+    spec = _runner_spec(module=module, function="anything")
+    with pytest.raises(TypeError, match=r"has no len\(\)"):
+        _import_target(spec)
+
+
 # --------------------------------------------------------------------------
 # _unwrap_annotated
 # --------------------------------------------------------------------------

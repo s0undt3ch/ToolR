@@ -143,8 +143,8 @@ These still parse but emit a `ToolrDeprecationWarning`:
 
 Removed: `must_exist=`, `must_be_file=` and `must_be_dir=` (and the `path_must_*` spellings). The
 build fails with a hint naming the replacement: use `toolr.types.ResolvedPath`, `FilePath` or
-`DirectoryPath`. A plugin that still uses them fails with a `TypeError` when its command module is
-imported. Rebuild it against this release (`toolr self build-manifest --check` in its CI catches
-it). See [Path types](arguments.md#path-types).
+`DirectoryPath`. A plugin that still uses them fails when you run one of its commands, with an
+error saying `arg()` has no such keyword. Rebuild it against this release
+(`toolr self build-manifest --check` in its CI catches it). See [Path types](arguments.md#path-types).
 
 Next: [Nested groups →](nesting.md)
