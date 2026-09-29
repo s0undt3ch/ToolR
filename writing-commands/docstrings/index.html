@@ -1826,9 +1826,21 @@ docstring can use the usual elements:</p>
   commands.</li>
 </ul>
 <h2 id="failing-without-a-docstring">Failing without a docstring<a class="headerlink" href="#failing-without-a-docstring" title="Permanent link">&para;</a></h2>
-<p>A command function with no docstring is rejected at manifest-build
-time: toolr refuses to ship undocumented commands. Add a one-line
-summary and you're good.</p>
+<p>toolr refuses to build a manifest that contains an undocumented command.
+Every <code>@command</code> needs a docstring whose first line is a summary. The build
+fails when a command has no docstring, an empty or blank one, or one with only
+sections such as <code>Args:</code>. The error lists every offending command:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>commands without a docstring (1):
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>  - tools.deploy::rollback: add a docstring. Its first line is the command's `--help` summary.
+</span></code></pre></div>
+<p>This applies to <code>toolr project manifest rebuild</code>, to the automatic rebuild
+when the manifest is stale, and to <code>toolr self build-manifest</code> for plugins.
+The <code>@command</code> decorators apply the same rule when the module is imported, so
+a <code>toolr.testing.CommandsTester</code> discovery test fails the same way, with a
+<code>ValueError</code> naming the command. Add a one-line summary and you're good.</p>
+<p>toolr refuses to run under <code>python -OO</code> or <code>PYTHONOPTIMIZE=2</code>. Both strip
+every docstring, and toolr describes commands and groups by theirs, so the
+decorators raise a <code>RuntimeError</code> instead.</p>
 <p>Next: <a href="../context/">Using <code>ctx</code> →</a></p>
 
 

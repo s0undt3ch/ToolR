@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev102-2026-09-28" class="md-nav__link">
+  <a href="#0331-dev105-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev102 - 2026-09-28
+        0.33.1-dev105 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev102 - 2026-09-28">
+    <nav class="md-nav" aria-label="0.33.1-dev105 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1534,6 +1534,17 @@
     <span class="md-ellipsis">
       
         Unknown arg() keywords now fail the manifest build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commands-without-a-docstring-now-fail-the-manifest-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commands without a docstring now fail the manifest build
       
     </span>
   </a>
@@ -4085,15 +4096,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev102-2026-09-28" class="md-nav__link">
+  <a href="#0331-dev105-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev102 - 2026-09-28
+        0.33.1-dev105 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev102 - 2026-09-28">
+    <nav class="md-nav" aria-label="0.33.1-dev105 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4156,6 +4167,17 @@
     <span class="md-ellipsis">
       
         Unknown arg() keywords now fail the manifest build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commands-without-a-docstring-now-fail-the-manifest-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commands without a docstring now fail the manifest build
       
     </span>
   </a>
@@ -6702,7 +6724,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev102-2026-09-28">0.33.1-dev102 - 2026-09-28<a class="headerlink" href="#0331-dev102-2026-09-28" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev105-2026-09-29">0.33.1-dev105 - 2026-09-29<a class="headerlink" href="#0331-dev105-2026-09-29" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6751,6 +6773,24 @@ dropped the keyword: the command showed up in <code>--help</code> and then faile
 The build-error heading for these failures, and for unsupported parameter
 types, now reads "invalid parameter declarations" instead of "unsupported
 parameter types". (<a href="https://github.com/s0undt3ch/ToolR/issues/500">#500</a>)</p>
+<h3 id="commands-without-a-docstring-now-fail-the-manifest-build">Commands without a docstring now fail the manifest build<a class="headerlink" href="#commands-without-a-docstring-now-fail-the-manifest-build" title="Permanent link">&para;</a></h3>
+<p><strong>Breaking.</strong> A <code>@command</code> whose docstring gives no summary line now fails the
+manifest build. That covers a missing docstring, an empty or blank one, and one
+with only sections such as <code>Args:</code>. The error names the module and function of
+every offending command. Before, such a command built with an empty <code>--help</code>
+summary, although the docs already said it was rejected. The check applies to
+<code>toolr project manifest rebuild</code>, the automatic rebuild of a stale manifest, and
+<code>toolr self build-manifest</code>. The <code>@command</code> decorators apply the same rule at
+import time and raise a <code>ValueError</code>, so a <code>toolr.testing.CommandsTester</code>
+discovery test fails the same way the build does. Commands grafted from
+argparse sources are not affected. To fix a failing build, give each listed
+command a one-line docstring.</p>
+<p>toolr now also refuses to run under <code>python -OO</code> or <code>PYTHONOPTIMIZE=2</code>, which
+strip every docstring. Declaring a command, or a group described by its
+docstring, raises a <code>RuntimeError</code> saying so. Before, a group declared with
+<code>docstring=__doc__</code> failed there with a misleading "must pass either docstring
+or description" error.
+(<a href="https://github.com/s0undt3ch/ToolR/issues/501">#501</a>)</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6762,6 +6802,8 @@ parameter types". (<a href="https://github.com/s0undt3ch/ToolR/issues/500">#500<
 <li><em>(xtask)</em> Add named docs-section extractor for skill references (<a href="https://github.com/s0undt3ch/ToolR/commit/0a504ce40b312cf1915a906eba7b0a51c321aef0"><code>0a504ce</code></a>)</li>
 <li><em>(skills)</em> Ship argument shapes, prek hook and plugin example inside the skills (<a href="https://github.com/s0undt3ch/ToolR/commit/66c41912c35cf4c01b22658aceb13d4420c8c332"><code>66c4191</code></a>)</li>
 <li><em>(xtask)</em> Fail build-skill-refs when a skill reaches outside its directory (<a href="https://github.com/s0undt3ch/ToolR/commit/114d4d09d860db43369192458de202151e6b9279"><code>114d4d0</code></a>)</li>
+<li><em>(parser)</em> [<strong>breaking</strong>] Fail the manifest build on commands without a docstring (#501) (<a href="https://github.com/s0undt3ch/ToolR/commit/7f224e560117f36621d4b0eb8504c2abb45b6879"><code>7f224e5</code></a>)</li>
+<li><em>(decorators)</em> [<strong>breaking</strong>] Reject undocumented commands at import and refuse -OO (#501) (<a href="https://github.com/s0undt3ch/ToolR/commit/83dd6e7a9ecda61c87dd354b2ed119ab9e7babdd"><code>83dd6e7</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
