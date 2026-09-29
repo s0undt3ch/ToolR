@@ -100,7 +100,7 @@ fn slash_path(path: &Path) -> String {
 /// names them.
 fn repo_urls(repo_root: &Path) -> Result<Vec<String>> {
     let repository = metadata_string(repo_root, CARGO_TOML, &REPOSITORY_KEY)?;
-    let rest = scheme_less(&repository);
+    let rest = scheme_less(without_fragment(&repository));
     let rest = rest.strip_suffix(".git").unwrap_or(&rest);
     let [host, owner, repo] = rest.split('/').collect::<Vec<_>>()[..] else {
         bail!(not_github(&repository));
@@ -109,7 +109,7 @@ fn repo_urls(repo_root: &Path) -> Result<Vec<String>> {
         bail!(not_github(&repository));
     }
     let docs = metadata_string(repo_root, PYPROJECT, &DOCUMENTATION_KEY)?;
-    let docs_host = scheme_less(&docs)
+    let docs_host = scheme_less(without_fragment(&docs))
         .split('/')
         .next()
         .unwrap_or_default()
@@ -122,7 +122,7 @@ fn repo_urls(repo_root: &Path) -> Result<Vec<String>> {
     }
     Ok(vec![
         format!("github.com/{owner}/{repo}"),
-        format!("raw.githubusercontent.com/{owner}/"),
+        format!("raw.githubusercontent.com/{owner}/{repo}"),
         docs_host,
     ])
 }
@@ -132,6 +132,10 @@ fn not_github(url: &str) -> String {
         "{CARGO_TOML}: `{}` is not a github.com/<owner>/<repo> URL: {url}",
         REPOSITORY_KEY.join(".")
     )
+}
+
+fn without_fragment(url: &str) -> &str {
+    url.split(['#', '?']).next().unwrap_or(url)
 }
 
 fn scheme_less(url: &str) -> String {
@@ -448,7 +452,14 @@ fn is_repo_url(url: &str, urls: &[String]) -> bool {
     let url = url.to_ascii_lowercase();
     let rest = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
     let rest = rest.strip_prefix("www.").unwrap_or(rest);
-    urls.iter().any(|p| rest.starts_with(p.as_str()))
+    urls.iter().any(|p| rest.strip_prefix(p.as_str()).is_some_and(at_boundary))
+}
+
+/// Whether a matched prefix ends on a segment boundary, so `<repo>` doesn't
+/// also match `<repo>-other`. A `.git` clone suffix still counts as the repo.
+fn at_boundary(rest: &str) -> bool {
+    let rest = rest.strip_prefix(".git").unwrap_or(rest);
+    rest.is_empty() || rest.starts_with(['/', '#', '?', ':'])
 }
 
 /// `http(s)://` tokens in `text`, with their byte offsets.
@@ -517,7 +528,7 @@ mod tests {
     fn urls() -> Vec<String> {
         [
             "github.com/s0undt3ch/toolr",
-            "raw.githubusercontent.com/s0undt3ch/",
+            "raw.githubusercontent.com/s0undt3ch/toolr",
             "toolr.readthedocs.io",
         ]
         .map(String::from)
@@ -965,7 +976,7 @@ mod tests {
             got,
             [
                 "github.com/acme/widget",
-                "raw.githubusercontent.com/acme/",
+                "raw.githubusercontent.com/acme/widget",
                 "docs.acme.dev"
             ]
         );
@@ -993,6 +1004,43 @@ mod tests {
             "{err}"
         );
         assert!(!err.contains("s0undt3ch/toolr"), "{err}");
+    }
+
+    #[test]
+    fn repo_urls_ignore_a_fragment_or_query_in_the_metadata() {
+        let got = urls_for(
+            "urls-fragment",
+            &[
+                (
+                    "Cargo.toml",
+                    "[workspace.package]\nrepository = \"https://github.com/acme/widget#readme\"\n",
+                ),
+                (
+                    "crates/toolr/pyproject.toml",
+                    "[project.urls]\nDocumentation = \"https://docs.acme.dev?v=1\"\n",
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            got,
+            [
+                "github.com/acme/widget",
+                "raw.githubusercontent.com/acme/widget",
+                "docs.acme.dev"
+            ]
+        );
+    }
+
+    #[test]
+    fn repo_urls_match_on_a_path_segment_boundary() {
+        let flagged = "https://github.com/s0undt3ch/ToolR/x https://github.com/s0undt3ch/toolr#f \
+            https://github.com/s0undt3ch/ToolR.git https://toolr.readthedocs.io:443/x \
+            https://raw.githubusercontent.com/s0undt3ch/ToolR/main/x\n";
+        assert_eq!(rules(flagged, &[]), ["repo-url"; 5]);
+        let other = "https://github.com/s0undt3ch/toolr-other https://toolr.readthedocs.io.evil.com/ \
+            https://raw.githubusercontent.com/s0undt3ch/other/main/x\n";
+        assert!(rules(other, &[]).is_empty());
     }
 
     #[test]
