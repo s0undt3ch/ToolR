@@ -37,7 +37,7 @@ declaring `docker` → `image` → `build` produces this fragment (checked with 
 ```
 
 - `docker` is dropped, because the group filter keeps only groups that hold a command directly
-  (`build_fragment.rs:175-177`).
+  (`build_fragment.rs:174-177`).
 - `docker.image` has no `parent`, so `merge.rs` turns it into a top-level group literally named
   `docker.image`. `cli.rs` indexes children by `parent`, so the command tree is wrong.
 - `merge.rs` seeds its dedup set with host *leaf* names but inserts fragment *full paths*, so the
@@ -46,7 +46,7 @@ declaring `docker` → `image` → `build` produces this fragment (checked with 
 Once the fragment carries real `Group`s, every place that dedups groups by leaf `name` becomes a
 collision bug: a plugin's `docker.image` and a local `ci.image` share the leaf `image`. There are
 three such places: `merge.rs:35-39`, `bootstrap.rs:194` (`carry_forward_cached_entries`) and
-`complete/freshness.rs:81` (`preserve_non_static_entries`).
+`complete/freshness.rs:82` (`preserve_non_static_entries`).
 
 ## Decisions
 
@@ -58,7 +58,7 @@ three such places: `merge.rs:35-39`, `bootstrap.rs:194` (`carry_forward_cached_e
 | Key name in the fragment | Stays `toolr_schema_version`. Its meaning changes, see §4. |
 | `self build-manifest --schema-version N` | Removed. The version is computed. |
 | A skipped plugin, or a plugin command hidden by a local one | Recorded in the manifest and warned about on every run. Local still wins a clash. |
-| Malformed JSON, duplicate command across two plugins | Still abort. Out of scope (follow-up issue). |
+| Malformed JSON, missing or invalid `toolr_schema_version`, duplicate command across two plugins | Still abort. Out of scope (follow-ups). |
 
 Rejected alternatives:
 
@@ -97,13 +97,15 @@ Callers:
 - **Plugin:** `build_third_party_fragment` =
     1. missing-dir and namespace-package checks (unchanged);
     2. `build_commands(source_dir, package_name)`;
-    3. the empty-package check (no groups and no commands);
+    3. the empty-package check, now "no commands". Today groups are derived from commands, so a
+       plugin with groups but no commands fails `EmptyPackage`. Keeping that means checking
+       commands only, now that groups are kept as declared;
     4. sort groups by `full_path()` and commands by `(group, name)` (unchanged);
     5. compute `toolr_schema_version` (see §4).
 
 Two current plugin steps go:
 
-- **The package filter** (`build_fragment.rs:171-172`). `module_path_for_prefix` prefixes every
+- **The package filter** (`build_fragment.rs:170-172`). `module_path_for_prefix` prefixes every
   walked file with the package name, so the filter never drops anything.
 - **The group filter.** The local build keeps every declared group, including one with no
   commands. The fragment does the same, which also keeps `docker` in the nested case.
@@ -164,9 +166,10 @@ groups with the same full path merge. No code may key groups by leaf `name`.
   sets them, so this only matters for a hand-edited fragment. Without the reset, such a fragment
   would reach the argparse dispatch path in `dispatch.rs`, which is local-only.
 - Nothing else is filled in or changed.
-- Each merged command runs `Argument::validate`. A failure skips that plugin (§5) rather than
-  panicking the clap builder later. A hand-edited `fixed_arity` without `nargs` is the case it
-  catches.
+- Every command in a fragment runs `Argument::validate` **before** any of that fragment is merged,
+  in a validation pass between `parse_fragment` and the merge loop. A failure skips the whole plugin
+  (§5), so a partial merge never happens, rather than panicking the clap builder later. A
+  hand-edited `fixed_arity` without `nargs` is the case it catches.
 - A local command with the same `(group, name)` still wins, but no longer silently. The debug log
   becomes a persisted `Shadowed` warning (§5): `tools/<file> defines <group> <name>, hiding the
   one from <pkg>`. The repo is the part the user controls, and the plugin is a dependency, so a
@@ -208,10 +211,12 @@ fragment" instead.
 Two constants in `third_party/model.rs`, both 2 today:
 
 - `FRAGMENT_SHAPE_SCHEMA`: the **writer** floor. It is the schema at which the fragment's JSON
-  shape last changed in a way an older reader can't parse. Bump it (and `SCHEMA_VERSION`) on any
-  non-additive change to `Group`, `Command`, `Argument`, `ArgMetadata`, `HelpSection`,
-  `SupportedType`, `ArgumentKind` or `Nargs`. Examples: a renamed field, a changed field type, a
-  new required field.
+  shape last changed in a way an older reader can't parse or would misread. Bump it (and
+  `SCHEMA_VERSION`) on any non-additive change to `Group`, `Command`, `Argument`, `ArgMetadata`,
+  `HelpSection`, `SupportedType`, `ArgumentKind` or `Nargs`. Examples: a renamed field, a changed
+  field type, a new required field, or a changed meaning of an existing field or variant (such as
+  what `nargs` means for a kind). The destructure-without-`..` guard catches only new fields.
+  Changes of meaning rely on review.
 - `MIN_READABLE_FRAGMENT_SCHEMA`: the **reader** floor, the oldest fragment this reader can parse.
   It stays below `FRAGMENT_SHAPE_SCHEMA` only when `parse_fragment` has a migration from the older
   shape. A migration helps newer readers only. Older readers still need the writer floor to turn
@@ -256,7 +261,8 @@ uses:
   types for `List`, `Tuple` and `Optional`. `list[NewType]` counts.
 - `ArgumentKind::since_schema()` and `Nargs::since_schema()`: exhaustive matches. An old reader
   can't deserialise a new variant of either, just as with a new type (`SupportedType` is
-  `tag = "kind"`, and an unknown variant is a hard serde error).
+  adjacently tagged, `tag = "kind", content = "value"`, and an unknown variant is a hard serde
+  error).
 - `min_schema(&self)` on `Group`, `Command`, `Argument`, `ArgMetadata` and `HelpSection`. Each
   destructures the struct **without `..`**, so a new field doesn't compile until someone decides:
     - **Ignorable:** an old reader may drop it and still behave correctly. It contributes nothing.
@@ -282,7 +288,10 @@ The compiler forces *an* answer for each new variant, not the right one. Two gua
 - A test asserts every `since_schema()` is `<= SCHEMA_VERSION`, and that
   `FRAGMENT_SHAPE_SCHEMA <= SCHEMA_VERSION`.
 - "Adding a supported type" in `CONTRIBUTING.md` gains a step: "bump `SCHEMA_VERSION` and set the
-  new kind's `since_schema()` to the new value".
+  new kind's `since_schema()` to the new value. The golden test is *expected* to fail. Its new row
+  is the new `SCHEMA_VERSION`, not whatever makes the test pass."
+- These guards stop a variant being forgotten, not a wrong value being written down. Review is
+  the last line of defence.
 
 `ManifestFragment::min_schema()` folds these over every group and command. The builder writes the
 result as `toolr_schema_version`. `parse_fragment` reads the declared value and doesn't recompute
@@ -328,27 +337,34 @@ warned about on every run.
   rebuilds anyway because `toolr_version` differs.
 - `discover_and_merge` returns the merged manifest with `plugin_warnings` filled in. Every other
   `ThirdPartyError` still aborts.
-- Freshness verdicts:
-    - `ThirdPartyDrift` and a first build: `plugin_warnings` comes from the fresh merge.
-      `third_party_hash` covers skipped fragments' bytes too, so fixing or removing a plugin
-      triggers `ThirdPartyDrift` and clears its entry.
-    - `StaticDrift`, no `Shadowed` entries in the cache: `carry_forward_cached_entries` copies the
-      `Skipped` entries from the cache, just as it copies cached third-party commands.
-    - `StaticDrift` with a `Shadowed` entry in the cache and a venv present: escalate to
-      `ThirdPartyDrift`. Shadowing depends on the local command set, which just changed. A stale
-      cache would keep warning about a removed local command, and it would keep hiding the plugin
-      command, which the merge dropped. Re-merging only globs and parses JSON, so it's cheap.
-    - `ThirdPartyDrift` with no venv: plugin commands and warnings are both dropped (existing
+- **Freshness: with a venv, any drift re-merges.** Shadowing depends on the local command set,
+  so a local change can create a `Shadowed` warning or clear one. For example, adding
+  `tools/ci.py::lint` must hide the plugin's `ci lint` *and* warn, and removing it must bring the
+  plugin command back. Carry-forward can't do either. So in `freshness::compare`, a `StaticDrift`
+  with `venv_dir` present becomes `ThirdPartyDrift`, and the merge reruns. This is cheap:
+  `compare` already reads every fragment's bytes on each dispatch to compute `third_party_hash`
+  (`compare.rs:81-85`), so a re-merge only adds JSON parsing.
+    - With a venv, `ThirdPartyDrift` and a first build: `plugin_warnings` comes from the fresh
+      merge. `third_party_hash` covers skipped fragments' bytes too, so fixing or removing a
+      plugin clears its entry.
+    - With no venv, `StaticDrift`: `carry_forward_cached_entries` copies cached third-party
+      commands and every cached `plugin_warnings` entry, `Shadowed` included. A possibly stale
+      warning beats a silently hidden command.
+    - With no venv, `ThirdPartyDrift`: plugin commands and warnings are both dropped (existing
       behaviour for commands).
-- **Where it prints:** `main.rs::run`, right after `load_or_empty` and before clap parses argv.
-  So `--help`, `dispatch_help_from_argv` and the `self`/`project` builtins all get it. The format
-  is `toolr: warning: <message>` on stderr.
+- **Where it prints:** `main.rs::run`, right after `load_or_empty` and before clap parses argv,
+  so `--help` and `dispatch_help_from_argv` get it. The format is `toolr: warning: <message>` on
+  stderr.
 - **When it doesn't print:**
-    - on the tab-completion path, because output there corrupts the shell's candidates;
+    - when `bootstrap::should_skip_auto_rebuild(&argv)` is true. That covers `__complete` (tab
+      completion enters through `main.rs::run`, and output there corrupts the shell's
+      candidates), plus `project`, `self`, `init` and `--version`. Those skip the freshness check,
+      so their cached warnings may be stale;
     - when `argv_requests_quiet(&argv)` is true, matching the cache hint's `--quiet` handling
       (`main.rs:76-84`).
-- `RebuildOutcome.warnings` (always empty today) is filled from `plugin_warnings`, so
-  `toolr project manifest rebuild` reports them too.
+- `RebuildOutcome.warnings` (always empty today) is filled from `plugin_warnings`. It's the only
+  channel for `toolr project manifest rebuild`, which already prints it (`project.rs:222-224`).
+  Because of the gate above, nothing prints twice.
 
 ### 6. CLI and docs fallout
 
@@ -391,7 +407,11 @@ All tests live in `toolr-core` unless noted. They follow the existing `TempDir` 
 - **Parity.** One command set built both ways. Both sides are serialised to JSON, and `"tools.` /
   `"tools"` are rewritten to `"<pkg>.` / `"<pkg>"`. This catches the prefix inside
   `SupportedType::Enum.module` as well as `Command.module`. `origin` is normalised as well. The
-  results must be equal. The set covers:
+  results must be equal once both sides are sorted: groups by `full_path()`, commands by
+  `(group, name)`. The local build emits in walk order. The fixture is one source tree that uses
+  relative imports (`from .enums import Color`), so it resolves the same under either prefix.
+  It must not name a group `tools` or start a docstring with `tools.`, because the rewrite would
+  touch those. The set covers:
     - a nested `docker` → `image` → `build` group, and a declared group with no commands;
     - `tuple[str, int]`, which arrives as `Repeated` with `resolved_type` `Tuple([Str, Int])`;
     - an `Annotated[..., arg(aliases=..., metavar=..., env=..., help_section=...)]` argument;
@@ -402,17 +422,21 @@ All tests live in `toolr-core` unless noted. They follow the existing `TempDir` 
 - **Nested groups.** The fragment keeps `docker` with `parent: None` and `image` with
   `parent: Some("docker")`. After merge, a plugin `docker.image` and a local `ci.image` both
   survive.
-- **Carry-forward** (`crates/toolr` integration, `assert_cmd`): a cached plugin `docker.image`
-  survives a `StaticDrift` caused by editing a local file that declares `ci.image`. The completion
-  path's `preserve_non_static_entries` gets the same case as a unit test.
+- **Carry-forward** (`crates/toolr` integration, `assert_cmd`): with no venv, a cached plugin
+  `docker.image` survives a `StaticDrift` caused by editing a local file that declares `ci.image`.
+  With a venv, the same edit re-merges, and `docker.image` is still there. The completion path's
+  `preserve_non_static_entries` gets the no-venv case as a unit test.
 - **Plugin build checks.** A plugin command in an undeclared group fails with the "did you mean"
   hint. A plugin with a bad positional order fails positional arity. A plugin that declares a host
   group's name merges under it, and the host title wins.
 - **Load rule.**
     - `M = 2` loads.
     - `M = SCHEMA_VERSION + 1` is skipped with the "Upgrade toolr" reason.
-    - `M = 1` is skipped with the "Rebuild the plugin" reason. `crates/toolr/tests/untrusted_repo.rs`
-      hard-codes a v1 fragment today. Convert it into this test at the binary level.
+    - `M = 1` is skipped with the "Rebuild the plugin" reason. At the binary level, add a sibling
+      to `crates/toolr/tests/untrusted_repo.rs::manifest_rebuilds_when_a_venv_appears`: the same
+      fixture with a v1 fragment. It asserts the plugin group is absent and
+      `toolr: warning: skipping plugin demo_plugin` is on stderr. The existing test keeps its
+      assertion that the plugin lands, with its fixture bumped to v2.
     - A hand-built fragment with `fixed_arity` and no `nargs` is skipped, not a panic. Only a
       hand-edited fragment can have this shape.
     - A hand-built fragment with `is_dispatcher: true` merges with it reset to `false`.
@@ -422,8 +446,11 @@ All tests live in `toolr-core` unless noted. They follow the existing `TempDir` 
     - `toolr --help` warns.
     - `--quiet` and tab completion print nothing.
     - A local `ci lint` and a plugin `ci lint`: the local one runs, and a `Shadowed` warning prints.
-    - Removing the local `ci lint` (a `StaticDrift`) escalates to a re-merge. The plugin's
-      `ci lint` comes back and the warning goes.
+    - Adding a local `ci lint` over a cached plugin `ci lint` (a `StaticDrift`) re-merges. The
+      warning appears on that run.
+    - Removing the local `ci lint` re-merges. The plugin's `ci lint` comes back and the warning
+      goes.
+    - `toolr project manifest rebuild` prints each warning once.
 - **Computed `M`.**
     - Every current fragment computes 2.
     - `min_schema_with` with a test `since` that returns 3 for one kind raises `M` when that kind
@@ -439,7 +466,7 @@ Verification: full `mise run test`, which includes `cargo xtask build-skill-refs
 
 ## Out of scope
 
-- Choosing a clash winner in config, and plugin-vs-plugin clashes. A follow-up issue proposes a
+- Choosing a clash winner in config, and plugin-vs-plugin clashes. #522 proposes a
   `[tool.toolr.plugins]` table in `tools/pyproject.toml` that picks the winner per command and
   silences the `Shadowed` warning. It would also turn an unresolved plugin-vs-plugin clash from a
   whole-CLI abort into one disabled command with a warning.
