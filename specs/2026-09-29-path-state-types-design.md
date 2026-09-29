@@ -171,8 +171,8 @@ information. `FragmentArgument` has only `name`, `kind`, `help`, `default`, `typ
 argument. The fragment format doesn't change, so bumping it would break every published plugin for
 nothing.
 
-As a result, the new path types, like every other `toolr.types` type, are **not enforced for plugin
-commands**. That gap already exists, and this design doesn't fix it. See "Found, out of scope".
+As a result, the new path types' checks **do not run for plugin commands**. The value still reaches
+Python as a `pathlib.Path`. That gap already exists, and this design doesn't fix it. See "Found, out of scope".
 
 ## Known limit: non-literal defaults
 
@@ -183,10 +183,12 @@ Python's own default then applies, unchecked. The docs say this. Fixing it is ou
 
 ## Found, out of scope
 
-- **Plugin arguments carry no type information.** Fragments record no `SupportedType`, so plugin
-  commands get no clap type checking at all: no path checks, and no `int`, `UUID` or `Email`
-  parsing. Fixing this needs a fragment schema v2, and that is when plugin authors would have to
-  rebuild. File it as its own issue.
+- **Plugin arguments get no clap value parser.** Fragments record no `SupportedType`, so for plugin
+  commands clap accepts any string. The runner's `msgspec.convert` still converts values to the
+  annotated type. So `int`, `UUID` and `DateTime` fail late, inside Python, with a msgspec error
+  instead of a clap usage error. `Email` gets no validation, and there are no completion hints.
+  Checks that only Rust does, which includes every path-state check here, never run for plugin
+  commands. Fixing this needs a fragment schema v2 that records the type. File it as its own issue.
 - **`parse_fragment` comment is wrong.** It says only the current version is accepted. The code
   accepts every version from 1 to current. Harmless while there is only v1, but the comment
   should match the code.
