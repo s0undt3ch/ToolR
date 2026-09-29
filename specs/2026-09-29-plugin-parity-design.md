@@ -151,6 +151,10 @@ pub struct ManifestFragment {
 
 ### 3. Merge and group dedup
 
+**Invariant:** a group's identity is its `full_path()`, everywhere. Groups with different full
+paths, such as `docker.image` and `ci.image`, are always separate, and so are their commands. Only
+groups with the same full path merge. No code may key groups by leaf `name`.
+
 `merge_into_manifest` changes:
 
 - Groups dedup by `full_path()`, not `name`. The rule is unchanged otherwise: a group already in
