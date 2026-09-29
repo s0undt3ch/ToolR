@@ -1482,6 +1482,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#adding-a-supported-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a supported type
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#commits" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1635,6 +1646,17 @@
     <span class="md-ellipsis">
       
         RUNNER_SCHEMA_VERSION ↔ SCHEMA_VERSION lock-step
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-supported-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a supported type
       
     </span>
   </a>
@@ -1812,6 +1834,32 @@ Python-level subprocess tests unless the behaviour can't be exercised in Rust.</
 <p>Both carry doc comments listing which changes require a bump and which don't. Read those before
 changing either the Rust serde structs or the Python <code>RunnerSpec</code> class. A CI gate fails the build
 when the two values disagree.</p>
+<h2 id="adding-a-supported-type">Adding a supported type<a class="headerlink" href="#adding-a-supported-type" title="Permanent link">&para;</a></h2>
+<p>A new <code>toolr.types</code> alias starts as a new <code>SupportedType</code> variant in
+<code>crates/toolr-core/src/parser/types/supported.rs</code>. The compiler walks you through the Rust side:
+each <code>non-exhaustive patterns: … not covered</code> error names the next <code>match</code> to extend.</p>
+<ol>
+<li>Add the variant to <code>SupportedType</code>.</li>
+<li><code>SupportedType::doc()</code>: write its row for the "Supported types" table.</li>
+<li><code>SupportedType::kind()</code>: map it to a new kind, and add that kind to the
+   <code>supported_type_kinds!</code> list at the position its table row should take.</li>
+<li><code>SupportedTypeKind::representative()</code>: return a value of the new variant.</li>
+<li><code>apply_value_parser</code> in <code>crates/toolr/src/value_parsers.rs</code>: choose the clap value parser.</li>
+</ol>
+<p>The compiler doesn't check the rest. Tests catch some of it, but not all:</p>
+<ol>
+<li><code>resolve_toolr_types_name</code> in <code>crates/toolr-core/src/parser/types/resolve.rs</code>: map
+   <code>toolr.types.&lt;Name&gt;</code> to the variant.</li>
+<li><code>crates/toolr-py/python/toolr/types/__init__.py</code>: define the alias and add it to <code>__all__</code>.</li>
+<li><code>_dec_hook</code> in <code>crates/toolr-py/python/toolr/_runner.py</code>: if the Python value isn't a JSON type,
+   convert the string the binary sends.</li>
+<li>Add the name to the three pinned lists: <code>toolr_types_names_match_python_surface</code> in
+   <code>parser/types/mod.rs</code>, <code>catalogue_covers_every_toolr_types_name</code> in <code>supported.rs</code>, and
+   <code>EXPECTED_TOOLR_TYPES_NAMES</code> in <code>tests/test_types_module.py</code>.</li>
+<li>Run <code>cargo xtask build-skill-refs</code> and commit the regenerated type tables in <code>docs/</code> and
+   <code>skills/</code>.</li>
+<li>Queue an <code>UNRELEASED.md</code> entry. A new type makes the next release a minor one.</li>
+</ol>
 <h2 id="commits">Commits<a class="headerlink" href="#commits" title="Permanent link">&para;</a></h2>
 <p><a href="https://www.conventionalcommits.org/">Conventional Commits</a>. Examples:</p>
 <ul>
