@@ -1791,18 +1791,6 @@ a call to <a class="autorefs autorefs-internal" href="../../reference/arg/#toolr
 <td><code>requires=[...]</code></td>
 <td>If this flag is set, every name listed must also be set.</td>
 </tr>
-<tr>
-<td><code>must_exist=True</code></td>
-<td>Reject paths that don't exist on disk (Path types only).</td>
-</tr>
-<tr>
-<td><code>must_be_file=True</code></td>
-<td>Reject anything that isn't a regular file; implies <code>must_exist</code>.</td>
-</tr>
-<tr>
-<td><code>must_be_dir=True</code></td>
-<td>Reject anything that isn't a directory; implies <code>must_exist</code>.</td>
-</tr>
 </tbody>
 </table>
 <h2 id="aliases-short-flags-alternate-long-flags">Aliases (short flags + alternate long flags)<a class="headerlink" href="#aliases-short-flags-alternate-long-flags" title="Permanent link">&para;</a></h2>
@@ -1884,9 +1872,11 @@ description, a bare string is accepted:</p>
 <li><code>action=</code> — <code>bool</code> infers flag, <code>list[T]</code> infers append, <code>Count</code> infers count.</li>
 <li><code>group=</code> — use <code>conflicts_with=[…]</code> for mutex, <code>help_section=</code> for display grouping.</li>
 </ul>
-<p>Not accepted: <code>path_must_exist=</code> / <code>path_must_be_file=</code> /
-<code>path_must_be_dir=</code>. These spellings never parsed; the real (and only)
-names are <code>must_exist=</code> / <code>must_be_file=</code> / <code>must_be_dir=</code>.</p>
+<p>Removed: <code>must_exist=</code>, <code>must_be_file=</code> and <code>must_be_dir=</code> (and the <code>path_must_*</code> spellings). The
+build fails with a hint naming the replacement: use <code>toolr.types.ResolvedPath</code>, <code>FilePath</code> or
+<code>DirectoryPath</code>. A plugin that still uses them fails when you run one of its commands, with an
+error saying <code>arg()</code> has no such keyword. Rebuild it against this release
+(<code>toolr self build-manifest --check</code> in its CI catches it). See <a href="../arguments/#path-types">Path types</a>.</p>
 <p>Next: <a href="../nesting/">Nested groups →</a></p>
 
 

@@ -1758,7 +1758,7 @@ the auto-rebuild doesn't already cover.</p>
 </div>
 <h2 id="file-shape">File shape<a class="headerlink" href="#file-shape" title="Permanent link">&para;</a></h2>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"schema_version"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"schema_version"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">"static_hash"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;blake3 hex&gt;"</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">"third_party_hash"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;blake3 hex&gt;"</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">"toolr_version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;CARGO_PKG_VERSION&gt;"</span><span class="p">,</span>
@@ -1768,7 +1768,9 @@ the auto-rebuild doesn't already cover.</p>
 </span></code></pre></div>
 <ul>
 <li><strong><code>schema_version</code></strong> — single integer; toolr refuses to load a
-  manifest with a higher schema than it understands.</li>
+  manifest with a higher schema than it understands. Version 2 removed
+  <code>path_constraints</code>. A cache with any other schema version is rebuilt
+  on the next run.</li>
 <li><strong><code>static_hash</code></strong> — blake3 over the sorted <code>(path, contents)</code> of
   every <code>tools/**/*.py</code> file. Drives static-layer rebuilds.</li>
 <li><strong><code>third_party_hash</code></strong> — blake3 over the sorted set of
@@ -1833,9 +1835,8 @@ the auto-rebuild doesn't already cover.</p>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">"default"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="nt">"type_annotation"</span><span class="p">:</span><span class="w"> </span><span class="s2">"str"</span><span class="p">,</span>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span><span class="nt">"resolved_type"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"str"</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span><span class="nt">"path_constraints"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">  </span><span class="nt">"allowed_values"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="p">}</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span><span class="nt">"allowed_values"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="p">}</span>
 </span></code></pre></div>
 <ul>
 <li><strong><code>kind</code></strong> — one of <code>"positional"</code>, <code>"optional"</code>, <code>"flag"</code>,
@@ -1856,14 +1857,15 @@ the auto-rebuild doesn't already cover.</p>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">{</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"literal"</span><span class="p">,</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"a"</span><span class="p">,</span><span class="w"> </span><span class="s2">"b"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">{</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"enum"</span><span class="p">,</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Operation"</span><span class="p">,</span><span class="w"> </span><span class="nt">"values"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"add"</span><span class="p">,</span><span class="w"> </span><span class="s2">"subtract"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">{</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"optional"</span><span class="p">,</span><span class="w"> </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"path"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">{</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"file_path"</span><span class="w"> </span><span class="p">}</span>
 </span></code></pre></div>
 <p>See <code>src/parser/types.rs</code> for the full enum. <code>null</code> means the type
   layer couldn't resolve a supported type — third-party fragments
   built against the legacy schema fall through to string semantics.
-- <strong><code>path_constraints</code></strong> — for path-typed parameters annotated with
-  <code>arg(must_exist=True, ...)</code>. Object with optional <code>must_exist</code>,
-  <code>must_be_file</code>, <code>must_be_dir</code> booleans. <code>null</code> when no constraints
-  were declared.
+  Path types (<code>path</code>, <code>absolute_path</code>, <code>new_path</code>, <code>resolved_path</code>,
+  <code>file_path</code>, <code>directory_path</code>, <code>executable_path</code>,
+  <code>writable_directory_path</code>) name their filesystem check, if any, in
+  the kind itself.
 - <strong><code>allowed_values</code></strong> — for <code>Literal[...]</code> / <code>Enum</code> types, the
   values clap validates against. Also used by tab completion.</p>
 <h2 id="static-layer">Static layer<a class="headerlink" href="#static-layer" title="Permanent link">&para;</a></h2>

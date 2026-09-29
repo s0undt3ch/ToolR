@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev119-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev141-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev119 - 2026-09-29
+        0.33.1-dev141 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev119 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev141 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1567,6 +1567,17 @@
     <span class="md-ellipsis">
       
         Readable debug and info log colours
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#path-types-replace-argmust_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Path types replace arg(must_*)
       
     </span>
   </a>
@@ -4118,15 +4129,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev119-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev141-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev119 - 2026-09-29
+        0.33.1-dev141 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev119 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev141 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4222,6 +4233,17 @@
     <span class="md-ellipsis">
       
         Readable debug and info log colours
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#path-types-replace-argmust_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Path types replace arg(must_*)
       
     </span>
   </a>
@@ -6768,7 +6790,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev119-2026-09-29">0.33.1-dev119 - 2026-09-29<a class="headerlink" href="#0331-dev119-2026-09-29" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev141-2026-09-29">0.33.1-dev141 - 2026-09-29<a class="headerlink" href="#0331-dev141-2026-09-29" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6780,13 +6802,10 @@ unaffected. See <code>toolr.testing.set_current_context()</code> for testing hel
 that use it.</p>
 <h3 id="agent-skills-are-now-self-contained">Agent skills are now self-contained<a class="headerlink" href="#agent-skills-are-now-self-contained" title="Permanent link">&para;</a></h3>
 <p>Each skill under <code>skills/</code> now carries everything it needs: the supported
-argument types and path constraints (generated from toolr's own parser), the
+argument types (generated from toolr's own parser), the
 argument-shape rules, the prek hook recipe, and the example plugin
 <code>pyproject.toml</code>. Installed skills no longer point agents at the toolr docs
-site or repository. The docs' path-constraint table previously documented
-<code>arg(path_must_exist=...)</code>; the real keywords are <code>must_exist</code>,
-<code>must_be_file</code> and <code>must_be_dir</code>, and the docs now generate that table from the
-code.</p>
+site or repository. The generated tables include the <code>toolr.types</code> path types.</p>
 <h3 id="the-authoring-skill-covers-external-command-sources">The authoring skill covers external command sources<a class="headerlink" href="#the-authoring-skill-covers-external-command-sources" title="Permanent link">&para;</a></h3>
 <p>The <code>toolr-command-authoring</code> skill now teaches agents how to put existing
 argparse scripts and Django management commands behind a <code>DispatchCommand</code>
@@ -6805,7 +6824,7 @@ for releases published before packslip support.</p>
 <p>A misspelled or unsupported <code>arg()</code> keyword, such as
 <code>arg(path_must_exist=True)</code>, and any positional argument passed to <code>arg()</code> now
 fail the manifest build with the module, function and argument, plus a
-"did you mean" hint where one fits (<code>path_must_exist</code> suggests <code>must_exist</code>).
+"did you mean" hint where one fits (<code>path_must_exist</code> points at <code>toolr.types.ResolvedPath</code>).
 Argparse-style <code>help=</code>, <code>type=</code> and <code>default=</code> instead point at where toolr
 takes that information from. The check follows <code>arg()</code> calls nested in
 <code>X | None</code>, <code>Optional[...]</code> and <code>list[...]</code> annotations and through
@@ -6851,6 +6870,49 @@ The "Working example" link now points at <code>examples/plugin-package/</code>.
 labels, no longer use Rich's <code>dim</code> modifier. On many terminal palettes <code>dim</code>
 turned the blue and cyan into near-illegible grey. The named ANSI colours still
 follow the terminal's own light or dark palette.</p>
+<h3 id="path-types-replace-argmust_">Path types replace <code>arg(must_*)</code><a class="headerlink" href="#path-types-replace-argmust_" title="Permanent link">&para;</a></h3>
+<p><code>toolr.types</code> gains path types that say what a path argument must be. The toolr binary checks each
+one while it parses the command line, and your command always receives a <code>pathlib.Path</code>:</p>
+<ul>
+<li><code>NewPath</code>: must not exist; its parent directory must.</li>
+<li><code>FilePath</code>, <code>DirectoryPath</code>: must exist as that kind; canonicalised.</li>
+<li><code>ExecutablePath</code>, <code>WritableDirectoryPath</code>: as above, plus executable or writable.</li>
+</ul>
+<p>All seven path types, including the existing <code>AbsolutePath</code> and <code>ResolvedPath</code>, are now
+<code>typing.NewType</code>s rather than plain aliases, so type checkers tell them apart. <strong>Typing-level
+break:</strong> passing a bare <code>Path</code> where one of them is expected is now a type error.</p>
+<p><strong>Breaking:</strong> <code>arg(must_exist=…)</code>, <code>arg(must_be_file=…)</code> and <code>arg(must_be_dir=…)</code> are removed. The
+manifest build fails and names the replacement:</p>
+<table>
+<thead>
+<tr>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Annotated[Path, arg(must_exist=True)]</code></td>
+<td><code>ResolvedPath</code></td>
+</tr>
+<tr>
+<td><code>Annotated[Path, arg(must_be_file=True)]</code></td>
+<td><code>FilePath</code></td>
+</tr>
+<tr>
+<td><code>Annotated[Path, arg(must_be_dir=True)]</code></td>
+<td><code>DirectoryPath</code></td>
+</tr>
+</tbody>
+</table>
+<p>A plugin that still uses them fails when you run one of its commands, with an error saying
+<code>arg()</code> has no such keyword. Rebuild it against this release (<code>toolr self build-manifest --check</code>
+in its CI catches it). A command from a stale local manifest cache fails the same way.</p>
+<p>The local manifest schema is now version 2. An existing cache is rebuilt on the next run; there is
+nothing to do. Plugin commands don't run the path checks yet (#520).</p>
+<p>On Windows, <code>ResolvedPath</code> and the other canonical path types now hand your command a plain path
+(<code>C:\Users\...</code>) instead of a verbatim one (<code>\\?\C:\Users\...</code>), which <code>pathlib</code> treated as a
+different drive.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6864,6 +6926,10 @@ follow the terminal's own light or dark palette.</p>
 <li><em>(xtask)</em> Fail build-skill-refs when a skill reaches outside its directory (<a href="https://github.com/s0undt3ch/ToolR/commit/114d4d09d860db43369192458de202151e6b9279"><code>114d4d0</code></a>)</li>
 <li><em>(parser)</em> [<strong>breaking</strong>] Fail the manifest build on commands without a docstring (#501) (<a href="https://github.com/s0undt3ch/ToolR/commit/7f224e560117f36621d4b0eb8504c2abb45b6879"><code>7f224e5</code></a>)</li>
 <li><em>(decorators)</em> [<strong>breaking</strong>] Reject undocumented commands at import and refuse -OO (#501) (<a href="https://github.com/s0undt3ch/ToolR/commit/83dd6e7a9ecda61c87dd354b2ed119ab9e7babdd"><code>83dd6e7</code></a>)</li>
+<li><em>(types)</em> Add path-state types with clap-side checks (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/345ad3d1688870fc2e2931a7f5932c9b422a665f"><code>345ad3d</code></a>)</li>
+<li><em>(types)</em> [<strong>breaking</strong>] Remove arg(must_*) in favour of path types (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/1762d4266a24b9803d540d81d6986d08c7ccddd1"><code>1762d42</code></a>)</li>
+<li><em>(manifest)</em> Bump schema to 2 and rebuild caches on a schema mismatch (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/b988538a626e509da37048a0e60eadd29ac72a69"><code>b988538</code></a>)</li>
+<li><em>(types)</em> Expose path types as NewTypes in toolr.types (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/4b270fecbfdd8c0aa24cc02a3f2336b302de2df4"><code>4b270fe</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6893,6 +6959,11 @@ follow the terminal's own light or dark palette.</p>
 <li><em>(xtask)</em> Lint prefixed HTML href/src attributes (#504) (<a href="https://github.com/s0undt3ch/ToolR/commit/d1eb41d58983e32f6e48ddd15ce77e59adbb521b"><code>d1eb41d</code></a>)</li>
 <li><em>(xtask)</em> Report malformed Markdown at the offending line (#504) (<a href="https://github.com/s0undt3ch/ToolR/commit/2081ee2f7272f62c75897ed8d61f09f80c744e49"><code>2081ee2</code></a>)</li>
 <li><em>(xtask)</em> Match repo URLs on a path-segment boundary (#504) (<a href="https://github.com/s0undt3ch/ToolR/commit/c41ee50f37e97cd17095d3da54b7422a561afb3e"><code>c41ee50</code></a>)</li>
+<li><em>(execute)</em> Read every path type back as a path (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/bc9b1a8669eb8f7c42a8379773a90387b6c23001"><code>bc9b1a8</code></a>)</li>
+<li><em>(types)</em> Tighten path-check errors and document path-type limits (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/9bd98e4628f8a94a5df2d89da3564c0263bb9f7d"><code>9bd98e4</code></a>)</li>
+<li><em>(runner)</em> Report an unknown arg() keyword at import as a clear error (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/899098862cd32b3bdadcc600f8a867afe9f016eb"><code>8990988</code></a>)</li>
+<li><em>(runner)</em> Catch a removed arg() keyword when annotations evaluate lazily (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/fc3338c44f97025f2d741d9c08b183b81ad3a8a8"><code>fc3338c</code></a>)</li>
+<li><em>(types)</em> Hand Windows canonical paths back without the \?\ prefix (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/2a3001b6bafdd7c974310662052a5e34951f3910"><code>2a3001b</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6932,6 +7003,16 @@ follow the terminal's own light or dark palette.</p>
 <li><em>(third-party)</em> Fix the hatchling recipe and fragment-schema claim (#506) (<a href="https://github.com/s0undt3ch/ToolR/commit/8a4a524a8469d15ef42220e0c6372b57522603c7"><code>8a4a524</code></a>)</li>
 <li><em>(third-party)</em> Ship the manifest via setuptools package-data (#506) (<a href="https://github.com/s0undt3ch/ToolR/commit/6aee50c27ca2c6f6fd69b6b66e34e7f1c173a4f3"><code>6aee50c</code></a>)</li>
 <li><em>(contributing)</em> Add a checklist for adding a supported type (#503) (<a href="https://github.com/s0undt3ch/ToolR/commit/8d93388a1ea5ba1e56264a6acd123025c419abad"><code>8d93388</code></a>)</li>
+<li><em>(specs)</em> Design path-state types for toolr.types (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/f472743ec7bc580009d49936e996424f2203b13c"><code>f472743</code></a>)</li>
+<li><em>(specs)</em> Cover xtask, docs and local-cache fallout in path-state types design (<a href="https://github.com/s0undt3ch/ToolR/commit/39d8d14e4808cf718557aafd0caee9290b5d0591"><code>39d8d14</code></a>)</li>
+<li><em>(specs)</em> Adopt pydantic-style path type names, record rejected composite form (<a href="https://github.com/s0undt3ch/ToolR/commit/e70f7cdef2a52965a103d215a0bf52b4e36f1c83"><code>e70f7cd</code></a>)</li>
+<li><em>(specs)</em> Enforce manifest schema bump, keep fragment schema, place checks in rust (<a href="https://github.com/s0undt3ch/ToolR/commit/94b0dc175f0bbd0449983ec5d146bb5523d61c62"><code>94b0dc1</code></a>)</li>
+<li><em>(specs)</em> State the plugin type-checking gap precisely (<a href="https://github.com/s0undt3ch/ToolR/commit/0b776bb9efcb455558d52552795c1310652d0f30"><code>0b776bb</code></a>)</li>
+<li><em>(specs)</em> Add path-state types implementation plan (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/83db8bb10ce3e98d25e51112edb13451253c913e"><code>83db8bb</code></a>)</li>
+<li><em>(specs)</em> Correct the derived-path typing claim and pin the suggestion path (<a href="https://github.com/s0undt3ch/ToolR/commit/c33b23e1eb7546f375607cb895f38172f8c95d55"><code>c33b23e</code></a>)</li>
+<li><em>(types)</em> Document path types and the arg(must_*) removal (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/183fd790690318388d00d495df549991f3bd1c91"><code>183fd79</code></a>)</li>
+<li><em>(specs)</em> Archive the path-state types design and plan (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/a692500f5966788d05d0e95ff3bc55bff521e677"><code>a692500</code></a>)</li>
+<li><em>(unreleased)</em> Note plain canonical paths on Windows (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/868afe36d1dbb424cc5a5611a877a3d5dc0a7175"><code>868afe3</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6939,6 +7020,8 @@ follow the terminal's own light or dark palette.</p>
 <li><em>(skills)</em> Regenerate the authoring examples manifest snapshot (<a href="https://github.com/s0undt3ch/ToolR/commit/743b875691b244367215b59d3d90ec351b41d9c1"><code>743b875</code></a>)</li>
 <li><em>(cli)</em> Cover unknown arg() keywords failing the manifest build (<a href="https://github.com/s0undt3ch/ToolR/commit/0d4ce23cc80b556248629157ce146cfe33afb68f"><code>0d4ce23</code></a>)</li>
 <li><em>(parser)</em> Cover the arg() check's remaining branches (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/935b9fc3955ab4403d056ffa3b1017701dc6a918"><code>935b9fc</code></a>)</li>
+<li><em>(cli)</em> Pin path-type rejections end to end (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/d9af38a8341b7ce129cc6f2353074ba532b9e510"><code>d9af38a</code></a>)</li>
+<li><em>(types)</em> Make the stale-keyword and permission tests hold on every Python and user (<a href="https://github.com/s0undt3ch/ToolR/commit/10f9f5ebc6fc130c3d6bf86ae06978273b323bf7"><code>10f9f5e</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

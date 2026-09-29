@@ -1622,9 +1622,9 @@ list.</p>
   Python annotation through the static parser into clap. Path
   constraints renamed to <code>path_must_exist</code> / <code>path_must_be_file</code> /
   <code>path_must_be_dir</code>. Old names accepted with a deprecation warning.
-  <strong>Correction:</strong> the <code>path_must_*</code> rename was later reverted; the
-  accepted names are <code>must_exist</code> / <code>must_be_file</code> / <code>must_be_dir</code>
-  (see the <a href="../annotations/">annotations reference</a>).</li>
+  <strong>Correction:</strong> the <code>path_must_*</code> rename was later reverted, and the
+  <code>must_*</code> keywords were then removed in favour of the <code>toolr.types</code> path
+  types (see <a href="../arguments/#path-types">Path types</a>).</li>
 <li>Positional <code>int</code> / <code>float</code> coercion: typed clap value-parsers
   serialise typed JSON, msgspec validates against function hints on
   the Python side.</li>

@@ -1845,6 +1845,9 @@ each <code>non-exhaustive patterns: … not covered</code> error names the next 
    <code>supported_type_kinds!</code> list at the position its table row should take.</li>
 <li><code>SupportedTypeKind::representative()</code>: return a value of the new variant.</li>
 <li><code>apply_value_parser</code> in <code>crates/toolr/src/value_parsers.rs</code>: choose the clap value parser.</li>
+<li><code>SupportedType::is_path()</code>: say whether clap stores the value as a <code>PathBuf</code>. For a path type,
+   also add its <code>(PathForm, PathCheck)</code> to <code>path_rule</code> in <code>crates/toolr/src/value_parsers.rs</code>.
+   A test fails if the two disagree.</li>
 </ol>
 <p>The compiler doesn't check the rest. Tests catch some of it, but not all:</p>
 <ol>
