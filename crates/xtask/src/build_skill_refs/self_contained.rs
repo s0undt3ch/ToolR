@@ -385,7 +385,7 @@ impl FileLint<'_> {
             token = rest;
         }
         if token.starts_with("../") {
-            return normalize(&self.file_dir.join(token)).is_none();
+            return !self.inside(&self.file_dir.join(token));
         }
         REPO_PATHS.iter().any(|p| token.starts_with(p)) && !self.inside(Path::new(token))
     }
@@ -794,7 +794,17 @@ mod tests {
             rules_in("references/r.md", "`../../docs/x.md`\n", &[]),
             ["repo-path"]
         );
-        assert!(rules_in("references/r.md", "`../examples/a.py`\n", &[]).is_empty());
+        assert!(
+            rules_in("references/r.md", "`../examples/a.py`\n", &["s/examples/a.py"]).is_empty()
+        );
+    }
+
+    #[test]
+    fn parent_relative_backticked_path_missing_inside_skill_is_flagged() {
+        assert_eq!(
+            rules_in("references/r.md", "`../examples/nope.py`\n", &[]),
+            ["repo-path"]
+        );
     }
 
     #[test]
