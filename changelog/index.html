@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev108-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev110-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev108 - 2026-09-29
+        0.33.1-dev110 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev108 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev110 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1556,6 +1556,17 @@
     <span class="md-ellipsis">
       
         Plugin packaging docs: fixed hatchling recipe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#readable-debug-and-info-log-colours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readable debug and info log colours
       
     </span>
   </a>
@@ -4107,15 +4118,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev108-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev110-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev108 - 2026-09-29
+        0.33.1-dev110 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev108 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev110 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4200,6 +4211,17 @@
     <span class="md-ellipsis">
       
         Plugin packaging docs: fixed hatchling recipe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#readable-debug-and-info-log-colours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readable debug and info log colours
       
     </span>
   </a>
@@ -6746,7 +6768,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev108-2026-09-29">0.33.1-dev108 - 2026-09-29<a class="headerlink" href="#0331-dev108-2026-09-29" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev110-2026-09-29">0.33.1-dev110 - 2026-09-29<a class="headerlink" href="#0331-dev110-2026-09-29" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6824,6 +6846,11 @@ which works whatever <code>include-package-data</code> is set to, instead of rel
 older fragment schemas: it accepts only the current <code>toolr_schema_version</code>.
 The "Working example" link now points at <code>examples/plugin-package/</code>.
 (<a href="https://github.com/s0undt3ch/ToolR/issues/506">#506</a>)</p>
+<h3 id="readable-debug-and-info-log-colours">Readable debug and info log colours<a class="headerlink" href="#readable-debug-and-info-log-colours" title="Permanent link">&para;</a></h3>
+<p>The <code>log-debug</code> and <code>log-info</code> console styles, and the <code>stdout</code>/<code>stderr</code> level
+labels, no longer use Rich's <code>dim</code> modifier. On many terminal palettes <code>dim</code>
+turned the blue and cyan into near-illegible grey. The named ANSI colours still
+follow the terminal's own light or dark palette.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6860,6 +6887,7 @@ The "Working example" link now points at <code>examples/plugin-package/</code>.
 <li><em>(parser)</em> Follow star-imported aliases and binding order in arg() check (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/eb8bc5244ee843e90886fe5056dbe3c6cbcaf52d"><code>eb8bc52</code></a>)</li>
 <li><em>(parser)</em> Don't guess aliases behind unparsed star imports (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/70f0dd762cdcce8e3d7bbaaee902af4dbf80c57d"><code>70f0dd7</code></a>)</li>
 <li><em>(xtask)</em> Make the docs section extractor faithful to mkdocs (#505) (<a href="https://github.com/s0undt3ch/ToolR/commit/92db6021862dd1c66c910a171f4c9cae509c18bc"><code>92db602</code></a>)</li>
+<li><em>(console)</em> Drop dim modifier from log-debug/log-info styles (<a href="https://github.com/s0undt3ch/ToolR/commit/7999a008f4c67b613c9b0bc5dc642fcc954466b0"><code>7999a00</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
