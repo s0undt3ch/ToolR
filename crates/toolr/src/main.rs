@@ -36,6 +36,11 @@ fn run() -> anyhow::Result<ExitCode> {
     bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv)?;
     bootstrap::ensure_manifest_fresh(&cwd, &argv)?;
     let manifest = load_or_empty(&cwd);
+    if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
+        for w in &manifest.plugin_warnings {
+            eprintln!("toolr: warning: {}", w.message);
+        }
+    }
     let mut command = cli::build_command(&manifest);
     // Use try_get_matches_from so that `subcommand_required` validation errors
     // (e.g. `toolr self --help`) don't exit before dispatch can intercept
