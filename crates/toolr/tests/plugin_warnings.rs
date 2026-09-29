@@ -261,3 +261,62 @@ fn nested_groups_with_the_same_leaf_name_coexist() {
     assert_eq!(module_of("docker.image"), "dock_plugin.commands");
     assert_eq!(module_of("ci.image"), "tools.ci");
 }
+
+#[test]
+fn host_group_title_wins_over_a_plugin_group() {
+    let p = Project::new();
+    p.write_tool("ci.py", LOCAL_CI_LINT);
+    let plugin = r#"{"toolr_schema_version":2,"package":"ci_plugin",
+        "groups":[{"name":"ci","title":"Plugin CI title","description":"D","origin":"third_party"}],
+        "commands":[{"name":"deploy","group":"ci","module":"ci_plugin.commands",
+            "function":"deploy_fn","summary":"S","description":"",
+            "arguments":[],"origin":"third_party"}]}"#;
+    p.add_plugin("ci_plugin", plugin);
+
+    let help = p.stdout(&["--help"]);
+    assert!(help.contains("CI"), "{help}");
+    assert!(!help.contains("Plugin CI title"), "{help}");
+    let manifest: serde_json::Value = serde_json::from_str(&p.manifest()).unwrap();
+    let ci: Vec<_> = manifest["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|g| g["name"] == "ci")
+        .collect();
+    assert_eq!(ci.len(), 1, "{manifest}");
+    assert_eq!(ci[0]["title"], "CI");
+}
+
+#[test]
+fn static_drift_keeps_plugin_entries_when_the_venv_cannot_be_resolved() {
+    let p = Project::new();
+    p.add_plugin(
+        "dock_plugin",
+        &fragment(2, "dock_plugin", "docker", None, "up"),
+    );
+    p.add_plugin(
+        "demo_plugin",
+        &fragment(1, "demo_plugin", "oldplugin", None, "run"),
+    );
+    p.stderr(&["--help"]);
+    let before = p.manifest();
+    assert!(before.contains("dock_plugin.commands"), "{before}");
+    assert!(before.contains("plugin_warnings"), "{before}");
+
+    // An invalid venv-location makes `resolve_venv_path` fail, so the
+    // freshness check sees no venv at all while the static tree drifts.
+    p.write_tool("ci.py", LOCAL_CI_LINT);
+    let out = p
+        .toolr(&["--help"])
+        .env("TOOLR_VENV_LOCATION", "bogus")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let after = p.manifest();
+    assert!(
+        after.contains("tools.ci"),
+        "no rebuild happened:\n{stderr}\n{after}"
+    );
+    assert!(after.contains("dock_plugin.commands"), "{after}");
+    assert!(after.contains("skipping plugin demo_plugin"), "{after}");
+}

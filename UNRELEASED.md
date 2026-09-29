@@ -146,7 +146,7 @@ A command shipped in a plugin now gets the same CLI behaviour as one in a repo's
 arguments are validated by clap before Python runs, so bad values and `Email` fail early, and the
 path types from the section above check the filesystem. Every `arg()` field (`aliases`, `metavar`,
 `env`, `hide`, `display_order`, `help_section`, `conflicts_with`, `requires`, `nargs`) now takes
-effect, tab completion offers type-derived hints, and `tuple[T1, T2]` arguments enforce their element
+effect, and `tuple[T1, T2]` arguments enforce their element
 count and types. Nested plugin groups (`docker` then `image`) work too. Before, they produced a
 top-level group literally named `docker.image`.
 ([#520](https://github.com/s0undt3ch/ToolR/issues/520))

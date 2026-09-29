@@ -640,6 +640,22 @@ fn merge_dedups_fragment_group_against_nested_base_group_by_full_path() {
     assert_eq!(merged.groups.len(), 1);
 }
 
+#[test]
+fn merge_keeps_the_host_title_when_a_fragment_group_collides() {
+    let mut base = empty_base();
+    let mut host = static_group("image", Some("docker"));
+    host.title = "Host title".into();
+    base.groups.push(host);
+    let merged = merge_into_manifest(
+        base,
+        from_files(vec![sample_fragment("pkg_a", "docker.image", "build")]),
+    )
+    .unwrap();
+    assert_eq!(merged.groups.len(), 1);
+    assert_eq!(merged.groups[0].title, "Host title");
+    assert_eq!(merged.groups[0].origin, Origin::Static);
+}
+
 /// A v2 fragment for `pkg` whose `commands` JSON is spliced in verbatim.
 fn v2_fragment_json(pkg: &str, groups: &str, commands: &str) -> String {
     format!(

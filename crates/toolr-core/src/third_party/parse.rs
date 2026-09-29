@@ -11,6 +11,7 @@ use crate::manifest::{
 };
 
 /// The release that raised `MIN_READABLE_FRAGMENT_SCHEMA` to its current value.
+/// Must be the first release that reads this fragment shape; changes only with that constant.
 const MIN_READABLE_FRAGMENT_RELEASE: &str = "0.34.0";
 
 #[derive(Debug, Error)]
