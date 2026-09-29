@@ -1431,6 +1431,64 @@ def documented(ctx: Context) -> None:
         );
     }
 
+    #[test]
+    fn path_state_types_resolve_bare_in_containers_and_as_varargs() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/paths.py",
+            r#"from toolr import Context, command_group
+from toolr.types import DirectoryPath, ExecutablePath, FilePath, NewPath, WritableDirectoryPath
+
+group = command_group("paths", "Paths", description="Paths.")
+
+
+@group.command
+def run(
+    ctx: Context,
+    config: FilePath,
+    *rest: ExecutablePath,
+    inputs: list[DirectoryPath],
+    output: NewPath | None = None,
+    scratch: WritableDirectoryPath | None = None,
+) -> None:
+    """Run.
+
+    Args:
+        config: Config file.
+        rest: Tools to run.
+        inputs: Input dirs.
+        output: Output file.
+        scratch: Scratch dir.
+    """
+"#,
+        );
+        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let cmd = manifest.commands.iter().find(|c| c.name == "run").unwrap();
+        let ty = |name: &str| {
+            cmd.arguments
+                .iter()
+                .find(|a| a.name == name)
+                .unwrap_or_else(|| panic!("no argument {name}"))
+                .resolved_type
+                .clone()
+        };
+        assert_eq!(ty("config"), Some(SupportedType::FilePath));
+        assert_eq!(ty("rest"), Some(SupportedType::ExecutablePath));
+        assert_eq!(
+            ty("inputs"),
+            Some(SupportedType::List(Box::new(SupportedType::DirectoryPath)))
+        );
+        assert_eq!(
+            ty("output"),
+            Some(SupportedType::Optional(Box::new(SupportedType::NewPath)))
+        );
+        assert_eq!(
+            ty("scratch"),
+            Some(SupportedType::Optional(Box::new(SupportedType::WritableDirectoryPath)))
+        );
+    }
+
     fn assert_builds(src: &str) {
         let tmp = TempDir::new().unwrap();
         write(tmp.path(), "tools/kw.py", src);

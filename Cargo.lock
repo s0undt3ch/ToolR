@@ -2518,6 +2518,7 @@ dependencies = [
  "email_address",
  "glob",
  "humansize",
+ "libc",
  "pep440_rs",
  "predicates",
  "serde_json",

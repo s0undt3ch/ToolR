@@ -8,7 +8,12 @@
 | `str` | none (passthrough) | JSON string | `str` |
 | `pathlib.Path` | clap (custom parser) | string | `pathlib.Path` |
 | `toolr.types.AbsolutePath` | clap (absolutise vs cwd) | absolute string | `pathlib.Path` |
+| `toolr.types.NewPath` | clap (must not exist; parent dir must) | absolute string | `pathlib.Path` |
 | `toolr.types.ResolvedPath` | clap (`canonicalize()`) | resolved string | `pathlib.Path` |
+| `toolr.types.FilePath` | clap (`canonicalize()`, regular file) | resolved string | `pathlib.Path` |
+| `toolr.types.DirectoryPath` | clap (`canonicalize()`, directory) | resolved string | `pathlib.Path` |
+| `toolr.types.ExecutablePath` | clap (`canonicalize()`, executable file) | resolved string | `pathlib.Path` |
+| `toolr.types.WritableDirectoryPath` | clap (`canonicalize()`, writable directory) | resolved string | `pathlib.Path` |
 | `toolr.types.DateTime` | clap (chrono RFC 3339) | string | `datetime.datetime` |
 | `toolr.types.Date` | clap (chrono ISO date) | string | `datetime.date` |
 | `toolr.types.Time` | clap (chrono ISO time) | string | `datetime.time` |

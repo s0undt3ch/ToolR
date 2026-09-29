@@ -494,13 +494,18 @@ mod tests {
             "Count",
             "Date",
             "DateTime",
+            "DirectoryPath",
             "Email",
+            "ExecutablePath",
+            "FilePath",
             "IPv4",
             "IPv6",
+            "NewPath",
             "ResolvedPath",
             "Time",
             "UUID",
             "Version",
+            "WritableDirectoryPath",
         ];
         for name in names {
             assert!(

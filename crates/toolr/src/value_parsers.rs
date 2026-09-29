@@ -42,28 +42,27 @@ pub fn apply_value_parser(
     // Path / Email types carry shell-completion hints derived from the
     // type itself; path constraints refine them further (must_be_dir →
     // DirPath, must_be_file → FilePath).
-    let arg = match inner {
-        SupportedType::Path | SupportedType::AbsolutePath | SupportedType::ResolvedPath => {
-            let hint = if pc.must_be_dir {
-                ValueHint::DirPath
-            } else if pc.must_be_file {
-                ValueHint::FilePath
-            } else {
-                ValueHint::AnyPath
-            };
-            arg.value_hint(hint)
-        }
-        SupportedType::Email => arg.value_hint(ValueHint::EmailAddress),
-        _ => arg,
+    let arg = match path_rule(inner) {
+        Some((_, check)) => arg.value_hint(path_hint(with_legacy_constraints(check, pc))),
+        None if matches!(inner, SupportedType::Email) => arg.value_hint(ValueHint::EmailAddress),
+        None => arg,
     };
     match inner {
         SupportedType::Int => arg.value_parser(clap::value_parser!(i64)),
         SupportedType::Float => arg.value_parser(clap::value_parser!(f64)),
         SupportedType::Bool => arg.value_parser(clap::value_parser!(bool)),
         SupportedType::Str => arg,
-        SupportedType::Path => arg.value_parser(path_parser(false, false, pc)),
-        SupportedType::AbsolutePath => arg.value_parser(path_parser(true, false, pc)),
-        SupportedType::ResolvedPath => arg.value_parser(path_parser(true, true, pc)),
+        SupportedType::Path
+        | SupportedType::AbsolutePath
+        | SupportedType::NewPath
+        | SupportedType::ResolvedPath
+        | SupportedType::FilePath
+        | SupportedType::DirectoryPath
+        | SupportedType::ExecutablePath
+        | SupportedType::WritableDirectoryPath => {
+            let (form, check) = path_rule(inner).expect("path variant has a rule");
+            arg.value_parser(path_parser(form, with_legacy_constraints(check, pc)))
+        }
         SupportedType::DateTime => arg.value_parser(datetime_parser()),
         SupportedType::Date => arg.value_parser(date_parser()),
         SupportedType::Time => arg.value_parser(time_parser()),
@@ -106,40 +105,160 @@ fn unwrap_optional(ty: &SupportedType) -> &SupportedType {
     }
 }
 
-/// Build a path value-parser with three orthogonal knobs:
-/// - `absolutise`: join relative paths to cwd (no fs check).
-/// - `canonical`: full `canonicalize()` — symlinks resolved, must exist.
-/// - `constraints`: optional `must_exist`/`must_be_file`/`must_be_dir`
-///   layered on top. `must_be_file`/`must_be_dir` imply `must_exist`.
-///
-/// `canonical=true` already enforces existence; the constraint checks
-/// then run against the resolved path. With `canonical=false` the
-/// checks run against the (possibly absolutised) input as the user
-/// passed it.
-fn path_parser(absolutise: bool, canonical: bool, constraints: PathConstraints) -> ValueParser {
+/// How a path type shapes the value it hands to Python.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathForm {
+    AsTyped,
+    Absolute,
+    Canonical,
+}
+
+/// What a path type checks on disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathCheck {
+    None,
+    Exists,
+    File,
+    Dir,
+    Executable,
+    WritableDir,
+    New,
+}
+
+/// The form and check for a path type; `None` for non-path types. The
+/// `every_path_kind_has_a_path_rule_and_no_other_kind_does` test keeps
+/// this in step with `SupportedType::is_path`.
+fn path_rule(ty: &SupportedType) -> Option<(PathForm, PathCheck)> {
+    Some(match ty {
+        SupportedType::Path => (PathForm::AsTyped, PathCheck::None),
+        SupportedType::AbsolutePath => (PathForm::Absolute, PathCheck::None),
+        SupportedType::NewPath => (PathForm::Absolute, PathCheck::New),
+        SupportedType::ResolvedPath => (PathForm::Canonical, PathCheck::Exists),
+        SupportedType::FilePath => (PathForm::Canonical, PathCheck::File),
+        SupportedType::DirectoryPath => (PathForm::Canonical, PathCheck::Dir),
+        SupportedType::ExecutablePath => (PathForm::Canonical, PathCheck::Executable),
+        SupportedType::WritableDirectoryPath => (PathForm::Canonical, PathCheck::WritableDir),
+        _ => return None,
+    })
+}
+
+// Removed with `PathConstraints` in the next task.
+fn with_legacy_constraints(check: PathCheck, pc: PathConstraints) -> PathCheck {
+    if check != PathCheck::None {
+        check
+    } else if pc.must_be_dir {
+        PathCheck::Dir
+    } else if pc.must_be_file {
+        PathCheck::File
+    } else if pc.must_exist {
+        PathCheck::Exists
+    } else {
+        PathCheck::None
+    }
+}
+
+fn path_hint(check: PathCheck) -> ValueHint {
+    match check {
+        PathCheck::File => ValueHint::FilePath,
+        PathCheck::Dir | PathCheck::WritableDir => ValueHint::DirPath,
+        PathCheck::Executable => ValueHint::ExecutablePath,
+        PathCheck::None | PathCheck::Exists | PathCheck::New => ValueHint::AnyPath,
+    }
+}
+
+/// Error messages name the path as the user typed it.
+fn path_parser(form: PathForm, check: PathCheck) -> ValueParser {
     ValueParser::new(move |s: &str| -> Result<PathBuf, String> {
-        let mut path = PathBuf::from(s);
-        if canonical {
-            path = std::path::Path::new(s)
-                .canonicalize()
-                .map_err(|e| format!("invalid path `{s}`: {e}"))?;
-        } else if absolutise && !path.is_absolute() {
-            let cwd = std::env::current_dir()
-                .map_err(|e| format!("could not resolve cwd: {e}"))?;
-            path = cwd.join(&path);
-        }
-        // Constraint checks. Skip when already enforced by canonical.
-        if constraints.requires_existence() && !path.exists() {
-            return Err(format!("path does not exist: {}", path.display()));
-        }
-        if constraints.must_be_file && !path.is_file() {
-            return Err(format!("path is not a regular file: {}", path.display()));
-        }
-        if constraints.must_be_dir && !path.is_dir() {
-            return Err(format!("path is not a directory: {}", path.display()));
-        }
+        let typed = std::path::Path::new(s);
+        let path = match form {
+            PathForm::AsTyped => typed.to_path_buf(),
+            PathForm::Absolute => absolutise(typed)?,
+            PathForm::Canonical => {
+                if !typed.exists() {
+                    return Err(format!("path does not exist: {s}"));
+                }
+                typed
+                    .canonicalize()
+                    .map_err(|e| format!("invalid path `{s}`: {e}"))?
+            }
+        };
+        check_path(&path, check, s)?;
         Ok(path)
     })
+}
+
+fn absolutise(path: &std::path::Path) -> Result<PathBuf, String> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    let cwd = std::env::current_dir().map_err(|e| format!("could not resolve cwd: {e}"))?;
+    Ok(cwd.join(path))
+}
+
+fn check_path(path: &std::path::Path, check: PathCheck, typed: &str) -> Result<(), String> {
+    let require = |ok: bool, msg: &str| if ok { Ok(()) } else { Err(format!("{msg}: {typed}")) };
+    match check {
+        PathCheck::None => Ok(()),
+        PathCheck::Exists => require(path.exists(), "path does not exist"),
+        PathCheck::File => require(path.is_file(), "path is not a regular file"),
+        PathCheck::Dir => require(path.is_dir(), "path is not a directory"),
+        PathCheck::Executable => {
+            require(path.is_file(), "path is not a regular file")?;
+            require(is_executable(path), "path is not executable")
+        }
+        PathCheck::WritableDir => {
+            require(path.is_dir(), "path is not a directory")?;
+            require(is_writable_dir(path), "directory is not writable")
+        }
+        PathCheck::New => {
+            // `symlink_metadata` so a dangling symlink counts as existing:
+            // writing through it would create its target.
+            require(path.symlink_metadata().is_err(), "path already exists")?;
+            match path.parent() {
+                Some(parent) if !parent.is_dir() => Err(format!(
+                    "parent directory does not exist: {}",
+                    parent.display()
+                )),
+                _ => Ok(()),
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn access_ok(path: &std::path::Path, mode: libc::c_int) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c_path` is NUL-terminated and outlives the call.
+    unsafe { libc::access(c_path.as_ptr(), mode) == 0 }
+}
+
+#[cfg(unix)]
+fn is_executable(path: &std::path::Path) -> bool {
+    access_ok(path, libc::X_OK)
+}
+
+#[cfg(unix)]
+fn is_writable_dir(path: &std::path::Path) -> bool {
+    access_ok(path, libc::W_OK)
+}
+
+#[cfg(windows)]
+fn is_executable(path: &std::path::Path) -> bool {
+    let exts = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+        return false;
+    };
+    exts.split(';')
+        .any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(ext))
+}
+
+// Directory ACLs, not the read-only attribute, decide writability on Windows.
+#[cfg(windows)]
+fn is_writable_dir(path: &std::path::Path) -> bool {
+    tempfile::tempfile_in(path).is_ok()
 }
 
 fn datetime_parser() -> ValueParser {
@@ -218,6 +337,237 @@ mod tests {
 
     fn build_command_with_constraints(ty: &SupportedType, pc: PathConstraints) -> Command {
         Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty, Some(&pc)))
+    }
+
+    use std::fs;
+    use tempfile::TempDir;
+    use toolr_core::parser::types::SupportedTypeKind;
+
+    fn parse(ty: &SupportedType, value: &str) -> Result<PathBuf, String> {
+        build_command_with(ty)
+            .try_get_matches_from(["test", "--v", value])
+            .map(|m| m.get_one::<PathBuf>("v").unwrap().clone())
+            .map_err(|e| e.to_string())
+    }
+
+    fn s(p: &std::path::Path) -> &str {
+        p.to_str().unwrap()
+    }
+
+    #[test]
+    fn every_path_kind_has_a_path_rule_and_no_other_kind_does() {
+        for kind in SupportedTypeKind::ALL {
+            let ty = kind.representative();
+            assert_eq!(ty.is_path(), path_rule(&ty).is_some(), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn file_path_canonicalises_dot_dot_segments() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join("sub")).unwrap();
+        fs::write(tmp.path().join("f.txt"), "x").unwrap();
+        let typed = tmp.path().join("sub").join("..").join("f.txt");
+        let got = parse(&SupportedType::FilePath, s(&typed)).unwrap();
+        assert_eq!(got, tmp.path().join("f.txt").canonicalize().unwrap());
+    }
+
+    #[test]
+    fn file_path_rejects_a_directory_naming_the_typed_path() {
+        let tmp = TempDir::new().unwrap();
+        let err = parse(&SupportedType::FilePath, s(tmp.path())).unwrap_err();
+        assert!(
+            err.contains(&format!("path is not a regular file: {}", s(tmp.path()))),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn canonical_types_reject_a_missing_path_as_does_not_exist() {
+        let tmp = TempDir::new().unwrap();
+        let missing = tmp.path().join("missing");
+        for ty in [
+            SupportedType::ResolvedPath,
+            SupportedType::FilePath,
+            SupportedType::DirectoryPath,
+            SupportedType::ExecutablePath,
+            SupportedType::WritableDirectoryPath,
+        ] {
+            let err = parse(&ty, s(&missing)).unwrap_err();
+            assert!(
+                err.contains(&format!("path does not exist: {}", s(&missing))),
+                "{ty:?} got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn directory_path_rejects_a_file() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("f.txt");
+        fs::write(&file, "x").unwrap();
+        let err = parse(&SupportedType::DirectoryPath, s(&file)).unwrap_err();
+        assert!(
+            err.contains(&format!("path is not a directory: {}", s(&file))),
+            "got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_path_accepts_a_symlink_to_a_directory_and_returns_the_target() {
+        let tmp = TempDir::new().unwrap();
+        let real = tmp.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let got = parse(&SupportedType::DirectoryPath, s(&link)).unwrap();
+        assert_eq!(got, real.canonicalize().unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn executable_path_follows_the_mode_bits() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let tool = tmp.path().join("tool");
+        fs::write(&tool, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o644)).unwrap();
+        let err = parse(&SupportedType::ExecutablePath, s(&tool)).unwrap_err();
+        assert!(
+            err.contains(&format!("path is not executable: {}", s(&tool))),
+            "got: {err}"
+        );
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(parse(&SupportedType::ExecutablePath, s(&tool)).is_ok());
+    }
+
+    #[test]
+    fn executable_path_rejects_a_directory_as_not_a_file() {
+        let tmp = TempDir::new().unwrap();
+        let err = parse(&SupportedType::ExecutablePath, s(tmp.path())).unwrap_err();
+        assert!(err.contains("path is not a regular file"), "got: {err}");
+    }
+
+    #[test]
+    fn writable_directory_path_accepts_a_fresh_temp_dir() {
+        let tmp = TempDir::new().unwrap();
+        let got = parse(&SupportedType::WritableDirectoryPath, s(tmp.path())).unwrap();
+        assert_eq!(got, tmp.path().canonicalize().unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writable_directory_path_rejects_a_read_only_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        // root passes access(W_OK) regardless of mode bits.
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
+        let tmp = TempDir::new().unwrap();
+        let ro = tmp.path().join("ro");
+        fs::create_dir(&ro).unwrap();
+        fs::set_permissions(&ro, fs::Permissions::from_mode(0o555)).unwrap();
+        let err = parse(&SupportedType::WritableDirectoryPath, s(&ro)).unwrap_err();
+        fs::set_permissions(&ro, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            err.contains(&format!("directory is not writable: {}", s(&ro))),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn new_path_accepts_a_missing_file_in_an_existing_dir() {
+        let tmp = TempDir::new().unwrap();
+        let target = tmp.path().join("out.txt");
+        assert_eq!(parse(&SupportedType::NewPath, s(&target)).unwrap(), target);
+    }
+
+    #[test]
+    fn new_path_absolutises_a_relative_path() {
+        let got = parse(&SupportedType::NewPath, "not-here-4f1c2a.txt").unwrap();
+        assert!(got.is_absolute(), "got: {}", got.display());
+        assert!(got.ends_with("not-here-4f1c2a.txt"));
+    }
+
+    #[test]
+    fn new_path_rejects_an_existing_path() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("f.txt");
+        fs::write(&file, "x").unwrap();
+        let err = parse(&SupportedType::NewPath, s(&file)).unwrap_err();
+        assert!(
+            err.contains(&format!("path already exists: {}", s(&file))),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn new_path_rejects_a_missing_parent() {
+        let tmp = TempDir::new().unwrap();
+        let target = tmp.path().join("missing").join("out.txt");
+        let err = parse(&SupportedType::NewPath, s(&target)).unwrap_err();
+        assert!(
+            err.contains(&format!(
+                "parent directory does not exist: {}",
+                tmp.path().join("missing").display()
+            )),
+            "got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn new_path_treats_a_dangling_symlink_as_existing() {
+        let tmp = TempDir::new().unwrap();
+        let link = tmp.path().join("dangling");
+        std::os::unix::fs::symlink(tmp.path().join("nowhere"), &link).unwrap();
+        let err = parse(&SupportedType::NewPath, s(&link)).unwrap_err();
+        assert!(err.contains("path already exists"), "got: {err}");
+    }
+
+    #[test]
+    fn path_hints_follow_the_type() {
+        use clap::ValueHint;
+        for (ty, hint) in [
+            (SupportedType::Path, ValueHint::AnyPath),
+            (SupportedType::NewPath, ValueHint::AnyPath),
+            (SupportedType::ResolvedPath, ValueHint::AnyPath),
+            (SupportedType::FilePath, ValueHint::FilePath),
+            (SupportedType::DirectoryPath, ValueHint::DirPath),
+            (SupportedType::ExecutablePath, ValueHint::ExecutablePath),
+            (SupportedType::WritableDirectoryPath, ValueHint::DirPath),
+        ] {
+            let arg = apply_value_parser(Arg::new("v").long("v"), &ty, None);
+            assert_eq!(arg.get_value_hint(), hint, "{ty:?}");
+        }
+    }
+
+    #[test]
+    fn a_literal_default_naming_a_missing_file_is_rejected() {
+        let tmp = TempDir::new().unwrap();
+        let missing = tmp.path().join("missing.toml");
+        let cmd = Command::new("test").arg(
+            apply_value_parser(Arg::new("v").long("v"), &SupportedType::FilePath, None)
+                .default_value(s(&missing).to_string()),
+        );
+        let err = cmd.try_get_matches_from(["test"]).unwrap_err();
+        assert!(err.to_string().contains("path does not exist"), "got: {err}");
+    }
+
+    #[test]
+    fn list_of_file_paths_checks_every_element() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("f.txt");
+        fs::write(&file, "x").unwrap();
+        let ty = SupportedType::List(Box::new(SupportedType::FilePath));
+        let cmd = Command::new("test").arg(
+            apply_value_parser(Arg::new("v").long("v"), &ty, None).action(clap::ArgAction::Append),
+        );
+        let err = cmd
+            .try_get_matches_from(["test", "--v", s(&file), "--v", s(tmp.path())])
+            .unwrap_err();
+        assert!(err.to_string().contains("path is not a regular file"), "got: {err}");
     }
 
     #[test]
