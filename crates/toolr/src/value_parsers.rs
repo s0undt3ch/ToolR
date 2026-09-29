@@ -444,20 +444,19 @@ mod tests {
     #[test]
     fn writable_directory_path_rejects_a_read_only_directory() {
         use std::os::unix::fs::PermissionsExt;
-        // root passes access(W_OK) regardless of mode bits.
-        if unsafe { libc::geteuid() } == 0 {
-            return;
-        }
         let tmp = TempDir::new().unwrap();
         let ro = tmp.path().join("ro");
         fs::create_dir(&ro).unwrap();
         fs::set_permissions(&ro, fs::Permissions::from_mode(0o555)).unwrap();
-        let err = parse(&SupportedType::WritableDirectoryPath, s(&ro)).unwrap_err();
+        let got = parse(&SupportedType::WritableDirectoryPath, s(&ro));
         fs::set_permissions(&ro, fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(
-            err.contains(&format!("directory is not writable: {}", s(&ro))),
-            "got: {err}"
-        );
+        if !running_as_root() {
+            let err = got.unwrap_err();
+            assert!(
+                err.contains(&format!("directory is not writable: {}", s(&ro))),
+                "got: {err}"
+            );
+        }
     }
 
     #[test]
@@ -510,21 +509,25 @@ mod tests {
         assert!(err.contains("path already exists"), "got: {err}");
     }
 
-    /// Makes a file inside a mode-0o000 directory, so any lookup of it fails with
-    /// a permission error. Returns `None` when running as root (the mode is ignored).
+    /// root passes `access(2)` and directory permission checks regardless of
+    /// mode bits, so mode-based assertions only hold for other users.
     #[cfg(unix)]
-    fn unreadable_child(tmp: &TempDir) -> Option<(PathBuf, PathBuf)> {
-        use std::os::unix::fs::PermissionsExt;
+    fn running_as_root() -> bool {
         // SAFETY: `geteuid` has no preconditions.
-        if unsafe { libc::geteuid() } == 0 {
-            return None;
-        }
+        unsafe { libc::geteuid() == 0 }
+    }
+
+    /// Makes a file inside a mode-0o000 directory, so any lookup of it fails
+    /// with a permission error (except as root).
+    #[cfg(unix)]
+    fn unreadable_child(tmp: &TempDir) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
         let dir = tmp.path().join("locked");
         fs::create_dir(&dir).unwrap();
         let file = dir.join("f.txt");
         fs::write(&file, "x").unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
-        Some((dir, file))
+        (dir, file)
     }
 
     #[cfg(unix)]
@@ -532,14 +535,14 @@ mod tests {
     fn resolved_path_reports_a_permission_error_as_invalid_not_missing() {
         use std::os::unix::fs::PermissionsExt;
         let tmp = TempDir::new().unwrap();
-        let Some((dir, file)) = unreadable_child(&tmp) else {
-            return;
-        };
-        let err = parse(&SupportedType::ResolvedPath, s(&file));
+        let (dir, file) = unreadable_child(&tmp);
+        let got = parse(&SupportedType::ResolvedPath, s(&file));
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
-        let err = err.unwrap_err();
-        assert!(err.contains("invalid path"), "got: {err}");
-        assert!(!err.contains("does not exist"), "got: {err}");
+        if !running_as_root() {
+            let err = got.unwrap_err();
+            assert!(err.contains("invalid path"), "got: {err}");
+            assert!(!err.contains("does not exist"), "got: {err}");
+        }
     }
 
     #[cfg(unix)]
@@ -547,13 +550,13 @@ mod tests {
     fn new_path_reports_a_permission_error_as_invalid_not_free() {
         use std::os::unix::fs::PermissionsExt;
         let tmp = TempDir::new().unwrap();
-        let Some((dir, file)) = unreadable_child(&tmp) else {
-            return;
-        };
-        let err = parse(&SupportedType::NewPath, s(&file));
+        let (dir, file) = unreadable_child(&tmp);
+        let got = parse(&SupportedType::NewPath, s(&file));
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
-        let err = err.unwrap_err();
-        assert!(err.contains("invalid path"), "got: {err}");
+        if !running_as_root() {
+            let err = got.unwrap_err();
+            assert!(err.contains("invalid path"), "got: {err}");
+        }
     }
 
     #[test]
@@ -786,6 +789,27 @@ mod tests {
         let typed = format!("{}/sub/../f.txt", s(tmp.path()));
         let got = parse(&SupportedType::FilePath, &typed).unwrap();
         assert_eq!(got, dunce::canonicalize(&file).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_path_with_an_interior_nul_is_neither_executable_nor_writable() {
+        let path = std::path::Path::new("tool\0name");
+        assert!(!is_executable(path));
+        assert!(!is_writable_dir(path));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn executable_path_on_windows_rejects_a_file_without_an_extension() {
+        let tmp = TempDir::new().unwrap();
+        let tool = tmp.path().join("tool");
+        fs::write(&tool, "").unwrap();
+        let err = parse(&SupportedType::ExecutablePath, s(&tool)).unwrap_err();
+        assert!(
+            err.contains(&format!("path is not executable: {}", s(&tool))),
+            "got: {err}"
+        );
     }
 
     #[cfg(windows)]

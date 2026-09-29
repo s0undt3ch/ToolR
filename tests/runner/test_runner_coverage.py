@@ -326,7 +326,25 @@ def test_run_reports_unknown_arg_keyword_in_a_parameter_annotation(
     )
     assert _run_isolated(spec) == 2
     assert "`arg()` has no `must_exist` keyword" in capsys.readouterr().err
-    assert importlib.import_module(module).CALLED == []
+    # Below 3.14 the eager variant never finishes importing, so it isn't in `sys.modules`.
+    assert getattr(sys.modules.get(module), "CALLED", []) == []
+
+
+def test_coerce_args_falls_back_to_raw_values_on_an_unrelated_hint_type_error(
+    importable_module: Callable[[str, str], str],
+) -> None:
+    module = importable_module(
+        "unrelated_hint_type_error_mod",
+        """
+        from __future__ import annotations
+
+
+        def read(ctx, count: len(5)) -> None: ...
+        """,
+    )
+    target = importlib.import_module(module).read
+    _, keyword = _coerce_args(target, {"count": "3"})
+    assert keyword == {"count": "3"}
 
 
 def test_import_target_leaves_other_import_time_type_errors_alone(

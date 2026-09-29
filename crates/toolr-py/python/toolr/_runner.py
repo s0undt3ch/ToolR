@@ -428,7 +428,7 @@ def _hints_and_signature(
     target: Callable[..., Any],
     localns: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], inspect.Signature]:
-    """Resolve ``target``'s type hints (best-effort) and signature.
+    """Resolve ``target``'s type hints (best-effort) and its signature.
 
     Postponed or lazy (3.14+) annotations only evaluate here, so a stale
     `arg()` keyword surfaces here rather than at import.
@@ -443,14 +443,7 @@ def _hints_and_signature(
         hints = {}
     except Exception:  # noqa: BLE001 — best-effort; fall back to raw values.
         hints = {}
-    try:
-        sig = inspect.signature(target)
-    except TypeError as exc:
-        error = _unknown_arg_keyword_error(exc, where)
-        if error is None:
-            raise
-        raise error from exc
-    return hints, sig
+    return hints, inspect.signature(target)
 
 
 def _coerce_args(
