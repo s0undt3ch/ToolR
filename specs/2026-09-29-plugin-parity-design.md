@@ -57,7 +57,7 @@ three such places: `merge.rs:35-39`, `bootstrap.rs:194` (`carry_forward_cached_e
 | Fragment version counter | One counter: `manifest::SCHEMA_VERSION`. `FRAGMENT_SCHEMA_VERSION` goes. |
 | Key name in the fragment | Stays `toolr_schema_version`. Its meaning changes, see §4. |
 | `self build-manifest --schema-version N` | Removed. The version is computed. |
-| A skipped plugin | Recorded in the manifest and warned about on every run. |
+| A skipped plugin, or a plugin command hidden by a local one | Recorded in the manifest and warned about on every run. Local still wins a clash. |
 | Malformed JSON, duplicate command across two plugins | Still abort. Out of scope (follow-up issue). |
 
 Rejected alternatives:
@@ -167,8 +167,12 @@ groups with the same full path merge. No code may key groups by leaf `name`.
 - Each merged command runs `Argument::validate`. A failure skips that plugin (§5) rather than
   panicking the clap builder later. A hand-edited `fixed_arity` without `nargs` is the case it
   catches.
-- A local command with the same `(group, name)` still wins, with a debug log. Two plugins
-  declaring the same command still abort with `DuplicateCommand`.
+- A local command with the same `(group, name)` still wins, but no longer silently. The debug log
+  becomes a persisted `Shadowed` warning (§5): `tools/<file> defines <group> <name>, hiding the
+  one from <pkg>`. The repo is the part the user controls, and the plugin is a dependency, so a
+  plugin release must not change what an existing local command does.
+- Two plugins declaring the same command still abort with `DuplicateCommand` (out of scope, see
+  the follow-up below).
 
 The same `full_path()` dedup applies to the two cache carry-forward helpers:
 
@@ -292,45 +296,58 @@ test, `crates/toolr-core/tests/manifest_schema_version_lockstep.rs`, fails CI wh
 It follows `schema_version_lockstep.rs`. This counter is separate from the runner pair
 (`RUNNER_SCHEMA_VERSION` / `_runner.py::SCHEMA_VERSION`), which is untouched.
 
-### 5. Skipped plugins
+### 5. Plugin warnings
 
 One unloadable plugin must not break the CLI, including local commands. Silently missing commands
-are just as bad, so a skip is recorded and warned about on every run.
+are just as bad. So a skipped plugin, or a plugin command hidden by a local one, is recorded and
+warned about on every run.
 
 - `Manifest` gains a field:
 
   ```rust
   #[serde(default, skip_serializing_if = "Vec::is_empty")]
-  pub skipped_plugins: Vec<SkippedPlugin>,
+  pub plugin_warnings: Vec<PluginWarning>,
 
-  pub struct SkippedPlugin {
+  pub struct PluginWarning {
       pub package: String,
       pub path: PathBuf,
-      pub reason: String,
+      pub kind: PluginWarningKind,
+      pub message: String,
+  }
+
+  pub enum PluginWarningKind {
+      /// The whole plugin was skipped: version outside the load rule, or a failed
+      /// `Argument::validate`.
+      Skipped,
+      /// One plugin command was hidden by a local command with the same `(group, name)`.
+      Shadowed,
   }
   ```
 
   It's additive and optional, so there's no schema bump. An older binary drops it on read, then
   rebuilds anyway because `toolr_version` differs.
-- `discover_and_merge` returns the merged manifest with `skipped_plugins` filled in. A version
-  outside the load rule or a failed `Argument::validate` skips that plugin. Every other
+- `discover_and_merge` returns the merged manifest with `plugin_warnings` filled in. Every other
   `ThirdPartyError` still aborts.
 - Freshness verdicts:
-    - `ThirdPartyDrift` and a first build: `skipped_plugins` comes from the fresh merge.
+    - `ThirdPartyDrift` and a first build: `plugin_warnings` comes from the fresh merge.
       `third_party_hash` covers skipped fragments' bytes too, so fixing or removing a plugin
       triggers `ThirdPartyDrift` and clears its entry.
-    - `StaticDrift`: `carry_forward_cached_entries` copies `skipped_plugins` from the cache, just as
-      it copies cached third-party commands.
-    - `ThirdPartyDrift` with no venv: plugin commands and skips are both dropped (existing
+    - `StaticDrift`, no `Shadowed` entries in the cache: `carry_forward_cached_entries` copies the
+      `Skipped` entries from the cache, just as it copies cached third-party commands.
+    - `StaticDrift` with a `Shadowed` entry in the cache and a venv present: escalate to
+      `ThirdPartyDrift`. Shadowing depends on the local command set, which just changed. A stale
+      cache would keep warning about a removed local command, and it would keep hiding the plugin
+      command, which the merge dropped. Re-merging only globs and parses JSON, so it's cheap.
+    - `ThirdPartyDrift` with no venv: plugin commands and warnings are both dropped (existing
       behaviour for commands).
 - **Where it prints:** `main.rs::run`, right after `load_or_empty` and before clap parses argv.
   So `--help`, `dispatch_help_from_argv` and the `self`/`project` builtins all get it. The format
-  is `toolr: warning: <reason>` on stderr.
+  is `toolr: warning: <message>` on stderr.
 - **When it doesn't print:**
     - on the tab-completion path, because output there corrupts the shell's candidates;
     - when `argv_requests_quiet(&argv)` is true, matching the cache hint's `--quiet` handling
       (`main.rs:76-84`).
-- `RebuildOutcome.warnings` (always empty today) is filled from `skipped_plugins`, so
+- `RebuildOutcome.warnings` (always empty today) is filled from `plugin_warnings`, so
   `toolr project manifest rebuild` reports them too.
 
 ### 6. CLI and docs fallout
@@ -362,6 +379,7 @@ are just as bad, so a skip is recorded and warned about on every run.
     - To add commands to a host group, a plugin must now declare that group.
     - `--schema-version` is removed.
     - New plugin build errors: positional arity, undeclared group.
+    - A local command that hides a plugin command now warns on every run.
     - The unreleased #506 entry says toolr "accepts only the current `toolr_schema_version`". Amend
       it to match the load rule rather than adding a contradicting line.
 
@@ -403,6 +421,9 @@ All tests live in `toolr-core` unless noted. They follow the existing `TempDir` 
     - A second run on a fresh cache warns again.
     - `toolr --help` warns.
     - `--quiet` and tab completion print nothing.
+    - A local `ci lint` and a plugin `ci lint`: the local one runs, and a `Shadowed` warning prints.
+    - Removing the local `ci lint` (a `StaticDrift`) escalates to a re-merge. The plugin's
+      `ci lint` comes back and the warning goes.
 - **Computed `M`.**
     - Every current fragment computes 2.
     - `min_schema_with` with a test `since` that returns 3 for one kind raises `M` when that kind
@@ -418,8 +439,11 @@ Verification: full `mise run test`, which includes `cargo xtask build-skill-refs
 
 ## Out of scope
 
-- Skipping, rather than aborting on, malformed JSON or a duplicate command across two plugins.
-  File a follow-up issue.
+- Choosing a clash winner in config, and plugin-vs-plugin clashes. A follow-up issue proposes a
+  `[tool.toolr.plugins]` table in `tools/pyproject.toml` that picks the winner per command and
+  silences the `Shadowed` warning. It would also turn an unresolved plugin-vs-plugin clash from a
+  whole-CLI abort into one disabled command with a warning.
+- Skipping, rather than aborting on, malformed JSON.
 - Argparse grafting or `DispatchCommand` for plugins.
 - Migrating v1 fragments. They are skipped.
 - Dishonest fragments: a declared `M` lower than the features actually used.
