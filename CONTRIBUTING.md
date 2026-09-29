@@ -81,7 +81,9 @@ each `non-exhaustive patterns: … not covered` error names the next `match` to 
 4. `SupportedTypeKind::representative()`: return a value of the new variant.
 5. Bump `SCHEMA_VERSION` in `crates/toolr-core/src/manifest/model.rs` and return the new value from
    the new kind's `SupportedTypeKind::since_schema()`. `since_schema_golden_tables` is expected to
-   fail. Its new row is the new `SCHEMA_VERSION`, not whatever makes the test pass.
+   fail. Its new row is the new `SCHEMA_VERSION`, not whatever makes the test pass. Also set
+   `toolr.MANIFEST_SCHEMA_VERSION` in `crates/toolr-py/python/toolr/_decorators.py` to the same
+   value (the lockstep test fails otherwise), and re-run `cargo xtask build-skill-refs`.
 6. `apply_value_parser` in `crates/toolr/src/value_parsers.rs`: choose the clap value parser.
 7. `SupportedType::is_path()`: say whether clap stores the value as a `PathBuf`. For a path type,
    also add its `(PathForm, PathCheck)` to `path_rule` in `crates/toolr/src/value_parsers.rs`.

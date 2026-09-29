@@ -38,6 +38,13 @@ unchanged. It tells you exactly three things on top of that.
    `__init__.py`. The schema is documented in
    [`references/packaging.md`](references/packaging.md); you do not
    write the JSON by hand.
+   The builder runs the same checks as a repo's own build, so a
+   command in a group the plugin doesn't declare fails. To add
+   commands to a host group such as `ci`, declare that group in the
+   plugin with the same full path; the host's title wins. The
+   fragment's `toolr_schema_version` is computed, never passed by hand
+   (`--schema-version` no longer exists). A toolr that can't read it
+   skips the plugin with a warning rather than failing.
 
 2. **Include the manifest in the wheel.** Build-backend-specific —
    the canonical worked example uses hatchling, which ships every

@@ -312,7 +312,6 @@ subprocess, no `pip install -e .` required.
   would produce; exit `2` with a unified diff on drift.
 - `--output PATH` — write to a specific file instead of the
   package's default location.
-- `--schema-version N` — pin the emitted `toolr_schema_version`.
 
 ```sh
 toolr self build-manifest --help

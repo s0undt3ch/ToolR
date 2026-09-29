@@ -43,11 +43,14 @@ struct Section {
 const SECTIONS: &[Section] = &[
     Section {
         heading: "Schema version",
-        narrative: "Your plugin's `toolr-manifest.json` declares the \
-                    mandatory `toolr_schema_version` field: the lowest \
-                    toolr manifest schema a reader needs to load it. \
-                    `toolr self build-manifest` computes it; it is never \
-                    lower than `FRAGMENT_SHAPE_SCHEMA`.",
+        narrative: "`toolr_schema_version` in a plugin's `toolr-manifest.json` is \
+                    the lowest toolr schema that can read the fragment. \
+                    `toolr self build-manifest` computes it from the types \
+                    and features the plugin uses. A toolr whose schema is \
+                    between `MIN_READABLE_FRAGMENT_SCHEMA` and its own \
+                    `SCHEMA_VERSION` loads the fragment. Anything else is \
+                    skipped with a warning, and the rest of the CLI keeps \
+                    working.",
         source: ("manifest/model.rs", "SkillRefFragmentFloors"),
     },
     Section {
@@ -56,7 +59,10 @@ const SECTIONS: &[Section] = &[
                     `<pkg>/toolr-manifest.json` inside the installed \
                     wheel. Fields default to empty where reasonable so \
                     a plugin can ship just `groups` or just `commands` \
-                    without padding the file.",
+                    without padding the file. `groups` and `commands` are \
+                    the manifest's own `Group` and `Command` types, the \
+                    same ones a repo's `tools/` produces, so a plugin \
+                    command behaves like a local one.",
         source: ("third_party/model.rs", "SkillRefManifestFragment"),
     },
     Section {
@@ -101,9 +107,11 @@ pub fn packaging(repo_root: &Path) -> Result<Generated> {
         crates/toolr-core/src/manifest/model.rs and \
         crates/toolr-core/src/third_party/model.rs in the toolr repository.\nIf you ship a \
         plugin whose `toolr-manifest.json` matches the schema below, \
-        toolr's loader will accept it.\nIf you ship one that doesn't, \
-        the load will fail with a clear error from \
-        `parse_fragment`.\n\n",
+        toolr's loader will accept it.\nA fragment whose version is out of \
+        range, or one with a command that fails validation, is skipped \
+        with a warning on every run. Malformed JSON, a missing or invalid \
+        `toolr_schema_version`, and the same command declared by two \
+        plugins still abort the manifest build.\n\n",
     );
 
     body.push_str("## Discovery\n\n");

@@ -4,7 +4,7 @@
 
 This reference is generated from `toolr-core`'s own types. The struct definitions below are extracted verbatim from crates/toolr-core/src/manifest/model.rs and crates/toolr-core/src/third_party/model.rs in the toolr repository.
 If you ship a plugin whose `toolr-manifest.json` matches the schema below, toolr's loader will accept it.
-If you ship one that doesn't, the load will fail with a clear error from `parse_fragment`.
+A fragment whose version is out of range, or one with a command that fails validation, is skipped with a warning on every run. Malformed JSON, a missing or invalid `toolr_schema_version`, and the same command declared by two plugins still abort the manifest build.
 
 ## Discovery
 
@@ -29,7 +29,7 @@ Either layout works on every supported platform. If your wheel installs `<pkg>/t
 
 ## Schema version
 
-Your plugin's `toolr-manifest.json` declares the mandatory `toolr_schema_version` field: the lowest toolr manifest schema a reader needs to load it. `toolr self build-manifest` computes it; it is never lower than `FRAGMENT_SHAPE_SCHEMA`.
+`toolr_schema_version` in a plugin's `toolr-manifest.json` is the lowest toolr schema that can read the fragment. `toolr self build-manifest` computes it from the types and features the plugin uses. A toolr whose schema is between `MIN_READABLE_FRAGMENT_SCHEMA` and its own `SCHEMA_VERSION` loads the fragment. Anything else is skipped with a warning, and the rest of the CLI keeps working.
 
 ```rust
 /// The schema at which the fragment's JSON shape last changed in a way an older reader would
@@ -43,7 +43,7 @@ pub const MIN_READABLE_FRAGMENT_SCHEMA: u32 = 2;
 
 ## Fragment shape
 
-The fragment is the JSON blob your plugin ships at `<pkg>/toolr-manifest.json` inside the installed wheel. Fields default to empty where reasonable so a plugin can ship just `groups` or just `commands` without padding the file.
+The fragment is the JSON blob your plugin ships at `<pkg>/toolr-manifest.json` inside the installed wheel. Fields default to empty where reasonable so a plugin can ship just `groups` or just `commands` without padding the file. `groups` and `commands` are the manifest's own `Group` and `Command` types, the same ones a repo's `tools/` produces, so a plugin command behaves like a local one.
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
