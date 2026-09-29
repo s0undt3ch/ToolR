@@ -9,14 +9,14 @@ keywords. The type name says what the binary checked. A type checker can tell th
 command function always receives a `pathlib.Path` instance.
 
 ```python
-from toolr.types import ExistingFile, NewPath
+from toolr.types import FilePath, NewPath
 
-def convert(ctx, source: ExistingFile, output: NewPath) -> None: ...
+def convert(ctx, source: FilePath, output: NewPath) -> None: ...
 ```
 
 ## Non-goals
 
-- No `Command` type that looks a name up on `PATH`. `ExecutableFile` is a path.
+- No `Command` type that looks a name up on `PATH`. `ExecutablePath` is a path.
 - No readable-file type, no symlink, fifo or socket kinds, no `-` for stdin or stdout.
 - No fix for Windows `canonicalize()` returning `\\?\C:\…` paths. `ResolvedPath` already has this
   problem, and the new canonical types inherit it. File it on its own.
@@ -38,29 +38,33 @@ def convert(ctx, source: ExistingFile, output: NewPath) -> None: ...
 Each type is a `typing.NewType`. The chain gives the subtype relation: a value of any type can go
 where its parent is expected.
 
+Every name ends in `Path`, so a reader knows it is a path type before reading the rest. `FilePath`,
+`DirectoryPath` and `NewPath` use pydantic's names, and pydantic's meanings for them are the same
+as ours. The names in #502 (`ExistingFile`, `ExistingDir`) are not used.
+
 ```python
-AbsolutePath   = NewType("AbsolutePath", Path)
-NewPath        = NewType("NewPath", AbsolutePath)
-ResolvedPath   = NewType("ResolvedPath", Path)
-ExistingFile   = NewType("ExistingFile", ResolvedPath)
-ExistingDir    = NewType("ExistingDir", ResolvedPath)
-ExecutableFile = NewType("ExecutableFile", ExistingFile)
-WritableDir    = NewType("WritableDir", ExistingDir)
+AbsolutePath          = NewType("AbsolutePath", Path)
+NewPath               = NewType("NewPath", AbsolutePath)
+ResolvedPath          = NewType("ResolvedPath", Path)
+FilePath              = NewType("FilePath", ResolvedPath)
+DirectoryPath         = NewType("DirectoryPath", ResolvedPath)
+ExecutablePath        = NewType("ExecutablePath", FilePath)
+WritableDirectoryPath = NewType("WritableDirectoryPath", DirectoryPath)
 ```
 
-| Type | The binary rejects the value unless | Value handed to Python | Completion hint |
+| Type | The binary rejects the value unless | Value handed to Python | clap `ValueHint` |
 |---|---|---|---|
 | `pathlib.Path` | (no check) | as typed | `AnyPath` |
 | `AbsolutePath` | (no check) | joined to cwd if relative | `AnyPath` |
 | `NewPath` | the path does not exist, and its parent is an existing directory | absolute | `AnyPath` |
 | `ResolvedPath` | the path exists | canonical | `AnyPath` |
-| `ExistingFile` | the path is a regular file | canonical | `FilePath` |
-| `ExistingDir` | the path is a directory | canonical | `DirPath` |
-| `ExecutableFile` | the path is a regular file the process can execute | canonical | `ExecutablePath` |
-| `WritableDir` | the path is a directory the process can write to | canonical | `DirPath` |
+| `FilePath` | the path is a regular file | canonical | `FilePath` |
+| `DirectoryPath` | the path is a directory | canonical | `DirPath` |
+| `ExecutablePath` | the path is a regular file the process can execute | canonical | `ExecutablePath` |
+| `WritableDirectoryPath` | the path is a directory the process can write to | canonical | `DirPath` |
 
 "Canonical" means `std::fs::canonicalize`: absolute, with symlinks and `..` resolved. The kind checks
-run on the canonical path. So a symlink to a directory counts as an `ExistingDir`.
+run on the canonical path. So a symlink to a directory counts as a `DirectoryPath`.
 
 `NewPath` is absolute, not canonical, because the path itself does not exist yet. Its parent is
 checked with `is_dir()`, which follows symlinks.
@@ -97,8 +101,8 @@ One message per failure, with the path as the user typed it:
   `msgspec.convert(value, type=hint, dec_hook=_dec_hook)` call. Checked with msgspec 0.21.1 for a
   three-level chain, for `list[T]` and for `T | None`. All three produced a `PosixPath`.
 - **Static:** pyright and mypy treat each `NewType` as a distinct subtype. Passing a bare `Path`
-  where an `ExistingFile` is expected is a type error. `p / "x"` returns a plain `Path`, which is
-  correct: a child of an `ExistingDir` is not known to exist.
+  where a `FilePath` is expected is a type error. `p / "x"` returns a plain `Path`, which is
+  correct: a child of a `DirectoryPath` is not known to exist.
 - **Parser:** the Rust parser resolves `toolr.types.<Name>` by name
   (`resolve_toolr_types_name` in `crates/toolr-core/src/parser/types/resolve.rs`). It never reads
   the definition, so switching aliases to `NewType` changes nothing on the Rust side.
@@ -111,6 +115,18 @@ Rejected:
   supports 3.11 (`requires-python = ">=3.11"`). Subclasses also pass through `p / "x"` and
   `.parent`, which would claim an existence nobody checked.
 - **`Annotated[Path, marker]`.** Readable, but the type checker still sees only `Path`.
+- **Composite `X[File, Writable]`.** A throwaway spike with mypy `--strict` made this half work. The
+  type checker saw a class `X(pathlib.Path, Generic[*Ts])`, which only existed under
+  `TYPE_CHECKING`. At runtime, `X[...]` evaluated to `Annotated[pathlib.Path, ...]`, and msgspec
+  still decoded the value to a `PosixPath`. Four results rejected it:
+    - Every `pathlib` method that returns `Self` leaked the parameter. `p.with_suffix(".y")`
+      type-checked as `X[File]`. Fixing this needs about 20 method overrides, each with a
+      `# type: ignore[override]`.
+    - `X[Dir, Writable]` is not assignable to `X[Dir]`. Composition was the point of the design,
+      and it gives no subtype relation. The `NewType` chain does.
+    - Combinations like `X[File, Dir]` would need rules to reject them at build time.
+    - Naming the class `Path` clashes with `pathlib.Path`. Another name fixes only this last
+      problem. `X[File | Dir]` reads as "file or dir", so `|` cannot mean "and".
 
 ## Removing `arg(must_*)`
 
@@ -118,8 +134,8 @@ Rejected:
   `crates/toolr-py/python/toolr/utils/_signature.py`.
 - The parser drops them from the known-keyword set. An author who still writes one gets the #500
   unknown-keyword build error, with a type hint in place of "did you mean":
-  `` unknown `arg()` keyword `must_be_file`: use `toolr.types.ExistingFile` ``. `must_exist` points
-  at `ResolvedPath`, and `must_be_dir` at `ExistingDir`.
+  `` unknown `arg()` keyword `must_be_file`: use `toolr.types.FilePath` ``. `must_exist` points
+  at `ResolvedPath`, and `must_be_dir` at `DirectoryPath`.
 - `PathConstraints` is no longer written to local manifests or third-party fragments.
 
 ### Compatibility with plugins built by older toolr
@@ -133,8 +149,8 @@ So loading keeps a read-only fallback. When a fragment or manifest argument carr
 
 | Stored as | Loaded as |
 |---|---|
-| any path type + `must_be_dir` | `ExistingDir` |
-| any path type + `must_be_file` | `ExistingFile` |
+| any path type + `must_be_dir` | `DirectoryPath` |
+| any path type + `must_be_file` | `FilePath` |
 | any path type + `must_exist` | `ResolvedPath` |
 
 This changes behaviour in one way: a legacy constrained `Path` or `AbsolutePath` now reaches Python
@@ -153,8 +169,8 @@ variant. Any new type has always had this effect, and it is not new here.
 
 ## Known limit: non-literal defaults
 
-`config: ExistingFile = "pyproject.toml"` is a literal default. clap runs it through the value
-parser, so it is checked. `config: ExistingFile = Path("pyproject.toml")` is stored as the `<expr>`
+`config: FilePath = "pyproject.toml"` is a literal default. clap runs it through the value
+parser, so it is checked. `config: FilePath = Path("pyproject.toml")` is stored as the `<expr>`
 sentinel, and the CLI then applies no default (`crates/toolr/src/cli.rs`, `ArgumentKind::Optional`).
 Python's own default then applies, unchecked. The docs say this. Fixing it is out of scope.
 
@@ -162,8 +178,8 @@ Python's own default then applies, unchecked. The docs say this. Fixing it is ou
 
 Rust:
 
-- `crates/toolr-core/src/parser/types/supported.rs`: variants `NewPath`, `ExistingFile`,
-  `ExistingDir`, `ExecutableFile` and `WritableDir`, each with its `doc()` row and kind. Follow the
+- `crates/toolr-core/src/parser/types/supported.rs`: variants `NewPath`, `FilePath`, `DirectoryPath`,
+  `ExecutablePath` and `WritableDirectoryPath`, each with its `doc()` row and kind. Follow the
   "Adding a supported type" checklist in `CONTRIBUTING.md`.
 - `crates/toolr-core/src/parser/types/resolve.rs`: map the five names.
 - `crates/toolr/src/value_parsers.rs`: replace the `PathConstraints` knob on `path_parser` with a
@@ -210,6 +226,6 @@ Docs, skills and notes:
 - Unknown-keyword error: each of the three removed keywords produces its type hint.
 - `crates/toolr/tests/`: an `assert_cmd` end-to-end run per type, for one accept and one reject.
 - pytest: the command body receives a `pathlib.Path` for every type, including in `list[T]`.
-- A static typing check (mypy on a snippet in the test suite) shows that `ExistingFile` is
-  accepted where `Path` is expected, and a bare `Path` is rejected where `ExistingFile` is expected.
+- A static typing check (mypy on a snippet in the test suite) shows that `FilePath` is
+  accepted where `Path` is expected, and a bare `Path` is rejected where `FilePath` is expected.
 - `mise run test`.
