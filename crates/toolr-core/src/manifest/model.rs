@@ -6,7 +6,7 @@ use crate::parser::SupportedType;
 
 // region: SkillRefSchemaVersion
 /// Current manifest schema version. Bump on breaking format changes.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 // endregion: SkillRefSchemaVersion
 
 // region: SkillRefManifest

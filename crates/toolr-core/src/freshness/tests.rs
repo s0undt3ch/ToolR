@@ -187,3 +187,32 @@ fn empty_toolr_version_from_a_pre_field_manifest_is_treated_as_a_mismatch() {
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
 }
+
+#[test]
+fn older_schema_version_forces_a_rebuild_even_when_hashes_and_version_match() {
+    // A dev build keeps its version string across commits, so the
+    // toolr_version check alone can't catch a schema bump.
+    let tmp = TempDir::new().unwrap();
+    make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    let mut cached = manifest_for(tmp.path());
+    cached.schema_version = crate::manifest::SCHEMA_VERSION - 1;
+    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
+}
+
+#[test]
+fn older_schema_version_with_venv_forces_third_party_drift() {
+    let tmp = TempDir::new().unwrap();
+    make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    make_venv(tmp.path(), &[("foo", "{}")]);
+    let mut cached = manifest_for(tmp.path());
+    cached.schema_version = crate::manifest::SCHEMA_VERSION - 1;
+    let venv = tmp.path().join("venv");
+    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    assert!(matches!(verdict, FreshnessVerdict::ThirdPartyDrift));
+}
+
+#[test]
+fn manifest_schema_version_is_2() {
+    assert_eq!(crate::manifest::SCHEMA_VERSION, 2);
+}
