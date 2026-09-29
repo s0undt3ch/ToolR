@@ -101,3 +101,10 @@ which works whatever `include-package-data` is set to, instead of relying on
 older fragment schemas: it accepts only the current `toolr_schema_version`.
 The "Working example" link now points at `examples/plugin-package/`.
 ([#506](https://github.com/s0undt3ch/ToolR/issues/506))
+
+### Readable debug and info log colours
+
+The `log-debug` and `log-info` console styles, and the `stdout`/`stderr` level
+labels, no longer use Rich's `dim` modifier. On many terminal palettes `dim`
+turned the blue and cyan into near-illegible grey. The named ANSI colours still
+follow the terminal's own light or dark palette.
