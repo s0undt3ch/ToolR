@@ -50,6 +50,8 @@ prek run --all-files              # run every pre-commit hook
   `specs/`. See `specs/README.md`.
 - **Specs (archive):** `specs/archive/<year>/`. Move with `git mv` in the implementing PR (see
   *Archive specs as the last implementation step* below).
+- Adding a `toolr.types` supported type: the checklist is "Adding a supported type" in
+  `CONTRIBUTING.md`. The compiler enforces only the Rust `match` steps.
 - Built-in completion entries: `crates/toolr/src/builtin_completions.rs` (derived from `cli::build_command`).
 - Static manifest parser: `crates/toolr-core/src/parser/`.
 - Tab-completion freshness: `crates/toolr-core/src/complete/freshness.rs`.

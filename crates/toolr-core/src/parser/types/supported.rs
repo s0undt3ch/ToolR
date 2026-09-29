@@ -229,43 +229,119 @@ impl SupportedType {
         }
     }
 
-    /// One representative of every variant, in table order, for
-    /// generating the "Supported types" doc table. `doc()` above is
-    /// exhaustive, but nothing enforces that every variant also has a
-    /// representative here — a new variant compiles `doc()` fine and
-    /// silently stays out of the catalogue unless the list below is
-    /// updated by hand.
-    // Add a representative here when adding a variant; doc() won't
-    // compile until you document it.
+    /// The fieldless [`SupportedTypeKind`] of this variant. Exhaustive, so
+    /// a new variant doesn't compile until it has a kind, and a new kind
+    /// doesn't compile until [`SupportedTypeKind::representative`] covers it.
+    /// For every step of adding a type, see "Adding a supported type" in
+    /// `CONTRIBUTING.md`.
+    pub fn kind(&self) -> SupportedTypeKind {
+        match self {
+            SupportedType::Str => SupportedTypeKind::Str,
+            SupportedType::Int => SupportedTypeKind::Int,
+            SupportedType::Float => SupportedTypeKind::Float,
+            SupportedType::Bool => SupportedTypeKind::Bool,
+            SupportedType::Path => SupportedTypeKind::Path,
+            SupportedType::AbsolutePath => SupportedTypeKind::AbsolutePath,
+            SupportedType::ResolvedPath => SupportedTypeKind::ResolvedPath,
+            SupportedType::DateTime => SupportedTypeKind::DateTime,
+            SupportedType::Date => SupportedTypeKind::Date,
+            SupportedType::Time => SupportedTypeKind::Time,
+            SupportedType::Uuid => SupportedTypeKind::Uuid,
+            SupportedType::Ipv4 => SupportedTypeKind::Ipv4,
+            SupportedType::Ipv6 => SupportedTypeKind::Ipv6,
+            SupportedType::Email => SupportedTypeKind::Email,
+            SupportedType::Version => SupportedTypeKind::Version,
+            SupportedType::Count => SupportedTypeKind::Count,
+            SupportedType::Literal(_) => SupportedTypeKind::Literal,
+            SupportedType::Enum { .. } => SupportedTypeKind::Enum,
+            SupportedType::List(_) => SupportedTypeKind::List,
+            SupportedType::Tuple(_) => SupportedTypeKind::Tuple,
+            SupportedType::Optional(_) => SupportedTypeKind::Optional,
+        }
+    }
+
+    /// Every variant's doc row, in table order, for generating the
+    /// "Supported types" doc table.
     pub fn catalogue() -> Vec<TypeDoc> {
-        vec![
-            SupportedType::Int.doc(),
-            SupportedType::Float.doc(),
-            SupportedType::Bool.doc(),
-            SupportedType::Str.doc(),
-            SupportedType::Path.doc(),
-            SupportedType::AbsolutePath.doc(),
-            SupportedType::ResolvedPath.doc(),
-            SupportedType::DateTime.doc(),
-            SupportedType::Date.doc(),
-            SupportedType::Time.doc(),
-            SupportedType::Uuid.doc(),
-            SupportedType::Ipv4.doc(),
-            SupportedType::Ipv6.doc(),
-            SupportedType::Email.doc(),
-            SupportedType::Version.doc(),
-            SupportedType::Count.doc(),
-            SupportedType::Literal(vec![]).doc(),
-            SupportedType::Enum {
+        SupportedTypeKind::ALL
+            .iter()
+            .map(|kind| kind.representative().doc())
+            .collect()
+    }
+}
+
+/// Declares [`SupportedTypeKind`] and its `ALL` list from one list of
+/// names, so the two can't drift apart.
+macro_rules! supported_type_kinds {
+    ($($kind:ident),+ $(,)?) => {
+        /// Fieldless mirror of [`SupportedType`].
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum SupportedTypeKind {
+            $($kind),+
+        }
+
+        impl SupportedTypeKind {
+            /// Every kind, in "Supported types" table order.
+            pub const ALL: &[SupportedTypeKind] = &[$(SupportedTypeKind::$kind),+];
+        }
+    };
+}
+
+supported_type_kinds!(
+    Int,
+    Float,
+    Bool,
+    Str,
+    Path,
+    AbsolutePath,
+    ResolvedPath,
+    DateTime,
+    Date,
+    Time,
+    Uuid,
+    Ipv4,
+    Ipv6,
+    Email,
+    Version,
+    Count,
+    Literal,
+    Enum,
+    List,
+    Tuple,
+    Optional,
+);
+
+impl SupportedTypeKind {
+    /// A value of this kind, for its doc row. Exhaustive, so a new kind
+    /// doesn't compile until it has one.
+    pub fn representative(self) -> SupportedType {
+        match self {
+            SupportedTypeKind::Int => SupportedType::Int,
+            SupportedTypeKind::Float => SupportedType::Float,
+            SupportedTypeKind::Bool => SupportedType::Bool,
+            SupportedTypeKind::Str => SupportedType::Str,
+            SupportedTypeKind::Path => SupportedType::Path,
+            SupportedTypeKind::AbsolutePath => SupportedType::AbsolutePath,
+            SupportedTypeKind::ResolvedPath => SupportedType::ResolvedPath,
+            SupportedTypeKind::DateTime => SupportedType::DateTime,
+            SupportedTypeKind::Date => SupportedType::Date,
+            SupportedTypeKind::Time => SupportedType::Time,
+            SupportedTypeKind::Uuid => SupportedType::Uuid,
+            SupportedTypeKind::Ipv4 => SupportedType::Ipv4,
+            SupportedTypeKind::Ipv6 => SupportedType::Ipv6,
+            SupportedTypeKind::Email => SupportedType::Email,
+            SupportedTypeKind::Version => SupportedType::Version,
+            SupportedTypeKind::Count => SupportedType::Count,
+            SupportedTypeKind::Literal => SupportedType::Literal(vec![]),
+            SupportedTypeKind::Enum => SupportedType::Enum {
                 name: String::new(),
                 module: String::new(),
                 values: vec![],
-            }
-            .doc(),
-            SupportedType::List(Box::new(SupportedType::Str)).doc(),
-            SupportedType::Tuple(vec![]).doc(),
-            SupportedType::Optional(Box::new(SupportedType::Str)).doc(),
-        ]
+            },
+            SupportedTypeKind::List => SupportedType::List(Box::new(SupportedType::Str)),
+            SupportedTypeKind::Tuple => SupportedType::Tuple(vec![]),
+            SupportedTypeKind::Optional => SupportedType::Optional(Box::new(SupportedType::Str)),
+        }
     }
 }
 
@@ -377,6 +453,14 @@ mod tests {
                 "catalogue has no row for `{want}`",
             );
         }
+    }
+
+    #[test]
+    fn every_kind_has_a_representative_of_that_kind() {
+        for kind in SupportedTypeKind::ALL {
+            assert_eq!(kind.representative().kind(), *kind);
+        }
+        assert_eq!(SupportedType::catalogue().len(), SupportedTypeKind::ALL.len());
     }
 
     #[test]
