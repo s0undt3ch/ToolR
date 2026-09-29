@@ -292,6 +292,43 @@ def test_import_target_reports_unknown_arg_keyword_as_spec_error(
     assert isinstance(excinfo.value.__cause__, TypeError)
 
 
+@pytest.mark.parametrize("future_import", [False, True], ids=["eager", "future-annotations"])
+def test_run_reports_unknown_arg_keyword_in_a_parameter_annotation(
+    importable_module: Callable[[str, str], str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    future_import: bool,
+) -> None:
+    # The shape plugins actually write: the keyword inline on the parameter.
+    # With postponed (or, on 3.14+, lazy) annotations, the import succeeds and
+    # the `TypeError` only surfaces when the runner resolves the hints.
+    prelude = "from __future__ import annotations\n" if future_import else ""
+    module = importable_module(
+        f"stale_param_kw_{'future' if future_import else 'eager'}",
+        prelude
+        + textwrap.dedent(
+            """
+            from pathlib import Path
+            from typing import Annotated
+
+            from toolr import arg
+
+            CALLED = []
+
+
+            def read(ctx, config: Annotated[Path, arg(must_exist=True)]) -> None:
+                CALLED.append(config)
+            """
+        ),
+    )
+    spec = _runner_spec(
+        module=module, function="read", args={"config": "/missing.toml"}, repo_root=tmp_path
+    )
+    assert _run_isolated(spec) == 2
+    assert "`arg()` has no `must_exist` keyword" in capsys.readouterr().err
+    assert importlib.import_module(module).CALLED == []
+
+
 def test_import_target_leaves_other_import_time_type_errors_alone(
     importable_module: Callable[[str, str], str],
 ) -> None:
