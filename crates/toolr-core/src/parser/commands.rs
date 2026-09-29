@@ -127,6 +127,44 @@ pub struct CommandNameConflict {
     pub function: String,
 }
 
+/// A command whose docstring gives it no `--help` summary line: no
+/// docstring at all, an empty or blank one, or only sections such as
+/// `Args:`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingDocstring {
+    /// Dotted python module the command lives in (`tools.foo.bar`).
+    pub module: String,
+    /// Python function name of the offending command.
+    pub function: String,
+}
+
+/// Every command in `commands` without a summary line, in order.
+pub fn missing_docstrings(commands: &[Command]) -> Vec<MissingDocstring> {
+    commands
+        .iter()
+        .filter(|c| c.summary.trim().is_empty())
+        .map(|c| MissingDocstring {
+            module: c.module.clone(),
+            function: c.function.clone(),
+        })
+        .collect()
+}
+
+/// The indented bullet list both manifest builders print under their
+/// "commands without a docstring" heading.
+pub fn format_missing_docstrings(missing: &[MissingDocstring]) -> String {
+    missing
+        .iter()
+        .map(|m| {
+            format!(
+                "  - {}::{}: add a docstring. Its first line is the command's `--help` summary.",
+                m.module, m.function
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Resolve the explicit CLI-name override from a `command(...)` call's
 /// arguments. The name may come from the first positional string literal
 /// (`command("collect")`) or the `name=` keyword (`command(name="collect")`),

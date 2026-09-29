@@ -614,7 +614,7 @@ fn make_tree(py_files: &[(&str, &str)]) -> TempDir {
 fn returns_fresh_manifest_when_no_cache_exists() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    pass\n",
+        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     let ResolvedManifest {
         manifest,
@@ -631,7 +631,7 @@ fn returns_fresh_manifest_when_no_cache_exists() {
 fn returns_cached_manifest_when_hash_matches() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    pass\n",
+        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     // Build once and write to disk.  Stamp the third_party_hash with the
     // empty-venv sentinel so `freshness::compare` (venv_dir=None) sees a
@@ -650,7 +650,7 @@ fn returns_cached_manifest_when_hash_matches() {
 fn re_parses_when_cached_hash_is_stale() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    pass\n",
+        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     // Write a stale manifest with a bogus hash.
     let mut stale = crate::parser::build_static_manifest(&tmp.path().join("tools")).unwrap();
@@ -667,7 +667,7 @@ fn re_parses_when_cached_hash_is_stale() {
 fn preserves_third_party_entries_from_cache_when_reparsing() {
     let tmp = make_tree(&[(
         "ci.py",
-        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    pass\n",
+        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
     )]);
     // Seed a manifest with a fake third-party command and a stale
     // static_hash so the re-parse path runs.

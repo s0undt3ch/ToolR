@@ -120,6 +120,7 @@ def test_current_context_is_set_before_target_runs(
 
         @group.command
         def hello(ctx, name: str = "world") -> None:
+            "Do it."
             same = current_context() is ctx
             ctx.print(f"hi {name} same={same}")
         """
@@ -150,6 +151,7 @@ def test_current_context_works_at_module_import_time(
 
         @group.command
         def hello(ctx) -> None:
+            "Do it."
             ctx.print(f"import-time repo_root matched={_repo_root_at_import == ctx.repo_root}")
         """
     )

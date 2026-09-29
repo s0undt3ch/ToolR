@@ -12,6 +12,7 @@ the CLI surface itself is a Rust binary, not Python.
 from __future__ import annotations
 
 import logging
+import sys
 import warnings
 from collections.abc import Callable
 from types import FunctionType
@@ -30,6 +31,37 @@ if TYPE_CHECKING:
     from toolr.utils._signature import F
 
 log = logging.getLogger(__name__)
+
+
+def _reject_stripped_docstrings() -> None:
+    """Refuse to run where Python has stripped every docstring.
+
+    ``python -OO`` and ``PYTHONOPTIMIZE=2`` both set ``sys.flags.optimize``
+    to 2, which leaves every ``__doc__`` as ``None``. toolr can't tell a
+    documented command from an undocumented one there.
+    """
+    if sys.flags.optimize >= 2:
+        err_msg = (
+            "toolr can't run under `python -OO` or `PYTHONOPTIMIZE=2`: they strip "
+            "the docstrings toolr commands and groups are described by."
+        )
+        raise RuntimeError(err_msg)
+
+
+def _require_docstring(func: Callable[..., Any]) -> None:
+    """Reject a command whose docstring gives no ``--help`` summary line.
+
+    Mirrors the manifest build, so a ``CommandsTester`` discovery test
+    fails the same way ``toolr`` would.
+    """
+    _reject_stripped_docstrings()
+    if Docstring.parse(func.__doc__ or "").short_description.strip():
+        return
+    err_msg = (
+        f"{func.__module__}::{func.__qualname__}: add a docstring. "
+        "Its first line is the command's `--help` summary."
+    )
+    raise ValueError(err_msg)
 
 
 def _emit_legacy_command_group_method_warning(parent_full_name: str, child: str) -> None:
@@ -122,6 +154,7 @@ class CommandGroup(Struct, frozen=True):
             cli_name = (
                 explicit_name if explicit_name is not None else func.__name__.replace("_", "-")
             )
+            _require_docstring(func)
             if cli_name in self.__commands:
                 log.debug(
                     "Command '%s' already exists in group '%s', overriding",
@@ -248,12 +281,13 @@ def command(
                 " — drop the parens-less form or move the kwargs into them."
             )
             raise TypeError(err_msg)
+        _require_docstring(name)
         return name
 
-    # Parameterised form: @command(...) — returns a decorator. The
-    # decorator itself is currently a passthrough; the static parser
-    # is what consumes the `group=` / `name` strings.
+    # Parameterised form: @command(...) — returns a decorator. The static
+    # parser is what consumes the `group=` / `name` strings.
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        _require_docstring(func)
         return func
 
     return decorator
@@ -323,6 +357,8 @@ def command_group(
         log.debug("Command group '%s' already exists, returning existing group", f"{parent}.{name}")
         return group
 
+    if docstring is None and description is None:
+        _reject_stripped_docstrings()
     if docstring is not None:
         if description is not None or long_description is not None:
             err_msg = "You can't pass both docstring and description or long_description"

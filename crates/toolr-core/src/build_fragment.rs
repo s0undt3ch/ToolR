@@ -8,7 +8,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::parser::{
-    commands::{detect_name_conflicts, extract_commands, CommandNameConflict},
+    commands::{
+        detect_name_conflicts, extract_commands, format_missing_docstrings, missing_docstrings,
+        CommandNameConflict, MissingDocstring,
+    },
     groups::extract_groups,
     symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
     types::{SourcesImports, TypeImports, TypeResolutionError},
@@ -33,6 +36,8 @@ pub enum BuildFragmentError {
     },
     #[error("invalid parameter declarations ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
     UnsupportedTypes(Vec<TypeResolutionError>),
+    #[error("commands without a docstring ({count}):\n{details}", count = .0.len(), details = format_missing_docstrings(.0))]
+    MissingDocstrings(Vec<MissingDocstring>),
     #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
     ConflictingCommandName(Vec<CommandNameConflict>),
 }
@@ -171,6 +176,11 @@ pub fn build_third_party_fragment(
         all_commands.iter().map(|c| c.group.as_str()).collect();
     all_groups.retain(|g| surviving_group_names.contains(g.full_path().as_str()));
 
+    let undocumented = missing_docstrings(&all_commands);
+    if !undocumented.is_empty() {
+        return Err(BuildFragmentError::MissingDocstrings(undocumented));
+    }
+
     if all_groups.is_empty() && all_commands.is_empty() {
         return Err(BuildFragmentError::EmptyPackage {
             package: package_name.to_string(),
@@ -263,6 +273,37 @@ mod tests {
         // No __init__.py.
         let err = build_third_party_fragment(&tmp.path().join("pkg"), "pkg", 1).unwrap_err();
         assert!(matches!(err, BuildFragmentError::NamespacePackage { .. }));
+    }
+
+    #[test]
+    fn rejects_a_plugin_command_without_a_docstring() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("mypkg");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "commands.py",
+            r#"from toolr import Context, command_group
+
+group = command_group("plug", "Plugin", "Plugin commands.")
+
+
+@group.command
+def hello(ctx: Context) -> None:
+    ctx.print("hi")
+"#,
+        );
+        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        let BuildFragmentError::MissingDocstrings(missing) = &err else {
+            panic!("expected MissingDocstrings, got {err}");
+        };
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].module, "mypkg.commands");
+        assert_eq!(missing[0].function, "hello");
+        assert!(
+            err.to_string().starts_with("commands without a docstring (1):"),
+            "{err}"
+        );
     }
 
     #[test]
