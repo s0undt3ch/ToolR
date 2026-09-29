@@ -95,7 +95,9 @@ The "Shipping the manifest" docs told hatchling users to list
 `toolr-manifest.json` under `include`, which builds a wheel with no Python
 modules and the manifest at the wrong path. They now use
 `packages = ["src/<pkg>"]`, matching the packaging skill and
-`examples/plugin-package/`. The docs also no longer claim that toolr migrates
+`examples/plugin-package/`. The setuptools recipe now uses `package-data`,
+which works whatever `include-package-data` is set to, instead of relying on
+`MANIFEST.in`. The docs also no longer claim that toolr migrates
 older fragment schemas: it accepts only the current `toolr_schema_version`.
 The "Working example" link now points at `examples/plugin-package/`.
 ([#506](https://github.com/s0undt3ch/ToolR/issues/506))

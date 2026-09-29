@@ -126,11 +126,17 @@ wheel to the matching files, so
 `src/my_pkg/toolr-manifest.json`: no Python modules, and the manifest at a
 path toolr doesn't search.
 
-**setuptools** — add a line to `MANIFEST.in`:
+**setuptools** — list the manifest in `package-data`:
 
-```text
-include src/my_pkg/toolr-manifest.json
+```toml
+[tool.setuptools.package-data]
+my_pkg = ["toolr-manifest.json"]
 ```
+
+This works whatever `include-package-data` is set to. An
+`include src/my_pkg/toolr-manifest.json` line in `MANIFEST.in` also reaches the
+wheel, but only while `include-package-data` is on. That is the default for
+projects configured in `pyproject.toml`, and not for a legacy `setup.py`.
 
 After building, verify the file is present in the wheel before
 publishing:
@@ -254,7 +260,7 @@ When multiple sources contribute commands with the same name:
 ## Distribution checklist
 
 - Include `toolr-manifest.json` in your package via
-  `package_data` (setuptools), `packages` (hatchling), or the
+  `package-data` (setuptools), `packages` (hatchling), or the
   equivalent in your build backend. Verify it's in the built wheel
   before publishing.
 - Pin a compatible `toolr` version in your package's dependencies.
