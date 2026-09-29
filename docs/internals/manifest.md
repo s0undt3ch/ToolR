@@ -132,8 +132,8 @@ Python imports involved in the hot path.
   built against the legacy schema fall through to string semantics.
   Path types (`path`, `absolute_path`, `new_path`, `resolved_path`,
   `file_path`, `directory_path`, `executable_path`,
-  `writable_directory_path`) carry their filesystem check in the kind
-  itself.
+  `writable_directory_path`) name their filesystem check, if any, in
+  the kind itself.
 - **`allowed_values`** — for `Literal[...]` / `Enum` types, the
   values clap validates against. Also used by tab completion.
 

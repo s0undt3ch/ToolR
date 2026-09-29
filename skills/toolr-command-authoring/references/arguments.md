@@ -314,14 +314,19 @@ The types are `typing.NewType`s, so a type checker tells them apart: a `FilePath
 as `config.parent / "x"`, keeps its type for the type checker, but nothing checked it. Treat
 derived paths as unchecked.
 
-Three limits:
+Limits:
 
 - The executable and writable checks are advisory. The file can change between the check and the
   moment your command uses it.
 - The checks run in the toolr binary only. Calling the function directly, for example in a test
   built with `toolr.testing.make_context`, checks nothing.
-- A default written as an expression, such as `config: FilePath = Path("pyproject.toml")`, isn't
-  checked. A string default, `config: FilePath = "pyproject.toml"`, is.
+- A string default, such as `config: FilePath = "pyproject.toml"`, is checked by the binary. The
+  type checker rejects it, so it needs `# type: ignore[assignment]`. A relative string default
+  resolves against the working directory, not the repo root.
+- A `Path(...)` default isn't checked. It type-checks only if the parameter is a bare `Path`.
+- Commands shipped in a plugin don't run these checks yet
+  (#520). The value still arrives as a `pathlib.Path`.
+- A path type inside a `tuple[...]` slot isn't checked. clap has no per-slot parser.
 
 ## Module-level type aliases
 

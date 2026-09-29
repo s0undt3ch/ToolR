@@ -151,7 +151,10 @@ fn path_parser(form: PathForm, check: PathCheck) -> ValueParser {
             PathForm::AsTyped => typed.to_path_buf(),
             PathForm::Absolute => absolutise(typed)?,
             PathForm::Canonical => {
-                if !typed.exists() {
+                if !typed
+                    .try_exists()
+                    .map_err(|e| format!("invalid path `{s}`: {e}"))?
+                {
                     return Err(format!("path does not exist: {s}"));
                 }
                 typed
@@ -176,7 +179,11 @@ fn check_path(path: &std::path::Path, check: PathCheck, typed: &str) -> Result<(
     let require = |ok: bool, msg: &str| if ok { Ok(()) } else { Err(format!("{msg}: {typed}")) };
     match check {
         PathCheck::None => Ok(()),
-        PathCheck::Exists => require(path.exists(), "path does not exist"),
+        PathCheck::Exists => require(
+            path.try_exists()
+                .map_err(|e| format!("invalid path `{typed}`: {e}"))?,
+            "path does not exist",
+        ),
         PathCheck::File => require(path.is_file(), "path is not a regular file"),
         PathCheck::Dir => require(path.is_dir(), "path is not a directory"),
         PathCheck::Executable => {
@@ -190,7 +197,11 @@ fn check_path(path: &std::path::Path, check: PathCheck, typed: &str) -> Result<(
         PathCheck::New => {
             // `symlink_metadata` so a dangling symlink counts as existing:
             // writing through it would create its target.
-            require(path.symlink_metadata().is_err(), "path already exists")?;
+            match path.symlink_metadata() {
+                Ok(_) => return Err(format!("path already exists: {typed}")),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(format!("invalid path `{typed}`: {e}")),
+            }
             match path.parent() {
                 Some(parent) if !parent.is_dir() => Err(format!(
                     "parent directory does not exist: {}",
@@ -497,6 +508,52 @@ mod tests {
         std::os::unix::fs::symlink(tmp.path().join("nowhere"), &link).unwrap();
         let err = parse(&SupportedType::NewPath, s(&link)).unwrap_err();
         assert!(err.contains("path already exists"), "got: {err}");
+    }
+
+    /// Makes a file inside a mode-0o000 directory, so any lookup of it fails with
+    /// a permission error. Returns `None` when running as root (the mode is ignored).
+    #[cfg(unix)]
+    fn unreadable_child(tmp: &TempDir) -> Option<(PathBuf, PathBuf)> {
+        use std::os::unix::fs::PermissionsExt;
+        // SAFETY: `geteuid` has no preconditions.
+        if unsafe { libc::geteuid() } == 0 {
+            return None;
+        }
+        let dir = tmp.path().join("locked");
+        fs::create_dir(&dir).unwrap();
+        let file = dir.join("f.txt");
+        fs::write(&file, "x").unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
+        Some((dir, file))
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolved_path_reports_a_permission_error_as_invalid_not_missing() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let Some((dir, file)) = unreadable_child(&tmp) else {
+            return;
+        };
+        let err = parse(&SupportedType::ResolvedPath, s(&file));
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        let err = err.unwrap_err();
+        assert!(err.contains("invalid path"), "got: {err}");
+        assert!(!err.contains("does not exist"), "got: {err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn new_path_reports_a_permission_error_as_invalid_not_free() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let Some((dir, file)) = unreadable_child(&tmp) else {
+            return;
+        };
+        let err = parse(&SupportedType::NewPath, s(&file));
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        let err = err.unwrap_err();
+        assert!(err.contains("invalid path"), "got: {err}");
     }
 
     #[test]
