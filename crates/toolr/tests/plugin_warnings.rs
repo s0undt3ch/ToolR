@@ -55,7 +55,8 @@ impl Project {
         let mut cmd = Command::cargo_bin("toolr").unwrap();
         cmd.args(args)
             .current_dir(self.tmp.path())
-            .env("TOOLR_VENV_LOCATION", "in-tree");
+            .env("TOOLR_VENV_LOCATION", "in-tree")
+            .env("TOOLR_NO_CACHE_HINT", "1");
         cmd
     }
 
@@ -100,7 +101,7 @@ fn project_with_skipped_plugin() -> Project {
     let p = Project::new();
     p.add_plugin(
         "demo_plugin",
-        &fragment(1, "demo_plugin", "old", None, "run"),
+        &fragment(1, "demo_plugin", "oldplugin", None, "run"),
     );
     p.add_plugin(
         "good_plugin",
@@ -120,7 +121,7 @@ fn skipped_plugin_warns_and_the_rest_still_works() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stderr.contains(SKIP_WARNING), "stderr:\n{stderr}");
     assert!(stdout.contains("good"), "stdout:\n{stdout}");
-    assert!(!stdout.contains("old"), "stdout:\n{stdout}");
+    assert!(!stdout.contains("oldplugin"), "stdout:\n{stdout}");
     p.toolr(&["greet", "--help"])
         .assert()
         .success()
@@ -130,10 +131,16 @@ fn skipped_plugin_warns_and_the_rest_still_works() {
 #[test]
 fn warning_repeats_on_every_run() {
     let p = project_with_skipped_plugin();
-    for _ in 0..2 {
-        let stderr = p.stderr(&["greet", "--help"]);
-        assert!(stderr.contains(SKIP_WARNING), "stderr:\n{stderr}");
-    }
+    let stderr = p.stderr(&["greet", "--help"]);
+    assert!(stderr.contains(SKIP_WARNING), "stderr:\n{stderr}");
+    let after_first = std::fs::read(p.tools().join(".toolr-manifest.json")).unwrap();
+    let stderr = p.stderr(&["greet", "--help"]);
+    assert!(stderr.contains(SKIP_WARNING), "stderr:\n{stderr}");
+    let after_second = std::fs::read(p.tools().join(".toolr-manifest.json")).unwrap();
+    assert!(
+        after_first == after_second,
+        "second run rewrote the manifest instead of reading the cache"
+    );
 }
 
 #[test]
@@ -148,6 +155,13 @@ fn completion_never_warns() {
     let p = project_with_skipped_plugin();
     let cwd = p.tmp.path().to_string_lossy().to_string();
     let stderr = p.stderr(&["__complete", &cwd, ""]);
+    assert!(!stderr.contains("warning: skipping"), "stderr:\n{stderr}");
+}
+
+#[test]
+fn self_commands_never_warn() {
+    let p = project_with_skipped_plugin();
+    let stderr = p.stderr(&["self", "--help"]);
     assert!(!stderr.contains("warning: skipping"), "stderr:\n{stderr}");
 }
 
@@ -183,6 +197,17 @@ fn shadowed_plugin_command_warns_then_recovers() {
     );
     let manifest = p.manifest();
     assert!(!manifest.contains("ci_plugin.commands"), "{manifest}");
+    let parsed: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    let lint = parsed["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["group"] == "ci" && c["name"] == "lint")
+        .unwrap_or_else(|| panic!("no local ci lint: {manifest}"));
+    assert!(
+        lint["module"].as_str().unwrap().starts_with("tools."),
+        "{lint}"
+    );
 
     // Removing it brings the plugin command back and clears the warning.
     std::fs::remove_file(p.tools().join("ci.py")).unwrap();
@@ -204,7 +229,7 @@ fn nested_groups_with_the_same_leaf_name_coexist() {
           {"name":"docker","title":"Docker","description":"D","origin":"third_party"},
           {"name":"image","title":"Image","description":"I","origin":"third_party","parent":"docker"}],
         "commands":[{"name":"build","group":"docker.image","module":"dock_plugin.commands",
-            "function":"build_fn","summary":"S","description":"",
+            "function":"build_fn","summary":"Plugin build.","description":"",
             "arguments":[],"origin":"third_party"}]}"#;
     p.add_plugin("dock_plugin", plugin);
     p.write_tool("ci.py", LOCAL_CI_IMAGE);
@@ -212,8 +237,12 @@ fn nested_groups_with_the_same_leaf_name_coexist() {
     let stderr = p.stderr(&["--help"]);
     assert!(!stderr.contains("warning"), "stderr:\n{stderr}");
 
-    assert!(p.stdout(&["docker", "image", "--help"]).contains("build"));
-    assert!(p.stdout(&["ci", "image", "--help"]).contains("build"));
+    let docker = p.stdout(&["docker", "image", "build", "--help"]);
+    assert!(docker.contains("Plugin build."), "{docker}");
+    assert!(!docker.contains("Local build."), "{docker}");
+    let ci = p.stdout(&["ci", "image", "build", "--help"]);
+    assert!(ci.contains("Local build."), "{ci}");
+    assert!(!ci.contains("Plugin build."), "{ci}");
 
     // Each `build` resolves to its own function, checked via the manifest
     // because the fixture venv can't import the plugin package.
@@ -230,5 +259,5 @@ fn nested_groups_with_the_same_leaf_name_coexist() {
             .to_string()
     };
     assert_eq!(module_of("docker.image"), "dock_plugin.commands");
-    assert_ne!(module_of("ci.image"), "dock_plugin.commands");
+    assert_eq!(module_of("ci.image"), "tools.ci");
 }
