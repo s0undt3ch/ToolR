@@ -60,8 +60,8 @@ anyway. If you need dynamic patterns, hand-edit the resulting
 ## The `toolr-manifest.json` fragment format
 
 A fragment is a JSON object that declares groups and commands. Toolr
-validates it against a schema version and merges it into the project's
-manifest at build time.
+loads it only when its schema version is in the range this toolr reads,
+then merges it into the project's manifest at build time.
 
 `toolr self build-manifest` writes the file, so you never author it by hand. This
 one is trimmed from the fragment of the example plugin:
@@ -111,9 +111,12 @@ so a plugin command gets the same validation, `arg()` options and completion as 
 
 `toolr_schema_version` is the *lowest* toolr schema that can read the fragment, not the schema of
 the toolr that built it. `toolr self build-manifest` computes it from the types and features the
-plugin uses, so a plugin that sticks to long-standing features keeps loading on older toolr
-releases. A toolr whose own schema is `C` and whose oldest readable fragment schema is `F` treats a
-fragment that declares `M` like this:
+plugin uses, so a plugin that sticks to long-standing features stays loadable by future toolr
+releases that still read this shape.
+Fragments in this format need toolr 0.34.0 or newer.
+
+A toolr whose own schema is `C` and whose oldest readable fragment schema is `F` treats a fragment
+that declares `M` like this:
 
 | Fragment | Result |
 | --- | --- |
@@ -124,8 +127,8 @@ fragment that declares `M` like this:
 
 A skipped plugin doesn't break the CLI: local commands and other plugins keep working, and toolr
 prints `toolr: warning: skipping plugin <pkg>: ...` on stderr on every run (except for tab
-completion, `--quiet`, `project`, `self`, `init` and `--version`). The same happens to a plugin
-with a command that fails validation. Malformed JSON and the same command declared by two plugins
+completion, `--quiet`, `project`, `self`, `init`, `--version` and `-V`). The same happens to a plugin
+with a command whose argument fails validation. Malformed JSON and the same command declared by two plugins
 still fail the manifest build.
 
 ### Build-time checks
@@ -308,7 +311,8 @@ When multiple sources contribute commands with the same name:
   `package-data` (setuptools), `packages` (hatchling), or the
   equivalent in your build backend. Verify it's in the built wheel
   before publishing.
-- Pin a compatible `toolr` version in your package's dependencies.
+- Pin a compatible `toolr` version in your package's dependencies:
+  a plugin built with this format needs `toolr>=0.34.0`.
   A fragment is loaded only when its `toolr_schema_version` is in the
   range the installed toolr reads (see [Schema version](#schema-version)).
   There are no schema migrations: a fragment outside that range is

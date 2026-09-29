@@ -157,12 +157,12 @@ whose fragment is too old, or needs a newer toolr, and prints
 `toolr: warning: skipping plugin <pkg>: ...` on stderr on every run. The rest of the CLI, including
 your local commands, keeps working. Run `toolr self build-manifest` with this release and ship the
 result. toolr 0.33.0 and older abort the whole manifest merge on a fragment built by this release.
-That can't be fixed in binaries that already shipped, so upgrade toolr wherever the new plugin is
-installed.
+That can't be fixed in binaries that already shipped, so upgrade to toolr 0.34.0 or newer wherever
+the rebuilt plugin is installed.
 
 `toolr_schema_version` in a fragment is now the lowest toolr schema that can read it, computed by
 `toolr self build-manifest` from what the plugin uses. A plugin that uses only long-standing features
-keeps loading on older toolr releases that support this fragment shape. `toolr self build-manifest
+stays loadable by future toolr releases that still read this fragment shape. `toolr self build-manifest
 --schema-version` is removed, because the value is no longer chosen by hand.
 
 **Plugin authors: two build errors.** `toolr self build-manifest` now runs the same checks as the
@@ -173,6 +173,6 @@ path. The host's title and description win at merge.
 
 A local command that hides a plugin command with the same group and name still wins, but now warns
 (`toolr: warning: ... defines ci lint, hiding the one from <pkg>`) on every run instead of hiding it
-silently. Warnings don't print for tab completion, `--quiet`, `project`, `self`, `init` or
-`--version`. Choosing the winner in configuration is tracked in
+silently. Warnings don't print for tab completion, `--quiet`, `project`, `self`, `init`, `--version`
+or `-V`. Choosing the winner in configuration is tracked in
 [#522](https://github.com/s0undt3ch/ToolR/issues/522).
