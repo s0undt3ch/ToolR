@@ -136,36 +136,43 @@ Rejected:
   unknown-keyword build error, with a type hint in place of "did you mean":
   `` unknown `arg()` keyword `must_be_file`: use `toolr.types.FilePath` ``. `must_exist` points
   at `ResolvedPath`, and `must_be_dir` at `DirectoryPath`.
-- `PathConstraints` is no longer written to local manifests or third-party fragments.
+- `PathConstraints` goes entirely. It is not read or written, and there is no migration from it.
 
-### Compatibility with plugins built by older toolr
+There is no deprecation period, including for local code: toolr is pre-1.0, and the error names the
+fix.
 
-Plugin wheels ship a `toolr-manifest.json` fragment built at wheel-build time. An older toolr
-writes `path_constraints` into it. If the new binary simply ignores that field (there is no
-`deny_unknown_fields`), those plugin commands lose their checks without any warning.
+## Where the checks run
 
-So loading keeps a read-only fallback. When a fragment or manifest argument carries
-`path_constraints`, the loader turns it into the matching type:
+All checks run in the Rust binary. Each type gets its own clap value parser in
+`crates/toolr/src/value_parsers.rs`, and it runs while the CLI is parsed, before the Python runner
+starts. A bad path is a normal clap usage error. The binary sends the checked, canonical path as a
+string. The runner turns it into a `pathlib.Path` through msgspec.
 
-| Stored as | Loaded as |
-|---|---|
-| any path type + `must_be_dir` | `DirectoryPath` |
-| any path type + `must_be_file` | `FilePath` |
-| any path type + `must_exist` | `ResolvedPath` |
+The Python types carry no checks, because `NewType` is identity at runtime. Calling a command
+function directly, for example in a test built with `toolr.testing.make_context`, checks nothing.
+The docs say this.
 
-This changes behaviour in one way: a legacy constrained `Path` or `AbsolutePath` now reaches Python
-canonicalised rather than as typed. The check is kept, so that is the safer direction. The fallback
-goes at the 1.0 release together with the other "removed in 1.0" items. There is no
-`SCHEMA_VERSION` or `FRAGMENT_SCHEMA_VERSION` bump. The old field still reads, and new manifests
-simply leave it out.
+## Schema bump, enforced
 
-The fold also applies to an author's own cached manifest. A project whose `tools/` still says
-`arg(must_be_file=True)` keeps working from the cache until the next rebuild. The rebuild then fails
-with the unknown-keyword error and its type hint. There is no deprecation-warning period for local
-code: toolr is pre-1.0, and the error names the fix.
+`manifest::SCHEMA_VERSION` in `crates/toolr-core/src/manifest/model.rs` goes from 1 to 2. The
+`path_constraints` field goes away, and the argument types gain five new variants.
 
-An older binary reading a fragment that uses a new type fails on the unknown `SupportedType`
-variant. Any new type has always had this effect, and it is not new here.
+Today `load_manifest` accepts any version up to the current one, and freshness doesn't look at the
+version. So on its own a bump changes nothing. A cached v1 manifest would keep loading, and its
+`path_constraints` would be silently ignored. So the bump comes with enforcement: freshness treats
+`schema_version != SCHEMA_VERSION` as stale, and the next run rebuilds the cache. The user does
+nothing. If `tools/` still uses `arg(must_*)`, the rebuild fails with the unknown-keyword error.
+
+### Plugin fragments are unaffected
+
+`FRAGMENT_SCHEMA_VERSION` stays at 1. Fragments never carried `path_constraints` or any type
+information. `FragmentArgument` has only `name`, `kind`, `help`, `default`, `type_annotation` and
+`allowed_values`. `merge.rs` sets `resolved_type: None` and `path_constraints: None` on every plugin
+argument. The fragment format doesn't change, so bumping it would break every published plugin for
+nothing.
+
+As a result, the new path types, like every other `toolr.types` type, are **not enforced for plugin
+commands**. That gap already exists, and this design doesn't fix it. See "Found, out of scope".
 
 ## Known limit: non-literal defaults
 
@@ -173,6 +180,17 @@ variant. Any new type has always had this effect, and it is not new here.
 parser, so it is checked. `config: FilePath = Path("pyproject.toml")` is stored as the `<expr>`
 sentinel, and the CLI then applies no default (`crates/toolr/src/cli.rs`, `ArgumentKind::Optional`).
 Python's own default then applies, unchecked. The docs say this. Fixing it is out of scope.
+
+## Found, out of scope
+
+- **Plugin arguments carry no type information.** Fragments record no `SupportedType`, so plugin
+  commands get no clap type checking at all: no path checks, and no `int`, `UUID` or `Email`
+  parsing. Fixing this needs a fragment schema v2, and that is when plugin authors would have to
+  rebuild. File it as its own issue.
+- **`parse_fragment` comment is wrong.** It says only the current version is accepted. The code
+  accepts every version from 1 to current. Harmless while there is only v1, but the comment
+  should match the code.
+- **Windows `canonicalize()` returns `\\?\` paths.** This is already in the non-goals.
 
 ## Changes
 
@@ -184,9 +202,11 @@ Rust:
 - `crates/toolr-core/src/parser/types/resolve.rs`: map the five names.
 - `crates/toolr/src/value_parsers.rs`: replace the `PathConstraints` knob on `path_parser` with a
   per-type check enum. Set completion hints from the type.
-- `crates/toolr-core/src/parser/types/path_constraints.rs` and `arg_keywords.rs`: remove the
-  keyword extraction. Keep a deserialise-only `PathConstraints` and the load-time fold into a type.
-- `crates/toolr-core/src/manifest/model.rs`: `path_constraints` becomes read-only, skipped on write.
+- `crates/toolr-core/src/parser/types/path_constraints.rs`: delete. `arg_keywords.rs`: drop the
+  three keywords and add their type hints to the unknown-keyword error.
+- `crates/toolr-core/src/manifest/model.rs`: drop `path_constraints` and bump `SCHEMA_VERSION` to 2.
+- `crates/toolr-core/src/complete/freshness.rs`: treat a manifest schema mismatch as stale.
+- `crates/toolr-core/src/third_party/merge.rs`: drop the `path_constraints: None` line.
 - `crates/toolr/Cargo.toml`: add `libc.workspace = true`, for `access(2)` on Unix.
 - `crates/xtask/src/build_skill_refs/types.rs` and `mod.rs`: remove `path_constraints_snippet` and
   its use of `PathConstraints::catalogue()`. Also remove the tests that pin the keyword table, in
@@ -207,11 +227,12 @@ Docs, skills and notes:
 
 - `docs/writing-commands/files/path-constraints.md` becomes the path types page.
   `annotations.md` and `known-bugs.md` drop the keyword text. The example in `arguments.md` moves
-  to the new types. The `path_constraints` entry in `docs/internals/manifest.md` becomes
-  "legacy, read only".
+  to the new types. `docs/internals/manifest.md` drops `path_constraints` and documents schema
+  version 2.
 - `cargo xtask build-skill-refs`: regenerate the type tables. Check the prose in
   `skills/toolr-command-authoring/` by hand for `must_*` mentions.
-- `UNRELEASED.md`: the new types; the removal of `arg(must_*)` with a migration table; and the
+- `UNRELEASED.md`: the new types; the removal of `arg(must_*)` with a migration table; the local
+  manifest schema bump, which triggers an automatic rebuild; and the
   typing-level break, where a bare `Path` no longer type-checks where `AbsolutePath` or
   `ResolvedPath` is expected. This makes the release a minor one.
 
@@ -222,7 +243,7 @@ Docs, skills and notes:
   `#[cfg]`-gated variants on Windows.
 - Parser tests that resolve each name bare, as `list[T]`, as `T | None` and as `*args: T`, shaped
   like real annotations (see the regression-test rule in `CLAUDE.md`).
-- The legacy fold: a fragment carrying each `path_constraints` shape loads as the right type.
+- Schema enforcement: a v1 local manifest is reported stale and gets rebuilt.
 - Unknown-keyword error: each of the three removed keywords produces its type hint.
 - `crates/toolr/tests/`: an `assert_cmd` end-to-end run per type, for one accept and one reject.
 - pytest: the command body receives a `pathlib.Path` for every type, including in `list[T]`.
