@@ -79,8 +79,11 @@ each `non-exhaustive patterns: … not covered` error names the next `match` to 
 3. `SupportedType::kind()`: map it to a new kind, and add that kind to the
    `supported_type_kinds!` list at the position its table row should take.
 4. `SupportedTypeKind::representative()`: return a value of the new variant.
-5. `apply_value_parser` in `crates/toolr/src/value_parsers.rs`: choose the clap value parser.
-6. `SupportedType::is_path()`: say whether clap stores the value as a `PathBuf`. For a path type,
+5. Bump `SCHEMA_VERSION` in `crates/toolr-core/src/manifest/model.rs` and return the new value from
+   the new kind's `SupportedTypeKind::since_schema()`. `since_schema_golden_tables` is expected to
+   fail. Its new row is the new `SCHEMA_VERSION`, not whatever makes the test pass.
+6. `apply_value_parser` in `crates/toolr/src/value_parsers.rs`: choose the clap value parser.
+7. `SupportedType::is_path()`: say whether clap stores the value as a `PathBuf`. For a path type,
    also add its `(PathForm, PathCheck)` to `path_rule` in `crates/toolr/src/value_parsers.rs`.
    A test fails if the two disagree.
 

@@ -439,6 +439,41 @@ impl SupportedTypeKind {
     }
 }
 
+impl SupportedTypeKind {
+    /// The schema this kind arrived in, so a fragment using it turns away older readers. A new
+    /// kind returns the bumped `SCHEMA_VERSION` (see "Adding a supported type" in `CONTRIBUTING.md`).
+    pub fn since_schema(self) -> u32 {
+        match self {
+            SupportedTypeKind::Int
+            | SupportedTypeKind::Float
+            | SupportedTypeKind::Bool
+            | SupportedTypeKind::Str
+            | SupportedTypeKind::Path
+            | SupportedTypeKind::AbsolutePath
+            | SupportedTypeKind::NewPath
+            | SupportedTypeKind::ResolvedPath
+            | SupportedTypeKind::FilePath
+            | SupportedTypeKind::DirectoryPath
+            | SupportedTypeKind::ExecutablePath
+            | SupportedTypeKind::WritableDirectoryPath
+            | SupportedTypeKind::DateTime
+            | SupportedTypeKind::Date
+            | SupportedTypeKind::Time
+            | SupportedTypeKind::Uuid
+            | SupportedTypeKind::Ipv4
+            | SupportedTypeKind::Ipv6
+            | SupportedTypeKind::Email
+            | SupportedTypeKind::Version
+            | SupportedTypeKind::Count
+            | SupportedTypeKind::Literal
+            | SupportedTypeKind::Enum
+            | SupportedTypeKind::List
+            | SupportedTypeKind::Tuple
+            | SupportedTypeKind::Optional => 2,
+        }
+    }
+}
+
 /// One row of the "Supported types" doc table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypeDoc {

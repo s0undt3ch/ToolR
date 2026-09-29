@@ -9,6 +9,19 @@ use crate::parser::SupportedType;
 pub const SCHEMA_VERSION: u32 = 2;
 // endregion: SkillRefSchemaVersion
 
+/// The schema at which the fragment's JSON shape last changed in a way an older reader would
+/// misread. Bump it with `SCHEMA_VERSION` on any non-additive change to a fragment type.
+pub const FRAGMENT_SHAPE_SCHEMA: u32 = 2;
+
+/// The oldest fragment schema this reader parses; below the shape floor only while
+/// `parse_fragment` migrates the older shape.
+pub const MIN_READABLE_FRAGMENT_SCHEMA: u32 = 2;
+
+const _: () = assert!(
+    MIN_READABLE_FRAGMENT_SCHEMA <= FRAGMENT_SHAPE_SCHEMA
+        && FRAGMENT_SHAPE_SCHEMA <= SCHEMA_VERSION
+);
+
 // region: SkillRefManifest
 /// Top-level manifest document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,6 +273,31 @@ pub enum ArgumentKind {
     /// Distinct from `Positional` (always required) and `VarPositional`
     /// (zero-or-more, trailing/greedy).
     OptionalPositional,
+}
+
+impl Nargs {
+    /// The schema this variant arrived in; an old reader can't deserialise a newer one.
+    pub fn since_schema(self) -> u32 {
+        match self {
+            Nargs::Plus | Nargs::Star | Nargs::Fixed(_) => 2,
+        }
+    }
+}
+
+impl ArgumentKind {
+    /// The schema this variant arrived in; an old reader can't deserialise a newer one.
+    pub fn since_schema(self) -> u32 {
+        match self {
+            ArgumentKind::Positional
+            | ArgumentKind::Optional
+            | ArgumentKind::Flag
+            | ArgumentKind::Repeated
+            | ArgumentKind::VarPositional
+            | ArgumentKind::Count
+            | ArgumentKind::FixedArity
+            | ArgumentKind::OptionalPositional => 2,
+        }
+    }
 }
 
 impl Argument {
