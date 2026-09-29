@@ -143,6 +143,11 @@ goes at the 1.0 release together with the other "removed in 1.0" items. There is
 `SCHEMA_VERSION` or `FRAGMENT_SCHEMA_VERSION` bump. The old field still reads, and new manifests
 simply leave it out.
 
+The fold also applies to an author's own cached manifest. A project whose `tools/` still says
+`arg(must_be_file=True)` keeps working from the cache until the next rebuild. The rebuild then fails
+with the unknown-keyword error and its type hint. There is no deprecation-warning period for local
+code: toolr is pre-1.0, and the error names the fix.
+
 An older binary reading a fragment that uses a new type fails on the unknown `SupportedType`
 variant. Any new type has always had this effect, and it is not new here.
 
@@ -166,6 +171,12 @@ Rust:
 - `crates/toolr-core/src/parser/types/path_constraints.rs` and `arg_keywords.rs`: remove the
   keyword extraction. Keep a deserialise-only `PathConstraints` and the load-time fold into a type.
 - `crates/toolr-core/src/manifest/model.rs`: `path_constraints` becomes read-only, skipped on write.
+- `crates/toolr/Cargo.toml`: add `libc.workspace = true`, for `access(2)` on Unix.
+- `crates/xtask/src/build_skill_refs/types.rs` and `mod.rs`: remove `path_constraints_snippet` and
+  its use of `PathConstraints::catalogue()`. Also remove the tests that pin the keyword table, in
+  that file and in `crates/xtask/tests/coverage.rs`. The new types reach the generated tables
+  through `SupportedType::doc()`. Without this change, `cargo xtask build-skill-refs --check`
+  breaks.
 
 Python:
 
@@ -179,7 +190,9 @@ Python:
 Docs, skills and notes:
 
 - `docs/writing-commands/files/path-constraints.md` becomes the path types page.
-  `annotations.md` and `known-bugs.md` drop the keyword text.
+  `annotations.md` and `known-bugs.md` drop the keyword text. The example in `arguments.md` moves
+  to the new types. The `path_constraints` entry in `docs/internals/manifest.md` becomes
+  "legacy, read only".
 - `cargo xtask build-skill-refs`: regenerate the type tables. Check the prose in
   `skills/toolr-command-authoring/` by hand for `must_*` mentions.
 - `UNRELEASED.md`: the new types; the removal of `arg(must_*)` with a migration table; and the
