@@ -7,16 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::parser::{
-    commands::{
-        detect_name_conflicts, extract_commands, format_missing_docstrings, missing_docstrings,
-        CommandNameConflict, MissingDocstring,
-    },
-    groups::extract_groups,
-    symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
-    types::{SourcesImports, TypeImports, TypeResolutionError},
-};
-use crate::parser::{list_python_files, module_path_for_prefix, parse_python_file};
+use crate::parser::build::build_commands;
+use crate::parser::BuildError;
 use crate::third_party::{FragmentArgument, FragmentCommand, FragmentGroup, ManifestFragment};
 
 /// Error type for `build_third_party_fragment`.
@@ -28,47 +20,8 @@ pub enum BuildFragmentError {
     MissingSourceDir { path: PathBuf },
     #[error("package `{package}` declares no toolr commands - nothing to write")]
     EmptyPackage { package: String },
-    #[error("parse error in {path}: {source}")]
-    Parse {
-        path: PathBuf,
-        #[source]
-        source: anyhow::Error,
-    },
-    #[error("invalid parameter declarations ({count}):\n{details}", count = .0.len(), details = format_type_errors(.0))]
-    UnsupportedTypes(Vec<TypeResolutionError>),
-    #[error("commands without a docstring ({count}):\n{details}", count = .0.len(), details = format_missing_docstrings(.0))]
-    MissingDocstrings(Vec<MissingDocstring>),
-    #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
-    ConflictingCommandName(Vec<CommandNameConflict>),
-}
-
-fn format_type_errors(errors: &[TypeResolutionError]) -> String {
-    let mut s = String::new();
-    for (i, err) in errors.iter().enumerate() {
-        if i > 0 {
-            s.push('\n');
-        }
-        use std::fmt::Write as _;
-        let _ = write!(&mut s, "  - {err}");
-    }
-    s
-}
-
-fn format_name_conflicts(conflicts: &[CommandNameConflict]) -> String {
-    let mut s = String::new();
-    for (i, c) in conflicts.iter().enumerate() {
-        if i > 0 {
-            s.push('\n');
-        }
-        use std::fmt::Write as _;
-        let _ = write!(
-            &mut s,
-            "  - {}::{}: command name passed both positionally and via `name=`. \
-             Pass it one way only, e.g. `command(name=\"…\")`.",
-            c.module, c.function,
-        );
-    }
-    s
+    #[error(transparent)]
+    Build(#[from] BuildError),
 }
 
 /// Build a `ManifestFragment` for `package_name` by AST-walking
@@ -90,98 +43,14 @@ pub fn build_third_party_fragment(
         });
     }
 
-    // Pass 1: cross-file enum / alias / arg-section tables.
-    let py_files = list_python_files(source_dir);
-    let mut enums = EnumTable::default();
-    let mut aliases = TypeAliasTable::default();
-    let mut sections = ArgSectionTable::default();
-    let mut all_imports: std::collections::HashMap<String, ImportTable> =
-        std::collections::HashMap::new();
-    for path in &py_files {
-        let module = parse_python_file(path).map_err(|e| BuildFragmentError::Parse {
-            path: path.clone(),
-            source: e,
-        })?;
-        let module_path = module_path_for_prefix(source_dir, path, package_name);
-        let is_package = path.file_stem().map(|s| s == "__init__").unwrap_or(false);
-        all_imports.insert(
-            module_path.clone(),
-            ImportTable::from_module(&module, &module_path, is_package),
-        );
-        enums.merge(EnumTable::from_module(&module, &module_path));
-        aliases.merge(TypeAliasTable::from_module_at(&module, &module_path));
-        sections.merge(ArgSectionTable::from_module(&module));
-    }
+    let (mut all_groups, mut all_commands) = build_commands(source_dir, package_name)?;
 
-    // Pass 2: groups + commands.
-    let mut all_groups: Vec<crate::manifest::Group> = Vec::new();
-    let mut all_commands: Vec<crate::manifest::Command> = Vec::new();
-    let mut seen_groups: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut global_vars: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-    let mut type_errors: Vec<TypeResolutionError> = Vec::new();
-    let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
-
-    for path in &py_files {
-        let module = parse_python_file(path).map_err(|e| BuildFragmentError::Parse {
-            path: path.clone(),
-            source: e,
-        })?;
-        let module_path = module_path_for_prefix(source_dir, path, package_name);
-        let module_doc = module_docstring(&module);
-        name_conflicts.extend(detect_name_conflicts(&module, &module_path));
-        let bindings = extract_groups(&module, &module_doc, &global_vars);
-        let type_imports = TypeImports::from_module(&module);
-        let sources_imports = SourcesImports::from_module(&module);
-        let consts = crate::parser::symbols::ConstTable::from_module(&module);
-        let commands = extract_commands(
-            &module,
-            &module_path,
-            &bindings,
-            &enums,
-            &all_imports,
-            &consts,
-            &type_imports,
-            &sources_imports,
-            &aliases,
-            &sections,
-            &global_vars,
-            &mut type_errors,
-        );
-        for binding in &bindings {
-            global_vars.insert(binding.var.clone(), binding.group.full_path());
-        }
-        for binding in bindings {
-            if seen_groups.insert(binding.group.full_path()) {
-                all_groups.push(binding.group);
-            }
-        }
-        all_commands.extend(commands);
-    }
-
-    if !name_conflicts.is_empty() {
-        return Err(BuildFragmentError::ConflictingCommandName(name_conflicts));
-    }
-
-    if !type_errors.is_empty() {
-        return Err(BuildFragmentError::UnsupportedTypes(type_errors));
-    }
-
-    // Filter: only keep commands whose `module` belongs to package_name.
-    let prefix_dot = format!("{package_name}.");
-    all_commands.retain(|c| c.module == package_name || c.module.starts_with(&prefix_dot));
-
-    // Derive surviving groups from surviving commands.
+    // The group filter stays until the v2 fragment shape replaces it.
     let surviving_group_names: std::collections::HashSet<&str> =
         all_commands.iter().map(|c| c.group.as_str()).collect();
     all_groups.retain(|g| surviving_group_names.contains(g.full_path().as_str()));
 
-    let undocumented = missing_docstrings(&all_commands);
-    if !undocumented.is_empty() {
-        return Err(BuildFragmentError::MissingDocstrings(undocumented));
-    }
-
-    if all_groups.is_empty() && all_commands.is_empty() {
+    if all_commands.is_empty() {
         return Err(BuildFragmentError::EmptyPackage {
             package: package_name.to_string(),
         });
@@ -242,20 +111,10 @@ pub fn serialise_fragment(fragment: &ManifestFragment) -> Result<String, serde_j
     Ok(out)
 }
 
-fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
-    use ruff_python_ast::Stmt;
-    let Some(Stmt::Expr(e)) = module.body.first() else {
-        return String::new();
-    };
-    if let ruff_python_ast::Expr::StringLiteral(s) = e.value.as_ref() {
-        return s.value.to_str().to_string();
-    }
-    String::new()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::BuildError;
     use tempfile::TempDir;
 
     fn write(tmp: &Path, name: &str, contents: &str) {
@@ -294,7 +153,7 @@ def hello(ctx: Context) -> None:
 "#,
         );
         let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
-        let BuildFragmentError::MissingDocstrings(missing) = &err else {
+        let BuildFragmentError::Build(BuildError::MissingDocstrings(missing)) = &err else {
             panic!("expected MissingDocstrings, got {err}");
         };
         assert_eq!(missing.len(), 1);
@@ -304,6 +163,71 @@ def hello(ctx: Context) -> None:
             err.to_string().starts_with("commands without a docstring (1):"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn rejects_a_plugin_command_in_an_undeclared_group() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("mypkg");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "commands.py",
+            r#"from toolr import command_group
+
+grp = command_group("plug", "Plugin", "Plugin commands.")
+
+
+@command(group="plgu")
+def hello(ctx):
+    """Hello."""
+    pass
+"#,
+        );
+        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.to_lowercase().contains("did you mean"), "got: {msg}");
+        assert!(msg.contains("plug"), "got: {msg}");
+    }
+
+    #[test]
+    fn rejects_a_plugin_with_bad_positional_arity() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("mypkg");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "commands.py",
+            r#""""Bad."""
+group = command_group("x", "X", docstring=__doc__)
+
+@group.command
+def f(ctx, a: str | None, b: str | None) -> None:
+    """Bad.
+
+    Args:
+        a: first.
+        b: second.
+    """
+"#,
+        );
+        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("invalid positional arity"), "got: {msg}");
+    }
+
+    #[test]
+    fn plugin_with_only_empty_groups_is_empty() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("mypkg");
+        write(&pkg, "__init__.py", "");
+        write(
+            &pkg,
+            "commands.py",
+            "from toolr import command_group\n\ngrp = command_group(\"plug\", \"Plugin\", \"Plugin commands.\")\n",
+        );
+        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        assert!(matches!(err, BuildFragmentError::EmptyPackage { .. }), "got: {err:?}");
     }
 
     #[test]
@@ -486,10 +410,10 @@ def subcmd(ctx):
         write(&pkg, "bad.py", "def broken(\n");
         let err = build_third_party_fragment(&pkg, "broken", 1).unwrap_err();
         match err {
-            BuildFragmentError::Parse { path, .. } => {
-                assert!(path.ends_with("bad.py"), "got: {}", path.display());
+            BuildFragmentError::Build(BuildError::Build(e)) => {
+                assert!(e.to_string().contains("bad.py"), "got: {e}");
             }
-            other => panic!("expected Parse, got {other:?}"),
+            other => panic!("expected Build(Build), got {other:?}"),
         }
     }
 
@@ -514,7 +438,10 @@ def do_thing(ctx):
         let err = build_third_party_fragment(&pkg, "conflictpkg", 1).unwrap_err();
         let msg = err.to_string();
         assert!(
-            matches!(err, BuildFragmentError::ConflictingCommandName(_)),
+            matches!(
+                err,
+                BuildFragmentError::Build(BuildError::ConflictingCommandName(_))
+            ),
             "got: {err:?}"
         );
         assert!(
