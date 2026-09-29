@@ -602,6 +602,7 @@ fn empty_manifest_for_completion() -> Manifest {
         toolr_version: String::new(),
         groups: Vec::new(),
         commands: Vec::new(),
+        plugin_warnings: Vec::new(),
     }
 }
 
@@ -706,6 +707,7 @@ mod tests {
             toolr_version: String::new(),
             groups: Vec::new(),
             commands: Vec::new(),
+            plugin_warnings: Vec::new(),
         }
     }
 
@@ -813,6 +815,7 @@ mod path_lookup_tests {
             toolr_version: String::new(),
             groups: vec![],
             commands,
+            plugin_warnings: Vec::new(),
         }
     }
 

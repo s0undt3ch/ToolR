@@ -1,8 +1,11 @@
+use std::path::PathBuf;
+
 use super::glob::glob_manifests;
 use super::model::*;
 use crate::manifest::{
-    ArgMetadata, Argument, ArgumentKind, Command, FRAGMENT_SHAPE_SCHEMA, Group, Manifest, Nargs,
-    Origin, SCHEMA_VERSION,
+    ArgMetadata, Argument, ArgumentKind, Command, FRAGMENT_SHAPE_SCHEMA, Group,
+    MIN_READABLE_FRAGMENT_SCHEMA, Manifest, Nargs, Origin, PluginWarning, PluginWarningKind,
+    SCHEMA_VERSION,
 };
 use crate::parser::SupportedType;
 use crate::parser::types::SupportedTypeKind;
@@ -70,7 +73,7 @@ fn glob_returns_empty_when_no_site_packages() {
     assert!(hits.is_empty());
 }
 
-use super::parse::{ThirdPartyError, parse_fragment};
+use super::parse::{ParsedFragment, ThirdPartyError, parse_fragment};
 
 fn write_fragment(tmp: &TempDir, pkg: &str, contents: &str) -> std::path::PathBuf {
     let site = tmp
@@ -85,22 +88,109 @@ fn write_fragment(tmp: &TempDir, pkg: &str, contents: &str) -> std::path::PathBu
     path
 }
 
+fn loaded(parsed: ParsedFragment) -> ManifestFragment {
+    match parsed {
+        ParsedFragment::Loaded(fragment, _) => fragment,
+        ParsedFragment::Skipped(w) => panic!("expected Loaded, got Skipped: {}", w.message),
+    }
+}
+
+fn skipped(parsed: ParsedFragment) -> PluginWarning {
+    match parsed {
+        ParsedFragment::Skipped(w) => w,
+        ParsedFragment::Loaded(f, _) => panic!("expected Skipped, got Loaded: {}", f.package),
+    }
+}
+
 #[test]
-fn parse_accepts_minimal_v1_fragment() {
+fn fragment_at_minimum_schema_loads() {
     let tmp = TempDir::new().unwrap();
     let path = write_fragment(
         &tmp,
-        "my_pkg",
+        "demo",
+        &format!(
+            r#"{{
+                "toolr_schema_version": {MIN_READABLE_FRAGMENT_SCHEMA},
+                "package": "demo",
+                "groups": [{{"name": "ci", "title": "CI", "origin": "third_party"}}],
+                "commands": [{{
+                    "name": "lint", "group": "ci",
+                    "module": "demo.ci", "function": "lint",
+                    "arguments": [], "origin": "third_party"
+                }}]
+            }}"#
+        ),
+    );
+    let parsed = parse_fragment(&path).expect("should parse");
+    let ParsedFragment::Loaded(frag, loaded_from) = parsed else {
+        panic!("expected Loaded, got {parsed:?}");
+    };
+    assert_eq!(loaded_from, path);
+    assert_eq!(frag.toolr_schema_version, MIN_READABLE_FRAGMENT_SCHEMA);
+    assert_eq!(frag.package, "demo");
+    assert_eq!(frag.groups.len(), 1);
+    assert_eq!(frag.commands.len(), 1);
+}
+
+#[test]
+fn newer_fragment_is_skipped_with_upgrade_hint() {
+    let tmp = TempDir::new().unwrap();
+    let newer = SCHEMA_VERSION + 1;
+    let path = write_fragment(
+        &tmp,
+        "demo",
+        &format!(r#"{{"toolr_schema_version": {newer}, "package": "demo"}}"#),
+    );
+    let warning = skipped(parse_fragment(&path).expect("a newer fragment is not an error"));
+    assert_eq!(warning.kind, PluginWarningKind::Skipped);
+    assert_eq!(warning.package, "demo");
+    assert_eq!(warning.path, path);
+    assert_eq!(
+        warning.message,
+        format!(
+            "skipping plugin demo: needs toolr schema {}, this toolr supports {}. Upgrade toolr.",
+            SCHEMA_VERSION + 1,
+            SCHEMA_VERSION
+        )
+    );
+}
+
+#[test]
+fn v1_fragment_is_skipped_with_rebuild_hint() {
+    // The shape a real v1 fragment has: no `origin`, so a typed deserialise would fail. The
+    // version check must run on the raw value first.
+    let tmp = TempDir::new().unwrap();
+    let path = write_fragment(
+        &tmp,
+        "demo",
         r#"{
             "toolr_schema_version": 1,
-            "package": "my_pkg",
-            "groups": [],
-            "commands": []
+            "package": "demo",
+            "groups": [{"name": "ci", "title": "CI"}],
+            "commands": [{"name": "lint", "group": "ci", "module": "demo.ci",
+                          "function": "lint", "arguments": []}]
         }"#,
     );
-    let frag = parse_fragment(&path).expect("should parse");
-    assert_eq!(frag.toolr_schema_version, 1);
-    assert_eq!(frag.package, "my_pkg");
+    let warning = skipped(parse_fragment(&path).expect("a v1 fragment is not an error"));
+    assert_eq!(warning.kind, PluginWarningKind::Skipped);
+    assert_eq!(
+        warning.message,
+        "skipping plugin demo: built with toolr schema 1, this toolr needs >= 2. \
+         Rebuild the plugin with toolr >= 0.34.0."
+    );
+}
+
+#[test]
+fn skipped_fragment_without_package_key_is_named_after_its_directory() {
+    let tmp = TempDir::new().unwrap();
+    let path = write_fragment(&tmp, "nameless", r#"{"toolr_schema_version": 1}"#);
+    let warning = skipped(parse_fragment(&path).unwrap());
+    assert_eq!(warning.package, "nameless");
+    assert!(
+        warning.message.starts_with("skipping plugin nameless: "),
+        "got: {}",
+        warning.message
+    );
 }
 
 #[test]
@@ -113,25 +203,6 @@ fn parse_rejects_missing_version_key() {
     );
     let err = parse_fragment(&path).expect_err("should reject");
     assert!(matches!(err, ThirdPartyError::MissingVersion { .. }));
-}
-
-#[test]
-fn parse_rejects_unknown_future_version() {
-    let tmp = TempDir::new().unwrap();
-    let path = write_fragment(
-        &tmp,
-        "future_pkg",
-        r#"{"toolr_schema_version": 999, "package": "future_pkg"}"#,
-    );
-    let err = parse_fragment(&path).expect_err("should reject");
-    assert!(matches!(
-        err,
-        ThirdPartyError::UnknownVersion { version: 999, .. }
-    ));
-    // The message must tell the user to upgrade toolr.
-    let msg = err.to_string();
-    assert!(msg.contains("999"), "got: {msg}");
-    assert!(msg.contains("Upgrade toolr"), "got: {msg}");
 }
 
 #[test]
@@ -152,8 +223,7 @@ fn parse_rejects_zero_or_below_version_as_missing() {
 
 #[test]
 fn parse_accepts_exactly_current_version() {
-    // A fragment declaring the current SCHEMA_VERSION parses unchanged
-    // (there is no migration step).
+    // A fragment declaring the current SCHEMA_VERSION parses unchanged.
     let tmp = TempDir::new().unwrap();
     let path = write_fragment(
         &tmp,
@@ -167,7 +237,7 @@ fn parse_accepts_exactly_current_version() {
             }}"#
         ),
     );
-    let frag = parse_fragment(&path).expect("current version should parse");
+    let frag = loaded(parse_fragment(&path).expect("current version should parse"));
     assert_eq!(frag.toolr_schema_version, SCHEMA_VERSION);
     assert_eq!(frag.package, "cur_pkg");
 }
@@ -267,7 +337,19 @@ fn empty_base() -> Manifest {
         toolr_version: String::new(),
         groups: vec![],
         commands: vec![],
+        plugin_warnings: Vec::new(),
     }
+}
+
+/// Pairs each fragment with the file it would have been read from.
+fn from_files(fragments: Vec<ManifestFragment>) -> Vec<(ManifestFragment, PathBuf)> {
+    fragments
+        .into_iter()
+        .map(|f| {
+            let path = PathBuf::from(format!("site-packages/{}/toolr-manifest.json", f.package));
+            (f, path)
+        })
+        .collect()
 }
 
 /// A fragment group for a dotted `full_path` such as `docker.image`.
@@ -323,7 +405,7 @@ fn sample_fragment(pkg: &str, group: &str, name: &str) -> ManifestFragment {
 fn merge_adds_groups_and_commands_from_fragments() {
     let merged = merge_into_manifest(
         empty_base(),
-        vec![sample_fragment("pkg_a", "deploy", "rollout")],
+        from_files(vec![sample_fragment("pkg_a", "deploy", "rollout")]),
     )
     .unwrap();
     assert_eq!(merged.groups.len(), 1);
@@ -356,20 +438,25 @@ fn merge_skips_third_party_command_when_local_already_defines_it() {
         dispatched_from: None,
         is_dispatcher: false,
     });
-    let merged =
-        merge_into_manifest(base, vec![sample_fragment("pkg_a", "deploy", "rollout")]).unwrap();
+    let merged = merge_into_manifest(
+        base,
+        from_files(vec![sample_fragment("pkg_a", "deploy", "rollout")]),
+    )
+    .unwrap();
     assert_eq!(merged.commands.len(), 1);
     assert_eq!(merged.commands[0].summary, "local");
+    let kinds: Vec<_> = merged.plugin_warnings.iter().map(|w| w.kind).collect();
+    assert_eq!(kinds, [PluginWarningKind::Shadowed]);
 }
 
 #[test]
 fn merge_errors_on_third_party_to_third_party_collision() {
     let err = merge_into_manifest(
         empty_base(),
-        vec![
+        from_files(vec![
             sample_fragment("pkg_a", "deploy", "rollout"),
             sample_fragment("pkg_b", "deploy", "rollout"),
-        ],
+        ]),
     )
     .expect_err("should collide");
     let msg = err.to_string();
@@ -390,7 +477,7 @@ fn repeated_tuple_argument_round_trips_through_merge() {
 
     let json = serde_json::to_string(&frag).unwrap();
     let back: ManifestFragment = serde_json::from_str(&json).unwrap();
-    let merged = merge_into_manifest(empty_base(), vec![back]).unwrap();
+    let merged = merge_into_manifest(empty_base(), from_files(vec![back])).unwrap();
     assert_eq!(merged.commands[0].arguments, [pair]);
 }
 
@@ -401,7 +488,7 @@ fn merge_forces_third_party_origin_and_clears_dispatch_flags() {
     frag.commands[0].origin = Origin::Static;
     frag.commands[0].dispatched_from = Some("argparse:django".into());
     frag.commands[0].is_dispatcher = true;
-    let merged = merge_into_manifest(empty_base(), vec![frag]).unwrap();
+    let merged = merge_into_manifest(empty_base(), from_files(vec![frag])).unwrap();
     assert_eq!(merged.groups[0].origin, Origin::ThirdParty);
     let cmd = &merged.commands[0];
     assert_eq!(cmd.origin, Origin::ThirdParty);
@@ -415,7 +502,7 @@ fn argument_kind_propagates_through_merge() {
     frag.commands[0]
         .arguments
         .push(plain_argument("force", ArgumentKind::Flag));
-    let merged = merge_into_manifest(empty_base(), vec![frag]).unwrap();
+    let merged = merge_into_manifest(empty_base(), from_files(vec![frag])).unwrap();
     assert_eq!(merged.commands[0].arguments.len(), 1);
     assert_eq!(merged.commands[0].arguments[0].kind, ArgumentKind::Flag);
 }
@@ -454,7 +541,7 @@ fn discover_and_merge_picks_up_all_valid_fragments() {
         (
             "pkg_a",
             r#"{
-                "toolr_schema_version": 1,
+                "toolr_schema_version": 2,
                 "package": "pkg_a",
                 "groups": [{"name": "deploy", "title": "Deploy", "description": "", "origin": "third_party"}],
                 "commands": [{
@@ -468,7 +555,7 @@ fn discover_and_merge_picks_up_all_valid_fragments() {
         (
             "pkg_b",
             r#"{
-                "toolr_schema_version": 1,
+                "toolr_schema_version": 2,
                 "package": "pkg_b",
                 "groups": [{"name": "lint", "title": "Lint", "description": "", "origin": "third_party"}],
                 "commands": [{
@@ -492,7 +579,10 @@ fn discover_and_merge_picks_up_all_valid_fragments() {
 #[test]
 fn discover_and_merge_aborts_on_malformed_fragment() {
     let tmp = setup_fake_venv(&[
-        ("pkg_ok", r#"{"toolr_schema_version": 1, "package": "pkg_ok"}"#),
+        (
+            "pkg_ok",
+            r#"{"toolr_schema_version": 2, "package": "pkg_ok"}"#,
+        ),
         ("pkg_bad", "not valid json at all"),
     ]);
     let err = discover_and_merge(tmp.path(), empty_base()).expect_err("should abort");
@@ -529,8 +619,11 @@ fn static_group(name: &str, parent: Option<&str>) -> Group {
 fn merge_keeps_same_leaf_groups_under_different_parents() {
     let mut base = empty_base();
     base.groups.push(static_group("image", Some("ci")));
-    let merged =
-        merge_into_manifest(base, vec![sample_fragment("pkg_a", "docker.image", "build")]).unwrap();
+    let merged = merge_into_manifest(
+        base,
+        from_files(vec![sample_fragment("pkg_a", "docker.image", "build")]),
+    )
+    .unwrap();
     let paths: Vec<String> = merged.groups.iter().map(Group::full_path).collect();
     assert_eq!(paths, ["ci.image", "docker.image"]);
 }
@@ -539,7 +632,184 @@ fn merge_keeps_same_leaf_groups_under_different_parents() {
 fn merge_dedups_fragment_group_against_nested_base_group_by_full_path() {
     let mut base = empty_base();
     base.groups.push(static_group("image", Some("docker")));
-    let merged =
-        merge_into_manifest(base, vec![sample_fragment("pkg_a", "docker.image", "build")]).unwrap();
+    let merged = merge_into_manifest(
+        base,
+        from_files(vec![sample_fragment("pkg_a", "docker.image", "build")]),
+    )
+    .unwrap();
     assert_eq!(merged.groups.len(), 1);
+}
+
+/// A v2 fragment for `pkg` whose `commands` JSON is spliced in verbatim.
+fn v2_fragment_json(pkg: &str, groups: &str, commands: &str) -> String {
+    format!(
+        r#"{{"toolr_schema_version": 2, "package": "{pkg}", "groups": {groups}, "commands": {commands}}}"#
+    )
+}
+
+#[test]
+fn bad_command_skips_the_whole_plugin() {
+    let fragment = v2_fragment_json(
+        "demo",
+        r#"[{"name": "ci", "title": "CI", "origin": "third_party"}]"#,
+        r#"[
+            {"name": "lint", "group": "ci", "module": "demo.ci", "function": "lint",
+             "arguments": [], "origin": "third_party"},
+            {"name": "pair", "group": "ci", "module": "demo.ci", "function": "pair",
+             "arguments": [{"name": "values", "kind": "fixed_arity"}],
+             "origin": "third_party"}
+        ]"#,
+    );
+    let tmp = setup_fake_venv(&[("demo", &fragment)]);
+    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    assert!(merged.groups.is_empty(), "groups: {:?}", merged.groups);
+    assert!(
+        merged.commands.is_empty(),
+        "commands: {:?}",
+        merged.commands
+    );
+    assert_eq!(merged.plugin_warnings.len(), 1);
+    let warning = &merged.plugin_warnings[0];
+    assert_eq!(warning.kind, PluginWarningKind::Skipped);
+    assert_eq!(warning.package, "demo");
+    assert!(
+        warning.message.starts_with("skipping plugin demo: ")
+            && warning.message.contains("fixed_arity"),
+        "got: {}",
+        warning.message
+    );
+}
+
+fn local_command(group: &str, name: &str, module: &str) -> Command {
+    Command {
+        name: name.into(),
+        group: group.into(),
+        module: module.into(),
+        function: name.replace('-', "_"),
+        summary: "local".into(),
+        description: String::new(),
+        arguments: vec![],
+        origin: Origin::Static,
+        dispatched_from: None,
+        is_dispatcher: false,
+    }
+}
+
+#[test]
+fn local_command_shadows_plugin_with_warning() {
+    let mut base = empty_base();
+    base.groups.push(static_group("ci", None));
+    base.commands.push(local_command("ci", "lint", "tools.ci"));
+    let fragment = v2_fragment_json(
+        "demo",
+        r#"[{"name": "ci", "title": "CI", "origin": "third_party"}]"#,
+        r#"[{"name": "lint", "group": "ci", "module": "demo.ci", "function": "lint",
+             "arguments": [], "origin": "third_party"}]"#,
+    );
+    let tmp = setup_fake_venv(&[("demo", &fragment)]);
+    let merged = discover_and_merge(tmp.path(), base).unwrap();
+    assert_eq!(merged.commands.len(), 1);
+    assert_eq!(merged.commands[0].summary, "local");
+    assert_eq!(merged.commands[0].origin, Origin::Static);
+    assert_eq!(merged.plugin_warnings.len(), 1);
+    let warning = &merged.plugin_warnings[0];
+    assert_eq!(warning.kind, PluginWarningKind::Shadowed);
+    assert_eq!(warning.package, "demo");
+    assert!(
+        warning.path.ends_with("demo/toolr-manifest.json"),
+        "{:?}",
+        warning.path
+    );
+    assert_eq!(
+        warning.message,
+        "tools/ci.py defines ci lint, hiding the one from demo"
+    );
+}
+
+#[test]
+fn shadow_message_spells_a_nested_group_with_spaces() {
+    let mut base = empty_base();
+    base.groups.push(static_group("docker", None));
+    base.groups.push(static_group("image", Some("docker")));
+    base.commands
+        .push(local_command("docker.image", "build", "tools.docker.image"));
+    let merged = merge_into_manifest(
+        base,
+        from_files(vec![sample_fragment("demo", "docker.image", "build")]),
+    )
+    .unwrap();
+    let messages: Vec<_> = merged
+        .plugin_warnings
+        .iter()
+        .map(|w| w.message.as_str())
+        .collect();
+    assert_eq!(
+        messages,
+        ["tools/docker/image.py defines docker image build, hiding the one from demo"]
+    );
+}
+
+#[test]
+fn good_plugin_loads_next_to_a_skipped_one() {
+    let good = v2_fragment_json(
+        "pkg_good",
+        r#"[{"name": "deploy", "title": "Deploy", "origin": "third_party"}]"#,
+        r#"[{"name": "rollout", "group": "deploy", "module": "pkg_good.deploy",
+             "function": "rollout", "arguments": [], "origin": "third_party"}]"#,
+    );
+    let old = r#"{
+        "toolr_schema_version": 1,
+        "package": "pkg_old",
+        "groups": [{"name": "lint", "title": "Lint"}],
+        "commands": [{"name": "check", "group": "lint", "module": "pkg_old.lint",
+                      "function": "check", "arguments": []}]
+    }"#;
+    let tmp = setup_fake_venv(&[("pkg_good", &good), ("pkg_old", old)]);
+    let merged = discover_and_merge(tmp.path(), empty_base()).unwrap();
+    let paths: Vec<String> = merged.groups.iter().map(Group::full_path).collect();
+    assert_eq!(paths, ["deploy"]);
+    let commands: Vec<_> = merged.commands.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(commands, ["rollout"]);
+    assert_eq!(merged.plugin_warnings.len(), 1);
+    assert_eq!(merged.plugin_warnings[0].kind, PluginWarningKind::Skipped);
+    assert_eq!(merged.plugin_warnings[0].package, "pkg_old");
+}
+
+#[test]
+fn skipped_warnings_come_before_shadowed_ones() {
+    let mut base = empty_base();
+    base.groups.push(static_group("ci", None));
+    base.commands.push(local_command("ci", "lint", "tools.ci"));
+    // `a_shadow` globs before `z_old`, so the order below is not just glob order.
+    let shadow = v2_fragment_json(
+        "a_shadow",
+        "[]",
+        r#"[{"name": "lint", "group": "ci", "module": "a_shadow.ci", "function": "lint",
+             "arguments": [], "origin": "third_party"}]"#,
+    );
+    let old = r#"{"toolr_schema_version": 1, "package": "z_old"}"#;
+    let tmp = setup_fake_venv(&[("a_shadow", &shadow), ("z_old", old)]);
+    let merged = discover_and_merge(tmp.path(), base).unwrap();
+    let kinds: Vec<_> = merged.plugin_warnings.iter().map(|w| w.kind).collect();
+    assert_eq!(
+        kinds,
+        [PluginWarningKind::Skipped, PluginWarningKind::Shadowed]
+    );
+}
+
+#[test]
+fn plugin_warnings_round_trip_and_stay_off_an_empty_manifest() {
+    let mut manifest = empty_base();
+    let bare = serde_json::to_string(&manifest).unwrap();
+    assert!(!bare.contains("plugin_warnings"), "got: {bare}");
+    manifest.plugin_warnings.push(PluginWarning {
+        package: "demo".into(),
+        path: PathBuf::from("site-packages/demo/toolr-manifest.json"),
+        kind: PluginWarningKind::Shadowed,
+        message: "tools/ci.py defines ci lint, hiding the one from demo".into(),
+    });
+    let json = serde_json::to_string(&manifest).unwrap();
+    assert!(json.contains(r#""kind":"shadowed""#), "got: {json}");
+    let back: Manifest = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, manifest);
 }

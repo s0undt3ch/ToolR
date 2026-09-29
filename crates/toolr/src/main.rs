@@ -141,6 +141,7 @@ fn empty_manifest() -> Manifest {
         toolr_version: String::new(),
         groups: Vec::new(),
         commands: Vec::new(),
+        plugin_warnings: Vec::new(),
     }
 }
 

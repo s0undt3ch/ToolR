@@ -68,8 +68,8 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
 
 /// Carry forward non-`Static` (i.e. `ThirdParty`) entries from the cache
 /// that don't collide with anything the fresh static parser produced.
-/// Also stamps the cached `third_party_hash` onto the fresh manifest,
-/// since we didn't re-glob.
+/// Also stamps the cached `third_party_hash` and `plugin_warnings` onto the
+/// fresh manifest, since we didn't re-glob.
 ///
 /// **NOTE:** This helper is safe for tab completion's in-memory use only.
 /// Callers that persist the resulting manifest (e.g. dispatch's
@@ -95,4 +95,5 @@ pub(crate) fn preserve_non_static_entries(fresh: &mut Manifest, cached: Manifest
         }
     }
     fresh.third_party_hash = cached.third_party_hash;
+    fresh.plugin_warnings = cached.plugin_warnings;
 }

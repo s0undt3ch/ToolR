@@ -74,6 +74,7 @@ fn empty_base() -> Manifest {
         toolr_version: String::new(),
         groups: vec![],
         commands: vec![],
+        plugin_warnings: Vec::new(),
     }
 }
 

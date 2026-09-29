@@ -44,6 +44,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: all_groups,
         commands: all_commands,
+        plugin_warnings: Vec::new(),
     };
 
     // Run the user's argparse scanner ([tool.toolr.argparse.*] in

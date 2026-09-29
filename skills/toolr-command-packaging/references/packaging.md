@@ -105,6 +105,9 @@ pub struct Manifest {
     pub toolr_version: String,
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
+    /// Plugins skipped or shadowed by the last third-party merge, warned about on every run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugin_warnings: Vec<PluginWarning>,
 }
 ```
 

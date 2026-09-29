@@ -18,7 +18,7 @@ use crate::manifest::Manifest;
 pub enum FreshnessVerdict {
     /// Cached manifest matches the live state on every axis.
     Fresh,
-    /// `tools/*.py` content has drifted; third-party manifests are unchanged.
+    /// `tools/*.py` content has drifted and there's no venv to re-merge plugins from.
     StaticDrift,
     /// At least one third-party `toolr-manifest.json` changed (and possibly
     /// the local tools too). Static-drift is a subset; callers should treat
@@ -44,8 +44,12 @@ pub enum FreshnessVerdict {
 /// version string across commits, so this catches a schema change that
 /// the version check can't.
 ///
+/// With `Some(venv)`, local drift also escalates to `ThirdPartyDrift`: a
+/// local change can shadow or unshadow a plugin command, which only a
+/// re-merge can reflect. So `StaticDrift` means local drift with no venv.
+///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
-/// third-party entries. On `ThirdPartyDrift`, call
+/// third-party entries and plugin warnings. On `ThirdPartyDrift`, call
 /// `build_static_manifest_with_venv`; third-party entries come from the
 /// fresh glob.
 pub fn compare(
@@ -86,7 +90,12 @@ pub fn compare(
     }
 
     if cached.static_hash != live_static {
-        return Ok(FreshnessVerdict::StaticDrift);
+        let verdict = if venv_dir.is_some() {
+            FreshnessVerdict::ThirdPartyDrift
+        } else {
+            FreshnessVerdict::StaticDrift
+        };
+        return Ok(verdict);
     }
     Ok(FreshnessVerdict::Fresh)
 }

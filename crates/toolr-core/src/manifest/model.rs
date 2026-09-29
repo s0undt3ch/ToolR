@@ -1,5 +1,7 @@
 //! Serde-derived types representing a loaded manifest.
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::parser::SupportedType;
@@ -46,8 +48,31 @@ pub struct Manifest {
     pub toolr_version: String,
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
+    /// Plugins skipped or shadowed by the last third-party merge, warned about on every run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugin_warnings: Vec<PluginWarning>,
 }
 // endregion: SkillRefManifest
+
+/// One plugin problem recorded at merge time so every later run can warn about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginWarning {
+    pub package: String,
+    /// The plugin's `toolr-manifest.json`.
+    pub path: PathBuf,
+    pub kind: PluginWarningKind,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginWarningKind {
+    /// The whole plugin was skipped: version outside the load rule, or a failed
+    /// `Argument::validate`.
+    Skipped,
+    /// One plugin command was hidden by a local command with the same `(group, name)`.
+    Shadowed,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {

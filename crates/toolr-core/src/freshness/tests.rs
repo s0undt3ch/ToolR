@@ -44,6 +44,7 @@ fn manifest_for(tmp: &Path) -> Manifest {
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: vec![],
         commands: vec![],
+        plugin_warnings: Vec::new(),
     }
 }
 
@@ -59,15 +60,37 @@ fn returns_fresh_when_both_axes_match() {
 }
 
 #[test]
-fn returns_static_drift_when_py_file_changed() {
+fn returns_static_drift_when_py_file_changed_without_a_venv() {
+    // With a venv this is `ThirdPartyDrift` (see the test below): a local change can shadow or
+    // unshadow a plugin command, so only the no-venv path still reports `StaticDrift`.
     let tmp = TempDir::new().unwrap();
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     make_venv(tmp.path(), &[("foo", "{}")]);
     let cached = manifest_for(tmp.path());
     fs::write(tmp.path().join("tools").join("a.py"), "x = 2\n").unwrap();
-    let venv = tmp.path().join("venv");
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
+}
+
+#[test]
+fn static_drift_with_venv_escalates_to_third_party_drift() {
+    let tmp = TempDir::new().unwrap();
+    make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    make_venv(tmp.path(), &[("foo", "{}")]);
+    let cached = manifest_for(tmp.path());
+    fs::write(tmp.path().join("tools").join("a.py"), "x = 2\n").unwrap();
+    let tools = tmp.path().join("tools");
+    let venv = tmp.path().join("venv");
+    let with_venv = compare(Some(&cached), &tools, Some(&venv)).unwrap();
+    assert!(
+        matches!(with_venv, FreshnessVerdict::ThirdPartyDrift),
+        "got {with_venv:?}"
+    );
+    let without_venv = compare(Some(&cached), &tools, None).unwrap();
+    assert!(
+        matches!(without_venv, FreshnessVerdict::StaticDrift),
+        "got {without_venv:?}"
+    );
 }
 
 #[test]
@@ -137,6 +160,7 @@ fn missing_venv_skips_third_party_axis() {
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: vec![],
         commands: vec![],
+        plugin_warnings: Vec::new(),
     };
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::Fresh));
@@ -170,6 +194,7 @@ fn toolr_version_mismatch_without_venv_only_forces_static_drift() {
         toolr_version: "0.0.0-old".to_string(),
         groups: vec![],
         commands: vec![],
+        plugin_warnings: Vec::new(),
     };
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
