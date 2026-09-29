@@ -101,8 +101,13 @@ One message per failure, with the path as the user typed it:
   `msgspec.convert(value, type=hint, dec_hook=_dec_hook)` call. Checked with msgspec 0.21.1 for a
   three-level chain, for `list[T]` and for `T | None`. All three produced a `PosixPath`.
 - **Static:** pyright and mypy treat each `NewType` as a distinct subtype. Passing a bare `Path`
-  where a `FilePath` is expected is a type error. `p / "x"` returns a plain `Path`, which is
-  correct: a child of a `DirectoryPath` is not known to exist.
+  where a `FilePath` is expected is a type error.
+- **Caveat: derived paths keep the type.** typeshed types `/`, `.parent`, `.with_suffix()` and the
+  other derived-path methods as returning `Self`, and `Self` binds to the `NewType`. So for mypy
+  `f / "x"` and `f.parent` are still `FilePath` when `f: FilePath` (checked with mypy `--strict`),
+  though nothing checked them. The docs tell authors to treat derived paths as unchecked. Every
+  alternative has the same leak or worse: a subclass leaks the same way, and
+  `Annotated[Path, marker]` gives no distinction at all.
 - **Parser:** the Rust parser resolves `toolr.types.<Name>` by name
   (`resolve_toolr_types_name` in `crates/toolr-core/src/parser/types/resolve.rs`). It never reads
   the definition, so switching aliases to `NewType` changes nothing on the Rust side.
@@ -112,16 +117,15 @@ Rejected:
 - **Plain aliases.** This is the current state. The type checker sees `Path`, so the name is the
   only signal.
 - **`Path` subclasses.** Python only supports subclassing `pathlib.Path` from 3.12, and toolr
-  supports 3.11 (`requires-python = ">=3.11"`). Subclasses also pass through `p / "x"` and
-  `.parent`, which would claim an existence nobody checked.
+  supports 3.11 (`requires-python = ">=3.11"`).
 - **`Annotated[Path, marker]`.** Readable, but the type checker still sees only `Path`.
 - **Composite `X[File, Writable]`.** A throwaway spike with mypy `--strict` made this half work. The
   type checker saw a class `X(pathlib.Path, Generic[*Ts])`, which only existed under
   `TYPE_CHECKING`. At runtime, `X[...]` evaluated to `Annotated[pathlib.Path, ...]`, and msgspec
   still decoded the value to a `PosixPath`. Four results rejected it:
-    - Every `pathlib` method that returns `Self` leaked the parameter. `p.with_suffix(".y")`
-      type-checked as `X[File]`. Fixing this needs about 20 method overrides, each with a
-      `# type: ignore[override]`.
+    - It has the same `Self` leak as `NewType` (`p.with_suffix(".y")` type-checked as `X[File]`),
+      so it gains nothing there, and it needs a fake `pathlib.Path` subclass that exists only for
+      the type checker.
     - `X[Dir, Writable]` is not assignable to `X[Dir]`. Composition was the point of the design,
       and it gives no subtype relation. The `NewType` chain does.
     - Combinations like `X[File, Dir]` would need rules to reject them at build time.

@@ -1067,6 +1067,34 @@ They are the #500 report shapes. Update only the expectations:
   `unknown_keyword("path_must_exist", None)`.
 - `assert_path_must_exist_flagged`: filter on `unknown_keyword("path_must_exist", None)`.
 
+Then add one build-level test so the "did you mean" branch stays pinned end to end. The other
+tests now take the hint branch instead:
+
+```rust
+    #[test]
+    fn misspelt_active_arg_keyword_suggests_the_real_one() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            r#"from typing import Annotated
+
+from toolr import Context, arg, command_group
+
+group = command_group("kw", "Kwarg test", description="Kwarg test.")
+
+
+@group.command
+def read(ctx: Context, *, name: Annotated[str, arg(metvar="NAME")] = "x") -> None:
+    """Read."""
+"#,
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].reason, unknown_keyword("metvar", Some("metavar")));
+        assert!(errs[0]
+            .to_string()
+            .ends_with("unknown `arg()` keyword `metvar` (did you mean `metavar`?)"));
+    }
+```
+
 In `tests/utils/signature/test_argument_annotation.py`:
 
 - Remove `must_be_file=True,` and `assert annotation.must_be_file is True` from
@@ -1254,8 +1282,9 @@ error: invalid value '/tmp/missing.toml' for '<config>': path does not exist: /t
 ```
 
 The types are `typing.NewType`s, so a type checker tells them apart: a `FilePath` can go where a
-`Path` is expected, but a bare `Path` can't go where a `FilePath` is. A child path such as
-`config.parent / "x"` is a plain `Path`, because nothing checked it.
+`Path` is expected, but a bare `Path` can't go where a `FilePath` is. A path derived from one, such
+as `config.parent / "x"`, keeps its type for the type checker, but nothing checked it. Treat
+derived paths as unchecked.
 
 Three limits:
 
@@ -1509,7 +1538,11 @@ def test_every_path_type_reaches_the_command_as_a_pathlib_path() -> None:
 Create `tests/test_types_static.py`:
 
 ```python
-"""mypy tells the path types apart from each other and from `pathlib.Path`."""
+"""mypy tells the path types apart from each other and from `pathlib.Path`.
+
+It also pins that a derived path (`f / "x"`, `f.parent`) keeps its type,
+which the docs warn about.
+"""
 
 from __future__ import annotations
 
@@ -1538,9 +1571,15 @@ SNIPPET = textwrap.dedent(
         child: Path = w / "x"
 
 
-    def rejected(p: Path, w: WritableDirectoryPath) -> None:
+    def rejected(p: Path) -> None:
         wants_file(p)  # E
-        wants_file(w / "x")  # E
+
+
+    # Pinned, not endorsed: derived paths keep the type (typeshed's `Self`),
+    # though nothing checked them. If this starts erroring, update the docs.
+    def derived(f: FilePath) -> None:
+        wants_file(f / "x")
+        wants_file(f.parent)
     """
 )
 
