@@ -68,6 +68,33 @@ Both carry doc comments listing which changes require a bump and which don't. Re
 changing either the Rust serde structs or the Python `RunnerSpec` class. A CI gate fails the build
 when the two values disagree.
 
+## Adding a supported type
+
+A new `toolr.types` alias starts as a new `SupportedType` variant in
+`crates/toolr-core/src/parser/types/supported.rs`. The compiler walks you through the Rust side:
+each `non-exhaustive patterns: … not covered` error names the next `match` to extend.
+
+1. Add the variant to `SupportedType`.
+2. `SupportedType::doc()`: write its row for the "Supported types" table.
+3. `SupportedType::kind()`: map it to a new kind, and add that kind to the
+   `supported_type_kinds!` list at the position its table row should take.
+4. `SupportedTypeKind::representative()`: return a value of the new variant.
+5. `apply_value_parser` in `crates/toolr/src/value_parsers.rs`: choose the clap value parser.
+
+The compiler doesn't check the rest. Tests catch some of it, but not all:
+
+1. `resolve_toolr_types_name` in `crates/toolr-core/src/parser/types/resolve.rs`: map
+   `toolr.types.<Name>` to the variant.
+2. `crates/toolr-py/python/toolr/types/__init__.py`: define the alias and add it to `__all__`.
+3. `_dec_hook` in `crates/toolr-py/python/toolr/_runner.py`: if the Python value isn't a JSON type,
+   convert the string the binary sends.
+4. Add the name to the three pinned lists: `toolr_types_names_match_python_surface` in
+   `parser/types/mod.rs`, `catalogue_covers_every_toolr_types_name` in `supported.rs`, and
+   `EXPECTED_TOOLR_TYPES_NAMES` in `tests/test_types_module.py`.
+5. Run `cargo xtask build-skill-refs` and commit the regenerated type tables in `docs/` and
+   `skills/`.
+6. Queue an `UNRELEASED.md` entry. A new type makes the next release a minor one.
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org/). Examples:
