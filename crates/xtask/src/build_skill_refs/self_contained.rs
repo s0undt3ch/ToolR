@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
@@ -37,10 +38,24 @@ pub fn lint(repo_root: &Path) -> Result<()> {
         if !skill_dir.is_dir() {
             continue;
         }
-        let mut files = Vec::new();
-        collect_shipped(&skill_dir, Path::new(""), &mut files)?;
-        for rel in files {
+        for rel in shipped_files(&skill_dir)? {
             let path = skill_dir.join(&rel);
+            let shown = path.strip_prefix(repo_root).unwrap_or(&path).to_path_buf();
+            // Listed in the index but deleted from the worktree: nothing ships.
+            let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() {
+                let target = std::fs::read_link(&path)
+                    .with_context(|| format!("reading link {}", path.display()))?;
+                violations.push(Violation {
+                    file: shown,
+                    line: 1,
+                    target: slash_path(&target),
+                    rule: "symlink",
+                });
+                continue;
+            }
             let bytes =
                 std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
             let Ok(body) = String::from_utf8(bytes) else {
@@ -55,7 +70,6 @@ pub fn lint(repo_root: &Path) -> Result<()> {
             } else {
                 lint_text(&body, &urls)
             };
-            let shown = path.strip_prefix(repo_root).unwrap_or(&path).to_path_buf();
             violations.extend(found.into_iter().map(|v| Violation {
                 file: shown.clone(),
                 ..v
@@ -86,7 +100,7 @@ fn slash_path(path: &Path) -> String {
 /// names them.
 fn repo_urls(repo_root: &Path) -> Result<Vec<String>> {
     let repository = metadata_string(repo_root, CARGO_TOML, &REPOSITORY_KEY)?;
-    let rest = scheme_less(&repository);
+    let rest = scheme_less(without_fragment(&repository));
     let rest = rest.strip_suffix(".git").unwrap_or(&rest);
     let [host, owner, repo] = rest.split('/').collect::<Vec<_>>()[..] else {
         bail!(not_github(&repository));
@@ -95,7 +109,7 @@ fn repo_urls(repo_root: &Path) -> Result<Vec<String>> {
         bail!(not_github(&repository));
     }
     let docs = metadata_string(repo_root, PYPROJECT, &DOCUMENTATION_KEY)?;
-    let docs_host = scheme_less(&docs)
+    let docs_host = scheme_less(without_fragment(&docs))
         .split('/')
         .next()
         .unwrap_or_default()
@@ -108,7 +122,7 @@ fn repo_urls(repo_root: &Path) -> Result<Vec<String>> {
     }
     Ok(vec![
         format!("github.com/{owner}/{repo}"),
-        format!("raw.githubusercontent.com/{owner}/"),
+        format!("raw.githubusercontent.com/{owner}/{repo}"),
         docs_host,
     ])
 }
@@ -118,6 +132,10 @@ fn not_github(url: &str) -> String {
         "{CARGO_TOML}: `{}` is not a github.com/<owner>/<repo> URL: {url}",
         REPOSITORY_KEY.join(".")
     )
+}
+
+fn without_fragment(url: &str) -> &str {
+    url.split(['#', '?']).next().unwrap_or(url)
 }
 
 fn scheme_less(url: &str) -> String {
@@ -149,21 +167,35 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
-/// Every file under `rel` that ships with the skill: all of it except
-/// `README.md`, `REVIEW.md` and `tests/`, which are for maintainers.
-fn collect_shipped(skill_dir: &Path, rel: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    for path in sorted_entries(&skill_dir.join(rel))? {
-        let name = path.file_name().unwrap_or_default();
-        let child = rel.join(name);
-        if path.is_dir() {
-            if name != "tests" {
-                collect_shipped(skill_dir, &child, out)?;
-            }
-        } else if name != "README.md" && name != "REVIEW.md" {
-            out.push(child);
-        }
+/// Every file the skill would ship if committed now, relative to
+/// `skill_dir`: tracked or untracked but not gitignored, so a local `.venv/`
+/// is left out. `README.md`, `REVIEW.md` and the skill-root `tests/` are for
+/// maintainers. Symlinks are listed, not followed.
+fn shipped_files(skill_dir: &Path) -> Result<Vec<PathBuf>> {
+    let out = Command::new("git")
+        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."])
+        .current_dir(skill_dir)
+        .output()
+        .with_context(|| format!("running git ls-files in {}", skill_dir.display()))?;
+    if !out.status.success() {
+        bail!(
+            "git ls-files in {} failed: {}",
+            skill_dir.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
-    Ok(())
+    let mut files: Vec<PathBuf> = String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|rel| !rel.is_empty() && !rel.starts_with("tests/"))
+        .map(PathBuf::from)
+        .filter(|rel| {
+            let name = rel.file_name().unwrap_or_default();
+            name != "README.md" && name != "REVIEW.md"
+        })
+        .collect();
+    files.sort();
+    files.dedup();
+    Ok(files)
 }
 
 /// Non-Markdown files have no link syntax to resolve; only a repo URL
@@ -207,7 +239,7 @@ fn lint_file(
         let links = match find_links(text, *first) {
             Ok(links) => links,
             Err(e) => {
-                lint.flag(*first, "malformed-markdown", &format!("{e:#}"));
+                lint.flag(e.line, "malformed-markdown", &e.message);
                 continue;
             }
         };
@@ -357,7 +389,7 @@ impl FileLint<'_> {
             token = rest;
         }
         if token.starts_with("../") {
-            return normalize(&self.file_dir.join(token)).is_none();
+            return !self.inside(&self.file_dir.join(token));
         }
         REPO_PATHS.iter().any(|p| token.starts_with(p)) && !self.inside(Path::new(token))
     }
@@ -420,7 +452,14 @@ fn is_repo_url(url: &str, urls: &[String]) -> bool {
     let url = url.to_ascii_lowercase();
     let rest = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
     let rest = rest.strip_prefix("www.").unwrap_or(rest);
-    urls.iter().any(|p| rest.starts_with(p.as_str()))
+    urls.iter().any(|p| rest.strip_prefix(p.as_str()).is_some_and(at_boundary))
+}
+
+/// Whether a matched prefix ends on a segment boundary, so `<repo>` doesn't
+/// also match `<repo>-other`. A `.git` clone suffix still counts as the repo.
+fn at_boundary(rest: &str) -> bool {
+    let rest = rest.strip_prefix(".git").unwrap_or(rest);
+    rest.is_empty() || rest.starts_with(['/', '#', '?', ':'])
 }
 
 /// `http(s)://` tokens in `text`, with their byte offsets.
@@ -470,6 +509,12 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, body).unwrap();
         }
+        let git = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        assert!(git.success());
         root
     }
 
@@ -483,7 +528,7 @@ mod tests {
     fn urls() -> Vec<String> {
         [
             "github.com/s0undt3ch/toolr",
-            "raw.githubusercontent.com/s0undt3ch/",
+            "raw.githubusercontent.com/s0undt3ch/toolr",
             "toolr.readthedocs.io",
         ]
         .map(String::from)
@@ -595,6 +640,14 @@ mod tests {
     }
 
     #[test]
+    fn malformed_markdown_reports_the_offending_line() {
+        let body = "Intro.\n\nfirst\nsecond\nthird ](b)\n";
+        let v = lint_file(Path::new("s"), Path::new("SKILL.md"), body, &exists_in(&[]), &urls());
+        assert_eq!((v[0].rule, v[0].line), ("malformed-markdown", 5));
+        assert_eq!(v[0].target, "`](` without a matching `[`");
+    }
+
+    #[test]
     fn repo_url_in_inline_code_is_ignored() {
         assert!(rules("`https://github.com/s0undt3ch/ToolR`\n", &[]).is_empty());
     }
@@ -669,7 +722,6 @@ mod tests {
                 ("skills/x/README.md", bad),
                 ("skills/x/REVIEW.md", bad),
                 ("skills/x/tests/t.md", bad),
-                ("skills/x/examples/tests/t.py", bad),
                 ("skills/x/examples/README.md", bad),
                 (
                     "skills/x/examples/blob.bin",
@@ -678,6 +730,75 @@ mod tests {
             ],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn nested_tests_directory_ships_and_is_linted() {
+        let err = lint_repo(
+            "nested-tests",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/examples/tests/t.py", "# https://toolr.readthedocs.io/\n"),
+            ],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("skills/x/examples/tests/t.py:1: repo-url"), "{err}");
+    }
+
+    #[test]
+    fn gitignored_files_do_not_ship_and_are_not_linted() {
+        let bad = "[a](../../docs/x.md) https://toolr.readthedocs.io/\n";
+        lint_repo(
+            "ignored",
+            &[
+                (".gitignore", ".venv/\n"),
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/examples/.venv/lib/x.md", bad),
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tracked_file_deleted_from_the_worktree_is_skipped() {
+        let root = temp_repo(
+            "deleted",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("skills/x/gone.md", "[a](../../docs/x.md)\n"),
+            ],
+        );
+        let added = std::process::Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        assert!(added.success());
+        std::fs::remove_file(root.join("skills/x/gone.md")).unwrap();
+        let out = lint(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        out.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_flagged_not_followed() {
+        let root = temp_repo(
+            "symlink",
+            &[
+                ("skills/x/SKILL.md", "ok\n"),
+                ("outside/leak.md", "[a](../../docs/x.md)\n"),
+            ],
+        );
+        let skill = root.join("skills/x");
+        std::os::unix::fs::symlink("../../outside", skill.join("outside")).unwrap();
+        std::os::unix::fs::symlink(".", skill.join("loop")).unwrap();
+        let err = lint(&root).unwrap_err().to_string();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(err.contains("skills/x/loop:1: symlink: ."), "{err}");
+        assert!(err.contains("skills/x/outside:1: symlink: ../../outside"), "{err}");
+        assert!(!err.contains("leak.md"), "{err}");
     }
 
     #[test]
@@ -692,7 +813,17 @@ mod tests {
             rules_in("references/r.md", "`../../docs/x.md`\n", &[]),
             ["repo-path"]
         );
-        assert!(rules_in("references/r.md", "`../examples/a.py`\n", &[]).is_empty());
+        assert!(
+            rules_in("references/r.md", "`../examples/a.py`\n", &["s/examples/a.py"]).is_empty()
+        );
+    }
+
+    #[test]
+    fn parent_relative_backticked_path_missing_inside_skill_is_flagged() {
+        assert_eq!(
+            rules_in("references/r.md", "`../examples/nope.py`\n", &[]),
+            ["repo-path"]
+        );
     }
 
     #[test]
@@ -779,8 +910,14 @@ mod tests {
     }
 
     #[test]
-    fn attribute_names_merely_ending_in_href_are_not_links() {
-        assert!(rules("<a data-href=\"../../x.md\">x</a>\n", &[]).is_empty());
+    fn prefixed_href_and_src_attributes_are_linted() {
+        let body = "<a data-href=\"../../x.md\">x</a>\n<img data-src=../../y.png>\n<use xlink:href='../../z.svg'/>\n";
+        assert_eq!(rules(body, &[]), ["link-escapes-skill"; 3]);
+    }
+
+    #[test]
+    fn srcset_and_names_merely_ending_in_href_are_not_targets() {
+        assert!(rules("<img srcset=\"../../a.png 2x\"> <a xhref=\"../../x.md\">\n", &[]).is_empty());
     }
 
     #[test]
@@ -839,7 +976,7 @@ mod tests {
             got,
             [
                 "github.com/acme/widget",
-                "raw.githubusercontent.com/acme/",
+                "raw.githubusercontent.com/acme/widget",
                 "docs.acme.dev"
             ]
         );
@@ -867,6 +1004,43 @@ mod tests {
             "{err}"
         );
         assert!(!err.contains("s0undt3ch/toolr"), "{err}");
+    }
+
+    #[test]
+    fn repo_urls_ignore_a_fragment_or_query_in_the_metadata() {
+        let got = urls_for(
+            "urls-fragment",
+            &[
+                (
+                    "Cargo.toml",
+                    "[workspace.package]\nrepository = \"https://github.com/acme/widget#readme\"\n",
+                ),
+                (
+                    "crates/toolr/pyproject.toml",
+                    "[project.urls]\nDocumentation = \"https://docs.acme.dev?v=1\"\n",
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            got,
+            [
+                "github.com/acme/widget",
+                "raw.githubusercontent.com/acme/widget",
+                "docs.acme.dev"
+            ]
+        );
+    }
+
+    #[test]
+    fn repo_urls_match_on_a_path_segment_boundary() {
+        let flagged = "https://github.com/s0undt3ch/ToolR/x https://github.com/s0undt3ch/toolr#f \
+            https://github.com/s0undt3ch/ToolR.git https://toolr.readthedocs.io:443/x \
+            https://raw.githubusercontent.com/s0undt3ch/ToolR/main/x\n";
+        assert_eq!(rules(flagged, &[]), ["repo-url"; 5]);
+        let other = "https://github.com/s0undt3ch/toolr-other https://toolr.readthedocs.io.evil.com/ \
+            https://raw.githubusercontent.com/s0undt3ch/other/main/x\n";
+        assert!(rules(other, &[]).is_empty());
     }
 
     #[test]
