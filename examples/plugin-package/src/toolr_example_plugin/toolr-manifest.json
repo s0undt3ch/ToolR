@@ -8,6 +8,9 @@
           "help": "Name to greet (default: World).",
           "kind": "optional",
           "name": "name",
+          "resolved_type": {
+            "kind": "str"
+          },
           "type_annotation": "str"
         }
       ],
@@ -16,6 +19,7 @@
       "group": "third-party",
       "module": "toolr_example_plugin.commands",
       "name": "hello",
+      "origin": "third_party",
       "summary": "Say hello to someone."
     },
     {
@@ -25,6 +29,7 @@
       "group": "third-party",
       "module": "toolr_example_plugin.commands",
       "name": "version",
+      "origin": "third_party",
       "summary": "Show the version of the example plugin."
     },
     {
@@ -35,6 +40,9 @@
           "help": "Message to echo.",
           "kind": "positional",
           "name": "message",
+          "resolved_type": {
+            "kind": "str"
+          },
           "type_annotation": "str"
         },
         {
@@ -43,6 +51,9 @@
           "help": "Number of times to repeat the message (default: 1).",
           "kind": "optional",
           "name": "repeat",
+          "resolved_type": {
+            "kind": "int"
+          },
           "type_annotation": "int"
         }
       ],
@@ -51,6 +62,7 @@
       "group": "utils",
       "module": "toolr_example_plugin.commands",
       "name": "echo",
+      "origin": "third_party",
       "summary": "Echo a message multiple times."
     },
     {
@@ -60,6 +72,7 @@
       "group": "utils",
       "module": "toolr_example_plugin.commands",
       "name": "info",
+      "origin": "third_party",
       "summary": "Show information about the example plugin."
     }
   ],
@@ -67,14 +80,18 @@
     {
       "description": "Tools contributed by a third-party plugin.",
       "name": "third-party",
+      "origin": "third_party",
+      "parent": null,
       "title": "Third Party Tools"
     },
     {
       "description": "General utility commands shipped by the example plugin.",
       "name": "utils",
+      "origin": "third_party",
+      "parent": null,
       "title": "Utility Commands"
     }
   ],
   "package": "toolr_example_plugin",
-  "toolr_schema_version": 1
+  "toolr_schema_version": 2
 }

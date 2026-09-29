@@ -429,7 +429,7 @@ ValueError so typos surface loudly.
 **Kind:** constant &nbsp;·&nbsp; **Source:** `toolr._decorators`
 
 ```python
-MANIFEST_SCHEMA_VERSION: int = 1
+MANIFEST_SCHEMA_VERSION: int = 2
 ```
 
 _No docstring on the source definition._

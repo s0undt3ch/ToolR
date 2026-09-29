@@ -1,5 +1,11 @@
 use super::glob::glob_manifests;
 use super::model::*;
+use crate::manifest::{
+    ArgMetadata, Argument, ArgumentKind, Command, FRAGMENT_SHAPE_SCHEMA, Group, Manifest, Nargs,
+    Origin, SCHEMA_VERSION,
+};
+use crate::parser::SupportedType;
+use crate::parser::types::SupportedTypeKind;
 use tempfile::TempDir;
 
 fn setup_fake_venv(packages: &[(&str, &str)]) -> TempDir {
@@ -21,12 +27,14 @@ fn setup_fake_venv(packages: &[(&str, &str)]) -> TempDir {
 #[test]
 fn fragment_round_trips_through_json() {
     let f = ManifestFragment {
-        toolr_schema_version: FRAGMENT_SCHEMA_VERSION,
+        toolr_schema_version: SCHEMA_VERSION,
         package: "my_pkg".into(),
-        groups: vec![FragmentGroup {
+        groups: vec![Group {
             name: "deploy".into(),
             title: "Deploy".into(),
             description: String::new(),
+            parent: None,
+            origin: Origin::ThirdParty,
         }],
         commands: vec![],
     };
@@ -144,15 +152,15 @@ fn parse_rejects_zero_or_below_version_as_missing() {
 
 #[test]
 fn parse_accepts_exactly_current_version() {
-    // The only accepted version is FRAGMENT_SCHEMA_VERSION; a fragment
-    // declaring it parses unchanged (there is no migration step).
+    // A fragment declaring the current SCHEMA_VERSION parses unchanged
+    // (there is no migration step).
     let tmp = TempDir::new().unwrap();
     let path = write_fragment(
         &tmp,
         "cur_pkg",
         &format!(
             r#"{{
-                "toolr_schema_version": {FRAGMENT_SCHEMA_VERSION},
+                "toolr_schema_version": {SCHEMA_VERSION},
                 "package": "cur_pkg",
                 "groups": [],
                 "commands": []
@@ -160,7 +168,7 @@ fn parse_accepts_exactly_current_version() {
         ),
     );
     let frag = parse_fragment(&path).expect("current version should parse");
-    assert_eq!(frag.toolr_schema_version, FRAGMENT_SCHEMA_VERSION);
+    assert_eq!(frag.toolr_schema_version, SCHEMA_VERSION);
     assert_eq!(frag.package, "cur_pkg");
 }
 
@@ -250,7 +258,6 @@ fn third_party_error_duplicate_command_renders_both_packages() {
 }
 
 use super::merge::merge_into_manifest;
-use crate::manifest::{ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION};
 
 fn empty_base() -> Manifest {
     Manifest {
@@ -263,16 +270,41 @@ fn empty_base() -> Manifest {
     }
 }
 
+/// A fragment group for a dotted `full_path` such as `docker.image`.
+fn fragment_group(full_path: &str) -> Group {
+    let (parent, name) = match full_path.rsplit_once('.') {
+        Some((parent, name)) => (Some(parent.to_string()), name),
+        None => (None, full_path),
+    };
+    Group {
+        name: name.into(),
+        title: name.to_uppercase(),
+        description: String::new(),
+        parent,
+        origin: Origin::ThirdParty,
+    }
+}
+
+fn plain_argument(name: &str, kind: ArgumentKind) -> Argument {
+    Argument {
+        name: name.into(),
+        kind,
+        help: String::new(),
+        default: None,
+        type_annotation: None,
+        resolved_type: None,
+        allowed_values: vec![],
+        metadata: ArgMetadata::default(),
+        long_flag: None,
+    }
+}
+
 fn sample_fragment(pkg: &str, group: &str, name: &str) -> ManifestFragment {
     ManifestFragment {
-        toolr_schema_version: FRAGMENT_SCHEMA_VERSION,
+        toolr_schema_version: SCHEMA_VERSION,
         package: pkg.into(),
-        groups: vec![FragmentGroup {
-            name: group.into(),
-            title: group.to_uppercase(),
-            description: String::new(),
-        }],
-        commands: vec![FragmentCommand {
+        groups: vec![fragment_group(group)],
+        commands: vec![Command {
             name: name.into(),
             group: group.into(),
             module: format!("{pkg}.commands"),
@@ -280,6 +312,9 @@ fn sample_fragment(pkg: &str, group: &str, name: &str) -> ManifestFragment {
             summary: String::new(),
             description: String::new(),
             arguments: vec![],
+            origin: Origin::ThirdParty,
+            dispatched_from: None,
+            is_dispatcher: false,
         }],
     }
 }
@@ -343,42 +378,72 @@ fn merge_errors_on_third_party_to_third_party_collision() {
 }
 
 #[test]
-fn merge_rejects_fixed_arity_fragment_argument() {
-    // `FragmentArgument` has no `nargs` field, so a fragment declaring
-    // `kind: "fixed_arity"` can't carry the exact value count the CLI
-    // builder needs — merging it would smuggle an `Argument` with
-    // `metadata.nargs: None` through to `cli.rs`, which panics on that
-    // combination. Must be rejected here instead.
+fn repeated_tuple_argument_round_trips_through_merge() {
     let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
-    frag.commands[0].arguments.push(FragmentArgument {
-        name: "pair".into(),
-        kind: ArgumentKind::FixedArity,
-        help: String::new(),
-        default: None,
-        type_annotation: None,
-        allowed_values: vec![],
-    });
-    let err = merge_into_manifest(empty_base(), vec![frag]).expect_err("should reject");
-    let msg = err.to_string();
-    assert!(msg.contains("pkg_a"), "got: {msg}");
-    assert!(msg.contains("pair"), "got: {msg}");
-    assert!(msg.contains("fixed_arity"), "got: {msg}");
+    let mut pair = plain_argument("pair", ArgumentKind::Repeated);
+    pair.type_annotation = Some("tuple[str, int] | None".into());
+    pair.resolved_type = Some(SupportedType::Optional(Box::new(SupportedType::Tuple(
+        vec![SupportedType::Str, SupportedType::Int],
+    ))));
+    pair.metadata.metavar = Some("PAIR".into());
+    frag.commands[0].arguments.push(pair.clone());
+
+    let json = serde_json::to_string(&frag).unwrap();
+    let back: ManifestFragment = serde_json::from_str(&json).unwrap();
+    let merged = merge_into_manifest(empty_base(), vec![back]).unwrap();
+    assert_eq!(merged.commands[0].arguments, [pair]);
+}
+
+#[test]
+fn merge_forces_third_party_origin_and_clears_dispatch_flags() {
+    let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
+    frag.groups[0].origin = Origin::Static;
+    frag.commands[0].origin = Origin::Static;
+    frag.commands[0].dispatched_from = Some("argparse:django".into());
+    frag.commands[0].is_dispatcher = true;
+    let merged = merge_into_manifest(empty_base(), vec![frag]).unwrap();
+    assert_eq!(merged.groups[0].origin, Origin::ThirdParty);
+    let cmd = &merged.commands[0];
+    assert_eq!(cmd.origin, Origin::ThirdParty);
+    assert_eq!(cmd.dispatched_from, None);
+    assert!(!cmd.is_dispatcher);
 }
 
 #[test]
 fn argument_kind_propagates_through_merge() {
     let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
-    frag.commands[0].arguments.push(FragmentArgument {
-        name: "force".into(),
-        kind: ArgumentKind::Flag,
-        help: String::new(),
-        default: None,
-        type_annotation: None,
-        allowed_values: vec![],
-    });
+    frag.commands[0]
+        .arguments
+        .push(plain_argument("force", ArgumentKind::Flag));
     let merged = merge_into_manifest(empty_base(), vec![frag]).unwrap();
     assert_eq!(merged.commands[0].arguments.len(), 1);
     assert_eq!(merged.commands[0].arguments[0].kind, ArgumentKind::Flag);
+}
+
+#[test]
+fn fragment_min_schema_is_the_shape_floor_for_current_features() {
+    let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
+    let mut emails = plain_argument("emails", ArgumentKind::FixedArity);
+    emails.resolved_type = Some(SupportedType::List(Box::new(SupportedType::Email)));
+    emails.metadata.nargs = Some(Nargs::Fixed(2));
+    frag.commands[0].arguments.push(emails);
+    assert_eq!(frag.min_schema(), FRAGMENT_SHAPE_SCHEMA);
+}
+
+#[test]
+fn fragment_min_schema_takes_the_newest_type_kind_used() {
+    let mut frag = sample_fragment("pkg_a", "deploy", "rollout");
+    let mut to = plain_argument("to", ArgumentKind::Optional);
+    to.resolved_type = Some(SupportedType::Optional(Box::new(SupportedType::Email)));
+    frag.commands[0].arguments.push(to);
+    let since = |k: SupportedTypeKind| if k == SupportedTypeKind::Email { 7 } else { 2 };
+    assert_eq!(frag.min_schema_with(&since), 7);
+
+    let empty = ManifestFragment {
+        commands: vec![],
+        ..frag
+    };
+    assert_eq!(empty.min_schema_with(&since), FRAGMENT_SHAPE_SCHEMA);
 }
 
 use super::discover_and_merge;
@@ -391,12 +456,12 @@ fn discover_and_merge_picks_up_all_valid_fragments() {
             r#"{
                 "toolr_schema_version": 1,
                 "package": "pkg_a",
-                "groups": [{"name": "deploy", "title": "Deploy", "description": ""}],
+                "groups": [{"name": "deploy", "title": "Deploy", "description": "", "origin": "third_party"}],
                 "commands": [{
                     "name": "rollout", "group": "deploy",
                     "module": "pkg_a.commands", "function": "rollout",
                     "summary": "", "description": "",
-                    "arguments": [], "imports": []
+                    "arguments": [], "origin": "third_party"
                 }]
             }"#,
         ),
@@ -405,12 +470,12 @@ fn discover_and_merge_picks_up_all_valid_fragments() {
             r#"{
                 "toolr_schema_version": 1,
                 "package": "pkg_b",
-                "groups": [{"name": "lint", "title": "Lint", "description": ""}],
+                "groups": [{"name": "lint", "title": "Lint", "description": "", "origin": "third_party"}],
                 "commands": [{
                     "name": "check", "group": "lint",
                     "module": "pkg_b.commands", "function": "check",
                     "summary": "", "description": "",
-                    "arguments": [], "imports": []
+                    "arguments": [], "origin": "third_party"
                 }]
             }"#,
         ),

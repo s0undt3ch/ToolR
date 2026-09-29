@@ -691,9 +691,7 @@ mod tests {
         std::fs::write(path, contents).unwrap();
     }
 
-    use crate::third_party::{
-        FragmentCommand, FragmentGroup, ManifestFragment, FRAGMENT_SCHEMA_VERSION,
-    };
+    use crate::third_party::ManifestFragment;
 
     #[test]
     fn build_with_venv_merges_local_and_third_party() {
@@ -716,14 +714,16 @@ def hello(ctx):
         let site = venv.join("lib").join("python3.13").join("site-packages");
         std::fs::create_dir_all(site.join("ext_pkg")).unwrap();
         let frag = ManifestFragment {
-            toolr_schema_version: FRAGMENT_SCHEMA_VERSION,
+            toolr_schema_version: SCHEMA_VERSION,
             package: "ext_pkg".into(),
-            groups: vec![FragmentGroup {
+            groups: vec![Group {
                 name: "deploy".into(),
                 title: "Deploy".into(),
                 description: String::new(),
+                parent: None,
+                origin: Origin::ThirdParty,
             }],
-            commands: vec![FragmentCommand {
+            commands: vec![Command {
                 name: "rollout".into(),
                 group: "deploy".into(),
                 module: "ext_pkg.commands".into(),
@@ -731,6 +731,9 @@ def hello(ctx):
                 summary: String::new(),
                 description: String::new(),
                 arguments: vec![],
+                origin: Origin::ThirdParty,
+                dispatched_from: None,
+                is_dispatcher: false,
             }],
         };
         std::fs::write(

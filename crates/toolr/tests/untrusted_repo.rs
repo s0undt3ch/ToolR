@@ -160,11 +160,12 @@ fn manifest_rebuilds_when_a_venv_appears() {
     std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
     std::fs::write(
         sp.join("toolr-manifest.json"),
-        r#"{"toolr_schema_version":1,"package":"demo_plugin",
-            "groups":[{"name":"plugins","title":"Plugins","description":"From a plugin."}],
+        r#"{"toolr_schema_version":2,"package":"demo_plugin",
+            "groups":[{"name":"plugins","title":"Plugins","description":"From a plugin.",
+                "origin":"third_party"}],
             "commands":[{"name":"from-plugin","group":"plugins","module":"demo_plugin.commands",
                 "function":"from_plugin","summary":"From a plugin.","description":"",
-                "arguments":[],"imports":[]}]}"#,
+                "arguments":[],"origin":"third_party"}]}"#,
     )
     .unwrap();
 

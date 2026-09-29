@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use super::model::{FRAGMENT_SCHEMA_VERSION, ManifestFragment};
+use super::model::ManifestFragment;
+use crate::manifest::SCHEMA_VERSION;
 
 #[derive(Debug, Error)]
 pub enum ThirdPartyError {
@@ -51,23 +52,12 @@ pub enum ThirdPartyError {
         first_package: String,
         second_package: String,
     },
-    #[error(
-        "{package}: command `{group}/{command}` argument `{argument}` has kind \
-         `fixed_arity`, which manifest fragments can't express (no `nargs` field) — \
-         unsupported for third-party commands"
-    )]
-    UnsupportedArgumentKind {
-        package: String,
-        group: String,
-        command: String,
-        argument: String,
-    },
 }
 
 /// Parse one fragment file, validating `toolr_schema_version` matches
-/// `FRAGMENT_SCHEMA_VERSION`. Returns the ready-to-merge fragment.
+/// `SCHEMA_VERSION`. Returns the ready-to-merge fragment.
 ///
-/// Every version from 1 up to `FRAGMENT_SCHEMA_VERSION` is accepted and
+/// Every version from 1 up to `SCHEMA_VERSION` is accepted and
 /// deserialised as-is; a newer one is an error. There are no schema
 /// migrations yet. A future migration function is the day-v2-ships change.
 pub fn parse_fragment(path: &Path) -> Result<ManifestFragment, ThirdPartyError> {
@@ -91,15 +81,15 @@ pub fn parse_fragment(path: &Path) -> Result<ManifestFragment, ThirdPartyError> 
             path: path.to_path_buf(),
         })?;
 
-    if version > FRAGMENT_SCHEMA_VERSION {
+    if version > SCHEMA_VERSION {
         return Err(ThirdPartyError::UnknownVersion {
             path: path.to_path_buf(),
             version,
-            max: FRAGMENT_SCHEMA_VERSION,
+            max: SCHEMA_VERSION,
         });
     }
 
-    // At this point `1 <= version <= FRAGMENT_SCHEMA_VERSION`: the `>= 1`
+    // At this point `1 <= version <= SCHEMA_VERSION`: the `>= 1`
     // filter above rejects 0 as MissingVersion and the check just above
     // rejects anything newer. There are no migrations, so older versions
     // deserialise as-is; when a v2 schema ships, add a migration step here.

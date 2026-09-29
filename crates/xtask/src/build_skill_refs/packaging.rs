@@ -43,12 +43,12 @@ struct Section {
 const SECTIONS: &[Section] = &[
     Section {
         heading: "Schema version",
-        narrative: "`FRAGMENT_SCHEMA_VERSION` is the version your \
-                    plugin's `toolr-manifest.json` declares via the \
-                    mandatory `toolr_schema_version` field. The toolr \
-                    binary accepts fragments that declare exactly this \
-                    version; any other version is rejected.",
-        source: ("third_party/model.rs", "SkillRefFragmentVersion"),
+        narrative: "Your plugin's `toolr-manifest.json` declares the \
+                    mandatory `toolr_schema_version` field: the lowest \
+                    toolr manifest schema a reader needs to load it. \
+                    `toolr self build-manifest` computes it; it is never \
+                    lower than `FRAGMENT_SHAPE_SCHEMA`.",
+        source: ("manifest/model.rs", "SkillRefFragmentFloors"),
     },
     Section {
         heading: "Fragment shape",
@@ -64,7 +64,8 @@ const SECTIONS: &[Section] = &[
         narrative: "Once merged into the project's manifest, every \
                     group and command carries an `origin` field. \
                     Plugins always end up tagged `\"third_party\"`. \
-                    You never set this yourself — the merger does. \
+                    You never set this yourself: `toolr self build-manifest` \
+                    writes it and the merger enforces it. \
                     Listed here so you can recognise plugin-origin \
                     entries when inspecting `tools/.toolr-manifest.json`.",
         source: ("manifest/model.rs", "SkillRefOrigin"),
@@ -82,10 +83,9 @@ const SECTIONS: &[Section] = &[
     Section {
         heading: "Plugin manifest schema (host invariants)",
         narrative: "Host-side schema version the merger expects on the \
-                    project's own manifest. Bumped in lockstep with \
-                    breaking changes to the host format; plugins don't \
-                    need to react to it directly because the merger owns \
-                    the host manifest, not the plugin fragment.",
+                    project's own manifest. It is also the highest \
+                    `toolr_schema_version` this toolr loads from a plugin \
+                    fragment.",
         source: ("manifest/model.rs", "SkillRefSchemaVersion"),
     },
 ];

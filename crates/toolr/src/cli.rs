@@ -504,13 +504,6 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .help("Override the output path"),
                     )
                     .arg(
-                        Arg::new("schema-version")
-                            .long("schema-version")
-                            .value_name("N")
-                            .value_parser(clap::value_parser!(u32))
-                            .help("Pin the emitted schema version"),
-                    )
-                    .arg(
                         Arg::new("check")
                             .long("check")
                             .action(ArgAction::SetTrue)

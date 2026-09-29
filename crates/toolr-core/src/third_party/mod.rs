@@ -12,9 +12,7 @@ pub mod parse;
 
 pub use glob::glob_manifests;
 pub use merge::merge_into_manifest;
-pub use model::{
-    FRAGMENT_SCHEMA_VERSION, FragmentArgument, FragmentCommand, FragmentGroup, ManifestFragment,
-};
+pub use model::ManifestFragment;
 pub use parse::{ThirdPartyError, parse_fragment};
 
 #[cfg(test)]

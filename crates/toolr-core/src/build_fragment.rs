@@ -1,15 +1,16 @@
 //! Build a third-party `ManifestFragment` from a plugin's source tree.
 //!
 //! Pure-Rust replacement for the legacy Python `toolr.build` module.
-//! Walks the package's `.py` files via the same AST pipeline used by
-//! `build_static_manifest`, applies a plugin-aware module-path prefix,
-//! and filters out anything that doesn't belong to the target package.
+//! Walks the package's `.py` files via the same builder as
+//! `build_static_manifest`, with the package name as the module-path
+//! prefix, and ships the resulting `Group`s and `Command`s unchanged.
 
 use std::path::{Path, PathBuf};
 
-use crate::parser::build::build_commands;
+use crate::manifest::Origin;
 use crate::parser::BuildError;
-use crate::third_party::{FragmentArgument, FragmentCommand, FragmentGroup, ManifestFragment};
+use crate::parser::build::build_commands;
+use crate::third_party::ManifestFragment;
 
 /// Error type for `build_third_party_fragment`.
 #[derive(Debug, thiserror::Error)]
@@ -29,7 +30,6 @@ pub enum BuildFragmentError {
 pub fn build_third_party_fragment(
     source_dir: &Path,
     package_name: &str,
-    schema_version: u32,
 ) -> Result<ManifestFragment, BuildFragmentError> {
     // Reject missing dirs and namespace packages up front.
     if !source_dir.is_dir() {
@@ -45,58 +45,33 @@ pub fn build_third_party_fragment(
 
     let (mut all_groups, mut all_commands) = build_commands(source_dir, package_name)?;
 
-    // The group filter stays until the v2 fragment shape replaces it.
-    let surviving_group_names: std::collections::HashSet<&str> =
-        all_commands.iter().map(|c| c.group.as_str()).collect();
-    all_groups.retain(|g| surviving_group_names.contains(g.full_path().as_str()));
-
     if all_commands.is_empty() {
         return Err(BuildFragmentError::EmptyPackage {
             package: package_name.to_string(),
         });
     }
 
-    // Sort: groups by name, commands by (group, name).
+    // Sort: groups by full path, commands by (group, name).
     all_groups.sort_by_key(|g| g.full_path());
     all_commands.sort_by(|a, b| {
         (a.group.as_str(), a.name.as_str()).cmp(&(b.group.as_str(), b.name.as_str()))
     });
 
-    Ok(ManifestFragment {
-        toolr_schema_version: schema_version,
+    for group in &mut all_groups {
+        group.origin = Origin::ThirdParty;
+    }
+    for command in &mut all_commands {
+        command.origin = Origin::ThirdParty;
+    }
+
+    let mut fragment = ManifestFragment {
+        toolr_schema_version: 0,
         package: package_name.to_string(),
-        groups: all_groups
-            .into_iter()
-            .map(|g| FragmentGroup {
-                name: g.full_path(),
-                title: g.title,
-                description: g.description,
-            })
-            .collect(),
-        commands: all_commands
-            .into_iter()
-            .map(|c| FragmentCommand {
-                name: c.name,
-                group: c.group,
-                module: c.module,
-                function: c.function,
-                summary: c.summary,
-                description: c.description,
-                arguments: c
-                    .arguments
-                    .into_iter()
-                    .map(|a| FragmentArgument {
-                        name: a.name,
-                        kind: a.kind,
-                        help: a.help,
-                        default: a.default,
-                        type_annotation: a.type_annotation,
-                        allowed_values: a.allowed_values,
-                    })
-                    .collect(),
-            })
-            .collect(),
-    })
+        groups: all_groups,
+        commands: all_commands,
+    };
+    fragment.toolr_schema_version = fragment.min_schema();
+    Ok(fragment)
 }
 
 /// Serialise a fragment to the canonical on-disk form: 2-space indent,
@@ -130,7 +105,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         std::fs::create_dir_all(tmp.path().join("pkg")).unwrap();
         // No __init__.py.
-        let err = build_third_party_fragment(&tmp.path().join("pkg"), "pkg", 1).unwrap_err();
+        let err = build_third_party_fragment(&tmp.path().join("pkg"), "pkg").unwrap_err();
         assert!(matches!(err, BuildFragmentError::NamespacePackage { .. }));
     }
 
@@ -152,7 +127,7 @@ def hello(ctx: Context) -> None:
     ctx.print("hi")
 "#,
         );
-        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "mypkg").unwrap_err();
         let BuildFragmentError::Build(BuildError::MissingDocstrings(missing)) = &err else {
             panic!("expected MissingDocstrings, got {err}");
         };
@@ -184,7 +159,7 @@ def hello(ctx):
     pass
 "#,
         );
-        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "mypkg").unwrap_err();
         let msg = err.to_string();
         assert!(msg.to_lowercase().contains("did you mean"), "got: {msg}");
         assert!(msg.contains("plug"), "got: {msg}");
@@ -211,7 +186,7 @@ def f(ctx, a: str | None, b: str | None) -> None:
     """
 "#,
         );
-        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "mypkg").unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("invalid positional arity"), "got: {msg}");
     }
@@ -226,7 +201,7 @@ def f(ctx, a: str | None, b: str | None) -> None:
             "commands.py",
             "from toolr import command_group\n\ngrp = command_group(\"plug\", \"Plugin\", \"Plugin commands.\")\n",
         );
-        let err = build_third_party_fragment(&pkg, "mypkg", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "mypkg").unwrap_err();
         assert!(matches!(err, BuildFragmentError::EmptyPackage { .. }), "got: {err:?}");
     }
 
@@ -260,8 +235,13 @@ def hello_command(ctx: Context, name: str = "World") -> None:
 "#,
         );
 
-        let fragment = build_third_party_fragment(&pkg, "mypkg", 1).unwrap();
-        assert_eq!(fragment.toolr_schema_version, 1);
+        let fragment = build_third_party_fragment(&pkg, "mypkg").unwrap();
+        assert_eq!(
+            fragment.toolr_schema_version,
+            crate::manifest::FRAGMENT_SHAPE_SCHEMA
+        );
+        assert_eq!(fragment.groups[0].origin, Origin::ThirdParty);
+        assert_eq!(fragment.commands[0].origin, Origin::ThirdParty);
         assert_eq!(fragment.package, "mypkg");
         assert_eq!(fragment.groups.len(), 1);
         assert_eq!(fragment.groups[0].name, "third-party");
@@ -309,7 +289,7 @@ def hello_command(ctx: Context, name: str = "World") -> None:
             include_str!("../../../examples/plugin-package/src/toolr_example_plugin/commands.py"),
         );
 
-        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin", 1).unwrap();
+        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin").unwrap();
 
         // Load the committed reference fragment.
         let reference_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -368,7 +348,7 @@ def subcmd(ctx):
 "#,
         );
 
-        let fragment = build_third_party_fragment(&pkg, "mypkg", 1).unwrap();
+        let fragment = build_third_party_fragment(&pkg, "mypkg").unwrap();
         let group_names: Vec<&str> = fragment.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(
             group_names.contains(&"own"),
@@ -395,7 +375,7 @@ def subcmd(ctx):
         let tmp = TempDir::new().unwrap();
         let pkg = tmp.path().join("empty");
         write(&pkg, "__init__.py", "");
-        let err = build_third_party_fragment(&pkg, "empty", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "empty").unwrap_err();
         assert!(matches!(err, BuildFragmentError::EmptyPackage { .. }));
     }
 
@@ -408,7 +388,7 @@ def subcmd(ctx):
         let pkg = tmp.path().join("broken");
         write(&pkg, "__init__.py", "");
         write(&pkg, "bad.py", "def broken(\n");
-        let err = build_third_party_fragment(&pkg, "broken", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "broken").unwrap_err();
         match err {
             BuildFragmentError::Build(BuildError::Build(e)) => {
                 assert!(e.to_string().contains("bad.py"), "got: {e}");
@@ -435,7 +415,7 @@ def do_thing(ctx):
     pass
 "#,
         );
-        let err = build_third_party_fragment(&pkg, "conflictpkg", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "conflictpkg").unwrap_err();
         let msg = err.to_string();
         assert!(
             matches!(
@@ -455,7 +435,7 @@ def do_thing(ctx):
     fn missing_source_dir_errors() {
         let tmp = TempDir::new().unwrap();
         let pkg = tmp.path().join("nope");
-        let err = build_third_party_fragment(&pkg, "nope", 1).unwrap_err();
+        let err = build_third_party_fragment(&pkg, "nope").unwrap_err();
         assert!(matches!(err, BuildFragmentError::MissingSourceDir { .. }));
     }
 
@@ -474,7 +454,7 @@ def do_thing(ctx):
             include_str!("../../../examples/plugin-package/src/toolr_example_plugin/commands.py"),
         );
 
-        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin", 1).unwrap();
+        let fragment = build_third_party_fragment(&pkg, "toolr_example_plugin").unwrap();
         let serialised = serialise_fragment(&fragment).expect("serialise");
 
         let reference = std::fs::read_to_string(
@@ -531,7 +511,7 @@ def run(ctx: Context, mode: Mode = "fast") -> None:
 "#,
         );
 
-        let fragment = build_third_party_fragment(&pkg, "xpkg", 1).unwrap();
+        let fragment = build_third_party_fragment(&pkg, "xpkg").unwrap();
         let cmd = fragment
             .commands
             .iter()

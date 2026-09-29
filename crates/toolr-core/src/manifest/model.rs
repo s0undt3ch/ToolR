@@ -9,6 +9,7 @@ use crate::parser::SupportedType;
 pub const SCHEMA_VERSION: u32 = 2;
 // endregion: SkillRefSchemaVersion
 
+// region: SkillRefFragmentFloors
 /// The schema at which the fragment's JSON shape last changed in a way an older reader would
 /// misread. Bump it with `SCHEMA_VERSION` on any non-additive change to a fragment type.
 pub const FRAGMENT_SHAPE_SCHEMA: u32 = 2;
@@ -16,6 +17,7 @@ pub const FRAGMENT_SHAPE_SCHEMA: u32 = 2;
 /// The oldest fragment schema this reader parses; below the shape floor only while
 /// `parse_fragment` migrates the older shape.
 pub const MIN_READABLE_FRAGMENT_SCHEMA: u32 = 2;
+// endregion: SkillRefFragmentFloors
 
 const _: () = assert!(
     MIN_READABLE_FRAGMENT_SCHEMA <= FRAGMENT_SHAPE_SCHEMA

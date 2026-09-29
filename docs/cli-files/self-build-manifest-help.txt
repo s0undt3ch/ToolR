@@ -13,8 +13,6 @@ Options:
           directory name)
       --output <PATH>
           Override the output path
-      --schema-version <N>
-          Pin the emitted schema version
       --check
           Verify the on-disk manifest matches regeneration
   -h, --help
