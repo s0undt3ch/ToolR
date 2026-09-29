@@ -107,20 +107,36 @@ The file lives at `<package_dir>/toolr-manifest.json` — i.e. next to
 The generated file must be included in the built wheel. The exact
 mechanism depends on your build backend.
 
-**hatchling** — add an `include` entry in `pyproject.toml`:
+**hatchling** — name the package directory in `packages`:
 
 ```toml
 [tool.hatch.build.targets.wheel]
-include = [
-  "src/my_pkg/toolr-manifest.json",
-]
+packages = ["src/my_pkg"]
 ```
 
-**setuptools** — add a line to `MANIFEST.in`:
+Hatchling ships every file in a `packages` directory, including non-`.py`
+files, so `toolr-manifest.json` lands next to `my_pkg/__init__.py` in the
+wheel. This is the configuration
+[`examples/plugin-package/`](https://github.com/s0undt3ch/ToolR/tree/main/examples/plugin-package)
+uses, and CI builds it on every run.
 
-```text
-include src/my_pkg/toolr-manifest.json
+Don't list the manifest in `include` on its own. `include` restricts the
+wheel to the matching files, so
+`include = ["src/my_pkg/toolr-manifest.json"]` builds a wheel that holds only
+`src/my_pkg/toolr-manifest.json`: no Python modules, and the manifest at a
+path toolr doesn't search.
+
+**setuptools** — list the manifest in `package-data`:
+
+```toml
+[tool.setuptools.package-data]
+my_pkg = ["toolr-manifest.json"]
 ```
+
+This works whatever `include-package-data` is set to. An
+`include src/my_pkg/toolr-manifest.json` line in `MANIFEST.in` also reaches the
+wheel, but only while `include-package-data` is on. That is the default for
+projects configured in `pyproject.toml`, and not for a legacy `setup.py`.
 
 After building, verify the file is present in the wheel before
 publishing:
@@ -244,16 +260,17 @@ When multiple sources contribute commands with the same name:
 ## Distribution checklist
 
 - Include `toolr-manifest.json` in your package via
-  `package_data` (setuptools), `include` (hatch), or the equivalent
-  in your build backend. Verify it's in the built wheel before
-  publishing.
+  `package-data` (setuptools), `packages` (hatchling), or the
+  equivalent in your build backend. Verify it's in the built wheel
+  before publishing.
 - Pin a compatible `toolr` version in your package's dependencies.
-- Toolr migrates older fragment schemas in-process when a newer
-  binary meets an older fragment, but pin defensively if you're
-  shipping pre-1.0.
+  Toolr accepts only fragments that declare its current
+  `toolr_schema_version` and rejects any other version. There are no
+  schema migrations, so a fragment whose version doesn't match fails
+  to load.
 
 ## Working example in the repo
 
-[`tests/support/3rd-party-pkg/`](https://github.com/s0undt3ch/ToolR/tree/main/tests/support/3rd-party-pkg)
-in the toolr repo is a complete third-party package fixture exercised
-by the integration tests. Treat it as a copy-pasteable starting point.
+[`examples/plugin-package/`](https://github.com/s0undt3ch/ToolR/tree/main/examples/plugin-package)
+in the toolr repo is a complete third-party package that CI builds on
+every run. Treat it as a copy-pasteable starting point.
