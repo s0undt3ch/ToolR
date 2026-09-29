@@ -449,3 +449,32 @@ fn discover_and_merge_no_op_when_venv_has_no_fragments() {
     assert!(merged.groups.is_empty());
     assert!(merged.commands.is_empty());
 }
+
+fn static_group(name: &str, parent: Option<&str>) -> Group {
+    Group {
+        name: name.into(),
+        title: name.into(),
+        description: String::new(),
+        parent: parent.map(String::from),
+        origin: Origin::Static,
+    }
+}
+
+#[test]
+fn merge_keeps_same_leaf_groups_under_different_parents() {
+    let mut base = empty_base();
+    base.groups.push(static_group("image", Some("ci")));
+    let merged =
+        merge_into_manifest(base, vec![sample_fragment("pkg_a", "docker.image", "build")]).unwrap();
+    let paths: Vec<String> = merged.groups.iter().map(Group::full_path).collect();
+    assert_eq!(paths, ["ci.image", "docker.image"]);
+}
+
+#[test]
+fn merge_dedups_fragment_group_against_nested_base_group_by_full_path() {
+    let mut base = empty_base();
+    base.groups.push(static_group("image", Some("docker")));
+    let merged =
+        merge_into_manifest(base, vec![sample_fragment("pkg_a", "docker.image", "build")]).unwrap();
+    assert_eq!(merged.groups.len(), 1);
+}

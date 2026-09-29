@@ -76,10 +76,10 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
 /// `ensure_manifest_fresh`) MUST recompute `third_party_hash` from the
 /// live venv after calling this, otherwise stale hashes will persist
 /// across invocations.
-fn preserve_non_static_entries(fresh: &mut Manifest, cached: Manifest) {
+pub(crate) fn preserve_non_static_entries(fresh: &mut Manifest, cached: Manifest) {
     for group in cached.groups {
         if !matches!(group.origin, Origin::Static)
-            && !fresh.groups.iter().any(|g| g.name == group.name)
+            && !fresh.groups.iter().any(|g| g.full_path() == group.full_path())
         {
             fresh.groups.push(group);
         }

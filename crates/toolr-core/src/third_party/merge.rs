@@ -32,7 +32,7 @@ pub fn merge_into_manifest(
         );
     }
 
-    let mut known_groups: HashSet<String> = base.groups.iter().map(|g| g.name.clone()).collect();
+    let mut known_groups: HashSet<String> = base.groups.iter().map(Group::full_path).collect();
 
     for fragment in fragments {
         for fg in fragment.groups {

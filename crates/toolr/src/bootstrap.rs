@@ -191,7 +191,7 @@ fn carry_forward_cached_entries(
         )
     };
     for group in &cached.groups {
-        if keep(&group.origin) && !fresh.groups.iter().any(|g| g.name == group.name) {
+        if keep(&group.origin) && !fresh.groups.iter().any(|g| g.full_path() == group.full_path()) {
             fresh.groups.push(group.clone());
         }
     }
@@ -226,7 +226,39 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::should_skip_auto_rebuild;
+    use super::{carry_forward_cached_entries, should_skip_auto_rebuild};
+    use toolr_core::freshness::FreshnessVerdict;
+    use toolr_core::manifest::{Group, Manifest, Origin, SCHEMA_VERSION};
+
+    fn nested_group(name: &str, parent: &str, origin: Origin) -> Group {
+        Group {
+            name: name.into(),
+            title: name.into(),
+            description: String::new(),
+            parent: Some(parent.into()),
+            origin,
+        }
+    }
+
+    fn manifest_with(groups: Vec<Group>) -> Manifest {
+        Manifest {
+            schema_version: SCHEMA_VERSION,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups,
+            commands: vec![],
+        }
+    }
+
+    #[test]
+    fn carry_forward_keeps_same_leaf_groups_with_different_parents() {
+        let mut fresh = manifest_with(vec![nested_group("image", "ci", Origin::Static)]);
+        let cached = manifest_with(vec![nested_group("image", "docker", Origin::ThirdParty)]);
+        carry_forward_cached_entries(&mut fresh, &cached, FreshnessVerdict::StaticDrift);
+        let paths: Vec<String> = fresh.groups.iter().map(Group::full_path).collect();
+        assert_eq!(paths, ["ci.image", "docker.image"]);
+    }
 
     fn args(parts: &[&str]) -> Vec<String> {
         std::iter::once("toolr")

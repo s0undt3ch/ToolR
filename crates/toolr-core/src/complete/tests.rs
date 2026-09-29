@@ -1078,3 +1078,21 @@ fn keyword_fixed_arity_offers_flag_completion() {
     let out = values(serve_completions(&manifest, &tokens(&["cmd", "run", ""])));
     assert_eq!(out, vec!["--pair".to_string()]);
 }
+
+#[test]
+fn preserve_non_static_keeps_same_leaf_groups_with_different_parents() {
+    let group = |parent: &str, origin| Group {
+        name: "image".into(),
+        title: "Image".into(),
+        description: String::new(),
+        parent: Some(parent.into()),
+        origin,
+    };
+    let mut fresh = fixture();
+    fresh.groups = vec![group("ci", Origin::Static)];
+    let mut cached = fixture();
+    cached.groups = vec![group("docker", Origin::ThirdParty)];
+    super::freshness::preserve_non_static_entries(&mut fresh, cached);
+    let paths: Vec<String> = fresh.groups.iter().map(Group::full_path).collect();
+    assert_eq!(paths, ["ci.image", "docker.image"]);
+}
