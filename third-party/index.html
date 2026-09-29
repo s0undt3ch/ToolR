@@ -1918,15 +1918,28 @@ manifest at build time.</p>
 <h2 id="shipping-the-manifest">Shipping the manifest<a class="headerlink" href="#shipping-the-manifest" title="Permanent link">&para;</a></h2>
 <p>The generated file must be included in the built wheel. The exact
 mechanism depends on your build backend.</p>
-<p><strong>hatchling</strong> — add an <code>include</code> entry in <code>pyproject.toml</code>:</p>
+<p><strong>hatchling</strong> — name the package directory in <code>packages</code>:</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[tool.hatch.build.targets.wheel]</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">include</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="s2">"src/my_pkg/toolr-manifest.json"</span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">]</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">packages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"src/my_pkg"</span><span class="p">]</span>
 </span></code></pre></div>
-<p><strong>setuptools</strong> — add a line to <code>MANIFEST.in</code>:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>include src/my_pkg/toolr-manifest.json
+<p>Hatchling ships every file in a <code>packages</code> directory, including non-<code>.py</code>
+files, so <code>toolr-manifest.json</code> lands next to <code>my_pkg/__init__.py</code> in the
+wheel. This is the configuration
+<a href="https://github.com/s0undt3ch/ToolR/tree/main/examples/plugin-package"><code>examples/plugin-package/</code></a>
+uses, and CI builds it on every run.</p>
+<p>Don't list the manifest in <code>include</code> on its own. <code>include</code> restricts the
+wheel to the matching files, so
+<code>include = ["src/my_pkg/toolr-manifest.json"]</code> builds a wheel that holds only
+<code>src/my_pkg/toolr-manifest.json</code>: no Python modules, and the manifest at a
+path toolr doesn't search.</p>
+<p><strong>setuptools</strong> — list the manifest in <code>package-data</code>:</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[tool.setuptools.package-data]</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">my_pkg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"toolr-manifest.json"</span><span class="p">]</span>
 </span></code></pre></div>
+<p>This works whatever <code>include-package-data</code> is set to. An
+<code>include src/my_pkg/toolr-manifest.json</code> line in <code>MANIFEST.in</code> also reaches the
+wheel, but only while <code>include-package-data</code> is on. That is the default for
+projects configured in <code>pyproject.toml</code>, and not for a legacy <code>setup.py</code>.</p>
 <p>After building, verify the file is present in the wheel before
 publishing:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>unzip<span class="w"> </span>-l<span class="w"> </span>dist/my_pkg-*.whl<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>toolr-manifest
@@ -2019,18 +2032,19 @@ invocation — no project-side changes needed on their end.</p>
 <h2 id="distribution-checklist">Distribution checklist<a class="headerlink" href="#distribution-checklist" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Include <code>toolr-manifest.json</code> in your package via
-  <code>package_data</code> (setuptools), <code>include</code> (hatch), or the equivalent
-  in your build backend. Verify it's in the built wheel before
-  publishing.</li>
-<li>Pin a compatible <code>toolr</code> version in your package's dependencies.</li>
-<li>Toolr migrates older fragment schemas in-process when a newer
-  binary meets an older fragment, but pin defensively if you're
-  shipping pre-1.0.</li>
+  <code>package-data</code> (setuptools), <code>packages</code> (hatchling), or the
+  equivalent in your build backend. Verify it's in the built wheel
+  before publishing.</li>
+<li>Pin a compatible <code>toolr</code> version in your package's dependencies.
+  Toolr accepts only fragments that declare its current
+  <code>toolr_schema_version</code> and rejects any other version. There are no
+  schema migrations, so a fragment whose version doesn't match fails
+  to load.</li>
 </ul>
 <h2 id="working-example-in-the-repo">Working example in the repo<a class="headerlink" href="#working-example-in-the-repo" title="Permanent link">&para;</a></h2>
-<p><a href="https://github.com/s0undt3ch/ToolR/tree/main/tests/support/3rd-party-pkg"><code>tests/support/3rd-party-pkg/</code></a>
-in the toolr repo is a complete third-party package fixture exercised
-by the integration tests. Treat it as a copy-pasteable starting point.</p>
+<p><a href="https://github.com/s0undt3ch/ToolR/tree/main/examples/plugin-package"><code>examples/plugin-package/</code></a>
+in the toolr repo is a complete third-party package that CI builds on
+every run. Treat it as a copy-pasteable starting point.</p>
 
 
 

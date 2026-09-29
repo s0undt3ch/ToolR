@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev105-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev108-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev105 - 2026-09-29
+        0.33.1-dev108 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev105 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev108 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1545,6 +1545,17 @@
     <span class="md-ellipsis">
       
         Commands without a docstring now fail the manifest build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plugin-packaging-docs-fixed-hatchling-recipe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin packaging docs: fixed hatchling recipe
       
     </span>
   </a>
@@ -4096,15 +4107,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev105-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev108-2026-09-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev105 - 2026-09-29
+        0.33.1-dev108 - 2026-09-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev105 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev108 - 2026-09-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4178,6 +4189,17 @@
     <span class="md-ellipsis">
       
         Commands without a docstring now fail the manifest build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plugin-packaging-docs-fixed-hatchling-recipe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin packaging docs: fixed hatchling recipe
       
     </span>
   </a>
@@ -6724,7 +6746,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev105-2026-09-29">0.33.1-dev105 - 2026-09-29<a class="headerlink" href="#0331-dev105-2026-09-29" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev108-2026-09-29">0.33.1-dev108 - 2026-09-29<a class="headerlink" href="#0331-dev108-2026-09-29" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6791,6 +6813,17 @@ docstring, raises a <code>RuntimeError</code> saying so. Before, a group declare
 <code>docstring=__doc__</code> failed there with a misleading "must pass either docstring
 or description" error.
 (<a href="https://github.com/s0undt3ch/ToolR/issues/501">#501</a>)</p>
+<h3 id="plugin-packaging-docs-fixed-hatchling-recipe">Plugin packaging docs: fixed hatchling recipe<a class="headerlink" href="#plugin-packaging-docs-fixed-hatchling-recipe" title="Permanent link">&para;</a></h3>
+<p>The "Shipping the manifest" docs told hatchling users to list
+<code>toolr-manifest.json</code> under <code>include</code>, which builds a wheel with no Python
+modules and the manifest at the wrong path. They now use
+<code>packages = ["src/&lt;pkg&gt;"]</code>, matching the packaging skill and
+<code>examples/plugin-package/</code>. The setuptools recipe now uses <code>package-data</code>,
+which works whatever <code>include-package-data</code> is set to, instead of relying on
+<code>MANIFEST.in</code>. The docs also no longer claim that toolr migrates
+older fragment schemas: it accepts only the current <code>toolr_schema_version</code>.
+The "Working example" link now points at <code>examples/plugin-package/</code>.
+(<a href="https://github.com/s0undt3ch/ToolR/issues/506">#506</a>)</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6862,6 +6895,8 @@ or description" error.
 <li>Note that unknown arg() keywords now fail the manifest build (<a href="https://github.com/s0undt3ch/ToolR/commit/9045e7d82030c96f5e535c44d376d4e2a0ec5fd6"><code>9045e7d</code></a>)</li>
 <li>Note nested arg() checks and argparse-keyword hints (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/26f0d0a10257c367b81e6483fcfa18b478cd5131"><code>26f0d0a</code></a>)</li>
 <li><em>(skills)</em> Cover external command sources in the authoring skill (#507) (<a href="https://github.com/s0undt3ch/ToolR/commit/bcb8c78e3ea11cb9a5612a9b6f4432705548ca71"><code>bcb8c78</code></a>)</li>
+<li><em>(third-party)</em> Fix the hatchling recipe and fragment-schema claim (#506) (<a href="https://github.com/s0undt3ch/ToolR/commit/8a4a524a8469d15ef42220e0c6372b57522603c7"><code>8a4a524</code></a>)</li>
+<li><em>(third-party)</em> Ship the manifest via setuptools package-data (#506) (<a href="https://github.com/s0undt3ch/ToolR/commit/6aee50c27ca2c6f6fd69b6b66e34e7f1c173a4f3"><code>6aee50c</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
