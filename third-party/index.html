@@ -2132,19 +2132,28 @@ invocation — no project-side changes needed on their end.</p>
   plugin command with the same group and name. The plugin command is
   hidden, and toolr warns about it on every run
   (<code>toolr: warning: ... hiding the one from &lt;pkg&gt;</code>), so a plugin release
-  can't silently change what a local command does. Choosing a winner in
-  configuration is tracked in
-  <a href="https://github.com/s0undt3ch/ToolR/issues/522">#522</a>.</li>
-<li><strong>Group augmentation:</strong> to add commands to a group of the host repo,
+  can't silently change what a local command does.</li>
+<li>
+<p><strong>Between third-party packages:</strong> when two or more plugins define the
+  same command and your <code>tools/</code> doesn't, toolr can't know which one you
+  want, so it disables that command. Everything else keeps working.
+  Uninstall all but one of them to get the command back, or define it in
+  your <code>tools/</code>, and the local one wins. If a group only held that command,
+  it stays in <code>--help</code> but is empty. The warning names every plugin:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>toolr: warning: deploy rollout is defined by more than one plugin (toolr_a, toolr_b), so it is disabled. Uninstall all but one. Choosing a winner in config is tracked in https://github.com/s0undt3ch/ToolR/issues/522
+</span></code></pre></div>
+</li>
+<li>
+<p><strong>Group augmentation:</strong> to add commands to a group of the host repo,
   the plugin declares that group itself (<code>command_group("ci", ...)</code>, with
   the same full path). A command in a group the plugin doesn't declare
   fails the build. The host's title and description win over the
   plugin's. Groups are matched by their full path, so a plugin's
-  <code>docker.image</code> and a local <code>ci.image</code> stay separate.</li>
-<li><strong>Between third-party packages:</strong> order is undefined — packages
-  that share group/command names will produce a manifest-build error,
-  pointing you to fix one of them.</li>
+  <code>docker.image</code> and a local <code>ci.image</code> stay separate.</p>
+</li>
 </ul>
+<p>Choosing the winner in configuration isn't supported yet. If you need it,
+vote on <a href="https://github.com/s0undt3ch/ToolR/issues/522">#522</a>.</p>
 <h2 id="distribution-checklist">Distribution checklist<a class="headerlink" href="#distribution-checklist" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Include <code>toolr-manifest.json</code> in your package via

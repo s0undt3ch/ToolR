@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev160-2026-09-30" class="md-nav__link">
+  <a href="#0331-dev172-2026-09-30" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev160 - 2026-09-30
+        0.33.1-dev172 - 2026-09-30
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev160 - 2026-09-30">
+    <nav class="md-nav" aria-label="0.33.1-dev172 - 2026-09-30">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4140,15 +4140,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev160-2026-09-30" class="md-nav__link">
+  <a href="#0331-dev172-2026-09-30" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev160 - 2026-09-30
+        0.33.1-dev172 - 2026-09-30
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev160 - 2026-09-30">
+    <nav class="md-nav" aria-label="0.33.1-dev172 - 2026-09-30">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -6812,7 +6812,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev160-2026-09-30">0.33.1-dev160 - 2026-09-30<a class="headerlink" href="#0331-dev160-2026-09-30" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev172-2026-09-30">0.33.1-dev172 - 2026-09-30<a class="headerlink" href="#0331-dev172-2026-09-30" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6967,6 +6967,12 @@ path. The host's title and description win at merge.</p>
 silently. Warnings don't print for tab completion, <code>--quiet</code>, <code>project</code>, <code>self</code>, <code>init</code>, <code>--version</code>
 or <code>-V</code>. Choosing the winner in configuration is tracked in
 <a href="https://github.com/s0undt3ch/ToolR/issues/522">#522</a>.</p>
+<p>Two plugins that define the same command no longer stop toolr from working. Before, the manifest build failed, and
+on a fresh clone or a CI runner no command ran, local ones included. Now that command is disabled, and a warning on
+every run names every plugin that defines it (<code>toolr: warning: deploy rollout is defined by more than one plugin
+(toolr_a, toolr_b), so it is disabled. ...</code>). Uninstall all but one to get it back, or define it in your <code>tools/</code>,
+and the local one wins. Both this warning and the shadowing one now link
+<a href="https://github.com/s0undt3ch/ToolR/issues/522">#522</a>, where you can vote for choosing the winner in configuration.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6988,6 +6994,7 @@ or <code>-V</code>. Choosing the winner in configuration is tracked in
 <li><em>(manifest)</em> [<strong>breaking</strong>] Ship plugin fragments as full manifest commands (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/a943a78889df6eac52f7dd0130702ec6ce08dd47"><code>a943a78</code></a>)</li>
 <li><em>(manifest)</em> Skip unloadable plugins and record plugin warnings (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/963d3fe2ac15a728eb00ef708da390294e507411"><code>963d3fe</code></a>)</li>
 <li><em>(cli)</em> Warn about skipped and shadowed plugins on every run (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/db4567955dd1c688bfa14a6834f3353429bf5c03"><code>db45679</code></a>)</li>
+<li><em>(plugins)</em> Disable a command two plugins define instead of failing (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/988c776e5d82ec7af78997960975e858fda253df"><code>988c776</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7082,6 +7089,14 @@ or <code>-V</code>. Choosing the winner in configuration is tracked in
 <li><em>(plugins)</em> Document fragment v2, the load rule and plugin warnings (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/8c74433df3b7d9a58e9d6a8c23f9fb04d8f53123"><code>8c74433</code></a>)</li>
 <li><em>(plugins)</em> State the toolr 0.34.0 requirement for rebuilt plugins (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/333590294d39a2870f6bc905f63a011cc71e3674"><code>3335902</code></a>)</li>
 <li><em>(specs)</em> Archive the plugin parity design and plan (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/380b3f5239493657e3ba85ca4034beca2780584b"><code>380b3f5</code></a>)</li>
+<li><em>(specs)</em> Design plugin clash resolution (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/cbd25c94d4dee9a16a80c32391887fcd12136b2b"><code>cbd25c9</code></a>)</li>
+<li><em>(specs)</em> Address adversarial review of clash resolution design (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/9500ae066715f3e8e994d7f4b5fe4e6d82231db7"><code>9500ae0</code></a>)</li>
+<li><em>(specs)</em> Narrow #522 to disabling plugin command conflicts (<a href="https://github.com/s0undt3ch/ToolR/commit/1a6251726a0af1d026447eceda6db28bb2084fd3"><code>1a62517</code></a>)</li>
+<li><em>(specs)</em> Address adversarial review of plugin conflicts design (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/cb6f8af6875f36f1008487165d837dcb7c749f8b"><code>cb6f8af</code></a>)</li>
+<li><em>(specs)</em> Plan the plugin command conflicts change (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/b7d0869a26794eb531352ba9a1eb9f5bf9ebeda9"><code>b7d0869</code></a>)</li>
+<li><em>(specs)</em> Address adversarial review of the plugin conflicts plan (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/1b463fd18d62eeb1732b1c1cca45eed16b7e064c"><code>1b463fd</code></a>)</li>
+<li><em>(plugins)</em> Document disabled plugin command conflicts (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/5f36ad8ab2e3d76be98296cd35a4e87a9b8b07b1"><code>5f36ad8</code></a>)</li>
+<li><em>(specs)</em> Archive the plugin command conflicts design and plan (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/4ea28ad911ae923f0bbb5488a79995163faa0d3f"><code>4ea28ad</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7094,6 +7109,8 @@ or <code>-V</code>. Choosing the winner in configuration is tracked in
 <li><em>(manifest)</em> Make the ArgumentKind and Nargs golden tables catch a forgotten variant (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/c102af2f7cd0241b0b34fbe1466a28dd1ee84fe1"><code>c102af2</code></a>)</li>
 <li><em>(cli)</em> Tighten plugin warning tests (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/f64fb9be60a9ebeb1460073ada12b2b08ac87377"><code>f64fb9b</code></a>)</li>
 <li><em>(manifest)</em> Cover host title winning and no-venv carry-forward (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/0f4a8e34b658a63e640a7b02b1ce976d6e1e75c5"><code>0f4a8e3</code></a>)</li>
+<li><em>(plugins)</em> Cover a plugin conflict on a fresh project and its recovery (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/68f153b0e53f487bfbe5f57ae1c72bc147fffab5"><code>68f153b</code></a>)</li>
+<li><em>(plugins)</em> Pin conflict serialisation and completion, document the local-command remedy (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/fb3ee8616e6876cf4ae4b596c80d90f1fb1ce578"><code>fb3ee86</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
