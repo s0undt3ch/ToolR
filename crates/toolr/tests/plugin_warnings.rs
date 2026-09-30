@@ -320,3 +320,111 @@ fn static_drift_keeps_plugin_entries_when_the_venv_cannot_be_resolved() {
     assert!(after.contains("dock_plugin.commands"), "{after}");
     assert!(after.contains("skipping plugin demo_plugin"), "{after}");
 }
+
+const CONFLICT_WARNING: &str =
+    "toolr: warning: deploy rollout is defined by more than one plugin (a_plugin, b_plugin), so it is disabled.";
+
+/// A fresh project (no cached manifest) where `a_plugin` and `b_plugin` both ship `deploy rollout`,
+/// and `c_plugin` ships its own `extra run`.
+fn project_with_conflict() -> Project {
+    let p = Project::new();
+    p.add_plugin(
+        "a_plugin",
+        &fragment(2, "a_plugin", "deploy", None, "rollout"),
+    );
+    p.add_plugin(
+        "b_plugin",
+        &fragment(2, "b_plugin", "deploy", None, "rollout"),
+    );
+    p.add_plugin("c_plugin", &fragment(2, "c_plugin", "extra", None, "run"));
+    p
+}
+
+fn has_command(manifest: &serde_json::Value, group: &str, name: &str) -> bool {
+    manifest["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["group"] == group && c["name"] == name)
+}
+
+#[test]
+fn conflicting_plugins_disable_only_that_command() {
+    let p = project_with_conflict();
+    assert!(
+        !p.tools().join(".toolr-manifest.json").exists(),
+        "the test needs a fresh project with no cache"
+    );
+
+    // Before the fix, the bootstrap build failed here and toolr exited 2.
+    let out = p.toolr(&["--help"]).output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches(CONFLICT_WARNING).count(),
+        1,
+        "stderr:\n{stderr}"
+    );
+    assert!(stdout.contains("greet"), "stdout:\n{stdout}");
+    assert!(stdout.contains("extra"), "stdout:\n{stdout}");
+
+    // The second run reads the cache and still warns exactly once.
+    let stderr = p.stderr(&["--help"]);
+    assert_eq!(
+        stderr.matches(CONFLICT_WARNING).count(),
+        1,
+        "stderr:\n{stderr}"
+    );
+
+    // The local group and the unrelated plugin command still work. The fixture venv
+    // can't import plugins, so plugin commands are checked through help and the manifest.
+    p.toolr(&["greet", "--help"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("hi"));
+    let manifest: serde_json::Value = serde_json::from_str(&p.manifest()).unwrap();
+    assert!(has_command(&manifest, "extra", "run"), "{manifest}");
+    assert!(!has_command(&manifest, "deploy", "rollout"), "{manifest}");
+
+    // Gone from the group's help and from completion.
+    let deploy_help = p.toolr(&["deploy", "--help"]).output().unwrap();
+    assert!(
+        !String::from_utf8_lossy(&deploy_help.stdout).contains("rollout"),
+        "{deploy_help:?}"
+    );
+    let cwd = p.tmp.path().to_string_lossy().to_string();
+    let completions = p.stdout(&["__complete", &cwd, "deploy", ""]);
+    assert!(
+        !completions.contains("rollout"),
+        "completions:\n{completions}"
+    );
+    let top = p.stdout(&["__complete", &cwd, ""]);
+    assert!(top.contains("extra"), "completions:\n{top}");
+}
+
+#[test]
+fn uninstalling_one_conflicting_plugin_restores_the_command() {
+    let p = project_with_conflict();
+    let stderr = p.stderr(&["--help"]);
+    assert!(stderr.contains(CONFLICT_WARNING), "stderr:\n{stderr}");
+
+    std::fs::remove_dir_all(
+        p.tools()
+            .join(".venv/lib/python3.13/site-packages/a_plugin"),
+    )
+    .unwrap();
+
+    let stderr = p.stderr(&["--help"]);
+    assert!(
+        !stderr.contains("is defined by more than one plugin"),
+        "stderr:\n{stderr}"
+    );
+    let manifest: serde_json::Value = serde_json::from_str(&p.manifest()).unwrap();
+    assert!(has_command(&manifest, "deploy", "rollout"), "{manifest}");
+    assert!(p.manifest().contains("b_plugin.commands"));
+    p.toolr(&["deploy", "--help"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("rollout"));
+}
