@@ -180,6 +180,6 @@ or `-V`. Choosing the winner in configuration is tracked in
 Two plugins that define the same command no longer stop toolr from working. Before, the manifest build failed, and
 on a fresh clone or a CI runner no command ran, local ones included. Now that command is disabled, and a warning on
 every run names every plugin that defines it (`toolr: warning: deploy rollout is defined by more than one plugin
-(toolr_a, toolr_b), so it is disabled. ...`). Uninstall all but one to get it back. Both this warning and the
-shadowing one now link [#522](https://github.com/s0undt3ch/ToolR/issues/522), where you can vote for choosing the
-winner in configuration.
+(toolr_a, toolr_b), so it is disabled. ...`). Uninstall all but one to get it back, or define it in your `tools/`,
+and the local one wins. Both this warning and the shadowing one now link
+[#522](https://github.com/s0undt3ch/ToolR/issues/522), where you can vote for choosing the winner in configuration.

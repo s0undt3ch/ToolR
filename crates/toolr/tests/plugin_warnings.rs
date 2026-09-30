@@ -401,6 +401,7 @@ fn conflicting_plugins_disable_only_that_command() {
     );
     let top = p.stdout(&["__complete", &cwd, ""]);
     assert!(top.contains("extra"), "completions:\n{top}");
+    assert!(top.contains("deploy"), "completions:\n{top}");
 }
 
 #[test]

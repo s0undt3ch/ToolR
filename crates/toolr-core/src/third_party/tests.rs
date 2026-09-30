@@ -977,3 +977,17 @@ fn plugin_warnings_round_trip_and_stay_off_an_empty_manifest() {
     let back: Manifest = serde_json::from_str(&json).unwrap();
     assert_eq!(back, manifest);
 }
+
+#[test]
+fn conflict_plugin_warning_serialises_as_conflict_and_round_trips() {
+    let warning = PluginWarning {
+        package: "toolr_a".into(),
+        path: PathBuf::from("site-packages/toolr_a/toolr-manifest.json"),
+        kind: PluginWarningKind::Conflict,
+        message: "deploy rollout is defined by more than one plugin (toolr_a, toolr_b)".into(),
+    };
+    let json = serde_json::to_string(&warning).unwrap();
+    assert!(json.contains(r#""kind":"conflict""#), "got: {json}");
+    let back: PluginWarning = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, warning);
+}

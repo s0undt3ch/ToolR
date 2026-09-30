@@ -296,9 +296,9 @@ When multiple sources contribute commands with the same name:
 - **Between third-party packages:** when two or more plugins define the
   same command and your `tools/` doesn't, toolr can't know which one you
   want, so it disables that command. Everything else keeps working.
-  Uninstall all but one of them to get the command back. If a group only
-  held that command, it stays in `--help` but is empty. The warning names
-  every plugin:
+  Uninstall all but one of them to get the command back, or define it in
+  your `tools/`, and the local one wins. If a group only held that command,
+  it stays in `--help` but is empty. The warning names every plugin:
 
     ```text
     toolr: warning: deploy rollout is defined by more than one plugin (toolr_a, toolr_b), so it is disabled. Uninstall all but one. Choosing a winner in config is tracked in https://github.com/s0undt3ch/ToolR/issues/522
