@@ -292,18 +292,27 @@ When multiple sources contribute commands with the same name:
   plugin command with the same group and name. The plugin command is
   hidden, and toolr warns about it on every run
   (`toolr: warning: ... hiding the one from <pkg>`), so a plugin release
-  can't silently change what a local command does. Choosing a winner in
-  configuration is tracked in
-  [#522](https://github.com/s0undt3ch/ToolR/issues/522).
+  can't silently change what a local command does.
+- **Between third-party packages:** when two or more plugins define the
+  same command and your `tools/` doesn't, toolr can't know which one you
+  want, so it disables that command. Everything else keeps working.
+  Uninstall all but one of them to get the command back. If a group only
+  held that command, it stays in `--help` but is empty. The warning names
+  every plugin:
+
+    ```text
+    toolr: warning: deploy rollout is defined by more than one plugin (toolr_a, toolr_b), so it is disabled. Uninstall all but one. Choosing a winner in config is tracked in https://github.com/s0undt3ch/ToolR/issues/522
+    ```
+
 - **Group augmentation:** to add commands to a group of the host repo,
   the plugin declares that group itself (`command_group("ci", ...)`, with
   the same full path). A command in a group the plugin doesn't declare
   fails the build. The host's title and description win over the
   plugin's. Groups are matched by their full path, so a plugin's
   `docker.image` and a local `ci.image` stay separate.
-- **Between third-party packages:** order is undefined — packages
-  that share group/command names will produce a manifest-build error,
-  pointing you to fix one of them.
+
+Choosing the winner in configuration isn't supported yet. If you need it,
+vote on [#522](https://github.com/s0undt3ch/ToolR/issues/522).
 
 ## Distribution checklist
 
