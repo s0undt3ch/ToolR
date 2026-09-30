@@ -2461,7 +2461,6 @@ subprocess, no <code>pip install -e .</code> required.</p>
   would produce; exit <code>2</code> with a unified diff on drift.</li>
 <li><code>--output PATH</code> — write to a specific file instead of the
   package's default location.</li>
-<li><code>--schema-version N</code> — pin the emitted <code>toolr_schema_version</code>.</li>
 </ul>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>toolr<span class="w"> </span>self<span class="w"> </span>build-manifest<span class="w"> </span>--help
 </span></code></pre></div>
@@ -2480,12 +2479,10 @@ subprocess, no <code>pip install -e .</code> required.</p>
 </span><span id="__span-32-13"><a id="__codelineno-32-13" name="__codelineno-32-13" href="#__codelineno-32-13"></a>          directory name)
 </span><span id="__span-32-14"><a id="__codelineno-32-14" name="__codelineno-32-14" href="#__codelineno-32-14"></a>      --output &lt;PATH&gt;
 </span><span id="__span-32-15"><a id="__codelineno-32-15" name="__codelineno-32-15" href="#__codelineno-32-15"></a>          Override the output path
-</span><span id="__span-32-16"><a id="__codelineno-32-16" name="__codelineno-32-16" href="#__codelineno-32-16"></a>      --schema-version &lt;N&gt;
-</span><span id="__span-32-17"><a id="__codelineno-32-17" name="__codelineno-32-17" href="#__codelineno-32-17"></a>          Pin the emitted schema version
-</span><span id="__span-32-18"><a id="__codelineno-32-18" name="__codelineno-32-18" href="#__codelineno-32-18"></a>      --check
-</span><span id="__span-32-19"><a id="__codelineno-32-19" name="__codelineno-32-19" href="#__codelineno-32-19"></a>          Verify the on-disk manifest matches regeneration
-</span><span id="__span-32-20"><a id="__codelineno-32-20" name="__codelineno-32-20" href="#__codelineno-32-20"></a>  -h, --help
-</span><span id="__span-32-21"><a id="__codelineno-32-21" name="__codelineno-32-21" href="#__codelineno-32-21"></a>          Print help
+</span><span id="__span-32-16"><a id="__codelineno-32-16" name="__codelineno-32-16" href="#__codelineno-32-16"></a>      --check
+</span><span id="__span-32-17"><a id="__codelineno-32-17" name="__codelineno-32-17" href="#__codelineno-32-17"></a>          Verify the on-disk manifest matches regeneration
+</span><span id="__span-32-18"><a id="__codelineno-32-18" name="__codelineno-32-18" href="#__codelineno-32-18"></a>  -h, --help
+</span><span id="__span-32-19"><a id="__codelineno-32-19" name="__codelineno-32-19" href="#__codelineno-32-19"></a>          Print help
 </span></code></pre></div>
 <p>See also: <a href="../third-party/">Third-party packages</a>.</p>
 <h2 id="internal-subcommands">Internal subcommands<a class="headerlink" href="#internal-subcommands" title="Permanent link">&para;</a></h2>

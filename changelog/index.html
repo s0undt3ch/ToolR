@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev141-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev160-2026-09-30" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev141 - 2026-09-29
+        0.33.1-dev160 - 2026-09-30
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev141 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev160 - 2026-09-30">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1578,6 +1578,17 @@
     <span class="md-ellipsis">
       
         Path types replace arg(must_*)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plugin-commands-behave-like-local-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin commands behave like local commands
       
     </span>
   </a>
@@ -4129,15 +4140,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev141-2026-09-29" class="md-nav__link">
+  <a href="#0331-dev160-2026-09-30" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev141 - 2026-09-29
+        0.33.1-dev160 - 2026-09-30
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev141 - 2026-09-29">
+    <nav class="md-nav" aria-label="0.33.1-dev160 - 2026-09-30">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4244,6 +4255,17 @@
     <span class="md-ellipsis">
       
         Path types replace arg(must_*)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plugin-commands-behave-like-local-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin commands behave like local commands
       
     </span>
   </a>
@@ -6790,7 +6812,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev141-2026-09-29">0.33.1-dev141 - 2026-09-29<a class="headerlink" href="#0331-dev141-2026-09-29" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev160-2026-09-30">0.33.1-dev160 - 2026-09-30<a class="headerlink" href="#0331-dev160-2026-09-30" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6862,7 +6884,8 @@ modules and the manifest at the wrong path. They now use
 <code>examples/plugin-package/</code>. The setuptools recipe now uses <code>package-data</code>,
 which works whatever <code>include-package-data</code> is set to, instead of relying on
 <code>MANIFEST.in</code>. The docs also no longer claim that toolr migrates
-older fragment schemas: it accepts only the current <code>toolr_schema_version</code>.
+older fragment schemas. It loads a fragment only when its <code>toolr_schema_version</code> is in
+the range this toolr reads, and skips the plugin with a warning otherwise.
 The "Working example" link now points at <code>examples/plugin-package/</code>.
 (<a href="https://github.com/s0undt3ch/ToolR/issues/506">#506</a>)</p>
 <h3 id="readable-debug-and-info-log-colours">Readable debug and info log colours<a class="headerlink" href="#readable-debug-and-info-log-colours" title="Permanent link">&para;</a></h3>
@@ -6909,10 +6932,41 @@ manifest build fails and names the replacement:</p>
 <code>arg()</code> has no such keyword. Rebuild it against this release (<code>toolr self build-manifest --check</code>
 in its CI catches it). A command from a stale local manifest cache fails the same way.</p>
 <p>The local manifest schema is now version 2. An existing cache is rebuilt on the next run; there is
-nothing to do. Plugin commands don't run the path checks yet (#520).</p>
+nothing to do.</p>
 <p>On Windows, <code>ResolvedPath</code> and the other canonical path types now hand your command a plain path
 (<code>C:\Users\...</code>) instead of a verbatim one (<code>\\?\C:\Users\...</code>), which <code>pathlib</code> treated as a
 different drive.</p>
+<h3 id="plugin-commands-behave-like-local-commands">Plugin commands behave like local commands<a class="headerlink" href="#plugin-commands-behave-like-local-commands" title="Permanent link">&para;</a></h3>
+<p>A command shipped in a plugin now gets the same CLI behaviour as one in a repo's <code>tools/</code>. Its
+arguments are validated by clap before Python runs, so bad values and <code>Email</code> fail early, and the
+path types from the section above check the filesystem. Every <code>arg()</code> field (<code>aliases</code>, <code>metavar</code>,
+<code>env</code>, <code>hide</code>, <code>display_order</code>, <code>help_section</code>, <code>conflicts_with</code>, <code>requires</code>, <code>nargs</code>) now takes
+effect, and <code>tuple[T1, T2]</code> arguments enforce their element
+count and types. Nested plugin groups (<code>docker</code> then <code>image</code>) work too. Before, they produced a
+top-level group literally named <code>docker.image</code>.
+(<a href="https://github.com/s0undt3ch/ToolR/issues/520">#520</a>)</p>
+<p><strong>Migration: rebuild and republish your plugins.</strong> The <code>toolr-manifest.json</code> fragment now carries the
+manifest's own <code>Group</code> and <code>Command</code> types, so v1 fragments can't be read. toolr skips a plugin
+whose fragment is too old, or needs a newer toolr, and prints
+<code>toolr: warning: skipping plugin &lt;pkg&gt;: ...</code> on stderr on every run. The rest of the CLI, including
+your local commands, keeps working. Run <code>toolr self build-manifest</code> with this release and ship the
+result. toolr 0.33.0 and older abort the whole manifest merge on a fragment built by this release.
+That can't be fixed in binaries that already shipped, so upgrade to toolr 0.34.0 or newer wherever
+the rebuilt plugin is installed.</p>
+<p><code>toolr_schema_version</code> in a fragment is now the lowest toolr schema that can read it, computed by
+<code>toolr self build-manifest</code> from what the plugin uses. A plugin that uses only long-standing features
+stays loadable by future toolr releases that still read this fragment shape. <code>toolr self build-manifest
+--schema-version</code> is removed, because the value is no longer chosen by hand.</p>
+<p><strong>Plugin authors: two build errors.</strong> <code>toolr self build-manifest</code> now runs the same checks as the
+local build. A plugin whose positional arguments are out of order fails the build, and so does a
+command in a group the plugin doesn't declare (with a "did you mean" hint). To add commands to a
+group from the host repo, such as <code>ci</code>, the plugin now declares that group itself with the same full
+path. The host's title and description win at merge.</p>
+<p>A local command that hides a plugin command with the same group and name still wins, but now warns
+(<code>toolr: warning: ... defines ci lint, hiding the one from &lt;pkg&gt;</code>) on every run instead of hiding it
+silently. Warnings don't print for tab completion, <code>--quiet</code>, <code>project</code>, <code>self</code>, <code>init</code>, <code>--version</code>
+or <code>-V</code>. Choosing the winner in configuration is tracked in
+<a href="https://github.com/s0undt3ch/ToolR/issues/522">#522</a>.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -6930,6 +6984,10 @@ different drive.</p>
 <li><em>(types)</em> [<strong>breaking</strong>] Remove arg(must_*) in favour of path types (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/1762d4266a24b9803d540d81d6986d08c7ccddd1"><code>1762d42</code></a>)</li>
 <li><em>(manifest)</em> Bump schema to 2 and rebuild caches on a schema mismatch (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/b988538a626e509da37048a0e60eadd29ac72a69"><code>b988538</code></a>)</li>
 <li><em>(types)</em> Expose path types as NewTypes in toolr.types (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/4b270fecbfdd8c0aa24cc02a3f2336b302de2df4"><code>4b270fe</code></a>)</li>
+<li><em>(manifest)</em> Record the schema each type and field arrived in (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/9417609062b4475f9f0d72f87a0108286fa02823"><code>9417609</code></a>)</li>
+<li><em>(manifest)</em> [<strong>breaking</strong>] Ship plugin fragments as full manifest commands (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/a943a78889df6eac52f7dd0130702ec6ce08dd47"><code>a943a78</code></a>)</li>
+<li><em>(manifest)</em> Skip unloadable plugins and record plugin warnings (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/963d3fe2ac15a728eb00ef708da390294e507411"><code>963d3fe</code></a>)</li>
+<li><em>(cli)</em> Warn about skipped and shadowed plugins on every run (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/db4567955dd1c688bfa14a6834f3353429bf5c03"><code>db45679</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6964,6 +7022,7 @@ different drive.</p>
 <li><em>(runner)</em> Report an unknown arg() keyword at import as a clear error (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/899098862cd32b3bdadcc600f8a867afe9f016eb"><code>8990988</code></a>)</li>
 <li><em>(runner)</em> Catch a removed arg() keyword when annotations evaluate lazily (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/fc3338c44f97025f2d741d9c08b183b81ad3a8a8"><code>fc3338c</code></a>)</li>
 <li><em>(types)</em> Hand Windows canonical paths back without the \?\ prefix (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/2a3001b6bafdd7c974310662052a5e34951f3910"><code>2a3001b</code></a>)</li>
+<li><em>(manifest)</em> Dedup groups by full path, not leaf name (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/04efd1a13c236231d57c573c48093f250ebc7b93"><code>04efd1a</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -6971,6 +7030,7 @@ different drive.</p>
 <li><em>(xtask)</em> Derive self-containment URL list from project metadata (<a href="https://github.com/s0undt3ch/ToolR/commit/a5d51a6cfee4f75e83a5f57c8fb893962e7b364f"><code>a5d51a6</code></a>)</li>
 <li><em>(ci)</em> Move the packslip manifest check into toolr ci packslip-check (<a href="https://github.com/s0undt3ch/ToolR/commit/254fa420d4b8d080be769bc2fc510f9dc227031a"><code>254fa42</code></a>)</li>
 <li><em>(parser)</em> Build the type catalogue from an exhaustive kind mirror (#503) (<a href="https://github.com/s0undt3ch/ToolR/commit/e534da619e98667c41b67e74e3b8035bce640904"><code>e534da6</code></a>)</li>
+<li><em>(parser)</em> Share one builder between tools/ and plugins (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/a3568cf2ef648bed1720387806f06ad571612498"><code>a3568cf</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7013,6 +7073,15 @@ different drive.</p>
 <li><em>(types)</em> Document path types and the arg(must_*) removal (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/183fd790690318388d00d495df549991f3bd1c91"><code>183fd79</code></a>)</li>
 <li><em>(specs)</em> Archive the path-state types design and plan (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/a692500f5966788d05d0e95ff3bc55bff521e677"><code>a692500</code></a>)</li>
 <li><em>(unreleased)</em> Note plain canonical paths on Windows (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/868afe36d1dbb424cc5a5611a877a3d5dc0a7175"><code>868afe3</code></a>)</li>
+<li><em>(specs)</em> Design plugin command parity and fragment v2 (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/50b2e44b4d9524bc3cc590e147235e6c0e0af8b6"><code>50b2e44</code></a>)</li>
+<li><em>(specs)</em> Fold adversarial review into the plugin parity design (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/403041864dfed4ebd6f9383d7bfd4b1ad650f99d"><code>4030418</code></a>)</li>
+<li><em>(specs)</em> State the full-path group identity invariant (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/33b24baac6129efab8a75c440f1392323f413b5b"><code>33b24ba</code></a>)</li>
+<li><em>(specs)</em> Warn when a local command hides a plugin command (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/8301a9fed6f2c3ec2b9ebb321baeb80d5c1da197"><code>8301a9f</code></a>)</li>
+<li><em>(specs)</em> Fold second adversarial review into the plugin parity design (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/afd3db233333d3fb7e8b2dc91c805696782dfbb1"><code>afd3db2</code></a>)</li>
+<li><em>(specs)</em> Plan the plugin parity implementation (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/e321178d52e6bd310b15e1186b4ba6e5364d542f"><code>e321178</code></a>)</li>
+<li><em>(plugins)</em> Document fragment v2, the load rule and plugin warnings (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/8c74433df3b7d9a58e9d6a8c23f9fb04d8f53123"><code>8c74433</code></a>)</li>
+<li><em>(plugins)</em> State the toolr 0.34.0 requirement for rebuilt plugins (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/333590294d39a2870f6bc905f63a011cc71e3674"><code>3335902</code></a>)</li>
+<li><em>(specs)</em> Archive the plugin parity design and plan (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/380b3f5239493657e3ba85ca4034beca2780584b"><code>380b3f5</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7022,6 +7091,9 @@ different drive.</p>
 <li><em>(parser)</em> Cover the arg() check's remaining branches (#500) (<a href="https://github.com/s0undt3ch/ToolR/commit/935b9fc3955ab4403d056ffa3b1017701dc6a918"><code>935b9fc</code></a>)</li>
 <li><em>(cli)</em> Pin path-type rejections end to end (#502) (<a href="https://github.com/s0undt3ch/ToolR/commit/d9af38a8341b7ce129cc6f2353074ba532b9e510"><code>d9af38a</code></a>)</li>
 <li><em>(types)</em> Make the stale-keyword and permission tests hold on every Python and user (<a href="https://github.com/s0undt3ch/ToolR/commit/10f9f5ebc6fc130c3d6bf86ae06978273b323bf7"><code>10f9f5e</code></a>)</li>
+<li><em>(manifest)</em> Make the ArgumentKind and Nargs golden tables catch a forgotten variant (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/c102af2f7cd0241b0b34fbe1466a28dd1ee84fe1"><code>c102af2</code></a>)</li>
+<li><em>(cli)</em> Tighten plugin warning tests (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/f64fb9be60a9ebeb1460073ada12b2b08ac87377"><code>f64fb9b</code></a>)</li>
+<li><em>(manifest)</em> Cover host title winning and no-venv carry-forward (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/0f4a8e34b658a63e640a7b02b1ce976d6e1e75c5"><code>0f4a8e3</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

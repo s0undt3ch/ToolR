@@ -953,6 +953,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The toolr-manifest.json fragment format">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schema-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-time-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build-time checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1701,6 +1729,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The toolr-manifest.json fragment format">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schema-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-time-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build-time checks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1878,40 +1934,92 @@ anyway. If you need dynamic patterns, hand-edit the resulting
 <code>toolr-manifest.json</code>.</p>
 <h2 id="the-toolr-manifestjson-fragment-format">The <code>toolr-manifest.json</code> fragment format<a class="headerlink" href="#the-toolr-manifestjson-fragment-format" title="Permanent link">&para;</a></h2>
 <p>A fragment is a JSON object that declares groups and commands. Toolr
-validates it against a schema version and merges it into the project's
-manifest at build time.</p>
-<p>Minimal shape:</p>
+loads it only when its schema version is in the range this toolr reads,
+then merges it into the project's manifest at build time.</p>
+<p><code>toolr self build-manifest</code> writes the file, so you never author it by hand. This
+one is trimmed from the fragment of the example plugin:</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"toolr_schema_version"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">"groups"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="p">{</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-pkg"</span><span class="p">,</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"My Package"</span><span class="p">,</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Commands contributed by my-pkg."</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="p">],</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nt">"commands"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="p">{</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hello"</span><span class="p">,</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">      </span><span class="nt">"group"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my-pkg"</span><span class="p">,</span>
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">      </span><span class="nt">"module"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my_pkg.commands"</span><span class="p">,</span>
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">      </span><span class="nt">"function"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hello"</span><span class="p">,</span>
-</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">      </span><span class="nt">"summary"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Say hello."</span><span class="p">,</span>
-</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">      </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">,</span>
-</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">      </span><span class="nt">"arguments"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">        </span><span class="p">{</span>
-</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">          </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"name"</span><span class="p">,</span>
-</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">          </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"keyword"</span><span class="p">,</span>
-</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">          </span><span class="nt">"help"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Name to greet."</span><span class="p">,</span>
-</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">          </span><span class="nt">"default"</span><span class="p">:</span><span class="w"> </span><span class="s2">"world"</span><span class="p">,</span>
-</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="w">          </span><span class="nt">"type_annotation"</span><span class="p">:</span><span class="w"> </span><span class="s2">"str"</span><span class="p">,</span>
-</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">          </span><span class="nt">"allowed_values"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span>
-</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">        </span><span class="p">}</span>
-</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">      </span><span class="p">]</span>
-</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">  </span><span class="p">]</span>
-</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="p">}</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"commands"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">      </span><span class="nt">"arguments"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">        </span><span class="p">{</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">          </span><span class="nt">"allowed_values"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">          </span><span class="nt">"default"</span><span class="p">:</span><span class="w"> </span><span class="s2">"World"</span><span class="p">,</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">          </span><span class="nt">"help"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Name to greet (default: World)."</span><span class="p">,</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">          </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"optional"</span><span class="p">,</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">          </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"name"</span><span class="p">,</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">          </span><span class="nt">"resolved_type"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"str"</span><span class="p">},</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">          </span><span class="nt">"type_annotation"</span><span class="p">:</span><span class="w"> </span><span class="s2">"str"</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">        </span><span class="p">}</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">      </span><span class="p">],</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">      </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Say hello to someone."</span><span class="p">,</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">      </span><span class="nt">"function"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hello_command"</span><span class="p">,</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">      </span><span class="nt">"group"</span><span class="p">:</span><span class="w"> </span><span class="s2">"third-party"</span><span class="p">,</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">      </span><span class="nt">"module"</span><span class="p">:</span><span class="w"> </span><span class="s2">"toolr_example_plugin.commands"</span><span class="p">,</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hello"</span><span class="p">,</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">      </span><span class="nt">"origin"</span><span class="p">:</span><span class="w"> </span><span class="s2">"third_party"</span><span class="p">,</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">      </span><span class="nt">"summary"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Say hello to someone."</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">  </span><span class="p">],</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="w">  </span><span class="nt">"groups"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">      </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Tools contributed by a third-party plugin."</span><span class="p">,</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"third-party"</span><span class="p">,</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">      </span><span class="nt">"origin"</span><span class="p">:</span><span class="w"> </span><span class="s2">"third_party"</span><span class="p">,</span>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">      </span><span class="nt">"parent"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="w">      </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Third Party Tools"</span>
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a><span class="w">  </span><span class="p">],</span>
+</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="w">  </span><span class="nt">"package"</span><span class="p">:</span><span class="w"> </span><span class="s2">"toolr_example_plugin"</span><span class="p">,</span>
+</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="w">  </span><span class="nt">"toolr_schema_version"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
+</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="p">}</span>
 </span></code></pre></div>
+<p><code>groups</code> and <code>commands</code> use the same <code>Group</code> and <code>Command</code> shapes as the project's own manifest,
+so a plugin command gets the same validation, <code>arg()</code> options and completion as a local one.</p>
+<h3 id="schema-version">Schema version<a class="headerlink" href="#schema-version" title="Permanent link">&para;</a></h3>
+<p><code>toolr_schema_version</code> is the <em>lowest</em> toolr schema that can read the fragment, not the schema of
+the toolr that built it. <code>toolr self build-manifest</code> computes it from the types and features the
+plugin uses, so a plugin that sticks to long-standing features stays loadable by future toolr
+releases that still read this shape.
+Fragments in this format need toolr 0.34.0 or newer.</p>
+<p>A toolr whose own schema is <code>C</code> and whose oldest readable fragment schema is <code>F</code> treats a fragment
+that declares <code>M</code> like this:</p>
+<table>
+<thead>
+<tr>
+<th>Fragment</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>M</code> below <code>F</code></td>
+<td>Skipped with a warning. Rebuild the plugin.</td>
+</tr>
+<tr>
+<td><code>M</code> above <code>C</code></td>
+<td>Skipped with a warning. Upgrade toolr.</td>
+</tr>
+<tr>
+<td><code>M</code> between <code>F</code> and <code>C</code></td>
+<td>Loaded.</td>
+</tr>
+<tr>
+<td>Missing, not an integer, or 0</td>
+<td>The manifest build fails.</td>
+</tr>
+</tbody>
+</table>
+<p>A skipped plugin doesn't break the CLI: local commands and other plugins keep working, and toolr
+prints <code>toolr: warning: skipping plugin &lt;pkg&gt;: ...</code> on stderr on every run (except for tab
+completion, <code>--quiet</code>, <code>project</code>, <code>self</code>, <code>init</code>, <code>--version</code> and <code>-V</code>). The same happens to a plugin
+with a command whose argument fails validation. Malformed JSON and the same command declared by two plugins
+still fail the manifest build.</p>
+<h3 id="build-time-checks">Build-time checks<a class="headerlink" href="#build-time-checks" title="Permanent link">&para;</a></h3>
+<p><code>toolr self build-manifest</code> runs the same checks as the project's own manifest build. Positional
+arguments in the wrong order, and a command in a group the plugin doesn't declare, fail the build.
+To add commands to a group of the host repo, declare that group in the plugin with the same full
+path (see <a href="#command-resolution">Command resolution</a>).</p>
 <p>The file lives at <code>&lt;package_dir&gt;/toolr-manifest.json</code> — i.e. next to
 <code>my_pkg/__init__.py</code>. Toolr's manifest builder finds it via the glob
 <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/toolr-manifest.json</code>.</p>
@@ -2020,11 +2128,19 @@ invocation — no project-side changes needed on their end.</p>
 <h2 id="command-resolution">Command resolution<a class="headerlink" href="#command-resolution" title="Permanent link">&para;</a></h2>
 <p>When multiple sources contribute commands with the same name:</p>
 <ul>
-<li><strong>Project commands</strong> (defined in your <code>tools/</code>) always win — they
-  override anything from a third-party package.</li>
-<li><strong>Group augmentation:</strong> if a third-party package targets an
-  existing group name, its commands are added to that group rather
-  than creating a duplicate.</li>
+<li><strong>Project commands</strong> (defined in your <code>tools/</code>) always win over a
+  plugin command with the same group and name. The plugin command is
+  hidden, and toolr warns about it on every run
+  (<code>toolr: warning: ... hiding the one from &lt;pkg&gt;</code>), so a plugin release
+  can't silently change what a local command does. Choosing a winner in
+  configuration is tracked in
+  <a href="https://github.com/s0undt3ch/ToolR/issues/522">#522</a>.</li>
+<li><strong>Group augmentation:</strong> to add commands to a group of the host repo,
+  the plugin declares that group itself (<code>command_group("ci", ...)</code>, with
+  the same full path). A command in a group the plugin doesn't declare
+  fails the build. The host's title and description win over the
+  plugin's. Groups are matched by their full path, so a plugin's
+  <code>docker.image</code> and a local <code>ci.image</code> stay separate.</li>
 <li><strong>Between third-party packages:</strong> order is undefined — packages
   that share group/command names will produce a manifest-build error,
   pointing you to fix one of them.</li>
@@ -2035,11 +2151,12 @@ invocation — no project-side changes needed on their end.</p>
   <code>package-data</code> (setuptools), <code>packages</code> (hatchling), or the
   equivalent in your build backend. Verify it's in the built wheel
   before publishing.</li>
-<li>Pin a compatible <code>toolr</code> version in your package's dependencies.
-  Toolr accepts only fragments that declare its current
-  <code>toolr_schema_version</code> and rejects any other version. There are no
-  schema migrations, so a fragment whose version doesn't match fails
-  to load.</li>
+<li>Pin a compatible <code>toolr</code> version in your package's dependencies:
+  a plugin built with this format needs <code>toolr&gt;=0.34.0</code>.
+  A fragment is loaded only when its <code>toolr_schema_version</code> is in the
+  range the installed toolr reads (see <a href="#schema-version">Schema version</a>).
+  There are no schema migrations: a fragment outside that range is
+  skipped with a warning until you rebuild it or the user upgrades toolr.</li>
 </ul>
 <h2 id="working-example-in-the-repo">Working example in the repo<a class="headerlink" href="#working-example-in-the-repo" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/s0undt3ch/ToolR/tree/main/examples/plugin-package"><code>examples/plugin-package/</code></a>

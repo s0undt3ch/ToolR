@@ -1844,6 +1844,11 @@ each <code>non-exhaustive patterns: … not covered</code> error names the next 
 <li><code>SupportedType::kind()</code>: map it to a new kind, and add that kind to the
    <code>supported_type_kinds!</code> list at the position its table row should take.</li>
 <li><code>SupportedTypeKind::representative()</code>: return a value of the new variant.</li>
+<li>Bump <code>SCHEMA_VERSION</code> in <code>crates/toolr-core/src/manifest/model.rs</code> and return the new value from
+   the new kind's <code>SupportedTypeKind::since_schema()</code>. <code>since_schema_golden_tables</code> is expected to
+   fail. Its new row is the new <code>SCHEMA_VERSION</code>, not whatever makes the test pass. Also set
+   <code>toolr.MANIFEST_SCHEMA_VERSION</code> in <code>crates/toolr-py/python/toolr/_decorators.py</code> to the same
+   value (the lockstep test fails otherwise), and re-run <code>cargo xtask build-skill-refs</code>.</li>
 <li><code>apply_value_parser</code> in <code>crates/toolr/src/value_parsers.rs</code>: choose the clap value parser.</li>
 <li><code>SupportedType::is_path()</code>: say whether clap stores the value as a <code>PathBuf</code>. For a path type,
    also add its <code>(PathForm, PathCheck)</code> to <code>path_rule</code> in <code>crates/toolr/src/value_parsers.rs</code>.
