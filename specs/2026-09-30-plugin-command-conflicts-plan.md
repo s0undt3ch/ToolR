@@ -491,15 +491,17 @@ Expected: builds. Nothing outside `toolr-core` calls `merge_into_manifest` or ma
 Run: `cargo clippy -p toolr-core --all-targets -- -D warnings 2>&1 | tail -20`
 Expected: no warnings.
 
-Run:
+The workspace isn't fmt-clean, and nothing gates on fmt. Format only what you wrote:
 
-```bash
-rustfmt --edition 2021 \
-  crates/toolr-core/src/third_party/{merge,mod,parse,tests}.rs \
-  crates/toolr-core/src/manifest/model.rs
-```
+- Run `rustfmt --edition 2021 crates/toolr-core/src/third_party/merge.rs`. `merge.rs` is fully rewritten, so the
+  whole file is yours.
+- Never pass `mod.rs` to `rustfmt`: it formats every child module too (`glob.rs`, `third_party/model.rs`).
+- For `third_party/tests.rs`, `third_party/parse.rs`, `third_party/mod.rs` and `manifest/model.rs`, run
+  `rustfmt --edition 2021 --check <file>` and hand-fix only hunks inside lines you edited. Leave pre-existing hunks
+  alone (`tests.rs` around lines 3, 49 and 73; `manifest/model.rs` around line 339; `parse.rs` around line 7;
+  `mod.rs` around line 13).
 
-The workspace edition is 2021 (`Cargo.toml`). Then `git diff --stat` must list only these five files.
+Then `git diff --stat` must list only the five files in this task's **Files** list.
 
 - [ ] **Step 9: Commit**
 
@@ -568,6 +570,10 @@ fn conflicting_plugins_disable_only_that_command() {
     assert!(stdout.contains("greet"), "stdout:\n{stdout}");
     assert!(stdout.contains("extra"), "stdout:\n{stdout}");
 
+    // The second run reads the cache and still warns exactly once.
+    let stderr = p.stderr(&["--help"]);
+    assert_eq!(stderr.matches(CONFLICT_WARNING).count(), 1, "stderr:\n{stderr}");
+
     // The local group and the unrelated plugin command still work. The fixture venv
     // can't import plugins, so plugin commands are checked through help and the manifest.
     p.toolr(&["greet", "--help"])
@@ -618,6 +624,11 @@ fn uninstalling_one_conflicting_plugin_restores_the_command() {
 If `p.tmp` isn't reachable from a free function in this file, it is: `completion_never_warns` already uses
 `p.tmp.path()`. The `deploy --help` call in the first test uses `.output()`, not `p.stdout`, because a group with no
 commands may exit non-zero (spec §3.1). Don't assert its status.
+
+Spec §3.1 says clap 4.6 doesn't assert on a `subcommand_required` group with no subcommands
+(`crates/toolr/src/cli.rs:63-66`). If the first `--help` panics inside `cli::build_command` on the empty `deploy`
+group, report it as a spec finding with status BLOCKED. Don't prune groups, and don't drop or weaken
+`out.status.success()`. A failing regression fixture is a second finding, not friction.
 
 - [ ] **Step 2: Prove the tests fail without Task 1**
 
@@ -684,12 +695,12 @@ When multiple sources contribute commands with the same name:
   want, so it disables that command. Everything else keeps working. The
   warning names every plugin:
 
-  ```text
-  toolr: warning: deploy rollout is defined by more than one plugin (toolr_a, toolr_b), so it is disabled. Uninstall all but one. Choosing a winner in config is tracked in https://github.com/s0undt3ch/ToolR/issues/522
-  ```
+    ```text
+    toolr: warning: deploy rollout is defined by more than one plugin (toolr_a, toolr_b), so it is disabled. Uninstall all but one. Choosing a winner in config is tracked in https://github.com/s0undt3ch/ToolR/issues/522
+    ```
 
-  Uninstall all but one of them to get the command back. If a group only
-  held that command, it stays in `--help` but is empty.
+    Uninstall all but one of them to get the command back. If a group only
+    held that command, it stays in `--help` but is empty.
 - **Group augmentation:** to add commands to a group of the host repo,
   the plugin declares that group itself (`command_group("ci", ...)`, with
   the same full path). A command in a group the plugin doesn't declare
@@ -702,6 +713,14 @@ vote on [#522](https://github.com/s0undt3ch/ToolR/issues/522).
 ````
 
 Keep the "Group augmentation" bullet's wording exactly as it is today. Only its position changes.
+
+The nested code block and paragraph use 4-space indentation, so Python-Markdown keeps them inside the bullet.
+
+This deliberately differs from spec §4 in one detail: the #522 link moves out of the local-wins bullet into one
+closing paragraph that covers both cases, instead of appearing in each bullet. One link says it once.
+
+After `uv run mkdocs build --strict`, open `site/third-party/index.html` and check that the code block renders
+inside the "Between third-party packages" bullet.
 
 - [ ] **Step 2: Update the packaging skill's prose**
 
@@ -765,7 +784,7 @@ prek run --files docs/third-party.md skills/toolr-command-packaging/SKILL.md \
   crates/toolr-core/src/manifest/model.rs
 ```
 
-Expected: every hook passes.
+Expected: every hook passes. None of these files is Python, so the mypy hook should skip.
 
 - [ ] **Step 6: Commit**
 
@@ -791,12 +810,15 @@ Expected: the skill-refs drift gate, `cargo test --workspace` and `pytest` all p
 - [ ] **Step 2: All hooks**
 
 Run: `prek run --all-files`
-Expected: every hook passes.
+Expected: every hook passes. Exception: the mypy hook has about 29 known local-only errors on a clean `main` (CI is
+green with the same versions). If mypy fails, run it on a clean `main` checkout too; if the same errors appear there,
+it's that known issue, not this branch. Judge on the other hooks.
 
 - [ ] **Step 3: Leak check**
 
-Run: `git grep -in paddle -- crates docs skills specs UNRELEASED.md; git grep -n '/Users/' -- crates docs skills specs UNRELEASED.md`
-Expected: no output.
+Run: `git diff main...HEAD | grep -inE '^\+.*(p[a]ddle|/Use[r]s/)'`
+Expected: no output. (The tree already has unrelated `/Users/` examples in `docs/internals/cache.md` and an archived
+spec, so only added lines are checked.)
 
 - [ ] **Step 4: Archive the specs (final commit)**
 
