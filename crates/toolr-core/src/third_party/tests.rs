@@ -313,20 +313,6 @@ fn third_party_error_io_renders_path_and_reason() {
     assert!(s.contains("boom"));
 }
 
-#[test]
-fn third_party_error_duplicate_command_renders_both_packages() {
-    let err = ThirdPartyError::DuplicateCommand {
-        group: "demo".into(),
-        name: "hello".into(),
-        first_package: "pkg-a".into(),
-        second_package: "pkg-b".into(),
-    };
-    let s = err.to_string();
-    assert!(s.contains("demo/hello"));
-    assert!(s.contains("pkg-a"));
-    assert!(s.contains("pkg-b"));
-}
-
 use super::merge::merge_into_manifest;
 
 fn empty_base() -> Manifest {
@@ -401,13 +387,32 @@ fn sample_fragment(pkg: &str, group: &str, name: &str) -> ManifestFragment {
     }
 }
 
+/// A fragment for `pkg` with two commands in one group.
+fn two_command_fragment(pkg: &str, group: &str, first: &str, second: &str) -> ManifestFragment {
+    let mut fragment = sample_fragment(pkg, group, first);
+    fragment
+        .commands
+        .extend(sample_fragment(pkg, group, second).commands);
+    fragment
+}
+
+const RESOLVE_TAIL: &str =
+    "Choosing a winner in config is tracked in https://github.com/s0undt3ch/ToolR/issues/522";
+
+fn command_names(manifest: &Manifest) -> Vec<(&str, &str)> {
+    manifest
+        .commands
+        .iter()
+        .map(|c| (c.group.as_str(), c.name.as_str()))
+        .collect()
+}
+
 #[test]
 fn merge_adds_groups_and_commands_from_fragments() {
     let merged = merge_into_manifest(
         empty_base(),
         from_files(vec![sample_fragment("pkg_a", "deploy", "rollout")]),
-    )
-    .unwrap();
+    );
     assert_eq!(merged.groups.len(), 1);
     assert_eq!(merged.groups[0].name, "deploy");
     assert_eq!(merged.commands.len(), 1);
@@ -441,8 +446,7 @@ fn merge_skips_third_party_command_when_local_already_defines_it() {
     let merged = merge_into_manifest(
         base,
         from_files(vec![sample_fragment("pkg_a", "deploy", "rollout")]),
-    )
-    .unwrap();
+    );
     assert_eq!(merged.commands.len(), 1);
     assert_eq!(merged.commands[0].summary, "local");
     let kinds: Vec<_> = merged.plugin_warnings.iter().map(|w| w.kind).collect();
@@ -450,18 +454,166 @@ fn merge_skips_third_party_command_when_local_already_defines_it() {
 }
 
 #[test]
-fn merge_errors_on_third_party_to_third_party_collision() {
-    let err = merge_into_manifest(
+fn merge_disables_a_command_two_plugins_define() {
+    let merged = merge_into_manifest(
+        empty_base(),
+        from_files(vec![
+            two_command_fragment("pkg_a", "deploy", "rollout", "status"),
+            sample_fragment("pkg_b", "deploy", "rollout"),
+        ]),
+    );
+    assert_eq!(command_names(&merged), [("deploy", "status")]);
+    assert_eq!(merged.plugin_warnings.len(), 1);
+    let warning = &merged.plugin_warnings[0];
+    assert_eq!(warning.kind, PluginWarningKind::Conflict);
+    assert_eq!(warning.package, "pkg_a");
+    assert_eq!(
+        warning.path,
+        PathBuf::from("site-packages/pkg_a/toolr-manifest.json")
+    );
+    assert_eq!(
+        warning.message,
+        format!(
+            "deploy rollout is defined by more than one plugin (pkg_a, pkg_b), so it is disabled. \
+             Uninstall all but one. {RESOLVE_TAIL}"
+        )
+    );
+}
+
+#[test]
+fn a_conflict_names_every_plugin_in_discovery_order() {
+    let merged = merge_into_manifest(
+        empty_base(),
+        from_files(vec![
+            sample_fragment("pkg_a", "deploy", "rollout"),
+            sample_fragment("pkg_b", "deploy", "rollout"),
+            sample_fragment("pkg_c", "deploy", "rollout"),
+        ]),
+    );
+    assert!(merged.commands.is_empty());
+    let messages: Vec<_> = merged
+        .plugin_warnings
+        .iter()
+        .map(|w| w.message.as_str())
+        .collect();
+    assert_eq!(messages.len(), 1, "{messages:?}");
+    assert!(
+        messages[0].starts_with(
+            "deploy rollout is defined by more than one plugin (pkg_a, pkg_b, pkg_c), so it is disabled."
+        ),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn conflict_message_spells_nested_and_top_level_paths() {
+    let mut top_a = sample_fragment("pkg_a", "", "hello");
+    top_a.groups.clear();
+    let mut top_b = sample_fragment("pkg_b", "", "hello");
+    top_b.groups.clear();
+    let merged = merge_into_manifest(
+        empty_base(),
+        from_files(vec![
+            sample_fragment("pkg_a", "docker.image", "build"),
+            top_a,
+            sample_fragment("pkg_b", "docker.image", "build"),
+            top_b,
+        ]),
+    );
+    let starts: Vec<_> = merged
+        .plugin_warnings
+        .iter()
+        .map(|w| w.message.split(" is defined").next().unwrap())
+        .collect();
+    assert_eq!(starts, ["docker image build", "hello"]);
+}
+
+#[test]
+fn local_command_beats_two_clashing_plugins() {
+    let mut base = empty_base();
+    base.groups.push(static_group("ci", None));
+    base.commands.push(local_command("ci", "lint", "tools.ci"));
+    let merged = merge_into_manifest(
+        base,
+        from_files(vec![
+            sample_fragment("pkg_a", "ci", "lint"),
+            sample_fragment("pkg_b", "ci", "lint"),
+        ]),
+    );
+    assert_eq!(command_names(&merged), [("ci", "lint")]);
+    assert_eq!(merged.commands[0].origin, Origin::Static);
+    let kinds: Vec<_> = merged.plugin_warnings.iter().map(|w| w.kind).collect();
+    assert_eq!(
+        kinds,
+        [PluginWarningKind::Shadowed, PluginWarningKind::Shadowed]
+    );
+}
+
+#[test]
+fn a_fragment_listing_one_command_twice_merges_it_once() {
+    let merged = merge_into_manifest(
+        empty_base(),
+        from_files(vec![two_command_fragment(
+            "pkg_a", "deploy", "rollout", "rollout",
+        )]),
+    );
+    assert_eq!(command_names(&merged), [("deploy", "rollout")]);
+    assert!(
+        merged.plugin_warnings.is_empty(),
+        "{:?}",
+        merged.plugin_warnings
+    );
+}
+
+#[test]
+fn a_group_emptied_by_a_conflict_is_kept() {
+    let merged = merge_into_manifest(
         empty_base(),
         from_files(vec![
             sample_fragment("pkg_a", "deploy", "rollout"),
             sample_fragment("pkg_b", "deploy", "rollout"),
         ]),
-    )
-    .expect_err("should collide");
-    let msg = err.to_string();
-    assert!(msg.contains("pkg_a"), "got: {msg}");
-    assert!(msg.contains("pkg_b"), "got: {msg}");
+    );
+    let paths: Vec<String> = merged.groups.iter().map(Group::full_path).collect();
+    assert_eq!(paths, ["deploy"]);
+    assert!(merged.commands.is_empty());
+}
+
+#[test]
+fn warnings_run_skipped_then_shadowed_then_conflict() {
+    let mut base = empty_base();
+    base.groups.push(static_group("ci", None));
+    base.commands.push(local_command("ci", "lint", "tools.ci"));
+    let rollout = r#"[{"name": "rollout", "group": "deploy", "module": "m", "function": "f",
+                       "arguments": [], "origin": "third_party"}]"#;
+    let deploy = r#"[{"name": "deploy", "title": "Deploy", "origin": "third_party"}]"#;
+    // Glob order is a_dup, b_dup, c_shadow, z_old. The conflict is seen first and the
+    // skipped plugin last, so the asserted order is not just glob order.
+    let a_dup = v2_fragment_json("a_dup", deploy, rollout);
+    let b_dup = v2_fragment_json("b_dup", deploy, rollout);
+    let c_shadow = v2_fragment_json(
+        "c_shadow",
+        "[]",
+        r#"[{"name": "lint", "group": "ci", "module": "c_shadow.ci", "function": "lint",
+             "arguments": [], "origin": "third_party"}]"#,
+    );
+    let z_old = r#"{"toolr_schema_version": 1, "package": "z_old"}"#;
+    let tmp = setup_fake_venv(&[
+        ("a_dup", &a_dup),
+        ("b_dup", &b_dup),
+        ("c_shadow", &c_shadow),
+        ("z_old", z_old),
+    ]);
+    let merged = discover_and_merge(tmp.path(), base).unwrap();
+    let kinds: Vec<_> = merged.plugin_warnings.iter().map(|w| w.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            PluginWarningKind::Skipped,
+            PluginWarningKind::Shadowed,
+            PluginWarningKind::Conflict,
+        ]
+    );
 }
 
 #[test]
@@ -477,7 +629,7 @@ fn repeated_tuple_argument_round_trips_through_merge() {
 
     let json = serde_json::to_string(&frag).unwrap();
     let back: ManifestFragment = serde_json::from_str(&json).unwrap();
-    let merged = merge_into_manifest(empty_base(), from_files(vec![back])).unwrap();
+    let merged = merge_into_manifest(empty_base(), from_files(vec![back]));
     assert_eq!(merged.commands[0].arguments, [pair]);
 }
 
@@ -488,7 +640,7 @@ fn merge_forces_third_party_origin_and_clears_dispatch_flags() {
     frag.commands[0].origin = Origin::Static;
     frag.commands[0].dispatched_from = Some("argparse:django".into());
     frag.commands[0].is_dispatcher = true;
-    let merged = merge_into_manifest(empty_base(), from_files(vec![frag])).unwrap();
+    let merged = merge_into_manifest(empty_base(), from_files(vec![frag]));
     assert_eq!(merged.groups[0].origin, Origin::ThirdParty);
     let cmd = &merged.commands[0];
     assert_eq!(cmd.origin, Origin::ThirdParty);
@@ -502,7 +654,7 @@ fn argument_kind_propagates_through_merge() {
     frag.commands[0]
         .arguments
         .push(plain_argument("force", ArgumentKind::Flag));
-    let merged = merge_into_manifest(empty_base(), from_files(vec![frag])).unwrap();
+    let merged = merge_into_manifest(empty_base(), from_files(vec![frag]));
     assert_eq!(merged.commands[0].arguments.len(), 1);
     assert_eq!(merged.commands[0].arguments[0].kind, ArgumentKind::Flag);
 }
@@ -622,8 +774,7 @@ fn merge_keeps_same_leaf_groups_under_different_parents() {
     let merged = merge_into_manifest(
         base,
         from_files(vec![sample_fragment("pkg_a", "docker.image", "build")]),
-    )
-    .unwrap();
+    );
     let paths: Vec<String> = merged.groups.iter().map(Group::full_path).collect();
     assert_eq!(paths, ["ci.image", "docker.image"]);
 }
@@ -635,8 +786,7 @@ fn merge_dedups_fragment_group_against_nested_base_group_by_full_path() {
     let merged = merge_into_manifest(
         base,
         from_files(vec![sample_fragment("pkg_a", "docker.image", "build")]),
-    )
-    .unwrap();
+    );
     assert_eq!(merged.groups.len(), 1);
 }
 
@@ -649,8 +799,7 @@ fn merge_keeps_the_host_title_when_a_fragment_group_collides() {
     let merged = merge_into_manifest(
         base,
         from_files(vec![sample_fragment("pkg_a", "docker.image", "build")]),
-    )
-    .unwrap();
+    );
     assert_eq!(merged.groups.len(), 1);
     assert_eq!(merged.groups[0].title, "Host title");
     assert_eq!(merged.groups[0].origin, Origin::Static);
@@ -738,7 +887,7 @@ fn local_command_shadows_plugin_with_warning() {
     );
     assert_eq!(
         warning.message,
-        "tools/ci.py defines ci lint, hiding the one from demo"
+        format!("tools/ci.py defines ci lint, hiding the one from demo. {RESOLVE_TAIL}")
     );
 }
 
@@ -752,17 +901,16 @@ fn shadow_message_spells_a_nested_group_with_spaces() {
     let merged = merge_into_manifest(
         base,
         from_files(vec![sample_fragment("demo", "docker.image", "build")]),
-    )
-    .unwrap();
+    );
     let messages: Vec<_> = merged
         .plugin_warnings
         .iter()
         .map(|w| w.message.as_str())
         .collect();
-    assert_eq!(
-        messages,
-        ["tools/docker/image.py defines docker image build, hiding the one from demo"]
+    let expected = format!(
+        "tools/docker/image.py defines docker image build, hiding the one from demo. {RESOLVE_TAIL}"
     );
+    assert_eq!(messages, [expected.as_str()]);
 }
 
 #[test]
@@ -828,4 +976,18 @@ fn plugin_warnings_round_trip_and_stay_off_an_empty_manifest() {
     assert!(json.contains(r#""kind":"shadowed""#), "got: {json}");
     let back: Manifest = serde_json::from_str(&json).unwrap();
     assert_eq!(back, manifest);
+}
+
+#[test]
+fn conflict_plugin_warning_serialises_as_conflict_and_round_trips() {
+    let warning = PluginWarning {
+        package: "toolr_a".into(),
+        path: PathBuf::from("site-packages/toolr_a/toolr-manifest.json"),
+        kind: PluginWarningKind::Conflict,
+        message: "deploy rollout is defined by more than one plugin (toolr_a, toolr_b)".into(),
+    };
+    let json = serde_json::to_string(&warning).unwrap();
+    assert!(json.contains(r#""kind":"conflict""#), "got: {json}");
+    let back: PluginWarning = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, warning);
 }

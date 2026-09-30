@@ -88,10 +88,11 @@ plugin-package/
 ## Command resolution
 
 When multiple sources contribute commands with the same name: a
-project's own `tools/` commands always win over a plugin's; a
-plugin can add commands to an existing group rather than creating a
-duplicate; and two plugins that register the same group/command pair
-fail the consuming project's manifest build.
+project's own `tools/` commands always win over a plugin's, with a
+warning on every run; a plugin can add commands to an existing group
+rather than creating a duplicate; and a command that two or more plugins
+define is disabled with a warning naming them all, while the rest of the
+CLI keeps working. Choosing the winner in configuration isn't supported.
 
 ## Verifying after install
 

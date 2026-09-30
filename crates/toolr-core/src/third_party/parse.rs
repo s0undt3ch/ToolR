@@ -39,16 +39,6 @@ pub enum ThirdPartyError {
          this file is not a valid toolr manifest fragment"
     )]
     MissingVersion { path: PathBuf },
-    #[error(
-        "duplicate command `{group}/{name}` declared by both `{first_package}` \
-         and `{second_package}`"
-    )]
-    DuplicateCommand {
-        group: String,
-        name: String,
-        first_package: String,
-        second_package: String,
-    },
 }
 
 /// The outcome of reading one fragment that is at least a well-formed, versioned fragment.

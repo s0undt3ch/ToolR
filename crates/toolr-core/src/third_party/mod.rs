@@ -23,14 +23,15 @@ use std::path::Path;
 use crate::manifest::Manifest;
 
 /// Glob for fragments under `tools_venv`, parse each, and merge them
-/// into `base`. Returns the augmented manifest, with every skipped plugin
-/// and then every shadowed plugin command recorded in `plugin_warnings`.
+/// into `base`. Returns the augmented manifest, with every skipped plugin,
+/// then every shadowed plugin command, then every plugin-to-plugin conflict
+/// recorded in `plugin_warnings`.
 ///
-/// A plugin outside the load rule, or with an invalid argument, is skipped
-/// so it can't break the CLI. These still abort the whole merge:
+/// A plugin outside the load rule, or with an invalid argument, is skipped,
+/// and a command two plugins define is disabled, so neither can break the CLI.
+/// These still abort the whole merge:
 /// - Malformed JSON in any fragment → `ThirdPartyError::Json`.
 /// - Missing/invalid `toolr_schema_version` → `MissingVersion`.
-/// - Third-party-to-third-party command collision → `DuplicateCommand`.
 pub fn discover_and_merge(
     tools_venv: &Path,
     mut base: Manifest,
@@ -43,5 +44,5 @@ pub fn discover_and_merge(
             ParsedFragment::Skipped(warning) => base.plugin_warnings.push(warning),
         }
     }
-    merge_into_manifest(base, fragments)
+    Ok(merge_into_manifest(base, fragments))
 }

@@ -48,7 +48,7 @@ pub struct Manifest {
     pub toolr_version: String,
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
-    /// Plugins skipped or shadowed by the last third-party merge, warned about on every run.
+    /// Plugins skipped, shadowed or in conflict at the last third-party merge, warned about on every run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugin_warnings: Vec<PluginWarning>,
 }
@@ -72,6 +72,8 @@ pub enum PluginWarningKind {
     Skipped,
     /// One plugin command was hidden by a local command with the same `(group, name)`.
     Shadowed,
+    /// A command defined by two or more plugins and no local command. It is disabled.
+    Conflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
