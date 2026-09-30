@@ -95,7 +95,8 @@ modules and the manifest at the wrong path. They now use
 `examples/plugin-package/`. The setuptools recipe now uses `package-data`,
 which works whatever `include-package-data` is set to, instead of relying on
 `MANIFEST.in`. The docs also no longer claim that toolr migrates
-older fragment schemas: it accepts only the current `toolr_schema_version`.
+older fragment schemas. It loads a fragment only when its `toolr_schema_version` is in
+the range this toolr reads, and skips the plugin with a warning otherwise.
 The "Working example" link now points at `examples/plugin-package/`.
 ([#506](https://github.com/s0undt3ch/ToolR/issues/506))
 
@@ -133,8 +134,45 @@ A plugin that still uses them fails when you run one of its commands, with an er
 in its CI catches it). A command from a stale local manifest cache fails the same way.
 
 The local manifest schema is now version 2. An existing cache is rebuilt on the next run; there is
-nothing to do. Plugin commands don't run the path checks yet (#520).
+nothing to do.
 
 On Windows, `ResolvedPath` and the other canonical path types now hand your command a plain path
 (`C:\Users\...`) instead of a verbatim one (`\\?\C:\Users\...`), which `pathlib` treated as a
 different drive.
+
+### Plugin commands behave like local commands
+
+A command shipped in a plugin now gets the same CLI behaviour as one in a repo's `tools/`. Its
+arguments are validated by clap before Python runs, so bad values and `Email` fail early, and the
+path types from the section above check the filesystem. Every `arg()` field (`aliases`, `metavar`,
+`env`, `hide`, `display_order`, `help_section`, `conflicts_with`, `requires`, `nargs`) now takes
+effect, and `tuple[T1, T2]` arguments enforce their element
+count and types. Nested plugin groups (`docker` then `image`) work too. Before, they produced a
+top-level group literally named `docker.image`.
+([#520](https://github.com/s0undt3ch/ToolR/issues/520))
+
+**Migration: rebuild and republish your plugins.** The `toolr-manifest.json` fragment now carries the
+manifest's own `Group` and `Command` types, so v1 fragments can't be read. toolr skips a plugin
+whose fragment is too old, or needs a newer toolr, and prints
+`toolr: warning: skipping plugin <pkg>: ...` on stderr on every run. The rest of the CLI, including
+your local commands, keeps working. Run `toolr self build-manifest` with this release and ship the
+result. toolr 0.33.0 and older abort the whole manifest merge on a fragment built by this release.
+That can't be fixed in binaries that already shipped, so upgrade to toolr 0.34.0 or newer wherever
+the rebuilt plugin is installed.
+
+`toolr_schema_version` in a fragment is now the lowest toolr schema that can read it, computed by
+`toolr self build-manifest` from what the plugin uses. A plugin that uses only long-standing features
+stays loadable by future toolr releases that still read this fragment shape. `toolr self build-manifest
+--schema-version` is removed, because the value is no longer chosen by hand.
+
+**Plugin authors: two build errors.** `toolr self build-manifest` now runs the same checks as the
+local build. A plugin whose positional arguments are out of order fails the build, and so does a
+command in a group the plugin doesn't declare (with a "did you mean" hint). To add commands to a
+group from the host repo, such as `ci`, the plugin now declares that group itself with the same full
+path. The host's title and description win at merge.
+
+A local command that hides a plugin command with the same group and name still wins, but now warns
+(`toolr: warning: ... defines ci lint, hiding the one from <pkg>`) on every run instead of hiding it
+silently. Warnings don't print for tab completion, `--quiet`, `project`, `self`, `init`, `--version`
+or `-V`. Choosing the winner in configuration is tracked in
+[#522](https://github.com/s0undt3ch/ToolR/issues/522).

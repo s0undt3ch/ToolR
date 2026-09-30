@@ -160,11 +160,12 @@ fn manifest_rebuilds_when_a_venv_appears() {
     std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
     std::fs::write(
         sp.join("toolr-manifest.json"),
-        r#"{"toolr_schema_version":1,"package":"demo_plugin",
-            "groups":[{"name":"plugins","title":"Plugins","description":"From a plugin."}],
+        r#"{"toolr_schema_version":2,"package":"demo_plugin",
+            "groups":[{"name":"plugins","title":"Plugins","description":"From a plugin.",
+                "origin":"third_party"}],
             "commands":[{"name":"from-plugin","group":"plugins","module":"demo_plugin.commands",
                 "function":"from_plugin","summary":"From a plugin.","description":"",
-                "arguments":[],"imports":[]}]}"#,
+                "arguments":[],"origin":"third_party"}]}"#,
     )
     .unwrap();
 
@@ -187,6 +188,49 @@ fn manifest_rebuilds_when_a_venv_appears() {
         manifest.contains("from-plugin"),
         "manifest should include the third-party command after the venv appeared:\n{manifest}"
     );
+}
+
+/// A v1 plugin fragment is skipped, not loaded, and the skip is warned about.
+#[test]
+fn v1_plugin_is_skipped_with_a_warning() {
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    std::fs::create_dir_all(&tools).unwrap();
+    std::fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname=\"demo\"\nversion=\"0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tools.join("greet.py"),
+        "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+    )
+    .unwrap();
+    let venv = tools.join(".venv");
+    let sp = venv.join("lib").join("python3.13").join("site-packages").join("demo_plugin");
+    std::fs::create_dir_all(&sp).unwrap();
+    std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
+    std::fs::write(
+        sp.join("toolr-manifest.json"),
+        r#"{"toolr_schema_version":1,"package":"demo_plugin",
+            "groups":[{"name":"plugins","title":"Plugins","description":"From a plugin.",
+                "origin":"third_party"}],
+            "commands":[{"name":"from-plugin","group":"plugins","module":"demo_plugin.commands",
+                "function":"from_plugin","summary":"From a plugin.","description":"",
+                "arguments":[],"origin":"third_party"}]}"#,
+    )
+    .unwrap();
+
+    Command::cargo_bin("toolr")
+        .unwrap()
+        .arg("--help")
+        .current_dir(tmp.path())
+        .env("TOOLR_VENV_LOCATION", "in-tree")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("greet"))
+        .stdout(predicates::str::contains("plugins").not())
+        .stderr(predicates::str::contains("toolr: warning: skipping plugin demo_plugin"));
 }
 
 #[test]

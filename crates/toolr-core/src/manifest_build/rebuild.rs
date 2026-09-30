@@ -35,7 +35,11 @@ pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<Re
         manifest_path,
         group_count: manifest.groups.len(),
         command_count: manifest.commands.len(),
-        warnings: Vec::new(),
+        warnings: manifest
+            .plugin_warnings
+            .iter()
+            .map(|w| w.message.clone())
+            .collect(),
     })
 }
 
@@ -64,5 +68,28 @@ mod tests {
         let group_names: Vec<_> = m.groups.iter().map(|g| g.name.as_str()).collect();
         assert!(group_names.contains(&"ci"));
         assert!(!m.third_party_hash.is_empty());
+    }
+
+    #[test]
+    fn full_rebuild_reports_plugin_warnings() {
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        std::fs::create_dir(project.join("tools")).unwrap();
+        let venv = project.join("venv");
+        let pkg = venv.join("lib/python3.13/site-packages/demo");
+        std::fs::create_dir_all(&pkg).unwrap();
+        std::fs::write(
+            pkg.join("toolr-manifest.json"),
+            r#"{"toolr_schema_version": 1, "package": "demo"}"#,
+        )
+        .unwrap();
+        let outcome = rebuild_manifest_full(project, &venv).unwrap();
+        assert_eq!(
+            outcome.warnings,
+            [
+                "skipping plugin demo: built with toolr schema 1, this toolr needs >= 2. \
+              Rebuild the plugin with toolr >= 0.34.0."
+            ]
+        );
     }
 }

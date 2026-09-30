@@ -80,11 +80,10 @@ def _emit_legacy_command_group_method_warning(parent_full_name: str, child: str)
     )
 
 
-MANIFEST_SCHEMA_VERSION: int = 1
-"""Current toolr manifest fragment schema version.
+MANIFEST_SCHEMA_VERSION: int = 2
+"""Current toolr manifest schema version.
 
-Mirrors `FRAGMENT_SCHEMA_VERSION` on the Rust side. Bump in lockstep
-when introducing a breaking change to the fragment format.
+Mirrors `SCHEMA_VERSION` in `crates/toolr-core/src/manifest/model.rs`.
 """
 
 

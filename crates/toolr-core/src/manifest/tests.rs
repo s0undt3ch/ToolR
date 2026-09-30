@@ -25,6 +25,7 @@ fn sample_manifest() -> Manifest {
             dispatched_from: None,
             is_dispatcher: false,
         }],
+        plugin_warnings: Vec::new(),
     }
 }
 

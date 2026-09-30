@@ -504,13 +504,6 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .help("Override the output path"),
                     )
                     .arg(
-                        Arg::new("schema-version")
-                            .long("schema-version")
-                            .value_name("N")
-                            .value_parser(clap::value_parser!(u32))
-                            .help("Pin the emitted schema version"),
-                    )
-                    .arg(
                         Arg::new("check")
                             .long("check")
                             .action(ArgAction::SetTrue)
@@ -932,6 +925,7 @@ mod cli_tree_tests {
             toolr_version: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, runserver],
+            plugin_warnings: Vec::new(),
         };
 
         let jenkins = build_for(manifest);
@@ -959,6 +953,7 @@ mod cli_tree_tests {
             toolr_version: String::new(),
             groups: vec![group("docker")],
             commands: vec![build_cmd, image_cmd, build_child, image_child],
+            plugin_warnings: Vec::new(),
         };
 
         let docker = build_for(manifest);
@@ -984,6 +979,7 @@ mod cli_tree_tests {
             toolr_version: String::new(),
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, status],
+            plugin_warnings: Vec::new(),
         };
 
         let jenkins = build_for(manifest);
@@ -1277,6 +1273,7 @@ mod cli_tree_tests {
             toolr_version: String::new(),
             groups: vec![group("django")],
             commands: vec![dispatcher_cmd, migrate],
+            plugin_warnings: Vec::new(),
         };
 
         let django = build_for(manifest);

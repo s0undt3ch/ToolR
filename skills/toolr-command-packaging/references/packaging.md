@@ -4,7 +4,7 @@
 
 This reference is generated from `toolr-core`'s own types. The struct definitions below are extracted verbatim from crates/toolr-core/src/manifest/model.rs and crates/toolr-core/src/third_party/model.rs in the toolr repository.
 If you ship a plugin whose `toolr-manifest.json` matches the schema below, toolr's loader will accept it.
-If you ship one that doesn't, the load will fail with a clear error from `parse_fragment`.
+A fragment whose version is out of range, or one with a command that fails validation, is skipped with a warning on every run. Malformed JSON, a missing or invalid `toolr_schema_version`, and the same command declared by two plugins still abort the manifest build.
 
 ## Discovery
 
@@ -29,72 +29,41 @@ Either layout works on every supported platform. If your wheel installs `<pkg>/t
 
 ## Schema version
 
-`FRAGMENT_SCHEMA_VERSION` is the version your plugin's `toolr-manifest.json` declares via the mandatory `toolr_schema_version` field. The toolr binary accepts fragments that declare exactly this version; any other version is rejected.
+`toolr_schema_version` in a plugin's `toolr-manifest.json` is the lowest toolr schema that can read the fragment. `toolr self build-manifest` computes it from the types and features the plugin uses. A toolr whose schema is between `MIN_READABLE_FRAGMENT_SCHEMA` and its own `SCHEMA_VERSION` loads the fragment. Anything else is skipped with a warning, and the rest of the CLI keeps working.
 
 ```rust
-/// Current fragment schema version. The Rust binary accepts fragments that
-/// declare exactly this version; any other version is rejected. (There are
-/// no schema migrations — a migration function is the day-v2-ships change.)
-pub const FRAGMENT_SCHEMA_VERSION: u32 = 1;
+/// The schema at which the fragment's JSON shape last changed in a way an older reader would
+/// misread. Bump it with `SCHEMA_VERSION` on any non-additive change to a fragment type.
+pub const FRAGMENT_SHAPE_SCHEMA: u32 = 2;
+
+/// The oldest fragment schema this reader parses; below the shape floor only while
+/// `parse_fragment` migrates the older shape.
+pub const MIN_READABLE_FRAGMENT_SCHEMA: u32 = 2;
 ```
 
 ## Fragment shape
 
-The fragment is the JSON blob your plugin ships at `<pkg>/toolr-manifest.json` inside the installed wheel. Fields default to empty where reasonable so a plugin can ship just `groups` or just `commands` without padding the file.
+The fragment is the JSON blob your plugin ships at `<pkg>/toolr-manifest.json` inside the installed wheel. Fields default to empty where reasonable so a plugin can ship just `groups` or just `commands` without padding the file. `groups` and `commands` are the manifest's own `Group` and `Command` types, the same ones a repo's `tools/` produces, so a plugin command behaves like a local one.
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestFragment {
+    /// Lowest toolr schema a reader needs to load this fragment, not the schema of the toolr
+    /// that built it.
     pub toolr_schema_version: u32,
     /// The Python package name this fragment came from. Used for
     /// diagnostic messages and de-duplication.
     pub package: String,
     #[serde(default)]
-    pub groups: Vec<FragmentGroup>,
+    pub groups: Vec<Group>,
     #[serde(default)]
-    pub commands: Vec<FragmentCommand>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FragmentGroup {
-    pub name: String,
-    pub title: String,
-    #[serde(default)]
-    pub description: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FragmentCommand {
-    pub name: String,
-    pub group: String,
-    pub module: String,
-    pub function: String,
-    #[serde(default)]
-    pub summary: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub arguments: Vec<FragmentArgument>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FragmentArgument {
-    pub name: String,
-    pub kind: crate::manifest::ArgumentKind,
-    #[serde(default)]
-    pub help: String,
-    #[serde(default)]
-    pub default: Option<String>,
-    #[serde(default)]
-    pub type_annotation: Option<String>,
-    #[serde(default)]
-    pub allowed_values: Vec<String>,
+    pub commands: Vec<Command>,
 }
 ```
 
 ## Origin
 
-Once merged into the project's manifest, every group and command carries an `origin` field. Plugins always end up tagged `"third_party"`. You never set this yourself — the merger does. Listed here so you can recognise plugin-origin entries when inspecting `tools/.toolr-manifest.json`.
+Once merged into the project's manifest, every group and command carries an `origin` field. Plugins always end up tagged `"third_party"`. You never set this yourself: `toolr self build-manifest` writes it and the merger enforces it. Listed here so you can recognise plugin-origin entries when inspecting `tools/.toolr-manifest.json`.
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,12 +105,15 @@ pub struct Manifest {
     pub toolr_version: String,
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
+    /// Plugins skipped or shadowed by the last third-party merge, warned about on every run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugin_warnings: Vec<PluginWarning>,
 }
 ```
 
 ## Plugin manifest schema (host invariants)
 
-Host-side schema version the merger expects on the project's own manifest. Bumped in lockstep with breaking changes to the host format; plugins don't need to react to it directly because the merger owns the host manifest, not the plugin fragment.
+Host-side schema version the merger expects on the project's own manifest. It is also the highest `toolr_schema_version` this toolr loads from a plugin fragment.
 
 ```rust
 /// Current manifest schema version. Bump on breaking format changes.

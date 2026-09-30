@@ -60,43 +60,83 @@ anyway. If you need dynamic patterns, hand-edit the resulting
 ## The `toolr-manifest.json` fragment format
 
 A fragment is a JSON object that declares groups and commands. Toolr
-validates it against a schema version and merges it into the project's
-manifest at build time.
+loads it only when its schema version is in the range this toolr reads,
+then merges it into the project's manifest at build time.
 
-Minimal shape:
+`toolr self build-manifest` writes the file, so you never author it by hand. This
+one is trimmed from the fragment of the example plugin:
 
 ```json
 {
-  "toolr_schema_version": 1,
-  "groups": [
-    {
-      "name": "my-pkg",
-      "title": "My Package",
-      "description": "Commands contributed by my-pkg."
-    }
-  ],
   "commands": [
     {
-      "name": "hello",
-      "group": "my-pkg",
-      "module": "my_pkg.commands",
-      "function": "hello",
-      "summary": "Say hello.",
-      "description": "",
       "arguments": [
         {
+          "allowed_values": [],
+          "default": "World",
+          "help": "Name to greet (default: World).",
+          "kind": "optional",
           "name": "name",
-          "kind": "keyword",
-          "help": "Name to greet.",
-          "default": "world",
-          "type_annotation": "str",
-          "allowed_values": []
+          "resolved_type": {"kind": "str"},
+          "type_annotation": "str"
         }
-      ]
+      ],
+      "description": "Say hello to someone.",
+      "function": "hello_command",
+      "group": "third-party",
+      "module": "toolr_example_plugin.commands",
+      "name": "hello",
+      "origin": "third_party",
+      "summary": "Say hello to someone."
     }
-  ]
+  ],
+  "groups": [
+    {
+      "description": "Tools contributed by a third-party plugin.",
+      "name": "third-party",
+      "origin": "third_party",
+      "parent": null,
+      "title": "Third Party Tools"
+    }
+  ],
+  "package": "toolr_example_plugin",
+  "toolr_schema_version": 2
 }
 ```
+
+`groups` and `commands` use the same `Group` and `Command` shapes as the project's own manifest,
+so a plugin command gets the same validation, `arg()` options and completion as a local one.
+
+### Schema version
+
+`toolr_schema_version` is the *lowest* toolr schema that can read the fragment, not the schema of
+the toolr that built it. `toolr self build-manifest` computes it from the types and features the
+plugin uses, so a plugin that sticks to long-standing features stays loadable by future toolr
+releases that still read this shape.
+Fragments in this format need toolr 0.34.0 or newer.
+
+A toolr whose own schema is `C` and whose oldest readable fragment schema is `F` treats a fragment
+that declares `M` like this:
+
+| Fragment | Result |
+| --- | --- |
+| `M` below `F` | Skipped with a warning. Rebuild the plugin. |
+| `M` above `C` | Skipped with a warning. Upgrade toolr. |
+| `M` between `F` and `C` | Loaded. |
+| Missing, not an integer, or 0 | The manifest build fails. |
+
+A skipped plugin doesn't break the CLI: local commands and other plugins keep working, and toolr
+prints `toolr: warning: skipping plugin <pkg>: ...` on stderr on every run (except for tab
+completion, `--quiet`, `project`, `self`, `init`, `--version` and `-V`). The same happens to a plugin
+with a command whose argument fails validation. Malformed JSON and the same command declared by two plugins
+still fail the manifest build.
+
+### Build-time checks
+
+`toolr self build-manifest` runs the same checks as the project's own manifest build. Positional
+arguments in the wrong order, and a command in a group the plugin doesn't declare, fail the build.
+To add commands to a group of the host repo, declare that group in the plugin with the same full
+path (see [Command resolution](#command-resolution)).
 
 The file lives at `<package_dir>/toolr-manifest.json` — i.e. next to
 `my_pkg/__init__.py`. Toolr's manifest builder finds it via the glob
@@ -248,11 +288,19 @@ invocation — no project-side changes needed on their end.
 
 When multiple sources contribute commands with the same name:
 
-- **Project commands** (defined in your `tools/`) always win — they
-  override anything from a third-party package.
-- **Group augmentation:** if a third-party package targets an
-  existing group name, its commands are added to that group rather
-  than creating a duplicate.
+- **Project commands** (defined in your `tools/`) always win over a
+  plugin command with the same group and name. The plugin command is
+  hidden, and toolr warns about it on every run
+  (`toolr: warning: ... hiding the one from <pkg>`), so a plugin release
+  can't silently change what a local command does. Choosing a winner in
+  configuration is tracked in
+  [#522](https://github.com/s0undt3ch/ToolR/issues/522).
+- **Group augmentation:** to add commands to a group of the host repo,
+  the plugin declares that group itself (`command_group("ci", ...)`, with
+  the same full path). A command in a group the plugin doesn't declare
+  fails the build. The host's title and description win over the
+  plugin's. Groups are matched by their full path, so a plugin's
+  `docker.image` and a local `ci.image` stay separate.
 - **Between third-party packages:** order is undefined — packages
   that share group/command names will produce a manifest-build error,
   pointing you to fix one of them.
@@ -263,11 +311,12 @@ When multiple sources contribute commands with the same name:
   `package-data` (setuptools), `packages` (hatchling), or the
   equivalent in your build backend. Verify it's in the built wheel
   before publishing.
-- Pin a compatible `toolr` version in your package's dependencies.
-  Toolr accepts only fragments that declare its current
-  `toolr_schema_version` and rejects any other version. There are no
-  schema migrations, so a fragment whose version doesn't match fails
-  to load.
+- Pin a compatible `toolr` version in your package's dependencies:
+  a plugin built with this format needs `toolr>=0.34.0`.
+  A fragment is loaded only when its `toolr_schema_version` is in the
+  range the installed toolr reads (see [Schema version](#schema-version)).
+  There are no schema migrations: a fragment outside that range is
+  skipped with a warning until you rebuild it or the user upgrades toolr.
 
 ## Working example in the repo
 

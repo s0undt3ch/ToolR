@@ -43,12 +43,15 @@ struct Section {
 const SECTIONS: &[Section] = &[
     Section {
         heading: "Schema version",
-        narrative: "`FRAGMENT_SCHEMA_VERSION` is the version your \
-                    plugin's `toolr-manifest.json` declares via the \
-                    mandatory `toolr_schema_version` field. The toolr \
-                    binary accepts fragments that declare exactly this \
-                    version; any other version is rejected.",
-        source: ("third_party/model.rs", "SkillRefFragmentVersion"),
+        narrative: "`toolr_schema_version` in a plugin's `toolr-manifest.json` is \
+                    the lowest toolr schema that can read the fragment. \
+                    `toolr self build-manifest` computes it from the types \
+                    and features the plugin uses. A toolr whose schema is \
+                    between `MIN_READABLE_FRAGMENT_SCHEMA` and its own \
+                    `SCHEMA_VERSION` loads the fragment. Anything else is \
+                    skipped with a warning, and the rest of the CLI keeps \
+                    working.",
+        source: ("manifest/model.rs", "SkillRefFragmentFloors"),
     },
     Section {
         heading: "Fragment shape",
@@ -56,7 +59,10 @@ const SECTIONS: &[Section] = &[
                     `<pkg>/toolr-manifest.json` inside the installed \
                     wheel. Fields default to empty where reasonable so \
                     a plugin can ship just `groups` or just `commands` \
-                    without padding the file.",
+                    without padding the file. `groups` and `commands` are \
+                    the manifest's own `Group` and `Command` types, the \
+                    same ones a repo's `tools/` produces, so a plugin \
+                    command behaves like a local one.",
         source: ("third_party/model.rs", "SkillRefManifestFragment"),
     },
     Section {
@@ -64,7 +70,8 @@ const SECTIONS: &[Section] = &[
         narrative: "Once merged into the project's manifest, every \
                     group and command carries an `origin` field. \
                     Plugins always end up tagged `\"third_party\"`. \
-                    You never set this yourself — the merger does. \
+                    You never set this yourself: `toolr self build-manifest` \
+                    writes it and the merger enforces it. \
                     Listed here so you can recognise plugin-origin \
                     entries when inspecting `tools/.toolr-manifest.json`.",
         source: ("manifest/model.rs", "SkillRefOrigin"),
@@ -82,10 +89,9 @@ const SECTIONS: &[Section] = &[
     Section {
         heading: "Plugin manifest schema (host invariants)",
         narrative: "Host-side schema version the merger expects on the \
-                    project's own manifest. Bumped in lockstep with \
-                    breaking changes to the host format; plugins don't \
-                    need to react to it directly because the merger owns \
-                    the host manifest, not the plugin fragment.",
+                    project's own manifest. It is also the highest \
+                    `toolr_schema_version` this toolr loads from a plugin \
+                    fragment.",
         source: ("manifest/model.rs", "SkillRefSchemaVersion"),
     },
 ];
@@ -101,9 +107,11 @@ pub fn packaging(repo_root: &Path) -> Result<Generated> {
         crates/toolr-core/src/manifest/model.rs and \
         crates/toolr-core/src/third_party/model.rs in the toolr repository.\nIf you ship a \
         plugin whose `toolr-manifest.json` matches the schema below, \
-        toolr's loader will accept it.\nIf you ship one that doesn't, \
-        the load will fail with a clear error from \
-        `parse_fragment`.\n\n",
+        toolr's loader will accept it.\nA fragment whose version is out of \
+        range, or one with a command that fails validation, is skipped \
+        with a warning on every run. Malformed JSON, a missing or invalid \
+        `toolr_schema_version`, and the same command declared by two \
+        plugins still abort the manifest build.\n\n",
     );
 
     body.push_str("## Discovery\n\n");

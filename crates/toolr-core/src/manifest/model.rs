@@ -1,5 +1,7 @@
 //! Serde-derived types representing a loaded manifest.
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::parser::SupportedType;
@@ -8,6 +10,21 @@ use crate::parser::SupportedType;
 /// Current manifest schema version. Bump on breaking format changes.
 pub const SCHEMA_VERSION: u32 = 2;
 // endregion: SkillRefSchemaVersion
+
+// region: SkillRefFragmentFloors
+/// The schema at which the fragment's JSON shape last changed in a way an older reader would
+/// misread. Bump it with `SCHEMA_VERSION` on any non-additive change to a fragment type.
+pub const FRAGMENT_SHAPE_SCHEMA: u32 = 2;
+
+/// The oldest fragment schema this reader parses; below the shape floor only while
+/// `parse_fragment` migrates the older shape.
+pub const MIN_READABLE_FRAGMENT_SCHEMA: u32 = 2;
+// endregion: SkillRefFragmentFloors
+
+const _: () = assert!(
+    MIN_READABLE_FRAGMENT_SCHEMA <= FRAGMENT_SHAPE_SCHEMA
+        && FRAGMENT_SHAPE_SCHEMA <= SCHEMA_VERSION
+);
 
 // region: SkillRefManifest
 /// Top-level manifest document.
@@ -31,8 +48,31 @@ pub struct Manifest {
     pub toolr_version: String,
     pub groups: Vec<Group>,
     pub commands: Vec<Command>,
+    /// Plugins skipped or shadowed by the last third-party merge, warned about on every run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugin_warnings: Vec<PluginWarning>,
 }
 // endregion: SkillRefManifest
+
+/// One plugin problem recorded at merge time so every later run can warn about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginWarning {
+    pub package: String,
+    /// The plugin's `toolr-manifest.json`.
+    pub path: PathBuf,
+    pub kind: PluginWarningKind,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginWarningKind {
+    /// The whole plugin was skipped: version outside the load rule, or a failed
+    /// `Argument::validate`.
+    Skipped,
+    /// One plugin command was hidden by a local command with the same `(group, name)`.
+    Shadowed,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {
@@ -260,6 +300,31 @@ pub enum ArgumentKind {
     /// Distinct from `Positional` (always required) and `VarPositional`
     /// (zero-or-more, trailing/greedy).
     OptionalPositional,
+}
+
+impl Nargs {
+    /// The schema this variant arrived in; an old reader can't deserialise a newer one.
+    pub fn since_schema(self) -> u32 {
+        match self {
+            Nargs::Plus | Nargs::Star | Nargs::Fixed(_) => 2,
+        }
+    }
+}
+
+impl ArgumentKind {
+    /// The schema this variant arrived in; an old reader can't deserialise a newer one.
+    pub fn since_schema(self) -> u32 {
+        match self {
+            ArgumentKind::Positional
+            | ArgumentKind::Optional
+            | ArgumentKind::Flag
+            | ArgumentKind::Repeated
+            | ArgumentKind::VarPositional
+            | ArgumentKind::Count
+            | ArgumentKind::FixedArity
+            | ArgumentKind::OptionalPositional => 2,
+        }
+    }
 }
 
 impl Argument {

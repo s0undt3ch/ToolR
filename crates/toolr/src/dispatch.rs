@@ -356,17 +356,11 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
 fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     let resolved = crate::build_manifest_resolve::resolve_source_and_package(matches)?;
 
-    let schema_version: u32 = matches
-        .get_one::<u32>("schema-version")
-        .copied()
-        .unwrap_or(toolr_core::third_party::FRAGMENT_SCHEMA_VERSION);
-
     let output_path = resolve_output_path(matches, &resolved.source_dir);
 
     let fragment = toolr_core::build_fragment::build_third_party_fragment(
         &resolved.source_dir,
         &resolved.package_name,
-        schema_version,
     )?;
     let serialised = toolr_core::build_fragment::serialise_fragment(&fragment)?;
 
@@ -608,6 +602,7 @@ fn empty_manifest_for_completion() -> Manifest {
         toolr_version: String::new(),
         groups: Vec::new(),
         commands: Vec::new(),
+        plugin_warnings: Vec::new(),
     }
 }
 
@@ -712,6 +707,7 @@ mod tests {
             toolr_version: String::new(),
             groups: Vec::new(),
             commands: Vec::new(),
+            plugin_warnings: Vec::new(),
         }
     }
 
@@ -819,6 +815,7 @@ mod path_lookup_tests {
             toolr_version: String::new(),
             groups: vec![],
             commands,
+            plugin_warnings: Vec::new(),
         }
     }
 

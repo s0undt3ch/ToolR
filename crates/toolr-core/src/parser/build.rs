@@ -7,7 +7,7 @@ use anyhow::Result;
 use walkdir::WalkDir;
 
 use crate::hash::hash_tools_dir;
-use crate::manifest::{ArgumentKind, Manifest, SCHEMA_VERSION};
+use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
@@ -34,7 +34,58 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
 }
 
 fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
-    let py_files = list_python_files(tools_dir);
+    let (all_groups, all_commands) = build_commands(tools_dir, "tools")?;
+
+    let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
+    let mut manifest = Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash,
+        third_party_hash: String::new(),
+        toolr_version: env!("CARGO_PKG_VERSION").to_string(),
+        groups: all_groups,
+        commands: all_commands,
+        plugin_warnings: Vec::new(),
+    };
+
+    // Run the user's argparse scanner ([tool.toolr.argparse.*] in
+    // tools/pyproject.toml) so its grafted children land in the same
+    // static manifest layer alongside the user's @command-decorated
+    // commands. The dotted-name derivation mirrors the CLI invocation
+    // path: a dispatcher whose name matches its group's leaf segment
+    // (`command_group("django")` + `def django(...)`) is addressable
+    // as `"django"`; any other command is `"<group>.<name>"`.
+    let parents: std::collections::HashMap<String, (String, String)> = manifest
+        .commands
+        .iter()
+        .map(|c| (dotted_name(c), (c.module.clone(), c.function.clone())))
+        .collect();
+
+    let project_root = tools_dir.parent().unwrap_or(tools_dir);
+    let grafted = crate::argparse::run_for_project(project_root, &parents)
+        .map_err(BuildError::Argparse)?;
+
+    // Splice grafted children into the manifest.
+    for (_parent, mut children) in grafted.children_by_parent {
+        manifest.commands.append(&mut children);
+    }
+
+    // Flip the dispatcher flag on each parent that received children.
+    for cmd in manifest.commands.iter_mut() {
+        if grafted.dispatchers.contains(&dotted_name(cmd)) {
+            cmd.is_dispatcher = true;
+        }
+    }
+
+    Ok(manifest)
+}
+
+/// Parse every `.py` under `source_root` and run every validation shared by
+/// the local `tools/` build and the plugin fragment build.
+pub(crate) fn build_commands(
+    source_root: &Path,
+    module_prefix: &str,
+) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
+    let py_files = list_python_files(source_root);
 
     // Pass 1: build cross-file enum + type-alias + arg-section tables
     // from every module so later passes can resolve symbols regardless
@@ -46,7 +97,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         std::collections::HashMap::new();
     for path in &py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
-        let module_path = module_path_for(tools_dir, path);
+        let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let is_package = path.file_stem().map(|s| s == "__init__").unwrap_or(false);
         all_imports.insert(
             module_path.clone(),
@@ -77,7 +128,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
     for path in &py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
-        let module_path = module_path_for(tools_dir, path);
+        let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
         name_conflicts.extend(detect_name_conflicts(&module, &module_path));
         let bindings = extract_groups(&module, &module_doc, &global_vars);
@@ -164,46 +215,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         return Err(BuildError::UnknownGroupRefs(unknown));
     }
 
-    let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
-    let mut manifest = Manifest {
-        schema_version: SCHEMA_VERSION,
-        static_hash,
-        third_party_hash: String::new(),
-        toolr_version: env!("CARGO_PKG_VERSION").to_string(),
-        groups: all_groups,
-        commands: all_commands,
-    };
-
-    // Run the user's argparse scanner ([tool.toolr.argparse.*] in
-    // tools/pyproject.toml) so its grafted children land in the same
-    // static manifest layer alongside the user's @command-decorated
-    // commands. The dotted-name derivation mirrors the CLI invocation
-    // path: a dispatcher whose name matches its group's leaf segment
-    // (`command_group("django")` + `def django(...)`) is addressable
-    // as `"django"`; any other command is `"<group>.<name>"`.
-    let parents: std::collections::HashMap<String, (String, String)> = manifest
-        .commands
-        .iter()
-        .map(|c| (dotted_name(c), (c.module.clone(), c.function.clone())))
-        .collect();
-
-    let project_root = tools_dir.parent().unwrap_or(tools_dir);
-    let grafted = crate::argparse::run_for_project(project_root, &parents)
-        .map_err(BuildError::Argparse)?;
-
-    // Splice grafted children into the manifest.
-    for (_parent, mut children) in grafted.children_by_parent {
-        manifest.commands.append(&mut children);
-    }
-
-    // Flip the dispatcher flag on each parent that received children.
-    for cmd in manifest.commands.iter_mut() {
-        if grafted.dispatchers.contains(&dotted_name(cmd)) {
-            cmd.is_dispatcher = true;
-        }
-    }
-
-    Ok(manifest)
+    Ok((all_groups, all_commands))
 }
 
 /// Compute the dotted name a command is addressable by from the CLI
@@ -538,10 +550,6 @@ pub(crate) fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
     paths
 }
 
-fn module_path_for(tools_dir: &Path, file: &Path) -> String {
-    module_path_for_prefix(tools_dir, file, "tools")
-}
-
 /// Compute a dotted module path for `file` rooted at `source_dir`, using
 /// `prefix` as the leading namespace segment. `__init__.py` files
 /// collapse to the prefix itself (the package root). Other files become
@@ -684,9 +692,7 @@ mod tests {
         std::fs::write(path, contents).unwrap();
     }
 
-    use crate::third_party::{
-        FragmentCommand, FragmentGroup, ManifestFragment, FRAGMENT_SCHEMA_VERSION,
-    };
+    use crate::third_party::ManifestFragment;
 
     #[test]
     fn build_with_venv_merges_local_and_third_party() {
@@ -709,14 +715,16 @@ def hello(ctx):
         let site = venv.join("lib").join("python3.13").join("site-packages");
         std::fs::create_dir_all(site.join("ext_pkg")).unwrap();
         let frag = ManifestFragment {
-            toolr_schema_version: FRAGMENT_SCHEMA_VERSION,
+            toolr_schema_version: SCHEMA_VERSION,
             package: "ext_pkg".into(),
-            groups: vec![FragmentGroup {
+            groups: vec![Group {
                 name: "deploy".into(),
                 title: "Deploy".into(),
                 description: String::new(),
+                parent: None,
+                origin: Origin::ThirdParty,
             }],
-            commands: vec![FragmentCommand {
+            commands: vec![Command {
                 name: "rollout".into(),
                 group: "deploy".into(),
                 module: "ext_pkg.commands".into(),
@@ -724,6 +732,9 @@ def hello(ctx):
                 summary: String::new(),
                 description: String::new(),
                 arguments: vec![],
+                origin: Origin::ThirdParty,
+                dispatched_from: None,
+                is_dispatcher: false,
             }],
         };
         std::fs::write(

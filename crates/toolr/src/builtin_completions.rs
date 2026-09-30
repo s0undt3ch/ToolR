@@ -37,6 +37,7 @@ fn empty_manifest() -> Manifest {
         toolr_version: String::new(),
         groups: Vec::new(),
         commands: Vec::new(),
+        plugin_warnings: Vec::new(),
     }
 }
 
@@ -215,6 +216,7 @@ mod tests {
             toolr_version: String::new(),
             groups,
             commands,
+            plugin_warnings: Vec::new(),
         }
     }
 
