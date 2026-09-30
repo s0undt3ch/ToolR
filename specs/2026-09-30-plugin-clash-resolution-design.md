@@ -59,12 +59,22 @@ Option<&ResolveRule>`.
 These are config errors. They abort, like a bad `[tool.toolr.argparse.*]` block:
 
 - a missing `command` or `use`, or a value of the wrong type (serde);
-- an empty `command` (after trimming) or an empty `use`;
-- two rules with the same `command` key. One key with two answers is ambiguous.
+- an empty `command` (after trimming) or an empty `use`.
 
-`ConfigError` gets a `BuildError::PluginsConfig` variant. On dispatch, a failed rebuild goes
-through `warn_and_keep_cache` like every other build error. `toolr project manifest rebuild`
-reports it as a hard error.
+A second rule with the same `command` key isn't malformed, just wrong, so it's a rule problem:
+the first rule wins and each later duplicate gets an `InvalidRule` warning (§4.3).
+
+The module has its own `third_party::config::ConfigError` (`failed to parse
+tool.toolr.plugins: …`). Reusing argparse's would label plugin errors as argparse ones.
+`BuildError` gets a `PluginsConfig` variant. Where it surfaces:
+
+- dispatch with a cache: `ensure_manifest_fresh` → `warn_and_keep_cache`, the old manifest keeps
+  working;
+- dispatch with no cache (fresh clone): `ensure_manifest_present_or_bootstrap` propagates it,
+  `toolr: <err>`, exit 2, `--help` included. Same as a bad argparse block today;
+- tab completion: `dispatch.rs` swallows `resolve_manifest_at_tab` errors and completes
+  built-ins only;
+- `toolr project manifest rebuild`: a hard error.
 
 No existing `[tool.toolr]` deserializer uses `deny_unknown_fields` (checked:
 `argparse/config.rs`, `venv/config.rs`), so the new table can't break them.
@@ -89,7 +99,9 @@ the old plugin, so a rebuild would produce the same manifest.
 
 No `SCHEMA_VERSION` bump. The manifest `SCHEMA_VERSION` is also the plugin fragment load-rule
 upper bound (`third_party/parse.rs`), so a bump would change which plugins load. The new warning
-kinds are additive enum variants. An older toolr that reads a newer cache fails to deserialize
+kinds are additive enum variants, and `PluginWarning.command` is an optional field that
+serde ignores when it's unknown (no `deny_unknown_fields`). An older toolr that reads a newer
+cache with a new kind fails to deserialize
 it, treats it as missing and rebuilds. No golden test covers `PluginWarning`.
 
 ## 4. Merge
@@ -103,16 +115,21 @@ it, treats it as missing and rebuilds. No golden test covers `PluginWarning`.
 1. **Groups.** Merge as today, by `full_path()`. The first definition keeps its title.
 2. **Collect.** For each `(group, name)`, record the local command (if any) and every plugin
    definition in discovery order: `(package, fragment path, Command)`. Nothing is resolved yet.
-   The first-come `owner` map goes.
+   The first-come `owner` map goes. Keys live in a `Vec` in first-seen order (local commands in
+   `base.commands` order, then plugin keys in discovery order), with a `HashMap` from key to
+   index. Not a bare `HashMap` (random order) and not a `BTreeMap` (sorted, not discovered).
+   Discovery itself is deterministic: `glob_manifests` sorts paths and fragments keep their
+   command order.
 3. **Resolve.** Apply §4.2 to each key. The result says which plugin command, if any, is merged
    and whether the local command is removed. It also records warnings and whether a rule was
    used.
 4. **Validate rules.** A rule that matched no key, or that §4.2 marks invalid, gets an
    `InvalidRule` warning (§4.3).
-5. **Prune.** Remove each `Origin::ThirdParty` group that has no commands and no child groups.
-   Repeat until nothing changes, so an empty parent goes too. A plugin group that only held a
-   disabled command would otherwise show in `--help` and fail with "subcommand required".
-   Local groups are never pruned.
+5. **Prune.** Remove each `Origin::ThirdParty` group that resolution emptied: it had at least
+   one plugin command before step 3, and has no commands and no child groups after it. Repeat
+   up the tree, so a parent emptied that way goes too. Such a group would otherwise show in
+   `--help` and fail with "subcommand required". A plugin group declared with no commands stays,
+   as #520's parity rule requires. Local groups are never pruned.
 
 Merged plugin commands keep today's tagging: `Origin::ThirdParty`, `dispatched_from = None`,
 `is_dispatcher = false`.
@@ -127,6 +144,20 @@ Merged plugin commands keep today's tagging: `Origin::ThirdParty`, `dispatched_f
 | no `L`, `P ≥ 2` | Nothing merged. One `Conflict` warning. | Invalid rule (no local command). Falls back to *No rule*. | `<pkg>` wins. No warning. |
 | `L` only, or `P = 1` only | Nothing to resolve. | Invalid rule (matches no clash). Falls back to *No rule*. | Invalid rule (matches no clash). Falls back to *No rule*. |
 | none | — | Invalid rule (no such command). | Invalid rule (no such command). |
+
+Precedence when a cell could match more than one message: a `use = "<pkg>"` that doesn't define
+the command always reports "doesn't define it", even when only one source defines it (`P = 1`,
+another package named). `use = "local"` with no definitions at all reports "nothing defines
+it".
+
+A key whose local definition is an argparse grafted child (`dispatched_from.is_some()`) is a
+special case. With no rule, or `use = "local"`, it behaves like any local command. With `use =
+"<pkg>"` the rule is invalid ("grafted from `<source>`, resolve its dispatcher instead") and
+falls back to *No rule*. Replacing one grafted child would leave its dispatcher inconsistent.
+
+Out of scope, and unchanged: a plugin group whose full path equals a local command's dotted
+name (for example a plugin `ci.django` group next to a local `ci django` dispatcher). That's a
+group-vs-command clash, not a command clash, and it behaves as it does today.
 
 `use = "<pkg>"` where `<pkg>` isn't installed, or doesn't define that command: invalid rule.
 Falls back to *No rule*. This covers a winner that was later uninstalled. Its fragment leaves
@@ -146,7 +177,11 @@ Conflict,
 InvalidRule,
 ```
 
-The `PluginWarning` struct doesn't change:
+`PluginWarning` gains one additive field, `command: Option<String>` (`#[serde(default,
+skip_serializing_if = "Option::is_none")]`). It holds the space-separated command path for
+`Shadowed`, `Conflict` and `InvalidRule`, and is `None` for `Skipped`. §5 uses it to drop
+warnings that a rule change made stale. The `path` doc comment ("the plugin's
+`toolr-manifest.json`") is widened, because `InvalidRule` points at `tools/pyproject.toml`.
 
 | Kind | `package` | `path` |
 | --- | --- | --- |
@@ -167,6 +202,10 @@ Messages (`<cmd>` is the space-separated path, as `shadow_message` prints it tod
   Remove the rule`.
 - `InvalidRule`, no definitions: `tools/pyproject.toml resolves <cmd>, but nothing defines it.
   Remove the rule`.
+- `InvalidRule`, grafted child: `tools/pyproject.toml resolves <cmd> to <pkg>, but <cmd> is
+  grafted from <source>. Resolve its dispatcher instead`.
+- `InvalidRule`, duplicate: `tools/pyproject.toml resolves <cmd> more than once. Only the first
+  rule is used`.
 
 Order in `plugin_warnings`: `Skipped` (from parsing), then `Shadowed` and `Conflict` in key
 discovery order, then `InvalidRule` in rule order. That order is deterministic, so tests can
@@ -182,9 +221,16 @@ change there.
 
 When `use = "<pkg>"` beats a local command, remove it from `base.commands`. If it's an argparse
 dispatcher (`is_dispatcher`), also remove its grafted children: the commands whose
-`dispatched_from.is_some()` and whose `group` equals the dispatcher's dotted path
-(`<group>.<name>`, or `<name>` at top level). The plugin command that replaces it is a plain leaf.
-Plugins can't be dispatchers. The docs say so.
+`dispatched_from.is_some()` and whose `group` equals the dispatcher's dotted name.
+
+The dotted name isn't always `<group>.<name>`. A hoisted dispatcher (`command_group("django")` +
+`def django`) has the dotted name `django`, not `django.django`. Two copies of that logic exist
+today: `parser/build.rs::dotted_name` and `cli.rs::dispatcher_dotted_name`. Replace both with one
+`Command::dotted_name()` method in `manifest/model.rs`, and use it in the merge and in the §5
+helper. A test covers the hoisted case.
+
+The plugin command that replaces it is a plain leaf. Plugins can't be dispatchers. The docs say
+so.
 
 ## 5. Paths with no venv
 
@@ -205,7 +251,15 @@ command (and its grafted children, §4.4) is removed, when the rule for that key
 other than `"local"`. Otherwise it's dropped, as today. The cache holds at most one plugin entry
 per key, so the helper doesn't need to know the package. Both call sites load rules with
 `load_rules(tools_dir)`. A `ConfigError` is propagated the same way the static build's own
-errors are there.
+errors are there (§2 lists where that surfaces).
+
+The helper also fixes the warnings it carries forward, since `carry_forward_cached_entries`
+persists the manifest. Using `PluginWarning.command` and the current rules, it drops:
+
+- an `InvalidRule` warning whose command no longer has a rule;
+- a `Shadowed` warning whose command now has `use = "local"`.
+
+Everything else needs the venv to recompute, so it's kept until the next run that has one.
 
 Known limit: without a venv, a rule can only keep what the cache already holds. A rule that was
 just added, or changed from `toolr_a` to `toolr_b`, takes effect on the next run that can
@@ -243,18 +297,24 @@ a broken venv) sees the old winner, and only until the next normal run. The docs
 - `third_party/config.rs`: a valid parse; the key mapping (top level, nested, extra whitespace);
   a missing key; the wrong type; an empty `command`; an empty `use`; a duplicate `command`; no
   table; no pyproject.
-- `third_party/tests.rs`: every cell of §4.2, with the exact warning kind, package, path and
-  message. Also:
+- `third_party/tests.rs`: every cell of §4.2, with the exact warning kind, package, path,
+  command and message. Also:
     - three plugins with no rule, and with `use = "<pkg>"`;
     - local plus two plugins, both with no rule and with `use = "<pkg>"`;
     - `use = "<pkg>"` for an uninstalled package;
     - pruning, including a nested empty plugin group, and a local group left alone;
-    - removing a local dispatcher and its grafted children;
+    - removing a local dispatcher and its grafted children, hoisted (`django`/`django`) and
+      not (`ci`/`django`);
+    - `use = "<pkg>"` on a grafted child is invalid; `use = "local"` on one is valid;
+    - a duplicate rule: the first wins and the second warns;
+    - a plugin group declared with no commands survives, one emptied by a `Conflict` is pruned;
     - warning order;
     - no `DuplicateCommand` path left.
 - `hash.rs`: `pyproject.toml` counts; other non-`.py` files don't.
 - `freshness` and the carry-forward helper: a rule that names a plugin keeps the cached plugin
-  command over a fresh local one; `use = "local"` and no rule drop it.
+  command over a fresh local one; `use = "local"` and no rule drop it; a removed rule drops its
+  cached `InvalidRule`; a new `use = "local"` drops the cached `Shadowed`.
+- `Command::dotted_name`: top level, nested, hoisted.
 
 ### Integration (`crates/toolr/tests/plugin_warnings.rs` harness)
 
@@ -264,7 +324,8 @@ a broken venv) sees the old winner, and only until the next normal run. The docs
 - A rule picks `toolr_a`. Uninstall `toolr_a`: the next run prints the `InvalidRule` warning and
   falls back.
 - `use = "<pkg>"` over a local command survives a static-drift run with no resolvable venv.
-- A malformed table: dispatch warns and keeps the cache; `toolr project manifest rebuild` fails.
+- A malformed table: dispatch warns and keeps the cache; with no cache it exits 2;
+  `toolr project manifest rebuild` fails.
 
 ### Docs examples (`crates/toolr/tests/docs_examples.rs`)
 
