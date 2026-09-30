@@ -72,6 +72,8 @@ pub enum PluginWarningKind {
     Skipped,
     /// One plugin command was hidden by a local command with the same `(group, name)`.
     Shadowed,
+    /// A command defined by two or more plugins and no local command. It is disabled.
+    Conflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
