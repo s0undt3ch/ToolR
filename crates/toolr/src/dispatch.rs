@@ -247,7 +247,9 @@ pub fn dispatch(
     // the per-repo venv layer.
     let resolved_venv: Option<toolr_core::venv::ResolvedVenv> =
         if repo_root.join("tools").join("pyproject.toml").is_file() {
-            Some(resolve_venv_path(&repo_root)?)
+            let resolved = resolve_venv_path(&repo_root)?;
+            let quiet = output_opts.verbosity == "quiet";
+            Some(resync_if_stale(&repo_root, resolved, quiet)?)
         } else {
             None
         };
@@ -333,6 +335,34 @@ pub fn dispatch(
     // ExitCode only carries u8 — clamp anything outside 0..=255.
     let clamped: u8 = code.clamp(0, 255).try_into().unwrap_or(1);
     Ok(ExitCode::from(clamped))
+}
+
+/// Re-sync a venv that `tools/uv.lock` has moved past, so a lock bump
+/// never runs old code (#527). A never-synced venv is left to the
+/// provenance gate, so a fresh clone installs nothing before it.
+fn resync_if_stale(
+    repo_root: &std::path::Path,
+    resolved: toolr_core::venv::ResolvedVenv,
+    quiet: bool,
+) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
+    use toolr_core::venv::{Freshness, check_freshness};
+    if check_freshness(&resolved, &repo_root.join("tools")) != Freshness::Stale {
+        return Ok(resolved);
+    }
+    if !quiet {
+        eprintln!(
+            "toolr: the tools venv is out of date with tools/uv.lock; syncing it first"
+        );
+    }
+    let mut consent = toolr_core::uv::install::ConsentMode::from_env();
+    consent.silent_refuse = quiet;
+    let opts = toolr_core::project::EnsureOpts::default().with_quiet(quiet);
+    let (resolved, _uv) =
+        toolr_core::project::ensure_venv_ready(repo_root, consent, opts).context(
+            "the tools venv is out of date with tools/uv.lock and could not be synced; \
+             run `toolr project venv sync`",
+        )?;
+    Ok(resolved)
 }
 
 fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
