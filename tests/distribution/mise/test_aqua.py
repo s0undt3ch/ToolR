@@ -11,6 +11,6 @@ from tests.distribution.mise.conftest import MiseProject
 
 
 def test_toolr_runs_at_release_version(aqua_project: MiseProject, smoke_version: str) -> None:
-    result = aqua_project.run("exec", "--", "toolr", "--version")
+    result = aqua_project.run_toolr("--version")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f"toolr {smoke_version}"

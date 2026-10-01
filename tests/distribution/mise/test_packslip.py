@@ -33,7 +33,7 @@ def _declared_skill_names(manifest: dict[str, Any]) -> set[str]:
 
 
 def _toolr_path_env(project: MiseProject) -> dict[str, str]:
-    return {**project.env, "PATH": f"{project.toolr_bin_dir()}{os.pathsep}{project.env['PATH']}"}
+    return {**project.env, "PATH": f"{project.toolr().parent}{os.pathsep}{project.env['PATH']}"}
 
 
 def test_manifest_matches_release(packslip_manifest: dict[str, Any], smoke_version: str) -> None:
@@ -41,11 +41,11 @@ def test_manifest_matches_release(packslip_manifest: dict[str, Any], smoke_versi
     assert _declared_skill_names(packslip_manifest), "the packslip declares no skills"
     completions = _declared(packslip_manifest, "completion")
     assert completions, "the packslip declares no shell completion"
-    assert set(SHELLS) <= set(completions[0]["shells"])
+    assert set(SHELLS) <= {shell for resource in completions for shell in resource["shells"]}
 
 
 def test_toolr_runs_at_release_version(packslip_project: MiseProject, smoke_version: str) -> None:
-    result = packslip_project.run("exec", "--", "toolr", "--version")
+    result = packslip_project.run_toolr("--version")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f"toolr {smoke_version}"
 

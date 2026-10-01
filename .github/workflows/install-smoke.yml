@@ -15,7 +15,10 @@ on:
     paths:
       - 'installation/install.sh'
       - 'installation/install.ps1'
+      - 'tests/distribution/conftest.py'
       - 'tests/distribution/mise/**'
+      - '.github/env'
+      - '.github/actions/setup-virtualenv/**'
       - '.github/workflows/install-smoke.yml'
   # PRs that touch the installer entry points get a smoke-test run
   # so we catch script breakage before it lands on main. The
@@ -26,7 +29,10 @@ on:
     paths:
       - 'installation/install.sh'
       - 'installation/install.ps1'
+      - 'tests/distribution/conftest.py'
       - 'tests/distribution/mise/**'
+      - '.github/env'
+      - '.github/actions/setup-virtualenv/**'
       - '.github/workflows/install-smoke.yml'
 
 permissions:
@@ -208,6 +214,7 @@ jobs:
   smoke-mise:
     name: mise packslip + aqua (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -231,11 +238,15 @@ jobs:
         with:
           cache-prefix: smoke-mise
           mise-version: ${{ env.MISE_VERSION }}
-      - name: Install shells for the completion tests
+      - name: Install shells for the completion tests (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends bash-completion fish zsh
+      # macOS ships bash 3.2 without bash-completion, and no fish.
+      - name: Install shells for the completion tests (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bash bash-completion@2 fish
       # Not `@latest`: mise holds a fresh release back from `latest` for a
       # while, so a run right after a release would test the previous one.
       - name: Resolve the version to test
@@ -248,12 +259,19 @@ jobs:
             VERSION=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
           fi
           echo "TOOLR_SMOKE_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+      # `--no-sync` and `--confcutdir` keep the repo's own toolr out: no
+      # build of HEAD, and no workspace `toolr` on PATH to mask a broken
+      # install. The version guard stops a lost env var from skipping
+      # every test into a green job.
       - name: Run the mise smoke tests
+        shell: bash
         env:
           # Anonymous GitHub API calls hit the rate limit, and mise then
           # silently drops packslip skills.
           GITHUB_TOKEN: ${{ github.token }}
-        run: uv run pytest -ra -v --color=yes tests/distribution/mise/
+        run: |
+          : "${TOOLR_SMOKE_VERSION:?not set by the resolve step}"
+          uv run --no-sync pytest -ra -v --color=yes --confcutdir=tests/distribution tests/distribution/mise/
 
   report:
     name: Report
