@@ -1463,15 +1463,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev179-2026-10-01" class="md-nav__link">
+  <a href="#0341-dev0-2026-10-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev179 - 2026-10-01
+        0.34.1-dev0 - 2026-10-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev179 - 2026-10-01">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0340-2026-10-01" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.34.0 - 2026-10-01
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.34.0 - 2026-10-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1600,6 +1611,17 @@
     <span class="md-ellipsis">
       
         Commands re-sync a stale tools venv before running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#warning-when-the-tools-venvs-toolr-py-is-from-another-minor-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warning when the tools venv's toolr-py is from another minor release
       
     </span>
   </a>
@@ -4151,15 +4173,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev179-2026-10-01" class="md-nav__link">
+  <a href="#0341-dev0-2026-10-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev179 - 2026-10-01
+        0.34.1-dev0 - 2026-10-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev179 - 2026-10-01">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0340-2026-10-01" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.34.0 - 2026-10-01
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.34.0 - 2026-10-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4288,6 +4321,17 @@
     <span class="md-ellipsis">
       
         Commands re-sync a stale tools venv before running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#warning-when-the-tools-venvs-toolr-py-is-from-another-minor-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Warning when the tools venv's toolr-py is from another minor release
       
     </span>
   </a>
@@ -6834,7 +6878,8 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev179-2026-10-01">0.33.1-dev179 - 2026-10-01<a class="headerlink" href="#0331-dev179-2026-10-01" title="Permanent link">&para;</a></h2>
+<h2 id="0341-dev0-2026-10-01">0.34.1-dev0 - 2026-10-01<a class="headerlink" href="#0341-dev0-2026-10-01" title="Permanent link">&para;</a></h2>
+<h2 id="0340-2026-10-01">0.34.0 - 2026-10-01<a class="headerlink" href="#0340-2026-10-01" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -7002,6 +7047,14 @@ bump (including <code>toolr-py</code> itself) never reached the venv until you r
 <code>toolr project venv sync</code> by hand, so commands kept running the old code without any warning.
 When the sync can't happen, for example because uv is missing and installing it wasn't
 approved, toolr refuses to run the command and points you at <code>toolr project venv sync</code>.</p>
+<h3 id="warning-when-the-tools-venvs-toolr-py-is-from-another-minor-release">Warning when the tools venv's <code>toolr-py</code> is from another minor release<a class="headerlink" href="#warning-when-the-tools-venvs-toolr-py-is-from-another-minor-release" title="Permanent link">&para;</a></h3>
+<p>Before running a command, toolr now checks the <code>toolr-py</code> version installed in the tools venv. If
+its minor release differs from the toolr binary's, toolr prints one warning naming both versions.
+The two can still talk to each other, so the command runs, but the mismatch used to stay hidden
+and made bugs already fixed in your toolr release look like new ones. When the venv is older, the
+warning suggests <code>toolr project venv sync -P toolr-py</code>, after loosening the <code>toolr-py</code> pin in
+<code>tools/pyproject.toml</code> if it caps the version. When the venv is newer, it suggests upgrading the
+toolr binary. Patch-level differences don't warn, and <code>--quiet</code> suppresses the warning.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -7024,6 +7077,7 @@ approved, toolr refuses to run the command and points you at <code>toolr project
 <li><em>(manifest)</em> Skip unloadable plugins and record plugin warnings (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/963d3fe2ac15a728eb00ef708da390294e507411"><code>963d3fe</code></a>)</li>
 <li><em>(cli)</em> Warn about skipped and shadowed plugins on every run (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/db4567955dd1c688bfa14a6834f3353429bf5c03"><code>db45679</code></a>)</li>
 <li><em>(plugins)</em> Disable a command two plugins define instead of failing (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/988c776e5d82ec7af78997960975e858fda253df"><code>988c776</code></a>)</li>
+<li><em>(dispatch)</em> Warn when the venv's toolr-py minor version differs from the binary (#529) (<a href="https://github.com/s0undt3ch/ToolR/commit/906ca41334f3510f9906c8fa4e988af00e5c5bef"><code>906ca41</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
