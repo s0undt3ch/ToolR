@@ -223,7 +223,8 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
           - macos-15-intel
-          - macos-14
+          # Not macos-14: its image lacks the `sha256sum` setup-virtualenv uses.
+          - macos-15
           - windows-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
