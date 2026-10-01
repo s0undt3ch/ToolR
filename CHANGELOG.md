@@ -6,6 +6,358 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.34.0 - 2026-10-01
+
+### Notes
+
+### `toolr.current_context()`
+
+Added `toolr.current_context()`, a `contextvars`-backed accessor a
+command-authoring helper can call to get the `Context` of the toolr command
+currently executing, without it being passed as a parameter. Purely
+additive: `@command`-decorated functions keep receiving `ctx` as their
+required first argument, and existing helpers that take `ctx` explicitly are
+unaffected. See `toolr.testing.set_current_context()` for testing helpers
+that use it.
+
+### Agent skills are now self-contained
+
+Each skill under `skills/` now carries everything it needs: the supported
+argument types (generated from toolr's own parser), the
+argument-shape rules, the prek hook recipe, and the example plugin
+`pyproject.toml`. Installed skills no longer point agents at the toolr docs
+site or repository. The generated tables include the `toolr.types` path types.
+
+### The authoring skill covers external command sources
+
+The `toolr-command-authoring` skill now teaches agents how to put existing
+argparse scripts and Django management commands behind a `DispatchCommand`
+dispatcher, instead of rewriting each one as a toolr command. It ships the
+configuration table and worked examples from the docs, and `DispatchCommand`
+now has a docstring. The external sources docs gain a plain-argparse example.
+They now also say that a script's subparser arguments merge into its single
+command, and list the payload's `schema` field.
+
+### Install toolr with mise's packslip backend
+
+Releases now ship a signed [packslip](https://packslip.dev/) manifest, so
+`mise use packslip:github.com/s0undt3ch/ToolR` installs toolr with signature
+and checksum verification, version-matched shell completions, and the three
+toolr agent skills (`mise skills sync`). The aqua backend remains available
+for releases published before packslip support.
+
+### Unknown `arg()` keywords now fail the manifest build
+
+A misspelled or unsupported `arg()` keyword, such as
+`arg(path_must_exist=True)`, and any positional argument passed to `arg()` now
+fail the manifest build with the module, function and argument, plus a
+"did you mean" hint where one fits (`path_must_exist` points at `toolr.types.ResolvedPath`).
+Argparse-style `help=`, `type=` and `default=` instead point at where toolr
+takes that information from. The check follows `arg()` calls nested in
+`X | None`, `Optional[...]` and `list[...]` annotations and through
+module-level aliases.
+The check also covers `toolr self build-manifest`, so a plugin can't ship a
+manifest containing a command that can never run. Before, the parser silently
+dropped the keyword: the command showed up in `--help` and then failed with a
+`TypeError` the first time it ran. No command that worked before is affected.
+The build-error heading for these failures, and for unsupported parameter
+types, now reads "invalid parameter declarations" instead of "unsupported
+parameter types". ([#500](https://github.com/s0undt3ch/ToolR/issues/500))
+
+### Commands without a docstring now fail the manifest build
+
+**Breaking.** A `@command` whose docstring gives no summary line now fails the
+manifest build. That covers a missing docstring, an empty or blank one, and one
+with only sections such as `Args:`. The error names the module and function of
+every offending command. Before, such a command built with an empty `--help`
+summary, although the docs already said it was rejected. The check applies to
+`toolr project manifest rebuild`, the automatic rebuild of a stale manifest, and
+`toolr self build-manifest`. The `@command` decorators apply the same rule at
+import time and raise a `ValueError`, so a `toolr.testing.CommandsTester`
+discovery test fails the same way the build does. Commands grafted from
+argparse sources are not affected. To fix a failing build, give each listed
+command a one-line docstring.
+
+toolr now also refuses to run under `python -OO` or `PYTHONOPTIMIZE=2`, which
+strip every docstring. Declaring a command, or a group described by its
+docstring, raises a `RuntimeError` saying so. Before, a group declared with
+`docstring=__doc__` failed there with a misleading "must pass either docstring
+or description" error.
+([#501](https://github.com/s0undt3ch/ToolR/issues/501))
+
+### Plugin packaging docs: fixed hatchling recipe
+
+The "Shipping the manifest" docs told hatchling users to list
+`toolr-manifest.json` under `include`, which builds a wheel with no Python
+modules and the manifest at the wrong path. They now use
+`packages = ["src/<pkg>"]`, matching the packaging skill and
+`examples/plugin-package/`. The setuptools recipe now uses `package-data`,
+which works whatever `include-package-data` is set to, instead of relying on
+`MANIFEST.in`. The docs also no longer claim that toolr migrates
+older fragment schemas. It loads a fragment only when its `toolr_schema_version` is in
+the range this toolr reads, and skips the plugin with a warning otherwise.
+The "Working example" link now points at `examples/plugin-package/`.
+([#506](https://github.com/s0undt3ch/ToolR/issues/506))
+
+### Readable debug and info log colours
+
+The `log-debug` and `log-info` console styles, and the `stdout`/`stderr` level
+labels, no longer use Rich's `dim` modifier. On many terminal palettes `dim`
+turned the blue and cyan into near-illegible grey. The named ANSI colours still
+follow the terminal's own light or dark palette.
+
+### Path types replace `arg(must_*)`
+
+`toolr.types` gains path types that say what a path argument must be. The toolr binary checks each
+one while it parses the command line, and your command always receives a `pathlib.Path`:
+
+- `NewPath`: must not exist; its parent directory must.
+- `FilePath`, `DirectoryPath`: must exist as that kind; canonicalised.
+- `ExecutablePath`, `WritableDirectoryPath`: as above, plus executable or writable.
+
+All seven path types, including the existing `AbsolutePath` and `ResolvedPath`, are now
+`typing.NewType`s rather than plain aliases, so type checkers tell them apart. **Typing-level
+break:** passing a bare `Path` where one of them is expected is now a type error.
+
+**Breaking:** `arg(must_exist=…)`, `arg(must_be_file=…)` and `arg(must_be_dir=…)` are removed. The
+manifest build fails and names the replacement:
+
+| Before | After |
+|---|---|
+| `Annotated[Path, arg(must_exist=True)]` | `ResolvedPath` |
+| `Annotated[Path, arg(must_be_file=True)]` | `FilePath` |
+| `Annotated[Path, arg(must_be_dir=True)]` | `DirectoryPath` |
+
+A plugin that still uses them fails when you run one of its commands, with an error saying
+`arg()` has no such keyword. Rebuild it against this release (`toolr self build-manifest --check`
+in its CI catches it). A command from a stale local manifest cache fails the same way.
+
+The local manifest schema is now version 2. An existing cache is rebuilt on the next run; there is
+nothing to do.
+
+On Windows, `ResolvedPath` and the other canonical path types now hand your command a plain path
+(`C:\Users\...`) instead of a verbatim one (`\\?\C:\Users\...`), which `pathlib` treated as a
+different drive.
+
+### Plugin commands behave like local commands
+
+A command shipped in a plugin now gets the same CLI behaviour as one in a repo's `tools/`. Its
+arguments are validated by clap before Python runs, so bad values and `Email` fail early, and the
+path types from the section above check the filesystem. Every `arg()` field (`aliases`, `metavar`,
+`env`, `hide`, `display_order`, `help_section`, `conflicts_with`, `requires`, `nargs`) now takes
+effect, and `tuple[T1, T2]` arguments enforce their element
+count and types. Nested plugin groups (`docker` then `image`) work too. Before, they produced a
+top-level group literally named `docker.image`.
+([#520](https://github.com/s0undt3ch/ToolR/issues/520))
+
+**Migration: rebuild and republish your plugins.** The `toolr-manifest.json` fragment now carries the
+manifest's own `Group` and `Command` types, so v1 fragments can't be read. toolr skips a plugin
+whose fragment is too old, or needs a newer toolr, and prints
+`toolr: warning: skipping plugin <pkg>: ...` on stderr on every run. The rest of the CLI, including
+your local commands, keeps working. Run `toolr self build-manifest` with this release and ship the
+result. toolr 0.33.0 and older abort the whole manifest merge on a fragment built by this release.
+That can't be fixed in binaries that already shipped, so upgrade to toolr 0.34.0 or newer wherever
+the rebuilt plugin is installed.
+
+`toolr_schema_version` in a fragment is now the lowest toolr schema that can read it, computed by
+`toolr self build-manifest` from what the plugin uses. A plugin that uses only long-standing features
+stays loadable by future toolr releases that still read this fragment shape. `toolr self build-manifest
+--schema-version` is removed, because the value is no longer chosen by hand.
+
+**Plugin authors: two build errors.** `toolr self build-manifest` now runs the same checks as the
+local build. A plugin whose positional arguments are out of order fails the build, and so does a
+command in a group the plugin doesn't declare (with a "did you mean" hint). To add commands to a
+group from the host repo, such as `ci`, the plugin now declares that group itself with the same full
+path. The host's title and description win at merge.
+
+A local command that hides a plugin command with the same group and name still wins, but now warns
+(`toolr: warning: ... defines ci lint, hiding the one from <pkg>`) on every run instead of hiding it
+silently. Warnings don't print for tab completion, `--quiet`, `project`, `self`, `init`, `--version`
+or `-V`. Choosing the winner in configuration is tracked in
+[#522](https://github.com/s0undt3ch/ToolR/issues/522).
+
+Two plugins that define the same command no longer stop toolr from working. Before, the manifest build failed, and
+on a fresh clone or a CI runner no command ran, local ones included. Now that command is disabled, and a warning on
+every run names every plugin that defines it (`toolr: warning: deploy rollout is defined by more than one plugin
+(toolr_a, toolr_b), so it is disabled. ...`). Uninstall all but one to get it back, or define it in your `tools/`,
+and the local one wins. Both this warning and the shadowing one now link
+[#522](https://github.com/s0undt3ch/ToolR/issues/522), where you can vote for choosing the winner in configuration.
+
+### Commands re-sync a stale tools venv before running
+
+Running a toolr command now checks whether `tools/uv.lock` has changed since the tools venv was
+last synced. If it has, toolr syncs the venv before running the command. Until now, a dependency
+bump (including `toolr-py` itself) never reached the venv until you ran
+`toolr project venv sync` by hand, so commands kept running the old code without any warning.
+When the sync can't happen, for example because uv is missing and installing it wasn't
+approved, toolr refuses to run the command and points you at `toolr project venv sync`.
+
+### Warning when the tools venv's `toolr-py` is from another minor release
+
+Before running a command, toolr now checks the `toolr-py` version installed in the tools venv. If
+its minor release differs from the toolr binary's, toolr prints one warning naming both versions.
+The two can still talk to each other, so the command runs, but the mismatch used to stay hidden
+and made bugs already fixed in your toolr release look like new ones. When the venv is older, the
+warning suggests `toolr project venv sync -P toolr-py`, after loosening the `toolr-py` pin in
+`tools/pyproject.toml` if it caps the version. When the venv is newer, it suggests upgrading the
+toolr binary. Patch-level differences don't warn, and `--quiet` suppresses the warning.
+
+### <!-- 0 -->🚀 Features
+
+- *(toolr-py)* Add current_context() accessor and NoCurrentContextError ([`5c49421`](https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7))
+- *(toolr-py)* Add toolr.testing.set_current_context ([`1c5dcc3`](https://github.com/s0undt3ch/ToolR/commit/1c5dcc353c28ead05856127b251a28c3295662c3))
+- *(toolr-py)* Set current_context() before dispatching a command ([`7b97fde`](https://github.com/s0undt3ch/ToolR/commit/7b97fde25b9f14b1221a4f417815ba19e8e30c36))
+- *(toolr-py)* Export toolr.current_context from the top-level package ([`3a14b77`](https://github.com/s0undt3ch/ToolR/commit/3a14b772bb012416622f791b33da95ffaa691471))
+- *(parser)* Add supported-type and path-constraint catalogues ([`855999e`](https://github.com/s0undt3ch/ToolR/commit/855999e2a44d7935afda4a34f9c8acbea420d96d))
+- *(xtask)* Generate supported-type and path-constraint tables from code ([`93ae116`](https://github.com/s0undt3ch/ToolR/commit/93ae116b1b1187ccfa992d76b1a75f293903aa5a))
+- *(xtask)* Add named docs-section extractor for skill references ([`0a504ce`](https://github.com/s0undt3ch/ToolR/commit/0a504ce40b312cf1915a906eba7b0a51c321aef0))
+- *(skills)* Ship argument shapes, prek hook and plugin example inside the skills ([`66c4191`](https://github.com/s0undt3ch/ToolR/commit/66c41912c35cf4c01b22658aceb13d4420c8c332))
+- *(xtask)* Fail build-skill-refs when a skill reaches outside its directory ([`114d4d0`](https://github.com/s0undt3ch/ToolR/commit/114d4d09d860db43369192458de202151e6b9279))
+- *(parser)* [**breaking**] Fail the manifest build on commands without a docstring (#501) ([`7f224e5`](https://github.com/s0undt3ch/ToolR/commit/7f224e560117f36621d4b0eb8504c2abb45b6879))
+- *(decorators)* [**breaking**] Reject undocumented commands at import and refuse -OO (#501) ([`83dd6e7`](https://github.com/s0undt3ch/ToolR/commit/83dd6e7a9ecda61c87dd354b2ed119ab9e7babdd))
+- *(types)* Add path-state types with clap-side checks (#502) ([`345ad3d`](https://github.com/s0undt3ch/ToolR/commit/345ad3d1688870fc2e2931a7f5932c9b422a665f))
+- *(types)* [**breaking**] Remove arg(must_*) in favour of path types (#502) ([`1762d42`](https://github.com/s0undt3ch/ToolR/commit/1762d4266a24b9803d540d81d6986d08c7ccddd1))
+- *(manifest)* Bump schema to 2 and rebuild caches on a schema mismatch (#502) ([`b988538`](https://github.com/s0undt3ch/ToolR/commit/b988538a626e509da37048a0e60eadd29ac72a69))
+- *(types)* Expose path types as NewTypes in toolr.types (#502) ([`4b270fe`](https://github.com/s0undt3ch/ToolR/commit/4b270fecbfdd8c0aa24cc02a3f2336b302de2df4))
+- *(manifest)* Record the schema each type and field arrived in (#520) ([`9417609`](https://github.com/s0undt3ch/ToolR/commit/9417609062b4475f9f0d72f87a0108286fa02823))
+- *(manifest)* [**breaking**] Ship plugin fragments as full manifest commands (#520) ([`a943a78`](https://github.com/s0undt3ch/ToolR/commit/a943a78889df6eac52f7dd0130702ec6ce08dd47))
+- *(manifest)* Skip unloadable plugins and record plugin warnings (#520) ([`963d3fe`](https://github.com/s0undt3ch/ToolR/commit/963d3fe2ac15a728eb00ef708da390294e507411))
+- *(cli)* Warn about skipped and shadowed plugins on every run (#520) ([`db45679`](https://github.com/s0undt3ch/ToolR/commit/db4567955dd1c688bfa14a6834f3353429bf5c03))
+- *(plugins)* Disable a command two plugins define instead of failing (#522) ([`988c776`](https://github.com/s0undt3ch/ToolR/commit/988c776e5d82ec7af78997960975e858fda253df))
+- *(dispatch)* Warn when the venv's toolr-py minor version differs from the binary (#529) ([`906ca41`](https://github.com/s0undt3ch/ToolR/commit/906ca41334f3510f9906c8fa4e988af00e5c5bef))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(parser)* Keep Markdown in catalogue cells verbatim ([`718eb88`](https://github.com/s0undt3ch/ToolR/commit/718eb8889cf472c6902b2c9f8c9143428d91d3db))
+- *(parser)* Add TypeDoc.note and an ordinal guard against missed catalogue rows ([`835ee0e`](https://github.com/s0undt3ch/ToolR/commit/835ee0e53fd58f04a11554dcdac54af66120d8e9))
+- *(xtask)* Give the supported-types table an output flavour for pipe-bearing annotations ([`6ea55da`](https://github.com/s0undt3ch/ToolR/commit/6ea55daed87473586df9e4de62ece5bc14d4cdb5))
+- *(xtask)* Reject or flatten docs constructs the section extractor passed through ([`1af4e00`](https://github.com/s0undt3ch/ToolR/commit/1af4e003be406c298d92fb9d71938982a4343887))
+- *(xtask)* Map paragraph offsets to each line's own number in docs extractor errors ([`6093f03`](https://github.com/s0undt3ch/ToolR/commit/6093f0341051bd54f5deeaa0142c9dc0dde7c97a))
+- *(xtask)* Support named-section includes and drop dangling out-of-section pointers ([`d04ca37`](https://github.com/s0undt3ch/ToolR/commit/d04ca37daf3f1d6efc8041754dd789a365e0d580))
+- *(xtask)* Lint every file a skill ships and close gate bypasses ([`460e4c0`](https://github.com/s0undt3ch/ToolR/commit/460e4c085b9faabf509e6ea8b721a95c670669b0))
+- *(xtask)* Normalise CRLF sources before generating skill refs ([`ae8fe45`](https://github.com/s0undt3ch/ToolR/commit/ae8fe45ad9e5ab1b96a07c801f6d699fc0e7ceef))
+- *(xtask)* Lint unquoted HTML href/src values in skills ([`5d00f7b`](https://github.com/s0undt3ch/ToolR/commit/5d00f7b8ed920212750e99abf096ec922525cd70))
+- *(xtask)* Print self-containment violations with forward slashes on every OS ([`52b21fc`](https://github.com/s0undt3ch/ToolR/commit/52b21fc93efcbe6acd16e42bdbfdced183967cbb))
+- *(packslip)* Harden packslip-check.sh path resolution and error handling ([`1f904b9`](https://github.com/s0undt3ch/ToolR/commit/1f904b90e7818f67fb7996eae52ce14236d35fb4))
+- *(release)* Publish the packslip after a partial release failure and pin the verify identity ([`c0dffcd`](https://github.com/s0undt3ch/ToolR/commit/c0dffcde1a4b7b67e81910f99c41dd628b07d2c6))
+- *(packslip)* Require each skill resource's repo path to be skills/<name> ([`72cf981`](https://github.com/s0undt3ch/ToolR/commit/72cf98191c7d8bc95dd424071f0c79b08ba15747))
+- *(ci)* Satisfy mypy in tools/ci.py's generate-build-matrix ([`485e11f`](https://github.com/s0undt3ch/ToolR/commit/485e11f41ab89a3b1eadae830970eaf880b7cb83))
+- *(parser)* Reject unknown arg() keywords at manifest build (#500) ([`91ec5e7`](https://github.com/s0undt3ch/ToolR/commit/91ec5e7a7d2f784bc52475a676c5fb0bb81f7b7a))
+- *(parser)* Check nested and aliased arg() calls, only toolr's (#500) ([`3e9914b`](https://github.com/s0undt3ch/ToolR/commit/3e9914b791fcd9e24223e18b795407443bc9811a))
+- *(parser)* Scope arg() checks to what each module can see (#500) ([`cd09eff`](https://github.com/s0undt3ch/ToolR/commit/cd09eff64efb8edcffb55e9589400ad2dbf2c2d2))
+- *(parser)* Follow star-imported aliases and binding order in arg() check (#500) ([`eb8bc52`](https://github.com/s0undt3ch/ToolR/commit/eb8bc5244ee843e90886fe5056dbe3c6cbcaf52d))
+- *(parser)* Don't guess aliases behind unparsed star imports (#500) ([`70f0dd7`](https://github.com/s0undt3ch/ToolR/commit/70f0dd762cdcce8e3d7bbaaee902af4dbf80c57d))
+- *(xtask)* Make the docs section extractor faithful to mkdocs (#505) ([`92db602`](https://github.com/s0undt3ch/ToolR/commit/92db6021862dd1c66c910a171f4c9cae509c18bc))
+- *(console)* Drop dim modifier from log-debug/log-info styles ([`7999a00`](https://github.com/s0undt3ch/ToolR/commit/7999a008f4c67b613c9b0bc5dc642fcc954466b0))
+- *(xtask)* Lint the files a skill ships, not its directory tree (#504) ([`1d7e76b`](https://github.com/s0undt3ch/ToolR/commit/1d7e76bfd4584b8e308f790a795188fb272393da))
+- *(xtask)* Flag backticked `../` paths missing inside the skill (#504) ([`ea0381a`](https://github.com/s0undt3ch/ToolR/commit/ea0381a231cd45bb272b9a888f73a5560d8abc7b))
+- *(xtask)* Lint prefixed HTML href/src attributes (#504) ([`d1eb41d`](https://github.com/s0undt3ch/ToolR/commit/d1eb41d58983e32f6e48ddd15ce77e59adbb521b))
+- *(xtask)* Report malformed Markdown at the offending line (#504) ([`2081ee2`](https://github.com/s0undt3ch/ToolR/commit/2081ee2f7272f62c75897ed8d61f09f80c744e49))
+- *(xtask)* Match repo URLs on a path-segment boundary (#504) ([`c41ee50`](https://github.com/s0undt3ch/ToolR/commit/c41ee50f37e97cd17095d3da54b7422a561afb3e))
+- *(execute)* Read every path type back as a path (#502) ([`bc9b1a8`](https://github.com/s0undt3ch/ToolR/commit/bc9b1a8669eb8f7c42a8379773a90387b6c23001))
+- *(types)* Tighten path-check errors and document path-type limits (#502) ([`9bd98e4`](https://github.com/s0undt3ch/ToolR/commit/9bd98e4628f8a94a5df2d89da3564c0263bb9f7d))
+- *(runner)* Report an unknown arg() keyword at import as a clear error (#502) ([`8990988`](https://github.com/s0undt3ch/ToolR/commit/899098862cd32b3bdadcc600f8a867afe9f016eb))
+- *(runner)* Catch a removed arg() keyword when annotations evaluate lazily (#502) ([`fc3338c`](https://github.com/s0undt3ch/ToolR/commit/fc3338c44f97025f2d741d9c08b183b81ad3a8a8))
+- *(types)* Hand Windows canonical paths back without the \\?\ prefix (#502) ([`2a3001b`](https://github.com/s0undt3ch/ToolR/commit/2a3001b6bafdd7c974310662052a5e34951f3910))
+- *(manifest)* Dedup groups by full path, not leaf name (#520) ([`04efd1a`](https://github.com/s0undt3ch/ToolR/commit/04efd1a13c236231d57c573c48093f250ebc7b93))
+- *(ci)* Harden packslip-check against odd statements and dot-dirs (#508) ([`d17884b`](https://github.com/s0undt3ch/ToolR/commit/d17884b5dc4c886357ac88a473b06b88196bfd29))
+- *(ci)* Label the packslip CLI pin as a GitHub Actions dependency (#508) ([`f699276`](https://github.com/s0undt3ch/ToolR/commit/f699276b9b8588e80d1b58eecede75811508b2ea))
+- *(dispatch)* Re-sync a stale tools venv before running a command (#527) ([`0f58c7f`](https://github.com/s0undt3ch/ToolR/commit/0f58c7f1aeb27b75e44875f772c3dd205f975a42))
+
+### <!-- 2 -->🚜 Refactor
+
+- *(parser)* Drop ordinal guard from type catalogue ([`b3fa5b6`](https://github.com/s0undt3ch/ToolR/commit/b3fa5b658ca31d2c3299bfc254702472ede115da))
+- *(xtask)* Derive self-containment URL list from project metadata ([`a5d51a6`](https://github.com/s0undt3ch/ToolR/commit/a5d51a6cfee4f75e83a5f57c8fb893962e7b364f))
+- *(ci)* Move the packslip manifest check into toolr ci packslip-check ([`254fa42`](https://github.com/s0undt3ch/ToolR/commit/254fa420d4b8d080be769bc2fc510f9dc227031a))
+- *(parser)* Build the type catalogue from an exhaustive kind mirror (#503) ([`e534da6`](https://github.com/s0undt3ch/ToolR/commit/e534da619e98667c41b67e74e3b8035bce640904))
+- *(parser)* Share one builder between tools/ and plugins (#520) ([`a3568cf`](https://github.com/s0undt3ch/ToolR/commit/a3568cf2ef648bed1720387806f06ad571612498))
+
+### <!-- 3 -->📚 Documentation
+
+- *(specs)* Add context-local helpers design ([`a3e3191`](https://github.com/s0undt3ch/ToolR/commit/a3e3191da324543fe35c97ab1dcbd1defb5dfabc))
+- *(specs)* Address adversarial review of context-local helpers spec ([`cfc0937`](https://github.com/s0undt3ch/ToolR/commit/cfc0937d0b7a272dc0fb7d2b1e93a61cf76e1226))
+- *(specs)* Add context-local helpers implementation plan ([`3002977`](https://github.com/s0undt3ch/ToolR/commit/3002977b8975fd5a71071abc6b4bd66cda1e6060))
+- *(toolr-command-authoring)* Document current_context() as a helper option ([`af5cebf`](https://github.com/s0undt3ch/ToolR/commit/af5cebfd50d38f9b7ad88a5ae2d13446dceb823e))
+- *(changelog)* Queue release note for current_context() ([`ec26239`](https://github.com/s0undt3ch/ToolR/commit/ec2623990791fc4d5c04b63ae086174469693ce8))
+- *(toolr-py)* Stop citing internal spec path in current_context() docstring ([`ee77edf`](https://github.com/s0undt3ch/ToolR/commit/ee77edfe2f5f37950a88299d30acf40952522621))
+- *(toolr-command-authoring)* Note module-scope caveat for current_context() ([`5939558`](https://github.com/s0undt3ch/ToolR/commit/5939558b23426274066886e2c6e77683bd049885))
+- *(reference)* Add current_context to the mkdocs site ([`8e39cdc`](https://github.com/s0undt3ch/ToolR/commit/8e39cdcb3b13292cbd5da116e6f779a64ce6ea82))
+- *(specs)* Add self-contained agent skills design ([`b3aefce`](https://github.com/s0undt3ch/ToolR/commit/b3aefcea12e7bd6c27ce1e24236f39bede3eaf12))
+- *(specs)* Add self-contained agent skills implementation plan ([`ebde75c`](https://github.com/s0undt3ch/ToolR/commit/ebde75c95d7c095aa42dcf11c1975fd9bec41384))
+- *(skills)* Inline facts the skills relied on docs for; reference sibling skills by name ([`8b6baf0`](https://github.com/s0undt3ch/ToolR/commit/8b6baf0fe8ead7f3dcd91b869e58966cb5473ad0))
+- Note self-contained skills in release notes and skills guide ([`e6c3725`](https://github.com/s0undt3ch/ToolR/commit/e6c3725cb67173b41be2425261c998d2e73c4e3d))
+- *(writing-commands)* Correct stale path_must_* keyword docs ([`0068ec6`](https://github.com/s0undt3ch/ToolR/commit/0068ec69e101a331a55cae2c4f7039e03df08200))
+- Sharpen self-contained-skills wording and list generated skill refs ([`b24cd6a`](https://github.com/s0undt3ch/ToolR/commit/b24cd6abef082eaa7acf2128d15a32eb4c1f8966))
+- Separate never-accepted path_must_* spellings from deprecated kwargs ([`b7d89cb`](https://github.com/s0undt3ch/ToolR/commit/b7d89cb10bbff5a32d103690bcea083f12a38ee7))
+- *(writing-commands)* Use the canonical @group.command form in single-file examples ([`c634aee`](https://github.com/s0undt3ch/ToolR/commit/c634aee0350d2884171b6675f4537d1de3aea686))
+- *(internals)* The bound @group.command form is canonical, not deprecated ([`56ce228`](https://github.com/s0undt3ch/ToolR/commit/56ce228a10edfaad8da634410c6e067f4a8363f8))
+- *(specs)* Add packslip release manifest design ([`e92a5c0`](https://github.com/s0undt3ch/ToolR/commit/e92a5c0530a74601c686c282b886370a0df4b046))
+- *(specs)* Add packslip release manifest implementation plan ([`2733672`](https://github.com/s0undt3ch/ToolR/commit/2733672b97aac36689ae709fdb61bc99fca6f2f3))
+- Document installing toolr and its skills through mise's packslip backend ([`76b330e`](https://github.com/s0undt3ch/ToolR/commit/76b330e43177e9661b345515876f86c6288c87bc))
+- *(mise)* Don't imply a version cut-over in the aqua fallback example ([`b976016`](https://github.com/s0undt3ch/ToolR/commit/b976016e60776f5074937e3c2e5c33e6c330cf18))
+- *(packslip)* Fix release-age/identity wording and don't imply a pinned version exists yet ([`2799dc5`](https://github.com/s0undt3ch/ToolR/commit/2799dc5145a316b721b035e892289a81eff03cda))
+- *(specs)* Document packslip partial-failure recovery and the CLI install path ([`ef87462`](https://github.com/s0undt3ch/ToolR/commit/ef87462759f23b0939d90bddc2d65e456dcd7509))
+- Note that unknown arg() keywords now fail the manifest build ([`9045e7d`](https://github.com/s0undt3ch/ToolR/commit/9045e7d82030c96f5e535c44d376d4e2a0ec5fd6))
+- Note nested arg() checks and argparse-keyword hints (#500) ([`26f0d0a`](https://github.com/s0undt3ch/ToolR/commit/26f0d0a10257c367b81e6483fcfa18b478cd5131))
+- *(skills)* Cover external command sources in the authoring skill (#507) ([`bcb8c78`](https://github.com/s0undt3ch/ToolR/commit/bcb8c78e3ea11cb9a5612a9b6f4432705548ca71))
+- *(third-party)* Fix the hatchling recipe and fragment-schema claim (#506) ([`8a4a524`](https://github.com/s0undt3ch/ToolR/commit/8a4a524a8469d15ef42220e0c6372b57522603c7))
+- *(third-party)* Ship the manifest via setuptools package-data (#506) ([`6aee50c`](https://github.com/s0undt3ch/ToolR/commit/6aee50c27ca2c6f6fd69b6b66e34e7f1c173a4f3))
+- *(contributing)* Add a checklist for adding a supported type (#503) ([`8d93388`](https://github.com/s0undt3ch/ToolR/commit/8d93388a1ea5ba1e56264a6acd123025c419abad))
+- *(specs)* Design path-state types for toolr.types (#502) ([`f472743`](https://github.com/s0undt3ch/ToolR/commit/f472743ec7bc580009d49936e996424f2203b13c))
+- *(specs)* Cover xtask, docs and local-cache fallout in path-state types design ([`39d8d14`](https://github.com/s0undt3ch/ToolR/commit/39d8d14e4808cf718557aafd0caee9290b5d0591))
+- *(specs)* Adopt pydantic-style path type names, record rejected composite form ([`e70f7cd`](https://github.com/s0undt3ch/ToolR/commit/e70f7cdef2a52965a103d215a0bf52b4e36f1c83))
+- *(specs)* Enforce manifest schema bump, keep fragment schema, place checks in rust ([`94b0dc1`](https://github.com/s0undt3ch/ToolR/commit/94b0dc175f0bbd0449983ec5d146bb5523d61c62))
+- *(specs)* State the plugin type-checking gap precisely ([`0b776bb`](https://github.com/s0undt3ch/ToolR/commit/0b776bb9efcb455558d52552795c1310652d0f30))
+- *(specs)* Add path-state types implementation plan (#502) ([`83db8bb`](https://github.com/s0undt3ch/ToolR/commit/83db8bb10ce3e98d25e51112edb13451253c913e))
+- *(specs)* Correct the derived-path typing claim and pin the suggestion path ([`c33b23e`](https://github.com/s0undt3ch/ToolR/commit/c33b23e1eb7546f375607cb895f38172f8c95d55))
+- *(types)* Document path types and the arg(must_*) removal (#502) ([`183fd79`](https://github.com/s0undt3ch/ToolR/commit/183fd790690318388d00d495df549991f3bd1c91))
+- *(specs)* Archive the path-state types design and plan (#502) ([`a692500`](https://github.com/s0undt3ch/ToolR/commit/a692500f5966788d05d0e95ff3bc55bff521e677))
+- *(unreleased)* Note plain canonical paths on Windows (#502) ([`868afe3`](https://github.com/s0undt3ch/ToolR/commit/868afe36d1dbb424cc5a5611a877a3d5dc0a7175))
+- *(specs)* Design plugin command parity and fragment v2 (#520) ([`50b2e44`](https://github.com/s0undt3ch/ToolR/commit/50b2e44b4d9524bc3cc590e147235e6c0e0af8b6))
+- *(specs)* Fold adversarial review into the plugin parity design (#520) ([`4030418`](https://github.com/s0undt3ch/ToolR/commit/403041864dfed4ebd6f9383d7bfd4b1ad650f99d))
+- *(specs)* State the full-path group identity invariant (#520) ([`33b24ba`](https://github.com/s0undt3ch/ToolR/commit/33b24baac6129efab8a75c440f1392323f413b5b))
+- *(specs)* Warn when a local command hides a plugin command (#520) ([`8301a9f`](https://github.com/s0undt3ch/ToolR/commit/8301a9fed6f2c3ec2b9ebb321baeb80d5c1da197))
+- *(specs)* Fold second adversarial review into the plugin parity design (#520) ([`afd3db2`](https://github.com/s0undt3ch/ToolR/commit/afd3db233333d3fb7e8b2dc91c805696782dfbb1))
+- *(specs)* Plan the plugin parity implementation (#520) ([`e321178`](https://github.com/s0undt3ch/ToolR/commit/e321178d52e6bd310b15e1186b4ba6e5364d542f))
+- *(plugins)* Document fragment v2, the load rule and plugin warnings (#520) ([`8c74433`](https://github.com/s0undt3ch/ToolR/commit/8c74433df3b7d9a58e9d6a8c23f9fb04d8f53123))
+- *(plugins)* State the toolr 0.34.0 requirement for rebuilt plugins (#520) ([`3335902`](https://github.com/s0undt3ch/ToolR/commit/333590294d39a2870f6bc905f63a011cc71e3674))
+- *(specs)* Archive the plugin parity design and plan (#520) ([`380b3f5`](https://github.com/s0undt3ch/ToolR/commit/380b3f5239493657e3ba85ca4034beca2780584b))
+- *(specs)* Design plugin clash resolution (#522) ([`cbd25c9`](https://github.com/s0undt3ch/ToolR/commit/cbd25c94d4dee9a16a80c32391887fcd12136b2b))
+- *(specs)* Address adversarial review of clash resolution design (#522) ([`9500ae0`](https://github.com/s0undt3ch/ToolR/commit/9500ae066715f3e8e994d7f4b5fe4e6d82231db7))
+- *(specs)* Narrow #522 to disabling plugin command conflicts ([`1a62517`](https://github.com/s0undt3ch/ToolR/commit/1a6251726a0af1d026447eceda6db28bb2084fd3))
+- *(specs)* Address adversarial review of plugin conflicts design (#522) ([`cb6f8af`](https://github.com/s0undt3ch/ToolR/commit/cb6f8af6875f36f1008487165d837dcb7c749f8b))
+- *(specs)* Plan the plugin command conflicts change (#522) ([`b7d0869`](https://github.com/s0undt3ch/ToolR/commit/b7d0869a26794eb531352ba9a1eb9f5bf9ebeda9))
+- *(specs)* Address adversarial review of the plugin conflicts plan (#522) ([`1b463fd`](https://github.com/s0undt3ch/ToolR/commit/1b463fd18d62eeb1732b1c1cca45eed16b7e064c))
+- *(plugins)* Document disabled plugin command conflicts (#522) ([`5f36ad8`](https://github.com/s0undt3ch/ToolR/commit/5f36ad8ab2e3d76be98296cd35a4e87a9b8b07b1))
+- *(specs)* Archive the plugin command conflicts design and plan (#522) ([`4ea28ad`](https://github.com/s0undt3ch/ToolR/commit/4ea28ad911ae923f0bbb5488a79995163faa0d3f))
+
+### <!-- 6 -->🧪 Testing
+
+- *(xtask)* Cover docs-section extraction edge cases and generator error paths ([`c07fda2`](https://github.com/s0undt3ch/ToolR/commit/c07fda2a5dd4b9e858545d8273641b2e6a98550b))
+- *(skills)* Regenerate the authoring examples manifest snapshot ([`743b875`](https://github.com/s0undt3ch/ToolR/commit/743b875691b244367215b59d3d90ec351b41d9c1))
+- *(cli)* Cover unknown arg() keywords failing the manifest build ([`0d4ce23`](https://github.com/s0undt3ch/ToolR/commit/0d4ce23cc80b556248629157ce146cfe33afb68f))
+- *(parser)* Cover the arg() check's remaining branches (#500) ([`935b9fc`](https://github.com/s0undt3ch/ToolR/commit/935b9fc3955ab4403d056ffa3b1017701dc6a918))
+- *(cli)* Pin path-type rejections end to end (#502) ([`d9af38a`](https://github.com/s0undt3ch/ToolR/commit/d9af38a8341b7ce129cc6f2353074ba532b9e510))
+- *(types)* Make the stale-keyword and permission tests hold on every Python and user ([`10f9f5e`](https://github.com/s0undt3ch/ToolR/commit/10f9f5ebc6fc130c3d6bf86ae06978273b323bf7))
+- *(manifest)* Make the ArgumentKind and Nargs golden tables catch a forgotten variant (#520) ([`c102af2`](https://github.com/s0undt3ch/ToolR/commit/c102af2f7cd0241b0b34fbe1466a28dd1ee84fe1))
+- *(cli)* Tighten plugin warning tests (#520) ([`f64fb9b`](https://github.com/s0undt3ch/ToolR/commit/f64fb9be60a9ebeb1460073ada12b2b08ac87377))
+- *(manifest)* Cover host title winning and no-venv carry-forward (#520) ([`0f4a8e3`](https://github.com/s0undt3ch/ToolR/commit/0f4a8e34b658a63e640a7b02b1ce976d6e1e75c5))
+- *(plugins)* Cover a plugin conflict on a fresh project and its recovery (#522) ([`68f153b`](https://github.com/s0undt3ch/ToolR/commit/68f153b0e53f487bfbe5f57ae1c72bc147fffab5))
+- *(plugins)* Pin conflict serialisation and completion, document the local-command remedy (#522) ([`fb3ee86`](https://github.com/s0undt3ch/ToolR/commit/fb3ee8616e6876cf4ae4b596c80d90f1fb1ce578))
+- *(dispatch)* Keep system PATH out of the stale-venv tests (#527) ([`f278843`](https://github.com/s0undt3ch/ToolR/commit/f2788437efb68dae6307c4bec592f89108acd574))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(specs)* Archive context-local-helpers design and plan ([`178063b`](https://github.com/s0undt3ch/ToolR/commit/178063b07e32eb6901f03cbdc861f5c1c7e5e04a))
+- Widen build-skill-refs hook inputs and fail on untracked generated files ([`d5c5c4d`](https://github.com/s0undt3ch/ToolR/commit/d5c5c4dcf3a7221c9dd99e0f6ef5002453161de8))
+- *(specs)* Archive self-contained skills design and plan ([`64eab09`](https://github.com/s0undt3ch/ToolR/commit/64eab09c9e46d09f59ab510244bbaa2d66185348))
+- *(packslip)* Add shared release manifest and offline check script ([`46c986e`](https://github.com/s0undt3ch/ToolR/commit/46c986ef0409707dbf65b44af8790f1ef33f5150))
+- *(packslip)* Check the release manifest against CI-built archives on every PR ([`dfcd4fb`](https://github.com/s0undt3ch/ToolR/commit/dfcd4fb5f33512f192a4467020e4d7818d665040))
+- *(release)* Sign and publish a packslip for each release ([`3a52202`](https://github.com/s0undt3ch/ToolR/commit/3a5220245de6c59ee60724fcba5f23019b7263fd))
+- *(renovate)* Bump the packslip CLI pin together with the action ([`69d1fee`](https://github.com/s0undt3ch/ToolR/commit/69d1feeeed20e97d4dd30100ae2b619bd34934c4))
+- *(specs)* Archive packslip design and plan ([`142e83a`](https://github.com/s0undt3ch/ToolR/commit/142e83a64abd64c51caea3e49bcc2f3fca7e6570))
+- *(packslip)* Run the manifest check through toolr and verify the packslip CLI attestation ([`f54f68c`](https://github.com/s0undt3ch/ToolR/commit/f54f68ccff111d04862a915ec638d855d6c0ff20))
+- *(packslip)* Bind the CLI attestation to its release tag ([`c20f4da`](https://github.com/s0undt3ch/ToolR/commit/c20f4da158a3a8a7c57c52d88a3443da236819f6))
 ## 0.33.0 - 2026-09-12
 
 ### Notes
