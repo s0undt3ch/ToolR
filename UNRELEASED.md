@@ -183,3 +183,12 @@ every run names every plugin that defines it (`toolr: warning: deploy rollout is
 (toolr_a, toolr_b), so it is disabled. ...`). Uninstall all but one to get it back, or define it in your `tools/`,
 and the local one wins. Both this warning and the shadowing one now link
 [#522](https://github.com/s0undt3ch/ToolR/issues/522), where you can vote for choosing the winner in configuration.
+
+### Commands re-sync a stale tools venv before running
+
+Running a toolr command now checks whether `tools/uv.lock` has changed since the tools venv was
+last synced. If it has, toolr syncs the venv before running the command. Until now, a dependency
+bump (including `toolr-py` itself) never reached the venv until you ran
+`toolr project venv sync` by hand, so commands kept running the old code without any warning.
+When the sync can't happen, for example because uv is missing and installing it wasn't
+approved, toolr refuses to run the command and points you at `toolr project venv sync`.

@@ -132,9 +132,9 @@ mise run ci
 
 ## Auto-sync the tools venv on shell-enter
 
-When `tools/pyproject.toml` or `tools/uv.lock` changes — say you've
-pulled a branch that bumped a dependency — `toolr`'s next invocation
-re-syncs the tools venv before doing its real work. That sync only
+When `tools/uv.lock` changes — say you've pulled a branch that
+bumped a dependency — the next `toolr` command you run re-syncs the
+tools venv before doing its real work. That sync only
 happens when you actually run a `toolr` command, so the latency
 shows up at an awkward moment, on a command you ran for a different
 reason.
