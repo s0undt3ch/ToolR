@@ -9,16 +9,18 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+from typing import NoReturn
 
 import pytest
 
 from tests.distribution.mise.conftest import MiseProject
 
 SHELLS = ("bash", "zsh", "fish")
+# The library itself, not Homebrew's `profile.d` wrapper, which only loads it when `PS1` is set.
 BASH_COMPLETION_SCRIPTS = (
     Path("/usr/share/bash-completion/bash_completion"),
-    Path("/opt/homebrew/etc/profile.d/bash_completion.sh"),
-    Path("/usr/local/etc/profile.d/bash_completion.sh"),
+    Path("/opt/homebrew/share/bash-completion/bash_completion"),
+    Path("/usr/local/share/bash-completion/bash_completion"),
 )
 # Built-in `toolr self` subcommands, all of which a completion must offer.
 SELF_SUBCOMMANDS = ("build-manifest", "cache", "completion")
@@ -30,6 +32,13 @@ def _declared(manifest: dict[str, Any], kind: str) -> list[dict[str, Any]]:
 
 def _declared_skill_names(manifest: dict[str, Any]) -> set[str]:
     return {resource["name"] for resource in _declared(manifest, "skill")}
+
+
+def _shell_missing(reason: str) -> NoReturn:
+    # CI installs the shells, so a missing one there is a broken setup, not a skip.
+    if os.environ.get("TOOLR_SMOKE_REQUIRE_SHELLS"):
+        pytest.fail(f"{reason}, but TOOLR_SMOKE_REQUIRE_SHELLS is set")
+    pytest.skip(reason)
 
 
 def _toolr_path_env(project: MiseProject) -> dict[str, str]:
@@ -87,7 +96,7 @@ def test_bash_completion_completes(packslip_project: MiseProject, tmp_path: Path
     bash = shutil.which("bash")
     bash_completion = next((path for path in BASH_COMPLETION_SCRIPTS if path.is_file()), None)
     if bash is None or bash_completion is None:
-        pytest.skip("bash with bash-completion not available")
+        _shell_missing("bash with bash-completion not available")
     script = tmp_path / "toolr.bash"
     script.write_text(packslip_project.run("completion", "bash", "--tool", "toolr").stdout)
     driver = (
@@ -114,7 +123,7 @@ def test_bash_completion_completes(packslip_project: MiseProject, tmp_path: Path
 def test_fish_completion_completes(packslip_project: MiseProject, tmp_path: Path) -> None:
     fish = shutil.which("fish")
     if fish is None:
-        pytest.skip("fish not available")
+        _shell_missing("fish not available")
     script = tmp_path / "toolr.fish"
     script.write_text(packslip_project.run("completion", "fish", "--tool", "toolr").stdout)
     result = subprocess.run(  # noqa: S603
@@ -137,7 +146,7 @@ def test_zsh_completion_script_parses(packslip_project: MiseProject, tmp_path: P
     # `toolr __complete`, is shared with bash and fish, which the tests above exercise.
     zsh = shutil.which("zsh")
     if zsh is None:
-        pytest.skip("zsh not available")
+        _shell_missing("zsh not available")
     script = tmp_path / "_toolr"
     script.write_text(packslip_project.run("completion", "zsh", "--tool", "toolr").stdout)
     result = subprocess.run(  # noqa: S603

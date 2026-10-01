@@ -244,11 +244,16 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends bash-completion fish zsh
       # macOS ships bash 3.2 without bash-completion, and no fish.
+      # bash-completion 2 needs bash 4.2+, so put Homebrew's bash first.
       - name: Install shells for the completion tests (macOS)
         if: runner.os == 'macOS'
-        run: brew install bash bash-completion@2 fish
+        run: |
+          brew install bash bash-completion@2 fish
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
       # Not `@latest`: mise holds a fresh release back from `latest` for a
       # while, so a run right after a release would test the previous one.
+      # The newest release with a packslip, not just the newest: release.yml
+      # uploads the packslip a few minutes after creating the release.
       - name: Resolve the version to test
         shell: bash
         env:
@@ -256,7 +261,8 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           if [ -z "$VERSION" ]; then
-            VERSION=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            VERSION=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq \
+              '[.[] | select(.draft | not) | select(any(.assets[]; .name == "packslip.sigstore.json"))][0].tag_name')
           fi
           echo "TOOLR_SMOKE_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
       # `--no-sync` and `--confcutdir` keep the repo's own toolr out: no
@@ -269,6 +275,7 @@ jobs:
           # Anonymous GitHub API calls hit the rate limit, and mise then
           # silently drops packslip skills.
           GITHUB_TOKEN: ${{ github.token }}
+          TOOLR_SMOKE_REQUIRE_SHELLS: ${{ runner.os != 'Windows' && '1' || '' }}
         run: |
           : "${TOOLR_SMOKE_VERSION:?not set by the resolve step}"
           uv run --no-sync pytest -ra -v --color=yes --confcutdir=tests/distribution tests/distribution/mise/

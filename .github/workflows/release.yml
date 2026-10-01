@@ -558,6 +558,9 @@ jobs:
   # `workflow_dispatch` is one of the few events GITHUB_TOKEN may trigger.
   dispatch-install-smoke:
     name: Start the install smoke tests
+    # Explicit, because publish-packslip can succeed after publish-release
+    # failed, and the implicit success() would then skip this job.
+    if: ${{ !cancelled() && needs.publish-packslip.result == 'success' }}
     needs:
       - prepare-release
       - publish-packslip
