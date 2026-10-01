@@ -117,6 +117,7 @@
       groupName: "github-actions",
       matchManagers: ["custom.regex"],
       matchDepNames: ["jdx/packslip"],
+      addLabels: ["dependencies:github-actions"],
     },
     {
       // mise CLI tools (the pre-commit-hook binaries + prek) — group them so
