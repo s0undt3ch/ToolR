@@ -1,6 +1,7 @@
 //! Dispatch must not run a tools venv that is out of date with
 //! `tools/uv.lock` (#527): a stale venv is re-synced first, and when that
-//! can't happen the command is refused rather than run on old code.
+//! can't happen the command is refused rather than run on old code. It also
+//! warns when the venv's `toolr-py` minor version differs from the binary (#529).
 #![cfg(unix)]
 
 use std::fs;
@@ -145,4 +146,74 @@ fn stale_venv_without_uv_refuses_to_run() {
         !p.sentinel.exists(),
         "the stale interpreter must not have run"
     );
+}
+
+fn install_toolr_py(p: &Project, version: &str) {
+    let site_packages = p.fx.venv_dir.join("lib/python3.13/site-packages");
+    fs::create_dir_all(site_packages.join(format!("toolr_py-{version}.dist-info"))).unwrap();
+}
+
+fn dispatch_stderr(p: &Project) -> String {
+    let output = p
+        .toolr(&p.path_with_uv())
+        .args(["hello", "world"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(p.sentinel.exists(), "a version mismatch warns but still runs");
+    stderr
+}
+
+#[test]
+fn older_venv_toolr_py_warns_to_upgrade_the_package() {
+    let p = synced_project();
+    install_toolr_py(&p, "0.0.1");
+    let stderr = dispatch_stderr(&p);
+    assert!(
+        stderr.contains("toolr-py 0.0.1") && stderr.contains(env!("CARGO_PKG_VERSION")),
+        "expected a warning naming both versions; stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("toolr project venv sync -P toolr-py"),
+        "a plain sync reinstalls the locked version; stderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn newer_venv_toolr_py_warns_to_upgrade_the_binary() {
+    let p = synced_project();
+    install_toolr_py(&p, "999.0.0");
+    let stderr = dispatch_stderr(&p);
+    assert!(stderr.contains("toolr-py 999.0.0"), "stderr:\n{stderr}");
+    assert!(stderr.contains("upgrade the toolr binary"), "stderr:\n{stderr}");
+    assert!(!stderr.contains("-P toolr-py"), "stderr:\n{stderr}");
+}
+
+#[test]
+fn no_warning_when_venv_toolr_py_matches_binary() {
+    let p = synced_project();
+    install_toolr_py(&p, env!("CARGO_PKG_VERSION"));
+    let output = p
+        .toolr(&p.path_with_uv())
+        .args(["hello", "world"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(!stderr.contains("toolr-py"), "stderr:\n{stderr}");
+}
+
+#[test]
+fn quiet_suppresses_the_version_warning() {
+    let p = synced_project();
+    install_toolr_py(&p, "0.0.1");
+    let output = p
+        .toolr(&p.path_with_uv())
+        .args(["--quiet", "hello", "world"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(!stderr.contains("toolr-py"), "stderr:\n{stderr}");
 }

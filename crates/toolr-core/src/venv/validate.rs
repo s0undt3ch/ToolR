@@ -90,6 +90,29 @@ pub fn candidate_site_packages(venv_dir: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// The `toolr-py` version installed in the venv, read from its
+/// `toolr_py-<version>.dist-info` directory name. Lists `site-packages`
+/// only: no file reads, no interpreter.
+pub fn installed_toolr_py_version(venv_dir: &Path) -> Option<String> {
+    candidate_site_packages(venv_dir).iter().find_map(|sp| {
+        fs::read_dir(sp).ok()?.filter_map(Result::ok).find_map(|entry| {
+            let name = entry.file_name();
+            let version = name.to_str()?.strip_prefix("toolr_py-")?.strip_suffix(".dist-info")?;
+            Some(version.to_string())
+        })
+    })
+}
+
+/// Order two versions by `major.minor` alone. `None` when either is
+/// unparsable, so a warning built on this can't misfire.
+pub fn compare_minor_versions(a: &str, b: &str) -> Option<std::cmp::Ordering> {
+    fn major_minor(v: &str) -> Option<(u64, u64)> {
+        let mut parts = v.split('.');
+        Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+    }
+    Some(major_minor(a)?.cmp(&major_minor(b)?))
+}
+
 /// Validate the venv has both a python interpreter and the toolr package.
 pub fn validate_venv(venv_dir: &Path, python: &Path) -> Result<PathBuf, ValidationError> {
     if !python.is_file() {
@@ -174,5 +197,38 @@ mod tests {
         let python = tmp.path().join("bin").join("python");
         let pkg = validate_venv(tmp.path(), &python).unwrap();
         assert!(pkg.ends_with("toolr"), "expected path ending in toolr, got {pkg:?}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn reads_installed_toolr_py_version_from_dist_info() {
+        let tmp = TempDir::new().unwrap();
+        fake_unix_venv(tmp.path(), true, true);
+        let sp = tmp.path().join("lib").join("python3.13").join("site-packages");
+        std::fs::create_dir_all(sp.join("toolr_py-0.32.0.dist-info")).unwrap();
+        std::fs::create_dir_all(sp.join("toolr_example_plugin-1.0.0.dist-info")).unwrap();
+        assert_eq!(installed_toolr_py_version(tmp.path()).as_deref(), Some("0.32.0"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn no_toolr_py_dist_info_means_no_version() {
+        let tmp = TempDir::new().unwrap();
+        fake_unix_venv(tmp.path(), true, true);
+        assert_eq!(installed_toolr_py_version(tmp.path()), None);
+    }
+
+    #[test]
+    fn minor_version_order_ignores_patch_level() {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        assert_eq!(super::compare_minor_versions("0.33.0", "0.33.4"), Some(Equal));
+        assert_eq!(super::compare_minor_versions("0.32.0", "0.33.0"), Some(Less));
+        assert_eq!(super::compare_minor_versions("1.0.0", "0.33.0"), Some(Greater));
+    }
+
+    #[test]
+    fn unparsable_versions_have_no_order() {
+        assert_eq!(super::compare_minor_versions("garbage", "0.33.0"), None);
+        assert_eq!(super::compare_minor_versions("0.33.0", ""), None);
     }
 }

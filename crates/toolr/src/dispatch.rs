@@ -314,6 +314,9 @@ pub fn dispatch(
         ) {
             anyhow::bail!("toolr: {e}");
         }
+        if output_opts.verbosity != "quiet" {
+            warn_on_toolr_py_mismatch(&resolved.venv_dir);
+        }
     }
 
     let mut child = spawn_runner(&python, tempfile.path(), &repo_root)
@@ -363,6 +366,29 @@ fn resync_if_stale(
              run `toolr project venv sync`",
         )?;
     Ok(resolved)
+}
+
+/// A runner from another minor release can pass the schema check yet
+/// still carry long-fixed bugs (#529), so name the skew instead of hiding it.
+/// The venv already matches the lock here, so a plain sync can't be the fix.
+fn warn_on_toolr_py_mismatch(venv_dir: &std::path::Path) {
+    use std::cmp::Ordering;
+    let binary = env!("CARGO_PKG_VERSION");
+    let Some(installed) = toolr_core::venv::installed_toolr_py_version(venv_dir) else {
+        return;
+    };
+    let remedy = match toolr_core::venv::compare_minor_versions(&installed, binary) {
+        Some(Ordering::Less) => {
+            "upgrade it with `toolr project venv sync -P toolr-py`, loosening the toolr-py \
+             pin in tools/pyproject.toml first if it caps the version"
+        }
+        Some(Ordering::Greater) => "upgrade the toolr binary to match",
+        Some(Ordering::Equal) | None => return,
+    };
+    eprintln!(
+        "toolr: warning: the tools venv has toolr-py {installed} but this toolr binary \
+         is {binary}; {remedy}"
+    );
 }
 
 fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
