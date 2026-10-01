@@ -2,7 +2,8 @@
 
 These tests install from GitHub, not from `wheelhouse/`, so they only run when
 `TOOLR_SMOKE_VERSION` names the release to check (`install-smoke.yml` sets it).
-Without it, or without `mise` on `PATH`, every test here skips.
+Without it every test skips; with it, a missing `mise` is a failure. They carry
+no `distribution` marker, since that suite tests `wheelhouse/` wheels instead.
 
 Each install runs against throwaway mise data, cache, state and config dirs, so
 a local run never touches the developer's own mise installs. Set
@@ -55,7 +56,7 @@ class MiseProject:
             timeout=timeout,
         )
 
-    def toolr(self) -> Path:
+    def installed_toolr(self) -> Path:
         """The `toolr` this project's mise install provides.
 
         `mise exec` falls back to whatever `toolr` is on `PATH` (a dev venv, the
@@ -71,7 +72,7 @@ class MiseProject:
 
     def run_toolr(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603
-            [str(self.toolr()), *args],
+            [str(self.installed_toolr()), *args],
             cwd=self.root,
             env=self.env,
             capture_output=True,
@@ -91,6 +92,7 @@ def smoke_version() -> str:
 
 @pytest.fixture(scope="session")
 def mise_bin(smoke_version: str) -> str:
+    """Depends on `smoke_version` so an unset version skips before a missing mise fails."""
     mise = shutil.which("mise")
     if mise is None:
         pytest.fail(f"TOOLR_SMOKE_VERSION={smoke_version} is set but mise is not on PATH")
@@ -105,6 +107,7 @@ def make_mise_project(
     """Return a factory that runs `mise use <spec>` in a fresh, isolated project."""
     mise_home = tmp_path_factory.mktemp("mise-home")
     data_dir = mise_home / "data"
+    # Drop the caller's MISE_* config and the __MISE_* state an activated shell exports.
     env = {
         key: value for key, value in os.environ.items() if not key.lstrip("_").startswith("MISE_")
     }
@@ -124,6 +127,7 @@ def make_mise_project(
         project = MiseProject(
             root=root,
             data_dir=data_dir,
+            # The parent, so mise still reads the project's own mise.toml but nothing above it.
             env={**env, "MISE_CEILING_PATHS": str(root.parent)},
             mise=mise_bin,
         )

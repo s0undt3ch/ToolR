@@ -1,7 +1,7 @@
 # mise
 
 [mise](https://mise.jdx.dev/) is a polyglot tool-version manager. Every
-toolr release ships a signed
+toolr release from 0.34.0 onward ships a signed
 [packslip](https://packslip.dev/) manifest, and mise's packslip backend
 installs directly from it — no plugin to register, no repository to
 clone. Releases before 0.34.0 predate packslip support and use mise's aqua

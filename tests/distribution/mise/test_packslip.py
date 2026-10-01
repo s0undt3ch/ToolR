@@ -42,7 +42,10 @@ def _shell_missing(reason: str) -> NoReturn:
 
 
 def _toolr_path_env(project: MiseProject) -> dict[str, str]:
-    return {**project.env, "PATH": f"{project.toolr().parent}{os.pathsep}{project.env['PATH']}"}
+    return {
+        **project.env,
+        "PATH": f"{project.installed_toolr().parent}{os.pathsep}{project.env['PATH']}",
+    }
 
 
 def test_manifest_matches_release(packslip_manifest: dict[str, Any], smoke_version: str) -> None:
@@ -99,6 +102,7 @@ def test_bash_completion_completes(packslip_project: MiseProject, tmp_path: Path
         _shell_missing("bash with bash-completion not available")
     script = tmp_path / "toolr.bash"
     script.write_text(packslip_project.run("completion", "bash", "--tool", "toolr").stdout)
+    # Emulates readline on `toolr self <TAB>`: the completion function gets (cmd, cur, prev).
     driver = (
         f'source "{bash_completion}"; source "{script}"\n'
         'COMP_WORDS=(toolr self ""); COMP_CWORD=2; COMP_LINE="toolr self "; COMP_POINT=${#COMP_LINE}\n'

@@ -510,6 +510,7 @@ jobs:
       # Version must match the `github:jdx/packslip@1.3.0` pin in ci.yml.
       # The action uploads with `gh release upload --clobber`, so a re-run
       # re-signs and replaces the existing packslip.sigstore.json asset.
+      # install-smoke.yml and tests/distribution/mise/ look for this asset as packslip.sigstore.json.
       - name: Sign and upload the packslip
         id: packslip
         uses: jdx/packslip@4920350c39c234c7a969f9775040bd02829f1923 # v1.3.0

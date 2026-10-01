@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to smoke-test (defaults to latest release)'
+        # release.yml's dispatch-install-smoke passes this; keep the name in sync.
+        description: 'Version to smoke-test (defaults to the newest release with a packslip)'
         required: false
         type: string
   push:
@@ -20,8 +21,8 @@ on:
       - '.github/env'
       - '.github/actions/setup-virtualenv/**'
       - '.github/workflows/install-smoke.yml'
-  # PRs that touch the installer entry points get a smoke-test run
-  # so we catch script breakage before it lands on main. The
+  # PRs that touch the installers, the mise smoke tests or their setup
+  # get a smoke-test run, to catch breakage before it lands on main. The
   # `smoke-pip-wheel` job is gated off below — it exercises the
   # published PyPI wheel, which a PR can't influence; running it here
   # would just retest main's last release.
@@ -265,10 +266,9 @@ jobs:
               '[.[] | select(.draft | not) | select(any(.assets[]; .name == "packslip.sigstore.json"))][0].tag_name')
           fi
           echo "TOOLR_SMOKE_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
-      # `--no-sync` and `--confcutdir` keep the repo's own toolr out: no
-      # build of HEAD, and no workspace `toolr` on PATH to mask a broken
-      # install. The version guard stops a lost env var from skipping
-      # every test into a green job.
+      # `--no-sync` stops uv building HEAD's toolr, and `--confcutdir` skips
+      # tests/conftest.py, which imports it. The version guard stops a lost
+      # env var from skipping every test into a green job.
       - name: Run the mise smoke tests
         shell: bash
         env:
