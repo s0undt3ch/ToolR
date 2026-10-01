@@ -15,18 +15,18 @@ on:
     paths:
       - 'installation/install.sh'
       - 'installation/install.ps1'
+      - 'tests/distribution/mise/**'
       - '.github/workflows/install-smoke.yml'
   # PRs that touch the installer entry points get a smoke-test run
   # so we catch script breakage before it lands on main. The
-  # *remote* jobs (`smoke-pip-wheel`, `smoke-mise-aqua`) are gated
-  # off below — they exercise the published PyPI wheel and the
-  # public aqua-registry entry respectively, neither of which a PR
-  # can influence; running them here would just retest main's last
-  # release.
+  # `smoke-pip-wheel` job is gated off below — it exercises the
+  # published PyPI wheel, which a PR can't influence; running it here
+  # would just retest main's last release.
   pull_request:
     paths:
       - 'installation/install.sh'
       - 'installation/install.ps1'
+      - 'tests/distribution/mise/**'
       - '.github/workflows/install-smoke.yml'
 
 permissions:
@@ -199,61 +199,61 @@ jobs:
             .venv-py/bin/python -c "import toolr; import toolr.utils._rust_utils; print(toolr.__version__)"
           fi
 
-  # The canonical user-facing mise install path is
+  # Installs the published release through mise's packslip and aqua
+  # backends, then checks the binary, the packslip's declared skills and
+  # its shell completions. The checks live in `tests/distribution/mise/`.
   #
-  #     mise use aqua:s0undt3ch/ToolR@<version>
-  #
-  # which resolves against the published aqua-registry release that
-  # contains `pkgs/s0undt3ch/ToolR/registry.yaml`. This job catches
-  # breakage in that path: aqua-registry dropping the entry, mise's
-  # aqua backend changing semantics, the published GitHub release
-  # archive layout drifting from what aqua expects, and so on.
-  #
-  # We use `mise install` + `mise exec` here rather than `mise use`
-  # because the runner has no project context to pin to — the goal
-  # is to fetch the binary and verify it runs, not to write a
-  # `.mise.toml` we throw away at the end of the job.
-  #
-  # Skipped on `pull_request` runs because the aqua-registry entry
-  # is external to this repo — a PR can't change what's published
-  # upstream, so the test would just retest main's last release.
-  smoke-mise-aqua:
-    name: mise aqua (${{ matrix.os }})
-    if: github.event_name != 'pull_request'
+  # Runs on pull requests too, unlike the other remote jobs: a PR can't
+  # change what's published, but it can change the tests.
+  smoke-mise:
+    name: mise packslip + aqua (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os:
           - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-15-intel
           - macos-14
+          - windows-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Load shared env vars
-        # MISE_VERSION lives in `.github/env`; checkout isn't strictly
-        # required for this job, but we need the file. Same sed-filter
-        # trick the other jobs use.
-        run: |
-          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/.github/env" \
-            | sed -n '/^[A-Z]/p' >> "$GITHUB_ENV"
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        shell: bash
+        run: sed -n '/^[A-Z]/p' .github/env >> "$GITHUB_ENV"
+      - name: Setup Virtual Environment
+        uses: ./.github/actions/setup-virtualenv
         with:
-          version: ${{ env.MISE_VERSION }}
-          install: false
-      - name: Install toolr via the aqua backend
+          cache-prefix: smoke-mise
+          mise-version: ${{ env.MISE_VERSION }}
+      - name: Install shells for the completion tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends bash-completion fish zsh
+      # Not `@latest`: mise holds a fresh release back from `latest` for a
+      # while, so a run right after a release would test the previous one.
+      - name: Resolve the version to test
+        shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          if [ -n "$VERSION" ]; then
-            mise install "aqua:s0undt3ch/ToolR@$VERSION"
-            mise exec "aqua:s0undt3ch/ToolR@$VERSION" -- toolr --version
-          else
-            mise install aqua:s0undt3ch/ToolR@latest
-            mise exec aqua:s0undt3ch/ToolR@latest -- toolr --version
+          if [ -z "$VERSION" ]; then
+            VERSION=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
           fi
+          echo "TOOLR_SMOKE_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+      - name: Run the mise smoke tests
+        env:
+          # Anonymous GitHub API calls hit the rate limit, and mise then
+          # silently drops packslip skills.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run pytest -ra -v --color=yes tests/distribution/mise/
 
   report:
     name: Report
@@ -262,7 +262,7 @@ jobs:
     needs:
       - smoke-install-ps1
       - smoke-install-sh
-      - smoke-mise-aqua
+      - smoke-mise
       - smoke-pip-wheel
     steps:
       - name: Harden the runner (Audit all outbound calls)

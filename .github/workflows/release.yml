@@ -553,6 +553,30 @@ jobs:
             | jq -e --arg v "$VERSION" --arg c "$COMMIT" \
                 '.predicate.version == $v and .predicate.source.commit == $c'
 
+  # The scheduled smoke run would only reach this release on its next
+  # cron tick, so start one now, after the packslip exists.
+  # `workflow_dispatch` is one of the few events GITHUB_TOKEN may trigger.
+  dispatch-install-smoke:
+    name: Start the install smoke tests
+    needs:
+      - prepare-release
+      - publish-packslip
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Dispatch install-smoke.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare-release.outputs.release-version }}
+        run: |
+          gh workflow run install-smoke.yml --repo "$GITHUB_REPOSITORY" --ref main -f version="$VERSION"
+
   set-pipeline-exit-status:
     environment: release
     permissions: {}
@@ -572,6 +596,7 @@ jobs:
       - build-py-wheel-linux
       - build-py-wheel-macos
       - build-py-wheel-windows
+      - dispatch-install-smoke
       - prepare-ci
       - prepare-release
       - publish-packslip
