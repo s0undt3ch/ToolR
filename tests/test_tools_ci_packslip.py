@@ -241,6 +241,49 @@ def test_non_skill_dirs_are_ignored(
     assert _packslip_statement_failures(statement(), root) == []
 
 
+def test_dot_dirs_are_not_skills(
+    statement: StatementFactory, skills_tree: SkillsTreeFactory
+) -> None:
+    skills = {n: f"---\nname: {n}\n---\n" for n in (*SKILL_NAMES, ".draft")}
+    assert _packslip_statement_failures(statement(), skills_tree(skills)) == []
+
+
+@pytest.mark.parametrize(
+    ("value", "detail"),
+    [
+        pytest.param([], "statement has no predicate object", id="statement-not-object"),
+        pytest.param(
+            {"predicate": ["x"]}, "statement has no predicate object", id="predicate-not-object"
+        ),
+        pytest.param(
+            {"predicate": {"artifacts": {"name": "x"}}},
+            "predicate.artifacts is not a list of objects",
+            id="artifacts-not-list",
+        ),
+        pytest.param(
+            {"predicate": {"artifacts": [{"name": "x"}], "resources": ["skill"]}},
+            "predicate.resources is not a list of objects",
+            id="resource-not-object",
+        ),
+    ],
+)
+def test_unexpected_statement_shape_fails(value: object, detail: str, tmp_path: Path) -> None:
+    assert _packslip_statement_failures(value, tmp_path / "skills") == [
+        PackslipFailure("statement shape", detail)
+    ]
+
+
+def test_bin_entry_must_be_a_list(
+    statement: StatementFactory, skills_tree: SkillsTreeFactory
+) -> None:
+    artifacts = statement()["predicate"]["artifacts"]
+    artifacts[0]["bin"] = "toolr"
+    failures = _packslip_statement_failures(statement(artifacts=artifacts), skills_tree())
+    assert failures == [
+        PackslipFailure("artifact bin entries", f"{artifacts[0]['name']}: bin is not a list")
+    ]
+
+
 def test_skill_repo_path_must_match_name(
     statement: StatementFactory, skills_tree: SkillsTreeFactory
 ) -> None:
@@ -383,6 +426,8 @@ def _stub_packslip(
 
     def _run(cmdline: tuple[str, ...], **_: Any) -> CommandResult[str] | CommandResult[bytes]:
         if cmdline[0] == "git":
+            if fail == "git":
+                return make_command_result(args=list(cmdline), stderr="git broke", returncode=1)
             return make_command_result(args=list(cmdline), stdout="a" * 40 + "\n")
         sub = cmdline[1]
         if sub == fail:
@@ -439,6 +484,40 @@ def test_command_names_the_failing_packslip_step(
         packslip_check(ctx, archive_dir(), packslip=fake_packslip)
     assert exc.value.code == 1
     assert f"packslip-check: packslip {sub} failed: {sub} broke" in ctx.stderr
+
+
+def test_command_fails_when_git_rev_parse_fails(
+    statement: StatementFactory,
+    repo_root: Path,
+    archive_dir: Callable[..., ResolvedPath],
+    fake_packslip: ResolvedPath,
+) -> None:
+    ctx = make_context(repo_root, run=_stub_packslip(statement(), fail="git"))
+    with pytest.raises(SystemExit) as exc:
+        packslip_check(ctx, archive_dir(), packslip=fake_packslip)
+    assert exc.value.code == 1
+    assert "packslip-check: git rev-parse HEAD failed: git broke" in ctx.stderr
+
+
+def test_command_fails_when_create_produces_no_bundle(
+    statement: StatementFactory,
+    repo_root: Path,
+    archive_dir: Callable[..., ResolvedPath],
+    fake_packslip: ResolvedPath,
+) -> None:
+    stub = _stub_packslip(statement())
+
+    def _run(cmdline: tuple[str, ...], **kwargs: Any) -> CommandResult[str] | CommandResult[bytes]:
+        if cmdline[1:2] == ("create",):
+            return make_command_result(args=list(cmdline))
+        return stub(cmdline, **kwargs)
+
+    ctx = make_context(repo_root, run=_run)
+    with pytest.raises(SystemExit) as exc:
+        packslip_check(ctx, archive_dir(), packslip=fake_packslip)
+    assert exc.value.code == 1
+    assert "packslip-check: packslip create failed: expected bundle at" in ctx.stderr
+    assert "none produced" in ctx.stderr
 
 
 def test_command_reports_statement_failures(
@@ -549,22 +628,28 @@ def test_command_fails_on_non_json_show_output(
     assert "packslip-check: packslip show failed:" in ctx.stderr
 
 
-def _packslip_runs() -> bool:
+@pytest.fixture(scope="session")
+def real_packslip() -> None:
     # A mise shim is on PATH even when no packslip version is configured, and then errors.
     path = shutil.which("packslip")
-    if path is None:
-        return False
     try:
-        result = subprocess.run([path, "--version"], capture_output=True, check=False)  # noqa: S603
+        runs = (
+            path is not None
+            and subprocess.run(  # noqa: S603
+                [path, "--version"], capture_output=True, check=False
+            ).returncode
+            == 0
+        )
     except OSError:
-        return False
-    return result.returncode == 0
+        runs = False
+    if not runs:
+        pytest.skip(
+            "packslip CLI not runnable from PATH "
+            "(e.g. `mise x github:jdx/packslip@<version> -- pytest`)"
+        )
 
 
-@pytest.mark.skipif(
-    not _packslip_runs(),
-    reason="packslip CLI not runnable from PATH (e.g. `mise x github:jdx/packslip@<version> -- pytest`)",
-)
+@pytest.mark.usefixtures("real_packslip")
 def test_command_end_to_end_with_real_packslip(archive_dir: Callable[..., ResolvedPath]) -> None:
     ctx = make_context(REPO_ROOT)
     packslip_check(ctx, archive_dir())

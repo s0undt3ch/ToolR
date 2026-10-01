@@ -9,7 +9,6 @@ import os
 import tempfile
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 from typing import Literal
 from typing import NamedTuple
 
@@ -504,9 +503,7 @@ def _bin_path(entry: object) -> object:
     return entry.get("path") if isinstance(entry, dict) else entry
 
 
-def _packslip_statement_failures(
-    statement: dict[str, Any], skills_root: Path
-) -> list[PackslipFailure]:
+def _packslip_statement_failures(statement: object, skills_root: Path) -> list[PackslipFailure]:
     """Check a `packslip show` statement against what a toolr release must ship.
 
     Args:
@@ -517,10 +514,18 @@ def _packslip_statement_failures(
     Returns:
         Every failed assertion, in check order. Empty means the statement passes.
     """
-    failures: list[PackslipFailure] = []
-    predicate = statement.get("predicate") or {}
+    predicate = (statement.get("predicate") or {}) if isinstance(statement, dict) else None
+    if not isinstance(predicate, dict):
+        return [PackslipFailure("statement shape", "statement has no predicate object")]
     artifacts = predicate.get("artifacts") or []
     resources = predicate.get("resources") or []
+    failures = [
+        PackslipFailure("statement shape", f"predicate.{key} is not a list of objects")
+        for key, entries in (("artifacts", artifacts), ("resources", resources))
+        if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries)
+    ]
+    if failures:
+        return failures
 
     if not artifacts:
         failures.append(PackslipFailure("artifacts", "statement lists no artifacts"))
@@ -528,6 +533,9 @@ def _packslip_statement_failures(
     for artifact in artifacts:
         name = artifact.get("name")
         bins = artifact.get("bin") or []
+        if not isinstance(bins, list):
+            failures.append(PackslipFailure("artifact bin entries", f"{name}: bin is not a list"))
+            continue
         if len(bins) != 1:
             failures.append(
                 PackslipFailure(
@@ -559,7 +567,11 @@ def _packslip_statement_failures(
     if not skills_root.is_dir():
         failures.append(PackslipFailure("skill resources", f"{skills_root} directory not found"))
     else:
-        dir_skills = sorted(p.parent.name for p in skills_root.glob("*/SKILL.md") if p.is_file())
+        dir_skills = sorted(
+            p.parent.name
+            for p in skills_root.glob("*/SKILL.md")
+            if p.is_file() and not p.parent.name.startswith(".")
+        )
         if not manifest_skills:
             failures.append(
                 PackslipFailure("skill resources", "statement lists no skill resources")
