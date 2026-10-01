@@ -192,3 +192,13 @@ bump (including `toolr-py` itself) never reached the venv until you ran
 `toolr project venv sync` by hand, so commands kept running the old code without any warning.
 When the sync can't happen, for example because uv is missing and installing it wasn't
 approved, toolr refuses to run the command and points you at `toolr project venv sync`.
+
+### Warning when the tools venv's `toolr-py` is from another minor release
+
+Before running a command, toolr now checks the `toolr-py` version installed in the tools venv. If
+its minor release differs from the toolr binary's, toolr prints one warning naming both versions.
+The two can still talk to each other, so the command runs, but the mismatch used to stay hidden
+and made bugs already fixed in your toolr release look like new ones. When the venv is older, the
+warning suggests `toolr project venv sync -P toolr-py`, after loosening the `toolr-py` pin in
+`tools/pyproject.toml` if it caps the version. When the venv is newer, it suggests upgrading the
+toolr binary. Patch-level differences don't warn, and `--quiet` suppresses the warning.
