@@ -32,7 +32,7 @@ impl Project {
     }
 
     fn path_with_uv(&self) -> String {
-        format!("{}:/usr/bin:/bin", self.fx.bin_dir.display())
+        self.fx.bin_dir.display().to_string()
     }
 
     fn reset_observations(&self) {
@@ -124,7 +124,7 @@ fn stale_venv_without_uv_refuses_to_run() {
     let p = synced_project();
     p.bump_lock();
     let output = p
-        .toolr("/usr/bin:/bin")
+        .toolr(&p.fx.root.join("empty-path").display().to_string())
         .args(["--quiet", "hello", "world"])
         .output()
         .unwrap();
