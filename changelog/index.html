@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev176-2026-10-01" class="md-nav__link">
+  <a href="#0331-dev179-2026-10-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev176 - 2026-10-01
+        0.33.1-dev179 - 2026-10-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev176 - 2026-10-01">
+    <nav class="md-nav" aria-label="0.33.1-dev179 - 2026-10-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1589,6 +1589,17 @@
     <span class="md-ellipsis">
       
         Plugin commands behave like local commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commands-re-sync-a-stale-tools-venv-before-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commands re-sync a stale tools venv before running
       
     </span>
   </a>
@@ -4140,15 +4151,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0331-dev176-2026-10-01" class="md-nav__link">
+  <a href="#0331-dev179-2026-10-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.33.1-dev176 - 2026-10-01
+        0.33.1-dev179 - 2026-10-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.33.1-dev176 - 2026-10-01">
+    <nav class="md-nav" aria-label="0.33.1-dev179 - 2026-10-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4266,6 +4277,17 @@
     <span class="md-ellipsis">
       
         Plugin commands behave like local commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commands-re-sync-a-stale-tools-venv-before-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commands re-sync a stale tools venv before running
       
     </span>
   </a>
@@ -6812,7 +6834,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0331-dev176-2026-10-01">0.33.1-dev176 - 2026-10-01<a class="headerlink" href="#0331-dev176-2026-10-01" title="Permanent link">&para;</a></h2>
+<h2 id="0331-dev179-2026-10-01">0.33.1-dev179 - 2026-10-01<a class="headerlink" href="#0331-dev179-2026-10-01" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <h3 id="toolrcurrent_context"><code>toolr.current_context()</code><a class="headerlink" href="#toolrcurrent_context" title="Permanent link">&para;</a></h3>
 <p>Added <code>toolr.current_context()</code>, a <code>contextvars</code>-backed accessor a
@@ -6973,6 +6995,13 @@ every run names every plugin that defines it (<code>toolr: warning: deploy rollo
 (toolr_a, toolr_b), so it is disabled. ...</code>). Uninstall all but one to get it back, or define it in your <code>tools/</code>,
 and the local one wins. Both this warning and the shadowing one now link
 <a href="https://github.com/s0undt3ch/ToolR/issues/522">#522</a>, where you can vote for choosing the winner in configuration.</p>
+<h3 id="commands-re-sync-a-stale-tools-venv-before-running">Commands re-sync a stale tools venv before running<a class="headerlink" href="#commands-re-sync-a-stale-tools-venv-before-running" title="Permanent link">&para;</a></h3>
+<p>Running a toolr command now checks whether <code>tools/uv.lock</code> has changed since the tools venv was
+last synced. If it has, toolr syncs the venv before running the command. Until now, a dependency
+bump (including <code>toolr-py</code> itself) never reached the venv until you ran
+<code>toolr project venv sync</code> by hand, so commands kept running the old code without any warning.
+When the sync can't happen, for example because uv is missing and installing it wasn't
+approved, toolr refuses to run the command and points you at <code>toolr project venv sync</code>.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(toolr-py)</em> Add current_context() accessor and NoCurrentContextError (<a href="https://github.com/s0undt3ch/ToolR/commit/5c49421f4db3f615841f2ca2229de5babb64bfe7"><code>5c49421</code></a>)</li>
@@ -7032,6 +7061,7 @@ and the local one wins. Both this warning and the shadowing one now link
 <li><em>(manifest)</em> Dedup groups by full path, not leaf name (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/04efd1a13c236231d57c573c48093f250ebc7b93"><code>04efd1a</code></a>)</li>
 <li><em>(ci)</em> Harden packslip-check against odd statements and dot-dirs (#508) (<a href="https://github.com/s0undt3ch/ToolR/commit/d17884b5dc4c886357ac88a473b06b88196bfd29"><code>d17884b</code></a>)</li>
 <li><em>(ci)</em> Label the packslip CLI pin as a GitHub Actions dependency (#508) (<a href="https://github.com/s0undt3ch/ToolR/commit/f699276b9b8588e80d1b58eecede75811508b2ea"><code>f699276</code></a>)</li>
+<li><em>(dispatch)</em> Re-sync a stale tools venv before running a command (#527) (<a href="https://github.com/s0undt3ch/ToolR/commit/0f58c7f1aeb27b75e44875f772c3dd205f975a42"><code>0f58c7f</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7113,6 +7143,7 @@ and the local one wins. Both this warning and the shadowing one now link
 <li><em>(manifest)</em> Cover host title winning and no-venv carry-forward (#520) (<a href="https://github.com/s0undt3ch/ToolR/commit/0f4a8e34b658a63e640a7b02b1ce976d6e1e75c5"><code>0f4a8e3</code></a>)</li>
 <li><em>(plugins)</em> Cover a plugin conflict on a fresh project and its recovery (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/68f153b0e53f487bfbe5f57ae1c72bc147fffab5"><code>68f153b</code></a>)</li>
 <li><em>(plugins)</em> Pin conflict serialisation and completion, document the local-command remedy (#522) (<a href="https://github.com/s0undt3ch/ToolR/commit/fb3ee8616e6876cf4ae4b596c80d90f1fb1ce578"><code>fb3ee86</code></a>)</li>
+<li><em>(dispatch)</em> Keep system PATH out of the stale-venv tests (#527) (<a href="https://github.com/s0undt3ch/ToolR/commit/f2788437efb68dae6307c4bec592f89108acd574"><code>f278843</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
