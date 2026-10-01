@@ -27,7 +27,7 @@ mise use packslip:github.com/s0undt3ch/ToolR@latest
 Installs toolr from its signed [packslip](https://packslip.dev/)
 manifest via mise's packslip backend — no plugin to register. For
 projects that already pin tool versions via `.mise.toml`, this is
-the most-natural fit. Releases before packslip support have no
+the most-natural fit. Releases before 0.34.0 have no
 manifest to install from; use `mise use aqua:s0undt3ch/ToolR@<version>`
 for those. See [installation/mise](installation/mise.md).
 
