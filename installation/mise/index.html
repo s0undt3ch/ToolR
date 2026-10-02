@@ -2077,10 +2077,10 @@
 
 <h1 id="mise">mise<a class="headerlink" href="#mise" title="Permanent link">&para;</a></h1>
 <p><a href="https://mise.jdx.dev/">mise</a> is a polyglot tool-version manager. Every
-toolr release ships a signed
+toolr release from 0.34.0 onward ships a signed
 <a href="https://packslip.dev/">packslip</a> manifest, and mise's packslip backend
 installs directly from it — no plugin to register, no repository to
-clone. Releases published before packslip support use mise's aqua
+clone. Releases before 0.34.0 predate packslip support and use mise's aqua
 backend instead; see "Aqua fallback" below.</p>
 <h2 id="why">Why<a class="headerlink" href="#why" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2128,7 +2128,7 @@ global config with a tool you mostly use inside specific repos.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>toolr<span class="w"> </span>--version
 </span></code></pre></div>
 <h3 id="aqua-fallback">Aqua fallback<a class="headerlink" href="#aqua-fallback" title="Permanent link">&para;</a></h3>
-<p>Releases before packslip support have no packslip manifest to install
+<p>Releases before 0.34.0 have no packslip manifest to install
 from. For those, use mise's aqua backend, unchanged from before
 packslip landed:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@&lt;version&gt;
@@ -2272,7 +2272,7 @@ release containing the entry has shipped.</p>
 <code>mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise</code>.
 That plugin has been <strong>removed</strong> in favour of the backends described
 above: packslip for current releases, aqua as the fallback for
-releases before packslip support. Migrate with:</p>
+releases before 0.34.0. Migrate with:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>uninstall<span class="w"> </span>toolr
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>mise<span class="w"> </span>use<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@latest<span class="w">         </span><span class="c1"># per-project</span>
 </span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># or:</span>
