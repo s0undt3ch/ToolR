@@ -1,10 +1,10 @@
 # mise
 
 [mise](https://mise.jdx.dev/) is a polyglot tool-version manager. Every
-toolr release ships a signed
+toolr release from 0.34.0 onward ships a signed
 [packslip](https://packslip.dev/) manifest, and mise's packslip backend
 installs directly from it — no plugin to register, no repository to
-clone. Releases published before packslip support use mise's aqua
+clone. Releases before 0.34.0 predate packslip support and use mise's aqua
 backend instead; see "Aqua fallback" below.
 
 ## Why
@@ -69,7 +69,7 @@ toolr --version
 
 ### Aqua fallback
 
-Releases before packslip support have no packslip manifest to install
+Releases before 0.34.0 have no packslip manifest to install
 from. For those, use mise's aqua backend, unchanged from before
 packslip landed:
 
@@ -268,7 +268,7 @@ Earlier toolr revisions shipped an asdf-style plugin at
 `mise plugin add toolr git::https://github.com/s0undt3ch/ToolR.git//installation/mise`.
 That plugin has been **removed** in favour of the backends described
 above: packslip for current releases, aqua as the fallback for
-releases before packslip support. Migrate with:
+releases before 0.34.0. Migrate with:
 
 ```sh
 mise plugin uninstall toolr

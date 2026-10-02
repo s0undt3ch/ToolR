@@ -510,6 +510,7 @@ jobs:
       # Version must match the `github:jdx/packslip@1.3.0` pin in ci.yml.
       # The action uploads with `gh release upload --clobber`, so a re-run
       # re-signs and replaces the existing packslip.sigstore.json asset.
+      # install-smoke.yml and tests/distribution/mise/ look for this asset as packslip.sigstore.json.
       - name: Sign and upload the packslip
         id: packslip
         uses: jdx/packslip@4920350c39c234c7a969f9775040bd02829f1923 # v1.3.0
@@ -553,6 +554,33 @@ jobs:
             | jq -e --arg v "$VERSION" --arg c "$COMMIT" \
                 '.predicate.version == $v and .predicate.source.commit == $c'
 
+  # The scheduled smoke run would only reach this release on its next
+  # cron tick, so start one now, after the packslip exists.
+  # `workflow_dispatch` is one of the few events GITHUB_TOKEN may trigger.
+  dispatch-install-smoke:
+    name: Start the install smoke tests
+    # Explicit, because publish-packslip can succeed after publish-release
+    # failed, and the implicit success() would then skip this job.
+    if: ${{ !cancelled() && needs.publish-packslip.result == 'success' }}
+    needs:
+      - prepare-release
+      - publish-packslip
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Dispatch install-smoke.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare-release.outputs.release-version }}
+        run: |
+          gh workflow run install-smoke.yml --repo "$GITHUB_REPOSITORY" --ref main -f version="$VERSION"
+
   set-pipeline-exit-status:
     environment: release
     permissions: {}
@@ -572,6 +600,7 @@ jobs:
       - build-py-wheel-linux
       - build-py-wheel-macos
       - build-py-wheel-windows
+      - dispatch-install-smoke
       - prepare-ci
       - prepare-release
       - publish-packslip

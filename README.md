@@ -36,7 +36,7 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
 - **First-class third-party command packages.** Plugins ship a static `toolr-manifest.json` inside
   the wheel. Discovery is a glob + JSON parse; no Python import to find them.
 - **Signed releases.** Every release archive ships with a SLSA build-provenance attestation, and
-  every release publishes a signed [packslip](https://packslip.dev/) manifest that mise verifies
+  every release from 0.34.0 onward publishes a signed [packslip](https://packslip.dev/) manifest that mise verifies
   against the ToolR repository's signing identity, remembering the release workflow after the
   first install. The install scripts verify the attestation by default (requires the `gh` CLI);
   pass `--verify-attestation=skip` to bypass, accepting the supply-chain risk.
@@ -72,7 +72,7 @@ backend — no plugin to register. mise verifies the release against the ToolR r
 identity, remembering the release workflow after the first install, and checks the digest and size
 of the archive for your platform before unpacking it. For projects that already pin tool versions
 via `.mise.toml`, toolr's version becomes part of your project's reproducible tool set. Releases
-before packslip support have no manifest to install from; use
+before 0.34.0 have no manifest to install from; use
 `mise use aqua:s0undt3ch/ToolR@<version>` for those.
 See [docs/installation/mise/](https://toolr.readthedocs.io/latest/installation/mise/).
 
