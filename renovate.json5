@@ -50,6 +50,14 @@
       datasourceTemplate: "github-tags",
       extractVersionTemplate: "^v?(?<version>.*)$",
     },
+    {
+      customType: "regex",
+      description: "Track the mise version every workflow installs",
+      managerFilePatterns: ["/^\\.github/env$/"],
+      matchStrings: ["MISE_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "jdx/mise",
+      datasourceTemplate: "github-releases",
+    },
   ],
 
   assignees: ["s0undt3ch"],

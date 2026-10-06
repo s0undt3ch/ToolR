@@ -4,6 +4,6 @@
 # is `KEY=VALUE` per line (no shell quoting / interpolation) which is
 # what `$GITHUB_ENV` consumes verbatim.
 #
-# Bump `MISE_VERSION` here to upgrade every workflow's mise install in
-# a single edit. Lockstep with `mise.toml`'s tooling pins.
-MISE_VERSION=v2026.9.5
+# `MISE_VERSION` sets every workflow's mise install. Renovate bumps it
+# (see the regex manager in renovate.json5).
+MISE_VERSION=v2026.10.3
