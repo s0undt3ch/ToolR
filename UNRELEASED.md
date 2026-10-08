@@ -13,5 +13,6 @@ no scaffolding. Just write whatever should appear in the notes.
 
 Commands with a named positional parameter ahead of `*args` (for example
 `def cmd(ctx, foo: Foo, *paths: pathlib.Path)`) now run. They used to crash with
-`TypeError: ... got multiple values for argument`. Positional-only (`/`)
-parameters are now passed positionally too.
+`TypeError: ... got multiple values for argument`. Commands with positional-only
+(`/`) parameters now work too: the manifest parser used to drop them, plus the
+parameter right after them.

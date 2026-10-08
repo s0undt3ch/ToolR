@@ -693,6 +693,48 @@ def go(ctx, items: list[str] | None = None):
     }
 
     #[test]
+    fn positional_only_params_resolve_in_lockstep() {
+        let src = r#"command_group("repro", "Repro")
+
+@command(group="repro")
+def go(ctx, name: str, /, count: int, *rest: int):
+    """Repro."""
+    pass
+"#;
+        let m = parse_src(src);
+        let bindings = extract_groups(&m, "", &HashMap::new());
+        let commands = extract_commands(
+            &m,
+            "tools.repro",
+            &bindings,
+            &EnumTable::default(),
+            &HashMap::new(),
+            &ConstTable::default(),
+            &TypeImports::default(),
+            &SourcesImports::default(),
+            &TypeAliasTable::default(),
+            &ArgSectionTable::default(),
+            &HashMap::new(),
+            &mut Vec::new(),
+        );
+        use crate::manifest::ArgumentKind;
+        use crate::parser::types::SupportedType;
+        let got: Vec<_> = commands[0]
+            .arguments
+            .iter()
+            .map(|a| (a.name.as_str(), a.kind, a.resolved_type.clone()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("name", ArgumentKind::Positional, Some(SupportedType::Str)),
+                ("count", ArgumentKind::Positional, Some(SupportedType::Int)),
+                ("rest", ArgumentKind::VarPositional, Some(SupportedType::Int)),
+            ]
+        );
+    }
+
+    #[test]
     fn optional_tuple_keyword_resolves_to_repeated() {
         // Same fix as `optional_list_keyword_resolves_to_repeated`, for
         // the other collection shape `is_list_like_annotation` accepts.
