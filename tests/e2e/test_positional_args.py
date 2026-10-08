@@ -30,7 +30,7 @@ def positional(ctx: Context, foo: Foo, *paths: pathlib.Path) -> None:
         paths: A variable number of file paths.
     """
     ctx.print(f"foo: {foo}")
-    ctx.print(f"paths: {[str(p) for p in paths]}")
+    ctx.print(f"paths: {[p.as_posix() for p in paths]}")
 
 
 @example.command

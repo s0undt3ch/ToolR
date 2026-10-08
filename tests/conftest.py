@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from toolr.testing import CommandsTester
 
@@ -111,7 +112,8 @@ def toolr_bin(request: pytest.FixtureRequest) -> Path:
     )
     binary_version = proc.stdout.split()[-1]
     toolr_py_version = importlib.metadata.version("toolr-py")
-    if binary_version != toolr_py_version:
+    # Cargo's SemVer (`0.34.1-dev25`) and PEP 440 (`0.34.1.dev25`) spell the same version differently.
+    if Version(binary_version) != Version(toolr_py_version):
         pytest.fail(
             f"{binary} is toolr {binary_version} but the importable toolr-py is "
             f"{toolr_py_version}; subprocess tests would mix two releases"

@@ -130,7 +130,7 @@ def test_runner_invokes_target_with_positional_before_variadic(
         def positional(ctx: Context, foo: Foo, *paths: pathlib.Path) -> None:
             "Do it."
             ctx.print(f"foo: {foo}")
-            ctx.print(f"paths: {[str(p) for p in paths]}")
+            ctx.print(f"paths: {[p.as_posix() for p in paths]}")
         """
     )
     spec_path = spec_file(
