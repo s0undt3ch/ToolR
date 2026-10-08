@@ -460,6 +460,16 @@ def _positional_only(ctx, name: str, /, count: int) -> tuple[Any, ...]:
     return (name, count)
 
 
+def _defaulted_then_variadic(ctx, label: str = "none", *values: int) -> tuple[Any, ...]:
+    """Helper with a defaulted param ahead of `*args` (a `--label` option on the CLI)."""
+    return (label, values)
+
+
+def _two_then_variadic(ctx, first: str, second: str, *rest: str) -> tuple[Any, ...]:
+    """Helper with two required params ahead of `*args`."""
+    return (first, second, rest)
+
+
 def test_coerce_args_passes_through_when_no_hints() -> None:
     raw = {"x": "1", "y": "two"}
     positional, keyword = _coerce_args(_no_hints, raw)
@@ -519,6 +529,20 @@ def test_coerce_args_passes_positional_before_variadic_positionally() -> None:
 def test_coerce_args_passes_positional_only_positionally() -> None:
     positional, keyword = _coerce_args(_positional_only, {"name": "x", "count": "3"})
     assert _positional_only(None, *positional, **keyword) == ("x", 3)
+
+
+def test_coerce_args_fills_omitted_default_ahead_of_variadic() -> None:
+    positional, keyword = _coerce_args(_defaulted_then_variadic, {"values": ["1", "2"]})
+    assert _defaulted_then_variadic(None, *positional, **keyword) == ("none", (1, 2))
+
+
+def test_coerce_args_missing_required_ahead_of_variadic_fails_on_that_param() -> None:
+    # A stale manifest can omit a required param. Shifting the later values
+    # into its slot would run the command with the wrong arguments; leaving
+    # them as keywords lets Python name the missing one.
+    positional, keyword = _coerce_args(_two_then_variadic, {"second": "b", "rest": []})
+    with pytest.raises(TypeError, match=r"missing 1 required positional argument: 'first'"):
+        _two_then_variadic(None, *positional, **keyword)
 
 
 def test_coerce_args_raises_when_variadic_value_is_not_a_list() -> None:
