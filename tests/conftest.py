@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import dataclasses
+import importlib.metadata
+import json
 import os
 import shutil
+import subprocess
+import sys
+import textwrap
+from collections.abc import Callable
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -58,25 +65,105 @@ def commands_tester(tmp_path: Path) -> Iterator[CommandsTester]:
         yield commands_tester
 
 
-@pytest.fixture(scope="session")
-def toolr_bin() -> Path:
-    """Path to the ``toolr`` binary for subprocess tests.
-
-    Prefers `shutil.which("toolr")` so the test exercises whichever
-    binary the surrounding environment actually picks up (in CI: the
-    one extracted from the `toolr-archive` artifact and put on PATH;
-    locally: whatever `mise` / `cargo install` / `pip install toolr`
-    placed). Falls back to `target/release/toolr` only when nothing's
-    on PATH so a developer with `cargo build --release` and no install
-    can still run subprocess tests.
-    """
-    found = shutil.which("toolr")
-    if found is not None:
-        return Path(found)
-    candidate = Path(__file__).parent.parent / "target" / "release" / "toolr"
-    if candidate.exists():
-        return candidate
-    pytest.skip(
-        "no toolr binary on PATH and no `target/release/toolr` — "
-        "run `cargo build --release -p toolr` or install toolr first"
+def _build_checkout_toolr(config: pytest.Config) -> Path:
+    """`cargo build -p toolr` and return the built executable's path."""
+    cargo = shutil.which("cargo")
+    if cargo is None:
+        pytest.skip("cargo not on PATH — can't build the checkout's toolr binary")
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_line("building toolr from checkout (cargo build -p toolr)…")
+    proc = subprocess.run(  # noqa: S603
+        [cargo, "build", "-p", "toolr", "--message-format=json-render-diagnostics"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
     )
+    if proc.returncode != 0:
+        pytest.fail(f"`cargo build -p toolr` failed:\n{proc.stderr}")
+    for line in proc.stdout.splitlines():
+        message = json.loads(line)
+        if message.get("reason") != "compiler-artifact" or message["target"]["name"] != "toolr":
+            continue
+        if message.get("executable"):
+            return Path(message["executable"])
+    pytest.fail("`cargo build -p toolr` reported no toolr executable")
+
+
+@pytest.fixture(scope="session")
+def toolr_bin(request: pytest.FixtureRequest) -> Path:
+    """The `toolr` binary for subprocess tests, version-matched to the importable `toolr-py`.
+
+    CI puts its prebuilt binary on PATH. Locally PATH can't be trusted: the
+    workspace venv carries the last release's `toolr` from PyPI, so build
+    the checkout's binary instead.
+    """
+    if os.environ.get("GITHUB_ACTIONS"):
+        found = shutil.which("toolr")
+        if found is None:
+            pytest.fail("no toolr binary on PATH — CI must put the prebuilt binary there")
+        binary = Path(found)
+    else:
+        binary = _build_checkout_toolr(request.config)
+    proc = subprocess.run(  # noqa: S603
+        [str(binary), "--version"], capture_output=True, text=True, check=True
+    )
+    binary_version = proc.stdout.split()[-1]
+    toolr_py_version = importlib.metadata.version("toolr-py")
+    if binary_version != toolr_py_version:
+        pytest.fail(
+            f"{binary} is toolr {binary_version} but the importable toolr-py is "
+            f"{toolr_py_version}; subprocess tests would mix two releases"
+        )
+    return binary
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolsProject:
+    """A throwaway repo with a `tools/` package, driven through the real binary."""
+
+    root: Path
+    toolr_bin: Path
+    env: dict[str, str]
+
+    def run(self, *args: str) -> subprocess.CompletedProcess[str]:
+        """Run `toolr *args` in the project root."""
+        return subprocess.run(  # noqa: S603
+            [str(self.toolr_bin), *args],
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
+@pytest.fixture
+def make_tools_project(tmp_path: Path, toolr_bin: Path) -> Callable[..., ToolsProject]:
+    """Factory: write `tools/<name>.py` modules into a fresh project.
+
+    `tools/.venv` links to the workspace venv, which already has the
+    checkout's (or CI's prebuilt) `toolr-py`, so no `uv sync` is needed.
+    """
+
+    def _make(**modules: str) -> ToolsProject:
+        root = tmp_path / "project"
+        tools = root / "tools"
+        tools.mkdir(parents=True)
+        (tools / "__init__.py").write_text("")
+        (tools / "pyproject.toml").write_text(
+            '[project]\nname = "e2e-tools"\nversion = "0"\n\n[tool.toolr]\nvenv-location = "in-tree"\n'
+        )
+        for name, body in modules.items():
+            (tools / f"{name}.py").write_text(textwrap.dedent(body))
+        (tools / ".venv").symlink_to(Path(sys.prefix), target_is_directory=True)
+        env = {key: value for key, value in os.environ.items() if not key.startswith("TOOLR_")}
+        env |= {
+            "PATH": str(toolr_bin.parent) + os.pathsep + env.get("PATH", ""),
+            "XDG_CACHE_HOME": str(tmp_path / "cache"),
+            "TOOLR_NO_CACHE_HINT": "1",
+        }
+        return ToolsProject(root=root, toolr_bin=toolr_bin, env=env)
+
+    return _make
