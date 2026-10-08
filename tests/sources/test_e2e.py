@@ -101,11 +101,9 @@ def test_e2e_dispatch_through_argparse_scanner(
     project = project_with_dispatcher_and_command
     sidecar = tmp_path / "captured.json"
 
-    # `TOOLR_TEST_PYTHON` short-circuits toolr's project-venv resolution
-    # so the test doesn't need to run `uv sync` in the tmp project. The
-    # interpreter must have `toolr-py` importable so the dynamic-layer
-    # introspect helper can `import tools.dispatcher`.
-    base_env = {**os.environ, "TOOLR_TEST_PYTHON": sys.executable}
+    # No `uv sync` needed: the fixture's `tools/.venv` symlinks the workspace
+    # venv, which already has `toolr-py` for the introspect helper to import.
+    base_env = dict(os.environ)
 
     # 1. Explicit rebuild.
     subprocess.run(  # noqa: S603
@@ -220,7 +218,7 @@ def test_e2e_same_source_attached_to_two_parents(tmp_path: Path, toolr_bin: Path
         },
     )
 
-    env = {**os.environ, "TOOLR_TEST_PYTHON": sys.executable}
+    env = dict(os.environ)
     subprocess.run(  # noqa: S603
         [str(toolr_bin), "project", "manifest", "rebuild"], check=True, cwd=project, env=env
     )
@@ -302,7 +300,7 @@ def test_e2e_collision_across_sources_fails_build(tmp_path: Path, toolr_bin: Pat
         },
     )
 
-    env = {**os.environ, "TOOLR_TEST_PYTHON": sys.executable}
+    env = dict(os.environ)
     result = subprocess.run(  # noqa: S603
         [str(toolr_bin), "project", "manifest", "rebuild"],
         check=False,
@@ -413,7 +411,7 @@ def test_e2e_dispatcher_outer_flags(tmp_path: Path, toolr_bin: Path) -> None:
     )
 
     sidecar = tmp_path / "captured.json"
-    env = {**os.environ, "TOOLR_TEST_PYTHON": sys.executable, "E2E_SIDECAR": str(sidecar)}
+    env = {**os.environ, "E2E_SIDECAR": str(sidecar)}
 
     subprocess.run(  # noqa: S603
         [str(toolr_bin), "project", "manifest", "rebuild"],
