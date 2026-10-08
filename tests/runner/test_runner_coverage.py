@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextvars
 import datetime as dt
+import enum
 import importlib
 import ipaddress
 import json
@@ -444,6 +445,21 @@ def _variadic_no_hint(ctx, *values) -> None:
     """Helper with `*args` and no element type hint."""
 
 
+class _Foo(enum.Enum):
+    A = "a"
+    B = "b"
+
+
+def _positional_then_variadic(ctx, foo: _Foo, *paths: pathlib.Path) -> tuple[Any, ...]:
+    """Helper with a named positional ahead of `*args`."""
+    return (foo, paths)
+
+
+def _positional_only(ctx, name: str, /, count: int) -> tuple[Any, ...]:
+    """Helper with a positional-only parameter."""
+    return (name, count)
+
+
 def test_coerce_args_passes_through_when_no_hints() -> None:
     raw = {"x": "1", "y": "two"}
     positional, keyword = _coerce_args(_no_hints, raw)
@@ -489,6 +505,20 @@ def test_coerce_args_handles_variadic_without_element_type() -> None:
     # No hint → list passes through untouched.
     assert positional == ["a", "b"]
     assert keyword == {}
+
+
+def test_coerce_args_passes_positional_before_variadic_positionally() -> None:
+    raw = {"foo": "a", "paths": ["tools/env/setup.py.bak", "tools/example.py"]}
+    positional, keyword = _coerce_args(_positional_then_variadic, raw)
+    assert _positional_then_variadic(None, *positional, **keyword) == (
+        _Foo.A,
+        (pathlib.Path("tools/env/setup.py.bak"), pathlib.Path("tools/example.py")),
+    )
+
+
+def test_coerce_args_passes_positional_only_positionally() -> None:
+    positional, keyword = _coerce_args(_positional_only, {"name": "x", "count": "3"})
+    assert _positional_only(None, *positional, **keyword) == ("x", 3)
 
 
 def test_coerce_args_raises_when_variadic_value_is_not_a_list() -> None:

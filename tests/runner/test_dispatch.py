@@ -107,6 +107,43 @@ def test_runner_invokes_target_function(
     assert "hi Alice" in result.stdout
 
 
+def test_runner_invokes_target_with_positional_before_variadic(
+    tools_module: Callable[[str], Path],
+    spec_file: Callable[..., Path],
+    run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+) -> None:
+    tools_module(
+        """
+        import enum
+        import pathlib
+
+        from toolr import Context
+        from toolr import command_group
+
+        group = command_group("demo", "Demo", description="demo group")
+
+        class Foo(enum.Enum):
+            A = "a"
+            B = "b"
+
+        @group.command
+        def positional(ctx: Context, foo: Foo, *paths: pathlib.Path) -> None:
+            "Do it."
+            ctx.print(f"foo: {foo}")
+            ctx.print(f"paths: {[str(p) for p in paths]}")
+        """
+    )
+    spec_path = spec_file(
+        command="positional",
+        function="positional",
+        args={"foo": "a", "paths": ["tools/env/setup.py.bak", "tools/example.py"]},
+    )
+    result = run_runner(spec_path)
+    assert result.returncode == 0, f"stderr:\n{result.stderr}\nstdout:\n{result.stdout}"
+    assert "foo: Foo.A" in result.stdout
+    assert "paths: ['tools/env/setup.py.bak', 'tools/example.py']" in result.stdout
+
+
 def test_runner_propagates_nonzero_exit_via_ctx_exit(
     tools_module: Callable[[str], Path],
     spec_file: Callable[..., Path],
