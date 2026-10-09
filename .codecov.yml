@@ -6,6 +6,15 @@
 #
 # Reference: https://docs.codecov.com/docs/codecov-yaml
 
+codecov:
+  notify:
+    # Hold every status and comment until ci.yml's `codecov-notify` job,
+    # which runs after all test jobs, says the uploads are in. The upload
+    # count depends on the test matrix (9 on a PR, 15 on `main`), so
+    # `after_n_builds` can't express it; without this, statuses were
+    # computed from the first Python-only uploads and could stay stale.
+    manual_trigger: true
+
 coverage:
   # The headline number Codecov reports. We round to one decimal place
   # so the GitHub status text isn't 91.234567%.
@@ -24,9 +33,6 @@ coverage:
         # No wobble. With `auto`, a 1% drop is meaningful and should
         # be visible — there's no "noise" baseline to absorb.
         threshold: 0%
-        # Wait until every flag has reported before computing the status.
-        # We upload 8 flags (4 Python × 2 OSes); without this Codecov
-        # sometimes flips green/red as the partial uploads land.
         if_not_found: success
         if_ci_failed: error
 

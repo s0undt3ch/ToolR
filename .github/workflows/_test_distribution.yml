@@ -95,6 +95,10 @@ jobs:
         with:
           # Use OpenID Connect for secure authentication (no token needed)
           use_oidc: true
+          # Without these the CLI's search also uploads `.d` files, cargo
+          # fingerprints and any source file with "coverage" in its name.
+          files: coverage.xml
+          disable_search: true
           flags: ${{ inputs.os }}
 
       - name: Upload test results to Codecov
