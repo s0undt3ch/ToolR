@@ -2091,4 +2091,40 @@ def read(ctx: Context, {signature}) -> None:
             ));
         }
     }
+
+    /// #545: a wrapped `Args:` entry must keep its continuation lines.
+    #[test]
+    fn wrapped_args_entry_keeps_continuation_lines() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/demo.py",
+            r#""""Demo commands."""
+
+from toolr import Context, command, command_group
+
+command_group("demo", docstring=__doc__)
+
+
+@command("wrap", group="demo")
+def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
+    """Show how wrapped Args entries render.
+
+    Args:
+        name: First line of the name help, which is long enough that it has to
+            continue on a second line that should also be shown.
+        loud: Single-line help for comparison.
+    """
+"#,
+        );
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let wrap = m.commands.iter().find(|c| c.name == "wrap").unwrap();
+        let help = |n: &str| &wrap.arguments.iter().find(|a| a.name == n).unwrap().help;
+        assert_eq!(
+            help("name"),
+            "First line of the name help, which is long enough that it has to \
+             continue on a second line that should also be shown."
+        );
+        assert_eq!(help("loud"), "Single-line help for comparison.");
+    }
 }

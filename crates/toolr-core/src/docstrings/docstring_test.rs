@@ -638,3 +638,76 @@ Notes:
         assert_eq!(result.notes[2], "This is the third note with even more information.");
     }
 }
+
+#[cfg(test)]
+mod wrapped_args_tests {
+    use crate::docstrings::SimpleDocstringParser;
+
+    fn param(docstring: &str, name: &str) -> Option<String> {
+        let result = SimpleDocstringParser::new().parse(docstring).expect("parse");
+        result.params.get(name).cloned().flatten()
+    }
+
+    #[test]
+    fn three_line_wrapped_entry_is_joined() {
+        let docstring = r#"Summary.
+
+    Args:
+        name: First line
+            second line
+            third line.
+        loud: Single line.
+    "#;
+        assert_eq!(param(docstring, "name").as_deref(), Some("First line second line third line."));
+        assert_eq!(param(docstring, "loud").as_deref(), Some("Single line."));
+    }
+
+    #[test]
+    fn continuation_with_colon_does_not_create_a_param() {
+        let docstring = r#"Summary.
+
+    Args:
+        name: First line,
+            continue on a second line, see: the README
+            or https://example.com/docs for more.
+        loud: Single line.
+    "#;
+        let result = SimpleDocstringParser::new().parse(docstring).expect("parse");
+        assert_eq!(result.params.len(), 2, "params: {:?}", result.params);
+        assert_eq!(
+            param(docstring, "name").as_deref(),
+            Some("First line, continue on a second line, see: the README or https://example.com/docs for more.")
+        );
+    }
+
+    #[test]
+    fn continuation_named_like_a_param_does_not_overwrite_it() {
+        let docstring = r#"Summary.
+
+    Args:
+        loud: Single line.
+        name: First line
+            loud: is not a new entry here.
+    "#;
+        assert_eq!(param(docstring, "loud").as_deref(), Some("Single line."));
+        assert_eq!(param(docstring, "name").as_deref(), Some("First line loud: is not a new entry here."));
+    }
+
+    #[test]
+    fn description_may_start_on_the_next_line() {
+        let docstring = r#"Summary.
+
+    Args:
+        name:
+            Described on the next line.
+    "#;
+        assert_eq!(param(docstring, "name").as_deref(), Some("Described on the next line."));
+    }
+
+    #[test]
+    fn entry_indented_deeper_than_the_next_entry_is_not_a_continuation() {
+        let docstring = "Summary.\n\nArgs:\n        first: One.\n    second: Two.\n";
+        assert_eq!(param(docstring, "first").as_deref(), Some("One."));
+        assert_eq!(param(docstring, "second").as_deref(), Some("Two."));
+    }
+}
