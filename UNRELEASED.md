@@ -21,3 +21,6 @@ A Google-style `Args:` entry that wraps onto more than one line now shows in
 full in `--help`. The parser used to keep only the first line. A continuation
 line containing a colon (`see: the README`, a URL) also used to register a bogus
 parameter, or overwrite a real one with the same name.
+
+Running several `toolr` processes at once against the same project no longer prints
+"failed to touch cache meta.json" warnings or leaves a truncated `meta.json` in the cache.

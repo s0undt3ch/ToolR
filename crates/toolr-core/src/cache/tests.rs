@@ -51,6 +51,57 @@ fn meta_write_then_load_round_trips() {
     assert_eq!(m, loaded);
 }
 
+/// Regression for #541: writers sharing one cache entry used to clobber a fixed
+/// `.meta.json.tmp`, failing with ENOENT or leaving a torn `meta.json`.
+#[test]
+fn meta_write_survives_concurrent_writers() {
+    const WRITERS: usize = 16;
+    const ROUNDS: usize = 200;
+
+    let tmp = TempDir::new().unwrap();
+    let cache_dir = tmp.path().to_path_buf();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(WRITERS));
+
+    let handles: Vec<_> = (0..WRITERS)
+        .map(|i| {
+            let cache_dir = cache_dir.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                let mut m = sample_meta();
+                m.toolr_version = format!("1.0.{i}");
+                barrier.wait();
+                (0..ROUNDS)
+                    .filter_map(|_| m.write(&cache_dir).err().map(|e| e.to_string()))
+                    .collect::<Vec<_>>()
+            })
+        })
+        .collect();
+
+    let errors: Vec<String> = handles
+        .into_iter()
+        .flat_map(|h| h.join().expect("writer thread panicked"))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "{} concurrent writes failed, e.g. {:?}",
+        errors.len(),
+        errors.first()
+    );
+
+    let loaded = Meta::load(&cache_dir).expect("meta.json must parse after concurrent writes");
+    assert_eq!(loaded.repo_path, sample_meta().repo_path);
+
+    let leftovers: Vec<_> = std::fs::read_dir(&cache_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .filter(|n| n != "meta.json")
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "stray temp files left behind: {leftovers:?}"
+    );
+}
+
 #[test]
 fn meta_load_rejects_unknown_schema_version() {
     let tmp = TempDir::new().unwrap();
