@@ -321,6 +321,20 @@ fn enumerate_caches_skips_directories_without_meta() {
     assert!(caches.is_empty());
 }
 
+#[test]
+fn enumerate_caches_ignores_the_manifest_rebuild_locks_dir() {
+    let tmp = TempDir::new().unwrap();
+    let when = Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap();
+    make_entry(tmp.path(), "key-a", "/repo/a", when, 1024);
+    let locks = tmp.path().join(crate::manifest::LOCKS_DIR);
+    std::fs::create_dir_all(&locks).unwrap();
+    std::fs::write(locks.join("0123abcd.lock"), b"").unwrap();
+
+    let caches = enumerate_caches(tmp.path()).expect("ok");
+    let keys: Vec<_> = caches.iter().map(|c| c.repo_key.as_str()).collect();
+    assert_eq!(keys, ["key-a"]);
+}
+
 use super::classify::{PruneReason, classify_entries};
 use chrono::Duration as ChronoDuration;
 

@@ -10,7 +10,9 @@ use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 use toolr_core::freshness::{FreshnessVerdict, compare};
-use toolr_core::manifest::{Manifest, ManifestError, Origin, load_manifest, write_manifest};
+use toolr_core::manifest::{
+    Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
+};
 use toolr_core::parser::{build_static_manifest, build_static_manifest_with_venv};
 use toolr_core::venv::resolve_venv_path;
 
@@ -46,17 +48,22 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
     }
 
     let manifest_path = tools.join(".toolr-manifest.json");
-    // First-party is always available (pure AST). Add third-party only when
-    // a venv already exists — globbing site-packages JSON executes nothing.
-    let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
-    let manifest = match venv_dir.as_deref() {
-        Some(v) if v.join("pyvenv.cfg").is_file() => {
-            build_static_manifest_with_venv(&tools, v).map_err(anyhow::Error::from)?
-        }
-        _ => build_static_manifest(&tools)?,
-    };
-    write_manifest(&manifest_path, &manifest)
-        .with_context(|| format!("writing {}", manifest_path.display()))?;
+    // Concurrent processes on a fresh clone all see it missing; the
+    // re-check under the lock lets only the first one build it.
+    let missing = || Ok::<_, anyhow::Error>((!manifest_path.is_file()).then_some(()));
+    rebuild_if_stale(&manifest_path, missing, |()| {
+        // First-party is always available (pure AST). Add third-party only when
+        // a venv already exists — globbing site-packages JSON executes nothing.
+        let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
+        let manifest = match venv_dir.as_deref() {
+            Some(v) if v.join("pyvenv.cfg").is_file() => {
+                build_static_manifest_with_venv(&tools, v).map_err(anyhow::Error::from)?
+            }
+            _ => build_static_manifest(&tools)?,
+        };
+        write_manifest(&manifest_path, &manifest)
+            .with_context(|| format!("writing {}", manifest_path.display()))
+    })?;
     Ok(())
 }
 
@@ -118,37 +125,49 @@ pub(crate) fn ensure_manifest_fresh(
     }
 
     let manifest_path = tools.join(".toolr-manifest.json");
-    let cached = match load_manifest(&manifest_path) {
-        Ok(m) => Some(m),
-        Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(e) => {
-            eprintln!(
-                "toolr: warning: ignoring unreadable {}: {e}; rebuilding",
-                manifest_path.display()
-            );
-            None
-        }
-    };
     let venv_dir: Option<std::path::PathBuf> =
         resolve_venv_path(&root).ok().map(|r| r.venv_dir);
 
-    let verdict = compare(cached.as_ref(), &tools, venv_dir.as_deref())?;
-
-    if matches!(verdict, FreshnessVerdict::Fresh) {
-        return Ok(cached);
-    }
-
-    match try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref()) {
-        Ok(fresh) => {
-            write_manifest(&manifest_path, &fresh)
-                .with_context(|| format!("writing {}", manifest_path.display()))?;
-            Ok(Some(fresh))
+    // `check` runs twice when stale (before and under the rebuild lock):
+    // warn about an unreadable manifest once, and keep a fresh one so the
+    // caller dispatches against it.
+    let mut warned = false;
+    let mut fresh_cache = None;
+    let check = || -> anyhow::Result<Option<(FreshnessVerdict, Option<Manifest>)>> {
+        let cached = match load_manifest(&manifest_path) {
+            Ok(m) => Some(m),
+            Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => {
+                if !std::mem::replace(&mut warned, true) {
+                    eprintln!(
+                        "toolr: warning: ignoring unreadable {}: {e}; rebuilding",
+                        manifest_path.display()
+                    );
+                }
+                None
+            }
+        };
+        let verdict = compare(cached.as_ref(), &tools, venv_dir.as_deref())?;
+        if matches!(verdict, FreshnessVerdict::Fresh) {
+            fresh_cache = cached;
+            return Ok(None);
         }
-        Err(e) => {
-            warn_and_keep_cache(&e, cached.is_some());
-            Ok(cached)
+        Ok(Some((verdict, cached)))
+    };
+    let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| {
+        match try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref()) {
+            Ok(fresh) => {
+                write_manifest(&manifest_path, &fresh)
+                    .with_context(|| format!("writing {}", manifest_path.display()))?;
+                Ok(Some(fresh))
+            }
+            Err(e) => {
+                warn_and_keep_cache(&e, cached.is_some());
+                Ok(cached)
+            }
         }
-    }
+    };
+    Ok(rebuild_if_stale(&manifest_path, check, rebuild)?.unwrap_or(fresh_cache))
 }
 
 fn try_rebuild(

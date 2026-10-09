@@ -473,3 +473,45 @@ def bare(ctx: Context) -> None:
         );
     }
 }
+
+#[test]
+fn concurrent_dispatches_rebuild_a_stale_manifest_under_the_lock() {
+    let tmp = TempDir::new().unwrap();
+    let xdg_cache = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+    fs::write(tmp.path().join("tools").join("example.py"), EXAMPLE_PY).unwrap();
+
+    let children: Vec<_> = (0..8)
+        .map(|_| {
+            Command::cargo_bin("toolr")
+                .unwrap()
+                .arg("--help")
+                .current_dir(tmp.path())
+                .env("XDG_CACHE_HOME", xdg_cache.path())
+                .env("TOOLR_NO_CACHE_HINT", "1")
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    for child in children {
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "toolr --help failed: {output:?}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("example"),
+            "expected `example` in --help, got:\n{stdout}"
+        );
+    }
+    let locks: Vec<_> = fs::read_dir(xdg_cache.path().join("toolr").join("locks"))
+        .expect("the rebuild should have gone through the cache-dir lock")
+        .collect();
+    assert_eq!(locks.len(), 1, "one lock per manifest: {locks:?}");
+    let stray: Vec<_> = fs::read_dir(tmp.path().join("tools"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .filter(|n| n.to_string_lossy().ends_with(".lock"))
+        .collect();
+    assert!(stray.is_empty(), "lock files leaked into tools/: {stray:?}");
+}

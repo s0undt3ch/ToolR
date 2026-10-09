@@ -666,8 +666,9 @@ fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let root = toolr_core::discovery::discover_project_root(&cwd)?;
     let tools = root.join("tools");
-    let manifest = toolr_core::parser::build_static_manifest(&tools)?;
     let path = tools.join(".toolr-manifest.json");
+    let _lock = toolr_core::manifest::acquire_rebuild_lock(&path);
+    let manifest = toolr_core::parser::build_static_manifest(&tools)?;
     toolr_core::manifest::write_manifest(&path, &manifest)?;
     println!(
         "toolr: wrote {} groups / {} commands to {}",

@@ -37,3 +37,9 @@ random with `error: unrecognized subcommand`. Each process rewrote `tools/.toolr
 place, so another process could read it half written, and toolr then quietly treated the manifest as
 empty. The manifest is now replaced atomically, and a manifest toolr can't read is reported as an
 error naming the file instead of hiding your commands.
+
+When several `toolr` processes start at once against a stale or missing manifest
+(for example parallel pre-commit hooks after editing `tools/*.py`), only one now
+rebuilds it; the others wait for it and reuse the result. The lock lives in toolr's
+cache directory, so nothing new appears in `tools/`. If the lock can't be taken, for
+example on a read-only filesystem, the rebuild runs without it as before.

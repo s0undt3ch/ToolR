@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use super::hash::compute_third_party_hash;
-use crate::manifest::write_manifest;
+use crate::manifest::{acquire_rebuild_lock, write_manifest};
 use crate::parser::build_static_manifest_with_venv;
 
 /// Result of a rebuild, returned for diagnostics / CLI output.
@@ -26,10 +26,13 @@ pub struct RebuildOutcome {
 /// [`compute_third_party_hash`].
 pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<RebuildOutcome> {
     let tools = project_root.join("tools");
+    let manifest_path = tools.join(".toolr-manifest.json");
+    // An explicit rebuild always runs; the lock only serialises it with
+    // concurrent auto-rebuilds.
+    let _lock = acquire_rebuild_lock(&manifest_path);
     let mut manifest = build_static_manifest_with_venv(&tools, venv_root)
         .with_context(|| "building static manifest (incl. third-party glob-merge)")?;
     manifest.third_party_hash = compute_third_party_hash(venv_root)?;
-    let manifest_path = tools.join(".toolr-manifest.json");
     write_manifest(&manifest_path, &manifest)?;
     Ok(RebuildOutcome {
         manifest_path,
