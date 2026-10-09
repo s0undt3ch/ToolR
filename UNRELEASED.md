@@ -16,3 +16,8 @@ Commands with a named positional parameter ahead of `*args` (for example
 `TypeError: ... got multiple values for argument`. Commands with positional-only
 (`/`) parameters now work too: the manifest parser used to drop them, plus the
 parameter right after them.
+
+A Google-style `Args:` entry that wraps onto more than one line now shows in
+full in `--help`. The parser used to keep only the first line. A continuation
+line containing a colon (`see: the README`, a URL) also used to register a bogus
+parameter, or overwrite a real one with the same name.

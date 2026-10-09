@@ -418,19 +418,38 @@ impl SimpleDocstringParser {
     }
 
     fn parse_args_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+        let indent = |line: &str| line.len() - line.trim_start().len();
+
+        // (indent of the entry's opening line, name, description)
+        let mut current: Option<(usize, String, String)> = None;
         for line in content {
             let trimmed = line.trim();
             if trimmed.is_empty() {
                 continue;
             }
 
+            // Google style: a line indented past its entry's opening line continues
+            // that entry's description, even when it contains a `:`.
+            if let Some((entry_indent, _, description)) = current.as_mut() {
+                if indent(line) > *entry_indent {
+                    if !description.is_empty() {
+                        description.push(' ');
+                    }
+                    description.push_str(trimmed);
+                    continue;
+                }
+            }
+
             // Parse format: name (type): description
             if let Some((name_part, description)) = trimmed.split_once(':') {
-                let name_part = name_part.trim();
-                let description = description.trim();
-
-                result.params.insert(name_part.to_string(), Some(description.to_string()));
+                if let Some((_, name, description)) = current.take() {
+                    result.params.insert(name, Some(description));
+                }
+                current = Some((indent(line), name_part.trim().to_string(), description.trim().to_string()));
             }
+        }
+        if let Some((_, name, description)) = current {
+            result.params.insert(name, Some(description));
         }
         Ok(())
     }
