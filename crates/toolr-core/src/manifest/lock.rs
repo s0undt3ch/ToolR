@@ -218,13 +218,12 @@ mod tests {
 
     #[test]
     fn fresh_manifest_is_never_locked_or_rebuilt() {
-        let out = rebuild_if_stale_with(
-            || panic!("fresh manifest must not take the lock"),
-            || Ok::<Option<()>, ()>(None),
-            |()| panic!("fresh manifest must not rebuild"),
-        )
-        .unwrap();
-        assert_eq!(out, None::<()>);
+        // One-line closures: they must never run, and a multi-line body would
+        // show up as uncovered.
+        let lock = || -> ManifestRebuildLock { unreachable!("must not lock") };
+        let rebuild = |()| -> Result<(), ()> { unreachable!("must not rebuild") };
+        let out = rebuild_if_stale_with(lock, || Ok(None), rebuild).unwrap();
+        assert_eq!(out, None);
     }
 
     #[test]
