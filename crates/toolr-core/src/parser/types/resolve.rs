@@ -44,8 +44,9 @@ pub fn resolve_arguments(
     let params = func.parameters.as_ref();
     let function = func.name.as_str().to_string();
     let mut i = 0usize;
-    // First positional in the signature is `ctx`; skip it.
-    for p in params.args.iter().skip(1) {
+    // `ctx` is the first positional, which is positional-only when the
+    // signature has a `/`.
+    for p in params.posonlyargs.iter().chain(&params.args).skip(1) {
         resolve_one(
             p.parameter.annotation.as_deref(),
             &mut arguments[i],

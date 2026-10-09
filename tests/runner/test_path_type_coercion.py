@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import pathlib
 
 from toolr import types as tt
@@ -30,9 +31,10 @@ def test_every_path_type_reaches_the_command_as_a_pathlib_path() -> None:
     raw: dict[str, object] = dict.fromkeys(SCALARS, "/srv/x")
     raw |= {"files": ["/srv/a", "/srv/b"], "maybe": "/srv/d", "rest": ["/srv/e"]}
     positional, keyword = _coerce_args(_all_path_types, raw)
+    bound = inspect.signature(_all_path_types).bind(None, *positional, **keyword).arguments
     path_cls = type(pathlib.Path())
     for name in SCALARS:
-        assert type(keyword[name]) is path_cls, name
-    assert [type(p) for p in keyword["files"]] == [path_cls, path_cls]
-    assert type(keyword["maybe"]) is path_cls
-    assert [type(p) for p in positional] == [path_cls]
+        assert type(bound[name]) is path_cls, name
+    assert [type(p) for p in bound["files"]] == [path_cls, path_cls]
+    assert type(bound["maybe"]) is path_cls
+    assert [type(p) for p in bound["rest"]] == [path_cls]

@@ -526,7 +526,37 @@ def _coerce_args(
         if _is_optional(hints.get(param_name)):
             keyword[param_name] = None
 
-    return positional, keyword
+    return _pop_leading_positionals(
+        sig, keyword, has_var_positional=var_positional_name is not None
+    ) + positional, keyword
+
+
+def _pop_leading_positionals(
+    sig: inspect.Signature,
+    keyword: dict[str, Any],
+    *,
+    has_var_positional: bool,
+) -> list[Any]:
+    """Move the params that must be passed positionally out of ``keyword``, in order.
+
+    Splatting ``*args`` fills the leading slots, so every param ahead of it
+    has to go positionally too; positional-only params always do.
+    """
+    leading: list[Any] = []
+    for param_name, param in sig.parameters.items():
+        if param_name == "ctx":
+            continue
+        if param.kind == param.POSITIONAL_OR_KEYWORD and not has_var_positional:
+            break
+        if param.kind not in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD):
+            break
+        if param_name in keyword:
+            leading.append(keyword.pop(param_name))
+        elif param.default is not param.empty:
+            leading.append(param.default)
+        else:
+            break
+    return leading
 
 
 def invoke_dispatcher(

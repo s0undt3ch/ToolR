@@ -27,8 +27,9 @@ pub fn extract_arguments(
     let params = func.parameters.as_ref();
     let mut out = Vec::new();
 
-    // Skip ctx (first positional-or-keyword param).
-    for p in params.args.iter().skip(1) {
+    // `ctx` is the first positional, which is positional-only when the
+    // signature has a `/`.
+    for p in params.posonlyargs.iter().chain(&params.args).skip(1) {
         let annotation = p.parameter.annotation.as_deref();
         let has_default = p.default.is_some();
         let kind = if has_default {
@@ -348,6 +349,26 @@ mod tests {
         );
         assert_eq!(args.len(), 1);
         assert_eq!(args[0].name, "name");
+    }
+
+    #[test]
+    fn includes_positional_only_params_and_skips_only_ctx() {
+        for src in [
+            "def f(ctx, name, /, count): pass\n",
+            "def f(ctx, /, name, count): pass\n",
+        ] {
+            let func = first_func(src);
+            let args = extract_arguments(
+                &func,
+                &EnumTable::default(),
+                &std::collections::HashMap::new(),
+                &ConstTable::default(),
+                &SourcesImports::default(),
+                "tools.test",
+            );
+            let names: Vec<_> = args.iter().map(|a| a.name.as_str()).collect();
+            assert_eq!(names, ["name", "count"], "{src}");
+        }
     }
 
     #[test]
