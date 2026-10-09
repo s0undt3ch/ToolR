@@ -6,6 +6,83 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.34.1 - 2026-10-09
+
+### Notes
+
+Commands with a named positional parameter ahead of `*args` (for example
+`def cmd(ctx, foo: Foo, *paths: pathlib.Path)`) now run. They used to crash with
+`TypeError: ... got multiple values for argument`. Commands with positional-only
+(`/`) parameters now work too: the manifest parser used to drop them, plus the
+parameter right after them.
+
+A Google-style `Args:` entry that wraps onto more than one line now shows in
+full in `--help`. The parser used to keep only the first line. A continuation
+line containing a colon (`see: the README`, a URL) also used to register a bogus
+parameter, or overwrite a real one with the same name.
+
+Running several `toolr` processes at once against the same project no longer prints
+"failed to touch cache meta.json" warnings or leaves a truncated `meta.json` in the cache.
+
+With `venv-location = "in-tree"`, toolr no longer reads all of `tools/.venv` on every
+run to check whether the manifest is stale. It also no longer fails with
+`hashing <repo>/tools: No such file or directory (os error 2)` when `uv sync` recreates
+that venv while toolr commands are running. The freshness hash now skips `__pycache__`
+and dot-directories under `tools/`, the same way the manifest parser already skipped
+dot-directories.
+
+Running several `toolr` commands in parallel (for example as pre-commit hooks) no longer fails at
+random with `error: unrecognized subcommand`. Each process rewrote `tools/.toolr-manifest.json` in
+place, so another process could read it half written, and toolr then quietly treated the manifest as
+empty. The manifest is now replaced atomically, and a manifest toolr can't read is reported as an
+error naming the file instead of hiding your commands.
+
+When several `toolr` processes start at once against a stale or missing manifest
+(for example parallel pre-commit hooks after editing `tools/*.py`), only one now
+rebuilds it; the others wait for it and reuse the result. The lock lives in toolr's
+cache directory, so nothing new appears in `tools/`. If the lock can't be taken, for
+example on a read-only filesystem, the rebuild runs without it as before.
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(runner)* Pass params ahead of `*args` positionally ([`2fe4039`](https://github.com/s0undt3ch/ToolR/commit/2fe40399a273cbe0bd1bd1254e7199b5ca932252))
+- *(parser)* Read positional-only params from the signature ([`77e21b2`](https://github.com/s0undt3ch/ToolR/commit/77e21b2bfdc8c14b985ad8ca5551116a0911fcb4))
+- *(docstrings)* Keep wrapped `Args:` entries' continuation lines ([`c50dec1`](https://github.com/s0undt3ch/ToolR/commit/c50dec1735f517fce516318bbce12af412f42b7d))
+- *(cache)* Stage meta.json through a unique temp file ([`f30e73a`](https://github.com/s0undt3ch/ToolR/commit/f30e73a0be6be922b19215d960c27274aaa4e3df))
+- *(cache)* Rename meta.json with std so Windows allows concurrent replaces ([`78e3980`](https://github.com/s0undt3ch/ToolR/commit/78e39802b2f0bc101a5f98205bab0ea84a4bbc61))
+- *(freshness)* Skip the in-tree venv when hashing tools/ ([`91bb3d9`](https://github.com/s0undt3ch/ToolR/commit/91bb3d936a25f85934c8c8352bba4eed08df1259))
+- *(manifest)* Write the manifest atomically ([`4213da7`](https://github.com/s0undt3ch/ToolR/commit/4213da7761b80c61b2472f112c8d4e49395eae26))
+- *(cli)* Stop treating an unreadable manifest as an empty command set ([`dd23160`](https://github.com/s0undt3ch/ToolR/commit/dd23160c213dfb71d22ae59c09c9b1e1bddb3c81))
+- *(manifest)* Rename with std so Windows allows concurrent replaces ([`f5a62f0`](https://github.com/s0undt3ch/ToolR/commit/f5a62f00ff0680fa85d4781e9b25f2b3a69d7b0f))
+- *(manifest)* Retry reads Windows denies during a concurrent replace ([`ed5fe57`](https://github.com/s0undt3ch/ToolR/commit/ed5fe57e999d182730e97ea25aa2e9f84c1d19ce))
+
+### <!-- 3 -->📚 Documentation
+
+- *(install)* Name 0.34.0 as the first release with a packslip ([`33aa9a8`](https://github.com/s0undt3ch/ToolR/commit/33aa9a8b737b742667095aacf055b124b53a8b69))
+
+### <!-- 4 -->⚡ Performance
+
+- *(manifest)* Rebuild a stale manifest once under a file lock ([`96cae05`](https://github.com/s0undt3ch/ToolR/commit/96cae059e0f3e45ec8d66ba8551de1e5940aa836))
+
+### <!-- 6 -->🧪 Testing
+
+- *(ci)* Smoke-test packslip and aqua installs through pytest ([`6d3429e`](https://github.com/s0undt3ch/ToolR/commit/6d3429e618ef25589dd50eb64f09e26cd2750a0d))
+- *(ci)* Harden the mise smoke tests against false greens ([`9104827`](https://github.com/s0undt3ch/ToolR/commit/910482702814838228ead8640d4c90de4ec21e93))
+- *(ci)* Make the mise smoke shell checks fail loudly in CI ([`43b3857`](https://github.com/s0undt3ch/ToolR/commit/43b38577f9f120eb8e57d1daae93d51893e2603f))
+- *(ci)* Explain the mise smoke test couplings ([`4d24353`](https://github.com/s0undt3ch/ToolR/commit/4d243534baae69e8b57c1cca28cf84d0fcaaa6de))
+- *(ci)* Run the arm64 macOS mise smoke leg on macos-15 ([`2028658`](https://github.com/s0undt3ch/ToolR/commit/20286586009fa6bccba4ae3d46192ab10749540e))
+- *(e2e)* Drive #539's shapes through the checkout's toolr binary ([`117c1dd`](https://github.com/s0undt3ch/ToolR/commit/117c1ddfcad4f39c28f3670dbc7a2e3e94ba92c4))
+- *(sources)* Drop the dead TOOLR_TEST_PYTHON env from the e2e tests ([`b459f3a`](https://github.com/s0undt3ch/ToolR/commit/b459f3a69722ae4662176306e64bacd9d1f3e4a6))
+- Compare toolr versions semantically and print paths portably ([`a1e69a1`](https://github.com/s0undt3ch/ToolR/commit/a1e69a1e06f44731411ff205d8a65efea90112c2))
+- *(runner)* Cover the default and missing-param paths ahead of `*args` ([`006ad72`](https://github.com/s0undt3ch/ToolR/commit/006ad7297c1d939867af350b776051119148c954))
+- *(hash)* Cover the non-NotFound read error path ([`b0f981a`](https://github.com/s0undt3ch/ToolR/commit/b0f981acfd31b65c31a803f69d561f0aaec335e6))
+- *(manifest)* Cover the missing-manifest rebuild path ([`7955b59`](https://github.com/s0undt3ch/ToolR/commit/7955b591d261b6f38c9ef89b8cbdbbaf886c33f1))
+- *(manifest)* Keep never-called closures off their own lines ([`9ee57a0`](https://github.com/s0undt3ch/ToolR/commit/9ee57a05c06debde39d0413b173555370f13abe0))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(ci)* Bump mise to v2026.10.3 ([`55867f7`](https://github.com/s0undt3ch/ToolR/commit/55867f79a6b65e9026022ba1de021fd17ed62c91))
+- *(renovate)* Track MISE_VERSION in .github/env ([`879bf48`](https://github.com/s0undt3ch/ToolR/commit/879bf48d9a5da69b0372a7d271df49e8305c8154))
 ## 0.34.0 - 2026-10-01
 
 ### Notes
