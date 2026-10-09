@@ -42,10 +42,10 @@ pub fn load_manifest(path: &Path) -> Result<Manifest, ManifestError> {
 /// the same directory and are renamed over `path`. Readers see either
 /// the old or the new manifest, never a truncated or partial one (#542).
 pub fn write_manifest(path: &Path, manifest: &Manifest) -> Result<(), ManifestError> {
-    let parent = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => p,
-        _ => Path::new("."),
-    };
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     fs::create_dir_all(parent)?;
     let bytes = serde_json::to_vec_pretty(manifest)?;
     let mut tmp = tempfile::Builder::new()

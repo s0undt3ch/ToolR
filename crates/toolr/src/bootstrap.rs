@@ -246,7 +246,7 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{carry_forward_cached_entries, should_skip_auto_rebuild};
+    use super::{carry_forward_cached_entries, ensure_manifest_fresh, should_skip_auto_rebuild};
     use toolr_core::freshness::FreshnessVerdict;
     use toolr_core::manifest::{
         Group, Manifest, Origin, PluginWarning, PluginWarningKind, SCHEMA_VERSION,
@@ -380,5 +380,20 @@ mod tests {
     #[test]
     fn fires_with_leading_global_flag() {
         assert!(!should_skip_auto_rebuild(&args(&["--debug", "django", "migrate"])));
+    }
+
+    /// A missing manifest is rebuilt and written, not reported as unreadable.
+    #[test]
+    fn ensure_manifest_fresh_rebuilds_a_missing_manifest() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        std::fs::write(tools.join("pyproject.toml"), "[project]\nname = \"t\"\n").unwrap();
+        std::fs::write(tools.join("demo.py"), "\"\"\"Demo.\"\"\"\n").unwrap();
+
+        let fresh = ensure_manifest_fresh(tmp.path(), &[]).unwrap();
+
+        assert!(fresh.is_some());
+        assert!(tools.join(".toolr-manifest.json").is_file());
     }
 }
