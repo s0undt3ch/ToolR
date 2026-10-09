@@ -245,6 +245,8 @@ tags
 # in the tree (sample-repo fixtures, plugin examples, etc.) — gitignore
 # patterns with embedded `/` anchor to the repo root, so we use `**`.
 **/tools/.toolr-manifest.json
+# Temp file of an atomic manifest write, left behind only if toolr is killed mid-write.
+**/tools/.toolr-manifest.*.tmp
 
 # Local claude
 .claude.local.md

@@ -76,6 +76,10 @@ fn legacy_imports_key_is_tolerated() {
 }
 
 use super::io::{ManifestError, load_manifest, write_manifest};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 #[test]
@@ -140,6 +144,82 @@ fn legacy_dynamic_origin_is_not_loadable_and_triggers_rebuild() {
         "dispatched_from":null,"is_dispatcher":false}]}"#;
     let parsed: Result<Manifest, _> = serde_json::from_str(json);
     assert!(parsed.is_err());
+}
+
+/// A manifest big enough that serialising it takes many write syscalls, so a
+/// non-atomic truncate-then-write is observable by a concurrent reader.
+fn large_manifest(tag: usize) -> Manifest {
+    let mut m = sample_manifest();
+    m.static_hash = format!("hash-{tag}");
+    let template = m.commands[0].clone();
+    m.commands = (0..2_000)
+        .map(|i| Command {
+            name: format!("cmd-{i}"),
+            description: "x".repeat(64),
+            ..template.clone()
+        })
+        .collect();
+    m
+}
+
+#[test]
+fn concurrent_writers_never_expose_a_torn_manifest() {
+    // Regression for #542: parallel toolr processes rewriting the manifest
+    // must never let a reader see an empty or partially written file.
+    let tmp = TempDir::new().unwrap();
+    let path = Arc::new(tmp.path().join(".toolr-manifest.json"));
+    let expected_len = large_manifest(0).commands.len();
+    write_manifest(&path, &large_manifest(0)).unwrap();
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let writers: Vec<_> = (1..=8)
+        .map(|tag| {
+            let path = Arc::clone(&path);
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || {
+                let m = large_manifest(tag);
+                while !stop.load(Ordering::Relaxed) {
+                    write_manifest(&path, &m).expect("write");
+                }
+            })
+        })
+        .collect();
+    let readers: Vec<_> = (0..8)
+        .map(|_| {
+            let path = Arc::clone(&path);
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || {
+                let mut reads = 0usize;
+                while !stop.load(Ordering::Relaxed) {
+                    let m = load_manifest(&path)
+                        .unwrap_or_else(|e| panic!("torn manifest after {reads} reads: {e}"));
+                    assert_eq!(m.commands.len(), expected_len);
+                    reads += 1;
+                }
+                reads
+            })
+        })
+        .collect();
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline && !readers.iter().any(|r| r.is_finished()) {
+        thread::sleep(Duration::from_millis(20));
+    }
+    stop.store(true, Ordering::Relaxed);
+    for w in writers {
+        w.join().expect("writer panicked");
+    }
+    for r in readers {
+        let reads = r.join().expect("reader observed a torn manifest");
+        assert!(reads > 0, "reader never completed a read");
+    }
+
+    let leftovers: Vec<_> = std::fs::read_dir(tmp.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .filter(|n| n != ".toolr-manifest.json")
+        .collect();
+    assert!(leftovers.is_empty(), "stray temp files: {leftovers:?}");
 }
 
 mod dispatched_from_tests {
