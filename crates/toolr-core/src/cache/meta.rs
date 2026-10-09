@@ -130,7 +130,10 @@ impl Meta {
             .suffix(".tmp")
             .tempfile_in(cache_dir)?;
         tmp.write_all(&bytes)?;
-        tmp.persist(Self::path_in(cache_dir)).map_err(|e| e.error)?;
+        // Not `persist`: its Windows `MoveFileExW` denies concurrent replaces;
+        // std's rename uses POSIX semantics there.
+        let tmp = tmp.into_temp_path();
+        fs::rename(&tmp, Self::path_in(cache_dir))?;
         Ok(())
     }
 }
