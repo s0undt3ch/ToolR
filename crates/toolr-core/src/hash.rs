@@ -168,6 +168,15 @@ mod tests {
         assert_eq!(with_gone, hash_tools_dir(tmp.path()).unwrap());
     }
 
+    /// Only `NotFound` is tolerated; any other read error still fails.
+    #[test]
+    fn unreadable_listed_path_fails_the_hash() {
+        let tmp = setup(&[("a.py", "x")]);
+        let dir = tmp.path().join("pkg.py");
+        std::fs::create_dir(&dir).unwrap();
+        assert!(hash_paths(tmp.path(), &[tmp.path().join("a.py"), dir]).is_err());
+    }
+
     /// #544 mechanism: `uv sync` recreating `tools/.venv` while toolr
     /// hashes `tools/` used to fail with `No such file or directory`.
     /// Churn the venv from another thread while hashing repeatedly.
