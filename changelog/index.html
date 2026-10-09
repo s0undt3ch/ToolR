@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0341-dev29-2026-10-09" class="md-nav__link">
+  <a href="#0341-dev35-2026-10-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.34.1-dev29 - 2026-10-09
+        0.34.1-dev35 - 2026-10-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.34.1-dev29 - 2026-10-09">
+    <nav class="md-nav" aria-label="0.34.1-dev35 - 2026-10-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4234,15 +4234,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0341-dev29-2026-10-09" class="md-nav__link">
+  <a href="#0341-dev35-2026-10-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.34.1-dev29 - 2026-10-09
+        0.34.1-dev35 - 2026-10-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.34.1-dev29 - 2026-10-09">
+    <nav class="md-nav" aria-label="0.34.1-dev35 - 2026-10-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7000,7 +7000,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0341-dev29-2026-10-09">0.34.1-dev29 - 2026-10-09<a class="headerlink" href="#0341-dev29-2026-10-09" title="Permanent link">&para;</a></h2>
+<h2 id="0341-dev35-2026-10-09">0.34.1-dev35 - 2026-10-09<a class="headerlink" href="#0341-dev35-2026-10-09" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Commands with a named positional parameter ahead of <code>*args</code> (for example
 <code>def cmd(ctx, foo: Foo, *paths: pathlib.Path)</code>) now run. They used to crash with
@@ -7011,11 +7011,22 @@ parameter right after them.</p>
 full in <code>--help</code>. The parser used to keep only the first line. A continuation
 line containing a colon (<code>see: the README</code>, a URL) also used to register a bogus
 parameter, or overwrite a real one with the same name.</p>
+<p>Running several <code>toolr</code> processes at once against the same project no longer prints
+"failed to touch cache meta.json" warnings or leaves a truncated <code>meta.json</code> in the cache.</p>
+<p>With <code>venv-location = "in-tree"</code>, toolr no longer reads all of <code>tools/.venv</code> on every
+run to check whether the manifest is stale. It also no longer fails with
+<code>hashing &lt;repo&gt;/tools: No such file or directory (os error 2)</code> when <code>uv sync</code> recreates
+that venv while toolr commands are running. The freshness hash now skips <code>__pycache__</code>
+and dot-directories under <code>tools/</code>, the same way the manifest parser already skipped
+dot-directories.</p>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(runner)</em> Pass params ahead of <code>*args</code> positionally (<a href="https://github.com/s0undt3ch/ToolR/commit/2fe40399a273cbe0bd1bd1254e7199b5ca932252"><code>2fe4039</code></a>)</li>
 <li><em>(parser)</em> Read positional-only params from the signature (<a href="https://github.com/s0undt3ch/ToolR/commit/77e21b2bfdc8c14b985ad8ca5551116a0911fcb4"><code>77e21b2</code></a>)</li>
 <li><em>(docstrings)</em> Keep wrapped <code>Args:</code> entries' continuation lines (<a href="https://github.com/s0undt3ch/ToolR/commit/c50dec1735f517fce516318bbce12af412f42b7d"><code>c50dec1</code></a>)</li>
+<li><em>(cache)</em> Stage meta.json through a unique temp file (<a href="https://github.com/s0undt3ch/ToolR/commit/f30e73a0be6be922b19215d960c27274aaa4e3df"><code>f30e73a</code></a>)</li>
+<li><em>(cache)</em> Rename meta.json with std so Windows allows concurrent replaces (<a href="https://github.com/s0undt3ch/ToolR/commit/78e39802b2f0bc101a5f98205bab0ea84a4bbc61"><code>78e3980</code></a>)</li>
+<li><em>(freshness)</em> Skip the in-tree venv when hashing tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/91bb3d936a25f85934c8c8352bba4eed08df1259"><code>91bb3d9</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7032,6 +7043,7 @@ parameter, or overwrite a real one with the same name.</p>
 <li><em>(sources)</em> Drop the dead TOOLR_TEST_PYTHON env from the e2e tests (<a href="https://github.com/s0undt3ch/ToolR/commit/b459f3a69722ae4662176306e64bacd9d1f3e4a6"><code>b459f3a</code></a>)</li>
 <li>Compare toolr versions semantically and print paths portably (<a href="https://github.com/s0undt3ch/ToolR/commit/a1e69a1e06f44731411ff205d8a65efea90112c2"><code>a1e69a1</code></a>)</li>
 <li><em>(runner)</em> Cover the default and missing-param paths ahead of <code>*args</code> (<a href="https://github.com/s0undt3ch/ToolR/commit/006ad7297c1d939867af350b776051119148c954"><code>006ad72</code></a>)</li>
+<li><em>(hash)</em> Cover the non-NotFound read error path (<a href="https://github.com/s0undt3ch/ToolR/commit/b0f981acfd31b65c31a803f69d561f0aaec335e6"><code>b0f981a</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
