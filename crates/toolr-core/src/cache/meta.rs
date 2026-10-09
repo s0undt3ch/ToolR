@@ -9,6 +9,7 @@
 //! ```
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -121,11 +122,15 @@ impl Meta {
     /// created if missing.
     pub fn write(&self, cache_dir: &Path) -> Result<(), MetaError> {
         fs::create_dir_all(cache_dir)?;
-        let final_path = Self::path_in(cache_dir);
-        let tmp_path = cache_dir.join(".meta.json.tmp");
         let bytes = serde_json::to_vec_pretty(self)?;
-        fs::write(&tmp_path, bytes)?;
-        fs::rename(&tmp_path, &final_path)?;
+        // Each writer stages through its own temp file: concurrent toolr
+        // processes share this directory, so a fixed temp name races (#541).
+        let mut tmp = tempfile::Builder::new()
+            .prefix(".meta.json.")
+            .suffix(".tmp")
+            .tempfile_in(cache_dir)?;
+        tmp.write_all(&bytes)?;
+        tmp.persist(Self::path_in(cache_dir)).map_err(|e| e.error)?;
         Ok(())
     }
 }
