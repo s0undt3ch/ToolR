@@ -14,6 +14,10 @@ Python imports involved in the hot path.
     merge conflicts on every `tools/` edit without buying anything
     the auto-rebuild doesn't already cover.
 
+Rebuilds take a lock, so concurrent `toolr` processes that find the
+manifest stale rebuild it once. The lock file lives in toolr's cache
+directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
+
 ## File shape
 
 ```json
