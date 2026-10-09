@@ -63,6 +63,9 @@ pub fn write_manifest(path: &Path, manifest: &Manifest) -> Result<(), ManifestEr
             .unwrap_or_else(|_| fs::Permissions::from_mode(0o644));
         tmp.as_file().set_permissions(perms)?;
     }
-    tmp.persist(path).map_err(|e| ManifestError::Io(e.error))?;
+    // Not `persist`: its Windows `MoveFileExW` denies concurrent replaces;
+    // std's rename uses POSIX semantics there.
+    let tmp = tmp.into_temp_path();
+    fs::rename(&tmp, path)?;
     Ok(())
 }
