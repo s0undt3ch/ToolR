@@ -24,3 +24,10 @@ parameter, or overwrite a real one with the same name.
 
 Running several `toolr` processes at once against the same project no longer prints
 "failed to touch cache meta.json" warnings or leaves a truncated `meta.json` in the cache.
+
+With `venv-location = "in-tree"`, toolr no longer reads all of `tools/.venv` on every
+run to check whether the manifest is stale. It also no longer fails with
+`hashing <repo>/tools: No such file or directory (os error 2)` when `uv sync` recreates
+that venv while toolr commands are running. The freshness hash now skips `__pycache__`
+and dot-directories under `tools/`, the same way the manifest parser already skipped
+dot-directories.

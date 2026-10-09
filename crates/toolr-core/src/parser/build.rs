@@ -1,12 +1,11 @@
 //! Build a complete static `Manifest` from a `tools/` directory.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
-use walkdir::WalkDir;
 
-use crate::hash::hash_tools_dir;
+use crate::hash::{hash_tools_dir, list_python_files};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
@@ -521,33 +520,6 @@ fn format_type_errors(errors: &[TypeResolutionError]) -> String {
         let _ = write!(&mut s, "  - {err}");
     }
     s
-}
-
-pub(crate) fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
-    // Skip dot-prefixed directories (`.venv`, `.git`, `.tox`,
-    // `.mypy_cache`, `.ruff_cache`, …). Without this, walking
-    // `tools/` after `uv sync` would harvest every installed
-    // package's `.py` files from `tools/.venv/lib/python*/site-packages/`,
-    // producing a manifest with garbage `module` paths like
-    // `tools..venv.lib.site-packages.<pkg>.<mod>` that the runner then
-    // fails to import. The root `tools_dir` itself is never skipped —
-    // a leaf basename starting with `.` is fine if the user pointed
-    // us there directly.
-    let root = tools_dir.to_path_buf();
-    let mut paths: Vec<_> = WalkDir::new(tools_dir)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.path() == root {
-                return true;
-            }
-            !e.file_type().is_dir() || !e.file_name().to_str().is_some_and(|n| n.starts_with('.'))
-        })
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x == "py"))
-        .map(|e| e.into_path())
-        .collect();
-    paths.sort();
-    paths
 }
 
 /// Compute a dotted module path for `file` rooted at `source_dir`, using
