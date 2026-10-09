@@ -1463,15 +1463,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0341-dev41-2026-10-09" class="md-nav__link">
+  <a href="#0341-dev44-2026-10-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.34.1-dev41 - 2026-10-09
+        0.34.1-dev44 - 2026-10-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.34.1-dev41 - 2026-10-09">
+    <nav class="md-nav" aria-label="0.34.1-dev44 - 2026-10-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1501,6 +1501,17 @@
     <span class="md-ellipsis">
       
         📚 Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚡ Performance
       
     </span>
   </a>
@@ -4234,15 +4245,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0341-dev41-2026-10-09" class="md-nav__link">
+  <a href="#0341-dev44-2026-10-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.34.1-dev41 - 2026-10-09
+        0.34.1-dev44 - 2026-10-09
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.34.1-dev41 - 2026-10-09">
+    <nav class="md-nav" aria-label="0.34.1-dev44 - 2026-10-09">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4272,6 +4283,17 @@
     <span class="md-ellipsis">
       
         📚 Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚡ Performance
       
     </span>
   </a>
@@ -7000,7 +7022,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0341-dev41-2026-10-09">0.34.1-dev41 - 2026-10-09<a class="headerlink" href="#0341-dev41-2026-10-09" title="Permanent link">&para;</a></h2>
+<h2 id="0341-dev44-2026-10-09">0.34.1-dev44 - 2026-10-09<a class="headerlink" href="#0341-dev44-2026-10-09" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Commands with a named positional parameter ahead of <code>*args</code> (for example
 <code>def cmd(ctx, foo: Foo, *paths: pathlib.Path)</code>) now run. They used to crash with
@@ -7024,6 +7046,11 @@ random with <code>error: unrecognized subcommand</code>. Each process rewrote <c
 place, so another process could read it half written, and toolr then quietly treated the manifest as
 empty. The manifest is now replaced atomically, and a manifest toolr can't read is reported as an
 error naming the file instead of hiding your commands.</p>
+<p>When several <code>toolr</code> processes start at once against a stale or missing manifest
+(for example parallel pre-commit hooks after editing <code>tools/*.py</code>), only one now
+rebuilds it; the others wait for it and reuse the result. The lock lives in toolr's
+cache directory, so nothing new appears in <code>tools/</code>. If the lock can't be taken, for
+example on a read-only filesystem, the rebuild runs without it as before.</p>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(runner)</em> Pass params ahead of <code>*args</code> positionally (<a href="https://github.com/s0undt3ch/ToolR/commit/2fe40399a273cbe0bd1bd1254e7199b5ca932252"><code>2fe4039</code></a>)</li>
@@ -7041,6 +7068,10 @@ error naming the file instead of hiding your commands.</p>
 <ul>
 <li><em>(install)</em> Name 0.34.0 as the first release with a packslip (<a href="https://github.com/s0undt3ch/ToolR/commit/33aa9a8b737b742667095aacf055b124b53a8b69"><code>33aa9a8</code></a>)</li>
 </ul>
+<h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>(manifest)</em> Rebuild a stale manifest once under a file lock (<a href="https://github.com/s0undt3ch/ToolR/commit/96cae059e0f3e45ec8d66ba8551de1e5940aa836"><code>96cae05</code></a>)</li>
+</ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(ci)</em> Smoke-test packslip and aqua installs through pytest (<a href="https://github.com/s0undt3ch/ToolR/commit/6d3429e618ef25589dd50eb64f09e26cd2750a0d"><code>6d3429e</code></a>)</li>
@@ -7054,6 +7085,7 @@ error naming the file instead of hiding your commands.</p>
 <li><em>(runner)</em> Cover the default and missing-param paths ahead of <code>*args</code> (<a href="https://github.com/s0undt3ch/ToolR/commit/006ad7297c1d939867af350b776051119148c954"><code>006ad72</code></a>)</li>
 <li><em>(hash)</em> Cover the non-NotFound read error path (<a href="https://github.com/s0undt3ch/ToolR/commit/b0f981acfd31b65c31a803f69d561f0aaec335e6"><code>b0f981a</code></a>)</li>
 <li><em>(manifest)</em> Cover the missing-manifest rebuild path (<a href="https://github.com/s0undt3ch/ToolR/commit/7955b591d261b6f38c9ef89b8cbdbbaf886c33f1"><code>7955b59</code></a>)</li>
+<li><em>(manifest)</em> Keep never-called closures off their own lines (<a href="https://github.com/s0undt3ch/ToolR/commit/9ee57a05c06debde39d0413b173555370f13abe0"><code>9ee57a0</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

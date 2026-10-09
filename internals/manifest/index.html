@@ -1756,6 +1756,9 @@ projects. <code>toolr project init</code> adds the file to
 merge conflicts on every <code>tools/</code> edit without buying anything
 the auto-rebuild doesn't already cover.</p>
 </div>
+<p>Rebuilds take a lock, so concurrent <code>toolr</code> processes that find the
+manifest stale rebuild it once. The lock file lives in toolr's cache
+directory (<code>$XDG_CACHE_HOME/toolr/locks/</code>), not in <code>tools/</code>.</p>
 <h2 id="file-shape">File shape<a class="headerlink" href="#file-shape" title="Permanent link">&para;</a></h2>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"schema_version"</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
