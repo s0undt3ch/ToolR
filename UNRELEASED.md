@@ -31,3 +31,9 @@ run to check whether the manifest is stale. It also no longer fails with
 that venv while toolr commands are running. The freshness hash now skips `__pycache__`
 and dot-directories under `tools/`, the same way the manifest parser already skipped
 dot-directories.
+
+Running several `toolr` commands in parallel (for example as pre-commit hooks) no longer fails at
+random with `error: unrecognized subcommand`. Each process rewrote `tools/.toolr-manifest.json` in
+place, so another process could read it half written, and toolr then quietly treated the manifest as
+empty. The manifest is now replaced atomically, and a manifest toolr can't read is reported as an
+error naming the file instead of hiding your commands.

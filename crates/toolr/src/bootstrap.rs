@@ -10,7 +10,7 @@ use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 use toolr_core::freshness::{FreshnessVerdict, compare};
-use toolr_core::manifest::{Manifest, Origin, load_manifest, write_manifest};
+use toolr_core::manifest::{Manifest, ManifestError, Origin, load_manifest, write_manifest};
 use toolr_core::parser::{build_static_manifest, build_static_manifest_with_venv};
 use toolr_core::venv::resolve_venv_path;
 
@@ -96,41 +96,57 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
 /// in-process (pure Rust, no Python), persist the result, and fall
 /// back to the cached manifest with a warning when a rebuild errors.
 ///
-/// Returns `Ok(())` on success OR on any non-fatal soft failure
-/// (drift rebuild error, missing venv, etc.). Only I/O errors from
-/// writing the freshly rebuilt manifest propagate.
+/// Returns the manifest this step validated or rebuilt, so the caller
+/// dispatches against it instead of re-reading a file another toolr
+/// process may be rewriting (#542). `Ok(None)` means the step didn't
+/// apply (no project, skip-list argv) or the rebuild failed with no
+/// usable cache; the caller then reads the file itself. Only I/O errors
+/// from writing the freshly rebuilt manifest propagate.
 pub(crate) fn ensure_manifest_fresh(
     cwd: &Path,
     argv: &[String],
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<Manifest>> {
     let Ok(root) = discover_project_root(cwd) else {
-        return Ok(());
+        return Ok(None);
     };
     let tools = root.join("tools");
     if !tools.join("pyproject.toml").is_file() {
-        return Ok(());
+        return Ok(None);
     }
     if should_skip_auto_rebuild(argv) {
-        return Ok(());
+        return Ok(None);
     }
 
     let manifest_path = tools.join(".toolr-manifest.json");
-    let cached = load_manifest(&manifest_path).ok();
+    let cached = match load_manifest(&manifest_path) {
+        Ok(m) => Some(m),
+        Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            eprintln!(
+                "toolr: warning: ignoring unreadable {}: {e}; rebuilding",
+                manifest_path.display()
+            );
+            None
+        }
+    };
     let venv_dir: Option<std::path::PathBuf> =
         resolve_venv_path(&root).ok().map(|r| r.venv_dir);
 
     let verdict = compare(cached.as_ref(), &tools, venv_dir.as_deref())?;
 
     if matches!(verdict, FreshnessVerdict::Fresh) {
-        return Ok(());
+        return Ok(cached);
     }
 
     match try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref()) {
-        Ok(fresh) => write_manifest(&manifest_path, &fresh)
-            .with_context(|| format!("writing {}", manifest_path.display())),
+        Ok(fresh) => {
+            write_manifest(&manifest_path, &fresh)
+                .with_context(|| format!("writing {}", manifest_path.display()))?;
+            Ok(Some(fresh))
+        }
         Err(e) => {
             warn_and_keep_cache(&e, cached.is_some());
-            Ok(())
+            Ok(cached)
         }
     }
 }

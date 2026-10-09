@@ -15,7 +15,7 @@ mod value_parsers;
 use std::process::ExitCode;
 
 use toolr_core::discovery::discover_project_root;
-use toolr_core::manifest::{Manifest, SCHEMA_VERSION, load_manifest};
+use toolr_core::manifest::{Manifest, ManifestError, SCHEMA_VERSION, load_manifest};
 
 fn main() -> ExitCode {
     match run() {
@@ -34,8 +34,10 @@ fn run() -> anyhow::Result<ExitCode> {
     // and `--help` (which would otherwise exit inside clap) still see it.
     maybe_emit_cache_hint_from_argv();
     bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv)?;
-    bootstrap::ensure_manifest_fresh(&cwd, &argv)?;
-    let manifest = load_or_empty(&cwd);
+    let manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv)? {
+        Some(m) => m,
+        None => load_or_empty(&cwd, &argv)?,
+    };
     if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
         for w in &manifest.plugin_warnings {
             eprintln!("toolr: warning: {}", w.message);
@@ -130,12 +132,35 @@ fn argv_requests_quiet(argv: &[String]) -> bool {
     false
 }
 
-fn load_or_empty(cwd: &std::path::Path) -> Manifest {
+/// Read the on-disk manifest; "no project" and "no manifest file" mean an
+/// empty command set.
+///
+/// Any other load failure is an error for user commands: an empty manifest
+/// there turns a corrupt file into clap's misleading `unrecognized
+/// subcommand` (#542). Built-ins don't need the user's commands, and
+/// `project manifest rebuild` is the repair path, so they only warn.
+fn load_or_empty(cwd: &std::path::Path, argv: &[String]) -> anyhow::Result<Manifest> {
     let Ok(root) = discover_project_root(cwd) else {
-        return empty_manifest();
+        return Ok(empty_manifest());
     };
     let manifest_path = root.join("tools").join(".toolr-manifest.json");
-    load_manifest(&manifest_path).unwrap_or_else(|_| empty_manifest())
+    match load_manifest(&manifest_path) {
+        Ok(m) => Ok(m),
+        Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok(empty_manifest())
+        }
+        Err(e) if bootstrap::should_skip_auto_rebuild(argv) => {
+            eprintln!(
+                "toolr: warning: ignoring unreadable {}: {e}",
+                manifest_path.display()
+            );
+            Ok(empty_manifest())
+        }
+        Err(e) => Err(anyhow::anyhow!(
+            "cannot read {}: {e}; run `toolr project manifest rebuild` to regenerate it",
+            manifest_path.display()
+        )),
+    }
 }
 
 fn empty_manifest() -> Manifest {
