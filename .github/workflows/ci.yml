@@ -788,6 +788,36 @@ jobs:
     permissions:
       contents: read
 
+  codecov-notify:
+    name: Codecov Notify
+    # `.codecov.yml` sets `manual_trigger`, so Codecov computes statuses
+    # only once this runs, after every job that uploads coverage.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    needs:
+      - test-distribution-linux
+      - test-distribution-macos
+      - test-distribution-windows
+      - test-linux
+      - test-macos
+      - test-windows
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Tell Codecov every upload is in
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          run_command: send-notifications
+
   set-pipeline-exit-status:
     permissions: {}
     # This job exists so the branch ruleset can require a single check that
@@ -810,6 +840,7 @@ jobs:
       - build-py-wheel-linux
       - build-py-wheel-macos
       - build-py-wheel-windows
+      - codecov-notify
       - docs
       - packslip-check
       - pre-commit
