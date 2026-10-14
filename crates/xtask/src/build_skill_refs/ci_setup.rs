@@ -54,7 +54,7 @@ pub fn action(repo_root: &Path) -> Result<Generated> {
 
 fn render(yaml: &str) -> Result<String> {
     let action: Action =
-        serde_yaml_ng::from_str(yaml).context("parsing action.yml as YAML")?;
+        serde_saphyr::from_str(yaml).context("parsing action.yml as YAML")?;
     let mut body = String::new();
     body.push_str("# `s0undt3ch/ToolR` action surface\n\n");
     body.push_str(DO_NOT_EDIT);
