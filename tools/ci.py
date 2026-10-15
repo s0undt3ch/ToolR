@@ -40,7 +40,7 @@ group = command_group("ci", "CI utilities", docstring=__doc__)
 # *test* matrix only — the toolr-py wheel itself is now a single abi3
 # build (see ABI3_WHEEL_PYTHONS). Keep aligned with `requires-python`
 # in crates/toolr-py/pyproject.toml; bump when a CPython is added/removed.
-ALL_CPYTHONS = ["cp311", "cp312", "cp313", "cp314"]
+ALL_CPYTHONS = ["cp311", "cp312", "cp313", "cp314", "cp315"]
 
 # CPython ABI tags cibuildwheel builds for the toolr-py (pyo3) wheel.
 # abi3 stable-ABI → a single cp311 wheel covers all CPython >=3.11;
