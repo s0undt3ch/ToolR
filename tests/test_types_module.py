@@ -10,7 +10,7 @@ toolr_types_names_match_python_surface`) pins it on the rust side.
 
 from __future__ import annotations
 
-import datetime as dt
+import datetime
 import ipaddress
 import pathlib
 import typing
@@ -79,9 +79,9 @@ def test_path_types_hand_back_the_path_they_are_given() -> None:
 
 
 def test_datetime_aliases_resolve_to_stdlib() -> None:
-    assert toolr.types.DateTime is dt.datetime
-    assert toolr.types.Date is dt.date
-    assert toolr.types.Time is dt.time
+    assert toolr.types.DateTime is datetime.datetime
+    assert toolr.types.Date is datetime.date
+    assert toolr.types.Time is datetime.time
 
 
 def test_uuid_alias_resolves_to_stdlib() -> None:
