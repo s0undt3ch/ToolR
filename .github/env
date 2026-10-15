@@ -6,4 +6,4 @@
 #
 # `MISE_VERSION` sets every workflow's mise install. Renovate bumps it
 # (see the regex manager in renovate.json5).
-MISE_VERSION=v2026.10.8
+MISE_VERSION=v2026.10.10

@@ -112,6 +112,7 @@ ignore = [
   "FBT001",  # Boolean-typed positional argument in function definition
   "FBT002",  # Boolean default positional argument in function definition
   "FIX002",  # Line contains TODO, consider resolving the issue"
+  "ICN001",  # Unconventional import alias (ruff 0.17 wants `datetime` as `dt`)
   "PERF203", # `try`-`except` within a loop incurs performance overhead"
   "PERF401", # Use a list comprehension to create a transformed list
   "PERF402", # Use `list` or `list.copy` to create a copy of a list
