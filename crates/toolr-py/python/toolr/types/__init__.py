@@ -53,7 +53,7 @@ Supported entries:
 
 from __future__ import annotations
 
-import datetime as _dt
+import datetime as _dt  # noqa: ICN001 -- private alias keeps `toolr.types` namespace clean
 import ipaddress as _ip
 import pathlib as _pathlib
 import uuid as _uuid

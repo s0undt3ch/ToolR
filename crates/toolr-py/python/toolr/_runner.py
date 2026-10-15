@@ -16,7 +16,7 @@ on are all supported "for free" via msgspec's coercion rules.
 from __future__ import annotations
 
 import contextlib
-import datetime
+import datetime as dt
 import importlib
 import inspect
 import ipaddress
@@ -374,12 +374,12 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
     if isinstance(obj, str):
         if isinstance(target_type, type) and issubclass(target_type, pathlib.PurePath):
             return target_type(obj)
-        if target_type is datetime.datetime:
-            return datetime.datetime.fromisoformat(obj)
-        if target_type is datetime.date:
-            return datetime.date.fromisoformat(obj)
-        if target_type is datetime.time:
-            return datetime.time.fromisoformat(obj)
+        if target_type is dt.datetime:
+            return dt.datetime.fromisoformat(obj)
+        if target_type is dt.date:
+            return dt.date.fromisoformat(obj)
+        if target_type is dt.time:
+            return dt.time.fromisoformat(obj)
         if target_type is uuid.UUID:
             return uuid.UUID(obj)
         if target_type is ipaddress.IPv4Address:
