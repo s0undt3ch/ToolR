@@ -2548,7 +2548,7 @@ checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
 
 [[package]]
 name = "toolr"
-version = "0.34.1"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2573,7 +2573,7 @@ dependencies = [
 
 [[package]]
 name = "toolr-core"
-version = "0.34.1"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2604,7 +2604,7 @@ dependencies = [
 
 [[package]]
 name = "toolr-py"
-version = "0.34.1"
+version = "0.35.0"
 dependencies = [
  "libc",
  "pyo3",
@@ -3076,7 +3076,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.34.1"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "assert_cmd",

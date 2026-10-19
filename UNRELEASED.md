@@ -10,6 +10,3 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
-
-`toolr-py` now supports CPython 3.15. The abi3 wheel already loaded there, but
-`requires-python` excluded it; the bound is now `<3.16`. CI tests 3.15 alongside 3.11–3.14.

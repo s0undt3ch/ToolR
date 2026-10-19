@@ -6,6 +6,37 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.35.0 - 2026-10-19
+
+### Notes
+
+`toolr-py` now supports CPython 3.15. The abi3 wheel already loaded there, but
+`requires-python` excluded it; the bound is now `<3.16`. CI tests 3.15 alongside 3.11–3.14.
+
+### <!-- 0 -->🚀 Features
+
+- *(python)* Support CPython 3.15 ([`087ca00`](https://github.com/s0undt3ch/ToolR/commit/087ca004f3d101958ac9550d8f3e2dec55e00301))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(deps)* Update rust crate serde-saphyr to v2 ([`a0e61ab`](https://github.com/s0undt3ch/ToolR/commit/a0e61ab2e79d72fb3a99a8ee10e73fe990d63426))
+
+### <!-- 3 -->📚 Documentation
+
+- *(unreleased)* Note CPython 3.15 support ([`51254e0`](https://github.com/s0undt3ch/ToolR/commit/51254e0bf76d451451f45046bf7d63e6e89dd080))
+
+### <!-- 5 -->🎨 Styling
+
+- Satisfy ruff 0.17 ICN001 datetime import alias ([`377b4fe`](https://github.com/s0undt3ch/ToolR/commit/377b4fe0887103413612d9fc51bfe0263cec4236))
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- *(codecov)* Compute statuses only after every coverage upload ([`949947c`](https://github.com/s0undt3ch/ToolR/commit/949947c9fb75a9de232006bd3fede75377dcbc39))
+- *(codecov)* Skip the notification when no test job ran ([`3695b25`](https://github.com/s0undt3ch/ToolR/commit/3695b250b4c8869ee98b65c8fbdacf41994684e7))
+- *(codecov)* Gate the notification on should-run-build ([`13858d4`](https://github.com/s0undt3ch/ToolR/commit/13858d41c4dd90833e96fbc596151229833f7ec0))
+- *(packslip)* Pin the CLI attestation to packslip's release-plz branch ([`7f7e807`](https://github.com/s0undt3ch/ToolR/commit/7f7e807f797b7ae5dca086cd37c6d47db04668cb))
+- *(mise)* Drop stale musl lockfile caveat ([`24b2415`](https://github.com/s0undt3ch/ToolR/commit/24b2415a7c416f21b24e126293c52e801fb15208))
+- *(ruff)* Ignore ICN001 instead of renaming datetime imports ([`08d57ae`](https://github.com/s0undt3ch/ToolR/commit/08d57ae96cfbad72d679a4652f763b2e4a9ce563))
 ## 0.34.1 - 2026-10-09
 
 ### Notes
