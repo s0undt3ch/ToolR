@@ -1521,15 +1521,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ppv-lite86"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
-dependencies = [
- "zerocopy",
-]
-
-[[package]]
 name = "predicates"
 version = "3.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1746,8 +1737,6 @@ version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e058c7de0b26af77780c769414d6257830bb240f3c38477dbc2c16e5f54d6d4c"
 dependencies = [
- "libc",
- "rand_chacha",
  "rand_core 0.6.4",
 ]
 
@@ -1763,23 +1752,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand_chacha"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
-dependencies = [
- "ppv-lite86",
- "rand_core 0.6.4",
-]
-
-[[package]]
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
-dependencies = [
- "getrandom 0.2.17",
-]
 
 [[package]]
 name = "rand_core"
@@ -1897,8 +1873,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_ast"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.0#5b27c1ccfaa230fb195855f5cf3404a21e3379cd"
+version = "0.0.18"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.1#4683270c69cbdaf6ad64d3f983fc458d5a43b41f"
 dependencies = [
  "aho-corasick",
  "arrayvec",
@@ -1918,8 +1894,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_parser"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.0#5b27c1ccfaa230fb195855f5cf3404a21e3379cd"
+version = "0.0.18"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.1#4683270c69cbdaf6ad64d3f983fc458d5a43b41f"
 dependencies = [
  "bitflags",
  "bstr",
@@ -1941,8 +1917,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_trivia"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.0#5b27c1ccfaa230fb195855f5cf3404a21e3379cd"
+version = "0.0.18"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.1#4683270c69cbdaf6ad64d3f983fc458d5a43b41f"
 dependencies = [
  "itertools",
  "memchr",
@@ -1955,8 +1931,8 @@ dependencies = [
 
 [[package]]
 name = "ruff_source_file"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.0#5b27c1ccfaa230fb195855f5cf3404a21e3379cd"
+version = "0.0.18"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.1#4683270c69cbdaf6ad64d3f983fc458d5a43b41f"
 dependencies = [
  "memchr",
  "ruff_text_size",
@@ -1964,16 +1940,16 @@ dependencies = [
 
 [[package]]
 name = "ruff_text_size"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.0#5b27c1ccfaa230fb195855f5cf3404a21e3379cd"
+version = "0.0.18"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.1#4683270c69cbdaf6ad64d3f983fc458d5a43b41f"
 dependencies = [
  "get-size2",
 ]
 
 [[package]]
 name = "ruff_unicode_names2"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.0#5b27c1ccfaa230fb195855f5cf3404a21e3379cd"
+version = "0.0.18"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.1#4683270c69cbdaf6ad64d3f983fc458d5a43b41f"
 dependencies = [
  "phf",
  "ruff_unicode_names2_generator",
@@ -1981,11 +1957,11 @@ dependencies = [
 
 [[package]]
 name = "ruff_unicode_names2_generator"
-version = "0.0.17"
-source = "git+https://github.com/astral-sh/ruff?tag=0.17.0#5b27c1ccfaa230fb195855f5cf3404a21e3379cd"
+version = "0.0.18"
+source = "git+https://github.com/astral-sh/ruff?tag=0.17.1#4683270c69cbdaf6ad64d3f983fc458d5a43b41f"
 dependencies = [
  "phf_codegen",
- "rand 0.8.8",
+ "rand 0.10.3",
 ]
 
 [[package]]
@@ -3136,26 +3112,6 @@ dependencies = [
  "quote",
  "syn 3.0.9",
  "synstructure",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.8.63"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5fe1f8f1b06191a00962174c61aa5005e0bb391a6d80d07e24d115c01a92ed8"
-dependencies = [
- "zerocopy-derive",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.8.63"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "863ad3ac83293fb4d740aedbfdc9240dd8d1a50c1099acd76ce80ce7c7230c7f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
