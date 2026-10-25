@@ -23,6 +23,8 @@ default-groups = ["dev", "pre-commit"]
 # window for a compromised release, so we let the ecosystem vet them first.
 # Renovate's own bumps run `uv lock`, so they inherit the same 7-day gate.
 exclude-newer = "7 days"
+# PYSEC-2026-4320: the fixed certifi landed inside the cooldown. Drop once it ages past 7 days.
+exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
 
 [tool.uv.workspace]
 members = [

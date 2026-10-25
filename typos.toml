@@ -16,3 +16,7 @@ extend-ignore-re = [
     # short SHAs the CHANGELOG renders in backticks, e.g. `91f45b8`.
     '`[0-9a-f]{7,40}`',
 ]
+
+[default.extend-words]
+# The Python CA-bundle package name.
+certifi = "certifi"
