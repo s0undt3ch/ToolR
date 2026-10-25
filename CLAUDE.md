@@ -105,6 +105,12 @@ prek run --all-files              # run every pre-commit hook
   existing `__all__`, also check by hand whether any skill's prose (not just its generated
   `references/*.md`) mentions that API by name and needs updating — the generator only keeps the
   reference tables current, not the skill's narrative sections.
+- **Security fixes bypass the 7-day dependency cooldown.** uv's `exclude-newer` in
+  `pyproject.toml` can't tell an advisory fix apart, and Renovate's `uv lock` runs inherit it.
+  When a fixed release is under 7 days old, add a per-package entry to `exclude-newer-package`.
+  Set the cutoff just past the fixed release's PyPI upload time, so it resolves to exactly that
+  release and not anything newer. Then run `uv lock --upgrade-package <pkg>` and drop the entry
+  once the release ages out.
 - **Stacked PRs use [git-spice](https://abhinav.github.io/git-spice/).** `git-spice branch create`
   and `git-spice branch submit --draft`. Don't `git checkout -b` + `git push` directly.
 - **Conventional Commits** (`feat(cli): …`, `fix(parser): …`, `docs(internals): …`).
