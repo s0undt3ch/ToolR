@@ -199,19 +199,8 @@ fn classify_leaf_args<'a>(
     arg_tokens: &[String],
     prefix: String,
 ) -> Slot<'a> {
-    // If the previous committed token was a `--flag`, we're completing
-    // that flag's value.
-    if let Some(prev) = arg_tokens.last() {
-        if let Some(flag_name) = prev.strip_prefix("--") {
-            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
-                if !matches!(arg.kind, ArgumentKind::Flag) {
-                    return Slot::FlagValue {
-                        argument: arg,
-                        prefix,
-                    };
-                }
-            }
-        }
+    if let Some(argument) = pending_flag_value(command, arg_tokens) {
+        return Slot::FlagValue { argument, prefix };
     }
 
     // Otherwise: if the in-progress word starts with `--`, complete to a
@@ -223,18 +212,11 @@ fn classify_leaf_args<'a>(
     // Positional path: count how many positional values have already
     // been provided in `arg_tokens` (skipping `--flag value` pairs and
     // bare `--flag` boolean flags) and pick the matching Argument.
-    let positional_index = count_positionals_consumed(command, arg_tokens);
+    let positional_index = positional_indices(command, arg_tokens).len();
     let positional_args: Vec<&Argument> = command
         .arguments
         .iter()
-        .filter(|a| {
-            matches!(
-                a.kind,
-                ArgumentKind::Positional
-                    | ArgumentKind::VarPositional
-                    | ArgumentKind::OptionalPositional
-            ) || (a.kind == ArgumentKind::FixedArity && a.long_flag.is_none())
-        })
+        .filter(|a| is_positional(a))
         .collect();
     if let Some(&arg) = positional_args.get(positional_index) {
         return Slot::Positional {
@@ -258,13 +240,7 @@ fn classify_leaf_args<'a>(
     // Tab into — particularly useful for argparse-style commands whose
     // entire surface is `--flag value` pairs (no positionals at all),
     // and for the trailing position past every fixed positional.
-    let has_flags = command.arguments.iter().any(|a| {
-        !(matches!(
-            a.kind,
-            ArgumentKind::Positional | ArgumentKind::VarPositional | ArgumentKind::OptionalPositional
-        ) || (a.kind == ArgumentKind::FixedArity && a.long_flag.is_none()))
-    });
-    if has_flags {
+    if command.arguments.iter().any(|a| !is_positional(a)) {
         return Slot::Flag { command, prefix };
     }
 
@@ -294,35 +270,22 @@ fn classify_dispatcher<'a>(
     // flag values, and positional completions from here on belong to
     // the *child*, not the dispatcher. Checking this first prevents
     // the dispatcher's flag-name fallback from masking the child's.
-    let positional_index = count_positionals_consumed(command, arg_tokens);
-    if positional_index >= 1 {
-        let Some(child_name) = first_positional_value(command, arg_tokens) else {
-            return Slot::None;
-        };
+    if let Some(&child_index) = positional_indices(command, arg_tokens).first() {
+        let child_name = &arg_tokens[child_index];
         let Some(child) = manifest
             .commands
             .iter()
-            .find(|c| c.group == dispatcher_path && c.name == child_name)
+            .find(|c| c.group == dispatcher_path && &c.name == child_name)
         else {
             return Slot::None;
         };
-        let child_arg_tokens = drop_through_first_positional(command, arg_tokens);
-        return classify_leaf_args(child, &child_arg_tokens, prefix);
+        return classify_leaf_args(child, &arg_tokens[child_index + 1..], prefix);
     }
 
     // No child chosen yet — completion targets the dispatcher's own
     // surface (`--flag <TAB>`, `--<TAB>`) or the child-name slot.
-    if let Some(prev) = arg_tokens.last() {
-        if let Some(flag_name) = prev.strip_prefix("--") {
-            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
-                if !matches!(arg.kind, ArgumentKind::Flag) {
-                    return Slot::FlagValue {
-                        argument: arg,
-                        prefix,
-                    };
-                }
-            }
-        }
+    if let Some(argument) = pending_flag_value(command, arg_tokens) {
+        return Slot::FlagValue { argument, prefix };
     }
     if prefix.starts_with("--") || prefix == "-" {
         return Slot::Flag { command, prefix };
@@ -334,78 +297,71 @@ fn classify_dispatcher<'a>(
     }
 }
 
-/// Return the first positional value in `arg_tokens`, skipping flags
-/// and their values per the command's argument schema. Mirrors the
-/// counting logic in [`count_positionals_consumed`].
-fn first_positional_value<'a>(command: &Command, arg_tokens: &'a [String]) -> Option<&'a str> {
-    let mut i = 0usize;
-    while i < arg_tokens.len() {
-        let t = &arg_tokens[i];
-        if let Some(flag_name) = t.strip_prefix("--") {
-            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
-                if matches!(arg.kind, ArgumentKind::Flag) {
-                    i += 1;
-                    continue;
-                }
-                i += 2;
-                continue;
-            }
-            i += 1;
-            continue;
-        }
-        return Some(t.as_str());
-    }
-    None
+fn is_positional(argument: &Argument) -> bool {
+    matches!(
+        argument.kind,
+        ArgumentKind::Positional | ArgumentKind::VarPositional | ArgumentKind::OptionalPositional
+    ) || (argument.kind == ArgumentKind::FixedArity && argument.long_flag.is_none())
 }
 
-/// Return the slice of `arg_tokens` that comes after the first
-/// positional value (flag/value pairs in between are preserved).
-fn drop_through_first_positional(command: &Command, arg_tokens: &[String]) -> Vec<String> {
-    let mut i = 0usize;
-    while i < arg_tokens.len() {
-        let t = &arg_tokens[i];
-        if let Some(flag_name) = t.strip_prefix("--") {
-            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
-                if matches!(arg.kind, ArgumentKind::Flag) {
-                    i += 1;
-                    continue;
-                }
-                i += 2;
-                continue;
-            }
-            i += 1;
-            continue;
-        }
-        // i points at the first positional; everything after it belongs
-        // to the child's arg zone.
-        return arg_tokens[i + 1..].to_vec();
-    }
-    Vec::new()
+fn takes_value(argument: &Argument) -> bool {
+    !matches!(argument.kind, ArgumentKind::Flag | ArgumentKind::Count)
 }
 
-fn count_positionals_consumed(command: &Command, arg_tokens: &[String]) -> usize {
-    let mut idx = 0usize;
+/// The argument a committed flag token names, under every spelling the
+/// clap CLI accepts (`cli::build_user_command`): `--` plus the name with
+/// `_` → `-`, and each `arg(aliases=…)` entry (one char → `-c`, longer →
+/// `--alias`). Manifest names are Python identifiers, so comparing them
+/// to the typed token directly misses every multi-word flag.
+fn find_flag<'a>(command: &'a Command, token: &str) -> Option<&'a Argument> {
+    let (spelling, short) = match token.strip_prefix("--") {
+        Some(long) => (long, false),
+        None => (token.strip_prefix('-')?, true),
+    };
+    if spelling.is_empty() {
+        return None;
+    }
+    command
+        .arguments
+        .iter()
+        .filter(|a| !is_positional(a))
+        .find(|a| {
+            (!short && a.name.replace('_', "-") == spelling)
+                || a.metadata.aliases.iter().any(|alias| {
+                    let alias = alias.trim_start_matches('-');
+                    (alias.chars().count() == 1) == short && alias == spelling
+                })
+        })
+}
+
+/// The value-taking flag whose value is being completed, when it's the
+/// last committed token.
+fn pending_flag_value<'a>(command: &'a Command, arg_tokens: &[String]) -> Option<&'a Argument> {
+    arg_tokens
+        .last()
+        .and_then(|t| find_flag(command, t))
+        .filter(|a| takes_value(a))
+}
+
+/// Indices of the positional values in `arg_tokens`, skipping each known
+/// flag and, when it takes one, its value. An unknown `--flag` skips just
+/// itself; `--flag=value` is one token, so it lands there too.
+fn positional_indices(command: &Command, arg_tokens: &[String]) -> Vec<usize> {
+    let mut out = Vec::new();
     let mut i = 0usize;
     while i < arg_tokens.len() {
-        let t = &arg_tokens[i];
-        if let Some(flag_name) = t.strip_prefix("--") {
-            if let Some(arg) = command.arguments.iter().find(|a| a.name == flag_name) {
-                if matches!(arg.kind, ArgumentKind::Flag) {
-                    i += 1;
-                    continue;
-                }
-                // --flag value pair
-                i += 2;
-                continue;
+        let token = &arg_tokens[i];
+        match find_flag(command, token) {
+            Some(arg) if takes_value(arg) => i += 2,
+            Some(_) => i += 1,
+            None if token.starts_with("--") => i += 1,
+            None => {
+                out.push(i);
+                i += 1;
             }
-            // Unknown flag — skip just the token.
-            i += 1;
-            continue;
         }
-        idx += 1;
-        i += 1;
     }
-    idx
+    out
 }
 
 /// Top-level group names matching `prefix`, described by their `title`.
@@ -447,12 +403,7 @@ fn flags(command: &Command, prefix: &str) -> Vec<Candidate> {
     let mut out: Vec<Candidate> = command
         .arguments
         .iter()
-        .filter(|a| {
-            !(matches!(
-                a.kind,
-                ArgumentKind::Positional | ArgumentKind::VarPositional | ArgumentKind::OptionalPositional
-            ) || (a.kind == ArgumentKind::FixedArity && a.long_flag.is_none()))
-        })
+        .filter(|a| !is_positional(a))
         .filter_map(|a| {
             let value = format!("--{}", a.name.replace('_', "-"));
             value

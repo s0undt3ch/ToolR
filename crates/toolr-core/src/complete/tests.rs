@@ -338,8 +338,9 @@ fn leaf_help_prefix_filters_to_help_only() {
 
 fn dispatcher_fixture() -> Manifest {
     // Mirrors the dashtastic shape: `jenkins job` is a dispatcher with
-    // a couple of its own flags (`--dry-run`, `--cpu`) plus grafted
-    // children at `group = "jenkins.job"`.
+    // its own flags plus grafted children at `group = "jenkins.job"`.
+    // Names are the Python identifiers the parser writes (`log_level`,
+    // not `log-level`); a kebab-case stand-in here once hid a lookup bug.
     let str_arg = |name: &str, kind, default: Option<&str>, values: &[&str]| Argument {
         name: name.into(),
         kind,
@@ -350,6 +351,10 @@ fn dispatcher_fixture() -> Manifest {
         metadata: crate::manifest::ArgMetadata::default(),
         long_flag: None,
         allowed_values: values.iter().map(|s| (*s).to_string()).collect(),
+    };
+    let aliased = |mut arg: Argument, aliases: &[&str]| {
+        arg.metadata.aliases = aliases.iter().map(|s| (*s).to_string()).collect();
+        arg
     };
     Manifest {
         schema_version: SCHEMA_VERSION,
@@ -376,7 +381,14 @@ fn dispatcher_fixture() -> Manifest {
                 description: String::new(),
                 arguments: vec![
                     str_arg("cpu", ArgumentKind::Optional, Some("200m"), &[]),
-                    str_arg("dry-run", ArgumentKind::Flag, None, &[]),
+                    str_arg("log_level", ArgumentKind::Optional, Some("INFO"), &[]),
+                    aliased(
+                        str_arg("reference", ArgumentKind::Optional, Some("latest"), &[]),
+                        &["--ref"],
+                    ),
+                    str_arg("on_demand", ArgumentKind::Flag, None, &[]),
+                    str_arg("dry_run", ArgumentKind::Flag, None, &[]),
+                    str_arg("no_follow", ArgumentKind::Flag, None, &[]),
                 ],
                 origin: Origin::Static,
                 dispatched_from: None,
@@ -392,12 +404,14 @@ fn dispatcher_fixture() -> Manifest {
                 function: "job".into(),
                 summary: "Delete orphans.".into(),
                 description: String::new(),
-                arguments: vec![str_arg(
-                    "scope",
-                    ArgumentKind::Positional,
-                    None,
-                    &["all", "stale"],
-                )],
+                arguments: vec![
+                    aliased(
+                        str_arg("batch_size", ArgumentKind::Optional, None, &[]),
+                        &["-b"],
+                    ),
+                    str_arg("verbose", ArgumentKind::Count, None, &[]),
+                    str_arg("scope", ArgumentKind::Positional, None, &["all", "stale"]),
+                ],
                 origin: Origin::Static,
                 dispatched_from: Some("argparse:django".into()),
                 is_dispatcher: false,
@@ -447,7 +461,15 @@ fn dispatcher_flag_prefix_lists_dispatcher_flags_not_children() {
     let out = values(serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "--"])));
     assert_eq!(
         out,
-        vec!["--cpu".to_string(), "--dry-run".to_string(), "--help".to_string()]
+        vec![
+            "--cpu".to_string(),
+            "--dry-run".to_string(),
+            "--help".to_string(),
+            "--log-level".to_string(),
+            "--no-follow".to_string(),
+            "--on-demand".to_string(),
+            "--reference".to_string(),
+        ]
     );
 }
 
@@ -483,6 +505,88 @@ fn dispatcher_recurses_through_parent_flag_value_pair() {
     let out = values(serve_completions(
         &dispatcher_fixture(),
         &tokens(&["jenkins", "job", "--cpu", "200m", "delete_orphans", ""]),
+    ));
+    assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
+}
+
+#[test]
+fn dispatcher_flag_completes_after_hyphenated_flag_value_pair() {
+    // Reported shape: `toolr jenkins job --log-level debug --on-demand
+    // --no-fol<TAB>` returned nothing. `--log-level` didn't match the
+    // manifest's `log_level`, so `debug` was taken for the child name.
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--log-level", "debug", "--on-demand", "--no-fol"]),
+    ));
+    assert_eq!(out, vec!["--no-follow".to_string()]);
+}
+
+#[test]
+fn dispatcher_hyphenated_flag_value_slot_does_not_offer_children() {
+    // `--log-level <TAB>` is the flag's value slot, not the child slot.
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--log-level", ""]),
+    ));
+    assert!(out.is_empty(), "expected no candidates, got {out:?}");
+}
+
+#[test]
+fn dispatcher_offers_children_after_hyphenated_flag_value_pair() {
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--log-level", "debug", ""]),
+    ));
+    assert_eq!(
+        out,
+        vec!["delete_orphans".to_string(), "delete_stale".to_string()]
+    );
+}
+
+#[test]
+fn dispatcher_flag_completes_after_long_alias_value_pair() {
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--ref", "abc123", "--no-fol"]),
+    ));
+    assert_eq!(out, vec!["--no-follow".to_string()]);
+}
+
+#[test]
+fn dispatcher_recurses_through_hyphenated_flag_value_pair() {
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--log-level", "debug", "delete_orphans", ""]),
+    ));
+    assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
+}
+
+#[test]
+fn leaf_positional_completes_after_hyphenated_flag_value_pair() {
+    // In a leaf, the misread value took the positional's slot, so the
+    // positional's candidates never showed.
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "delete_orphans", "--batch-size", "10", ""]),
+    ));
+    assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
+}
+
+#[test]
+fn leaf_positional_completes_after_short_alias_value_pair() {
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "delete_orphans", "-b", "10", ""]),
+    ));
+    assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
+}
+
+#[test]
+fn leaf_positional_completes_after_count_flag() {
+    // A count flag takes no value; the next token is the positional.
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "delete_orphans", "--verbose", ""]),
     ));
     assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
 }
