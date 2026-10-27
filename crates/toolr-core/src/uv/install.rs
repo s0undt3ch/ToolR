@@ -87,17 +87,24 @@ fn prompt_for_consent() -> Result<bool, UvError> {
     )?;
     write!(stderr, "Choice [I/M] ")?;
     stderr.flush()?;
-    Ok(read_consent(std::io::stdin().lock())?)
+    match read_consent(std::io::stdin().lock())? {
+        Some(consent) => Ok(consent),
+        None => {
+            // EOF echoes no newline, so the error would land on the prompt line.
+            writeln!(stderr)?;
+            Ok(false)
+        }
+    }
 }
 
-/// Read one answer line. Bare Enter means "install"; EOF (Ctrl-D, closed
-/// stdin) means no answer, which is not consent.
-fn read_consent(mut input: impl BufRead) -> std::io::Result<bool> {
+/// Read one answer line. Bare Enter means "install". Returns `None` on EOF
+/// (Ctrl-D, closed stdin): no answer, which is not consent.
+fn read_consent(mut input: impl BufRead) -> std::io::Result<Option<bool>> {
     let mut buf = String::new();
     if input.read_line(&mut buf)? == 0 {
-        return Ok(false);
+        return Ok(None);
     }
-    Ok(matches!(buf.trim(), "I" | "i" | ""))
+    Ok(Some(matches!(buf.trim(), "I" | "i" | "")))
 }
 
 /// Convenience that combines a TTY check + decision.
@@ -350,14 +357,15 @@ mod tests {
 
     #[test]
     fn read_consent_eof_refuses() {
-        assert!(!read_consent(std::io::Cursor::new("")).unwrap());
+        assert_eq!(read_consent(std::io::Cursor::new("")).unwrap(), None);
     }
 
     #[test]
     fn read_consent_accepts_enter_and_i() {
         for answer in ["\n", "\r\n", "i\n", "I\n", "  i  \n", "I"] {
-            assert!(
+            assert_eq!(
                 read_consent(std::io::Cursor::new(answer)).unwrap(),
+                Some(true),
                 "{answer:?}"
             );
         }
@@ -366,8 +374,9 @@ mod tests {
     #[test]
     fn read_consent_refuses_anything_else() {
         for answer in ["M\n", "m\n", "yes\n", "n\n"] {
-            assert!(
-                !read_consent(std::io::Cursor::new(answer)).unwrap(),
+            assert_eq!(
+                read_consent(std::io::Cursor::new(answer)).unwrap(),
+                Some(false),
                 "{answer:?}"
             );
         }
