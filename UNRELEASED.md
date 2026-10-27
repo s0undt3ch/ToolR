@@ -10,3 +10,11 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+Both wheels now carry the `Development Status :: 4 - Beta` PyPI classifier instead of Alpha.
+
+`toolr-py`'s dispatch-schema mismatch error now names the side to upgrade: run
+`toolr project venv sync -P toolr-py` when the binary is newer, or upgrade the binary when it is
+older. It used to always point at `toolr project venv upgrade`, which was removed in 0.22.0. The
+error comes from the `toolr-py` in your tools venv, so a venv still on an older `toolr-py` keeps
+printing the old text; the binary's version-skew warning above it gives the right command.

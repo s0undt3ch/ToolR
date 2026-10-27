@@ -12,7 +12,7 @@ authors = [
     { name = "Pedro Algarvio", email = "pedro@algarvio.me" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Programming Language :: Rust",
     "License :: OSI Approved :: Apache Software License",
 ]

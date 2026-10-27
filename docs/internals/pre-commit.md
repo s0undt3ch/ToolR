@@ -27,8 +27,8 @@ when invoked locally.
 
 ## Why the change
 
-- The static manifest builds in ~10 ms on most projects; tab
-  completion stays sub-50 ms regardless of staleness.
+- The static manifest builds without starting Python, and tab
+  completion never starts Python, stale manifest or not.
 - The committed file caused merge conflicts on every PR that touched
   `tools/`, and the diffs weren't human-meaningful.
 - The binary's hash-drift detector already keeps the on-disk file

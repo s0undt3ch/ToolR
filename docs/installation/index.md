@@ -100,9 +100,81 @@ first command edit.
 - **Python 3.11 or later** at execute time. The toolr binary itself
   is standalone, but every user command runs inside a Python
   subprocess.
-- **[uv](https://docs.astral.sh/uv/)** to materialise the tools
-  venv (`uv sync`). If it isn't on PATH, toolr installs a managed
-  copy on first use.
+- **[uv](https://docs.astral.sh/uv/)** 0.4.0 or later to materialise
+  the tools venv (`uv sync`). If toolr can't find it, it offers to
+  install a managed copy. See [uv and Python](#uv-and-python).
+
+## uv and Python {#uv-and-python}
+
+Toolr doesn't pick the tools venv's Python interpreter. It hands the
+venv to uv, and uv picks the interpreter.
+
+### Finding uv
+
+Toolr uses the first uv it finds:
+
+1. `uv` on `PATH`.
+2. A toolr-managed copy at `$XDG_DATA_HOME/toolr/bin/uv` (`uv.exe` on
+   Windows). When `XDG_DATA_HOME` is unset, toolr uses the platform data
+   directory: `~/.local/share` on Linux, `~/Library/Application Support`
+   on macOS and `%APPDATA%` on Windows.
+
+A uv on `PATH` that toolr can't use is an error: one older than 0.4.0,
+one that won't run, or one whose version toolr can't read. Toolr doesn't
+fall back to the managed copy, so fix that uv or take it off `PATH`.
+
+### When uv is missing
+
+If toolr finds no uv, it asks whether to download one to the managed
+path or leave you to install it yourself. Press Enter or `I` to
+install. Any other answer stops toolr with an error.
+
+Toolr only asks when stdin is a terminal. `toolr --quiet <command>` and
+`toolr project venv sync --quiet` never ask. In CI, in pipes and in
+other non-interactive runs toolr fails instead, unless you approve the
+install in advance:
+
+- Set `TOOLR_AUTO_INSTALL_UV=1` to install without asking.
+- Run [`toolr __install-uv-now`](../cli.md#__install-uv-now), for
+  example in a CI setup step. It installs the managed copy when no uv
+  is found, and does nothing when a usable one already is.
+
+Toolr downloads prebuilt uv binaries for Linux (x86_64 and aarch64),
+macOS (x86_64 and Apple silicon) and Windows (x86_64). On other hosts,
+install uv yourself.
+
+On Linux, toolr downloads the glibc or musl build of uv to match the
+host. If it guesses wrong, set `TOOLR_UV_LIBC=gnu` or
+`TOOLR_UV_LIBC=musl`.
+
+### Choosing Python
+
+- If `tools/pyproject.toml` sets
+  [`[tool.toolr] python-version`](../project-config.md#python-version),
+  toolr passes it to uv as `--python`.
+- Otherwise toolr passes no Python request. uv picks an interpreter
+  that satisfies `[project] requires-python`, using
+  [its own discovery rules](https://docs.astral.sh/uv/concepts/python-versions/).
+  Those rules consider uv-managed and system interpreters, and uv can
+  download one when nothing installed fits.
+
+uv runs against the `tools/` project, so it honours a
+`tools/.python-version` file but not one at the repo root. uv settings
+such as `UV_PYTHON`, `UV_PYTHON_PREFERENCE` and `UV_PYTHON_DOWNLOADS`
+apply as usual.
+
+Changes to `python-version`, `requires-python`, `tools/.python-version`
+or the `UV_*` settings only take effect when toolr runs uv, which it
+does when `tools/uv.lock` changes. After changing any of them, rebuild
+the venv with `toolr project venv sync --force`.
+
+Two cases don't go through uv:
+
+- A repo with no `tools/pyproject.toml` has no tools venv. Toolr runs
+  commands with the interpreter in `$TOOLR_PYTHON`, which must be an
+  absolute path.
+- `toolr project init` runs the host `python3` once to pick the default
+  `requires-python` it writes.
 
 ## Adding `toolr-py` manually
 

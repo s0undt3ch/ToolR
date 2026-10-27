@@ -10,12 +10,13 @@ $XDG_CACHE_HOME/toolr/
 ├── <repo-key-1>/
 │   ├── meta.json
 │   └── venv/
-├── <repo-key-2>/
-│   ├── meta.json
-│   └── venv/
-└── bin/
-    └── uv          # toolr's managed copy of uv (optional)
+└── <repo-key-2>/
+    ├── meta.json
+    └── venv/
 ```
+
+toolr's managed copy of uv lives in the data directory, not here. See
+[Finding uv](../installation/index.md#finding-uv).
 
 `<repo-key>` is a stable, content-addressable identifier derived from
 the repo's canonical path and Python version. **Each git worktree gets

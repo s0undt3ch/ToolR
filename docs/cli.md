@@ -332,7 +332,7 @@ user-facing surface; documented here for completeness.
 
 Completion endpoint called by the installed shell scripts. Reads the
 current repo's manifest, prefix-matches against subcommands and arg
-values, writes candidates to stdout. Sub-50ms.
+values, writes candidates to stdout. Never starts Python.
 
 ### `toolr __build-static-manifest` {#__build-static-manifest}
 
@@ -342,6 +342,7 @@ won't pick up dynamically-registered commands.
 
 ### `toolr __install-uv-now` {#__install-uv-now}
 
-Force-install a managed copy of uv into `$XDG_DATA_HOME/toolr/bin/`,
-bypassing the usual consent prompt. Used by the install scripts and
-by `toolr project venv sync` after a consent flow.
+Make sure uv is available without the consent prompt. Uses a usable
+uv on `PATH` or an existing managed copy, and otherwise installs the
+managed copy into `$XDG_DATA_HOME/toolr/bin/`. See
+[uv and Python](installation/index.md#uv-and-python).

@@ -186,18 +186,22 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
         msg = f"toolr spec file is not valid JSON ({spec_path}): {exc}"
         raise SpecError(msg) from exc
     if spec.schema_version != SCHEMA_VERSION:
-        # The binary and toolr-py must agree on the dispatch wire format.
-        # Direct the user at the exact command that brings the venv back
-        # in sync; mention the pin-down-the-binary escape hatch for the
-        # rarer case where they need to stay on the older toolr-py.
+        # Upgrading toolr-py only helps when the binary is the newer side.
+        # Keep the remedies in step with dispatch.rs::warn_on_toolr_py_mismatch.
+        if spec.schema_version > SCHEMA_VERSION:
+            remedy = (
+                "If tools/pyproject.toml caps the toolr-py version, loosen that pin, then run:\n"
+                "  toolr project venv sync -P toolr-py\n\n"
+                "Or pin the toolr binary to a version compatible with "
+                f"toolr-py schema {SCHEMA_VERSION}."
+            )
+        else:
+            remedy = f"Upgrade the toolr binary to a version that emits schema {SCHEMA_VERSION}."
         msg = (
             f"toolr-py in this tools venv speaks schema {SCHEMA_VERSION}, "
             f"but the toolr binary emitted schema {spec.schema_version}. "
             "The venv is out of sync with the binary.\n\n"
-            "Run:\n"
-            "  toolr project venv upgrade toolr-py\n\n"
-            "Or pin the toolr binary to a version compatible with "
-            f"toolr-py schema {SCHEMA_VERSION}."
+            f"{remedy}"
         )
         raise SpecError(msg)
     return spec

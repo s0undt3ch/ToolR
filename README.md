@@ -27,10 +27,11 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
 
 ## Why ToolR
 
-- **Sub-millisecond discovery.** The CLI is a Rust binary. `--help` and Tab completion read a cached
-  static manifest; Python never boots for non-execute paths.
+- **Fast startup.** The CLI is a Rust binary. `--help` and Tab completion read a cached static
+  manifest and never start Python. All three columns above time `toolr -h`.
 - **No system-Python dependency.** Toolr resolves a per-repo Python venv via `uv` on first
   invocation. The host OS doesn't need Python at all to install toolr — it's a single static binary.
+  See [How toolr finds uv and Python](https://toolr.readthedocs.io/latest/installation/#uv-and-python).
 - **Write Python, not framework boilerplate.** Drop a `tools/*.py` file with a `command_group` and a
   `@command` decorator. Type hints become CLI arguments; Google-style docstrings become `--help` text.
 - **First-class third-party command packages.** Plugins ship a static `toolr-manifest.json` inside
