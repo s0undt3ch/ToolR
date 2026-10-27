@@ -332,7 +332,7 @@ user-facing surface; documented here for completeness.
 
 Completion endpoint called by the installed shell scripts. Reads the
 current repo's manifest, prefix-matches against subcommands and arg
-values, writes candidates to stdout. Sub-50ms.
+values, writes candidates to stdout. Never starts Python.
 
 ### `toolr __build-static-manifest` {#__build-static-manifest}
 

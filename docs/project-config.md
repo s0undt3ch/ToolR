@@ -27,8 +27,9 @@ venv and for the binary to dispatch commands.
 
 Standard PEP 621 metadata. Toolr inspects:
 
-- `requires-python` — used as a fallback for the venv's Python
-  version when `[tool.toolr] python-version` is not set.
+- `requires-python` — when `[tool.toolr] python-version` is not set,
+  uv picks an interpreter that satisfies it. See
+  [uv and Python](installation/index.md#uv-and-python).
 - `dependencies` — passed straight through to `uv sync`. Add every
   package your `tools/*.py` files import. The `toolr` package itself
   must be present — toolr refuses to operate against a venv that
@@ -89,8 +90,9 @@ keeps loading — the key is ignored.
 
 ### `python-version` {#python-version}
 
-Explicit override of the venv's Python version. Falls back to
-`[project] requires-python` when unset.
+Explicit override of the venv's Python version. Toolr passes it to uv
+as `--python`. When unset, uv picks an interpreter that satisfies
+`[project] requires-python`.
 
 ```toml
 [tool.toolr]

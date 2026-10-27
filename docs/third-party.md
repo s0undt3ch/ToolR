@@ -18,7 +18,7 @@ approach that was removed in the 2025 rewrite), toolr had to spawn
 Python and import every registered module to learn what commands
 existed — one import per package, on every shell tab press.
 
-A `toolr-manifest.json` is a sub-millisecond `glob()` + JSON parse,
+A `toolr-manifest.json` is a `glob()` + JSON parse,
 no Python involved. For interactive use the difference is the
 boundary between "instant" and "noticeable lag".
 
