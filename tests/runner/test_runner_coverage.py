@@ -190,7 +190,7 @@ def test_load_spec_rejects_older_binary_schema(make_spec_file: Callable[..., Pat
         load_spec(spec_path)
     msg = str(exc_info.value)
     # Upgrading toolr-py can't fix an older binary, so the error must not suggest it.
-    assert "Upgrade the toolr binary" in msg, msg
+    assert f"Upgrade the toolr binary to a version that emits schema {SCHEMA_VERSION}." in msg, msg
     assert "venv sync -P" not in msg, msg
     assert f"schema {SCHEMA_VERSION - 1}" in msg, msg
 

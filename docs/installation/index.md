@@ -119,17 +119,18 @@ Toolr uses the first uv it finds:
    directory: `~/.local/share` on Linux, `~/Library/Application Support`
    on macOS and `%APPDATA%` on Windows.
 
-A uv on `PATH` that is older than 0.4.0 is an error. Toolr doesn't fall
-back to the managed copy, so upgrade that uv or take it off `PATH`.
+A uv on `PATH` that toolr can't use is an error: one older than 0.4.0,
+one that won't run, or one whose version toolr can't read. Toolr doesn't
+fall back to the managed copy, so fix that uv or take it off `PATH`.
 
 ### When uv is missing
 
 If toolr finds no uv, it asks before it downloads one to the managed
-path. The prompt shows the full path for your platform:
+path:
 
 ```text
 toolr needs uv (https://docs.astral.sh/uv/) and didn't find it on PATH.
-  [I] Install it for me at ~/.local/share/toolr/bin/uv
+  [I] Install it for me at <data directory>/toolr/bin/uv
   [M] I'll install it manually (see https://docs.astral.sh/uv/getting-started/installation/)
 Choice [I/M]
 ```
@@ -137,14 +138,15 @@ Choice [I/M]
 Press Enter or `I` to install. Any other answer stops toolr with an
 error.
 
-Toolr only asks when stdin is a terminal and `--quiet` isn't set. In
-CI, in pipes and in other non-interactive runs it fails instead, unless
-you approve the install in advance:
+Toolr only asks when stdin is a terminal. `toolr --quiet <command>` and
+`toolr project venv sync --quiet` never ask. In CI, in pipes and in
+other non-interactive runs toolr fails instead, unless you approve the
+install in advance:
 
 - Set `TOOLR_AUTO_INSTALL_UV=1` to install without asking.
 - Run [`toolr __install-uv-now`](../cli.md#__install-uv-now), for
   example in a CI setup step. It installs the managed copy when no uv
-  is found, and does nothing when one already is.
+  is found, and does nothing when a usable one already is.
 
 Toolr downloads prebuilt uv binaries for Linux (x86_64 and aarch64),
 macOS (x86_64 and Apple silicon) and Windows (x86_64). On other hosts,
@@ -170,11 +172,15 @@ uv runs against the `tools/` project, so it honours a
 such as `UV_PYTHON`, `UV_PYTHON_PREFERENCE` and `UV_PYTHON_DOWNLOADS`
 apply as usual.
 
+These settings only take effect when toolr runs uv, which it does when
+`tools/uv.lock` changes. After changing any of them, rebuild the venv
+with `toolr project venv sync --force`.
+
 Two cases don't go through uv:
 
 - A repo with no `tools/pyproject.toml` has no tools venv. Toolr runs
-  commands with `$TOOLR_PYTHON` if set, otherwise the first `python3` or
-  `python` on `PATH`.
+  commands with the interpreter in `$TOOLR_PYTHON`, which must be an
+  absolute path.
 - `toolr project init` runs the host `python3` once to pick the default
   `requires-python` it writes.
 

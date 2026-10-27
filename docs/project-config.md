@@ -93,7 +93,8 @@ keeps loading — the key is ignored.
 
 Explicit override of the venv's Python version. Toolr passes it to uv
 as `--python`. When unset, uv picks an interpreter that satisfies
-`[project] requires-python`. Changing either value moves a
+`[project] requires-python`. Changing `python-version`, or
+`requires-python` while `python-version` is unset, moves a
 `venv-location = "cache"` venv to a new cache directory.
 
 ```toml

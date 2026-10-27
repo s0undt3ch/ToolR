@@ -13,7 +13,8 @@ no scaffolding. Just write whatever should appear in the notes.
 
 Both wheels now carry the `Development Status :: 4 - Beta` PyPI classifier instead of Alpha.
 
-The error shown when the `toolr` binary and the `toolr-py` in your tools venv disagree on the
-dispatch schema now names the side to upgrade. A newer binary tells you to run
-`toolr project venv sync -P toolr-py`; an older binary tells you to upgrade the binary. It used to
-always point at `toolr project venv upgrade`, which was removed in 0.22.0.
+`toolr-py`'s dispatch-schema mismatch error now names the side to upgrade: run
+`toolr project venv sync -P toolr-py` when the binary is newer, or upgrade the binary when it is
+older. It used to always point at `toolr project venv upgrade`, which was removed in 0.22.0. The
+error comes from the `toolr-py` in your tools venv, so a venv still on an older `toolr-py` keeps
+printing the old text; the binary's version-skew warning above it gives the right command.
