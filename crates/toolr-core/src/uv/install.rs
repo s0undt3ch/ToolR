@@ -1,7 +1,7 @@
 //! Decision logic + executor for installing a toolr-managed uv.
 
 use std::fs;
-use std::io::{IsTerminal, Write};
+use std::io::{BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use super::{UvBinary, UvError, UvSource, managed_uv_path, probe};
@@ -87,8 +87,16 @@ fn prompt_for_consent() -> Result<bool, UvError> {
     )?;
     write!(stderr, "Choice [I/M] ")?;
     stderr.flush()?;
+    Ok(read_consent(std::io::stdin().lock())?)
+}
+
+/// Read one answer line. Bare Enter means "install"; EOF (Ctrl-D, closed
+/// stdin) means no answer, which is not consent.
+fn read_consent(mut input: impl BufRead) -> std::io::Result<bool> {
     let mut buf = String::new();
-    std::io::stdin().read_line(&mut buf)?;
+    if input.read_line(&mut buf)? == 0 {
+        return Ok(false);
+    }
     Ok(matches!(buf.trim(), "I" | "i" | ""))
 }
 
@@ -339,6 +347,31 @@ fn extract_zip(archive: &Path, into: &Path) -> Result<(), UvError> {
 mod tests {
     use super::*;
     use std::process::Command;
+
+    #[test]
+    fn read_consent_eof_refuses() {
+        assert!(!read_consent(std::io::Cursor::new("")).unwrap());
+    }
+
+    #[test]
+    fn read_consent_accepts_enter_and_i() {
+        for answer in ["\n", "\r\n", "i\n", "I\n", "  i  \n", "I"] {
+            assert!(
+                read_consent(std::io::Cursor::new(answer)).unwrap(),
+                "{answer:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn read_consent_refuses_anything_else() {
+        for answer in ["M\n", "m\n", "yes\n", "n\n"] {
+            assert!(
+                !read_consent(std::io::Cursor::new(answer)).unwrap(),
+                "{answer:?}"
+            );
+        }
+    }
 
     #[test]
     fn already_available_when_path_present() {

@@ -18,3 +18,6 @@ Both wheels now carry the `Development Status :: 4 - Beta` PyPI classifier inste
 older. It used to always point at `toolr project venv upgrade`, which was removed in 0.22.0. The
 error comes from the `toolr-py` in your tools venv, so a venv still on an older `toolr-py` keeps
 printing the old text; the binary's version-skew warning above it gives the right command.
+
+Pressing Ctrl-D (or stdin closing) at the uv install prompt now declines the install. It used to
+count as consent and download uv. Bare Enter still installs.
