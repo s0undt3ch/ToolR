@@ -179,7 +179,7 @@ def test_load_spec_rejects_unknown_schema_version(make_spec_file: Callable[..., 
     msg = str(exc_info.value)
     # The error must tell the user exactly which command to run, and must
     # name both schema versions so they understand which side is stale.
-    assert "toolr project venv upgrade toolr-py" in msg, msg
+    assert "toolr project venv sync -P toolr-py" in msg, msg
     assert f"schema {SCHEMA_VERSION}" in msg, msg
     assert f"schema {SCHEMA_VERSION + 99}" in msg, msg
 

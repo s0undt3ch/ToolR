@@ -195,7 +195,7 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
             f"but the toolr binary emitted schema {spec.schema_version}. "
             "The venv is out of sync with the binary.\n\n"
             "Run:\n"
-            "  toolr project venv upgrade toolr-py\n\n"
+            "  toolr project venv sync -P toolr-py\n\n"
             "Or pin the toolr binary to a version compatible with "
             f"toolr-py schema {SCHEMA_VERSION}."
         )
