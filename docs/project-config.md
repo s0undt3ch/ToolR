@@ -28,7 +28,8 @@ venv and for the binary to dispatch commands.
 Standard PEP 621 metadata. Toolr inspects:
 
 - `requires-python` — when `[tool.toolr] python-version` is not set,
-  uv picks an interpreter that satisfies it. See
+  uv picks an interpreter that satisfies it, and toolr uses it to name
+  the cached venv directory. See
   [uv and Python](installation/index.md#uv-and-python).
 - `dependencies` — passed straight through to `uv sync`. Add every
   package your `tools/*.py` files import. The `toolr` package itself
@@ -92,7 +93,8 @@ keeps loading — the key is ignored.
 
 Explicit override of the venv's Python version. Toolr passes it to uv
 as `--python`. When unset, uv picks an interpreter that satisfies
-`[project] requires-python`.
+`[project] requires-python`. Changing either value moves a
+`venv-location = "cache"` venv to a new cache directory.
 
 ```toml
 [tool.toolr]

@@ -28,7 +28,8 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
 ## Why ToolR
 
 - **Fast startup.** The CLI is a Rust binary. `--help` and Tab completion read a cached static
-  manifest, so Python only starts when you run a command. The `-h` column above measures this path.
+  manifest, so Python only starts when you run a command. The `-h` column above measures the `--help`
+  path.
 - **No system-Python dependency.** Toolr resolves a per-repo Python venv via `uv` on first
   invocation. The host OS doesn't need Python at all to install toolr — it's a single static binary.
   See [How toolr finds uv and Python](https://toolr.readthedocs.io/stable/installation/#uv-and-python).

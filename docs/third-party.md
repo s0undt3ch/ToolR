@@ -11,7 +11,7 @@ Python import is involved.
 
 ## Why ship a JSON manifest
 
-Toolr's CLI is a native Rust binary that boots in under 50 ms. Tab
+Toolr's CLI is a native Rust binary that starts without Python. Tab
 completion and `--help` need the full command tree available
 **before** Python starts. With an entry-point registration (the
 approach that was removed in the 2025 rewrite), toolr had to spawn
