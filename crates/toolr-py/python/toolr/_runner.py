@@ -186,13 +186,12 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
         msg = f"toolr spec file is not valid JSON ({spec_path}): {exc}"
         raise SpecError(msg) from exc
     if spec.schema_version != SCHEMA_VERSION:
-        # The binary and toolr-py must agree on the dispatch wire format.
         # Upgrading toolr-py only helps when the binary is the newer side.
+        # Keep the remedies in step with dispatch.rs::warn_on_toolr_py_mismatch.
         if spec.schema_version > SCHEMA_VERSION:
             remedy = (
-                "Run:\n"
+                "If tools/pyproject.toml caps the toolr-py version, loosen that pin, then run:\n"
                 "  toolr project venv sync -P toolr-py\n\n"
-                "If tools/pyproject.toml caps the toolr-py version, loosen that pin first. "
                 "Or pin the toolr binary to a version compatible with "
                 f"toolr-py schema {SCHEMA_VERSION}."
             )

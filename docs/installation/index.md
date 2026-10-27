@@ -125,18 +125,9 @@ fall back to the managed copy, so fix that uv or take it off `PATH`.
 
 ### When uv is missing
 
-If toolr finds no uv, it asks before it downloads one to the managed
-path:
-
-```text
-toolr needs uv (https://docs.astral.sh/uv/) and didn't find it on PATH.
-  [I] Install it for me at <data directory>/toolr/bin/uv
-  [M] I'll install it manually (see https://docs.astral.sh/uv/getting-started/installation/)
-Choice [I/M]
-```
-
-Press Enter or `I` to install. Any other answer stops toolr with an
-error.
+If toolr finds no uv, it asks whether to download one to the managed
+path or leave you to install it yourself. Press Enter or `I` to
+install. Any other answer stops toolr with an error.
 
 Toolr only asks when stdin is a terminal. `toolr --quiet <command>` and
 `toolr project venv sync --quiet` never ask. In CI, in pipes and in
@@ -172,9 +163,10 @@ uv runs against the `tools/` project, so it honours a
 such as `UV_PYTHON`, `UV_PYTHON_PREFERENCE` and `UV_PYTHON_DOWNLOADS`
 apply as usual.
 
-These settings only take effect when toolr runs uv, which it does when
-`tools/uv.lock` changes. After changing any of them, rebuild the venv
-with `toolr project venv sync --force`.
+Changes to `python-version`, `requires-python`, `tools/.python-version`
+or the `UV_*` settings only take effect when toolr runs uv, which it
+does when `tools/uv.lock` changes. After changing any of them, rebuild
+the venv with `toolr project venv sync --force`.
 
 Two cases don't go through uv:
 

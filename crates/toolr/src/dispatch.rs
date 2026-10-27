@@ -371,6 +371,7 @@ fn resync_if_stale(
 /// A runner from another minor release can pass the schema check yet
 /// still carry long-fixed bugs (#529), so name the skew instead of hiding it.
 /// The venv already matches the lock here, so a plain sync can't be the fix.
+/// Keep the remedies in step with the schema-mismatch error in `toolr/_runner.py::load_spec`.
 fn warn_on_toolr_py_mismatch(venv_dir: &std::path::Path) {
     use std::cmp::Ordering;
     let binary = env!("CARGO_PKG_VERSION");
