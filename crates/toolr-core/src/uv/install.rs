@@ -44,13 +44,13 @@ impl ConsentMode {
 
 /// Pure decision logic. `path_found` is whether `find_uv_on_path` returned
 /// `Some`. `managed_found` is whether `find_managed_uv` returned `Some`.
-/// `stdin_tty` controls whether to prompt; in tests / pipes we never
-/// prompt and rely on `consent` instead.
+/// `prompt_io` is the (input, output) pair to prompt on, or `None` when
+/// stdin is not a TTY; then we never prompt and rely on `consent` instead.
 pub fn decide_install(
     path_found: bool,
     managed_found: bool,
     consent: ConsentMode,
-    stdin_tty: bool,
+    prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
 ) -> InstallDecision {
     if path_found || managed_found {
         return InstallDecision::AlreadyAvailable;
@@ -61,18 +61,18 @@ pub fn decide_install(
     if consent.silent_refuse {
         return InstallDecision::Refuse;
     }
-    if !stdin_tty {
+    let Some((input, output)) = prompt_io else {
         return InstallDecision::Refuse;
-    }
-    match prompt_for_consent() {
+    };
+    match prompt_for_consent(input, output) {
         Ok(true) => InstallDecision::Install,
         _ => InstallDecision::Refuse,
     }
 }
 
-/// Print the prompt and return `true` for "install".
-fn prompt_for_consent() -> Result<bool, UvError> {
-    let mut stderr = std::io::stderr();
+/// Print the prompt to `stderr`, read the answer from `input`, and return
+/// `true` for "install".
+fn prompt_for_consent(input: &mut dyn BufRead, stderr: &mut dyn Write) -> Result<bool, UvError> {
     writeln!(
         stderr,
         "toolr needs uv (https://docs.astral.sh/uv/) and didn't find it on PATH."
@@ -87,7 +87,7 @@ fn prompt_for_consent() -> Result<bool, UvError> {
     )?;
     write!(stderr, "Choice [I/M] ")?;
     stderr.flush()?;
-    match read_consent(std::io::stdin().lock())? {
+    match read_consent(input)? {
         Some(consent) => Ok(consent),
         None => {
             // EOF echoes no newline, so the error would land on the prompt line.
@@ -99,7 +99,7 @@ fn prompt_for_consent() -> Result<bool, UvError> {
 
 /// Read one answer line. Bare Enter means "install". Returns `None` on EOF
 /// (Ctrl-D, closed stdin): no answer, which is not consent.
-fn read_consent(mut input: impl BufRead) -> std::io::Result<Option<bool>> {
+fn read_consent(input: &mut dyn BufRead) -> std::io::Result<Option<bool>> {
     let mut buf = String::new();
     if input.read_line(&mut buf)? == 0 {
         return Ok(None);
@@ -113,12 +113,13 @@ pub fn decide_install_auto(
     managed_found: bool,
     consent: ConsentMode,
 ) -> InstallDecision {
-    decide_install(
-        path_found,
-        managed_found,
-        consent,
-        std::io::stdin().is_terminal(),
-    )
+    let stdin = std::io::stdin();
+    let mut input = stdin.lock();
+    let mut stderr = std::io::stderr();
+    let prompt_io = stdin
+        .is_terminal()
+        .then_some((&mut input as &mut dyn BufRead, &mut stderr as &mut dyn Write));
+    decide_install(path_found, managed_found, consent, prompt_io)
 }
 
 /// Linux libc variant. Picked at runtime via [`detect_linux_libc`] so
@@ -357,14 +358,56 @@ mod tests {
 
     #[test]
     fn read_consent_eof_is_no_answer() {
-        assert_eq!(read_consent(std::io::Cursor::new("")).unwrap(), None);
+        assert_eq!(read_consent(&mut std::io::Cursor::new("")).unwrap(), None);
+    }
+
+    #[test]
+    fn prompts_on_a_tty_and_follows_the_answer() {
+        for (answer, expected) in [
+            ("\n", InstallDecision::Install),
+            ("M\n", InstallDecision::Refuse),
+            ("", InstallDecision::Refuse),
+        ] {
+            let mut out = Vec::new();
+            assert_eq!(
+                decide_install(
+                    false,
+                    false,
+                    ConsentMode::default(),
+                    Some((&mut std::io::Cursor::new(answer), &mut out))
+                ),
+                expected,
+                "{answer:?}"
+            );
+            assert!(String::from_utf8(out).unwrap().contains("Choice [I/M]"));
+        }
+    }
+
+    #[test]
+    fn prompt_for_consent_refuses_on_eof_and_ends_the_line() {
+        let mut out = Vec::new();
+        assert!(!prompt_for_consent(&mut std::io::Cursor::new(""), &mut out).unwrap());
+        assert!(String::from_utf8(out).unwrap().ends_with("Choice [I/M] \n"));
+    }
+
+    #[test]
+    fn prompt_for_consent_relies_on_the_echoed_newline_for_answers() {
+        for (answer, expected) in [("\n", true), ("M\n", false)] {
+            let mut out = Vec::new();
+            assert_eq!(
+                prompt_for_consent(&mut std::io::Cursor::new(answer), &mut out).unwrap(),
+                expected,
+                "{answer:?}"
+            );
+            assert!(String::from_utf8(out).unwrap().ends_with("Choice [I/M] "));
+        }
     }
 
     #[test]
     fn read_consent_accepts_enter_and_i() {
         for answer in ["\n", "\r\n", "i\n", "I\n", "  i  \n", "I"] {
             assert_eq!(
-                read_consent(std::io::Cursor::new(answer)).unwrap(),
+                read_consent(&mut std::io::Cursor::new(answer)).unwrap(),
                 Some(true),
                 "{answer:?}"
             );
@@ -375,7 +418,7 @@ mod tests {
     fn read_consent_refuses_anything_else() {
         for answer in ["M\n", "m\n", "yes\n", "n\n"] {
             assert_eq!(
-                read_consent(std::io::Cursor::new(answer)).unwrap(),
+                read_consent(&mut std::io::Cursor::new(answer)).unwrap(),
                 Some(false),
                 "{answer:?}"
             );
@@ -385,7 +428,7 @@ mod tests {
     #[test]
     fn already_available_when_path_present() {
         assert_eq!(
-            decide_install(true, false, ConsentMode::default(), false),
+            decide_install(true, false, ConsentMode::default(), None),
             InstallDecision::AlreadyAvailable
         );
     }
@@ -393,7 +436,7 @@ mod tests {
     #[test]
     fn already_available_when_managed_present() {
         assert_eq!(
-            decide_install(false, true, ConsentMode::default(), false),
+            decide_install(false, true, ConsentMode::default(), None),
             InstallDecision::AlreadyAvailable
         );
     }
@@ -402,7 +445,7 @@ mod tests {
     fn yes_flag_forces_install_even_without_tty() {
         let consent = ConsentMode { yes_flag: true, ..Default::default() };
         assert_eq!(
-            decide_install(false, false, consent, false),
+            decide_install(false, false, consent, None),
             InstallDecision::Install
         );
     }
@@ -411,7 +454,7 @@ mod tests {
     fn auto_install_env_forces_install_even_without_tty() {
         let consent = ConsentMode { auto_install_env: true, ..Default::default() };
         assert_eq!(
-            decide_install(false, false, consent, false),
+            decide_install(false, false, consent, None),
             InstallDecision::Install
         );
     }
@@ -419,7 +462,7 @@ mod tests {
     #[test]
     fn refuses_non_interactive_without_consent() {
         assert_eq!(
-            decide_install(false, false, ConsentMode::default(), false),
+            decide_install(false, false, ConsentMode::default(), None),
             InstallDecision::Refuse
         );
     }
@@ -427,10 +470,15 @@ mod tests {
     #[test]
     fn silent_refuse_returns_refuse_without_consent_or_tty() {
         let consent = ConsentMode { silent_refuse: true, ..Default::default() };
-        // No path/managed uv, stdin is a TTY → without silent_refuse we'd prompt.
-        // With silent_refuse we must Refuse immediately.
+        // No path/managed uv, stdin is a TTY answering Enter → without
+        // silent_refuse we'd prompt and install. With it we must Refuse.
         assert_eq!(
-            decide_install(false, false, consent, true),
+            decide_install(
+                false,
+                false,
+                consent,
+                Some((&mut std::io::Cursor::new("\n"), &mut Vec::new()))
+            ),
             InstallDecision::Refuse,
         );
     }
@@ -440,7 +488,7 @@ mod tests {
         let consent = ConsentMode { silent_refuse: true, ..Default::default() };
         // uv is on PATH: silent_refuse must NOT pretend it's missing.
         assert_eq!(
-            decide_install(true, false, consent, false),
+            decide_install(true, false, consent, None),
             InstallDecision::AlreadyAvailable,
         );
     }
@@ -455,7 +503,7 @@ mod tests {
         // Caller explicitly asked for unattended install via --yes;
         // silent_refuse must not contradict that. Explicit consent wins.
         assert_eq!(
-            decide_install(false, false, consent, false),
+            decide_install(false, false, consent, None),
             InstallDecision::Install,
         );
     }
