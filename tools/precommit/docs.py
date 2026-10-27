@@ -52,9 +52,7 @@ SNIPPETS: tuple[Snippet, ...] = (
         "docs/quickstart-files/example-setlog-help.txt",
         ("example", "setlog", "--help"),
     ),
-    # Writing-commands chapter — Arguments (captures only the subset of
-    # features that currently render correctly in the rust front-end —
-    # see docs/writing-commands/known-bugs.md for the rest).
+    # Writing-commands chapter — Arguments.
     Snippet(
         f"{WC_FILES}/calculator-add-help.txt",
         ("math", "add", "--help"),
