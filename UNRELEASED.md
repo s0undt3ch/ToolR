@@ -10,3 +10,5 @@ this file to empty for the next cycle.
 Empty between releases is the steady-state — there's no header,
 no scaffolding. Just write whatever should appear in the notes.
 -->
+
+Both wheels now carry the `Development Status :: 4 - Beta` PyPI classifier instead of Alpha.
