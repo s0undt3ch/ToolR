@@ -158,7 +158,7 @@ wheels = [
 
 [[package]]
 name = "toolr-py"
-version = "0.35.0"
+version = "0.35.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -166,15 +166,15 @@ dependencies = [
     { name = "packaging" },
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/6a/b0b06f6fe6f62f67286a317968d679b5d238c590bbced69d7df27cdff981/toolr_py-0.35.0.tar.gz", hash = "sha256:c88f6b9f9df242837135ba25c8b164887b0eb700c4e2dfb5a558102d9346a2d4", size = 294192, upload-time = "2026-10-19T11:09:23.863Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/58/c9178b64b0e7dbd29883ec4169f727e4e2b3f95d966b7089ec0e2ec618c4/toolr_py-0.35.1.tar.gz", hash = "sha256:f210ef8c2341bd712182f22a06fa5b0b1ceb62410c01de64c13c015515f5da01", size = 294587, upload-time = "2026-10-27T12:09:10.386Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bb/74/c4472432cb385ffa206d04158f5e88ec67af8373dd4bacb0afd743425d03/toolr_py-0.35.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:cd50ca977c13df5bf50449e8745515cfcc158421452e673b3239d2df0c256e80", size = 688321, upload-time = "2026-10-19T11:09:09.812Z" },
-    { url = "https://files.pythonhosted.org/packages/de/df/0ffb016a8299563e478c0943df9dcf40bb92c6494005f3ada15844c314bd/toolr_py-0.35.0-cp311-abi3-macosx_11_0_x86_64.whl", hash = "sha256:2602a5d639916732e2c7a3462474174d8c4c7931d251bd202fc90a08792cb835", size = 808514, upload-time = "2026-10-19T11:09:11.661Z" },
-    { url = "https://files.pythonhosted.org/packages/4f/8c/99121be7d5be624c139b6d7e36bdf89754bfb8782d377c84e9d4195fd2f5/toolr_py-0.35.0-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:5889fdb2e4cc93cf42048e989f6d661720aecb6b1c922c10be01a90fb374d6d3", size = 397952, upload-time = "2026-10-19T11:09:13.459Z" },
-    { url = "https://files.pythonhosted.org/packages/73/77/6523141b168dccf7ed69d6aeb9ee5bdf44bae9b99416a3ff286eeb7aac1d/toolr_py-0.35.0-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:cd9a5c68b85a5b35af2a4bf200f162a1853623bb876128800a8f53e86ea15ea1", size = 555967, upload-time = "2026-10-19T11:09:15.18Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/60/7e8fd0c7872f0ff43f5c3f71ad5a68e70b49053fba5a05de2d19e9950242/toolr_py-0.35.0-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:8470b29503eac2a6f9a85a0319a6783460624220fb06ed8460f733c0faaf32e4", size = 464563, upload-time = "2026-10-19T11:09:17.058Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/3d/06be919dc65500547f890367116489ff89cdae1b003511b6e771939eeefa/toolr_py-0.35.0-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:33900ebcf3b51169b3371a446ff7bcb23147a01ebf565f552c4e59d73e1f3cba", size = 492233, upload-time = "2026-10-19T11:09:18.755Z" },
-    { url = "https://files.pythonhosted.org/packages/47/a3/9766b2276b4327d7baacc406c81e3c1808fbba6536cb47fd09222a20cef1/toolr_py-0.35.0-cp311-abi3-win_amd64.whl", hash = "sha256:74ef0ec07caa69eefdccb2100fb663796774903151eed50beaf1cb9c7b1f482d", size = 1007337, upload-time = "2026-10-19T11:09:20.418Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/75/965232252bd279ace871b9bdc94f991b4dd51ddb20032f8d453f0ce840b6/toolr_py-0.35.1-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:a220593f1b1271e8ec1b16ab3d2ffe193799299f4b115aad3be141fe1e81bd56", size = 687253, upload-time = "2026-10-27T12:08:58.73Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/ae/42bd50f49d99091964462bfdd0ff12e8329253ad6d112a1ea1bef05754a7/toolr_py-0.35.1-cp311-abi3-macosx_11_0_x86_64.whl", hash = "sha256:406c3f2e87c50c3f2c44d46bc059f48559f7f4c88a0f6559a25b75a7611725d2", size = 807405, upload-time = "2026-10-27T12:09:00.449Z" },
+    { url = "https://files.pythonhosted.org/packages/09/0d/bc1cb4cd9aed84de82809413d9d854fa7cf96852438907a4e9d33435710a/toolr_py-0.35.1-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:5e32e7201f5ad77523b1140963b50762b983a430793e51013dee1a4b419ba2f1", size = 396900, upload-time = "2026-10-27T12:09:02.117Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/1d/804dab3cab86e7012e6847145093e5b701a6dac4242d936a9d10e9e20ebb/toolr_py-0.35.1-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:b1aa931092408119e08e2934aad0091a063ae2bcab234c76668e9cbbec8228a0", size = 555290, upload-time = "2026-10-27T12:09:03.45Z" },
+    { url = "https://files.pythonhosted.org/packages/70/d0/28d28fa9869e9da9354802b23656e9c6a510646e92fa32d7e4540dc5a6af/toolr_py-0.35.1-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:bcbe55b4dddff718b0f055b607e95b78c256c47464604ffa068247c15dd19e88", size = 463242, upload-time = "2026-10-27T12:09:05.09Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/17/ace4b268db420e7df8855f10005f8755ab09a3f9c6bb81b80ddcb2d690cd/toolr_py-0.35.1-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:d53835713d428034f93c0d7eaa11ec3e0b6df2a5d20ad01b00a5d36ec63fff34", size = 491362, upload-time = "2026-10-27T12:09:06.454Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/97/d2a1c3b56d03670c7e4cf58a99e2ca2222999f91fb0ab6c8f6792ae3353f/toolr_py-0.35.1-cp311-abi3-win_amd64.whl", hash = "sha256:4215a2b5094269677425ca749bb220d3ce4e65bf93a27d3db35da9718f587eea", size = 1006316, upload-time = "2026-10-27T12:09:07.738Z" },
 ]
 
 [[package]]
