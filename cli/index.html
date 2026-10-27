@@ -2491,15 +2491,16 @@ user-facing surface; documented here for completeness.</p>
 <h3 id="__complete"><code>toolr __complete &lt;cwd&gt; &lt;args...&gt;</code><a class="headerlink" href="#__complete" title="Permanent link">&para;</a></h3>
 <p>Completion endpoint called by the installed shell scripts. Reads the
 current repo's manifest, prefix-matches against subcommands and arg
-values, writes candidates to stdout. Sub-50ms.</p>
+values, writes candidates to stdout. Never starts Python.</p>
 <h3 id="__build-static-manifest"><code>toolr __build-static-manifest</code><a class="headerlink" href="#__build-static-manifest" title="Permanent link">&para;</a></h3>
 <p>Regenerate only the static layer of the manifest (no Python
 introspection). Faster than <code>toolr project manifest rebuild</code> but
 won't pick up dynamically-registered commands.</p>
 <h3 id="__install-uv-now"><code>toolr __install-uv-now</code><a class="headerlink" href="#__install-uv-now" title="Permanent link">&para;</a></h3>
-<p>Force-install a managed copy of uv into <code>$XDG_DATA_HOME/toolr/bin/</code>,
-bypassing the usual consent prompt. Used by the install scripts and
-by <code>toolr project venv sync</code> after a consent flow.</p>
+<p>Make sure uv is available without the consent prompt. Uses a usable
+uv on <code>PATH</code> or an existing managed copy, and otherwise installs the
+managed copy into <code>$XDG_DATA_HOME/toolr/bin/</code>. See
+<a href="../installation/#uv-and-python">uv and Python</a>.</p>
 
 
 

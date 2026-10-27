@@ -1610,8 +1610,8 @@ local hook:</p>
 when invoked locally.</p>
 <h2 id="why-the-change">Why the change<a class="headerlink" href="#why-the-change" title="Permanent link">&para;</a></h2>
 <ul>
-<li>The static manifest builds in ~10 ms on most projects; tab
-  completion stays sub-50 ms regardless of staleness.</li>
+<li>The static manifest builds without starting Python, and tab
+  completion never starts Python, stale manifest or not.</li>
 <li>The committed file caused merge conflicts on every PR that touched
   <code>tools/</code>, and the diffs weren't human-meaningful.</li>
 <li>The binary's hash-drift detector already keeps the on-disk file

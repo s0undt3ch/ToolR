@@ -1898,13 +1898,13 @@ the tools venv.</p>
 package. Toolr's Rust binary globs for these files at startup; no
 Python import is involved.</p>
 <h2 id="why-ship-a-json-manifest">Why ship a JSON manifest<a class="headerlink" href="#why-ship-a-json-manifest" title="Permanent link">&para;</a></h2>
-<p>Toolr's CLI is a native Rust binary that boots in under 50 ms. Tab
+<p>Toolr's CLI is a native Rust binary that starts without Python. Tab
 completion and <code>--help</code> need the full command tree available
 <strong>before</strong> Python starts. With an entry-point registration (the
 approach that was removed in the 2025 rewrite), toolr had to spawn
 Python and import every registered module to learn what commands
 existed — one import per package, on every shell tab press.</p>
-<p>A <code>toolr-manifest.json</code> is a sub-millisecond <code>glob()</code> + JSON parse,
+<p>A <code>toolr-manifest.json</code> is a <code>glob()</code> + JSON parse,
 no Python involved. For interactive use the difference is the
 boundary between "instant" and "noticeable lag".</p>
 <p>Command discovery globs

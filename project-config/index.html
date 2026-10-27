@@ -1755,8 +1755,10 @@ venv and for the binary to dispatch commands.</p>
 <h2 id="project-block"><code>[project]</code> block<a class="headerlink" href="#project-block" title="Permanent link">&para;</a></h2>
 <p>Standard PEP 621 metadata. Toolr inspects:</p>
 <ul>
-<li><code>requires-python</code> — used as a fallback for the venv's Python
-  version when <code>[tool.toolr] python-version</code> is not set.</li>
+<li><code>requires-python</code> — when <code>[tool.toolr] python-version</code> is not set,
+  uv picks an interpreter that satisfies it, and toolr uses it to name
+  the cached venv directory. See
+  <a href="../installation/#uv-and-python">uv and Python</a>.</li>
 <li><code>dependencies</code> — passed straight through to <code>uv sync</code>. Add every
   package your <code>tools/*.py</code> files import. The <code>toolr</code> package itself
   must be present — toolr refuses to operate against a venv that
@@ -1803,8 +1805,11 @@ standard editable path dependency:</p>
 <p>A <code>tools/pyproject.toml</code> that still carries an <code>editable-install</code> key
 keeps loading — the key is ignored.</p>
 <h3 id="python-version"><code>python-version</code><a class="headerlink" href="#python-version" title="Permanent link">&para;</a></h3>
-<p>Explicit override of the venv's Python version. Falls back to
-<code>[project] requires-python</code> when unset.</p>
+<p>Explicit override of the venv's Python version. Toolr passes it to uv
+as <code>--python</code>. When unset, uv picks an interpreter that satisfies
+<code>[project] requires-python</code>. Changing <code>python-version</code>, or
+<code>requires-python</code> while <code>python-version</code> is unset, moves a
+<code>venv-location = "cache"</code> venv to a new cache directory.</p>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[tool.toolr]</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">python-version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"3.13"</span>
 </span></code></pre></div>

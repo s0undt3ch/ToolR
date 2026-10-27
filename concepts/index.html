@@ -1706,7 +1706,7 @@ Created by <code>toolr project venv sync</code> (or automatically by
 <p><code>tools/.toolr-manifest.json</code> — the cached structure of every group
 and command the toolr binary knows about. Toolr regenerates it when
 <code>tools/</code> or your dependencies change, so tab completion and <code>--help</code>
-stay sub-50ms. Has two layers (static + dynamic). It's a pure cache —
+never have to start Python. Has two layers (static + dynamic). It's a pure cache —
 <strong>don't commit it to git</strong> (<code>toolr project init</code> adds it to
 <code>tools/.gitignore</code> for you). See
 <a href="../internals/manifest/">Internals → Manifest layers</a>.</p>

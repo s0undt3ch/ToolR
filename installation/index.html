@@ -1559,6 +1559,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#uv-and-python" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        uv and Python
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="uv and Python">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#finding-uv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding uv
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-uv-is-missing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When uv is missing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#choosing-python" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing Python
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#adding-toolr-py-manually" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1757,9 +1807,71 @@ first command edit.</p>
 <li><strong>Python 3.11 or later</strong> at execute time. The toolr binary itself
   is standalone, but every user command runs inside a Python
   subprocess.</li>
-<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> to materialise the tools
-  venv (<code>uv sync</code>). If it isn't on PATH, toolr installs a managed
-  copy on first use.</li>
+<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> 0.4.0 or later to materialise
+  the tools venv (<code>uv sync</code>). If toolr can't find it, it offers to
+  install a managed copy. See <a href="#uv-and-python">uv and Python</a>.</li>
+</ul>
+<h2 id="uv-and-python">uv and Python<a class="headerlink" href="#uv-and-python" title="Permanent link">&para;</a></h2>
+<p>Toolr doesn't pick the tools venv's Python interpreter. It hands the
+venv to uv, and uv picks the interpreter.</p>
+<h3 id="finding-uv">Finding uv<a class="headerlink" href="#finding-uv" title="Permanent link">&para;</a></h3>
+<p>Toolr uses the first uv it finds:</p>
+<ol>
+<li><code>uv</code> on <code>PATH</code>.</li>
+<li>A toolr-managed copy at <code>$XDG_DATA_HOME/toolr/bin/uv</code> (<code>uv.exe</code> on
+   Windows). When <code>XDG_DATA_HOME</code> is unset, toolr uses the platform data
+   directory: <code>~/.local/share</code> on Linux, <code>~/Library/Application Support</code>
+   on macOS and <code>%APPDATA%</code> on Windows.</li>
+</ol>
+<p>A uv on <code>PATH</code> that toolr can't use is an error: one older than 0.4.0,
+one that won't run, or one whose version toolr can't read. Toolr doesn't
+fall back to the managed copy, so fix that uv or take it off <code>PATH</code>.</p>
+<h3 id="when-uv-is-missing">When uv is missing<a class="headerlink" href="#when-uv-is-missing" title="Permanent link">&para;</a></h3>
+<p>If toolr finds no uv, it asks whether to download one to the managed
+path or leave you to install it yourself. Press Enter or <code>I</code> to
+install. Any other answer stops toolr with an error.</p>
+<p>Toolr only asks when stdin is a terminal. <code>toolr --quiet &lt;command&gt;</code> and
+<code>toolr project venv sync --quiet</code> never ask. In CI, in pipes and in
+other non-interactive runs toolr fails instead, unless you approve the
+install in advance:</p>
+<ul>
+<li>Set <code>TOOLR_AUTO_INSTALL_UV=1</code> to install without asking.</li>
+<li>Run <a href="../cli/#__install-uv-now"><code>toolr __install-uv-now</code></a>, for
+  example in a CI setup step. It installs the managed copy when no uv
+  is found, and does nothing when a usable one already is.</li>
+</ul>
+<p>Toolr downloads prebuilt uv binaries for Linux (x86_64 and aarch64),
+macOS (x86_64 and Apple silicon) and Windows (x86_64). On other hosts,
+install uv yourself.</p>
+<p>On Linux, toolr downloads the glibc or musl build of uv to match the
+host. If it guesses wrong, set <code>TOOLR_UV_LIBC=gnu</code> or
+<code>TOOLR_UV_LIBC=musl</code>.</p>
+<h3 id="choosing-python">Choosing Python<a class="headerlink" href="#choosing-python" title="Permanent link">&para;</a></h3>
+<ul>
+<li>If <code>tools/pyproject.toml</code> sets
+  <a href="../project-config/#python-version"><code>[tool.toolr] python-version</code></a>,
+  toolr passes it to uv as <code>--python</code>.</li>
+<li>Otherwise toolr passes no Python request. uv picks an interpreter
+  that satisfies <code>[project] requires-python</code>, using
+  <a href="https://docs.astral.sh/uv/concepts/python-versions/">its own discovery rules</a>.
+  Those rules consider uv-managed and system interpreters, and uv can
+  download one when nothing installed fits.</li>
+</ul>
+<p>uv runs against the <code>tools/</code> project, so it honours a
+<code>tools/.python-version</code> file but not one at the repo root. uv settings
+such as <code>UV_PYTHON</code>, <code>UV_PYTHON_PREFERENCE</code> and <code>UV_PYTHON_DOWNLOADS</code>
+apply as usual.</p>
+<p>Changes to <code>python-version</code>, <code>requires-python</code>, <code>tools/.python-version</code>
+or the <code>UV_*</code> settings only take effect when toolr runs uv, which it
+does when <code>tools/uv.lock</code> changes. After changing any of them, rebuild
+the venv with <code>toolr project venv sync --force</code>.</p>
+<p>Two cases don't go through uv:</p>
+<ul>
+<li>A repo with no <code>tools/pyproject.toml</code> has no tools venv. Toolr runs
+  commands with the interpreter in <code>$TOOLR_PYTHON</code>, which must be an
+  absolute path.</li>
+<li><code>toolr project init</code> runs the host <code>python3</code> once to pick the default
+  <code>requires-python</code> it writes.</li>
 </ul>
 <h2 id="adding-toolr-py-manually">Adding <code>toolr-py</code> manually<a class="headerlink" href="#adding-toolr-py-manually" title="Permanent link">&para;</a></h2>
 <p><code>toolr project init</code> is the fast path — it declares <code>toolr-py</code> for
