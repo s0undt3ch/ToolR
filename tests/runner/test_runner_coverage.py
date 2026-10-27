@@ -172,8 +172,8 @@ def test_load_spec_type_mismatch_raises_schema_validation(
         load_spec(spec_path)
 
 
-def test_load_spec_rejects_unknown_schema_version(make_spec_file: Callable[..., Path]) -> None:
-    spec_path = make_spec_file(schema_version=SCHEMA_VERSION + 99)
+def test_load_spec_rejects_newer_binary_schema(make_spec_file: Callable[..., Path]) -> None:
+    spec_path = make_spec_file(schema_version=SCHEMA_VERSION + 1)
     with pytest.raises(SpecError) as exc_info:
         load_spec(spec_path)
     msg = str(exc_info.value)
@@ -181,7 +181,18 @@ def test_load_spec_rejects_unknown_schema_version(make_spec_file: Callable[..., 
     # name both schema versions so they understand which side is stale.
     assert "toolr project venv sync -P toolr-py" in msg, msg
     assert f"schema {SCHEMA_VERSION}" in msg, msg
-    assert f"schema {SCHEMA_VERSION + 99}" in msg, msg
+    assert f"schema {SCHEMA_VERSION + 1}" in msg, msg
+
+
+def test_load_spec_rejects_older_binary_schema(make_spec_file: Callable[..., Path]) -> None:
+    spec_path = make_spec_file(schema_version=SCHEMA_VERSION - 1)
+    with pytest.raises(SpecError) as exc_info:
+        load_spec(spec_path)
+    msg = str(exc_info.value)
+    # Upgrading toolr-py can't fix an older binary, so the error must not suggest it.
+    assert "Upgrade the toolr binary" in msg, msg
+    assert "venv sync -P" not in msg, msg
+    assert f"schema {SCHEMA_VERSION - 1}" in msg, msg
 
 
 def test_load_spec_round_trip_preserves_fields(make_spec_file: Callable[..., Path]) -> None:
