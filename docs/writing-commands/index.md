@@ -17,8 +17,8 @@ section you need:
 6. [Nested groups](nesting.md) — multi-level command hierarchies.
 7. [Testing your commands](testing.md) — drive Python-side
    discovery from pytest via `toolr.testing.CommandsTester`.
-8. [Known bugs](known-bugs.md) — GA-blocking gaps in the current
-   rust-front-end build.
+8. [Known bugs](https://github.com/s0undt3ch/ToolR/issues?q=is%3Aissue+is%3Aopen+label%3Abug) — open issues labelled
+   `bug` on GitHub.
 
 Every example on these pages is a real file under
 [`docs/writing-commands/files/`](https://github.com/s0undt3ch/ToolR/tree/main/docs/writing-commands/files)
