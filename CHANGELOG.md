@@ -6,6 +6,31 @@ This project uses [*git-cliff*](https://git-cliff.org/) to automatically generat
 from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.35.1 - 2026-10-27
+
+### Notes
+
+Bumped the bundled `rustls-webpki` to 0.103.16 to fix
+[RUSTSEC-2026-0382](https://osv.dev/RUSTSEC-2026-0382), where certificate verification could
+accept distrusted intermediates. This affects HTTPS downloads made by the `toolr` binary and
+the `toolr-py` extension.
+
+Tab completion no longer stops after a multi-word or aliased option that takes a value, such
+as `--log-level debug` or `--ref abc`. The completion engine didn't recognise these flags, so it
+read their value as the next positional argument and offered nothing, or the wrong candidates,
+from there on. Count flags (`--verbose`) are now also recognised as taking no value.
+([#585](https://github.com/s0undt3ch/ToolR/issues/585))
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- *(deps)* Bump rustls-webpki and certifi for security advisories ([`87b6f45`](https://github.com/s0undt3ch/ToolR/commit/87b6f4561e469ae6d5f5c6425ec5b355935039a7))
+- *(deps)* Bump webpki-root-certs to 1.0.11 for RUSTSEC-2026-0383 ([`612e124`](https://github.com/s0undt3ch/ToolR/commit/612e1242ace411f0beca1bd19b0a71996e3027c0))
+- *(complete)* Recognise hyphenated and aliased flags when walking tokens ([`ebc90d4`](https://github.com/s0undt3ch/ToolR/commit/ebc90d44bb824bb51449e4179080a24d6e0237b2))
+
+### <!-- 3 -->📚 Documentation
+
+- *(deps)* Exempt security fixes from the uv dependency cooldown ([`d60295f`](https://github.com/s0undt3ch/ToolR/commit/d60295f4460f85a693be81da702233ffd18ad617))
+- *(renovate)* Correct osvVulnerabilityAlerts scope to direct deps only ([`354c822`](https://github.com/s0undt3ch/ToolR/commit/354c822029ce1b91648904076bc2ec9ddf412b92))
 ## 0.35.0 - 2026-10-19
 
 ### Notes
