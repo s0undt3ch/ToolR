@@ -356,7 +356,7 @@ mod tests {
     use std::process::Command;
 
     #[test]
-    fn read_consent_eof_refuses() {
+    fn read_consent_eof_is_no_answer() {
         assert_eq!(read_consent(std::io::Cursor::new("")).unwrap(), None);
     }
 
