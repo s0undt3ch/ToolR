@@ -14,8 +14,8 @@ Options:
       --no-example
           Skip generating tools/example.py
       --python <VERSION>
-          requires-python value for tools/pyproject.toml (defaults to the running Python's
-          >=major.minor)
+          requires-python value for tools/pyproject.toml (defaults to python3's >=major.minor,
+          never below the oldest Python toolr supports)
   -y, --yes
           Auto-approve overwriting any conflicting scaffold files
   -q, --quiet

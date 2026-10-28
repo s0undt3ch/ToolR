@@ -278,7 +278,8 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .value_name("VERSION")
                             .help(
                                 "`requires-python` value for tools/pyproject.toml \
-                                 (defaults to the running Python's >=major.minor)",
+                                 (defaults to python3's >=major.minor, never below the \
+                                 oldest Python toolr supports)",
                             ),
                     )
                     .arg(

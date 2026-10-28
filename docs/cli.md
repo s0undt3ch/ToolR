@@ -74,7 +74,7 @@ toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}]
   `[tool.toolr] venv-location` value in the generated `pyproject.toml`.
 - `--no-example` — skip generating `tools/example.py`.
 - `--python` — `requires-python` value for `tools/pyproject.toml`
-  (defaults to the running Python's `>=major.minor`).
+  (defaults to `python3`'s `>=major.minor`, never below the oldest Python toolr supports).
 - `--quiet` — suppress informational output and never prompt to install uv.
 
 ```sh

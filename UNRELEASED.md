@@ -45,4 +45,4 @@ asking.
 
 `toolr project init` no longer writes a `requires-python` floor older than toolr supports. With
 Python 3.9 as `python3`, it used to write `>=3.9`; it now writes `>=3.11`. A newer `python3` still
-sets the floor, and an explicit `--requires-python` is used as given.
+sets the floor, and an explicit `--python` is used as given.
