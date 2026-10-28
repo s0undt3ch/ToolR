@@ -173,8 +173,8 @@ Two cases don't go through uv:
 - A repo with no `tools/pyproject.toml` has no tools venv. Toolr runs
   commands with `$TOOLR_PYTHON` if set, else `python3`, else `python`
   from `PATH`. `$TOOLR_PYTHON` takes an absolute path or a bare name,
-  which toolr looks up on `PATH`. That interpreter must have `toolr-py`
-  installed.
+  which toolr looks up on `PATH`. A `PATH` interpreter older than
+  Python 3.11 is skipped. The interpreter must have `toolr-py` installed.
 - `toolr project init` runs the host `python3` once to pick the default
   `requires-python` it writes.
 

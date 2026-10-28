@@ -512,54 +512,37 @@ fn project_deps_removed_prints_migration_hint() {
 #[test]
 #[cfg(unix)]
 fn dispatch_uses_python3_from_path_without_tools_pyproject() {
-    use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
     let tmp = TempDir::new().unwrap();
     let repo = tmp.path().join("repo");
-    let tools = repo.join("tools");
-    fs::create_dir_all(&tools).unwrap();
-    fs::write(
-        tools.join("demo.py"),
-        "from toolr import Context, command_group\n\
-         group = command_group(\"demo\", \"Demo\", description=\"Demo group\")\n\
-         @group.command\n\
-         def hi(ctx: Context) -> None:\n    \"\"\"Say hi.\"\"\"\n    print(\"hi\")\n",
-    )
-    .unwrap();
+    write_tools_demo(&repo);
 
     // The stub answers the resolver's `--version` probe without touching the
     // marker, so the marker proves dispatch itself ran it.
     let bin_dir = tmp.path().join("bin");
-    fs::create_dir_all(&bin_dir).unwrap();
+    std::fs::create_dir_all(&bin_dir).unwrap();
     let marker = tmp.path().join("reached");
     let py = bin_dir.join("python3");
-    fs::write(
+    std::fs::write(
         &py,
         format!(
-            "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\n: > '{}'\nexit 0\n",
+            "#!/bin/sh\n\
+             if [ \"$1\" = --version ]; then echo 'Python 3.12.0'; exit 0; fi\n\
+             : > '{}'\nexit 0\n",
             marker.display()
         ),
     )
     .unwrap();
-    fs::set_permissions(&py, fs::Permissions::from_mode(0o755)).unwrap();
-
-    let cache_home = tmp.path().join("cache");
-    Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(&repo)
-        .env("XDG_CACHE_HOME", &cache_home)
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    std::fs::set_permissions(&py, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let output = Command::cargo_bin("toolr")
         .unwrap()
         .current_dir(&repo)
         .env("PATH", &bin_dir)
-        .env("XDG_CACHE_HOME", &cache_home)
+        .env("XDG_CACHE_HOME", tmp.path().join("cache"))
         .env_remove("TOOLR_PYTHON")
-        .args(["demo", "hi"])
+        .args(["demo", "hello"])
         .output()
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -571,4 +554,27 @@ fn dispatch_uses_python3_from_path_without_tools_pyproject() {
         marker.exists(),
         "dispatch never reached the PATH python3; stderr:\n{stderr}"
     );
+}
+
+/// Without a tools venv, a missing interpreter can only come from an explicit
+/// `$TOOLR_PYTHON` path, so the error must not point at `venv sync`, which
+/// needs a `tools/pyproject.toml` to work.
+#[test]
+fn dispatch_missing_toolr_python_without_tools_pyproject_skips_venv_sync_hint() {
+    let tmp = TempDir::new().unwrap();
+    let repo = tmp.path().join("repo");
+    write_tools_demo(&repo);
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(&repo)
+        .env("XDG_CACHE_HOME", tmp.path().join("cache"))
+        .env("TOOLR_PYTHON", tmp.path().join("missing").join("python"))
+        .args(["demo", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_ne!(output.status.code(), Some(0), "expected failure; stderr:\n{stderr}");
+    assert!(stderr.contains("TOOLR_PYTHON"), "stderr:\n{stderr}");
+    assert!(!stderr.contains("venv sync"), "stderr:\n{stderr}");
 }

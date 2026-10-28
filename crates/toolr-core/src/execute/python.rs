@@ -19,7 +19,16 @@ pub enum PythonError {
     NotFound,
     #[error("TOOLR_PYTHON={0} was not found on PATH. Set it to an absolute interpreter path")]
     ToolrPythonNotOnPath(String),
+    #[error(
+        "{path} can't run toolr: {reason}. toolr needs Python 3.{MIN_PYTHON_MINOR}+; \
+         set TOOLR_PYTHON to a supported interpreter"
+    )]
+    Unsupported { path: String, reason: String },
 }
+
+/// Oldest Python 3 minor toolr supports. Keep in step with `requires-python`
+/// in `crates/toolr-py/pyproject.toml`; the runner also spawns with `-P` (3.11+).
+const MIN_PYTHON_MINOR: u32 = 11;
 
 /// Resolve a Python interpreter, in priority order:
 ///
@@ -28,7 +37,8 @@ pub enum PythonError {
 /// 2. `python3` on PATH.
 /// 3. `python` on PATH.
 ///
-/// PATH hits come back absolute, so callers can `is_file()` them.
+/// PATH hits come back absolute, so callers can `is_file()` them, and must
+/// meet [`MIN_PYTHON_MINOR`]. An absolute `$TOOLR_PYTHON` is trusted as is.
 pub fn resolve_python() -> Result<PathBuf, PythonError> {
     let cwd = env::current_dir().unwrap_or_default();
     resolve_python_in(env::var_os("TOOLR_PYTHON"), env::var_os("PATH"), &cwd)
@@ -44,17 +54,22 @@ fn resolve_python_in(
         if !is_bare_name(&p) {
             return Ok(p);
         }
-        return which::which_in(&p, path, cwd)
-            .map_err(|_| PythonError::ToolrPythonNotOnPath(p.display().to_string()));
+        let found = which::which_in(&p, path, cwd)
+            .map_err(|_| PythonError::ToolrPythonNotOnPath(p.display().to_string()))?;
+        return probe(&found).map(|()| found);
     }
+    let mut rejected = None;
     for candidate in ["python3", "python"] {
         if let Ok(found) = which::which_in(candidate, path.as_ref(), cwd) {
-            if runs(&found) {
-                return Ok(found);
+            match probe(&found) {
+                Ok(()) => return Ok(found),
+                Err(e) => {
+                    rejected.get_or_insert(e);
+                }
             }
         }
     }
-    Err(PythonError::NotFound)
+    Err(rejected.unwrap_or(PythonError::NotFound))
 }
 
 fn is_bare_name(p: &Path) -> bool {
@@ -62,16 +77,37 @@ fn is_bare_name(p: &Path) -> bool {
     matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
 
-/// Spawn `<exe> --version` and see if it succeeds. Weeds out PATH entries
-/// that exist but don't run, such as the Windows Store `python3.exe` alias.
-fn runs(exe: &Path) -> bool {
-    Command::new(exe)
+/// Run `<exe> --version` and check it is a Python toolr supports. Also weeds
+/// out PATH entries that exist but don't run, such as the Windows Store alias.
+fn probe(exe: &Path) -> Result<(), PythonError> {
+    let unsupported = |reason: String| PythonError::Unsupported {
+        path: exe.display().to_string(),
+        reason,
+    };
+    let output = Command::new(exe)
         .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
         .stdin(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+        .output()
+        .map_err(|e| unsupported(format!("it does not run ({e})")))?;
+    if !output.status.success() {
+        return Err(unsupported("`--version` failed".to_string()));
+    }
+    // Python 2 printed its version to stderr.
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    match parse_minor(&text) {
+        Some(minor) if minor >= MIN_PYTHON_MINOR => Ok(()),
+        _ => Err(unsupported(format!("it reports {:?}", text.trim()))),
+    }
+}
+
+fn parse_minor(version_output: &str) -> Option<u32> {
+    let rest = version_output.trim().strip_prefix("Python 3.")?;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
 }
 
 #[cfg(test)]
@@ -79,8 +115,8 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Serialises tests that mutate `TOOLR_PYTHON`; cargo runs tests in
-    /// parallel and env vars are process-wide.
+    /// Guards the one test that sets `TOOLR_PYTHON` to cover the env read in
+    /// `resolve_python`. Prefer `resolve_python_in` for anything else.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
@@ -101,20 +137,10 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn empty_toolr_python_falls_through_to_path_lookup() {
-        let bin = tempfile::TempDir::new().unwrap();
-        let stub = stub_python(bin.path(), "python3", 0);
-        let cwd = tempfile::TempDir::new().unwrap();
-        let p = resolve_python_in(Some("".into()), Some(bin.path().into()), cwd.path()).unwrap();
-        assert_eq!(p, stub);
-    }
-
-    #[test]
-    #[cfg(unix)]
     fn path_candidate_that_does_not_run_is_skipped() {
         let bin = tempfile::TempDir::new().unwrap();
-        stub_python(bin.path(), "python3", 1);
-        let python = stub_python(bin.path(), "python", 0);
+        stub_python(bin.path(), "python3", None);
+        let python = stub_python(bin.path(), "python", Some("3.12.0"));
         let cwd = tempfile::TempDir::new().unwrap();
         let p = resolve_python_in(None, Some(bin.path().into()), cwd.path()).unwrap();
         assert_eq!(p, python);
@@ -129,15 +155,73 @@ mod tests {
     }
 
     #[test]
-    fn runs_is_false_for_missing_binary() {
-        assert!(!runs(Path::new("definitely-not-a-real-binary-toolr-test")));
+    fn probe_rejects_missing_binary() {
+        assert!(probe(Path::new("definitely-not-a-real-binary-toolr-test")).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn too_old_python3_is_skipped_for_a_supported_python() {
+        let bin = tempfile::TempDir::new().unwrap();
+        stub_python(bin.path(), "python3", Some("3.9.6"));
+        let python = stub_python(bin.path(), "python", Some("3.11.4"));
+        let cwd = tempfile::TempDir::new().unwrap();
+        let p = resolve_python_in(None, Some(bin.path().into()), cwd.path()).unwrap();
+        assert_eq!(p, python);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn only_too_old_python_on_path_is_unsupported() {
+        let bin = tempfile::TempDir::new().unwrap();
+        stub_python(bin.path(), "python3", Some("3.9.6"));
+        let cwd = tempfile::TempDir::new().unwrap();
+        let err = resolve_python_in(None, Some(bin.path().into()), cwd.path()).unwrap_err();
+        let msg = err.to_string();
+        assert!(matches!(err, PythonError::Unsupported { .. }), "{msg}");
+        assert!(msg.contains("3.9.6") && msg.contains("3.11"), "{msg}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bare_toolr_python_too_old_is_unsupported() {
+        let bin = tempfile::TempDir::new().unwrap();
+        stub_python(bin.path(), "python3", Some("3.10.12"));
+        let cwd = tempfile::TempDir::new().unwrap();
+        let err = resolve_python_in(Some("python3".into()), Some(bin.path().into()), cwd.path())
+            .unwrap_err();
+        assert!(matches!(err, PythonError::Unsupported { .. }), "{err}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bare_toolr_python_that_does_not_run_is_unsupported() {
+        let bin = tempfile::TempDir::new().unwrap();
+        stub_python(bin.path(), "python3", None);
+        let cwd = tempfile::TempDir::new().unwrap();
+        let err = resolve_python_in(Some("python3".into()), Some(bin.path().into()), cwd.path())
+            .unwrap_err();
+        assert!(matches!(err, PythonError::Unsupported { .. }), "{err}");
+    }
+
+    #[test]
+    fn parse_minor_reads_python_3_versions_only() {
+        assert_eq!(parse_minor("Python 3.11.4\n"), Some(11));
+        assert_eq!(parse_minor("Python 3.13.0rc1"), Some(13));
+        assert_eq!(parse_minor("Python 2.7.18"), None);
+        assert_eq!(parse_minor("garbage"), None);
     }
 
     #[cfg(unix)]
-    fn stub_python(dir: &Path, name: &str, exit_code: u8) -> PathBuf {
+    /// `version: None` makes a stub whose `--version` fails.
+    fn stub_python(dir: &Path, name: &str, version: Option<&str>) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let path = dir.join(name);
-        std::fs::write(&path, format!("#!/bin/sh\nexit {exit_code}\n")).unwrap();
+        let body = match version {
+            Some(v) => format!("#!/bin/sh\necho 'Python {v}'\n"),
+            None => "#!/bin/sh\nexit 1\n".to_string(),
+        };
+        std::fs::write(&path, body).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         path
     }
@@ -146,17 +230,20 @@ mod tests {
     #[cfg(unix)]
     fn path_candidate_resolves_to_absolute_path() {
         let bin = tempfile::TempDir::new().unwrap();
-        let stub = stub_python(bin.path(), "python3", 0);
+        let stub = stub_python(bin.path(), "python3", Some("3.12.0"));
         let cwd = tempfile::TempDir::new().unwrap();
-        let p = resolve_python_in(None, Some(bin.path().into()), cwd.path()).unwrap();
-        assert_eq!(p, stub);
+        // An empty `TOOLR_PYTHON` counts as unset.
+        for toolr_python in [None, Some("".into())] {
+            let p = resolve_python_in(toolr_python, Some(bin.path().into()), cwd.path()).unwrap();
+            assert_eq!(p, stub);
+        }
     }
 
     #[test]
     #[cfg(unix)]
     fn bare_toolr_python_resolves_against_path() {
         let bin = tempfile::TempDir::new().unwrap();
-        let stub = stub_python(bin.path(), "python3.12", 0);
+        let stub = stub_python(bin.path(), "python3.12", Some("3.12.0"));
         let cwd = tempfile::TempDir::new().unwrap();
         let p = resolve_python_in(
             Some("python3.12".into()),

@@ -25,4 +25,5 @@ count as consent and download uv. Bare Enter still installs.
 In a repo without `tools/pyproject.toml`, toolr now runs commands with `python3` (or `python`) from
 `PATH`, as documented. It used to fail every command with "Python interpreter not found at python3"
 unless `$TOOLR_PYTHON` held an absolute path. `$TOOLR_PYTHON` now also accepts a bare name such as
-`python3.12`, looked up on `PATH`.
+`python3.12`, looked up on `PATH`. A `PATH` interpreter older than Python 3.11 is skipped, and
+the error names it if nothing newer is found.
