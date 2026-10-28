@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev21-2026-10-28" class="md-nav__link">
+  <a href="#0352-dev24-2026-10-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev21 - 2026-10-28
+        0.35.2-dev24 - 2026-10-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev21 - 2026-10-28">
+    <nav class="md-nav" aria-label="0.35.2-dev24 - 2026-10-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4447,15 +4447,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev21-2026-10-28" class="md-nav__link">
+  <a href="#0352-dev24-2026-10-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev21 - 2026-10-28
+        0.35.2-dev24 - 2026-10-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev21 - 2026-10-28">
+    <nav class="md-nav" aria-label="0.35.2-dev24 - 2026-10-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7429,7 +7429,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev21-2026-10-28">0.35.2-dev21 - 2026-10-28<a class="headerlink" href="#0352-dev21-2026-10-28" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev24-2026-10-28">0.35.2-dev24 - 2026-10-28<a class="headerlink" href="#0352-dev24-2026-10-28" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7439,12 +7439,19 @@ error comes from the <code>toolr-py</code> in your tools venv, so a venv still o
 printing the old text; the binary's version-skew warning above it gives the right command.</p>
 <p>Pressing Ctrl-D (or stdin closing) at the uv install prompt now declines the install. It used to
 count as consent and download uv. Bare Enter still installs.</p>
+<p>In a repo without <code>tools/pyproject.toml</code>, toolr now runs commands with <code>python3</code> (or <code>python</code>) from
+<code>PATH</code>, as documented. It used to fail every command with "Python interpreter not found at python3"
+unless <code>$TOOLR_PYTHON</code> held an absolute path. <code>$TOOLR_PYTHON</code> now also accepts a bare name such as
+<code>python3.12</code>, looked up on <code>PATH</code>. A <code>PATH</code> interpreter older than Python 3.11 is skipped, and
+the error names it if nothing newer is found.</p>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(runner)</em> Point schema-mismatch error at venv sync -P (<a href="https://github.com/s0undt3ch/ToolR/commit/170361d39471a5957cf572966b79acf08e8019d7"><code>170361d</code></a>)</li>
 <li><em>(runner)</em> Name the stale side in the schema-mismatch error (<a href="https://github.com/s0undt3ch/ToolR/commit/ca3cdb273dc5192b4e86f038452c8a64e497619c"><code>ca3cdb2</code></a>)</li>
 <li><em>(uv)</em> Treat EOF at the install prompt as refusal (<a href="https://github.com/s0undt3ch/ToolR/commit/14d30177cf462d05c1a52d620b96faf8e494a2a5"><code>14d3017</code></a>)</li>
 <li><em>(uv)</em> End the prompt line before the refusal error on EOF (<a href="https://github.com/s0undt3ch/ToolR/commit/f91da247a695f3f6e56cce4e98bcc0b8f28b0fbd"><code>f91da24</code></a>)</li>
+<li><em>(dispatch)</em> Resolve the PATH Python fallback to an absolute path (<a href="https://github.com/s0undt3ch/ToolR/commit/10fc53fb44fd0662d0bf327a8466a65708ea29b7"><code>10fc53f</code></a>)</li>
+<li><em>(dispatch)</em> Skip PATH interpreters older than Python 3.11 (<a href="https://github.com/s0undt3ch/ToolR/commit/1949afa1ae67a6a0cfe2eaa380b8047b5be59283"><code>1949afa</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
