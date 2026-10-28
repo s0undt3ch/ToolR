@@ -197,7 +197,11 @@ fn prompt_overwrite_file(dest: &Path, cwd: &Path) -> Result<bool> {
 
 /// Default `requires-python` value for new projects.
 fn detect_requires_python() -> String {
-    if let Ok(output) = std::process::Command::new("python3")
+    requires_python_from("python3")
+}
+
+fn requires_python_from(python: &str) -> String {
+    if let Ok(output) = std::process::Command::new(python)
         .arg("-c")
         .arg("import sys; print(f'>={sys.version_info.major}.{sys.version_info.minor}')")
         .output()
@@ -209,7 +213,7 @@ fn detect_requires_python() -> String {
             }
         }
     }
-    ">=3.11".to_string()
+    format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {
@@ -940,11 +944,20 @@ dev = ["pytest", "ruff"]
     fn detect_requires_python_returns_non_empty_string() {
         // We can't pin a specific version — depends on the runner's
         // python3. Just assert the contract: returns something with the
-        // `>=X.Y` prefix, falling back to ">=3.11" if python3 absent.
+        // `>=X.Y` prefix.
         let s = detect_requires_python();
         assert!(
             s.starts_with(">="),
             "expected >= prefix, got: {s}",
+        );
+    }
+
+    #[test]
+    fn requires_python_falls_back_to_the_supported_floor() {
+        let s = requires_python_from("definitely-not-a-real-python-toolr-test");
+        assert_eq!(
+            s,
+            format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
         );
     }
 
