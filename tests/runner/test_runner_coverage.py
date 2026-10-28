@@ -28,6 +28,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 from typing import Any
+from typing import Final
 from typing import Literal
 
 import pytest
@@ -61,6 +62,10 @@ def _run_isolated(spec: RunnerSpec) -> int:
 # --------------------------------------------------------------------------
 
 
+#: `make_spec_file(overrides={key: DROP})` removes `key` from the spec.
+DROP: Final = object()
+
+
 @pytest.fixture
 def make_spec_file(tmp_path: Path) -> Callable[..., Path]:
     """Factory: write a serialised RunnerSpec to disk; return the path."""
@@ -76,6 +81,7 @@ def make_spec_file(tmp_path: Path) -> Callable[..., Path]:
         verbosity: str = "normal",
         repo_root: Path | None = None,
         contents: str | None = None,
+        overrides: dict[str, object] | None = None,
     ) -> Path:
         spec_path = tmp_path / "spec.json"
         if contents is not None:
@@ -95,6 +101,11 @@ def make_spec_file(tmp_path: Path) -> Callable[..., Path]:
                 "log_level": "INFO",
             },
         }
+        for key, value in (overrides or {}).items():
+            if value is DROP:
+                del payload[key]
+            else:
+                payload[key] = value
         spec_path.write_text(json.dumps(payload))
         return spec_path
 
@@ -193,6 +204,48 @@ def test_load_spec_rejects_older_binary_schema(make_spec_file: Callable[..., Pat
     assert f"Upgrade the toolr binary to a version that emits schema {SCHEMA_VERSION}." in msg, msg
     assert "venv sync -P" not in msg, msg
     assert f"schema {SCHEMA_VERSION - 1}" in msg, msg
+
+
+def test_load_spec_newer_binary_with_removed_field_still_names_remedy(
+    make_spec_file: Callable[..., Path],
+) -> None:
+    # A non-additive bump: the newer binary no longer sends `module`. The
+    # version check must win over the typed decode, or the user only sees
+    # "failed schema validation" with no hint which side is stale.
+    spec_path = make_spec_file(schema_version=SCHEMA_VERSION + 1, overrides={"module": DROP})
+    with pytest.raises(SpecError) as exc_info:
+        load_spec(spec_path)
+    msg = str(exc_info.value)
+    assert "toolr project venv sync -P toolr-py" in msg, msg
+    assert "failed schema validation" not in msg, msg
+
+
+def test_load_spec_older_binary_with_changed_field_type_still_names_remedy(
+    make_spec_file: Callable[..., Path],
+) -> None:
+    spec_path = make_spec_file(
+        schema_version=SCHEMA_VERSION - 1, overrides={"args": ["not", "a", "dict"]}
+    )
+    with pytest.raises(SpecError) as exc_info:
+        load_spec(spec_path)
+    msg = str(exc_info.value)
+    assert f"Upgrade the toolr binary to a version that emits schema {SCHEMA_VERSION}." in msg, msg
+    assert "failed schema validation" not in msg, msg
+
+
+@pytest.mark.parametrize(
+    "schema_version",
+    [
+        pytest.param(DROP, id="missing"),
+        pytest.param(str(SCHEMA_VERSION), id="not-an-int"),
+    ],
+)
+def test_load_spec_bad_schema_version_fails_schema_validation(
+    make_spec_file: Callable[..., Path], schema_version: object
+) -> None:
+    spec_path = make_spec_file(overrides={"schema_version": schema_version})
+    with pytest.raises(SpecError, match=r"failed schema validation.*schema_version"):
+        load_spec(spec_path)
 
 
 def test_load_spec_round_trip_preserves_fields(make_spec_file: Callable[..., Path]) -> None:

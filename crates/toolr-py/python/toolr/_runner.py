@@ -34,6 +34,7 @@ from types import UnionType
 from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
+from typing import TypeVar
 from typing import Union
 from typing import get_args
 from typing import get_origin
@@ -139,6 +140,19 @@ class DispatchPayloadSpec(msgspec.Struct, frozen=True):
     schema: CommandSchema
 
 
+_SpecT = TypeVar("_SpecT", bound=msgspec.Struct)
+
+
+class _SchemaVersionProbe(msgspec.Struct):
+    """Decode only ``schema_version``.
+
+    A version mismatch must be reported before the rest of the spec is checked
+    against a :class:`RunnerSpec` it may no longer fit.
+    """
+
+    schema_version: int
+
+
 class RunnerSpec(msgspec.Struct, frozen=True):
     """Top-level spec written by the Rust binary into ``$TOOLR_SPEC_FILE``."""
 
@@ -174,21 +188,11 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
     except OSError as exc:
         msg = f"failed to read toolr spec file {spec_path}: {exc}"
         raise SpecError(msg) from exc
-    try:
-        spec = msgspec.json.decode(data, type=RunnerSpec)
-    except msgspec.ValidationError as exc:
-        # `ValidationError` is a subclass of `DecodeError` in msgspec, so
-        # the more-specific clause must come first; otherwise the broader
-        # "not valid JSON" message swallows real type/schema mismatches.
-        msg = f"toolr spec file failed schema validation ({spec_path}): {exc}"
-        raise SpecError(msg) from exc
-    except msgspec.DecodeError as exc:
-        msg = f"toolr spec file is not valid JSON ({spec_path}): {exc}"
-        raise SpecError(msg) from exc
-    if spec.schema_version != SCHEMA_VERSION:
+    schema_version = _decode_spec(data, _SchemaVersionProbe, spec_path).schema_version
+    if schema_version != SCHEMA_VERSION:
         # Upgrading toolr-py only helps when the binary is the newer side.
         # Keep the remedies in step with dispatch.rs::warn_on_toolr_py_mismatch.
-        if spec.schema_version > SCHEMA_VERSION:
+        if schema_version > SCHEMA_VERSION:
             remedy = (
                 "If tools/pyproject.toml caps the toolr-py version, loosen that pin, then run:\n"
                 "  toolr project venv sync -P toolr-py\n\n"
@@ -199,12 +203,26 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
             remedy = f"Upgrade the toolr binary to a version that emits schema {SCHEMA_VERSION}."
         msg = (
             f"toolr-py in this tools venv speaks schema {SCHEMA_VERSION}, "
-            f"but the toolr binary emitted schema {spec.schema_version}. "
+            f"but the toolr binary emitted schema {schema_version}. "
             "The venv is out of sync with the binary.\n\n"
             f"{remedy}"
         )
         raise SpecError(msg)
-    return spec
+    return _decode_spec(data, RunnerSpec, spec_path)
+
+
+def _decode_spec(data: bytes, type_: type[_SpecT], spec_path: Path) -> _SpecT:
+    try:
+        return msgspec.json.decode(data, type=type_)
+    except msgspec.ValidationError as exc:
+        # `ValidationError` is a subclass of `DecodeError` in msgspec, so
+        # the more-specific clause must come first; otherwise the broader
+        # "not valid JSON" message swallows real type/schema mismatches.
+        msg = f"toolr spec file failed schema validation ({spec_path}): {exc}"
+        raise SpecError(msg) from exc
+    except msgspec.DecodeError as exc:
+        msg = f"toolr spec file is not valid JSON ({spec_path}): {exc}"
+        raise SpecError(msg) from exc
 
 
 def _validate_spec_file(path: str) -> None:
