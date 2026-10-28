@@ -207,20 +207,20 @@ fn detect_requires_python() -> String {
     requires_python_from("python3")
 }
 
+/// `>=3.N` for `python`'s minor, never below the oldest Python toolr runs on.
 fn requires_python_from(python: &str) -> String {
-    if let Ok(output) = std::process::Command::new(python)
+    let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
+    let minor = std::process::Command::new(python)
         .arg("-c")
-        .arg("import sys; print(f'>={sys.version_info.major}.{sys.version_info.minor}')")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
         .output()
-    {
-        if output.status.success() {
-            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !s.is_empty() {
-                return s;
-            }
-        }
-    }
-    format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            let version = String::from_utf8_lossy(&output.stdout);
+            version.trim().strip_prefix("3.")?.parse::<u32>().ok()
+        });
+    format!(">=3.{}", minor.map_or(floor, |m| m.max(floor)))
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {
@@ -966,6 +966,35 @@ dev = ["pytest", "ruff"]
             s,
             format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn requires_python_raises_a_too_old_interpreter_to_the_supported_floor() {
+        let bin = tempfile::TempDir::new().unwrap();
+        let python = stub_python(bin.path(), "3.9");
+        assert_eq!(
+            requires_python_from(python.to_str().unwrap()),
+            format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn requires_python_keeps_a_newer_interpreter_version() {
+        let bin = tempfile::TempDir::new().unwrap();
+        let python = stub_python(bin.path(), "3.99");
+        assert_eq!(requires_python_from(python.to_str().unwrap()), ">=3.99");
+    }
+
+    /// A `python` that prints `version` for whatever it is asked to run.
+    #[cfg(unix)]
+    fn stub_python(dir: &std::path::Path, version: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("python");
+        std::fs::write(&path, format!("#!/bin/sh\necho '{version}'\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
     }
 
     #[test]
