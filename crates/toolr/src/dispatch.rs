@@ -290,11 +290,14 @@ pub fn dispatch(
     // as `toolr: No such file or directory (os error 2)` — uninformative
     // and gives no recovery hint.
     if !python.is_file() {
-        anyhow::bail!(
-            "Python interpreter not found at {}.\n\
-             Run `toolr project venv sync` to materialise the tools venv.",
-            python.display()
-        );
+        let hint = if resolved_venv.is_some() {
+            "Run `toolr project venv sync` to materialise the tools venv."
+        } else {
+            // `resolve_python` returns PATH hits absolute and probed, so only
+            // an explicit `TOOLR_PYTHON` path can be missing here.
+            "It came from TOOLR_PYTHON; point it at an existing interpreter."
+        };
+        anyhow::bail!("Python interpreter not found at {}.\n{hint}", python.display());
     }
 
     // Interpreter-provenance gate (SEC-01). This is the only point where
@@ -303,6 +306,8 @@ pub fn dispatch(
     // an in-tree `tools/.venv` — matching the provenance record written
     // by `toolr project venv sync`. A committed fake `tools/.venv` has no
     // record and is refused.
+    // A PATH or `$TOOLR_PYTHON` interpreter is the host's own, not repo
+    // code, so it stays outside this gate on purpose (#588).
     if let Some(resolved) = &resolved_venv {
         let cache_dir =
             toolr_core::project::provenance_cache_dir(&repo_root, resolved).ok();

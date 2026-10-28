@@ -171,8 +171,10 @@ the venv with `toolr project venv sync --force`.
 Two cases don't go through uv:
 
 - A repo with no `tools/pyproject.toml` has no tools venv. Toolr runs
-  commands with the interpreter in `$TOOLR_PYTHON`, which must be an
-  absolute path.
+  commands with `$TOOLR_PYTHON` if set, else `python3`, else `python`
+  from `PATH`. `$TOOLR_PYTHON` takes an absolute path or a bare name,
+  which toolr looks up on `PATH`. A `PATH` interpreter older than
+  Python 3.11 is skipped. The interpreter must have `toolr-py` installed.
 - `toolr project init` runs the host `python3` once to pick the default
   `requires-python` it writes.
 
