@@ -27,8 +27,9 @@ pub enum PythonError {
 }
 
 /// Oldest Python 3 minor toolr supports. Keep in step with `requires-python`
-/// in `crates/toolr-py/pyproject.toml`; the runner also spawns with `-P` (3.11+).
-const MIN_PYTHON_MINOR: u32 = 11;
+/// in `crates/toolr-py/pyproject.toml` (enforced by `tests/python_floor_lockstep.rs`);
+/// the runner also spawns with `-P` (3.11+).
+pub const MIN_PYTHON_MINOR: u32 = 11;
 
 /// Resolve a Python interpreter, in priority order:
 ///
