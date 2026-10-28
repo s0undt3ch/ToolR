@@ -509,12 +509,23 @@ fn pyproject_declares_dependency(pyproject: &Path, package: &str) -> Result<bool
 }
 
 /// PEP 508-light: `foo`, `foo[bar]`, `foo>=1.2`, `foo ==1.2; python_version < "3.13"`
-/// all parse to the name `foo`. We just peel the first identifier-ish token.
+/// all parse to the name `foo`. We just peel the first identifier-ish token and
+/// compare it to `package` after PEP 503 normalisation.
 fn dep_name_matches(spec: &str, package: &str) -> bool {
     let name_end = spec
         .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-' && c != '.')
         .unwrap_or(spec.len());
-    spec[..name_end].eq_ignore_ascii_case(package)
+    normalize_dist_name(&spec[..name_end]) == normalize_dist_name(package)
+}
+
+/// PEP 503 name normalisation, ported from `packaging.utils.canonicalize_name`
+/// so names compare exactly as uv and pip compare them.
+fn normalize_dist_name(name: &str) -> String {
+    let mut value = name.to_lowercase().replace(['_', '.'], "-");
+    while value.contains("--") {
+        value = value.replace("--", "-");
+    }
+    value
 }
 
 fn venv_path() -> Result<ExitCode> {
@@ -859,6 +870,32 @@ mod tests {
     #[test]
     fn dep_name_matches_is_case_insensitive() {
         assert!(dep_name_matches("Toolr-Py>=0.11", "toolr-py"));
+    }
+
+    /// Expected values come from `packaging.utils.canonicalize_name` (26.3).
+    #[test]
+    fn normalize_dist_name_matches_packaging_canonicalize_name() {
+        for (name, expected) in [
+            ("toolr_py", "toolr-py"),
+            ("Toolr.Py", "toolr-py"),
+            ("toolr--py", "toolr-py"),
+            ("toolr-_.py", "toolr-py"),
+            ("TOOLR-PY", "toolr-py"),
+            ("Ünicode", "ünicode"),
+            ("İstanbul", "i\u{307}stanbul"),
+            ("_toolr_", "-toolr-"),
+            ("toolrpy", "toolrpy"),
+        ] {
+            assert_eq!(normalize_dist_name(name), expected, "{name:?}");
+        }
+    }
+
+    #[test]
+    fn dep_name_matches_normalises_separators_per_pep_503() {
+        assert!(dep_name_matches("toolr_py", "toolr-py"));
+        assert!(dep_name_matches("Toolr.Py>=1", "toolr-py"));
+        assert!(dep_name_matches("toolr--py", "toolr_py"));
+        assert!(!dep_name_matches("toolrpy", "toolr-py"));
     }
 
     #[test]
