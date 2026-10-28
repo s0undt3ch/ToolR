@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev30-2026-10-28" class="md-nav__link">
+  <a href="#0352-dev34-2026-10-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev30 - 2026-10-28
+        0.35.2-dev34 - 2026-10-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev30 - 2026-10-28">
+    <nav class="md-nav" aria-label="0.35.2-dev34 - 2026-10-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4447,15 +4447,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev30-2026-10-28" class="md-nav__link">
+  <a href="#0352-dev34-2026-10-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev30 - 2026-10-28
+        0.35.2-dev34 - 2026-10-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev30 - 2026-10-28">
+    <nav class="md-nav" aria-label="0.35.2-dev34 - 2026-10-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7429,7 +7429,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev30-2026-10-28">0.35.2-dev30 - 2026-10-28<a class="headerlink" href="#0352-dev30-2026-10-28" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev34-2026-10-28">0.35.2-dev34 - 2026-10-28<a class="headerlink" href="#0352-dev34-2026-10-28" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7463,6 +7463,7 @@ still on an older <code>toolr-py</code> keeps printing "failed schema validation
 <li><em>(project)</em> Tighten PEP 503 matching wording and tests (<a href="https://github.com/s0undt3ch/ToolR/commit/92026608d987a321c650e5a09f0102cc853b80ef"><code>9202660</code></a>)</li>
 <li><em>(runner)</em> Check the spec schema version before the full decode (<a href="https://github.com/s0undt3ch/ToolR/commit/f8756c26e6744fbb9ef38a0b60084972b341b8b0"><code>f8756c2</code></a>)</li>
 <li><em>(runner)</em> Pin schema_version as a frozen contract (<a href="https://github.com/s0undt3ch/ToolR/commit/a624fad020fe034b5ad61b08b9331091abdc9e80"><code>a624fad</code></a>)</li>
+<li><em>(execute)</em> Keep MIN_PYTHON_MINOR in lockstep with requires-python (<a href="https://github.com/s0undt3ch/ToolR/commit/1a86ea38a7bbaa5f8bb7e67d42e461333fa61c67"><code>1a86ea3</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7473,11 +7474,13 @@ still on an older <code>toolr-py</code> keeps printing "failed schema validation
 <li>Replace the known-bugs page with a link to open bug issues (<a href="https://github.com/s0undt3ch/ToolR/commit/491f110d5362070a65269ec6399099a941b2d797"><code>491f110</code></a>)</li>
 <li>Drop the stale known-bugs pointer from the snippet list (<a href="https://github.com/s0undt3ch/ToolR/commit/3d9777b945519408e18c1f114f408dea0f936ca9"><code>3d9777b</code></a>)</li>
 <li>List known bugs at the top level, not in the authoring guide (<a href="https://github.com/s0undt3ch/ToolR/commit/a0b6f5572e32ed7b2c993412584ae5b817561c58"><code>a0b6f55</code></a>)</li>
+<li><em>(execute)</em> Point both sides of the Python floor lockstep at each other (<a href="https://github.com/s0undt3ch/ToolR/commit/9820cdf4584e591ae1e6461090ae72f305313b53"><code>9820cdf</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(uv)</em> Name the EOF test after what it asserts (<a href="https://github.com/s0undt3ch/ToolR/commit/246ad196cebc37f2a00f661aeb3198f1cd865a09"><code>246ad19</code></a>)</li>
 <li><em>(uv)</em> Cover the interactive install prompt (<a href="https://github.com/s0undt3ch/ToolR/commit/09e46a4fb9b1092185a20c81ad27075b1dc21e59"><code>09e46a4</code></a>)</li>
+<li><em>(execute)</em> Reject a patch-level requires-python floor in the lockstep gate (<a href="https://github.com/s0undt3ch/ToolR/commit/699c0d9685f12d8e9df0cfb88f3ed312fa4a371d"><code>699c0d9</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
