@@ -948,15 +948,18 @@ dev = ["pytest", "ruff"]
     }
 
     #[test]
-    fn detect_requires_python_returns_non_empty_string() {
-        // We can't pin a specific version — depends on the runner's
-        // python3. Just assert the contract: returns something with the
-        // `>=X.Y` prefix.
-        let s = detect_requires_python();
-        assert!(
-            s.starts_with(">="),
-            "expected >= prefix, got: {s}",
-        );
+    fn detect_requires_python_reads_the_real_python3() {
+        // Probed separately so a broken probe script can't hide behind the
+        // floor fallback.
+        let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
+        let minor = std::process::Command::new("python3")
+            .args(["-c", "import sys; print(sys.version_info.minor)"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok());
+        let expected = format!(">=3.{}", minor.map_or(floor, |m| m.max(floor)));
+        assert_eq!(detect_requires_python(), expected);
     }
 
     #[test]
