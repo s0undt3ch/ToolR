@@ -26,8 +26,6 @@ exclude-newer = "7 days"
 # Security fixes are exempt from the cooldown, but uv can't tell an advisory
 # fix apart: pin a per-package cutoff just past the fixed release's upload
 # time, then drop the entry once that release ages past 7 days.
-# PYSEC-2026-4320 (fixed certifi 2026.10.19).
-exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
 
 [tool.uv.workspace]
 members = [
