@@ -21,3 +21,8 @@ printing the old text; the binary's version-skew warning above it gives the righ
 
 Pressing Ctrl-D (or stdin closing) at the uv install prompt now declines the install. It used to
 count as consent and download uv. Bare Enter still installs.
+
+In a repo without `tools/pyproject.toml`, toolr now runs commands with `python3` (or `python`) from
+`PATH`, as documented. It used to fail every command with "Python interpreter not found at python3"
+unless `$TOOLR_PYTHON` held an absolute path. `$TOOLR_PYTHON` now also accepts a bare name such as
+`python3.12`, looked up on `PATH`.

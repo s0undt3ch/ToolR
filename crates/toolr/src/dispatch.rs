@@ -290,11 +290,12 @@ pub fn dispatch(
     // as `toolr: No such file or directory (os error 2)` — uninformative
     // and gives no recovery hint.
     if !python.is_file() {
-        anyhow::bail!(
-            "Python interpreter not found at {}.\n\
-             Run `toolr project venv sync` to materialise the tools venv.",
-            python.display()
-        );
+        let hint = if resolved_venv.is_some() {
+            "Run `toolr project venv sync` to materialise the tools venv."
+        } else {
+            "It came from TOOLR_PYTHON; point it at an existing interpreter."
+        };
+        anyhow::bail!("Python interpreter not found at {}.\n{hint}", python.display());
     }
 
     // Interpreter-provenance gate (SEC-01). This is the only point where

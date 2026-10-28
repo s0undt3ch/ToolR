@@ -7,7 +7,8 @@
 //! this module is the legacy-shape fallback.
 
 use std::env;
-use std::path::PathBuf;
+use std::ffi::OsString;
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use thiserror::Error;
@@ -16,39 +17,61 @@ use thiserror::Error;
 pub enum PythonError {
     #[error("no Python interpreter found. Set TOOLR_PYTHON or install python3 on PATH")]
     NotFound,
+    #[error("TOOLR_PYTHON={0} was not found on PATH. Set it to an absolute interpreter path")]
+    ToolrPythonNotOnPath(String),
 }
 
 /// Resolve a Python interpreter, in priority order:
 ///
-/// 1. `$TOOLR_PYTHON` if set.
+/// 1. `$TOOLR_PYTHON` if set. A bare name is looked up on PATH; any other
+///    path is returned unchanged.
 /// 2. `python3` on PATH.
 /// 3. `python` on PATH.
+///
+/// PATH hits come back absolute, so callers can `is_file()` them.
 pub fn resolve_python() -> Result<PathBuf, PythonError> {
-    if let Ok(p) = env::var("TOOLR_PYTHON") {
-        if !p.is_empty() {
-            return Ok(PathBuf::from(p));
+    let cwd = env::current_dir().unwrap_or_default();
+    resolve_python_in(env::var_os("TOOLR_PYTHON"), env::var_os("PATH"), &cwd)
+}
+
+fn resolve_python_in(
+    toolr_python: Option<OsString>,
+    path: Option<OsString>,
+    cwd: &Path,
+) -> Result<PathBuf, PythonError> {
+    if let Some(p) = toolr_python.filter(|p| !p.is_empty()) {
+        let p = PathBuf::from(p);
+        if !is_bare_name(&p) {
+            return Ok(p);
         }
+        return which::which_in(&p, path, cwd)
+            .map_err(|_| PythonError::ToolrPythonNotOnPath(p.display().to_string()));
     }
     for candidate in ["python3", "python"] {
-        if which_on_path(candidate).is_some() {
-            return Ok(PathBuf::from(candidate));
+        if let Ok(found) = which::which_in(candidate, path.as_ref(), cwd) {
+            if runs(&found) {
+                return Ok(found);
+            }
         }
     }
     Err(PythonError::NotFound)
 }
 
-/// Cheap PATH check: spawn `<exe> --version` and see if it runs.
-/// (We avoid a `which` crate dep for one call site.)
-fn which_on_path(exe: &str) -> Option<()> {
+fn is_bare_name(p: &Path) -> bool {
+    let mut components = p.components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
+
+/// Spawn `<exe> --version` and see if it succeeds. Weeds out PATH entries
+/// that exist but don't run, such as the Windows Store `python3.exe` alias.
+fn runs(exe: &Path) -> bool {
     Command::new(exe)
         .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .stdin(std::process::Stdio::null())
         .status()
-        .ok()
-        .filter(|s| s.success())
-        .map(|_| ())
+        .is_ok_and(|s| s.success())
 }
 
 #[cfg(test)]
@@ -56,12 +79,8 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Both tests in this module mutate `TOOLR_PYTHON`. Cargo runs
-    /// `#[test]` functions in parallel by default, so without
-    /// serialisation a race window of "Test A set the var → Test B
-    /// removed it → Test A read it back as unset" trivially flakes
-    /// (observed on Linux 3.11 in CI). Take this Mutex around the
-    /// env-touching region of every test that depends on the var.
+    /// Serialises tests that mutate `TOOLR_PYTHON`; cargo runs tests in
+    /// parallel and env vars are process-wide.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
@@ -81,66 +100,95 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_path_when_env_unset() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        // SAFETY: as above — serialised against the sibling test.
-        unsafe {
-            env::remove_var("TOOLR_PYTHON");
-        }
-        // We can't assert a specific path without making the test brittle.
-        // We only check that *if* python3/python is available, we get
-        // a non-empty path back, *or* we get NotFound.
-        match resolve_python() {
-            Ok(p) => assert!(!p.as_os_str().is_empty()),
-            Err(PythonError::NotFound) => {
-                // Acceptable on systems without any python on PATH.
-            }
-        }
+    #[cfg(unix)]
+    fn empty_toolr_python_falls_through_to_path_lookup() {
+        let bin = tempfile::TempDir::new().unwrap();
+        let stub = stub_python(bin.path(), "python3", 0);
+        let cwd = tempfile::TempDir::new().unwrap();
+        let p = resolve_python_in(Some("".into()), Some(bin.path().into()), cwd.path()).unwrap();
+        assert_eq!(p, stub);
     }
 
     #[test]
-    fn empty_toolr_python_env_falls_through_to_path_lookup() {
-        // `TOOLR_PYTHON=""` is the "set but empty" case. The guard
-        // `if !p.is_empty()` skips the env branch and falls back to
-        // `which_on_path`, exactly as if the var weren't set at all.
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        // SAFETY: serialised against the sibling env-mutating tests.
-        unsafe {
-            env::set_var("TOOLR_PYTHON", "");
-        }
-        let result = resolve_python();
-        // Restore before any potential panic from the assertions.
-        unsafe {
-            env::remove_var("TOOLR_PYTHON");
-        }
-        // Same forgiving shape as `falls_back_to_path_when_env_unset`:
-        // some CI images have no python on PATH, in which case NotFound
-        // is the correct answer.
-        match result {
-            Ok(p) => assert!(!p.as_os_str().is_empty()),
-            Err(PythonError::NotFound) => {}
-        }
+    #[cfg(unix)]
+    fn path_candidate_that_does_not_run_is_skipped() {
+        let bin = tempfile::TempDir::new().unwrap();
+        stub_python(bin.path(), "python3", 1);
+        let python = stub_python(bin.path(), "python", 0);
+        let cwd = tempfile::TempDir::new().unwrap();
+        let p = resolve_python_in(None, Some(bin.path().into()), cwd.path()).unwrap();
+        assert_eq!(p, python);
     }
 
     #[test]
-    fn which_on_path_returns_none_for_nonexistent_binary() {
-        // Exercises the `.ok()` -> None path on `Command::status()`
-        // failure, which `resolve_python` relies on to walk past the
-        // python3/python candidates when neither is present.
-        let result = which_on_path("definitely-not-a-real-binary-toolr-test");
-        assert!(result.is_none());
+    fn no_python_on_path_is_not_found() {
+        let bin = tempfile::TempDir::new().unwrap();
+        let cwd = tempfile::TempDir::new().unwrap();
+        let err = resolve_python_in(None, Some(bin.path().into()), cwd.path()).unwrap_err();
+        assert!(matches!(err, PythonError::NotFound), "{err}");
     }
 
     #[test]
-    fn which_on_path_returns_some_for_a_known_binary() {
-        // `sh` is on every supported runner (Linux + macOS). Windows
-        // CI runs cmd.exe via Git Bash; if that ever changes, swap
-        // for a cross-platform stand-in.
-        let result = which_on_path("sh");
-        // We tolerate `sh --version` returning non-zero on the slim
-        // BusyBox sh — `which_on_path` only succeeds when the status
-        // is success(). So accept either Some or None.
-        let _ = result;
+    fn runs_is_false_for_missing_binary() {
+        assert!(!runs(Path::new("definitely-not-a-real-binary-toolr-test")));
+    }
+
+    #[cfg(unix)]
+    fn stub_python(dir: &Path, name: &str, exit_code: u8) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\nexit {exit_code}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn path_candidate_resolves_to_absolute_path() {
+        let bin = tempfile::TempDir::new().unwrap();
+        let stub = stub_python(bin.path(), "python3", 0);
+        let cwd = tempfile::TempDir::new().unwrap();
+        let p = resolve_python_in(None, Some(bin.path().into()), cwd.path()).unwrap();
+        assert_eq!(p, stub);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bare_toolr_python_resolves_against_path() {
+        let bin = tempfile::TempDir::new().unwrap();
+        let stub = stub_python(bin.path(), "python3.12", 0);
+        let cwd = tempfile::TempDir::new().unwrap();
+        let p = resolve_python_in(
+            Some("python3.12".into()),
+            Some(bin.path().into()),
+            cwd.path(),
+        )
+        .unwrap();
+        assert_eq!(p, stub);
+    }
+
+    #[test]
+    fn bare_toolr_python_missing_from_path_names_the_value() {
+        let bin = tempfile::TempDir::new().unwrap();
+        let cwd = tempfile::TempDir::new().unwrap();
+        let err = resolve_python_in(
+            Some("no-such-python-toolr".into()),
+            Some(bin.path().into()),
+            cwd.path(),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("TOOLR_PYTHON=no-such-python-toolr"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn absolute_toolr_python_is_returned_unchanged() {
+        let cwd = tempfile::TempDir::new().unwrap();
+        let p = resolve_python_in(Some("/custom/python".into()), None, cwd.path()).unwrap();
+        assert_eq!(p, PathBuf::from("/custom/python"));
     }
 
     #[test]

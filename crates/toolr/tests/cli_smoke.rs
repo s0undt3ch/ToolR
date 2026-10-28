@@ -504,3 +504,71 @@ fn project_deps_removed_prints_migration_hint() {
         "stderr missing pointer to new path:\n{stderr}"
     );
 }
+
+/// Regression for #588: in a repo with no `tools/pyproject.toml`, dispatch
+/// falls back to `python3` on `PATH`. That fallback used to come back as the
+/// bare name `python3`, which the `is_file()` pre-check resolved against the
+/// cwd, so every command failed with "Python interpreter not found".
+#[test]
+#[cfg(unix)]
+fn dispatch_uses_python3_from_path_without_tools_pyproject() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = TempDir::new().unwrap();
+    let repo = tmp.path().join("repo");
+    let tools = repo.join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(
+        tools.join("demo.py"),
+        "from toolr import Context, command_group\n\
+         group = command_group(\"demo\", \"Demo\", description=\"Demo group\")\n\
+         @group.command\n\
+         def hi(ctx: Context) -> None:\n    \"\"\"Say hi.\"\"\"\n    print(\"hi\")\n",
+    )
+    .unwrap();
+
+    // The stub answers the resolver's `--version` probe without touching the
+    // marker, so the marker proves dispatch itself ran it.
+    let bin_dir = tmp.path().join("bin");
+    fs::create_dir_all(&bin_dir).unwrap();
+    let marker = tmp.path().join("reached");
+    let py = bin_dir.join("python3");
+    fs::write(
+        &py,
+        format!(
+            "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\n: > '{}'\nexit 0\n",
+            marker.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&py, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let cache_home = tmp.path().join("cache");
+    Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(&repo)
+        .env("XDG_CACHE_HOME", &cache_home)
+        .arg("__build-static-manifest")
+        .assert()
+        .success();
+
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(&repo)
+        .env("PATH", &bin_dir)
+        .env("XDG_CACHE_HOME", &cache_home)
+        .env_remove("TOOLR_PYTHON")
+        .args(["demo", "hi"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Python interpreter not found"),
+        "PATH python3 should be accepted; stderr:\n{stderr}"
+    );
+    assert!(
+        marker.exists(),
+        "dispatch never reached the PATH python3; stderr:\n{stderr}"
+    );
+}
