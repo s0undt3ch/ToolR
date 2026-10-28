@@ -165,7 +165,7 @@ fn init_with_only_a_too_old_python3_writes_the_supported_floor() {
     let tmp = TempDir::new().unwrap();
     let bin = TempDir::new().unwrap();
     let python3 = bin.path().join("python3");
-    fs::write(&python3, "#!/bin/sh\necho '3.9'\n").unwrap();
+    fs::write(&python3, "#!/bin/sh\necho 'Python 3.9.18'\n").unwrap();
     fs::set_permissions(&python3, fs::Permissions::from_mode(0o755)).unwrap();
     cargo_bin()
         .current_dir(tmp.path())
@@ -174,8 +174,9 @@ fn init_with_only_a_too_old_python3_writes_the_supported_floor() {
         .assert()
         .success();
     let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
+    let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
     assert!(
-        pyproject.contains(r#"requires-python = ">=3.11""#),
+        pyproject.contains(&format!(r#"requires-python = ">=3.{floor}""#)),
         "{pyproject}"
     );
 }

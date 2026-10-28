@@ -209,18 +209,10 @@ fn detect_requires_python() -> String {
 
 /// `>=3.N` for `python`'s minor, never below the oldest Python toolr runs on.
 fn requires_python_from(python: &str) -> String {
-    let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
-    let minor = std::process::Command::new(python)
-        .arg("-c")
-        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| {
-            let version = String::from_utf8_lossy(&output.stdout);
-            version.trim().strip_prefix("3.")?.parse::<u32>().ok()
-        });
-    format!(">=3.{}", minor.map_or(floor, |m| m.max(floor)))
+    use toolr_core::execute::python::{MIN_PYTHON_MINOR, python3_minor};
+    let minor =
+        python3_minor(Path::new(python)).map_or(MIN_PYTHON_MINOR, |m| m.max(MIN_PYTHON_MINOR));
+    format!(">=3.{minor}")
 }
 
 fn manifest_rebuild() -> Result<ExitCode> {
@@ -952,14 +944,26 @@ dev = ["pytest", "ruff"]
         // Probed separately so a broken probe script can't hide behind the
         // floor fallback.
         let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
-        let minor = std::process::Command::new("python3")
+        let detected = detect_requires_python();
+        let minor: u32 = detected
+            .strip_prefix(">=3.")
+            .and_then(|m| m.parse().ok())
+            .unwrap_or_else(|| panic!("not a >=3.N floor: {detected}"));
+        assert!(minor >= floor, "{detected} is below the floor");
+        let real = std::process::Command::new("python3")
             .args(["-c", "import sys; print(sys.version_info.minor)"])
             .output()
             .ok()
             .filter(|o| o.status.success())
-            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok());
-        let expected = format!(">=3.{}", minor.map_or(floor, |m| m.max(floor)));
-        assert_eq!(detect_requires_python(), expected);
+            .and_then(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
+            });
+        if let Some(real) = real.filter(|&m| m >= floor) {
+            assert_eq!(minor, real, "{detected} doesn't match python3 3.{real}");
+        }
     }
 
     #[test]
@@ -975,7 +979,7 @@ dev = ["pytest", "ruff"]
     #[cfg(unix)]
     fn requires_python_raises_a_too_old_interpreter_to_the_supported_floor() {
         let bin = tempfile::TempDir::new().unwrap();
-        let python = stub_python(bin.path(), "3.9");
+        let python = stub_python(bin.path(), "3.9.18");
         assert_eq!(
             requires_python_from(python.to_str().unwrap()),
             format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
@@ -986,16 +990,16 @@ dev = ["pytest", "ruff"]
     #[cfg(unix)]
     fn requires_python_keeps_a_newer_interpreter_version() {
         let bin = tempfile::TempDir::new().unwrap();
-        let python = stub_python(bin.path(), "3.99");
+        let python = stub_python(bin.path(), "3.99.0");
         assert_eq!(requires_python_from(python.to_str().unwrap()), ">=3.99");
     }
 
-    /// A `python` that prints `version` for whatever it is asked to run.
+    /// A `python` that reports `Python {version}` for whatever it is asked to run.
     #[cfg(unix)]
     fn stub_python(dir: &std::path::Path, version: &str) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let path = dir.join("python");
-        std::fs::write(&path, format!("#!/bin/sh\necho '{version}'\n")).unwrap();
+        std::fs::write(&path, format!("#!/bin/sh\necho 'Python {version}'\n")).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         path
     }

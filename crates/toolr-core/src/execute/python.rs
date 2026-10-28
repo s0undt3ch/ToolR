@@ -85,24 +85,35 @@ fn probe(exe: &Path) -> Result<(), PythonError> {
         path: exe.display().to_string(),
         reason,
     };
-    let output = Command::new(exe)
-        .arg("--version")
-        .stdin(std::process::Stdio::null())
-        .output()
-        .map_err(|e| unsupported(format!("it does not run ({e})")))?;
-    if !output.status.success() {
-        return Err(unsupported("`--version` failed".to_string()));
-    }
-    // Python 2 printed its version to stderr.
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let text = version_text(exe).map_err(unsupported)?;
     match parse_minor(&text) {
         Some(minor) if minor >= MIN_PYTHON_MINOR => Ok(()),
         _ => Err(unsupported(format!("it reports {:?}", text.trim()))),
     }
+}
+
+/// The Python 3 minor `<exe> --version` reports, or `None` if it doesn't run
+/// or isn't Python 3.
+pub fn python3_minor(exe: &Path) -> Option<u32> {
+    parse_minor(&version_text(exe).ok()?)
+}
+
+/// `<exe> --version` output, or why it couldn't be read.
+fn version_text(exe: &Path) -> Result<String, String> {
+    let output = Command::new(exe)
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("it does not run ({e})"))?;
+    if !output.status.success() {
+        return Err("`--version` failed".to_string());
+    }
+    // Python 2 printed its version to stderr.
+    Ok(format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    ))
 }
 
 fn parse_minor(version_output: &str) -> Option<u32> {
@@ -203,6 +214,24 @@ mod tests {
         let err = resolve_python_in(Some("python3".into()), Some(bin.path().into()), cwd.path())
             .unwrap_err();
         assert!(matches!(err, PythonError::Unsupported { .. }), "{err}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn python3_minor_reads_the_interpreter_version() {
+        let bin = tempfile::TempDir::new().unwrap();
+        assert_eq!(
+            python3_minor(&stub_python(bin.path(), "python3", Some("3.13.2"))),
+            Some(13)
+        );
+        assert_eq!(
+            python3_minor(&stub_python(bin.path(), "python2", Some("2.7.18"))),
+            None
+        );
+        assert_eq!(
+            python3_minor(&stub_python(bin.path(), "broken", None)),
+            None
+        );
     }
 
     #[test]
