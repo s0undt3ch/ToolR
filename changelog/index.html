@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev24-2026-10-28" class="md-nav__link">
+  <a href="#0352-dev27-2026-10-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev24 - 2026-10-28
+        0.35.2-dev27 - 2026-10-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev24 - 2026-10-28">
+    <nav class="md-nav" aria-label="0.35.2-dev27 - 2026-10-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4447,15 +4447,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev24-2026-10-28" class="md-nav__link">
+  <a href="#0352-dev27-2026-10-28" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev24 - 2026-10-28
+        0.35.2-dev27 - 2026-10-28
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev24 - 2026-10-28">
+    <nav class="md-nav" aria-label="0.35.2-dev27 - 2026-10-28">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7429,7 +7429,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev24-2026-10-28">0.35.2-dev24 - 2026-10-28<a class="headerlink" href="#0352-dev24-2026-10-28" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev27-2026-10-28">0.35.2-dev27 - 2026-10-28<a class="headerlink" href="#0352-dev27-2026-10-28" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7444,6 +7444,9 @@ count as consent and download uv. Bare Enter still installs.</p>
 unless <code>$TOOLR_PYTHON</code> held an absolute path. <code>$TOOLR_PYTHON</code> now also accepts a bare name such as
 <code>python3.12</code>, looked up on <code>PATH</code>. A <code>PATH</code> interpreter older than Python 3.11 is skipped, and
 the error names it if nothing newer is found.</p>
+<p><code>toolr project venv sync -P</code>, <code>venv lock -P</code> and <code>venv remove</code> now ignore case and treat <code>-</code>, <code>_</code> and
+<code>.</code> as the same when checking that a package is declared, following PEP 503. A <code>tools/pyproject.toml</code>
+that declares <code>toolr_py</code> or <code>Toolr.Py</code> used to fail the "not declared" check for <code>toolr-py</code>.</p>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(runner)</em> Point schema-mismatch error at venv sync -P (<a href="https://github.com/s0undt3ch/ToolR/commit/170361d39471a5957cf572966b79acf08e8019d7"><code>170361d</code></a>)</li>
@@ -7452,6 +7455,8 @@ the error names it if nothing newer is found.</p>
 <li><em>(uv)</em> End the prompt line before the refusal error on EOF (<a href="https://github.com/s0undt3ch/ToolR/commit/f91da247a695f3f6e56cce4e98bcc0b8f28b0fbd"><code>f91da24</code></a>)</li>
 <li><em>(dispatch)</em> Resolve the PATH Python fallback to an absolute path (<a href="https://github.com/s0undt3ch/ToolR/commit/10fc53fb44fd0662d0bf327a8466a65708ea29b7"><code>10fc53f</code></a>)</li>
 <li><em>(dispatch)</em> Skip PATH interpreters older than Python 3.11 (<a href="https://github.com/s0undt3ch/ToolR/commit/1949afa1ae67a6a0cfe2eaa380b8047b5be59283"><code>1949afa</code></a>)</li>
+<li><em>(project)</em> Compare dependency names the way packaging does (<a href="https://github.com/s0undt3ch/ToolR/commit/fb450b3f3bba7c7e3b42ed707b4413272dd2d70f"><code>fb450b3</code></a>)</li>
+<li><em>(project)</em> Tighten PEP 503 matching wording and tests (<a href="https://github.com/s0undt3ch/ToolR/commit/92026608d987a321c650e5a09f0102cc853b80ef"><code>9202660</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
