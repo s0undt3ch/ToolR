@@ -518,8 +518,8 @@ fn dep_name_matches(spec: &str, package: &str) -> bool {
     normalize_dist_name(&spec[..name_end]) == normalize_dist_name(package)
 }
 
-/// PEP 503 name normalisation, ported from `packaging.utils.canonicalize_name`
-/// so names compare exactly as uv and pip compare them.
+/// PEP 503 name normalisation, a direct port of `packaging.utils.canonicalize_name`
+/// (which pip vendors).
 fn normalize_dist_name(name: &str) -> String {
     let mut value = name.to_lowercase().replace(['_', '.'], "-");
     while value.contains("--") {
@@ -867,11 +867,6 @@ mod tests {
         assert!(!dep_name_matches("other", "toolr-py"));
     }
 
-    #[test]
-    fn dep_name_matches_is_case_insensitive() {
-        assert!(dep_name_matches("Toolr-Py>=0.11", "toolr-py"));
-    }
-
     /// Expected values come from `packaging.utils.canonicalize_name` (26.3).
     #[test]
     fn normalize_dist_name_matches_packaging_canonicalize_name() {
@@ -881,6 +876,8 @@ mod tests {
             ("toolr--py", "toolr-py"),
             ("toolr-_.py", "toolr-py"),
             ("TOOLR-PY", "toolr-py"),
+            // Full Unicode lowercasing like Python's `str.lower()`: `package`
+            // comes from the CLI unfiltered, so ASCII-only would diverge.
             ("Ünicode", "ünicode"),
             ("İstanbul", "i\u{307}stanbul"),
             ("_toolr_", "-toolr-"),
@@ -892,6 +889,7 @@ mod tests {
 
     #[test]
     fn dep_name_matches_normalises_separators_per_pep_503() {
+        assert!(dep_name_matches("Toolr-Py>=0.11", "toolr-py"));
         assert!(dep_name_matches("toolr_py", "toolr-py"));
         assert!(dep_name_matches("Toolr.Py>=1", "toolr-py"));
         assert!(dep_name_matches("toolr--py", "toolr_py"));

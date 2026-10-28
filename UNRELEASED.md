@@ -28,6 +28,6 @@ unless `$TOOLR_PYTHON` held an absolute path. `$TOOLR_PYTHON` now also accepts a
 `python3.12`, looked up on `PATH`. A `PATH` interpreter older than Python 3.11 is skipped, and
 the error names it if nothing newer is found.
 
-`toolr project venv sync -P`, `venv lock -P` and `venv remove` now match package names the way uv and
-pip do. A `tools/pyproject.toml` that declares `toolr_py` or `Toolr.Py` used to fail the "not
-declared" check for `toolr-py`.
+`toolr project venv sync -P`, `venv lock -P` and `venv remove` now ignore case and treat `-`, `_` and
+`.` as the same when checking that a package is declared, following PEP 503. A `tools/pyproject.toml`
+that declares `toolr_py` or `Toolr.Py` used to fail the "not declared" check for `toolr-py`.
