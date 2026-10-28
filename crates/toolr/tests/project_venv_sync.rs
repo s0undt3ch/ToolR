@@ -178,3 +178,21 @@ fn sync_dash_p_success_path_invokes_uv_sync_with_upgrade_package() {
     );
     assert!(argv.contains("requests"), "uv argv should contain `requests`; got:\n{argv}");
 }
+
+/// Regression for #589: uv treats `toolr_py` and `toolr-py` as the same
+/// distribution (PEP 503), so the pre-flight guard must too.
+#[cfg(unix)]
+#[test]
+fn sync_dash_p_accepts_dependency_declared_with_underscores() {
+    let fx = VenvFixture::with_dependencies(&["toolr_py"]);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .env("PATH", &fx.bin_dir)
+        .current_dir(&fx.root)
+        .args(["project", "venv", "sync", "-P", "toolr-py"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    let argv = fx.uv_argv();
+    assert!(argv.contains("toolr-py"), "uv argv should contain `toolr-py`; got:\n{argv}");
+}
