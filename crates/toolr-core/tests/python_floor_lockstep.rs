@@ -34,7 +34,9 @@ fn min_python_minor_matches_toolr_py_requires_python() {
     assert_eq!(
         MIN_PYTHON_MINOR, floor,
         "MIN_PYTHON_MINOR={MIN_PYTHON_MINOR} but toolr-py's requires-python is \
-         {requires_python:?}. Update crates/toolr-core/src/execute/python.rs to match.",
+         {requires_python:?}. They must agree: change MIN_PYTHON_MINOR in \
+         crates/toolr-core/src/execute/python.rs or requires-python in \
+         crates/toolr-py/pyproject.toml so the minors match.",
     );
 }
 
