@@ -31,3 +31,8 @@ the error names it if nothing newer is found.
 `toolr project venv sync -P`, `venv lock -P` and `venv remove` now ignore case and treat `-`, `_` and
 `.` as the same when checking that a package is declared, following PEP 503. A `tools/pyproject.toml`
 that declares `toolr_py` or `Toolr.Py` used to fail the "not declared" check for `toolr-py`.
+
+From this release, `toolr-py`'s runner checks the spec's schema version before validating the rest of
+the spec. When the binary and `toolr-py` disagree, the error names which side to upgrade, even if a
+field was removed or retyped between schema versions. The fix lives in `toolr-py`, so a tools venv
+still on an older `toolr-py` keeps printing "failed schema validation" in those cases.

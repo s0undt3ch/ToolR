@@ -48,6 +48,12 @@ use serde::{Deserialize, Serialize};
 /// - Internal Rust refactors that don't change the serialised shape.
 /// - Renaming variables, restructuring code, expanding tests.
 ///
+/// # Never change `schema_version` itself
+///
+/// It must stay a top-level integer field. Runners read it before the rest
+/// of the spec, so a mismatch names the side to upgrade even when other
+/// fields changed. Every installed `toolr-py` relies on that.
+///
 /// Toolr is pre-1.0, so we don't carve out "major" / "minor" — bumps are
 /// monotonic integers tied 1:1 to "the protocol changed in a way an
 /// older peer can't handle".
