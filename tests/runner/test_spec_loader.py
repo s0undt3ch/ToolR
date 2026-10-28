@@ -4,6 +4,7 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -18,6 +19,10 @@ from toolr._runner import load_spec_from_env
 posix_only = pytest.mark.skipif(
     not hasattr(os, "getuid"), reason="requires POSIX ownership/permission semantics"
 )
+
+
+#: Pass as a `spec_file` override value to remove that key from the spec.
+DROP: Final = object()
 
 
 @pytest.fixture
@@ -39,7 +44,11 @@ def spec_file(tmp_path: Path) -> Callable[..., Path]:
                 "log_level": "INFO",
             },
         }
-        payload.update(overrides)
+        for key, value in overrides.items():
+            if value is DROP:
+                del payload[key]
+            else:
+                payload[key] = value
         spec_path = tmp_path / "spec.json"
         spec_path.write_text(json.dumps(payload))
         return spec_path
@@ -64,6 +73,46 @@ def test_load_spec_rejects_unknown_schema_version(spec_file: Callable[..., Path]
     # and points the user at the fix. Assert on the parts users will grep for.
     assert "schema" in msg
     assert "999" in msg
+
+
+def test_load_spec_newer_binary_with_removed_field_still_names_remedy(
+    spec_file: Callable[..., Path],
+) -> None:
+    # A non-additive bump: the newer binary no longer sends `module`. The
+    # version check must win over the typed decode, or the user only sees
+    # "failed schema validation" with no hint which side is stale.
+    spec_path = spec_file(schema_version=SCHEMA_VERSION + 1, module=DROP)
+    with pytest.raises(SpecError) as exc_info:
+        load_spec(spec_path)
+    msg = str(exc_info.value)
+    assert "toolr project venv sync -P toolr-py" in msg, msg
+    assert "failed schema validation" not in msg, msg
+
+
+def test_load_spec_older_binary_with_changed_field_type_still_names_remedy(
+    spec_file: Callable[..., Path],
+) -> None:
+    spec_path = spec_file(schema_version=SCHEMA_VERSION - 1, args=["not", "a", "dict"])
+    with pytest.raises(SpecError) as exc_info:
+        load_spec(spec_path)
+    msg = str(exc_info.value)
+    assert f"Upgrade the toolr binary to a version that emits schema {SCHEMA_VERSION}." in msg, msg
+    assert "failed schema validation" not in msg, msg
+
+
+@pytest.mark.parametrize(
+    "schema_version",
+    [
+        pytest.param(DROP, id="missing"),
+        pytest.param(str(SCHEMA_VERSION), id="not-an-int"),
+    ],
+)
+def test_load_spec_bad_schema_version_fails_schema_validation(
+    spec_file: Callable[..., Path], schema_version: object
+) -> None:
+    spec_path = spec_file(schema_version=schema_version)
+    with pytest.raises(SpecError, match=r"failed schema validation.*schema_version"):
+        load_spec(spec_path)
 
 
 def test_load_spec_raises_when_file_missing(tmp_path: Path) -> None:

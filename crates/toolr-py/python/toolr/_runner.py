@@ -95,6 +95,11 @@ together when the two sides would no longer understand each other:
   binaries.
 * Internal refactors that don't change the serialised shape.
 
+**Never** move, rename or retype ``schema_version`` itself: it must stay a
+top-level integer. Runners read it before the rest of the spec, so a
+mismatch names the side to upgrade even when other fields changed. Every
+installed ``toolr-py`` relies on that.
+
 Toolr is pre-1.0, so bumps are monotonic integers tied 1:1 to "the
 protocol changed in a way an older peer can't handle".
 
@@ -138,9 +143,6 @@ class DispatchPayloadSpec(msgspec.Struct, frozen=True):
     command: str
     command_args: dict[str, Any]
     schema: CommandSchema
-
-
-_SpecT = TypeVar("_SpecT", bound=msgspec.Struct)
 
 
 class _SchemaVersionProbe(msgspec.Struct):
@@ -209,6 +211,9 @@ def load_spec(path: str | os.PathLike[str]) -> RunnerSpec:
         )
         raise SpecError(msg)
     return _decode_spec(data, RunnerSpec, spec_path)
+
+
+_SpecT = TypeVar("_SpecT", bound=msgspec.Struct)
 
 
 def _decode_spec(data: bytes, type_: type[_SpecT], spec_path: Path) -> _SpecT:
