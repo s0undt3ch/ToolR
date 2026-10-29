@@ -388,7 +388,7 @@ def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
 
     Args:
         event_name: Event name
-        branch: Branch to check for open PR
+        branch: Ref name shown in the step summary
     """
     github_output = os.environ.get("GITHUB_OUTPUT")
     github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
