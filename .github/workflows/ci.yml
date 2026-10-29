@@ -3,6 +3,7 @@ run-name: "CI (${{ github.event_name == 'pull_request' && format('pr: #{0}', git
 
 on:
   push:
+    branches: [main]
   pull_request:
     # Default PR triggers PLUS labeled/unlabeled: applying or removing the
     # `full-build` or `full-bench` label re-runs CI so the new matrix /
@@ -36,6 +37,7 @@ jobs:
   prepare-ci:
     name: Prepare CI
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
@@ -60,6 +62,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Load shared env vars
         # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
@@ -125,6 +129,7 @@ jobs:
   pre-commit:
     name: Pre-commit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     needs:
@@ -137,6 +142,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Load shared env vars
         # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
@@ -214,6 +221,7 @@ jobs:
     needs:
       - build-binary-archive
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -223,6 +231,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Load shared env vars
         # `$GITHUB_ENV` expects strict `KEY=VALUE` lines and rejects
@@ -301,6 +311,7 @@ jobs:
       - prepare-ci
       - prepare-release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -310,6 +321,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
@@ -554,6 +567,7 @@ jobs:
   docs:
     name: Publish Docs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     needs:
       - pre-commit
@@ -704,6 +718,7 @@ jobs:
       - test-distribution-windows
       - test-distribution-macos
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
       attestations: write
@@ -799,6 +814,7 @@ jobs:
     # skipped, as on the `push` twin of a PR run, which uploads nothing.
     if: ${{ !cancelled() && fromJSON(needs.prepare-ci.outputs.should-run-build) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - prepare-ci
       - test-distribution-linux
@@ -817,6 +833,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Tell Codecov every upload is in
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -834,6 +852,7 @@ jobs:
     name: Set the ${{ github.workflow }}(${{ github.event_name }}) Pipeline Exit Status
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - bench-linux
       - bench-macos
@@ -868,6 +887,8 @@ jobs:
       # A local `uses:` resolves from the checked-out tree, and gate jobs
       # otherwise never check out the repo.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Gate on the needed jobs' results
         uses: ./.github/actions/pipeline-gate

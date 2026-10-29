@@ -31,6 +31,7 @@ jobs:
   test:
     name: ${{ inputs.display-name }}
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 45
     permissions:
       id-token: write
     steps:
@@ -40,6 +41,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Cargo's git-dependency checkouts (the ruff crates) can exceed
       # Windows' 260-char MAX_PATH; core.longpaths lifts that limit.
@@ -78,11 +81,13 @@ jobs:
         run: ls -la wheelhouse/
 
       - name: Run Distribution Tests
+        shell: bash
         env:
+          INPUTS_OS: ${{ inputs.os }}
           PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
           COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
         run: |
-          uv run coverage run -m pytest -ra -s -v --color=yes --junitxml=junit-dist-${{ inputs.os }}.xml tests/distribution/
+          uv run coverage run -m pytest -ra -s -v --color=yes --junitxml="junit-dist-${INPUTS_OS}.xml" tests/distribution/
 
       - name: Report Python Coverage
         run: |

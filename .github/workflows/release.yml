@@ -30,6 +30,7 @@ jobs:
   prepare-ci:
     name: Prepare CI
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: release
     permissions:
       contents: read
@@ -57,6 +58,8 @@ jobs:
           username: ${{ github.triggering_actor }}
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Load shared env vars
         # See ci.yml's matching step for why we sed-filter instead of cat.
@@ -106,7 +109,7 @@ jobs:
       attestations: write
     with:
       release-version: ${{ inputs.release-version }}
-      github-app-id: ${{ vars.GH_APP_ID }}
+      github-app-client-id: ${{ vars.GH_APP_CLIENT_ID }}
       environment: release
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
@@ -250,6 +253,7 @@ jobs:
       - prepare-ci
       - prepare-release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -259,6 +263,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Virtual Environment
         uses: ./.github/actions/setup-virtualenv
@@ -355,6 +361,7 @@ jobs:
       - test-distribution-windows
       - prepare-release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       id-token: write
@@ -371,8 +378,10 @@ jobs:
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
-          app-id: ${{ vars.GH_APP_ID }}
+          client-id: ${{ vars.GH_APP_CLIENT_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          # Pushes the release tag and commit, and creates the GitHub release.
+          permission-contents: write
 
       - name: Get GitHub App User ID
         id: get-user-id
@@ -447,18 +456,19 @@ jobs:
           subject-path: dist/*
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          tag_name: v${{ needs.prepare-release.outputs.release-version }}
-          name: ${{ needs.prepare-release.outputs.release-version }}
-          body_path: ${{ needs.prepare-release.outputs.release-notes-filename }}
-          files: |
-            dist/*
-            release-assets/*
-          draft: false
-          prerelease: false
-          make_latest: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
+          RELEASE_NOTES: ${{ needs.prepare-release.outputs.release-notes-filename }}
+        run: |
+          gh release create "v${RELEASE_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "${RELEASE_VERSION}" \
+            --notes-file "${RELEASE_NOTES}" \
+            --latest \
+            dist/* release-assets/*
 
       - name: Publish to PyPI (Trusted Publisher)
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
@@ -483,6 +493,7 @@ jobs:
       - prepare-release
       - publish-release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
       id-token: write
@@ -566,6 +577,7 @@ jobs:
       - prepare-release
       - publish-packslip
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       actions: write
     steps:
@@ -591,6 +603,7 @@ jobs:
     name: Set the ${{ github.workflow }} Pipeline Exit Status
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - build-binary-archive
       - build-binary-wheel-linux
@@ -617,6 +630,8 @@ jobs:
       # A local `uses:` resolves from the checked-out tree, and gate jobs
       # otherwise never check out the repo.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Gate on the needed jobs' results
         uses: ./.github/actions/pipeline-gate
