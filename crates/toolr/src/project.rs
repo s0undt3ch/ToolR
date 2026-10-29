@@ -961,9 +961,8 @@ dev = ["pytest", "ruff"]
                     .parse::<u32>()
                     .ok()
             });
-        if let Some(real) = real.filter(|&m| m >= floor) {
-            assert_eq!(minor, real, "{detected} doesn't match python3 3.{real}");
-        }
+        let real = real.filter(|&m| m >= floor).unwrap_or(minor);
+        assert_eq!(minor, real, "{detected} doesn't match python3 3.{real}");
     }
 
     #[test]
