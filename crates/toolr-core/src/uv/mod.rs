@@ -62,8 +62,12 @@ pub enum UvError {
     },
     #[error("HTTP error during uv install: {0}")]
     Http(String),
-    #[error("couldn't extract the downloaded uv archive {archive}: {reason}")]
-    Extract { archive: PathBuf, reason: String },
+    #[error("couldn't extract the downloaded uv archive {archive}")]
+    Extract {
+        archive: PathBuf,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
     #[error("uv sync failed with exit code {0:?}")]
     SyncFailed(Option<i32>),
 }
@@ -79,10 +83,13 @@ impl UvError {
         }
     }
 
-    pub(crate) fn extract(archive: &Path, reason: impl std::fmt::Display) -> Self {
+    pub(crate) fn extract(
+        archive: &Path,
+        source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
+    ) -> Self {
         Self::Extract {
             archive: archive.to_path_buf(),
-            reason: reason.to_string(),
+            source: source.into(),
         }
     }
 }
@@ -324,11 +331,12 @@ mod tests {
     fn extract_error_names_the_archive_and_points_at_manual_install() {
         let err = UvError::extract(Path::new("uv.zip"), "bad header");
         assert!(err.to_string().contains("uv.zip"));
-        assert!(err.to_string().contains("bad header"));
         assert!(
             err.user_message()
                 .contains("https://docs.astral.sh/uv/getting-started/installation/")
         );
+        let chain = format!("{:#}", err.into_anyhow());
+        assert!(chain.contains("bad header"), "got: {chain}");
     }
 
     #[test]

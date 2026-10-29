@@ -749,6 +749,26 @@ mod tests {
     }
 
     #[test]
+    fn extract_tar_gz_keeps_the_cause_of_a_truncated_download() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("cut.tar.gz");
+        let payload: Vec<u8> = (0..200_000u32)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
+            .collect();
+        write_tar_gz(&archive, &[("uv-x86_64-apple-darwin/uv", &payload)]);
+        let bytes = fs::read(&archive).unwrap();
+        fs::write(&archive, &bytes[..bytes.len() / 2]).unwrap();
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        let err = extract_tar_gz(&archive, &out).unwrap_err();
+        let chain = format!("{:#}", anyhow::Error::new(err));
+        assert!(
+            chain.contains("unexpected end of file") || chain.contains("deflate"),
+            "cause missing from: {chain}"
+        );
+    }
+
+    #[test]
     fn extract_zip_unpacks_archive_into_dest() {
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("bundle.zip");
