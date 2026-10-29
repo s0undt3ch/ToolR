@@ -291,6 +291,26 @@ fn no_sync_errors_when_venv_is_incomplete() {
     );
 }
 
+/// The Windows shape of #609: the venv's launcher survives, but the base
+/// Python that `pyvenv.cfg` points at is gone. Cross-platform.
+#[test]
+fn no_sync_errors_when_base_python_is_removed() {
+    let tmp = TempDir::new().unwrap();
+    let venv = fake_in_tree_venv_cross_platform(tmp.path(), /* with_toolr_pkg */ true);
+    let home = tmp.path().join("pruned").join("python");
+    std::fs::write(venv.join("pyvenv.cfg"), format!("home = {}\n", home.display())).unwrap();
+    mark_fresh(tmp.path(), &venv);
+    let output = Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .args(["project", "venv", "run", "--no-sync", "--", "python"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr:\n{stderr}");
+    assert!(stderr.contains("interpreter no longer exists"), "stderr:\n{stderr}");
+}
+
 /// A command that resolves on the venv PATH but cannot be executed (a
 /// non-executable file) fails to spawn with `PermissionDenied`, not
 /// `NotFound`. It must surface a real spawn error — NOT the

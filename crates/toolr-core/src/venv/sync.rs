@@ -71,7 +71,7 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
         return Freshness::Missing;
     };
     // `is_file` follows symlinks, so a dangling interpreter link counts as gone.
-    if !resolved.python.is_file() {
+    if !resolved.python.is_file() || base_python_removed(&resolved.venv_dir) {
         return Freshness::Broken;
     }
     let marker_t = marker_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
@@ -81,6 +81,18 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     } else {
         Freshness::Stale
     }
+}
+
+/// Whether `pyvenv.cfg`'s `home` is gone. Windows venvs hold a copied launcher,
+/// not a symlink, so their own interpreter outlives the base Python.
+fn base_python_removed(venv_dir: &Path) -> bool {
+    let Ok(cfg) = fs::read_to_string(venv_dir.join("pyvenv.cfg")) else {
+        return false;
+    };
+    cfg.lines()
+        .filter_map(|line| line.split_once('='))
+        .find(|(key, _)| key.trim() == "home")
+        .is_some_and(|(_, home)| !Path::new(home.trim()).is_dir())
 }
 
 /// Run `uv sync --project <tools>` synchronously, inheriting stdio.
@@ -261,6 +273,23 @@ mod tests {
             check_freshness(&resolved, tmp.path()),
             Freshness::Fresh
         );
+    }
+
+    #[test]
+    fn removed_base_python_reports_broken_even_with_a_venv_launcher() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("venv");
+        venv_with_interpreter(&venv);
+        let home = tmp.path().join("pruned").join("bin");
+        fs::write(venv.join("pyvenv.cfg"), format!("home = {}\n", home.display())).unwrap();
+        fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        touch_marker(&venv).unwrap();
+        let resolved = dummy_resolved(venv.clone());
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Broken);
+
+        fs::create_dir_all(&home).unwrap();
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
     }
 
     #[cfg(unix)]
