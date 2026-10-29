@@ -129,12 +129,12 @@ If toolr finds no uv, it asks whether to download one to the managed
 path or leave you to install it yourself. Press Enter or `I` to
 install. Any other answer stops toolr with an error.
 
-Toolr only asks when stdin is a terminal, and never with `--quiet`.
-`toolr --quiet <command>` and every `toolr project` subcommand that
-takes `--quiet` fail with an error instead of asking.
-`toolr project venv sync --quiet` exits silently instead, for
-shell-enter hooks. In CI, in pipes and in other non-interactive runs
-toolr also fails, unless you approve the install in advance:
+Toolr only asks when stdin is a terminal. With `--quiet`, at the root
+(`toolr --quiet …`) or on a subcommand, it never asks and fails with
+an error instead. The one exception is `toolr project venv sync
+--quiet`, which exits silently so shell-enter hooks don't break. In CI,
+in pipes and in other non-interactive runs toolr also fails, unless you
+approve the install in advance:
 
 - Set `TOOLR_AUTO_INSTALL_UV=1` to install without asking.
 - Run [`toolr __install-uv-now`](../cli.md#__install-uv-now), for

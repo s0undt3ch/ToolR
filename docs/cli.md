@@ -30,7 +30,7 @@ They're root-only — place them before the subcommand
 | Flag | What it does |
 |---|---|
 | `-d` / `--debug` | Increase verbosity. Also enables Python `DEBUG` logging in the runner. Mutually exclusive with `--quiet`. |
-| `-q` / `--quiet` | Suppress non-error output. |
+| `-q` / `--quiet` | Suppress non-error output and never prompt to install uv. |
 | `--timestamps` / `--ts` | Prepend ISO-8601 timestamps to log lines. |
 | `--no-timestamps` / `--nts` | Suppress log-line timestamps (default; wins over `--timestamps`). |
 | `--timeout-secs SECONDS` / `--timeout` | Default timeout passed to every `ctx.run(...)` call. Per-call `timeout_secs=` still wins. |

@@ -39,5 +39,6 @@ still on an older `toolr-py` keeps printing "failed schema validation" in those 
 
 `--quiet` now means "never prompt to install uv" on every subcommand that takes it. `toolr project
 init`, `venv lock`, `venv add`, `venv remove` and `venv run` used to ask on a terminal even with
-`--quiet`; they now fail with the uv install hint instead. Set `TOOLR_AUTO_INSTALL_UV=1` to install
-without asking.
+`--quiet`; they now fail with the uv install hint instead. The root `toolr --quiet project …` form,
+including `venv shell`, never prompts either. Set `TOOLR_AUTO_INSTALL_UV=1` to install without
+asking.

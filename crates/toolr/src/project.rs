@@ -11,18 +11,22 @@ use clap::ArgMatches;
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 
-pub fn dispatch_project(matches: &ArgMatches) -> Result<ExitCode> {
+/// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
+/// uv install prompt; output and `venv sync`'s silent exit follow the
+/// subcommand's own `--quiet`. A new handler that may install uv must honour it
+/// and get a case in `tests/quiet_uv_consent.rs`.
+pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     match matches.subcommand() {
-        Some(("init", init_m)) => project_init(init_m),
+        Some(("init", init_m)) => project_init(init_m, root_quiet),
         Some(("deps", _)) => deps_migration_hint(),
         Some(("venv", venv_m)) => match venv_m.subcommand() {
             Some(("path", _)) => venv_path(),
-            Some(("shell", _)) => venv_shell(),
-            Some(("run", run_m)) => venv_run(run_m),
-            Some(("sync", sync_m)) => venv_sync(sync_m),
-            Some(("lock", lock_m)) => venv_lock(lock_m),
-            Some(("add", add_m)) => venv_add(add_m),
-            Some(("remove", remove_m)) => venv_remove(remove_m),
+            Some(("shell", _)) => venv_shell(root_quiet),
+            Some(("run", run_m)) => venv_run(run_m, root_quiet),
+            Some(("sync", sync_m)) => venv_sync(sync_m, root_quiet),
+            Some(("lock", lock_m)) => venv_lock(lock_m, root_quiet),
+            Some(("add", add_m)) => venv_add(add_m, root_quiet),
+            Some(("remove", remove_m)) => venv_remove(remove_m, root_quiet),
             _ => unreachable!("clap enforces subcommand_required"),
         },
         Some(("manifest", manifest_m)) => match manifest_m.subcommand() {
@@ -46,7 +50,7 @@ fn deps_migration_hint() -> Result<ExitCode> {
     Ok(ExitCode::from(2))
 }
 
-fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
+fn project_init(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let force = matches.get_flag("force");
     let no_sync = matches.get_flag("no-sync");
     let no_example = matches.get_flag("no-example");
@@ -92,6 +96,7 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
         force,
         no_sync,
         quiet,
+        quiet || root_quiet,
         yes_all,
         &mut |dest| prompt_overwrite_file(dest, &cwd),
     )
@@ -99,12 +104,14 @@ fn project_init(matches: &ArgMatches) -> Result<ExitCode> {
 
 /// Inner implementation, factored out so the confirm callback can be injected
 /// in tests without spinning up a full process.
+#[allow(clippy::too_many_arguments)] // flat flags keep the unit-test call sites readable.
 pub(crate) fn run_project_init(
     cwd: &Path,
     opts: &ScaffoldOptions,
     force: bool,
     no_sync: bool,
     quiet: bool,
+    never_prompt: bool,
     yes_all: bool,
     confirm: &mut dyn FnMut(&Path) -> Result<bool>,
 ) -> Result<ExitCode> {
@@ -154,7 +161,7 @@ pub(crate) fn run_project_init(
     }
 
     // Auto-sync — same path as `toolr project venv sync --force`.
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(never_prompt);
     let (resolved, uv) =
         toolr_core::project::ensure_venv_ready(
             cwd,
@@ -235,7 +242,7 @@ fn manifest_rebuild() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
+fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let force = matches.get_flag("force");
     let quiet = matches.get_flag("quiet");
     let upgrade_all = matches.get_flag("upgrade");
@@ -263,7 +270,7 @@ fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
         }
     }
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
 
     let opts = toolr_core::project::EnsureOpts::default()
         .with_force_sync(force)
@@ -308,7 +315,7 @@ fn build_upgrade_mode(all: bool, pkgs: Vec<String>) -> toolr_core::venv::Upgrade
     }
 }
 
-fn venv_lock(matches: &ArgMatches) -> Result<ExitCode> {
+fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let quiet = matches.get_flag("quiet");
     let upgrade_all = matches.get_flag("upgrade");
     let upgrade_pkgs: Vec<String> = matches
@@ -336,7 +343,7 @@ fn venv_lock(matches: &ArgMatches) -> Result<ExitCode> {
 
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -357,7 +364,7 @@ fn venv_lock(matches: &ArgMatches) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_add(matches: &ArgMatches) -> Result<ExitCode> {
+fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let quiet = matches.get_flag("quiet");
     let specs: Vec<String> = matches
         .get_many::<String>("packages")
@@ -370,7 +377,7 @@ fn venv_add(matches: &ArgMatches) -> Result<ExitCode> {
         .context("locating project root for the tools venv")?;
     let tools_dir = repo_root.join("tools");
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -388,7 +395,7 @@ fn venv_add(matches: &ArgMatches) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_remove(matches: &ArgMatches) -> Result<ExitCode> {
+fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let quiet = matches.get_flag("quiet");
     let packages: Vec<String> = matches
         .get_many::<String>("packages")
@@ -412,7 +419,7 @@ fn venv_remove(matches: &ArgMatches) -> Result<ExitCode> {
         }
     }
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -447,7 +454,7 @@ fn venv_sync_unattended_quiet_exit(
     // already produces — keep this list aligned with:
     //   - discover_project_root NotFound        → "locating project root"
     //   - resolve_venv_path missing pyproject   → "resolving the tools venv path"
-    //   - ensure_uv with silent_refuse=true     → UvError::UserRefusedInstall
+    //   - ensure_uv with never_prompt=true      → UvError::UserRefusedInstall
     //     whose Display is "user declined uv install; ..."
     let benign_markers = [
         "locating project root",
@@ -537,11 +544,11 @@ fn venv_path() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn venv_shell() -> Result<ExitCode> {
+fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
     use std::process::Command;
 
     let cwd = std::env::current_dir()?;
-    let consent = toolr_core::uv::install::ConsentMode::from_env(false);
+    let consent = toolr_core::uv::install::ConsentMode::from_env(root_quiet);
     let (resolved, _) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -561,7 +568,7 @@ fn venv_shell() -> Result<ExitCode> {
     Ok(ExitCode::from(status.code().unwrap_or(1) as u8))
 }
 
-fn venv_run(matches: &ArgMatches) -> Result<ExitCode> {
+fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let no_sync = matches.get_flag("no-sync");
     let quiet = matches.get_flag("quiet");
     let argv: Vec<String> = matches
@@ -596,7 +603,7 @@ fn venv_run(matches: &ArgMatches) -> Result<ExitCode> {
         // Default: freshness-gated auto-sync (same path as `venv sync`,
         // and as `venv shell`), then run. `--quiet` forwards to uv's
         // --quiet inside the sync.
-        let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
+        let consent = toolr_core::uv::install::ConsentMode::from_env(quiet || root_quiet);
         let (resolved, _uv) = toolr_core::project::ensure_venv_ready(
             &cwd,
             consent,
@@ -742,6 +749,7 @@ mod tests {
             /*force=*/ false,
             /*no_sync=*/ true,
             /*quiet=*/ true,
+            /*never_prompt=*/ false,
             /*yes_all=*/ true,
             &mut |_| unreachable!("confirm should not be called when yes_all=true"),
         )
@@ -766,6 +774,7 @@ mod tests {
             /*force=*/ false,
             /*no_sync=*/ true,
             /*quiet=*/ true,
+            /*never_prompt=*/ false,
             /*yes_all=*/ false,
             &mut |_| Ok(false), // always decline
         )
@@ -793,6 +802,7 @@ mod tests {
             /*force=*/ false,
             /*no_sync=*/ true,
             /*quiet=*/ true,
+            /*never_prompt=*/ false,
             /*yes_all=*/ false,
             &mut |dest| {
                 // Approve only pyproject.toml.
