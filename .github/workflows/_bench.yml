@@ -27,6 +27,7 @@ jobs:
   bench:
     name: ${{ inputs.display-name }}
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
     permissions:
       contents: read
 
@@ -37,6 +38,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Derive the artifact identifiers we'll download below from the
       # runner OS. Centralised here so the rest of the job can reference

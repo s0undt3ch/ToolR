@@ -8,10 +8,10 @@ on:
         type: string
         description: 'Release version to prepare'
         default: ''
-      github-app-id:
+      github-app-client-id:
         required: false
         type: string
-        description: 'GitHub App ID for authentication'
+        description: 'GitHub App Client ID for authentication'
       environment:
         required: false
         type: string
@@ -53,6 +53,7 @@ jobs:
   prepare-release:
     name: Prepare Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: ${{ inputs.environment != '' && inputs.environment || null }}
     permissions:
       contents: read
@@ -72,15 +73,17 @@ jobs:
           egress-policy: audit
 
       - name: Create GitHub App Token
-        if: inputs.github-app-id != ''
+        if: inputs.github-app-client-id != ''
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ inputs.github-app-id }}
+          client-id: ${{ inputs.github-app-client-id }}
           private-key: ${{ secrets.github-app-private-key }}
+          # Only resolves the bot user and checks out; commits and tags stay local.
+          permission-contents: read
 
       - name: Get GitHub App User ID
-        if: inputs.github-app-id != ''
+        if: inputs.github-app-client-id != ''
         id: get-user-id
         shell: bash
         run: |
@@ -93,6 +96,7 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token || github.token }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up mise
         uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
@@ -128,14 +132,14 @@ jobs:
           mise-version: ${{ inputs.mise-version }}
 
       - name: Configure Git (with App)
-        if: inputs.github-app-id != ''
+        if: inputs.github-app-client-id != ''
         shell: bash
         run: |
           git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Configure Git (default)
-        if: inputs.github-app-id == ''
+        if: inputs.github-app-client-id == ''
         uses: ./.github/actions/configure-git
 
       - name: Bump Version

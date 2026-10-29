@@ -31,6 +31,7 @@ jobs:
   test:
     name: ${{ inputs.display-name }} (${{ matrix.python-version }})
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 40
     permissions:
       id-token: write
     strategy:
@@ -45,6 +46,8 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Cargo's git-dependency checkouts (the ruff crates) can exceed
       # Windows' 260-char MAX_PATH; core.longpaths lifts that limit.
@@ -252,7 +255,9 @@ jobs:
           fi
 
       - name: Run Python Tests
+        shell: bash
         env:
+          INPUTS_OS: ${{ inputs.os }}
           PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
           COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
         # `--no-sync`: the .venv is already provisioned by the
@@ -265,7 +270,7 @@ jobs:
         # toolr-plugin-example from source — undoing the whole
         # point of downloading the prebuilt wheel.
         run: |
-          uv run --no-sync coverage run -m pytest -ra -s -v --color=yes --junitxml=junit-${{ matrix.python-version }}-${{ inputs.os }}.xml
+          uv run --no-sync coverage run -m pytest -ra -s -v --color=yes --junitxml="junit-${{ matrix.python-version }}-${INPUTS_OS}.xml"
 
       - name: Report Python Coverage
         run: |

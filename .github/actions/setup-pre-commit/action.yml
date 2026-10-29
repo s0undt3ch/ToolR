@@ -58,7 +58,7 @@ runs:
     # project venv on PATH. mise seeds an empty venv, so install just the
     # `pre-commit` dependency group into it — `--only-group` skips the
     # default/dev groups and the Rust workspace build (all wheels, so it's
-    # quick). Binary hook tools (ruff, typos, rumdl, gh, actionlint,
+    # quick). Binary hook tools (ruff, typos, rumdl, gh, jactionlint,
     # shellcheck, gitleaks) come from mise, installed by the step above.
     - name: Install pre-commit Python tools into the venv
       shell: bash
