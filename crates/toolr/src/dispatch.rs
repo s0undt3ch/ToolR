@@ -362,8 +362,7 @@ fn resync_if_stale(
             "toolr: the tools venv is out of date with tools/uv.lock; syncing it first"
         );
     }
-    let mut consent = toolr_core::uv::install::ConsentMode::from_env();
-    consent.silent_refuse = quiet;
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let opts = toolr_core::project::EnsureOpts::default().with_quiet(quiet);
     let (resolved, _uv) =
         toolr_core::project::ensure_venv_ready(repo_root, consent, opts).context(

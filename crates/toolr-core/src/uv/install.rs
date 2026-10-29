@@ -32,12 +32,14 @@ pub struct ConsentMode {
 }
 
 impl ConsentMode {
-    pub fn from_env() -> Self {
+    /// Consent from the environment. `quiet` is the caller's `--quiet`, which
+    /// means "never prompt": a scripted run must not stop to ask.
+    pub fn from_env(quiet: bool) -> Self {
         Self {
             yes_flag: false,
             auto_install_env: std::env::var_os("TOOLR_AUTO_INSTALL_UV")
                 .is_some_and(|v| v == "1"),
-            silent_refuse: false,
+            silent_refuse: quiet,
         }
     }
 }
@@ -525,17 +527,17 @@ mod tests {
         let prev = std::env::var_os("TOOLR_AUTO_INSTALL_UV");
         // SAFETY: single-threaded test, see comment above.
         unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "1") };
-        let on = ConsentMode::from_env();
+        let on = ConsentMode::from_env(false);
         assert!(on.auto_install_env);
         assert!(!on.yes_flag);
 
         unsafe { std::env::remove_var("TOOLR_AUTO_INSTALL_UV") };
-        let off = ConsentMode::from_env();
+        let off = ConsentMode::from_env(false);
         assert!(!off.auto_install_env);
 
         // Non-"1" value also counts as "not set" for our purposes.
         unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "true") };
-        let other = ConsentMode::from_env();
+        let other = ConsentMode::from_env(false);
         assert!(!other.auto_install_env);
 
         // Restore prior value so we don't leak into sibling tests.

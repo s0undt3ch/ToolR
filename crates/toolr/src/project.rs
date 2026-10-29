@@ -154,7 +154,7 @@ pub(crate) fn run_project_init(
     }
 
     // Auto-sync — same path as `toolr project venv sync --force`.
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) =
         toolr_core::project::ensure_venv_ready(
             cwd,
@@ -263,10 +263,7 @@ fn venv_sync(matches: &ArgMatches) -> Result<ExitCode> {
         }
     }
 
-    let mut consent = toolr_core::uv::install::ConsentMode::from_env();
-    if quiet {
-        consent.silent_refuse = true;
-    }
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
 
     let opts = toolr_core::project::EnsureOpts::default()
         .with_force_sync(force)
@@ -339,7 +336,7 @@ fn venv_lock(matches: &ArgMatches) -> Result<ExitCode> {
 
     let upgrade = build_upgrade_mode(upgrade_all, upgrade_pkgs);
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -373,7 +370,7 @@ fn venv_add(matches: &ArgMatches) -> Result<ExitCode> {
         .context("locating project root for the tools venv")?;
     let tools_dir = repo_root.join("tools");
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -415,7 +412,7 @@ fn venv_remove(matches: &ArgMatches) -> Result<ExitCode> {
         }
     }
 
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -544,7 +541,7 @@ fn venv_shell() -> Result<ExitCode> {
     use std::process::Command;
 
     let cwd = std::env::current_dir()?;
-    let consent = toolr_core::uv::install::ConsentMode::from_env();
+    let consent = toolr_core::uv::install::ConsentMode::from_env(false);
     let (resolved, _) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
@@ -599,7 +596,7 @@ fn venv_run(matches: &ArgMatches) -> Result<ExitCode> {
         // Default: freshness-gated auto-sync (same path as `venv sync`,
         // and as `venv shell`), then run. `--quiet` forwards to uv's
         // --quiet inside the sync.
-        let consent = toolr_core::uv::install::ConsentMode::from_env();
+        let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
         let (resolved, _uv) = toolr_core::project::ensure_venv_ready(
             &cwd,
             consent,

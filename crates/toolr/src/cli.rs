@@ -293,7 +293,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .long("quiet")
                             .short('q')
                             .action(ArgAction::SetTrue)
-                            .help("Suppress informational output"),
+                            .help("Suppress informational output and never prompt to install uv"),
                     ),
             )
             .subcommand(
@@ -336,7 +336,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                 Arg::new("quiet")
                                     .long("quiet")
                                     .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to the auto-sync step (no effect with --no-sync)"),
+                                    .help("Pass --quiet to the auto-sync step and never prompt to install uv (no effect with --no-sync)"),
                             )
                             .arg(
                                 Arg::new("command")
@@ -391,7 +391,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .long("quiet")
                                     .short('q')
                                     .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to uv"),
+                                    .help("Pass --quiet to uv and never prompt to install it"),
                             )
                             .arg(
                                 Arg::new("upgrade")
@@ -425,7 +425,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .long("quiet")
                                     .short('q')
                                     .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to uv"),
+                                    .help("Pass --quiet to uv and never prompt to install it"),
                             ),
                     )
                     .subcommand(
@@ -444,7 +444,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .long("quiet")
                                     .short('q')
                                     .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to uv"),
+                                    .help("Pass --quiet to uv and never prompt to install it"),
                             ),
                     ),
             )
