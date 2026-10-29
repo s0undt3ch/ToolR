@@ -42,3 +42,7 @@ init`, `venv lock`, `venv add`, `venv remove` and `venv run` used to ask on a te
 `--quiet`; they now fail with the uv install hint instead. The root `toolr --quiet project …` form,
 including `venv shell`, never prompts either. Set `TOOLR_AUTO_INSTALL_UV=1` to install without
 asking.
+
+`toolr project init` no longer writes a `requires-python` floor older than toolr supports. With
+Python 3.9 as `python3`, it used to write `>=3.9`; it now writes `>=3.11`. A newer `python3` still
+sets the floor, and an explicit `--python` is used as given.
