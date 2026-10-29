@@ -62,6 +62,8 @@ pub enum UvError {
     },
     #[error("HTTP error during uv install: {0}")]
     Http(String),
+    /// The archive couldn't be decoded or unpacked. A download that unpacks
+    /// but lacks the binary is still `Http`.
     #[error("couldn't extract the downloaded uv archive {archive}")]
     Extract {
         archive: PathBuf,

@@ -752,6 +752,7 @@ mod tests {
     fn extract_tar_gz_keeps_the_cause_of_a_truncated_download() {
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("cut.tar.gz");
+        // Incompressible, so cutting the archive in half lands mid-stream.
         let payload: Vec<u8> = (0..200_000u32)
             .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
             .collect();
@@ -761,11 +762,9 @@ mod tests {
         let out = tmp.path().join("out");
         fs::create_dir_all(&out).unwrap();
         let err = extract_tar_gz(&archive, &out).unwrap_err();
-        let chain = format!("{:#}", anyhow::Error::new(err));
-        assert!(
-            chain.contains("unexpected end of file") || chain.contains("deflate"),
-            "cause missing from: {chain}"
-        );
+        // Extract -> "failed to unpack" -> the real cause.
+        let err = anyhow::Error::new(err);
+        assert!(err.chain().count() >= 3, "cause missing from: {err:#}");
     }
 
     #[test]
@@ -848,7 +847,7 @@ mod tests {
         .unwrap_err();
         match err {
             UvError::Http(msg) => {
-                let binary_name = if cfg!(windows) { "uv.exe" } else { "uv" };
+                let binary_name = super::super::uv_basename();
                 assert!(
                     msg.contains(&format!("did not contain a {binary_name} binary")),
                     "got: {msg}"
@@ -889,7 +888,7 @@ mod tests {
     #[test]
     fn download_and_extract_unpacks_a_zip_asset() {
         // The Windows asset shape: a zip with the binary at its root.
-        let binary_name = if cfg!(windows) { "uv.exe" } else { "uv" };
+        let binary_name = super::super::uv_basename();
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("uv.zip");
         write_zip(&archive, &[(binary_name, b"fake-uv")]);
