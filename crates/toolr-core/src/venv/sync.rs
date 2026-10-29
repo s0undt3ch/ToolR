@@ -89,10 +89,12 @@ fn base_python_removed(venv_dir: &Path) -> bool {
     let Ok(cfg) = fs::read_to_string(venv_dir.join("pyvenv.cfg")) else {
         return false;
     };
+    // Only a confirmed absence counts: an unreadable `home` would otherwise
+    // re-sync a working venv on every dispatch.
     cfg.lines()
         .filter_map(|line| line.split_once('='))
         .find(|(key, _)| key.trim() == "home")
-        .is_some_and(|(_, home)| !Path::new(home.trim()).is_dir())
+        .is_some_and(|(_, home)| matches!(Path::new(home.trim()).try_exists(), Ok(false)))
 }
 
 /// Run `uv sync --project <tools>` synchronously, inheriting stdio.
