@@ -688,7 +688,7 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
     let consent = toolr_core::uv::install::ConsentMode {
         yes_flag: true,
         auto_install_env: true,
-        never_prompt: false,
+        ..Default::default()
     };
     let uv = toolr_core::uv::ensure_uv(consent)
         .map_err(toolr_core::uv::UvError::into_anyhow)?;
