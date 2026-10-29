@@ -1827,10 +1827,12 @@ fall back to the managed copy, so fix that uv or take it off <code>PATH</code>.<
 <p>If toolr finds no uv, it asks whether to download one to the managed
 path or leave you to install it yourself. Press Enter or <code>I</code> to
 install. Any other answer stops toolr with an error.</p>
-<p>Toolr only asks when stdin is a terminal. <code>toolr --quiet &lt;command&gt;</code> and
-<code>toolr project venv sync --quiet</code> never ask. In CI, in pipes and in
-other non-interactive runs toolr fails instead, unless you approve the
-install in advance:</p>
+<p>Toolr only asks when stdin is a terminal, and never with <code>--quiet</code>.
+<code>toolr --quiet &lt;command&gt;</code> and every <code>toolr project</code> subcommand that
+takes <code>--quiet</code> fail with an error instead of asking.
+<code>toolr project venv sync --quiet</code> exits silently instead, for
+shell-enter hooks. In CI, in pipes and in other non-interactive runs
+toolr also fails, unless you approve the install in advance:</p>
 <ul>
 <li>Set <code>TOOLR_AUTO_INSTALL_UV=1</code> to install without asking.</li>
 <li>Run <a href="../cli/#__install-uv-now"><code>toolr __install-uv-now</code></a>, for
