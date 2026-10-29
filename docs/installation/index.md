@@ -143,7 +143,8 @@ approve the install in advance:
 
 Toolr downloads prebuilt uv binaries for Linux (x86_64 and aarch64),
 macOS (x86_64 and Apple silicon) and Windows (x86_64). On other hosts,
-install uv yourself.
+install uv yourself. Toolr unpacks the download itself, so the host
+needs no `tar` or `unzip`.
 
 On Linux, toolr downloads the glibc or musl build of uv to match the
 host. If it guesses wrong, set `TOOLR_UV_LIBC=gnu` or
