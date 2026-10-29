@@ -742,10 +742,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let missing = tmp.path().join("nope.tar.gz");
         let err = extract_tar_gz(&missing, tmp.path()).unwrap_err();
-        match err {
-            UvError::Extract { archive, .. } => assert_eq!(archive, missing),
-            other => panic!("expected Extract error, got {other:?}"),
-        }
+        assert!(
+            matches!(&err, UvError::Extract { archive, .. } if *archive == missing),
+            "got {err:?}"
+        );
     }
 
     #[test]
@@ -797,10 +797,10 @@ mod tests {
         let archive = tmp.path().join("corrupt.zip");
         fs::write(&archive, b"not a zip").unwrap();
         let err = extract_zip(&archive, tmp.path()).unwrap_err();
-        match err {
-            UvError::Extract { archive: got, .. } => assert_eq!(got, archive),
-            other => panic!("expected Extract error, got {other:?}"),
-        }
+        assert!(
+            matches!(&err, UvError::Extract { archive: got, .. } if *got == archive),
+            "got {err:?}"
+        );
     }
 
     #[test]
