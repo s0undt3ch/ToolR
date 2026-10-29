@@ -75,7 +75,7 @@ toolr project init [--force] [--no-sync] [--venv-location {cache,in-tree}]
 - `--no-example` — skip generating `tools/example.py`.
 - `--python` — `requires-python` value for `tools/pyproject.toml`
   (defaults to the running Python's `>=major.minor`).
-- `--quiet` — suppress informational output.
+- `--quiet` — suppress informational output and never prompt to install uv.
 
 ```sh
 toolr project init --help

@@ -36,3 +36,8 @@ From this release, `toolr-py`'s runner checks the spec's schema version before v
 the spec. When the binary and `toolr-py` disagree, the error names which side to upgrade, even if a
 field was removed or retyped between schema versions. The fix lives in `toolr-py`, so a tools venv
 still on an older `toolr-py` keeps printing "failed schema validation" in those cases.
+
+`--quiet` now means "never prompt to install uv" on every subcommand that takes it. `toolr project
+init`, `venv lock`, `venv add`, `venv remove` and `venv run` used to ask on a terminal even with
+`--quiet`; they now fail with the uv install hint instead. Set `TOOLR_AUTO_INSTALL_UV=1` to install
+without asking.

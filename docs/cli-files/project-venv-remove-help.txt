@@ -7,6 +7,6 @@ Arguments:
 
 Options:
   -q, --quiet
-          Pass --quiet to uv
+          Pass --quiet to uv and never prompt to install it
   -h, --help
           Print help

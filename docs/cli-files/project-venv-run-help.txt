@@ -11,6 +11,7 @@ Options:
           Do not sync first; run against the existing venv and error if it is missing or stale
           (CI-deterministic)
       --quiet
-          Pass --quiet to the auto-sync step (no effect with --no-sync)
+          Pass --quiet to the auto-sync step and never prompt to install uv (no effect with
+          --no-sync)
   -h, --help
           Print help

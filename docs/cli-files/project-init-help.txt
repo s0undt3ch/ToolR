@@ -19,6 +19,6 @@ Options:
   -y, --yes
           Auto-approve overwriting any conflicting scaffold files
   -q, --quiet
-          Suppress informational output
+          Suppress informational output and never prompt to install uv
   -h, --help
           Print help
