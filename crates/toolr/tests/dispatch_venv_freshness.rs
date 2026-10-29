@@ -47,6 +47,23 @@ impl Project {
         std::thread::sleep(std::time::Duration::from_millis(20));
         fs::write(self.fx.tools_dir.join("uv.lock"), "version = 1\n# bumped\n").unwrap();
     }
+
+    /// Leave `bin/python` dangling as `mise prune` does (#609); the swapped uv
+    /// stub's `sync` restores it, as real uv rebuilds such a venv.
+    fn prune_interpreter(&self) {
+        let python = self.fx.venv_dir.join("bin").join("python");
+        let saved = self.fx.root.join("python-before-prune");
+        fs::rename(&python, &saved).unwrap();
+        std::os::unix::fs::symlink(self.fx.root.join("pruned").join("python3.13"), &python)
+            .unwrap();
+        let stub = format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> {log}\ncase \"$1\" in\n  --version) echo 'uv 0.5.0';;\n  sync) /bin/rm -f {python} && /bin/cp {saved} {python};;\nesac\nexit 0\n",
+            log = self.fx.uv_argv_log.display(),
+            python = python.display(),
+            saved = saved.display(),
+        );
+        fs::write(self.fx.bin_dir.join("uv"), stub).unwrap();
+    }
 }
 
 /// Factory: a project whose tools venv was provisioned by `toolr project
@@ -118,6 +135,39 @@ fn stale_venv_is_synced_before_dispatch() {
     );
     assert!(stamp_is_newer_than_lock(&p.fx.venv_dir, &p.fx.tools_dir));
     assert!(p.sentinel.exists(), "the command should run after the sync");
+}
+
+#[test]
+fn venv_with_dead_interpreter_is_rebuilt_before_dispatch() {
+    let p = synced_project();
+    p.prune_interpreter();
+    let output = p
+        .toolr(&p.path_with_uv())
+        .args(["hello", "world"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("interpreter no longer exists"),
+        "stderr:\n{stderr}"
+    );
+    let log = p.fx.uv_argv();
+    assert!(uv_synced(&log), "expected a `uv sync`, uv argv was:\n{log}");
+    assert!(p.sentinel.exists(), "the command should run after the rebuild");
+}
+
+#[test]
+fn venv_sync_rebuilds_a_dead_interpreter() {
+    let p = synced_project();
+    p.prune_interpreter();
+    p.toolr(&p.path_with_uv())
+        .args(["project", "venv", "sync"])
+        .assert()
+        .success();
+    let log = p.fx.uv_argv();
+    assert!(uv_synced(&log), "expected a `uv sync`, uv argv was:\n{log}");
+    assert!(p.fx.venv_dir.join("bin").join("python").is_file());
 }
 
 #[test]

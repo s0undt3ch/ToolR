@@ -346,29 +346,29 @@ pub fn dispatch(
 }
 
 /// Re-sync a venv that `tools/uv.lock` has moved past, so a lock bump
-/// never runs old code (#527). A never-synced venv is left to the
-/// provenance gate, so a fresh clone installs nothing before it.
+/// never runs old code (#527), or whose interpreter was uninstalled
+/// under it (#609). A never-synced venv is left to the provenance gate,
+/// so a fresh clone installs nothing before it.
 fn resync_if_stale(
     repo_root: &std::path::Path,
     resolved: toolr_core::venv::ResolvedVenv,
     quiet: bool,
 ) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
     use toolr_core::venv::{Freshness, check_freshness};
-    if check_freshness(&resolved, &repo_root.join("tools")) != Freshness::Stale {
-        return Ok(resolved);
-    }
+    let reason = match check_freshness(&resolved, &repo_root.join("tools")) {
+        Freshness::Stale => " is out of date with tools/uv.lock",
+        Freshness::Broken => "'s Python interpreter no longer exists",
+        Freshness::Missing | Freshness::Fresh => return Ok(resolved),
+    };
     if !quiet {
-        eprintln!(
-            "toolr: the tools venv is out of date with tools/uv.lock; syncing it first"
-        );
+        eprintln!("toolr: the tools venv{reason}; syncing it first");
     }
     let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
     let opts = toolr_core::project::EnsureOpts::default().with_quiet(quiet);
-    let (resolved, _uv) =
-        toolr_core::project::ensure_venv_ready(repo_root, consent, opts).context(
-            "the tools venv is out of date with tools/uv.lock and could not be synced; \
-             run `toolr project venv sync`",
-        )?;
+    let (resolved, _uv) = toolr_core::project::ensure_venv_ready(repo_root, consent, opts)
+        .with_context(|| {
+            format!("the tools venv{reason} and could not be synced; run `toolr project venv sync`")
+        })?;
     Ok(resolved)
 }
 
