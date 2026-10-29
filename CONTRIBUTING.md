@@ -125,7 +125,7 @@ prek run --all-files
 prek run rumdl --files docs/internals/manifest.md
 ```
 
-Hooks include `ruff`, `mypy`, `clippy`, `cargo check`, `rumdl`, `typos`, `actionlint`,
+Hooks include `ruff`, `mypy`, `clippy`, `cargo check`, `rumdl`, `typos`, `jactionlint`,
 `shellcheck`, plus the project-local hooks (`pin-github-actions`, `regen-doc-snippets`).
 
 ## Benchmarking

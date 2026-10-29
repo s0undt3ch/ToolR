@@ -20,7 +20,7 @@ repos:
       - id: check-ast             # Simply check whether files parse as valid python.
 
   - repo: https://github.com/s0undt3ch/pre-commit-hooks
-    rev: v1.0.0
+    rev: v1.4.0
     hooks:
       # One pass: pin any unpinned `uses:` ref to a SHA AND verify that
       # every already-pinned ref still matches the SHA its `# <tag>` comment
@@ -31,7 +31,7 @@ repos:
       # for a non-blocking, gh-optional advisory run).
       - id: pin-github-actions
 
-      - id: actionlint
+      - id: jactionlint-fix
       - id: shellcheck
 
       - id: gitleaks
