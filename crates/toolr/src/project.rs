@@ -586,6 +586,9 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
             toolr_core::venv::Freshness::Stale => anyhow::bail!(
                 "the tools venv is out of date with tools/uv.lock — run `toolr project venv sync` (or drop --no-sync)"
             ),
+            toolr_core::venv::Freshness::Broken => anyhow::bail!(
+                "the tools venv's Python interpreter no longer exists (was it uninstalled?) — run `toolr project venv sync` to rebuild it (or drop --no-sync)"
+            ),
             toolr_core::venv::Freshness::Fresh => {}
         }
         toolr_core::venv::validate_venv(&resolved.venv_dir, &resolved.python)

@@ -51,3 +51,9 @@ The managed uv install no longer needs `tar` or `unzip` on the host. Toolr now u
 itself, which fixes `toolr __install-uv-now` and the install prompt on stock Windows, where `unzip`
 isn't available. A download that can't be unpacked now fails with a message pointing at the manual
 uv install.
+
+A tools venv whose Python was uninstalled under it (for example by `mise prune`) is now rebuilt.
+`toolr project venv sync` and command dispatch used to treat it as up to date and skip the sync.
+They then failed with "does not contain a python interpreter" or "Python interpreter not found"
+until the venv was deleted by hand. Now both re-sync it, and `toolr project venv run --no-sync`
+says the interpreter is gone and how to fix it.

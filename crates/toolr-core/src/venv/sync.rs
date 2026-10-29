@@ -16,14 +16,17 @@ use super::resolve::ResolvedVenv;
 /// whether re-sync is needed.
 const FRESHNESS_MARKER: &str = ".toolr-sync-stamp";
 
-/// Decision returned by `is_fresh`.
+/// Decision returned by `check_freshness`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
     /// Venv has never been synced (marker absent or venv missing).
     Missing,
     /// Lock has been edited since last sync.
     Stale,
-    /// Marker mtime >= lock mtime.
+    /// Synced once, but the interpreter no longer resolves — typically its
+    /// base Python was uninstalled (e.g. `mise prune`). `uv sync` rebuilds it.
+    Broken,
+    /// Marker mtime >= lock mtime, and the interpreter is still there.
     Fresh,
 }
 
@@ -61,12 +64,18 @@ impl UpgradeMode {
     }
 }
 
+/// Precedence is `Missing`, then `Broken`, then `Stale` or `Fresh`. Besides the
+/// two mtimes it stats the interpreter and reads `pyvenv.cfg`.
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
     let lock = tools_dir.join("uv.lock");
     let (Ok(marker_meta), Ok(lock_meta)) = (fs::metadata(&marker), fs::metadata(&lock)) else {
         return Freshness::Missing;
     };
+    // `is_file` follows symlinks, so a dangling interpreter link counts as gone.
+    if !resolved.python.is_file() || base_python_removed(&resolved.venv_dir) {
+        return Freshness::Broken;
+    }
     let marker_t = marker_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
     let lock_t = lock_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
     if marker_t >= lock_t {
@@ -74,6 +83,20 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     } else {
         Freshness::Stale
     }
+}
+
+/// Whether `pyvenv.cfg`'s `home` is gone. Windows venvs hold a copied launcher,
+/// not a symlink, so their own interpreter outlives the base Python.
+fn base_python_removed(venv_dir: &Path) -> bool {
+    let Ok(cfg) = fs::read_to_string(venv_dir.join("pyvenv.cfg")) else {
+        return false;
+    };
+    // Only a confirmed absence counts: an unreadable `home` would otherwise
+    // re-sync a working venv on every dispatch.
+    cfg.lines()
+        .filter_map(|line| line.split_once('='))
+        .find(|(key, _)| key.trim() == "home")
+        .is_some_and(|(_, home)| matches!(Path::new(home.trim()).try_exists(), Ok(false)))
 }
 
 /// Run `uv sync --project <tools>` synchronously, inheriting stdio.
@@ -193,6 +216,29 @@ mod tests {
         }
     }
 
+    /// Create `venv_dir` with the interpreter `dummy_resolved` points at.
+    fn venv_with_interpreter(venv_dir: &Path) {
+        fs::create_dir_all(venv_dir.join("bin")).unwrap();
+        fs::write(venv_dir.join("bin").join("python"), b"").unwrap();
+    }
+
+    /// A fresh venv whose interpreter is a dangling symlink, the way a venv
+    /// looks after `mise prune` removes the Python it was built from.
+    #[cfg(unix)]
+    fn fresh_venv_with_dead_interpreter(tmp: &Path) -> std::path::PathBuf {
+        let venv = tmp.join("venv");
+        fs::create_dir_all(venv.join("bin")).unwrap();
+        std::os::unix::fs::symlink(
+            tmp.join("pruned").join("python3.13"),
+            venv.join("bin").join("python"),
+        )
+        .unwrap();
+        fs::write(tmp.join("uv.lock"), b"locks").unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        touch_marker(&venv).unwrap();
+        venv
+    }
+
     #[test]
     fn missing_marker_or_lock_reports_missing() {
         let tmp = TempDir::new().unwrap();
@@ -207,7 +253,7 @@ mod tests {
     fn marker_older_than_lock_reports_stale() {
         let tmp = TempDir::new().unwrap();
         let venv = tmp.path().join("venv");
-        fs::create_dir_all(&venv).unwrap();
+        venv_with_interpreter(&venv);
         touch_marker(&venv).unwrap();
         std::thread::sleep(Duration::from_millis(20));
         std::fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
@@ -222,7 +268,7 @@ mod tests {
     fn marker_newer_than_lock_reports_fresh() {
         let tmp = TempDir::new().unwrap();
         let venv = tmp.path().join("venv");
-        fs::create_dir_all(&venv).unwrap();
+        venv_with_interpreter(&venv);
         std::fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
         std::thread::sleep(Duration::from_millis(20));
         touch_marker(&venv).unwrap();
@@ -231,6 +277,46 @@ mod tests {
             check_freshness(&resolved, tmp.path()),
             Freshness::Fresh
         );
+    }
+
+    #[test]
+    fn removed_base_python_reports_broken_even_with_a_venv_launcher() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("venv");
+        venv_with_interpreter(&venv);
+        let home = tmp.path().join("pruned").join("bin");
+        fs::write(venv.join("pyvenv.cfg"), format!("home = {}\n", home.display())).unwrap();
+        fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        touch_marker(&venv).unwrap();
+        let resolved = dummy_resolved(venv.clone());
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Broken);
+
+        fs::create_dir_all(&home).unwrap();
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dead_interpreter_reports_broken_despite_fresh_marker() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = dummy_resolved(fresh_venv_with_dead_interpreter(tmp.path()));
+        assert_eq!(
+            check_freshness(&resolved, tmp.path()),
+            Freshness::Broken
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sync_if_needed_invokes_uv_when_interpreter_is_dead() {
+        // The stub's non-zero exit proves uv ran instead of short-circuiting.
+        let tmp = TempDir::new().unwrap();
+        let resolved = dummy_resolved(fresh_venv_with_dead_interpreter(tmp.path()));
+        let uv = stub_uv(tmp.path(), 17);
+        let err = sync_if_needed(&uv, tmp.path(), &resolved, false, false, &UpgradeMode::None)
+            .expect_err("a dead interpreter must trigger a sync");
+        assert!(matches!(err, UvError::SyncFailed(Some(17))));
     }
 
     /// Build a uv-binary stub that, when invoked, returns `exit_code`.
@@ -262,7 +348,7 @@ mod tests {
         // never be invoked.
         let tmp = TempDir::new().unwrap();
         let venv = tmp.path().join("venv");
-        fs::create_dir_all(&venv).unwrap();
+        venv_with_interpreter(&venv);
         fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
         std::thread::sleep(Duration::from_millis(20));
         touch_marker(&venv).unwrap();

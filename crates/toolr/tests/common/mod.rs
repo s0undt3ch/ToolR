@@ -72,20 +72,27 @@ impl VenvFixture {
         let bin_dir = root.join("test-bin");
         fs::create_dir_all(&bin_dir).unwrap();
         let uv_argv_log = root.join("uv-argv.log");
-        let stub_body = format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> {log}\ncase \"$1\" in\n  --version) echo 'uv 0.5.0'; exit 0;;\n  *) exit 0;;\nesac\n",
-            log = uv_argv_log.display()
-        );
-        write_executable(&bin_dir.join("uv"), &stub_body);
 
-        Self {
+        let fx = Self {
             _tmp: tmp,
             root,
             tools_dir,
             venv_dir,
             bin_dir,
             uv_argv_log,
-        }
+        };
+        fx.write_uv_stub("");
+        fx
+    }
+
+    /// (Re)write the stub uv, running `sync_action` (a shell snippet) on
+    /// `uv sync`. PATH holds only the stub dir, so use absolute tool paths.
+    pub fn write_uv_stub(&self, sync_action: &str) {
+        let stub_body = format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> {log}\ncase \"$1\" in\n  --version) echo 'uv 0.5.0';;\n  sync) {sync_action}\n    ;;\nesac\nexit 0\n",
+            log = self.uv_argv_log.display()
+        );
+        write_executable(&self.bin_dir.join("uv"), &stub_body);
     }
 
     /// Read the captured uv argv lines (each token on a separate line).
