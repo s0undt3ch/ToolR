@@ -327,8 +327,8 @@ fn set_executable(_path: &Path) -> Result<(), UvError> {
 }
 
 // In-process, so the managed install needs no `tar` or `unzip` on the host
-// (stock Windows has no `unzip`). Both crates refuse entries that would land
-// outside `into`.
+// (stock Windows has no `unzip`). Neither writes outside `into`: tar skips an
+// escaping entry, zip rejects the whole archive.
 fn extract_tar_gz(archive: &Path, into: &Path) -> Result<(), UvError> {
     let file = fs::File::open(archive).map_err(|e| UvError::extract(archive, e))?;
     tar::Archive::new(flate2::read::GzDecoder::new(file))
@@ -728,11 +728,13 @@ mod tests {
     fn extract_tar_gz_never_writes_outside_dest() {
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("evil.tar.gz");
-        write_tar_gz(&archive, &[("../escaped", b"x")]);
+        write_tar_gz(&archive, &[("../escaped", b"x"), ("ok", b"y")]);
         let out = tmp.path().join("out");
         fs::create_dir_all(&out).unwrap();
-        let _ = extract_tar_gz(&archive, &out);
+        // tar skips the escaping entry and unpacks the rest.
+        extract_tar_gz(&archive, &out).unwrap();
         assert!(!tmp.path().join("escaped").exists());
+        assert_eq!(fs::read(out.join("ok")).unwrap(), b"y");
     }
 
     #[test]
@@ -761,10 +763,12 @@ mod tests {
     fn extract_zip_never_writes_outside_dest() {
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("evil.zip");
-        write_zip(&archive, &[("../escaped", b"x")]);
+        write_zip(&archive, &[("../escaped", b"x"), ("ok", b"y")]);
         let out = tmp.path().join("out");
         fs::create_dir_all(&out).unwrap();
-        let _ = extract_zip(&archive, &out);
+        // zip rejects the whole archive.
+        let err = extract_zip(&archive, &out).unwrap_err();
+        assert!(matches!(err, UvError::Extract { .. }), "got {err:?}");
         assert!(!tmp.path().join("escaped").exists());
     }
 
@@ -823,10 +827,13 @@ mod tests {
         )
         .unwrap_err();
         match err {
-            UvError::Http(msg) => assert!(
-                msg.contains("did not contain a uv binary"),
-                "got: {msg}"
-            ),
+            UvError::Http(msg) => {
+                let binary_name = if cfg!(windows) { "uv.exe" } else { "uv" };
+                assert!(
+                    msg.contains(&format!("did not contain a {binary_name} binary")),
+                    "got: {msg}"
+                );
+            }
             other => panic!("expected Http error, got {other:?}"),
         }
     }
