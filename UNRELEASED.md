@@ -46,3 +46,8 @@ asking.
 `toolr project init` no longer writes a `requires-python` floor older than toolr supports. With
 Python 3.9 as `python3`, it used to write `>=3.9`; it now writes `>=3.11`. A newer `python3` still
 sets the floor, and an explicit `--python` is used as given.
+
+The managed uv install no longer needs `tar` or `unzip` on the host. Toolr now unpacks the download
+itself, which fixes `toolr __install-uv-now` and the install prompt on stock Windows, where `unzip`
+isn't available. A download that can't be unpacked now fails with a message pointing at the manual
+uv install.

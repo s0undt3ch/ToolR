@@ -62,6 +62,8 @@ pub enum UvError {
     },
     #[error("HTTP error during uv install: {0}")]
     Http(String),
+    #[error("couldn't extract the downloaded uv archive {archive}: {reason}")]
+    Extract { archive: PathBuf, reason: String },
     #[error("uv sync failed with exit code {0:?}")]
     SyncFailed(Option<i32>),
 }
@@ -74,6 +76,13 @@ impl UvError {
         Self::ExecFailed {
             path: path.to_path_buf(),
             source,
+        }
+    }
+
+    pub(crate) fn extract(archive: &Path, reason: impl std::fmt::Display) -> Self {
+        Self::Extract {
+            archive: archive.to_path_buf(),
+            reason: reason.to_string(),
         }
     }
 }
@@ -120,6 +129,10 @@ impl UvError {
                  your OS package manager."
                     .into()
             }
+            Self::Extract { .. } => "toolr couldn't unpack the uv it downloaded. Install uv \
+                 yourself from https://docs.astral.sh/uv/getting-started/installation/ \
+                 and rerun."
+                .into(),
             other => other.to_string(),
         }
     }
@@ -305,6 +318,17 @@ mod tests {
                 .contains("uv sync failed")
         );
         assert!(UvError::SyncFailed(None).to_string().contains("uv sync failed"));
+    }
+
+    #[test]
+    fn extract_error_names_the_archive_and_points_at_manual_install() {
+        let err = UvError::extract(Path::new("uv.zip"), "bad header");
+        assert!(err.to_string().contains("uv.zip"));
+        assert!(err.to_string().contains("bad header"));
+        assert!(
+            err.user_message()
+                .contains("https://docs.astral.sh/uv/getting-started/installation/")
+        );
     }
 
     #[test]

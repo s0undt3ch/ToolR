@@ -326,37 +326,27 @@ fn set_executable(_path: &Path) -> Result<(), UvError> {
     Ok(())
 }
 
+// In-process, so the managed install needs no `tar` or `unzip` on the host
+// (stock Windows has no `unzip`). Both crates refuse entries that would land
+// outside `into`.
 fn extract_tar_gz(archive: &Path, into: &Path) -> Result<(), UvError> {
-    let status = std::process::Command::new("tar")
-        .arg("-xzf")
-        .arg(archive)
-        .current_dir(into)
-        .status()?;
-    if !status.success() {
-        return Err(UvError::Http(format!("tar exited with status {status:?}")));
-    }
-    Ok(())
+    let file = fs::File::open(archive).map_err(|e| UvError::extract(archive, e))?;
+    tar::Archive::new(flate2::read::GzDecoder::new(file))
+        .unpack(into)
+        .map_err(|e| UvError::extract(archive, e))
 }
 
 fn extract_zip(archive: &Path, into: &Path) -> Result<(), UvError> {
-    let status = std::process::Command::new("unzip")
-        .arg("-q")
-        .arg(archive)
-        .arg("-d")
-        .arg(into)
-        .status()?;
-    if !status.success() {
-        return Err(UvError::Http(format!(
-            "unzip exited with status {status:?}"
-        )));
-    }
-    Ok(())
+    let file = fs::File::open(archive).map_err(|e| UvError::extract(archive, e))?;
+    zip::ZipArchive::new(file)
+        .and_then(|mut zip| zip.extract(into))
+        .map_err(|e| UvError::extract(archive, e))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
+    use std::io::Write;
 
     #[test]
     fn read_consent_eof_is_no_answer() {
@@ -691,92 +681,102 @@ mod tests {
         assert_eq!(mode, 0o755);
     }
 
-    #[cfg(unix)]
+    fn write_tar_gz(path: &Path, entries: &[(&str, &[u8])]) {
+        let gz = flate2::write::GzEncoder::new(
+            fs::File::create(path).unwrap(),
+            flate2::Compression::default(),
+        );
+        let mut builder = tar::Builder::new(gz);
+        for (name, data) in entries {
+            let mut header = tar::Header::new_gnu();
+            // Written raw: `set_path` refuses `..`, which the traversal test needs.
+            header.as_gnu_mut().unwrap().name[..name.len()].copy_from_slice(name.as_bytes());
+            header.set_size(data.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder.append(&header, *data).unwrap();
+        }
+        builder.into_inner().unwrap().finish().unwrap();
+    }
+
+    fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
+        let mut zip = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (name, data) in entries {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
     #[test]
     fn extract_tar_gz_unpacks_archive_into_dest() {
-        // Skip when `tar` isn't on PATH (very rare; CI containers have it).
-        if which::which("tar").is_err() {
-            return;
-        }
         let tmp = tempfile::tempdir().unwrap();
-        let src_dir = tmp.path().join("src");
-        let payload = src_dir.join("hello.txt");
-        fs::create_dir_all(&src_dir).unwrap();
-        fs::write(&payload, b"world").unwrap();
-
         let archive = tmp.path().join("bundle.tar.gz");
-        let status = Command::new("tar")
-            .arg("-czf")
-            .arg(&archive)
-            .arg("-C")
-            .arg(tmp.path())
-            .arg("src")
-            .status()
-            .unwrap();
-        assert!(status.success());
-
+        write_tar_gz(&archive, &[("uv-x86_64-apple-darwin/uv", b"binary")]);
         let out = tmp.path().join("out");
         fs::create_dir_all(&out).unwrap();
         extract_tar_gz(&archive, &out).unwrap();
-        assert_eq!(fs::read(out.join("src").join("hello.txt")).unwrap(), b"world");
+        assert_eq!(
+            fs::read(out.join("uv-x86_64-apple-darwin/uv")).unwrap(),
+            b"binary"
+        );
     }
 
-    #[cfg(unix)]
     #[test]
-    fn extract_tar_gz_reports_failure_for_missing_archive() {
-        if which::which("tar").is_err() {
-            return;
-        }
+    fn extract_tar_gz_never_writes_outside_dest() {
         let tmp = tempfile::tempdir().unwrap();
-        let missing = tmp.path().join("nope.tar.gz");
+        let archive = tmp.path().join("evil.tar.gz");
+        write_tar_gz(&archive, &[("../escaped", b"x")]);
         let out = tmp.path().join("out");
         fs::create_dir_all(&out).unwrap();
-        let err = extract_tar_gz(&missing, &out).unwrap_err();
+        let _ = extract_tar_gz(&archive, &out);
+        assert!(!tmp.path().join("escaped").exists());
+    }
+
+    #[test]
+    fn extract_tar_gz_reports_the_archive_it_could_not_read() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("nope.tar.gz");
+        let err = extract_tar_gz(&missing, tmp.path()).unwrap_err();
         match err {
-            UvError::Http(msg) => assert!(msg.contains("tar exited with status")),
-            other => panic!("expected Http error, got {other:?}"),
+            UvError::Extract { archive, .. } => assert_eq!(archive, missing),
+            other => panic!("expected Extract error, got {other:?}"),
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn extract_zip_unpacks_archive_into_dest() {
-        if which::which("zip").is_err() || which::which("unzip").is_err() {
-            return;
-        }
         let tmp = tempfile::tempdir().unwrap();
-        let src_dir = tmp.path().join("src");
-        fs::create_dir_all(&src_dir).unwrap();
-        fs::write(src_dir.join("hello.txt"), b"world").unwrap();
         let archive = tmp.path().join("bundle.zip");
-        let status = Command::new("zip")
-            .arg("-qr")
-            .arg(&archive)
-            .arg("src")
-            .current_dir(tmp.path())
-            .status()
-            .unwrap();
-        assert!(status.success());
-
+        write_zip(&archive, &[("uv.exe", b"binary")]);
         let out = tmp.path().join("out");
         fs::create_dir_all(&out).unwrap();
         extract_zip(&archive, &out).unwrap();
-        assert_eq!(fs::read(out.join("src").join("hello.txt")).unwrap(), b"world");
+        assert_eq!(fs::read(out.join("uv.exe")).unwrap(), b"binary");
     }
 
-    #[cfg(unix)]
     #[test]
-    fn extract_zip_reports_failure_for_missing_archive() {
-        if which::which("unzip").is_err() {
-            return;
-        }
+    fn extract_zip_never_writes_outside_dest() {
         let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("evil.zip");
+        write_zip(&archive, &[("../escaped", b"x")]);
         let out = tmp.path().join("out");
         fs::create_dir_all(&out).unwrap();
-        let err = extract_zip(&tmp.path().join("nope.zip"), &out).unwrap_err();
+        let _ = extract_zip(&archive, &out);
+        assert!(!tmp.path().join("escaped").exists());
+    }
+
+    #[test]
+    fn extract_zip_reports_a_corrupt_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("corrupt.zip");
+        fs::write(&archive, b"not a zip").unwrap();
+        let err = extract_zip(&archive, tmp.path()).unwrap_err();
         match err {
-            UvError::Http(msg) => assert!(msg.contains("unzip exited with status")),
-            other => panic!("expected Http error, got {other:?}"),
+            UvError::Extract { archive: got, .. } => assert_eq!(got, archive),
+            other => panic!("expected Extract error, got {other:?}"),
         }
     }
 
@@ -800,7 +800,6 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn download_and_extract_against_local_http_with_missing_binary_in_archive() {
         // Stands up a one-shot HTTP/1.1 server on 127.0.0.1:<auto> that
@@ -809,25 +808,9 @@ mod tests {
         // "extracted archive did not contain a uv binary" Http error.
         // This covers the post-fetch / post-extract branch that the
         // unreachable-host test can't reach.
-        if which::which("tar").is_err() {
-            return;
-        }
-        // Build a tar.gz with one file that isn't `uv`.
         let tmp = tempfile::tempdir().unwrap();
-        let src = tmp.path().join("uv-fake-asset").join("not-uv");
-        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
-        std::fs::write(&src, b"placeholder").unwrap();
         let archive = tmp.path().join("uv.tar.gz");
-        let ok = Command::new("tar")
-            .arg("-czf")
-            .arg(&archive)
-            .arg("-C")
-            .arg(tmp.path())
-            .arg("uv-fake-asset")
-            .status()
-            .unwrap()
-            .success();
-        assert!(ok);
+        write_tar_gz(&archive, &[("uv-fake-asset/not-uv", b"placeholder")]);
         let payload = std::fs::read(&archive).unwrap();
 
         let server = serve_once(payload);
@@ -855,29 +838,11 @@ mod tests {
         // Verifies the full pipeline: fetch → extract → locate binary →
         // copy → set_executable. This is the single test that drives
         // download_and_extract's success arm end-to-end.
-        if which::which("tar").is_err() {
-            return;
-        }
         use std::os::unix::fs::PermissionsExt;
         let tmp = tempfile::tempdir().unwrap();
         let asset_name = "uv-asset-x";
-        let src_dir = tmp.path().join(asset_name);
-        std::fs::create_dir_all(&src_dir).unwrap();
-        let fake_uv = src_dir.join("uv");
-        std::fs::write(&fake_uv, b"#!/bin/sh\necho fake-uv\n").unwrap();
-        std::fs::set_permissions(&fake_uv, std::fs::Permissions::from_mode(0o644)).unwrap();
         let archive = tmp.path().join("uv.tar.gz");
-        assert!(
-            Command::new("tar")
-                .arg("-czf")
-                .arg(&archive)
-                .arg("-C")
-                .arg(tmp.path())
-                .arg(asset_name)
-                .status()
-                .unwrap()
-                .success()
-        );
+        write_tar_gz(&archive, &[("uv-asset-x/uv", b"#!/bin/sh\necho fake-uv\n")]);
         let payload = std::fs::read(&archive).unwrap();
 
         let server = serve_once(payload);
@@ -892,6 +857,25 @@ mod tests {
         assert!(dest.is_file(), "destination uv should exist");
         let mode = std::fs::metadata(&dest).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o755, "set_executable should mark dest 0o755");
+    }
+
+    #[test]
+    fn download_and_extract_unpacks_a_zip_asset() {
+        // The Windows asset shape: a zip with the binary at its root.
+        let binary_name = if cfg!(windows) { "uv.exe" } else { "uv" };
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("uv.zip");
+        write_zip(&archive, &[(binary_name, b"fake-uv")]);
+        let server = serve_once(fs::read(&archive).unwrap());
+        let dest = tmp.path().join("dest").join(binary_name);
+        download_and_extract(
+            &format!("http://{}/uv.zip", server.addr),
+            "uv-x86_64-pc-windows-msvc",
+            "zip",
+            &dest,
+        )
+        .expect("zip asset should install");
+        assert_eq!(fs::read(&dest).unwrap(), b"fake-uv");
     }
 
     /// Minimal one-shot HTTP/1.1 server for the install tests. Binds an
