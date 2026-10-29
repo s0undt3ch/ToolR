@@ -166,7 +166,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .action(ArgAction::SetTrue)
                 .conflicts_with("debug")
                 .help_heading(OUTPUT_HEADING)
-                .help("Suppress non-error output."),
+                .help("Suppress non-error output and never prompt to install uv."),
         )
         .arg(
             Arg::new("timestamps")

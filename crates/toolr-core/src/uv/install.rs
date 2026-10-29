@@ -25,21 +25,21 @@ pub struct ConsentMode {
     pub yes_flag: bool,
     /// `TOOLR_AUTO_INSTALL_UV=1` is set in the environment.
     pub auto_install_env: bool,
-    /// Caller is running unattended (e.g. a shell-enter hook) and must
-    /// never prompt; if uv isn't available and `yes_flag`/`auto_install_env`
-    /// haven't pre-authorised an install, return `Refuse` silently.
-    pub silent_refuse: bool,
+    /// Caller must never prompt (`--quiet`, scripts, shell-enter hooks). If uv
+    /// isn't available and `yes_flag`/`auto_install_env` haven't pre-authorised
+    /// an install, return `Refuse`; the caller decides what to print.
+    pub never_prompt: bool,
 }
 
 impl ConsentMode {
-    /// Consent from the environment. `quiet` is the caller's `--quiet`, which
-    /// means "never prompt": a scripted run must not stop to ask.
-    pub fn from_env(quiet: bool) -> Self {
+    /// Consent from the environment, plus the caller's `never_prompt` (set by
+    /// `--quiet`: a scripted run must not stop to ask).
+    pub fn from_env(never_prompt: bool) -> Self {
         Self {
             yes_flag: false,
             auto_install_env: std::env::var_os("TOOLR_AUTO_INSTALL_UV")
                 .is_some_and(|v| v == "1"),
-            silent_refuse: quiet,
+            never_prompt,
         }
     }
 }
@@ -60,7 +60,7 @@ pub fn decide_install(
     if consent.yes_flag || consent.auto_install_env {
         return InstallDecision::Install;
     }
-    if consent.silent_refuse {
+    if consent.never_prompt {
         return InstallDecision::Refuse;
     }
     let Some((input, output)) = prompt_io else {
@@ -470,10 +470,10 @@ mod tests {
     }
 
     #[test]
-    fn silent_refuse_returns_refuse_without_consent_or_tty() {
-        let consent = ConsentMode { silent_refuse: true, ..Default::default() };
+    fn never_prompt_returns_refuse_without_consent_or_tty() {
+        let consent = ConsentMode { never_prompt: true, ..Default::default() };
         // No path/managed uv, stdin is a TTY answering Enter → without
-        // silent_refuse we'd prompt and install. With it we must Refuse.
+        // never_prompt we'd prompt and install. With it we must Refuse.
         assert_eq!(
             decide_install(
                 false,
@@ -486,9 +486,9 @@ mod tests {
     }
 
     #[test]
-    fn silent_refuse_does_not_override_already_available() {
-        let consent = ConsentMode { silent_refuse: true, ..Default::default() };
-        // uv is on PATH: silent_refuse must NOT pretend it's missing.
+    fn never_prompt_does_not_override_already_available() {
+        let consent = ConsentMode { never_prompt: true, ..Default::default() };
+        // uv is on PATH: never_prompt must NOT pretend it's missing.
         assert_eq!(
             decide_install(true, false, consent, None),
             InstallDecision::AlreadyAvailable,
@@ -496,14 +496,14 @@ mod tests {
     }
 
     #[test]
-    fn silent_refuse_does_not_override_explicit_consent() {
+    fn never_prompt_does_not_override_explicit_consent() {
         let consent = ConsentMode {
-            silent_refuse: true,
+            never_prompt: true,
             yes_flag: true,
             ..Default::default()
         };
         // Caller explicitly asked for unattended install via --yes;
-        // silent_refuse must not contradict that. Explicit consent wins.
+        // never_prompt must not contradict that. Explicit consent wins.
         assert_eq!(
             decide_install(false, false, consent, None),
             InstallDecision::Install,

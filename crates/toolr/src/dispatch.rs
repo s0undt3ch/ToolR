@@ -164,7 +164,7 @@ pub fn dispatch(
         return run_install_uv_now();
     }
     if let Some(("project", project_m)) = matches.subcommand() {
-        return crate::project::dispatch_project(project_m);
+        return crate::project::dispatch_project(project_m, matches.get_flag("quiet"));
     }
     let Some((first_name, first_matches)) = matches.subcommand() else {
         // No subcommand and no --help flag: show root help as a courtesy,
@@ -688,7 +688,7 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
     let consent = toolr_core::uv::install::ConsentMode {
         yes_flag: true,
         auto_install_env: true,
-        silent_refuse: false,
+        never_prompt: false,
     };
     let uv = toolr_core::uv::ensure_uv(consent)
         .map_err(toolr_core::uv::UvError::into_anyhow)?;
