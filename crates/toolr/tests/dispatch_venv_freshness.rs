@@ -56,13 +56,11 @@ impl Project {
         fs::rename(&python, &saved).unwrap();
         std::os::unix::fs::symlink(self.fx.root.join("pruned").join("python3.13"), &python)
             .unwrap();
-        let stub = format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> {log}\ncase \"$1\" in\n  --version) echo 'uv 0.5.0';;\n  sync) /bin/rm -f {python} && /bin/cp {saved} {python};;\nesac\nexit 0\n",
-            log = self.fx.uv_argv_log.display(),
+        self.fx.write_uv_stub(&format!(
+            "/bin/rm -f {python} && /bin/cp {saved} {python}",
             python = python.display(),
             saved = saved.display(),
-        );
-        fs::write(self.fx.bin_dir.join("uv"), stub).unwrap();
+        ));
     }
 }
 

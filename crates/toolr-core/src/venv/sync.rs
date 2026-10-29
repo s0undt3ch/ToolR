@@ -16,7 +16,7 @@ use super::resolve::ResolvedVenv;
 /// whether re-sync is needed.
 const FRESHNESS_MARKER: &str = ".toolr-sync-stamp";
 
-/// Decision returned by `is_fresh`.
+/// Decision returned by `check_freshness`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
     /// Venv has never been synced (marker absent or venv missing).
@@ -26,7 +26,7 @@ pub enum Freshness {
     /// Synced once, but the interpreter no longer resolves — typically its
     /// base Python was uninstalled (e.g. `mise prune`). `uv sync` rebuilds it.
     Broken,
-    /// Marker mtime >= lock mtime.
+    /// Marker mtime >= lock mtime, and the interpreter is still there.
     Fresh,
 }
 
@@ -64,6 +64,8 @@ impl UpgradeMode {
     }
 }
 
+/// Precedence is `Missing`, then `Broken`, then `Stale` or `Fresh`. Besides the
+/// two mtimes it stats the interpreter and reads `pyvenv.cfg`.
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
     let lock = tools_dir.join("uv.lock");
