@@ -1827,12 +1827,12 @@ fall back to the managed copy, so fix that uv or take it off <code>PATH</code>.<
 <p>If toolr finds no uv, it asks whether to download one to the managed
 path or leave you to install it yourself. Press Enter or <code>I</code> to
 install. Any other answer stops toolr with an error.</p>
-<p>Toolr only asks when stdin is a terminal, and never with <code>--quiet</code>.
-<code>toolr --quiet &lt;command&gt;</code> and every <code>toolr project</code> subcommand that
-takes <code>--quiet</code> fail with an error instead of asking.
-<code>toolr project venv sync --quiet</code> exits silently instead, for
-shell-enter hooks. In CI, in pipes and in other non-interactive runs
-toolr also fails, unless you approve the install in advance:</p>
+<p>Toolr only asks when stdin is a terminal. With <code>--quiet</code>, at the root
+(<code>toolr --quiet …</code>) or on a subcommand, it never asks and fails with
+an error instead. The one exception is <code>toolr project venv sync
+--quiet</code>, which exits silently so shell-enter hooks don't break. In CI,
+in pipes and in other non-interactive runs toolr also fails, unless you
+approve the install in advance:</p>
 <ul>
 <li>Set <code>TOOLR_AUTO_INSTALL_UV=1</code> to install without asking.</li>
 <li>Run <a href="../cli/#__install-uv-now"><code>toolr __install-uv-now</code></a>, for
@@ -1937,7 +1937,7 @@ on a host where you can't install <code>gh</code>):</p>
 </span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>  -d, --debug
 </span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>          Increase verbosity (also enables DEBUG logging).
 </span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>  -q, --quiet
-</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a>          Suppress non-error output.
+</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a>          Suppress non-error output and never prompt to install uv.
 </span><span id="__span-10-19"><a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a>      --timestamps
 </span><span id="__span-10-20"><a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a>          Prepend ISO-8601 timestamps to log lines.
 </span><span id="__span-10-21"><a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a>      --no-timestamps

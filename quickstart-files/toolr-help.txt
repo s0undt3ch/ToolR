@@ -15,7 +15,7 @@ Output Options:
   -d, --debug
           Increase verbosity (also enables DEBUG logging).
   -q, --quiet
-          Suppress non-error output.
+          Suppress non-error output and never prompt to install uv.
       --timestamps
           Prepend ISO-8601 timestamps to log lines.
       --no-timestamps

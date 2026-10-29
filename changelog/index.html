@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev36-2026-10-29" class="md-nav__link">
+  <a href="#0352-dev38-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev36 - 2026-10-29
+        0.35.2-dev38 - 2026-10-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev36 - 2026-10-29">
+    <nav class="md-nav" aria-label="0.35.2-dev38 - 2026-10-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4447,15 +4447,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev36-2026-10-29" class="md-nav__link">
+  <a href="#0352-dev38-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev36 - 2026-10-29
+        0.35.2-dev38 - 2026-10-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev36 - 2026-10-29">
+    <nav class="md-nav" aria-label="0.35.2-dev38 - 2026-10-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7429,7 +7429,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev36-2026-10-29">0.35.2-dev36 - 2026-10-29<a class="headerlink" href="#0352-dev36-2026-10-29" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev38-2026-10-29">0.35.2-dev38 - 2026-10-29<a class="headerlink" href="#0352-dev38-2026-10-29" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7453,8 +7453,9 @@ field was removed or retyped between schema versions. The fix lives in <code>too
 still on an older <code>toolr-py</code> keeps printing "failed schema validation" in those cases.</p>
 <p><code>--quiet</code> now means "never prompt to install uv" on every subcommand that takes it. <code>toolr project
 init</code>, <code>venv lock</code>, <code>venv add</code>, <code>venv remove</code> and <code>venv run</code> used to ask on a terminal even with
-<code>--quiet</code>; they now fail with the uv install hint instead. Set <code>TOOLR_AUTO_INSTALL_UV=1</code> to install
-without asking.</p>
+<code>--quiet</code>; they now fail with the uv install hint instead. The root <code>toolr --quiet project …</code> form,
+including <code>venv shell</code>, never prompts either. Set <code>TOOLR_AUTO_INSTALL_UV=1</code> to install without
+asking.</p>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(runner)</em> Point schema-mismatch error at venv sync -P (<a href="https://github.com/s0undt3ch/ToolR/commit/170361d39471a5957cf572966b79acf08e8019d7"><code>170361d</code></a>)</li>
@@ -7469,6 +7470,7 @@ without asking.</p>
 <li><em>(runner)</em> Pin schema_version as a frozen contract (<a href="https://github.com/s0undt3ch/ToolR/commit/a624fad020fe034b5ad61b08b9331091abdc9e80"><code>a624fad</code></a>)</li>
 <li><em>(execute)</em> Keep MIN_PYTHON_MINOR in lockstep with requires-python (<a href="https://github.com/s0undt3ch/ToolR/commit/1a86ea38a7bbaa5f8bb7e67d42e461333fa61c67"><code>1a86ea3</code></a>)</li>
 <li><em>(cli)</em> Make --quiet never prompt to install uv (<a href="https://github.com/s0undt3ch/ToolR/commit/c79c810aa6c4f17e9ecbf0e74b8f3ce567b23b8e"><code>c79c810</code></a>)</li>
+<li><em>(cli)</em> Make root --quiet never prompt to install uv under project (<a href="https://github.com/s0undt3ch/ToolR/commit/38510a59829dabf26b85078f7f2e5f3c5d04377d"><code>38510a5</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
