@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev57-2026-10-29" class="md-nav__link">
+  <a href="#0352-dev62-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev57 - 2026-10-29
+        0.35.2-dev62 - 2026-10-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev57 - 2026-10-29">
+    <nav class="md-nav" aria-label="0.35.2-dev62 - 2026-10-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4458,15 +4458,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev57-2026-10-29" class="md-nav__link">
+  <a href="#0352-dev62-2026-10-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev57 - 2026-10-29
+        0.35.2-dev62 - 2026-10-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev57 - 2026-10-29">
+    <nav class="md-nav" aria-label="0.35.2-dev62 - 2026-10-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7451,7 +7451,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev57-2026-10-29">0.35.2-dev57 - 2026-10-29<a class="headerlink" href="#0352-dev57-2026-10-29" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev62-2026-10-29">0.35.2-dev62 - 2026-10-29<a class="headerlink" href="#0352-dev62-2026-10-29" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7485,6 +7485,11 @@ sets the floor, and an explicit <code>--python</code> is used as given.</p>
 itself, which fixes <code>toolr __install-uv-now</code> and the install prompt on stock Windows, where <code>unzip</code>
 isn't available. A download that can't be unpacked now fails with a message pointing at the manual
 uv install.</p>
+<p>A tools venv whose Python was uninstalled under it (for example by <code>mise prune</code>) is now rebuilt.
+<code>toolr project venv sync</code> and command dispatch used to treat it as up to date and skip the sync.
+They then failed with "does not contain a python interpreter" or "Python interpreter not found"
+until the venv was deleted by hand. Now both re-sync it, and <code>toolr project venv run --no-sync</code>
+says the interpreter is gone and how to fix it.</p>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(runner)</em> Point schema-mismatch error at venv sync -P (<a href="https://github.com/s0undt3ch/ToolR/commit/170361d39471a5957cf572966b79acf08e8019d7"><code>170361d</code></a>)</li>
@@ -7504,10 +7509,14 @@ uv install.</p>
 <li><em>(uv)</em> Unpack the managed uv download in-process (<a href="https://github.com/s0undt3ch/ToolR/commit/b401080c4decd10912f05cb663644db4a80e0d1b"><code>b401080</code></a>)</li>
 <li><em>(deps)</em> Take zip 9.0.5 for GHSA-m665-v7pm-7grj (<a href="https://github.com/s0undt3ch/ToolR/commit/93de3944e7a4a1310613960310d960e52b373c86"><code>93de394</code></a>)</li>
 <li><em>(uv)</em> Keep the cause chain on archive extraction errors (<a href="https://github.com/s0undt3ch/ToolR/commit/99db1250aba31062d1a4c3c84a8498086a354088"><code>99db125</code></a>)</li>
+<li><em>(venv)</em> Rebuild a venv whose interpreter was uninstalled (<a href="https://github.com/s0undt3ch/ToolR/commit/329eac955b3185a7f481cf1c8bae9ef9ab7ac409"><code>329eac9</code></a>)</li>
+<li><em>(venv)</em> Detect a removed base Python through pyvenv.cfg (<a href="https://github.com/s0undt3ch/ToolR/commit/757829394554f1dcce6c47ffe8f139e8cd4f90f4"><code>7578293</code></a>)</li>
+<li><em>(venv)</em> Only treat a confirmed-missing pyvenv.cfg home as broken (<a href="https://github.com/s0undt3ch/ToolR/commit/bf7a01eb5ee2ea952239e637163b6c029083799d"><code>bf7a01e</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(project)</em> Read python3's minor with the shared --version probe (<a href="https://github.com/s0undt3ch/ToolR/commit/1c485b3ea18210aa6658fb8c526d857d11382979"><code>1c485b3</code></a>)</li>
+<li><em>(venv)</em> Name and document the broken-venv resync path (<a href="https://github.com/s0undt3ch/ToolR/commit/9835e190f6307a9f9fc991e1f61794f76e27d65a"><code>9835e19</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
