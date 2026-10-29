@@ -2161,7 +2161,7 @@ opts in."</p>
   <code>[tool.toolr] venv-location</code> value in the generated <code>pyproject.toml</code>.</li>
 <li><code>--no-example</code> — skip generating <code>tools/example.py</code>.</li>
 <li><code>--python</code> — <code>requires-python</code> value for <code>tools/pyproject.toml</code>
-  (defaults to the running Python's <code>&gt;=major.minor</code>).</li>
+  (defaults to <code>python3</code>'s <code>&gt;=major.minor</code>, never below the oldest Python toolr supports).</li>
 <li><code>--quiet</code> — suppress informational output and never prompt to install uv.</li>
 </ul>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>init<span class="w"> </span>--help
@@ -2182,8 +2182,8 @@ opts in."</p>
 </span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>      --no-example
 </span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>          Skip generating tools/example.py
 </span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>      --python &lt;VERSION&gt;
-</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>          requires-python value for tools/pyproject.toml (defaults to the running Python's
-</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>          &gt;=major.minor)
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>          requires-python value for tools/pyproject.toml (defaults to python3's &gt;=major.minor,
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>          never below the oldest Python toolr supports)
 </span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>  -y, --yes
 </span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>          Auto-approve overwriting any conflicting scaffold files
 </span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>  -q, --quiet
