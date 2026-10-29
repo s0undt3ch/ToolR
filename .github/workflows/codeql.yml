@@ -20,7 +20,8 @@ on:
   schedule:
     - cron: "0 0 * * 1"
 
-# Supersede older runs of the same PR; let every run on main finish.
+# Supersede older runs of the same PR. A started run on main is never
+# cancelled, but a newer one replaces a queued one.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

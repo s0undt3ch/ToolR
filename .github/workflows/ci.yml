@@ -1,5 +1,5 @@
 name: CI Workflow
-run-name: "CI (${{ github.event_name == 'pull_request' && format('pr: #{0}', github.event.number) || format('{0}: {1}', startsWith(github.event.ref, 'refs/tags') && 'tag' || 'branch', github.ref_name) }})"
+run-name: "CI (${{ github.event_name == 'pull_request' && format('pr: #{0}', github.event.number) || format('branch: {0}', github.ref_name) }})"
 
 on:
   push:
@@ -811,7 +811,7 @@ jobs:
     # only once this runs, after every job that uploads coverage. Gated on
     # `should-run-build`, not the test jobs' results: those are reusable
     # workflow calls that report `success` even when their inner job
-    # skipped, as on the `push` twin of a PR run, which uploads nothing.
+    # skipped and uploaded nothing.
     if: ${{ !cancelled() && fromJSON(needs.prepare-ci.outputs.should-run-build) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
