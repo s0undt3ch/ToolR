@@ -381,33 +381,6 @@ def generate_build_matrix(
         f.writelines(f"{key}={json.dumps(value)}\n" for key, value in outputs.items())
 
 
-@group.command
-def check_run_build(ctx: Context, event_name: str, branch: str) -> None:
-    """
-    Check if the current build should run.
-
-    Args:
-        event_name: Event name
-        branch: Ref name shown in the step summary
-    """
-    github_output = os.environ.get("GITHUB_OUTPUT")
-    github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
-
-    # ci.yml only triggers on pull requests and pushes to main, and both always build.
-    if event_name == "pull_request":
-        msg = "Builds for PRs should always run"
-    else:
-        msg = f"Builds for the {branch} branch should always run"
-    ctx.info(msg)
-    if github_step_summary is not None:
-        with open(github_step_summary, "a") as wfh:
-            wfh.write(f"{msg}\n")
-    if github_output is not None:
-        with open(github_output, "a") as wfh:
-            wfh.write("should-run-build=true\n")
-    ctx.exit(0)
-
-
 PACKSLIP_PROJECT = "github.com/s0undt3ch/ToolR"
 PACKSLIP_SOURCE_REPO = "https://github.com/s0undt3ch/ToolR"
 PACKSLIP_COMPLETION_SHELLS = ["bash", "zsh", "fish"]

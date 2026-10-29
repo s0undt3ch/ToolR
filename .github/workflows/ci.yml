@@ -13,9 +13,7 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
-  # Concurrency is defined in a way that concurrent builds against the main branch do not not cancel previous builds.
-  # However, for branches other than the main branch, and every new build against the same pull request source branch,
-  # all older builds against that same branch get canceled.
+  # A new push to a PR cancels that PR's older runs. Runs on main never cancel each other.
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.repository }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: ${{ !contains(github.ref, 'refs/heads/main') }}
 
@@ -41,7 +39,6 @@ jobs:
     permissions:
       contents: read
     outputs:
-      should-run-build: ${{ steps.check-build.outputs.should-run-build }}
       platform-matrix: ${{ steps.generate-build-matrix.outputs.platform-matrix }}
       binary-archive-triples: ${{ steps.generate-build-matrix.outputs.binary-archive-triples }}
       pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
@@ -100,21 +97,8 @@ jobs:
           version: latest
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|prepare-ci
 
-      - name: Check if the build should run
-        id: check-build
-        env:
-          # Route through `env:` so `github.ref_name` (which is
-          # attacker-controllable — branch names can contain shell
-          # metacharacters) doesn't get spliced into the shell line
-          # at interpolation time. The `toolr` CLI receives them as
-          # ordinary argv.
-          EVENT_NAME: ${{ github.event_name }}
-          REF_NAME: ${{ github.ref_name }}
-        run: toolr ci check-run-build "$EVENT_NAME" "$REF_NAME"
-
       - name: Generate Build Matrix
         id: generate-build-matrix
-        if: fromJSON(steps.check-build.outputs.should-run-build)
         # `--workflow` is intentionally omitted: `generate-build-matrix`
         # auto-detects from the GitHub event context (push to main →
         # release; PR with `full-build` label → release; otherwise ci)
@@ -133,7 +117,6 @@ jobs:
       contents: read
     needs:
       - prepare-ci
-    if: fromJSON(needs.prepare-ci.outputs.should-run-build)
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -807,11 +790,8 @@ jobs:
   codecov-notify:
     name: Codecov Notify
     # `.codecov.yml` sets `manual_trigger`, so Codecov computes statuses
-    # only once this runs, after every job that uploads coverage. Gated on
-    # `should-run-build`, not the test jobs' results: those are reusable
-    # workflow calls that report `success` even when their inner job
-    # skipped and uploaded nothing.
-    if: ${{ !cancelled() && fromJSON(needs.prepare-ci.outputs.should-run-build) }}
+    # only once this runs, after every job that uploads coverage.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:

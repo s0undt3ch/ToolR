@@ -36,8 +36,9 @@ on:
       - '.github/actions/setup-virtualenv/**'
       - '.github/workflows/install-smoke.yml'
 
-# Only PR runs supersede each other. release.yml pushes to main and
-# dispatches a versioned run seconds apart; neither may cancel the other.
+# Newer runs of the same PR, or dispatches of the same version, supersede
+# older ones. release.yml pushes to main and dispatches a versioned run
+# seconds apart, and the two land in different groups.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.version || github.run_id }}
   cancel-in-progress: true

@@ -461,6 +461,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
           RELEASE_NOTES: ${{ needs.prepare-release.outputs.release-notes-filename }}
+        # --verify-tag relies on the "Push tag" step above having run.
         run: |
           gh release create "v${RELEASE_VERSION}" \
             --repo "${GITHUB_REPOSITORY}" \

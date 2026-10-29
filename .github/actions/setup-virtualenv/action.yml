@@ -54,6 +54,8 @@ runs:
       if: inputs.python-version != ''
       shell: bash
       run: |
+        # Anything written to $GITHUB_ENV can inject variables, so accept only
+        # the version shapes the mise.toml / tools/ci.py matrix produces.
         if [[ ! "${INPUTS_PYTHON_VERSION}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?t?$ ]]; then
           echo "::error::invalid python-version input: ${INPUTS_PYTHON_VERSION}" >&2
           exit 1
@@ -146,5 +148,6 @@ runs:
       env:
         UV_SYNC_ARGS: ${{ inputs.uv-sync-args }}
       run: |
+        # The input is a space-separated flag list, so split it into words.
         read -ra uv_sync_args <<< "${UV_SYNC_ARGS}"
         uv sync "${uv_sync_args[@]}"
