@@ -19,6 +19,7 @@ use ruff_python_ast::{Expr, StmtFunctionDef};
 
 use super::arg_keywords::check_arg_calls;
 use super::arg_metadata::extract_arg_metadata;
+use super::bool_flag::check_bool_flag;
 use super::supported::{SupportedType, TypeResolutionError, UnsupportedType};
 use super::{SourcesImports, TypeImports};
 use crate::manifest::{ArgMetadata, Argument, ArgumentKind};
@@ -159,6 +160,15 @@ fn resolve_one(
                 // (non-`Optional`) shape is already classified, and
                 // mirrors the `Count` override above.
                 arg.kind = ArgumentKind::Repeated;
+            }
+            if let Err(reason) = check_bool_flag(&ty, arg) {
+                errors.push(TypeResolutionError {
+                    module: module.to_string(),
+                    function: function.to_string(),
+                    argument: arg.name.clone(),
+                    annotation: arg.type_annotation.clone().unwrap_or_default(),
+                    reason,
+                });
             }
             arg.resolved_type = Some(ty);
         }

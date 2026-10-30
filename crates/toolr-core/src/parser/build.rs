@@ -559,7 +559,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 mod tests {
     use super::*;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
-    use crate::parser::types::UnsupportedType;
+    use crate::parser::types::{BoolFlagError, UnsupportedType};
     use tempfile::TempDir;
 
     fn arg(kind: ArgumentKind, name: &str, long_flag: Option<&str>) -> Argument {
@@ -2098,5 +2098,194 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
              continue on a second line that should also be shown."
         );
         assert_eq!(help("loud"), "Single-line help for comparison.");
+    }
+
+    fn bool_flag_error(signature: &str) -> (BoolFlagError, String) {
+        let errs = type_errors_for(&[("tools/kw.py", &kw_module(TOOLR_IMPORTS, "", signature))]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        let UnsupportedType::BoolFlag { error, .. } = &errs[0].reason else {
+            panic!("expected BoolFlag, got {:?}", errs[0].reason)
+        };
+        (error.clone(), errs[0].to_string())
+    }
+
+    #[test]
+    fn bool_true_default_rejected() {
+        let (error, msg) = bool_flag_error("colour: bool = True");
+        assert_eq!(
+            error,
+            BoolFlagError::DefaultTrue {
+                suggested: "no_colour".into()
+            }
+        );
+        assert!(
+            msg.contains("Write `no_colour: bool = False` (CLI: `--no-colour`)"),
+            "got: {msg}"
+        );
+    }
+
+    #[test]
+    fn annotated_bool_true_default_rejected() {
+        let (error, _) = bool_flag_error("colour: Annotated[bool, arg(env=\"C\")] = True");
+        assert_eq!(
+            error,
+            BoolFlagError::DefaultTrue {
+                suggested: "no_colour".into()
+            }
+        );
+    }
+
+    #[test]
+    fn no_prefixed_true_default_suggests_positive_name() {
+        let (error, msg) = bool_flag_error("no_cache: bool = True");
+        assert_eq!(
+            error,
+            BoolFlagError::DefaultTrue {
+                suggested: "cache".into()
+            }
+        );
+        assert!(msg.contains("`cache: bool = False`"), "got: {msg}");
+    }
+
+    #[test]
+    fn kwonly_bool_without_default_rejected() {
+        let (error, _) = bool_flag_error("*, verbose: bool");
+        assert_eq!(error, BoolFlagError::NoDefault);
+    }
+
+    #[test]
+    fn positional_bool_rejected() {
+        let (error, _) = bool_flag_error("flag: bool");
+        assert_eq!(error, BoolFlagError::NotKeyword);
+    }
+
+    #[test]
+    fn var_positional_bool_rejected() {
+        let (error, _) = bool_flag_error("*flags: bool");
+        assert_eq!(error, BoolFlagError::NotKeyword);
+    }
+
+    #[test]
+    fn optional_bool_rejected() {
+        let (error, _) = bool_flag_error("colour: bool | None = None");
+        assert_eq!(error, BoolFlagError::NotPlainFlag);
+    }
+
+    #[test]
+    fn typing_optional_bool_rejected() {
+        let (error, _) = bool_flag_error("colour: Optional[bool] = None");
+        assert_eq!(error, BoolFlagError::NotPlainFlag);
+    }
+
+    #[test]
+    fn list_of_bool_rejected() {
+        let (error, _) = bool_flag_error("*, flags: list[bool] = []");
+        assert_eq!(error, BoolFlagError::NotPlainFlag);
+    }
+
+    #[test]
+    fn tuple_of_bool_rejected() {
+        let (error, _) = bool_flag_error("*, flags: tuple[bool, bool] = (False, False)");
+        assert_eq!(error, BoolFlagError::NotPlainFlag);
+    }
+
+    #[test]
+    fn all_bool_violations_reported_together() {
+        let errs = type_errors_for(&[(
+            "tools/kw.py",
+            &kw_module(
+                TOOLR_IMPORTS,
+                "",
+                "flag: bool, *, colour: bool = True, verbose: bool",
+            ),
+        )]);
+        assert_eq!(errs.len(), 3, "{errs:?}");
+    }
+
+    #[test]
+    fn bool_alias_with_false_default_becomes_flag() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/kw.py",
+            &kw_module(
+                TOOLR_IMPORTS,
+                "Verbose = Annotated[bool, arg(env=\"V\")]",
+                "verbose: Verbose = False",
+            ),
+        );
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let read = m.commands.iter().find(|c| c.name == "read").unwrap();
+        let arg = read.arguments.iter().find(|a| a.name == "verbose").unwrap();
+        assert_eq!(arg.kind, ArgumentKind::Flag);
+        assert_eq!(arg.default, Some("false".into()));
+    }
+
+    #[test]
+    fn plain_false_default_still_builds() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/kw.py",
+            &kw_module(
+                TOOLR_IMPORTS,
+                "",
+                "verbose: bool = False, *, dry_run: bool = False",
+            ),
+        );
+        let m = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let read = m.commands.iter().find(|c| c.name == "read").unwrap();
+        for name in ["verbose", "dry_run"] {
+            let arg = read.arguments.iter().find(|a| a.name == name).unwrap();
+            assert_eq!(arg.kind, ArgumentKind::Flag, "{name}");
+        }
+    }
+
+    /// argparse `store_false` sources never pass through the native bool rule.
+    #[test]
+    fn argparse_store_false_with_true_default_still_builds() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/dispatcher.py",
+            r#""""Django dispatcher."""
+group = command_group("django", "Django")
+
+@group.command
+def django(ctx):
+    """Dispatch to manage.py."""
+    pass
+"#,
+        );
+        write(
+            tmp.path(),
+            "apps/x/management/commands/runserver.py",
+            "def add_arguments(self, parser):\n    parser.add_argument('--no-colour', dest='colour', action='store_false', default=True)\n",
+        );
+        write(
+            tmp.path(),
+            "tools/pyproject.toml",
+            r#"
+[tool.toolr.argparse.django]
+scan_paths = ["apps/*/management/commands/*.py"]
+
+[[tool.toolr.argparse.django.attach]]
+parent = "django"
+"#,
+        );
+
+        let manifest = build_static_manifest(&tmp.path().join("tools")).unwrap();
+        let runserver = manifest
+            .commands
+            .iter()
+            .find(|c| c.name == "runserver")
+            .unwrap();
+        let arg = runserver
+            .arguments
+            .iter()
+            .find(|a| a.long_flag.as_deref() == Some("--no-colour"))
+            .unwrap();
+        assert_eq!(arg.kind, ArgumentKind::Flag);
+        assert_eq!(arg.default.as_deref(), Some("true"));
     }
 }
