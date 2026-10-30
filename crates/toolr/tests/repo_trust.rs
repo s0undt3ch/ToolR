@@ -11,7 +11,7 @@ use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use tempfile::TempDir;
 
-use common::{hostile_repo, TrustEnv};
+use common::{TrustEnv, hostile_repo};
 use toolr_core::cache::Meta;
 
 const REFUSAL: &str = "refusing to run code from an untrusted repository";
@@ -257,4 +257,31 @@ fn project_init_records_trust_before_sync() {
         .assert()
         .success()
         .stdout(format!("{root}\n"));
+}
+
+#[test]
+fn home_with_tools_dir_can_be_trusted() {
+    let home = TempDir::new().unwrap();
+    let home_root = fs::canonicalize(home.path()).unwrap();
+    fs::create_dir(home_root.join("tools")).unwrap();
+    let proj = home_root.join("proj");
+    fs::create_dir(&proj).unwrap();
+    let env = TrustEnv::new();
+    let toolr = || {
+        let mut cmd = env.toolr(&proj);
+        cmd.env("HOME", &home_root)
+            .env_remove("XDG_STATE_HOME")
+            .env_remove("XDG_DATA_HOME");
+        cmd
+    };
+    toolr()
+        .args(["project", "trust"])
+        .assert()
+        .success()
+        .stdout(format!("{}\n", home_root.display()));
+    toolr()
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout(format!("{}\n", home_root.display()));
 }

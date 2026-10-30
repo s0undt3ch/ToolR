@@ -5,7 +5,7 @@ use std::fs;
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -39,7 +39,8 @@ pub enum TrustError {
     )]
     Untrusted(PathBuf),
     #[error(
-        "refusing to use a trust store inside the repository being checked: {}",
+        "refusing to use a trust store inside the repository being checked: {}\n\
+         Set XDG_STATE_HOME to a directory outside the repository.",
         .0.display()
     )]
     StoreInsideRepo(PathBuf),
@@ -79,6 +80,22 @@ impl TrustStore {
     /// Every store operation passes through here: the store must not resolve
     /// inside the repository whose trust it holds.
     fn guard(&self, canonical_root: &Path) -> Result<(), TrustError> {
+        self.guard_with_home(
+            canonical_root,
+            dirs::home_dir().map(|h| canonical(&h)).as_deref(),
+        )
+    }
+
+    /// A `~/tools` makes the home directory the root, and the default store
+    /// always lives under it. Nobody clones a hostile repository as `$HOME`.
+    fn guard_with_home(
+        &self,
+        canonical_root: &Path,
+        home: Option<&Path>,
+    ) -> Result<(), TrustError> {
+        if home == Some(canonical_root) {
+            return Ok(());
+        }
         if self.is_inside(canonical_root) {
             return Err(TrustError::StoreInsideRepo(self.dir.clone()));
         }
@@ -628,6 +645,18 @@ mod tests {
             ));
         }
         assert!(!f.root().join("state").exists());
+    }
+
+    #[test]
+    fn store_inside_home_root_is_allowed() {
+        let f = Fixture::new();
+        let store = TrustStore::at(f.root().join("state"));
+        let root = canonical(&f.root());
+        assert!(store.guard_with_home(&root, Some(&root)).is_ok());
+        assert!(matches!(
+            store.guard_with_home(&root, None),
+            Err(TrustError::StoreInsideRepo(_))
+        ));
     }
 
     #[test]
