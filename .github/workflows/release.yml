@@ -148,6 +148,7 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       wheel-kind: binary
       pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
@@ -166,6 +167,7 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['linux']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       wheel-kind: py
       pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 
@@ -184,6 +186,7 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       wheel-kind: binary
       pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
@@ -202,6 +205,7 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['windows']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       wheel-kind: py
       pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 
@@ -220,6 +224,7 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.binary-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       wheel-kind: binary
       pythons: ${{ needs.prepare-ci.outputs.pythons-binary }}
 
@@ -238,6 +243,7 @@ jobs:
       release-tarball-name: ${{ needs.prepare-release.outputs.py-release-tarball-name }}
       platform-matrix: ${{ toJSON(fromJSON(needs.prepare-ci.outputs.platform-matrix)['macos']) }}
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
+      mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
       wheel-kind: py
       pythons: ${{ needs.prepare-ci.outputs.pythons-py }}
 

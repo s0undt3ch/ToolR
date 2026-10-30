@@ -23,6 +23,10 @@ on:
         required: true
         type: string
         description: 'Label distinguishing the wheel build. Use "binary" for the toolr (bin) wheel and "py" for the toolr-py (pyo3) wheel. Embedded in the uploaded artifact name to avoid collisions between the two builds for identical python x platform combinations.'
+      mise-version:
+        required: true
+        type: string
+        description: 'Version of mise to install. Pass the caller workflow''s MISE_VERSION env var.'
       pythons:
         required: true
         type: string
@@ -65,6 +69,17 @@ jobs:
       - name: Enable git long paths (Windows)
         if: runner.os == 'Windows'
         run: git config --global core.longpaths true
+
+      # The runner's own Rust can trail the workspace `rust-version`, which cargo then refuses.
+      # Linux builds run in the manylinux container, where maturin installs current stable.
+      - name: Set up mise (installs the Rust toolchain locked in mise.toml)
+        if: runner.os != 'Linux'
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        with:
+          version: ${{ inputs.mise-version }}
+          install_args: rust
+          cache: true
+          cache_key_prefix: ${{ inputs.cache-seed }}|mise|${{ inputs.mise-version }}|build-wheel|${{ runner.os }}|${{ runner.arch }}
 
       - uses: ./.github/actions/throttle
 
