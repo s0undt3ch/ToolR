@@ -187,13 +187,9 @@ impl TrustStore {
     /// True when the store directory resolves under `canonical_root`.
     fn is_inside(&self, canonical_root: &Path) -> bool {
         match std::env::current_dir() {
-            Ok(cwd) => self.is_inside_from(canonical_root, &cwd),
-            Err(_) => self.is_inside_from(canonical_root, Path::new("/")),
+            Ok(cwd) => resolves_inside(&self.dir, canonical_root, &cwd),
+            Err(_) => resolves_inside(&self.dir, canonical_root, Path::new("/")),
         }
-    }
-
-    fn is_inside_from(&self, canonical_root: &Path, cwd: &Path) -> bool {
-        resolves_inside(&self.dir, canonical_root, cwd)
     }
 
     /// One-time import of trust from cache entries written before trust
@@ -201,7 +197,8 @@ impl TrustStore {
     /// store, so a later `untrust` (or a cache entry written under
     /// `TOOLR_TRUST_ALL=1`) is never turned back into trust. `checking_root`
     /// is the canonical root of the repository being acted on; nothing is
-    /// read from inside it.
+    /// read from inside it. Delete this once upgrades from releases without
+    /// trust are no longer supported.
     pub fn migrate_once(&self, cache_root: Option<&Path>, checking_root: &Path) {
         let Some(cache_root) = cache_root else {
             return;
@@ -712,8 +709,8 @@ mod tests {
     fn relative_store_inside_repo_is_rejected() {
         let f = Fixture::new();
         let store = TrustStore::at(PathBuf::from("state/trust"));
-        assert!(store.is_inside_from(&f.root(), &f.root()));
-        assert!(!store.is_inside_from(&f.root(), f.store_dir.path()));
+        assert!(resolves_inside(store.dir(), &f.root(), &f.root()));
+        assert!(!resolves_inside(store.dir(), &f.root(), f.store_dir.path()));
     }
 
     #[cfg(unix)]

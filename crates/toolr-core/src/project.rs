@@ -87,8 +87,9 @@ pub fn ensure_venv_ready(
 /// For cache-located venvs the sidecar lives next to the venv
 /// (`<cache>/<key>/meta.json`, the venv being `<cache>/<key>/venv`). For
 /// in-tree venvs (`tools/.venv`) the venv stays in the repo but the
-/// sidecar must live somewhere the repo cannot write, so it goes to `$XDG_CACHE_HOME/toolr/<repo-key>/` keyed by a hash of the
-/// canonical repo path.
+/// sidecar must live somewhere the repo cannot write, so it goes to
+/// `$XDG_CACHE_HOME/toolr/<repo-key>/` keyed by a hash of the canonical
+/// repo path.
 pub fn meta_cache_dir(repo_root: &Path, resolved: &ResolvedVenv) -> Result<PathBuf> {
     if !resolved.repo_key.is_empty() {
         // Cache-located venv: sidecar sits beside the venv.
