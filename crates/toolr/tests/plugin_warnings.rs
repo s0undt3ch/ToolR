@@ -131,6 +131,44 @@ fn skipped_plugin_warns_and_the_rest_still_works() {
 }
 
 #[test]
+fn plugin_warning_control_chars_are_stripped() {
+    let p = Project::new();
+    p.add_plugin(
+        "demo_plugin",
+        &fragment(
+            1,
+            "demo\\u001b]52;c;ZXZpbA==\\u0007",
+            "oldplugin",
+            None,
+            "run",
+        ),
+    );
+    let stderr = p.stderr(&["greet", "--help"]);
+    assert!(stderr.contains("skipping plugin"), "stderr:\n{stderr}");
+    assert!(!stderr.contains('\x1b'), "stderr:\n{stderr:?}");
+    assert!(!stderr.contains('\x07'), "stderr:\n{stderr:?}");
+}
+
+#[test]
+fn manifest_rebuild_warning_control_chars_are_stripped() {
+    let p = Project::new();
+    p.add_plugin(
+        "demo_plugin",
+        &fragment(
+            1,
+            "demo\\u001b]52;c;ZXZpbA==\\u0007",
+            "oldplugin",
+            None,
+            "run",
+        ),
+    );
+    let stderr = p.stderr(&["project", "manifest", "rebuild"]);
+    assert!(stderr.contains("skipping plugin"), "stderr:\n{stderr}");
+    assert!(!stderr.contains('\x1b'), "stderr:\n{stderr:?}");
+    assert!(!stderr.contains('\x07'), "stderr:\n{stderr:?}");
+}
+
+#[test]
 fn warning_repeats_on_every_run() {
     let p = project_with_skipped_plugin();
     let stderr = p.stderr(&["greet", "--help"]);

@@ -40,7 +40,10 @@ fn run() -> anyhow::Result<ExitCode> {
     };
     if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
         for w in &manifest.plugin_warnings {
-            eprintln!("toolr: warning: {}", w.message);
+            eprintln!(
+                "toolr: warning: {}",
+                toolr_core::text::strip_control_chars(&w.message)
+            );
         }
     }
     let mut command = cli::build_command(&manifest);

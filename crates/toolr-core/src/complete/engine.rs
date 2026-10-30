@@ -1,6 +1,7 @@
 //! Pure prefix-matching completion engine. No I/O.
 
 use crate::manifest::{Argument, ArgumentKind, Command, Manifest};
+use crate::text::{has_control_chars, strip_control_chars};
 
 /// A single completion candidate: the word to insert, plus an optional
 /// one-line description (a group's `title`, a command's `summary`, or a
@@ -17,12 +18,10 @@ impl Candidate {
     pub fn new(value: impl Into<String>, description: impl Into<String>) -> Self {
         Self {
             value: value.into(),
-            // The wire format between `__complete` and the shell scripts is
-            // one `value<TAB>description` line per candidate — a literal
-            // tab or newline in a hand-written title/summary/help string
-            // would otherwise corrupt that framing (extra bogus candidates
-            // in zsh/fish, a misaligned description column).
-            description: description.into().replace(['\t', '\n', '\r'], " "),
+            // The wire format is one `value<TAB>description` line per
+            // candidate, and the text reaches a terminal: strip anything
+            // that could forge candidates or inject escape sequences.
+            description: strip_control_chars(&description.into()),
         }
     }
 
@@ -59,6 +58,9 @@ pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<Candidat
         Slot::Positional { argument, prefix } => values(argument, &prefix),
         Slot::None => Vec::new(),
     };
+    // Single choke point for every candidate source. A value can't be both
+    // shown faithfully and kept safe, so it is dropped.
+    out.retain(|c| !has_control_chars(&c.value));
     sort_and_dedup_by_value(&mut out);
     out
 }

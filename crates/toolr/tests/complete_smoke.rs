@@ -76,6 +76,27 @@ fn complete(tmp: &TempDir, args: &[&str]) -> String {
 }
 
 #[test]
+fn description_newline_does_not_forge_candidates() {
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    std::fs::create_dir(&tools).unwrap();
+    std::fs::write(
+        tools.join("ci.py"),
+        "\"\"\"CI.\"\"\"\nfrom toolr import command_group\n\ngroup = command_group(\"ci\", \"x\\nevil\\tdesc\\x1b[2J\")\n",
+    )
+    .unwrap();
+    Command::cargo_bin("toolr")
+        .unwrap()
+        .current_dir(tmp.path())
+        .arg("__build-static-manifest")
+        .assert()
+        .success();
+    let out = complete_raw(&tmp, &["c"]);
+    assert_eq!(out.lines().count(), 1, "output: {out:?}");
+    assert!(!out.contains('\x1b'), "output: {out:?}");
+}
+
+#[test]
 fn completes_groups_at_top_level() {
     let tmp = fixture();
     let stdout = complete(&tmp, &[""]);

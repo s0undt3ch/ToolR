@@ -140,6 +140,25 @@ fn candidate_description_strips_embedded_tabs_and_newlines() {
 }
 
 #[test]
+fn candidate_description_is_stripped() {
+    let candidate = Candidate::new("v", "a\x1b]0;t\x07b");
+    assert!(!crate::text::has_control_chars(&candidate.description));
+}
+
+#[test]
+fn engine_drops_control_char_values() {
+    let mut manifest = fixture();
+    let load = manifest
+        .commands
+        .iter_mut()
+        .find(|c| c.name == "load")
+        .unwrap();
+    load.arguments[0].allowed_values = vec!["ok".into(), "bad\x1b[2J".into()];
+    let out = serve_completions(&manifest, &tokens(&["data", "load", ""]));
+    assert_eq!(out, vec![Candidate::bare("ok")]);
+}
+
+#[test]
 fn allowed_values_have_no_description() {
     let out = serve_completions(&fixture(), &tokens(&["data", "load", ""]));
     assert_eq!(out, vec![Candidate::bare("tall"), Candidate::bare("wide")]);
