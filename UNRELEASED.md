@@ -101,3 +101,7 @@ and plugin warnings are no longer passed to your terminal, and the manifest buil
 command names and argparse flags containing whitespace or control characters, and choice values
 containing control characters. Re-run `toolr self completion install bash` (or re-source the script) to
 pick up the fix.
+
+The same name and choice checks now also reject zero-width and bidi characters (such as U+200B or
+U+202E), which could make one command or value display as another. Help text and descriptions keep
+them, so right-to-left text and emoji sequences still render.
