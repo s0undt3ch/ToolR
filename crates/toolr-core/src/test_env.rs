@@ -20,6 +20,15 @@ impl EnvGuard {
         }
     }
 
+    /// Points `XDG_CACHE_HOME` at a fresh temp dir, so code under test that writes to toolr's
+    /// cache (rebuild locks, provenance records) never touches the real one.
+    pub(crate) fn temp_cache_home() -> (Self, tempfile::TempDir) {
+        let mut env = Self::lock();
+        let dir = tempfile::TempDir::new().expect("create temp XDG_CACHE_HOME");
+        env.set("XDG_CACHE_HOME", dir.path());
+        (env, dir)
+    }
+
     /// For tests whose code under test reads a var another test changes; they still run in
     /// parallel with each other.
     pub(crate) fn read() -> RwLockReadGuard<'static, ()> {

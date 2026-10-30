@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn full_rebuild_writes_static_manifest() {
-        let _env = EnvGuard::read();
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
         let tmp = TempDir::new().unwrap();
         let project = tmp.path();
         let tools = project.join("tools");
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn full_rebuild_reports_plugin_warnings() {
-        let _env = EnvGuard::read();
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
         let tmp = TempDir::new().unwrap();
         let project = tmp.path();
         std::fs::create_dir(project.join("tools")).unwrap();

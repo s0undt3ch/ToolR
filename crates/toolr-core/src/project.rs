@@ -201,9 +201,7 @@ mod tests {
         // In-tree venv (`repo_key` empty): the sidecar must live outside the
         // repo, under `$XDG_CACHE_HOME/toolr/<repo-key>` — exercises the
         // `compute_repo_key` + cache-dir branch.
-        let mut env = EnvGuard::lock();
-        let xdg = TempDir::new().unwrap();
-        env.set("XDG_CACHE_HOME", xdg.path());
+        let (env, xdg) = EnvGuard::temp_cache_home();
 
         let repo = TempDir::new().unwrap();
         let resolved = ResolvedVenv {
@@ -235,7 +233,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn finalize_sync_records_provenance_and_rebuilds_manifest() {
-        let _env = EnvGuard::read();
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = tempfile::tempdir().unwrap();
@@ -273,7 +271,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn finalize_sync_preserves_an_existing_sidecar() {
-        let _env = EnvGuard::read();
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
         // When a sidecar already exists, finalize_sync takes the
         // `Meta::load -> Ok(existing)` branch and preserves `created_at`
         // (rather than minting a fresh one), restamping the interpreter.
