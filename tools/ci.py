@@ -115,7 +115,7 @@ _BINARY_ARCHIVE_TRIPLES: list[dict[str, object]] = [
     },
     {
         "triple": "aarch64-apple-darwin",
-        "runner": "macos-14",
+        "runner": "macos-15",
         "archive": "tar.gz",
         "display-name": "macOS",
     },
@@ -148,7 +148,7 @@ _CI_BINARY_ARCHIVE_TRIPLE_NAMES = frozenset(
 _WHEEL_PLATFORM_MATRIX: dict[str, list[dict[str, str]]] = {
     "macos": [
         {"name": "macosx_x86_64", "os": "macos-15-intel"},
-        {"name": "macosx_arm64", "os": "macos-14"},
+        {"name": "macosx_arm64", "os": "macos-15"},
     ],
     "windows": [
         {"name": "win_amd64", "os": "windows-2025"},
