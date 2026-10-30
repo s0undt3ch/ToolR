@@ -37,8 +37,7 @@ impl ConsentMode {
     pub fn from_env(never_prompt: bool) -> Self {
         Self {
             yes_flag: false,
-            auto_install_env: std::env::var_os("TOOLR_AUTO_INSTALL_UV")
-                .is_some_and(|v| v == "1"),
+            auto_install_env: std::env::var_os("TOOLR_AUTO_INSTALL_UV").is_some_and(|v| v == "1"),
             never_prompt,
         }
     }
@@ -118,9 +117,10 @@ pub fn decide_install_auto(
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let mut stderr = std::io::stderr();
-    let prompt_io = stdin
-        .is_terminal()
-        .then_some((&mut input as &mut dyn BufRead, &mut stderr as &mut dyn Write));
+    let prompt_io = stdin.is_terminal().then_some((
+        &mut input as &mut dyn BufRead,
+        &mut stderr as &mut dyn Write,
+    ));
     decide_install(path_found, managed_found, consent, prompt_io)
 }
 
@@ -247,9 +247,8 @@ pub fn asset_url(asset: &str, ext: &str) -> String {
 
 /// Download + extract uv into the managed location.
 pub fn perform_install() -> Result<UvBinary, UvError> {
-    let dest = managed_uv_path().ok_or_else(|| {
-        UvError::Http("could not resolve $XDG_DATA_HOME/toolr/bin".into())
-    })?;
+    let dest = managed_uv_path()
+        .ok_or_else(|| UvError::Http("could not resolve $XDG_DATA_HOME/toolr/bin".into()))?;
     let (asset, ext) = host_asset().ok_or_else(|| {
         UvError::Http(format!(
             "no prebuilt uv asset for {}-{}",
@@ -262,24 +261,17 @@ pub fn perform_install() -> Result<UvBinary, UvError> {
     probe(&dest, UvSource::FreshlyInstalled)
 }
 
-fn download_and_extract(
-    url: &str,
-    asset: &str,
-    ext: &str,
-    dest: &Path,
-) -> Result<(), UvError> {
-    let parent = dest.parent().ok_or_else(|| {
-        UvError::Http("managed uv path has no parent directory".into())
-    })?;
+fn download_and_extract(url: &str, asset: &str, ext: &str, dest: &Path) -> Result<(), UvError> {
+    let parent = dest
+        .parent()
+        .ok_or_else(|| UvError::Http("managed uv path has no parent directory".into()))?;
     fs::create_dir_all(parent)?;
 
     let response = reqwest::blocking::get(url)
         .map_err(|e| UvError::Http(e.to_string()))?
         .error_for_status()
         .map_err(|e| UvError::Http(e.to_string()))?;
-    let bytes = response
-        .bytes()
-        .map_err(|e| UvError::Http(e.to_string()))?;
+    let bytes = response.bytes().map_err(|e| UvError::Http(e.to_string()))?;
 
     let archive_name = format!("{asset}.{ext}");
     let tmp = tempfile::tempdir()?;
@@ -346,6 +338,7 @@ fn extract_zip(archive: &Path, into: &Path) -> Result<(), UvError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
     use std::io::Write;
 
     #[test]
@@ -355,6 +348,7 @@ mod tests {
 
     #[test]
     fn prompts_on_a_tty_and_follows_the_answer() {
+        let _env = EnvGuard::read();
         for (answer, expected) in [
             ("\n", InstallDecision::Install),
             ("M\n", InstallDecision::Refuse),
@@ -377,6 +371,7 @@ mod tests {
 
     #[test]
     fn prompt_for_consent_refuses_on_eof_and_ends_the_line() {
+        let _env = EnvGuard::read();
         let mut out = Vec::new();
         assert!(!prompt_for_consent(&mut std::io::Cursor::new(""), &mut out).unwrap());
         assert!(String::from_utf8(out).unwrap().ends_with("Choice [I/M] \n"));
@@ -384,6 +379,7 @@ mod tests {
 
     #[test]
     fn prompt_for_consent_relies_on_the_echoed_newline_for_answers() {
+        let _env = EnvGuard::read();
         for (answer, expected) in [("\n", true), ("M\n", false)] {
             let mut out = Vec::new();
             assert_eq!(
@@ -435,7 +431,10 @@ mod tests {
 
     #[test]
     fn yes_flag_forces_install_even_without_tty() {
-        let consent = ConsentMode { yes_flag: true, ..Default::default() };
+        let consent = ConsentMode {
+            yes_flag: true,
+            ..Default::default()
+        };
         assert_eq!(
             decide_install(false, false, consent, None),
             InstallDecision::Install
@@ -444,7 +443,10 @@ mod tests {
 
     #[test]
     fn auto_install_env_forces_install_even_without_tty() {
-        let consent = ConsentMode { auto_install_env: true, ..Default::default() };
+        let consent = ConsentMode {
+            auto_install_env: true,
+            ..Default::default()
+        };
         assert_eq!(
             decide_install(false, false, consent, None),
             InstallDecision::Install
@@ -461,7 +463,10 @@ mod tests {
 
     #[test]
     fn never_prompt_returns_refuse_without_consent_or_tty() {
-        let consent = ConsentMode { never_prompt: true, ..Default::default() };
+        let consent = ConsentMode {
+            never_prompt: true,
+            ..Default::default()
+        };
         // No path/managed uv, stdin is a TTY answering Enter → without
         // never_prompt we'd prompt and install. With it we must Refuse.
         assert_eq!(
@@ -477,7 +482,10 @@ mod tests {
 
     #[test]
     fn never_prompt_does_not_override_already_available() {
-        let consent = ConsentMode { never_prompt: true, ..Default::default() };
+        let consent = ConsentMode {
+            never_prompt: true,
+            ..Default::default()
+        };
         // uv is on PATH: never_prompt must NOT pretend it's missing.
         assert_eq!(
             decide_install(true, false, consent, None),
@@ -512,29 +520,20 @@ mod tests {
 
     #[test]
     fn consent_mode_from_env_reads_toolr_auto_install_uv() {
-        // Mutating process env is racy across tests in the same binary;
-        // serialise inside a single test by handling both states here.
-        let prev = std::env::var_os("TOOLR_AUTO_INSTALL_UV");
-        // SAFETY: single-threaded test, see comment above.
-        unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "1") };
+        let mut env = EnvGuard::write();
+        env.set("TOOLR_AUTO_INSTALL_UV", "1");
         let on = ConsentMode::from_env(false);
         assert!(on.auto_install_env);
         assert!(!on.yes_flag);
 
-        unsafe { std::env::remove_var("TOOLR_AUTO_INSTALL_UV") };
+        env.remove("TOOLR_AUTO_INSTALL_UV");
         let off = ConsentMode::from_env(false);
         assert!(!off.auto_install_env);
 
         // Non-"1" value also counts as "not set" for our purposes.
-        unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "true") };
+        env.set("TOOLR_AUTO_INSTALL_UV", "true");
         let other = ConsentMode::from_env(false);
         assert!(!other.auto_install_env);
-
-        // Restore prior value so we don't leak into sibling tests.
-        match prev {
-            Some(v) => unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", v) },
-            None => unsafe { std::env::remove_var("TOOLR_AUTO_INSTALL_UV") },
-        }
     }
 
     #[test]

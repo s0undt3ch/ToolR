@@ -121,7 +121,11 @@ fn init_yes_overwrites_conflicts_non_interactive() {
 
     let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
     assert!(pyproject.contains(r#"name = "tools""#));
-    assert!(!fs::read_to_string(tmp.path().join("tools/.gitignore")).unwrap().contains("# stale"));
+    assert!(
+        !fs::read_to_string(tmp.path().join("tools/.gitignore"))
+            .unwrap()
+            .contains("# stale")
+    );
 }
 
 /// --force overwrites conflict files without prompting.

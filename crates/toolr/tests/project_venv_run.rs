@@ -175,8 +175,14 @@ fn no_sync_errors_when_interpreter_is_gone() {
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "stderr:\n{stderr}");
-    assert!(stderr.contains("interpreter no longer exists"), "stderr:\n{stderr}");
-    assert!(stderr.contains("toolr project venv sync"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("interpreter no longer exists"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("toolr project venv sync"),
+        "stderr:\n{stderr}"
+    );
 }
 
 #[cfg(unix)]
@@ -298,7 +304,11 @@ fn no_sync_errors_when_base_python_is_removed() {
     let tmp = TempDir::new().unwrap();
     let venv = fake_in_tree_venv_cross_platform(tmp.path(), /* with_toolr_pkg */ true);
     let home = tmp.path().join("pruned").join("python");
-    std::fs::write(venv.join("pyvenv.cfg"), format!("home = {}\n", home.display())).unwrap();
+    std::fs::write(
+        venv.join("pyvenv.cfg"),
+        format!("home = {}\n", home.display()),
+    )
+    .unwrap();
     mark_fresh(tmp.path(), &venv);
     let output = Command::cargo_bin("toolr")
         .unwrap()
@@ -308,7 +318,10 @@ fn no_sync_errors_when_base_python_is_removed() {
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "stderr:\n{stderr}");
-    assert!(stderr.contains("interpreter no longer exists"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("interpreter no longer exists"),
+        "stderr:\n{stderr}"
+    );
 }
 
 /// A command that resolves on the venv PATH but cannot be executed (a
@@ -365,7 +378,11 @@ fn project_init_next_steps_mention_venv_run() {
         .args(["project", "init", "--no-sync"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("project venv run"),

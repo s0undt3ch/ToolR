@@ -56,7 +56,11 @@ fn prune_removes_orphan_entries() {
         .args(["self", "cache", "prune"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ORPHAN"), "stdout:\n{stdout}");
 
@@ -93,7 +97,11 @@ fn prune_removes_stale_entries() {
         .args(["self", "cache", "prune"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("STALE"), "stdout:\n{stdout}");
 
@@ -121,7 +129,11 @@ fn prune_dry_run_leaves_disk_untouched() {
         .args(["self", "cache", "prune", "--dry-run"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("DRY-RUN"), "stdout:\n{stdout}");
 
@@ -147,7 +159,11 @@ fn prune_all_with_yes_nukes_everything() {
         .args(["self", "cache", "prune", "--all", "--yes"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     assert!(!cache_root.join("a").exists());
     assert!(!cache_root.join("b").exists());
@@ -177,7 +193,10 @@ fn passive_hint_appears_when_orphan_count_is_high() {
         .unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("toolr self cache prune"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("toolr self cache prune"),
+        "stderr:\n{stderr}"
+    );
 }
 
 #[test]
@@ -203,7 +222,10 @@ fn passive_hint_is_suppressed_by_env_var() {
         .unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!stderr.contains("toolr self cache prune"), "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("toolr self cache prune"),
+        "stderr:\n{stderr}"
+    );
 }
 
 #[test]

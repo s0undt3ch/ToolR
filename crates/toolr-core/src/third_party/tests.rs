@@ -49,8 +49,14 @@ fn fragment_round_trips_through_json() {
 #[test]
 fn glob_finds_only_toolr_manifest_files() {
     let tmp = setup_fake_venv(&[
-        ("a_pkg", r#"{"toolr_schema_version": 1, "package": "a_pkg"}"#),
-        ("b_pkg", r#"{"toolr_schema_version": 1, "package": "b_pkg"}"#),
+        (
+            "a_pkg",
+            r#"{"toolr_schema_version": 1, "package": "a_pkg"}"#,
+        ),
+        (
+            "b_pkg",
+            r#"{"toolr_schema_version": 1, "package": "b_pkg"}"#,
+        ),
     ]);
     // Drop a spurious file the glob must ignore.
     let site = tmp

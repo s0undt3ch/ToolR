@@ -39,7 +39,10 @@ pub fn glob_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError
         for segment in *layout_segments {
             pattern = pattern.join(segment);
         }
-        pattern = pattern.join("site-packages").join("*").join("toolr-manifest.json");
+        pattern = pattern
+            .join("site-packages")
+            .join("*")
+            .join("toolr-manifest.json");
         let pattern_str = pattern
             .to_str()
             .ok_or_else(|| ThirdPartyError::NonUtf8Path(pattern.clone()))?;

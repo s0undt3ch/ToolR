@@ -38,10 +38,9 @@ pub use build::{BuildError, build_static_manifest, build_static_manifest_with_ve
 
 /// Parse a single Python file and return its module AST.
 pub fn parse_python_file(path: &Path) -> Result<ModModule> {
-    let source = std::fs::read_to_string(path)
-        .with_context(|| format!("reading {}", path.display()))?;
-    let parsed = parse_module(&source)
-        .with_context(|| format!("parsing {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let parsed = parse_module(&source).with_context(|| format!("parsing {}", path.display()))?;
     Ok(parsed.into_syntax())
 }
 

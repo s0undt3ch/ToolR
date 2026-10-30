@@ -125,26 +125,15 @@ fn parse_minor(version_output: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use crate::test_env::EnvGuard;
 
-    /// Guards the one test that sets `TOOLR_PYTHON` to cover the env read in
-    /// `resolve_python`. Prefer `resolve_python_in` for anything else.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
+    /// Covers the env read in `resolve_python`; prefer `resolve_python_in` for anything else.
     #[test]
     fn toolr_python_env_var_wins() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        // SAFETY: ENV_LOCK serialises every test in this module that
-        // touches `TOOLR_PYTHON`, and no other thread in the crate
-        // mutates that env var.
-        unsafe {
-            env::set_var("TOOLR_PYTHON", "/custom/python");
-        }
+        let mut env = EnvGuard::write();
+        env.set("TOOLR_PYTHON", "/custom/python");
         let p = resolve_python().expect("should resolve");
         assert_eq!(p, PathBuf::from("/custom/python"));
-        unsafe {
-            env::remove_var("TOOLR_PYTHON");
-        }
     }
 
     #[test]

@@ -28,9 +28,14 @@ fn loads_v1_sidecar_without_provenance_fields() {
 
 #[test]
 fn with_interpreter_records_provenance() {
-    let m = Meta::new("/r", "0", "3.13")
-        .with_interpreter(PathBuf::from("/r/tools/.venv/bin/python"), "deadbeef".into());
-    assert_eq!(m.interpreter_path, Some(PathBuf::from("/r/tools/.venv/bin/python")));
+    let m = Meta::new("/r", "0", "3.13").with_interpreter(
+        PathBuf::from("/r/tools/.venv/bin/python"),
+        "deadbeef".into(),
+    );
+    assert_eq!(
+        m.interpreter_path,
+        Some(PathBuf::from("/r/tools/.venv/bin/python"))
+    );
     assert_eq!(m.interpreter_hash.as_deref(), Some("deadbeef"));
 }
 
@@ -143,13 +148,8 @@ fn write_meta_for_new_venv_creates_sidecar() {
     let cache_dir = tmp.path().join("repo-key");
     std::fs::create_dir_all(cache_dir.join("venv")).unwrap();
 
-    let meta = write_meta_for_new_venv(
-        &cache_dir,
-        "/abs/repo".as_ref(),
-        "1.2.3",
-        "3.13.1",
-    )
-    .expect("write meta");
+    let meta = write_meta_for_new_venv(&cache_dir, "/abs/repo".as_ref(), "1.2.3", "3.13.1")
+        .expect("write meta");
 
     let loaded = Meta::load(&cache_dir).expect("load meta");
     assert_eq!(meta, loaded);
@@ -182,13 +182,8 @@ fn touch_last_used_updates_only_last_used_at() {
     let cache_dir = tmp.path().join("repo-key");
     std::fs::create_dir_all(&cache_dir).unwrap();
 
-    let original = write_meta_for_new_venv(
-        &cache_dir,
-        "/abs/repo".as_ref(),
-        "1.0.0",
-        "3.13.1",
-    )
-    .unwrap();
+    let original =
+        write_meta_for_new_venv(&cache_dir, "/abs/repo".as_ref(), "1.0.0", "3.13.1").unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(20));
 
@@ -219,13 +214,8 @@ fn touch_or_backfill_updates_existing_sidecar() {
     let cache_dir = tmp.path().join("repo-key");
     std::fs::create_dir_all(&cache_dir).unwrap();
 
-    let original = write_meta_for_new_venv(
-        &cache_dir,
-        "/abs/repo".as_ref(),
-        "1.0.0",
-        "3.13.1",
-    )
-    .unwrap();
+    let original =
+        write_meta_for_new_venv(&cache_dir, "/abs/repo".as_ref(), "1.0.0", "3.13.1").unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(20));
 
@@ -252,8 +242,7 @@ fn touch_or_backfill_writes_sidecar_when_missing() {
     std::fs::create_dir_all(&cache_dir).unwrap();
     assert!(!cache_dir.join("meta.json").exists());
 
-    touch_or_backfill(&cache_dir, "/abs/repo".as_ref(), "2.0.0", "3.13.1")
-        .expect("backfill");
+    touch_or_backfill(&cache_dir, "/abs/repo".as_ref(), "2.0.0", "3.13.1").expect("backfill");
     let meta = Meta::load(&cache_dir).expect("load");
 
     assert_eq!(meta.repo_path, std::path::PathBuf::from("/abs/repo"));
@@ -418,7 +407,13 @@ fn hint_is_none_when_cache_is_small_and_clean() {
     std::fs::create_dir_all(&live_repo).unwrap();
     let cache_root = tmp.path().join("toolr-cache");
     std::fs::create_dir_all(&cache_root).unwrap();
-    make_entry(&cache_root, "a", live_repo.to_str().unwrap(), now_fixture(), 1024);
+    make_entry(
+        &cache_root,
+        "a",
+        live_repo.to_str().unwrap(),
+        now_fixture(),
+        1024,
+    );
 
     let hint = compute_hint(&cache_root, &HintConfig::default(), now_fixture()).unwrap();
     assert!(hint.is_none(), "expected no hint, got {hint:?}");
@@ -431,7 +426,13 @@ fn hint_fires_when_total_size_exceeds_threshold() {
     std::fs::create_dir_all(&live_repo).unwrap();
     let cache_root = tmp.path().join("toolr-cache");
     std::fs::create_dir_all(&cache_root).unwrap();
-    make_entry(&cache_root, "a", live_repo.to_str().unwrap(), now_fixture(), 4096);
+    make_entry(
+        &cache_root,
+        "a",
+        live_repo.to_str().unwrap(),
+        now_fixture(),
+        4096,
+    );
 
     let cfg = HintConfig {
         size_threshold_bytes: 1024,
@@ -471,7 +472,13 @@ fn hint_orphan_message_reports_orphan_bytes_not_total_cache_bytes() {
     std::fs::create_dir_all(&live_repo).unwrap();
     let cache_root = tmp.path().join("toolr-cache");
     std::fs::create_dir_all(&cache_root).unwrap();
-    make_entry(&cache_root, "live", live_repo.to_str().unwrap(), now_fixture(), 200 * 1024 * 1024);
+    make_entry(
+        &cache_root,
+        "live",
+        live_repo.to_str().unwrap(),
+        now_fixture(),
+        200 * 1024 * 1024,
+    );
     for key in &["a", "b", "c"] {
         make_entry(&cache_root, key, "/missing", now_fixture(), 32);
     }
@@ -480,10 +487,18 @@ fn hint_orphan_message_reports_orphan_bytes_not_total_cache_bytes() {
         size_threshold_bytes: 100 * 1024 * 1024 * 1024,
         orphan_threshold: 2,
     };
-    let hint = compute_hint(&cache_root, &cfg, now_fixture()).unwrap().unwrap();
+    let hint = compute_hint(&cache_root, &cfg, now_fixture())
+        .unwrap()
+        .unwrap();
     assert!(hint.contains("3 orphan entries"), "got: {hint}");
-    assert!(!hint.contains("MiB"), "orphan bytes are tiny — must not render as MiB: {hint}");
-    assert!(hint.contains("96 B") || hint.contains("B)"), "expected byte-scale size, got: {hint}");
+    assert!(
+        !hint.contains("MiB"),
+        "orphan bytes are tiny — must not render as MiB: {hint}"
+    );
+    assert!(
+        hint.contains("96 B") || hint.contains("B)"),
+        "expected byte-scale size, got: {hint}"
+    );
 }
 
 #[test]

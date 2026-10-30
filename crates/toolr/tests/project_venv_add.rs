@@ -20,7 +20,10 @@ fn add_help_lists_package_positional() {
     assert!(output.status.success(), "help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("PACKAGE"), "help missing PACKAGE: {stdout}");
-    assert!(stdout.contains("uv add"), "help should reference `uv add`: {stdout}");
+    assert!(
+        stdout.contains("uv add"),
+        "help should reference `uv add`: {stdout}"
+    );
 }
 
 #[test]
@@ -48,10 +51,23 @@ fn add_success_path_invokes_uv_add() {
         .args(["project", "venv", "add", "httpx"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let argv = fx.uv_argv();
-    assert!(argv.lines().any(|l| l == "add"), "uv argv should contain `add`; got:\n{argv}");
-    assert!(argv.contains("httpx"), "uv argv should contain `httpx`; got:\n{argv}");
+    assert!(
+        argv.lines().any(|l| l == "add"),
+        "uv argv should contain `add`; got:\n{argv}"
+    );
+    assert!(
+        argv.contains("httpx"),
+        "uv argv should contain `httpx`; got:\n{argv}"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("added"), "expected `added` in stdout, got: {stdout}");
+    assert!(
+        stdout.contains("added"),
+        "expected `added` in stdout, got: {stdout}"
+    );
 }

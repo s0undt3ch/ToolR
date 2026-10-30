@@ -57,10 +57,20 @@ fn source_dir_generates_manifest() {
     );
 
     let written = pkg.join("toolr-manifest.json");
-    assert!(written.is_file(), "manifest was not written to {}", written.display());
+    assert!(
+        written.is_file(),
+        "manifest was not written to {}",
+        written.display()
+    );
     let body = fs::read_to_string(&written).unwrap();
-    assert!(body.contains("\"package\": \"mypkg\""), "missing package field: {body}");
-    assert!(body.contains("\"name\": \"hi\""), "missing hi command: {body}");
+    assert!(
+        body.contains("\"package\": \"mypkg\""),
+        "missing package field: {body}"
+    );
+    assert!(
+        body.contains("\"name\": \"hi\""),
+        "missing hi command: {body}"
+    );
     assert!(body.ends_with('\n'), "missing trailing newline");
 }
 
@@ -69,14 +79,14 @@ fn check_passes_when_manifest_is_in_sync() {
     let tmp = TempDir::new().unwrap();
     let pkg = minimal_plugin(tmp.path(), "mypkg");
     // Generate once, then --check.
-    let gen = Command::cargo_bin("toolr")
+    let generate = Command::cargo_bin("toolr")
         .unwrap()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg"])
         .output()
         .unwrap();
-    assert!(gen.status.success());
+    assert!(generate.status.success());
 
     let check = Command::cargo_bin("toolr")
         .unwrap()
@@ -109,7 +119,10 @@ fn check_emits_diff_and_exits_2_on_drift() {
     assert!(!output.status.success());
     assert_eq!(output.status.code(), Some(2), "expected exit 2 on drift");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("out of date"), "expected drift message; got: {stderr}");
+    assert!(
+        stderr.contains("out of date"),
+        "expected drift message; got: {stderr}"
+    );
 }
 
 #[test]
@@ -145,7 +158,10 @@ fn package_positional_conflicts_with_source_dir() {
         .arg(&pkg)
         .output()
         .unwrap();
-    assert!(!output.status.success(), "clap should reject the combination");
+    assert!(
+        !output.status.success(),
+        "clap should reject the combination"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("cannot be used with") || stderr.contains("conflicts"),
@@ -165,7 +181,10 @@ fn python_flag_is_no_longer_accepted() {
         .args(["--package", "mypkg", "--python", "/usr/bin/python3"])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "--python should be rejected by clap");
+    assert!(
+        !output.status.success(),
+        "--python should be rejected by clap"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("unexpected argument") || stderr.contains("--python"),

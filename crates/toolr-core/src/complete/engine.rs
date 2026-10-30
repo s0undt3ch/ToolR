@@ -194,11 +194,7 @@ fn classify<'a>(manifest: &'a Manifest, tokens: &[String]) -> Slot<'a> {
 /// Token-classification for a regular (non-dispatcher) leaf command.
 /// Factored out so the dispatcher branch can reuse it after recursing
 /// into a chosen grafted child.
-fn classify_leaf_args<'a>(
-    command: &'a Command,
-    arg_tokens: &[String],
-    prefix: String,
-) -> Slot<'a> {
+fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: String) -> Slot<'a> {
     if let Some(argument) = pending_flag_value(command, arg_tokens) {
         return Slot::FlagValue { argument, prefix };
     }
@@ -226,13 +222,13 @@ fn classify_leaf_args<'a>(
     }
     // If the user is past the last fixed positional but there's a
     // trailing variadic, keep completing against that.
-    if let Some(&arg) = positional_args.last() {
-        if matches!(arg.kind, ArgumentKind::VarPositional) {
-            return Slot::Positional {
-                argument: arg,
-                prefix,
-            };
-        }
+    if let Some(&arg) = positional_args.last()
+        && matches!(arg.kind, ArgumentKind::VarPositional)
+    {
+        return Slot::Positional {
+            argument: arg,
+            prefix,
+        };
     }
 
     // No positional candidate to suggest. If the command has any flags,

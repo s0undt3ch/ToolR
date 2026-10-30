@@ -41,11 +41,11 @@ impl Docstring {
     pub fn full_description(&self) -> String {
         let mut out = self.short_description.clone();
 
-        if let Some(long) = &self.long_description {
-            if !long.is_empty() {
-                out.push_str("\n\n");
-                out.push_str(long);
-            }
+        if let Some(long) = &self.long_description
+            && !long.is_empty()
+        {
+            out.push_str("\n\n");
+            out.push_str(long);
         }
 
         if !self.examples.is_empty() {
@@ -260,7 +260,11 @@ impl SimpleDocstringParser {
         Ok(result)
     }
 
-    fn parse_docstring_content(&self, lines: &[&str], result: &mut Docstring) -> Result<(), ParseError> {
+    fn parse_docstring_content(
+        &self,
+        lines: &[&str],
+        result: &mut Docstring,
+    ) -> Result<(), ParseError> {
         let mut current_section: Option<&str> = None;
         let mut current_content = Vec::new();
         let mut in_code_block = false;
@@ -311,7 +315,6 @@ impl SimpleDocstringParser {
                 continue;
             }
 
-
             // If we're still in description, add to description lines
             if in_description {
                 description_lines.push(*line);
@@ -332,7 +335,11 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_description_lines(&self, lines: &[&str], result: &mut Docstring) -> Result<(), ParseError> {
+    fn parse_description_lines(
+        &self,
+        lines: &[&str],
+        result: &mut Docstring,
+    ) -> Result<(), ParseError> {
         if lines.is_empty() {
             return Ok(());
         }
@@ -400,7 +407,13 @@ impl SimpleDocstringParser {
         None
     }
 
-    fn process_section(&self, section: &str, content: &[&str], result: &mut Docstring, line_num: usize) -> Result<(), ParseError> {
+    fn process_section(
+        &self,
+        section: &str,
+        content: &[&str],
+        result: &mut Docstring,
+        line_num: usize,
+    ) -> Result<(), ParseError> {
         match section {
             "args" => self.parse_args_section(content, result, line_num),
             "examples" => self.parse_examples_section(content, result, line_num),
@@ -417,7 +430,12 @@ impl SimpleDocstringParser {
         }
     }
 
-    fn parse_args_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_args_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         let indent = |line: &str| line.len() - line.trim_start().len();
 
         // (indent of the entry's opening line, name, description)
@@ -430,14 +448,14 @@ impl SimpleDocstringParser {
 
             // Google style: a line indented past its entry's opening line continues
             // that entry's description, even when it contains a `:`.
-            if let Some((entry_indent, _, description)) = current.as_mut() {
-                if indent(line) > *entry_indent {
-                    if !description.is_empty() {
-                        description.push(' ');
-                    }
-                    description.push_str(trimmed);
-                    continue;
+            if let Some((entry_indent, _, description)) = current.as_mut()
+                && indent(line) > *entry_indent
+            {
+                if !description.is_empty() {
+                    description.push(' ');
                 }
+                description.push_str(trimmed);
+                continue;
             }
 
             // Parse format: name (type): description
@@ -445,7 +463,11 @@ impl SimpleDocstringParser {
                 if let Some((_, name, description)) = current.take() {
                     result.params.insert(name, Some(description));
                 }
-                current = Some((indent(line), name_part.trim().to_string(), description.trim().to_string()));
+                current = Some((
+                    indent(line),
+                    name_part.trim().to_string(),
+                    description.trim().to_string(),
+                ));
             }
         }
         if let Some((_, name, description)) = current {
@@ -453,9 +475,6 @@ impl SimpleDocstringParser {
         }
         Ok(())
     }
-
-
-
 
     /// Dedent a code snippet by removing common leading whitespace
     fn dedent_snippet(&self, snippet: &str) -> String {
@@ -494,7 +513,12 @@ impl SimpleDocstringParser {
         dedented_lines.join("\n")
     }
 
-    fn parse_examples_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_examples_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         let mut current_example = Example {
             description: String::new(),
             snippet: String::new(),
@@ -520,10 +544,13 @@ impl SimpleDocstringParser {
                     let is_python_repl = current_example.snippet.contains(">>>");
                     if is_python_repl {
                         // Python REPL code blocks end on empty lines
-                        if !current_example.description.is_empty() || !current_example.snippet.is_empty() {
+                        if !current_example.description.is_empty()
+                            || !current_example.snippet.is_empty()
+                        {
                             // Dedent the snippet before pushing
                             if !current_example.snippet.is_empty() {
-                                current_example.snippet = self.dedent_snippet(&current_example.snippet);
+                                current_example.snippet =
+                                    self.dedent_snippet(&current_example.snippet);
                             }
                             result.examples.push(current_example.clone());
                             current_example = Example {
@@ -542,7 +569,9 @@ impl SimpleDocstringParser {
                     }
                 } else {
                     // Outside code block - empty line ends the current example
-                    if !current_example.description.is_empty() || !current_example.snippet.is_empty() {
+                    if !current_example.description.is_empty()
+                        || !current_example.snippet.is_empty()
+                    {
                         // Dedent the snippet before pushing
                         if !current_example.snippet.is_empty() {
                             current_example.snippet = self.dedent_snippet(&current_example.snippet);
@@ -623,7 +652,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_notes_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_notes_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         for line in content {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
@@ -633,7 +667,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_warnings_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_warnings_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         for line in content {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
@@ -643,7 +682,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_see_also_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_see_also_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         for line in content {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
@@ -653,7 +697,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_references_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_references_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         for line in content {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
@@ -663,7 +712,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_todo_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_todo_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         for line in content {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
@@ -673,7 +727,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_deprecated_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_deprecated_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         let description = content.join(" ").trim().to_string();
         if !description.is_empty() {
             result.deprecated = Some(description);
@@ -681,7 +740,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_version_added_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_version_added_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         let version = content.join(" ").trim().to_string();
         if !version.is_empty() {
             result.version_added = Some(version);
@@ -689,7 +753,12 @@ impl SimpleDocstringParser {
         Ok(())
     }
 
-    fn parse_version_changed_section(&self, content: &[&str], result: &mut Docstring, _line_num: usize) -> Result<(), ParseError> {
+    fn parse_version_changed_section(
+        &self,
+        content: &[&str],
+        result: &mut Docstring,
+        _line_num: usize,
+    ) -> Result<(), ParseError> {
         for line in content {
             let trimmed = line.trim();
             if trimmed.is_empty() {

@@ -746,9 +746,8 @@ def f(x: Annotated[bool, arg(help_section=LOGGING)]): pass
 
     #[test]
     fn toolr_arg_calls_accepts_qualified_annotated_head() {
-        let (_, ann) = first_annotation(
-            "def f(x: typing.Annotated[Path, arg(must_exist=True)]): pass\n",
-        );
+        let (_, ann) =
+            first_annotation("def f(x: typing.Annotated[Path, arg(must_exist=True)]): pass\n");
         assert_eq!(toolr_arg_calls(&ann).len(), 1);
     }
 

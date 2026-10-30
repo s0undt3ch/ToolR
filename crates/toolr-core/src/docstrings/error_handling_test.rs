@@ -177,7 +177,12 @@ Unknown Section:
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.short_description, "Test function.");
-        assert_eq!(parsed.long_description, Some("Unknown Section:\nThis is an unknown section that should be ignored.".to_string()));
+        assert_eq!(
+            parsed.long_description,
+            Some(
+                "Unknown Section:\nThis is an unknown section that should be ignored.".to_string()
+            )
+        );
     }
 
     #[test]

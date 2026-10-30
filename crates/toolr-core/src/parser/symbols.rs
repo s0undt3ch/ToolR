@@ -498,11 +498,7 @@ fn resolve_relative_module(
         }
         out.push_str(m);
     }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
+    if out.is_empty() { None } else { Some(out) }
 }
 
 /// Module-level `NAME = <literal>` assignments. Used so a function
@@ -1069,9 +1065,11 @@ class Foo:
     X = "x"
 "#;
         let table = EnumTable::from_module(&parse(src), "tools.example");
-        assert!(table
-            .lookup("Foo", "tools.example", &std::collections::HashMap::new())
-            .is_none());
+        assert!(
+            table
+                .lookup("Foo", "tools.example", &std::collections::HashMap::new())
+                .is_none()
+        );
     }
 
     #[test]
@@ -1118,13 +1116,15 @@ class Database(StrEnum):
         // Neither module's definition wins from an unrelated module —
         // the collision is genuinely ambiguous, so this resolves to
         // nothing rather than silently picking one (GH #449).
-        assert!(table
-            .lookup(
-                "Database",
-                "tools.module_c",
-                &std::collections::HashMap::new()
-            )
-            .is_none());
+        assert!(
+            table
+                .lookup(
+                    "Database",
+                    "tools.module_c",
+                    &std::collections::HashMap::new()
+                )
+                .is_none()
+        );
     }
 
     #[test]
@@ -1192,9 +1192,11 @@ class Mode(StrEnum):
                 false,
             ),
         );
-        assert!(table
-            .lookup("Database", "tools.module_c", &all_imports)
-            .is_none());
+        assert!(
+            table
+                .lookup("Database", "tools.module_c", &all_imports)
+                .is_none()
+        );
     }
 
     #[test]
@@ -1304,7 +1306,10 @@ class Mode(StrEnum):
             enums
                 .lookup("Environment", "tools.metrics.analyse", &all_imports)
                 .unwrap(),
-            ("tools.metrics._common".to_string(), vec!["production".to_string()])
+            (
+                "tools.metrics._common".to_string(),
+                vec!["production".to_string()]
+            )
         );
     }
 

@@ -12,7 +12,7 @@ use super::symbols::ConstTable;
 use super::symbols::EnumTable;
 use super::symbols::ImportTable;
 use super::symbols::TypeAliasTable;
-use super::types::{resolve_arguments, SourcesImports, TypeImports, TypeResolutionError};
+use super::types::{SourcesImports, TypeImports, TypeResolutionError, resolve_arguments};
 use crate::manifest::{Command, Origin};
 
 type GlobalVars = HashMap<String, String>;
@@ -729,7 +729,11 @@ def go(ctx, name: str, /, count: int, *rest: int):
             [
                 ("name", ArgumentKind::Positional, Some(SupportedType::Str)),
                 ("count", ArgumentKind::Positional, Some(SupportedType::Int)),
-                ("rest", ArgumentKind::VarPositional, Some(SupportedType::Int)),
+                (
+                    "rest",
+                    ArgumentKind::VarPositional,
+                    Some(SupportedType::Int)
+                ),
             ]
         );
     }

@@ -134,11 +134,15 @@ Version Changed:
     #[test]
     fn test_small_docstring_parsing() {
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(SMALL_DOCSTRING).expect("Failed to parse small docstring");
-
+        let result = parser
+            .parse(SMALL_DOCSTRING)
+            .expect("Failed to parse small docstring");
 
         // Check short description
-        assert_eq!(result.short_description, "Generate test data for Stripe sandbox accounts.");
+        assert_eq!(
+            result.short_description,
+            "Generate test data for Stripe sandbox accounts."
+        );
 
         // Check long description
         assert_eq!(result.long_description, None);
@@ -147,13 +151,22 @@ Version Changed:
         assert_eq!(result.params.len(), 3);
 
         let stripe_param_desc = result.params.get("stripe_secret_key").unwrap();
-        assert_eq!(stripe_param_desc, &Some("Stripe secret key (must be a test key starting with sk_test_)".to_string()));
+        assert_eq!(
+            stripe_param_desc,
+            &Some("Stripe secret key (must be a test key starting with sk_test_)".to_string())
+        );
 
         let products_param_desc = result.params.get("products").unwrap();
-        assert_eq!(products_param_desc, &Some("The number of products to create.".to_string()));
+        assert_eq!(
+            products_param_desc,
+            &Some("The number of products to create.".to_string())
+        );
 
         let customers_param_desc = result.params.get("customers").unwrap();
-        assert_eq!(customers_param_desc, &Some("The number of customers to create.".to_string()));
+        assert_eq!(
+            customers_param_desc,
+            &Some("The number of customers to create.".to_string())
+        );
 
         // Check other sections are empty
         assert_eq!(result.examples.len(), 0);
@@ -170,34 +183,64 @@ Version Changed:
     #[test]
     fn test_medium_docstring_parsing() {
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(MEDIUM_DOCSTRING).expect("Failed to parse medium docstring");
+        let result = parser
+            .parse(MEDIUM_DOCSTRING)
+            .expect("Failed to parse medium docstring");
 
         // Check short description
-        assert_eq!(result.short_description, "Generate test data for Stripe sandbox accounts.");
+        assert_eq!(
+            result.short_description,
+            "Generate test data for Stripe sandbox accounts."
+        );
 
         // Check long description
-        assert_eq!(result.long_description, Some("Only test keys (sk_test_*) are accepted for safety.".to_string()));
+        assert_eq!(
+            result.long_description,
+            Some("Only test keys (sk_test_*) are accepted for safety.".to_string())
+        );
 
         // Check parameters
         assert_eq!(result.params.len(), 4);
 
         let stripe_param_desc = result.params.get("stripe_secret_key").unwrap();
-        assert_eq!(stripe_param_desc, &Some("Stripe secret key (must be a test key starting with sk_test_)".to_string()));
+        assert_eq!(
+            stripe_param_desc,
+            &Some("Stripe secret key (must be a test key starting with sk_test_)".to_string())
+        );
 
         let subscriptions_param_desc = result.params.get("subscriptions_per_customer").unwrap();
-        assert_eq!(subscriptions_param_desc, &Some("The number of subscriptions per customer.".to_string()));
+        assert_eq!(
+            subscriptions_param_desc,
+            &Some("The number of subscriptions per customer.".to_string())
+        );
 
         // Check examples
         assert_eq!(result.examples.len(), 2);
-        let basic_example = result.examples.iter().find(|e| e.description == "Basic usage:").unwrap();
+        let basic_example = result
+            .examples
+            .iter()
+            .find(|e| e.description == "Basic usage:")
+            .unwrap();
         assert_eq!(basic_example.snippet, "");
-        let custom_example = result.examples.iter().find(|e| e.description == "Custom quantities:").unwrap();
+        let custom_example = result
+            .examples
+            .iter()
+            .find(|e| e.description == "Custom quantities:")
+            .unwrap();
         assert_eq!(custom_example.snippet, "");
 
         // Check notes
         assert_eq!(result.notes.len(), 2);
-        assert!(result.notes.contains(&"Only test keys (sk_test_*) are accepted for safety.".to_string()));
-        assert!(result.notes.contains(&"This function creates realistic test data for development.".to_string()));
+        assert!(
+            result
+                .notes
+                .contains(&"Only test keys (sk_test_*) are accepted for safety.".to_string())
+        );
+        assert!(
+            result.notes.contains(
+                &"This function creates realistic test data for development.".to_string()
+            )
+        );
 
         // Check other sections are empty
         assert_eq!(result.warnings.len(), 0);
@@ -212,10 +255,15 @@ Version Changed:
     #[test]
     fn test_large_docstring_parsing() {
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(LARGE_DOCSTRING).expect("Failed to parse large docstring");
+        let result = parser
+            .parse(LARGE_DOCSTRING)
+            .expect("Failed to parse large docstring");
 
         // Check short description
-        assert_eq!(result.short_description, "Generate comprehensive test data for Stripe sandbox accounts.");
+        assert_eq!(
+            result.short_description,
+            "Generate comprehensive test data for Stripe sandbox accounts."
+        );
 
         // Check long description
         let long_desc = result.long_description.as_ref().unwrap();
@@ -226,8 +274,13 @@ Version Changed:
         assert_eq!(result.params.len(), 7);
 
         let expected_params = [
-            "stripe_secret_key", "products", "customers", "subscriptions_per_customer",
-            "include_payment_methods", "include_coupons", "test_mode"
+            "stripe_secret_key",
+            "products",
+            "customers",
+            "subscriptions_per_customer",
+            "include_payment_methods",
+            "include_coupons",
+            "test_mode",
         ];
 
         for param_name in expected_params {
@@ -240,19 +293,40 @@ Version Changed:
 
         // Check examples
         assert_eq!(result.examples.len(), 3);
-        let basic_example = result.examples.iter().find(|e| e.description == "Basic usage - creates 5 products, 20 customers, 1 subscription each:").unwrap();
+        let basic_example = result
+            .examples
+            .iter()
+            .find(|e| {
+                e.description
+                    == "Basic usage - creates 5 products, 20 customers, 1 subscription each:"
+            })
+            .unwrap();
         assert_eq!(basic_example.snippet, "");
-        let custom_example = result.examples.iter().find(|e| e.description == "Custom quantities:").unwrap();
+        let custom_example = result
+            .examples
+            .iter()
+            .find(|e| e.description == "Custom quantities:")
+            .unwrap();
         assert_eq!(custom_example.snippet, "");
-        let full_example = result.examples.iter().find(|e| e.description == "Full test suite with all features:").unwrap();
+        let full_example = result
+            .examples
+            .iter()
+            .find(|e| e.description == "Full test suite with all features:")
+            .unwrap();
         assert_eq!(full_example.snippet, "");
         // let full_example = result.examples.iter().find(|e| e.description.as_ref() == Some(&"Full test suite with all features:".to_string())).unwrap();
         // assert!(full_example.snippet.contains("include_payment_methods=True"));
 
         // Check notes
         assert_eq!(result.notes.len(), 4);
-        assert!(result.notes.contains(&"Only test keys (sk_test_*) are accepted for safety.".to_string()));
-        assert!(result.notes.contains(&"This function creates realistic test data for development and testing.".to_string()));
+        assert!(
+            result
+                .notes
+                .contains(&"Only test keys (sk_test_*) are accepted for safety.".to_string())
+        );
+        assert!(result.notes.contains(
+            &"This function creates realistic test data for development and testing.".to_string()
+        ));
 
         // Check warnings
         assert_eq!(result.warnings.len(), 2);
@@ -261,20 +335,50 @@ Version Changed:
 
         // Check see also
         assert_eq!(result.see_also.len(), 3);
-        assert!(result.see_also.contains(&"stripe.Customer.create: For creating individual customers".to_string()));
-        assert!(result.see_also.contains(&"stripe.Product.create: For creating individual products".to_string()));
-        assert!(result.see_also.contains(&"stripe.Subscription.create: For creating individual subscriptions".to_string()));
+        assert!(
+            result
+                .see_also
+                .contains(&"stripe.Customer.create: For creating individual customers".to_string())
+        );
+        assert!(
+            result
+                .see_also
+                .contains(&"stripe.Product.create: For creating individual products".to_string())
+        );
+        assert!(result.see_also.contains(
+            &"stripe.Subscription.create: For creating individual subscriptions".to_string()
+        ));
 
         // Check references
         assert_eq!(result.references.len(), 2);
-        assert!(result.references.contains(&"- Stripe API Documentation: https://stripe.com/docs/api".to_string()));
-        assert!(result.references.contains(&"- Test Data Best Practices: https://stripe.com/docs/testing".to_string()));
+        assert!(
+            result
+                .references
+                .contains(&"- Stripe API Documentation: https://stripe.com/docs/api".to_string())
+        );
+        assert!(
+            result.references.contains(
+                &"- Test Data Best Practices: https://stripe.com/docs/testing".to_string()
+            )
+        );
 
         // Check todo
         assert_eq!(result.todo.len(), 3);
-        assert!(result.todo.contains(&"- Add support for creating webhooks".to_string()));
-        assert!(result.todo.contains(&"- Implement data validation before creation".to_string()));
-        assert!(result.todo.contains(&"- Add progress callbacks for long-running operations".to_string()));
+        assert!(
+            result
+                .todo
+                .contains(&"- Add support for creating webhooks".to_string())
+        );
+        assert!(
+            result
+                .todo
+                .contains(&"- Implement data validation before creation".to_string())
+        );
+        assert!(
+            result
+                .todo
+                .contains(&"- Add progress callbacks for long-running operations".to_string())
+        );
 
         // Check deprecated
         assert!(result.deprecated.is_some());
@@ -284,9 +388,15 @@ Version Changed:
         assert_eq!(result.version_added, Some("1.0.0".to_string()));
         assert_eq!(result.version_changed.len(), 2);
         assert_eq!(result.version_changed[0].version, "1.2.0");
-        assert_eq!(result.version_changed[0].description, "Added support for payment methods and coupons");
+        assert_eq!(
+            result.version_changed[0].description,
+            "Added support for payment methods and coupons"
+        );
         assert_eq!(result.version_changed[1].version, "1.5.0");
-        assert_eq!(result.version_changed[1].description, "Improved error handling and progress reporting");
+        assert_eq!(
+            result.version_changed[1].description,
+            "Improved error handling and progress reporting"
+        );
     }
 
     #[test]
@@ -311,9 +421,14 @@ Version Changed:
     #[test]
     fn test_single_line_docstring() {
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse("A simple function that does nothing.").expect("Failed to parse single line docstring");
+        let result = parser
+            .parse("A simple function that does nothing.")
+            .expect("Failed to parse single line docstring");
 
-        assert_eq!(result.short_description, "A simple function that does nothing.");
+        assert_eq!(
+            result.short_description,
+            "A simple function that does nothing."
+        );
         assert_eq!(result.long_description, None);
         assert_eq!(result.params.len(), 0);
     }
@@ -328,7 +443,9 @@ Attributes:
     active: Whether the object is active (bool, optional)"#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with attributes");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with attributes");
 
         assert_eq!(result.short_description, "A class with attributes.");
         // Note: attributes section is not parsed in our current implementation
@@ -346,14 +463,19 @@ Version Changed:
     1.2.0: Fixed bug in processing"#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with version info");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with version info");
 
         assert_eq!(result.version_added, Some("1.0.0".to_string()));
         assert_eq!(result.version_changed.len(), 2);
         assert_eq!(result.version_changed[0].version, "1.1.0");
         assert_eq!(result.version_changed[0].description, "Added new parameter");
         assert_eq!(result.version_changed[1].version, "1.2.0");
-        assert_eq!(result.version_changed[1].description, "Fixed bug in processing");
+        assert_eq!(
+            result.version_changed[1].description,
+            "Fixed bug in processing"
+        );
     }
 
     #[test]
@@ -365,7 +487,9 @@ Deprecated:
     Use 'new_param' instead."#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with deprecated info");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with deprecated info");
 
         assert!(result.deprecated.is_some());
         let deprecated = result.deprecated.unwrap();
@@ -376,9 +500,14 @@ Deprecated:
     #[test]
     fn test_parser_strict_mode() {
         let strict_parser = SimpleDocstringParser::strict();
-        let result = strict_parser.parse(SMALL_DOCSTRING).expect("Failed to parse with strict parser");
+        let result = strict_parser
+            .parse(SMALL_DOCSTRING)
+            .expect("Failed to parse with strict parser");
 
-        assert_eq!(result.short_description, "Generate test data for Stripe sandbox accounts.");
+        assert_eq!(
+            result.short_description,
+            "Generate test data for Stripe sandbox accounts."
+        );
         assert_eq!(result.params.len(), 3);
     }
 
@@ -394,7 +523,11 @@ Deprecated:
         let duration = start.elapsed();
 
         // Should complete 1000 iterations in less than 1 second
-        assert!(duration.as_secs() < 1, "Parsing took too long: {:?}", duration);
+        assert!(
+            duration.as_secs() < 1,
+            "Parsing took too long: {:?}",
+            duration
+        );
     }
 
     #[test]
@@ -424,7 +557,9 @@ Deprecated:
 
         // Test with very long input (should still work)
         let long_docstring = "A".repeat(10000);
-        let result = parser.parse(&long_docstring).expect("Failed to parse long docstring");
+        let result = parser
+            .parse(&long_docstring)
+            .expect("Failed to parse long docstring");
         assert_eq!(result.short_description, long_docstring);
     }
 
@@ -439,7 +574,9 @@ Args:
     items: List of items (list[str])"#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with typed parameters");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with typed parameters");
 
         let name_param_desc = result.params.get("name").unwrap();
         assert!(name_param_desc.is_some());
@@ -476,14 +613,28 @@ Examples:
             print("File not found")"#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with complex examples");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with complex examples");
 
         assert_eq!(result.examples.len(), 3);
-        let basic_example = result.examples.iter().find(|e| e.description == "Basic usage:").unwrap();
+        let basic_example = result
+            .examples
+            .iter()
+            .find(|e| e.description == "Basic usage:")
+            .unwrap();
         assert_eq!(basic_example.snippet, "");
-        let custom_example = result.examples.iter().find(|e| e.description == "With custom options:").unwrap();
+        let custom_example = result
+            .examples
+            .iter()
+            .find(|e| e.description == "With custom options:")
+            .unwrap();
         assert_eq!(custom_example.snippet, "");
-        let error_example = result.examples.iter().find(|e| e.description == "Error handling:").unwrap();
+        let error_example = result
+            .examples
+            .iter()
+            .find(|e| e.description == "Error handling:")
+            .unwrap();
         assert_eq!(error_example.snippet, "");
         // assert!(error_example.snippet.contains("except FileNotFoundError:"));
     }
@@ -496,10 +647,15 @@ Examples:
     Examples can be seen under the `examples/` directory."#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with simple examples");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with simple examples");
 
         assert_eq!(result.examples.len(), 1);
-        assert_eq!(result.examples[0].description, "Examples can be seen under the `examples/` directory.");
+        assert_eq!(
+            result.examples[0].description,
+            "Examples can be seen under the `examples/` directory."
+        );
         assert_eq!(result.examples[0].snippet, "");
     }
 
@@ -525,7 +681,9 @@ Examples:
             print("File not found")"#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with complex examples without markdown");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with complex examples without markdown");
 
         assert_eq!(result.examples.len(), 3);
         assert_eq!(result.examples[0].description, "Basic usage:");
@@ -564,12 +722,18 @@ Examples:
     ```"#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with complex examples with markdown");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with complex examples with markdown");
 
         assert_eq!(result.examples.len(), 3);
         assert_eq!(result.examples[0].description, "Basic usage:");
         assert!(!result.examples[0].snippet.is_empty());
-        assert!(result.examples[0].snippet.contains("result = process_data(\"input.txt\")"));
+        assert!(
+            result.examples[0]
+                .snippet
+                .contains("result = process_data(\"input.txt\")")
+        );
         assert_eq!(result.examples[1].description, "With custom options:");
         assert!(!result.examples[1].snippet.is_empty());
         assert!(result.examples[1].snippet.contains("format=\"json\""));
@@ -599,7 +763,9 @@ Examples:
     ```"#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with syntax examples");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with syntax examples");
 
         assert_eq!(result.examples.len(), 3);
 
@@ -619,7 +785,6 @@ Examples:
         assert_eq!(result.examples[2].syntax, Some("javascript".to_string()));
     }
 
-
     #[test]
     fn test_multiple_notes_parsing() {
         let docstring = r#"Function with multiple notes.
@@ -630,12 +795,20 @@ Notes:
     This is the third note with even more information."#;
 
         let parser = SimpleDocstringParser::new();
-        let result = parser.parse(docstring).expect("Failed to parse docstring with multiple notes");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse docstring with multiple notes");
 
         assert_eq!(result.notes.len(), 3);
         assert_eq!(result.notes[0], "This is the first note.");
-        assert_eq!(result.notes[1], "This is the second note with more details.");
-        assert_eq!(result.notes[2], "This is the third note with even more information.");
+        assert_eq!(
+            result.notes[1],
+            "This is the second note with more details."
+        );
+        assert_eq!(
+            result.notes[2],
+            "This is the third note with even more information."
+        );
     }
 }
 
@@ -644,7 +817,9 @@ mod wrapped_args_tests {
     use crate::docstrings::SimpleDocstringParser;
 
     fn param(docstring: &str, name: &str) -> Option<String> {
-        let result = SimpleDocstringParser::new().parse(docstring).expect("parse");
+        let result = SimpleDocstringParser::new()
+            .parse(docstring)
+            .expect("parse");
         result.params.get(name).cloned().flatten()
     }
 
@@ -658,7 +833,10 @@ mod wrapped_args_tests {
             third line.
         loud: Single line.
     "#;
-        assert_eq!(param(docstring, "name").as_deref(), Some("First line second line third line."));
+        assert_eq!(
+            param(docstring, "name").as_deref(),
+            Some("First line second line third line.")
+        );
         assert_eq!(param(docstring, "loud").as_deref(), Some("Single line."));
     }
 
@@ -672,11 +850,15 @@ mod wrapped_args_tests {
             or https://example.com/docs for more.
         loud: Single line.
     "#;
-        let result = SimpleDocstringParser::new().parse(docstring).expect("parse");
+        let result = SimpleDocstringParser::new()
+            .parse(docstring)
+            .expect("parse");
         assert_eq!(result.params.len(), 2, "params: {:?}", result.params);
         assert_eq!(
             param(docstring, "name").as_deref(),
-            Some("First line, continue on a second line, see: the README or https://example.com/docs for more.")
+            Some(
+                "First line, continue on a second line, see: the README or https://example.com/docs for more."
+            )
         );
     }
 
@@ -690,7 +872,10 @@ mod wrapped_args_tests {
             loud: is not a new entry here.
     "#;
         assert_eq!(param(docstring, "loud").as_deref(), Some("Single line."));
-        assert_eq!(param(docstring, "name").as_deref(), Some("First line loud: is not a new entry here."));
+        assert_eq!(
+            param(docstring, "name").as_deref(),
+            Some("First line loud: is not a new entry here.")
+        );
     }
 
     #[test]
@@ -701,7 +886,10 @@ mod wrapped_args_tests {
         name:
             Described on the next line.
     "#;
-        assert_eq!(param(docstring, "name").as_deref(), Some("Described on the next line."));
+        assert_eq!(
+            param(docstring, "name").as_deref(),
+            Some("Described on the next line.")
+        );
     }
 
     #[test]

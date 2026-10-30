@@ -142,13 +142,11 @@ pub fn dispatch(
     // Intercept --help / -h before any other routing. Tab-completion
     // invocations (`__complete`) never set help flags, so they pass through
     // immediately.
-    if !matches!(matches.subcommand(), Some(("__complete", _))) {
-        if let Some((resolved_cmd, bin_path, mode)) =
-            resolve_help_target(root, matches, &argv)
-        {
-            help::print(&resolved_cmd, &bin_path, mode);
-            return Ok(ExitCode::SUCCESS);
-        }
+    if !matches!(matches.subcommand(), Some(("__complete", _)))
+        && let Some((resolved_cmd, bin_path, mode)) = resolve_help_target(root, matches, &argv)
+    {
+        help::print(&resolved_cmd, &bin_path, mode);
+        return Ok(ExitCode::SUCCESS);
     }
 
     if let Some(("__complete", sub)) = matches.subcommand() {
@@ -192,9 +190,8 @@ pub fn dispatch(
         // toolr <group> with no command → print group help
         return Ok(ExitCode::SUCCESS);
     }
-    let cmd = find_command_for_path(manifest, &path).ok_or_else(|| {
-        anyhow::anyhow!("unknown command: {}", path.join(" "))
-    })?;
+    let cmd = find_command_for_path(manifest, &path)
+        .ok_or_else(|| anyhow::anyhow!("unknown command: {}", path.join(" ")))?;
 
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;
@@ -222,11 +219,7 @@ pub fn dispatch(
         let dispatcher = manifest
             .commands
             .iter()
-            .find(|p| {
-                p.is_dispatcher
-                    && p.module == cmd.module
-                    && p.function == cmd.function
-            })
+            .find(|p| p.is_dispatcher && p.module == cmd.module && p.function == cmd.function)
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "dispatcher manifest entry for `{}` (module `{}`, function `{}`) not found",
@@ -266,17 +259,17 @@ pub fn dispatch(
     // Backfill a fresh `meta.json` for cache entries that predate the
     // sidecar — without this, `toolr self cache list` would silently
     // hide venvs created by older binaries.
-    if let Some(venv) = &venv_dir {
-        if let Some(cache_dir) = venv.parent() {
-            let py_ver = python_version.as_deref().unwrap_or("");
-            if let Err(e) = toolr_core::cache::touch_or_backfill(
-                cache_dir,
-                &repo_root,
-                env!("CARGO_PKG_VERSION"),
-                py_ver,
-            ) {
-                eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
-            }
+    if let Some(venv) = &venv_dir
+        && let Some(cache_dir) = venv.parent()
+    {
+        let py_ver = python_version.as_deref().unwrap_or("");
+        if let Err(e) = toolr_core::cache::touch_or_backfill(
+            cache_dir,
+            &repo_root,
+            env!("CARGO_PKG_VERSION"),
+            py_ver,
+        ) {
+            eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
         }
     }
 
@@ -297,7 +290,10 @@ pub fn dispatch(
             // an explicit `TOOLR_PYTHON` path can be missing here.
             "It came from TOOLR_PYTHON; point it at an existing interpreter."
         };
-        anyhow::bail!("Python interpreter not found at {}.\n{hint}", python.display());
+        anyhow::bail!(
+            "Python interpreter not found at {}.\n{hint}",
+            python.display()
+        );
     }
 
     // Interpreter-provenance gate (SEC-01). This is the only point where
@@ -309,8 +305,7 @@ pub fn dispatch(
     // A PATH or `$TOOLR_PYTHON` interpreter is the host's own, not repo
     // code, so it stays outside this gate on purpose (#588).
     if let Some(resolved) = &resolved_venv {
-        let cache_dir =
-            toolr_core::project::provenance_cache_dir(&repo_root, resolved).ok();
+        let cache_dir = toolr_core::project::provenance_cache_dir(&repo_root, resolved).ok();
         if let Err(e) = toolr_core::venv::verify_interpreter(
             &python,
             &resolved.venv_dir,
@@ -455,7 +450,8 @@ fn write_atomically(path: &std::path::Path, contents: &str) -> anyhow::Result<()
         path.parent().unwrap_or_else(|| std::path::Path::new(".")),
     )?;
     tmp.write_all(contents.as_bytes())?;
-    tmp.persist(path).map_err(|e| anyhow::anyhow!("persist: {e}"))?;
+    tmp.persist(path)
+        .map_err(|e| anyhow::anyhow!("persist: {e}"))?;
     Ok(())
 }
 
@@ -589,8 +585,7 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     // The engine is purely manifest-driven, but the binary owns its own
     // built-in `self` / `project` subtree. Inject synthetic entries that
     // mirror `cli::build_command` so those subcommands also complete.
-    let (extra_groups, extra_commands) =
-        crate::builtin_completions::built_in_completion_entries();
+    let (extra_groups, extra_commands) = crate::builtin_completions::built_in_completion_entries();
     manifest.groups.extend(extra_groups);
     manifest.commands.extend(extra_commands);
     let mut candidates = serve_completions(&manifest, &tokens);
@@ -690,8 +685,7 @@ fn run_install_uv_now() -> anyhow::Result<std::process::ExitCode> {
         auto_install_env: true,
         never_prompt: false,
     };
-    let uv = toolr_core::uv::ensure_uv(consent)
-        .map_err(toolr_core::uv::UvError::into_anyhow)?;
+    let uv = toolr_core::uv::ensure_uv(consent).map_err(toolr_core::uv::UvError::into_anyhow)?;
     println!(
         "toolr: uv {}.{}.{} ready at {} (source: {:?})",
         uv.version.0,
@@ -723,10 +717,7 @@ fn output_options_from_matches(matches: &ArgMatches) -> OutputOptions {
     if let Some(secs) = matches.get_one::<f64>("timeout-secs").copied() {
         opts.default_timeout_secs = Some(secs);
     }
-    if let Some(secs) = matches
-        .get_one::<f64>("no-output-timeout-secs")
-        .copied()
-    {
+    if let Some(secs) = matches.get_one::<f64>("no-output-timeout-secs").copied() {
         opts.default_no_output_timeout_secs = Some(secs);
     }
     opts
@@ -906,10 +897,7 @@ mod path_lookup_tests {
         // If both `docker.image.build` and `docker.build` exist, the
         // 3-segment path `docker image build` must resolve to the
         // nested one, not the top-level one.
-        let m = manifest_with(vec![
-            cmd("build", "docker"),
-            cmd("build", "docker.image"),
-        ]);
+        let m = manifest_with(vec![cmd("build", "docker"), cmd("build", "docker.image")]);
         let c = find_command_for_path(&m, &parts(&["docker", "image", "build"])).unwrap();
         assert_eq!(c.group, "docker.image");
     }

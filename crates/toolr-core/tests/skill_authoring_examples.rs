@@ -66,8 +66,6 @@ fn examples_dir() -> PathBuf {
     manifest_dir
         .ancestors()
         .nth(2)
-        .map(|root| {
-            root.join("skills/toolr-command-authoring/examples")
-        })
+        .map(|root| root.join("skills/toolr-command-authoring/examples"))
         .expect("workspace root two levels above CARGO_MANIFEST_DIR")
 }

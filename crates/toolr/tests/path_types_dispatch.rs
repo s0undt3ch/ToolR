@@ -58,13 +58,33 @@ fn each_path_type_rejects_its_bad_input() {
     let orphan = tmp.path().join("missing").join("out.txt");
     let orphan = orphan.to_str().unwrap();
 
-    assert_rejected("resolved_path", missing, &format!("path does not exist: {missing}"));
-    assert_rejected("file_path", dir, &format!("path is not a regular file: {dir}"));
-    assert_rejected("directory_path", file, &format!("path is not a directory: {file}"));
+    assert_rejected(
+        "resolved_path",
+        missing,
+        &format!("path does not exist: {missing}"),
+    );
+    assert_rejected(
+        "file_path",
+        dir,
+        &format!("path is not a regular file: {dir}"),
+    );
+    assert_rejected(
+        "directory_path",
+        file,
+        &format!("path is not a directory: {file}"),
+    );
     assert_rejected("new_path", file, &format!("path already exists: {file}"));
     assert_rejected("new_path", orphan, "parent directory does not exist:");
-    assert_rejected("writable_directory_path", file, &format!("path is not a directory: {file}"));
-    assert_rejected("executable_path", dir, &format!("path is not a regular file: {dir}"));
+    assert_rejected(
+        "writable_directory_path",
+        file,
+        &format!("path is not a directory: {file}"),
+    );
+    assert_rejected(
+        "executable_path",
+        dir,
+        &format!("path is not a regular file: {dir}"),
+    );
 }
 
 #[cfg(unix)]
@@ -76,7 +96,11 @@ fn executable_path_rejects_a_non_executable_file() {
     fs::write(&tool, "#!/bin/sh\n").unwrap();
     fs::set_permissions(&tool, fs::Permissions::from_mode(0o644)).unwrap();
     let tool = tool.to_str().unwrap();
-    assert_rejected("executable_path", tool, &format!("path is not executable: {tool}"));
+    assert_rejected(
+        "executable_path",
+        tool,
+        &format!("path is not executable: {tool}"),
+    );
 }
 
 #[cfg(windows)]
@@ -86,5 +110,9 @@ fn executable_path_rejects_an_extension_outside_pathext() {
     let tool = tmp.path().join("tool.txt");
     fs::write(&tool, "").unwrap();
     let tool = tool.to_str().unwrap();
-    assert_rejected("executable_path", tool, &format!("path is not executable: {tool}"));
+    assert_rejected(
+        "executable_path",
+        tool,
+        &format!("path is not executable: {tool}"),
+    );
 }

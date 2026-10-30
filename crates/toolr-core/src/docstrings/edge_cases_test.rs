@@ -32,7 +32,10 @@ Long description."#;
         let result = parser.parse(docstring).expect("Failed to parse case 3");
 
         assert_eq!(result.short_description, "Short Description.");
-        assert_eq!(result.long_description, Some("Long description.".to_string()));
+        assert_eq!(
+            result.long_description,
+            Some("Long description.".to_string())
+        );
     }
 
     #[test]
@@ -44,7 +47,10 @@ Long description."#;
         let result = parser.parse(docstring).expect("Failed to parse case 4");
 
         assert_eq!(result.short_description, "Short Description.");
-        assert_eq!(result.long_description, Some("Long description.".to_string()));
+        assert_eq!(
+            result.long_description,
+            Some("Long description.".to_string())
+        );
     }
 
     #[test]
@@ -58,7 +64,10 @@ Long description.
         let result = parser.parse(docstring).expect("Failed to parse case 5");
 
         assert_eq!(result.short_description, "Short Description.");
-        assert_eq!(result.long_description, Some("Long description.".to_string()));
+        assert_eq!(
+            result.long_description,
+            Some("Long description.".to_string())
+        );
     }
 
     #[test]
@@ -76,7 +85,10 @@ Examples:
         let result = parser.parse(docstring).expect("Failed to parse case 6");
 
         assert_eq!(result.short_description, "Short Description.");
-        assert_eq!(result.long_description, Some("Long description.\n\nMore long description.".to_string()));
+        assert_eq!(
+            result.long_description,
+            Some("Long description.\n\nMore long description.".to_string())
+        );
         // Examples section should be parsed separately
         assert!(!result.examples.is_empty());
     }
@@ -93,10 +105,15 @@ More long description.
 Args:
     param1: Description of param1
 "#;
-        let result = parser.parse(docstring).expect("Failed to parse case 6 with args");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse case 6 with args");
 
         assert_eq!(result.short_description, "Short Description.");
-        assert_eq!(result.long_description, Some("Long description.\n\nMore long description.".to_string()));
+        assert_eq!(
+            result.long_description,
+            Some("Long description.\n\nMore long description.".to_string())
+        );
         // Args section should be parsed separately
         assert!(result.params.contains_key("param1"));
     }
@@ -105,7 +122,9 @@ Args:
     fn test_empty_docstring() {
         let parser = SimpleDocstringParser::new();
         let docstring = "";
-        let result = parser.parse(docstring).expect("Failed to parse empty docstring");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse empty docstring");
 
         assert_eq!(result.short_description, "");
         assert_eq!(result.long_description, None);
@@ -115,7 +134,9 @@ Args:
     fn test_whitespace_only_docstring() {
         let parser = SimpleDocstringParser::new();
         let docstring = "   \n  \n  ";
-        let result = parser.parse(docstring).expect("Failed to parse whitespace docstring");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse whitespace docstring");
 
         assert_eq!(result.short_description, "");
         assert_eq!(result.long_description, None);
@@ -125,7 +146,9 @@ Args:
     fn test_single_word_short_description() {
         let parser = SimpleDocstringParser::new();
         let docstring = "Hello";
-        let result = parser.parse(docstring).expect("Failed to parse single word");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse single word");
 
         assert_eq!(result.short_description, "Hello");
         assert_eq!(result.long_description, None);
@@ -144,7 +167,9 @@ and provides more detail.
 Args:
     param: A parameter
 "#;
-        let result = parser.parse(docstring).expect("Failed to parse multiline long description");
+        let result = parser
+            .parse(docstring)
+            .expect("Failed to parse multiline long description");
 
         assert_eq!(result.short_description, "Short description.");
         assert_eq!(result.long_description, Some("This is a longer description\nthat spans multiple lines\nand provides more detail.".to_string()));

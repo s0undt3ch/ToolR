@@ -15,7 +15,9 @@ use crate::third_party::ManifestFragment;
 /// Error type for `build_third_party_fragment`.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildFragmentError {
-    #[error("source directory `{path}` is a namespace package (no __init__.py); namespace packages are not supported")]
+    #[error(
+        "source directory `{path}` is a namespace package (no __init__.py); namespace packages are not supported"
+    )]
     NamespacePackage { path: PathBuf },
     #[error("source directory `{path}` does not exist or is not a directory")]
     MissingSourceDir { path: PathBuf },
@@ -135,7 +137,8 @@ def hello(ctx: Context) -> None:
         assert_eq!(missing[0].module, "mypkg.commands");
         assert_eq!(missing[0].function, "hello");
         assert!(
-            err.to_string().starts_with("commands without a docstring (1):"),
+            err.to_string()
+                .starts_with("commands without a docstring (1):"),
             "{err}"
         );
     }
@@ -202,7 +205,10 @@ def f(ctx, a: str | None, b: str | None) -> None:
             "from toolr import command_group\n\ngrp = command_group(\"plug\", \"Plugin\", \"Plugin commands.\")\n",
         );
         let err = build_third_party_fragment(&pkg, "mypkg").unwrap_err();
-        assert!(matches!(err, BuildFragmentError::EmptyPackage { .. }), "got: {err:?}");
+        assert!(
+            matches!(err, BuildFragmentError::EmptyPackage { .. }),
+            "got: {err:?}"
+        );
     }
 
     #[test]

@@ -54,6 +54,12 @@ repos:
         args: [typos]
         stages: [commit-msg]
 
+      - id: system-tool
+        alias: rustfmt
+        name: rustfmt
+        args: [rustfmt]
+        types: [rust]
+
       - id: rumdl
         # Config picked up from .rumdl.toml.
 
@@ -166,8 +172,8 @@ repos:
       # bumping unrelated transitives the way `cargo update` would.
       # If the rewrite changes bytes on disk, prek sees the
       # modification and fails the commit; re-stage the fresh
-      # lockfile and commit again. No compilation — the heavier
-      # `cargo check` hooks below pick that up on `.rs` changes.
+      # lockfile and commit again. No compilation — the `cargo check`
+      # and clippy hooks below pick that up on `.rs` changes.
       - id: cargo-lock
         name: Sync Cargo.lock with Cargo.toml
         entry: cargo fetch
@@ -178,7 +184,7 @@ repos:
       # Does it compile?
       - id: cargo-check
         name: cargo check
-        entry: cargo check
+        entry: cargo check --all-targets --all-features
         language: system
         types: [rust]
         pass_filenames: false
@@ -186,13 +192,6 @@ repos:
       - id: clippy
         name: clippy
         entry: cargo clippy --all-targets --all-features -- -D warnings
-        language: system
-        types: [rust]
-        pass_filenames: false
-
-      - id: cargo-check
-        name: cargo check
-        entry: cargo check --all-targets --all-features
         language: system
         types: [rust]
         pass_filenames: false

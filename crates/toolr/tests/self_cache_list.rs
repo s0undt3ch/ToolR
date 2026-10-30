@@ -37,9 +37,16 @@ fn list_reports_no_caches_when_empty() {
         .args(["self", "cache", "list"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("no cached virtualenvs"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains("no cached virtualenvs"),
+        "stdout:\n{stdout}"
+    );
 }
 
 #[test]
@@ -57,7 +64,11 @@ fn list_renders_entries_with_size_and_last_used() {
         .args(["self", "cache", "list"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("/repo/a"), "stdout:\n{stdout}");
     assert!(stdout.contains("REPO"));

@@ -9,8 +9,8 @@
 
 use ruff_python_ast::{Expr, ExprCall};
 
-use super::toolr_arg_calls;
 use super::literals::{literal_str, literal_str_list, literal_u32};
+use super::toolr_arg_calls;
 use crate::manifest::{ArgMetadata, HelpSection};
 use crate::parser::symbols::ArgSectionTable;
 
@@ -18,10 +18,7 @@ use crate::parser::symbols::ArgSectionTable;
 /// `Annotated[T, arg(...), ...]` annotation. Returns `None` when the
 /// annotation isn't `Annotated[...]` or carries no metadata kwargs
 /// other than path constraints (which travel separately).
-pub fn extract_arg_metadata(
-    annotation: &Expr,
-    sections: &ArgSectionTable,
-) -> Option<ArgMetadata> {
+pub fn extract_arg_metadata(annotation: &Expr, sections: &ArgSectionTable) -> Option<ArgMetadata> {
     let mut md = ArgMetadata::default();
     let mut hit = false;
     for call in toolr_arg_calls(annotation) {

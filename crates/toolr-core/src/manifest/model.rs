@@ -338,7 +338,9 @@ impl Argument {
     /// all — could otherwise smuggle a `FixedArity` argument through
     /// with `nargs: None` and crash the CLI builder later.
     pub fn validate(&self) -> Result<(), String> {
-        if self.kind == ArgumentKind::FixedArity && !matches!(self.metadata.nargs, Some(Nargs::Fixed(_))) {
+        if self.kind == ArgumentKind::FixedArity
+            && !matches!(self.metadata.nargs, Some(Nargs::Fixed(_)))
+        {
             return Err(format!(
                 "argument `{}` has kind `fixed_arity` but its metadata.nargs isn't a fixed count",
                 self.name

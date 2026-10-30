@@ -8,11 +8,11 @@ use std::path::Path;
 
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
-use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 use toolr_core::freshness::{FreshnessVerdict, compare};
 use toolr_core::manifest::{
     Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
 };
+use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
 use toolr_core::parser::{build_static_manifest, build_static_manifest_with_venv};
 use toolr_core::venv::resolve_venv_path;
 
@@ -86,7 +86,11 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
 
     // `--version` prints binary metadata only — never needs the user
     // manifest, so don't pay the build cost.
-    if argv.iter().skip(1).any(|a| VERSION_FLAGS.contains(&a.as_str())) {
+    if argv
+        .iter()
+        .skip(1)
+        .any(|a| VERSION_FLAGS.contains(&a.as_str()))
+    {
         return true;
     }
     // First positional (= first arg after `toolr` that doesn't start with `-`).
@@ -125,8 +129,7 @@ pub(crate) fn ensure_manifest_fresh(
     }
 
     let manifest_path = tools.join(".toolr-manifest.json");
-    let venv_dir: Option<std::path::PathBuf> =
-        resolve_venv_path(&root).ok().map(|r| r.venv_dir);
+    let venv_dir: Option<std::path::PathBuf> = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
 
     // `check` runs twice when stale (before and under the rebuild lock):
     // warn about an unreadable manifest once, and keep a fresh one so the
@@ -154,17 +157,20 @@ pub(crate) fn ensure_manifest_fresh(
         }
         Ok(Some((verdict, cached)))
     };
-    let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| {
-        match try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref()) {
-            Ok(fresh) => {
-                write_manifest(&manifest_path, &fresh)
-                    .with_context(|| format!("writing {}", manifest_path.display()))?;
-                Ok(Some(fresh))
-            }
-            Err(e) => {
-                warn_and_keep_cache(&e, cached.is_some());
-                Ok(cached)
-            }
+    let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| match try_rebuild(
+        verdict,
+        &tools,
+        venv_dir.as_deref(),
+        cached.as_ref(),
+    ) {
+        Ok(fresh) => {
+            write_manifest(&manifest_path, &fresh)
+                .with_context(|| format!("writing {}", manifest_path.display()))?;
+            Ok(Some(fresh))
+        }
+        Err(e) => {
+            warn_and_keep_cache(&e, cached.is_some());
+            Ok(cached)
         }
     };
     Ok(rebuild_if_stale(&manifest_path, check, rebuild)?.unwrap_or(fresh_cache))
@@ -195,8 +201,9 @@ fn try_rebuild(
             .map(|c| c.third_party_hash.clone())
             .unwrap_or_else(empty_third_party_hash),
         FreshnessVerdict::ThirdPartyDrift => match venv {
-            Some(v) => compute_third_party_hash(v)
-                .with_context(|| "hashing third-party manifests")?,
+            Some(v) => {
+                compute_third_party_hash(v).with_context(|| "hashing third-party manifests")?
+            }
             None => empty_third_party_hash(),
         },
         FreshnessVerdict::Fresh => unreachable!(),
@@ -227,7 +234,12 @@ fn carry_forward_cached_entries(
         )
     };
     for group in &cached.groups {
-        if keep(&group.origin) && !fresh.groups.iter().any(|g| g.full_path() == group.full_path()) {
+        if keep(&group.origin)
+            && !fresh
+                .groups
+                .iter()
+                .any(|g| g.full_path() == group.full_path())
+        {
             fresh.groups.push(group.clone());
         }
     }
@@ -373,12 +385,18 @@ mod tests {
 
     #[test]
     fn skips_for_tab_completion() {
-        assert!(should_skip_auto_rebuild(&args(&["__complete", "/tmp", "..."])));
+        assert!(should_skip_auto_rebuild(&args(&[
+            "__complete",
+            "/tmp",
+            "..."
+        ])));
     }
 
     #[test]
     fn skips_for_project_subcommands() {
-        assert!(should_skip_auto_rebuild(&args(&["project", "manifest", "rebuild"])));
+        assert!(should_skip_auto_rebuild(&args(&[
+            "project", "manifest", "rebuild"
+        ])));
     }
 
     #[test]
@@ -393,12 +411,16 @@ mod tests {
 
     #[test]
     fn fires_for_user_command() {
-        assert!(!should_skip_auto_rebuild(&args(&["jenkins", "job", "migrate"])));
+        assert!(!should_skip_auto_rebuild(&args(&[
+            "jenkins", "job", "migrate"
+        ])));
     }
 
     #[test]
     fn fires_with_leading_global_flag() {
-        assert!(!should_skip_auto_rebuild(&args(&["--debug", "django", "migrate"])));
+        assert!(!should_skip_auto_rebuild(&args(&[
+            "--debug", "django", "migrate"
+        ])));
     }
 
     /// A missing manifest is rebuilt and written, not reported as unreadable.

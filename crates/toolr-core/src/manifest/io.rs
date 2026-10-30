@@ -32,7 +32,9 @@ pub fn load_manifest(path: &Path) -> Result<Manifest, ManifestError> {
         return Err(ManifestError::UnknownSchemaVersion(version));
     }
     let manifest: Manifest = serde_json::from_value(raw)?;
-    manifest.validate_arguments().map_err(ManifestError::InvalidArgument)?;
+    manifest
+        .validate_arguments()
+        .map_err(ManifestError::InvalidArgument)?;
     Ok(manifest)
 }
 

@@ -1,34 +1,34 @@
 #[cfg(test)]
 mod test_suite {
-    use std::io::{Read, Write, Seek, SeekFrom};
+    use anyhow::{Result, anyhow};
+    use std::collections::HashMap;
+    use std::fs::File;
+    use std::io::{Read, Seek, SeekFrom, Write};
     use std::process::{Command, Stdio};
     use std::thread;
     use std::time::{Duration, Instant};
     use tempfile::NamedTempFile;
-    use anyhow::{Result, anyhow};
-    use std::collections::HashMap;
-    use std::fs::File;
 
     // Platform-specific imports
+    #[cfg(windows)]
+    #[cfg(windows)]
+    use crate::command::ThreadSafeHandle;
     #[cfg(unix)]
     use std::os::unix::io::AsRawFd;
     #[cfg(windows)]
     use std::os::windows::io::AsRawHandle;
     #[cfg(windows)]
-    use winapi::um::handleapi::{INVALID_HANDLE_VALUE, DuplicateHandle};
+    use winapi::um::fileapi::ReadFile;
+    #[cfg(windows)]
+    use winapi::um::handleapi::{DuplicateHandle, INVALID_HANDLE_VALUE};
+    #[cfg(windows)]
+    use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
+    #[cfg(windows)]
+    use winapi::um::namedpipeapi::CreatePipe;
     #[cfg(windows)]
     use winapi::um::processthreadsapi::GetCurrentProcess;
     #[cfg(windows)]
     use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
-    #[cfg(windows)]
-    use winapi::um::namedpipeapi::CreatePipe;
-    #[cfg(windows)]
-    use winapi::um::fileapi::ReadFile;
-    #[cfg(windows)]
-    use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
-    #[cfg(windows)]
-    #[cfg(windows)]
-    use crate::command::ThreadSafeHandle;
 
     use crate::{CommandConfig, run_command_internal};
 
@@ -47,17 +47,18 @@ mod test_suite {
             let mut new_handle = INVALID_HANDLE_VALUE;
             if DuplicateHandle(
                 GetCurrentProcess(),
-                handle as *mut _,  // Let the compiler infer the void type
+                handle as *mut _, // Let the compiler infer the void type
                 GetCurrentProcess(),
                 &mut new_handle,
                 0,
                 1,
                 DUPLICATE_SAME_ACCESS,
-            ) != 0 {
-                ThreadSafeHandle::new(new_handle as *mut _)  // Convert to RawHandle
+            ) != 0
+            {
+                ThreadSafeHandle::new(new_handle as *mut _) // Convert to RawHandle
             } else {
                 // For tests, fallback to a dummy handle if duplication fails
-                ThreadSafeHandle::new(handle as *mut _)  // Convert to RawHandle
+                ThreadSafeHandle::new(handle as *mut _) // Convert to RawHandle
             }
         }
     }
@@ -131,12 +132,12 @@ mod test_suite {
                 let write = file.into_file();
                 Ok((
                     ThreadSafeHandle::new(read.as_raw_handle() as *mut _),
-                    ThreadSafeHandle::new(write.as_raw_handle() as *mut _)
+                    ThreadSafeHandle::new(write.as_raw_handle() as *mut _),
                 ))
             } else {
                 Ok((
                     ThreadSafeHandle::new(read_handle as *mut _),
-                    ThreadSafeHandle::new(write_handle as *mut _)
+                    ThreadSafeHandle::new(write_handle as *mut _),
                 ))
             }
         }
@@ -147,13 +148,15 @@ mod test_suite {
         let mut bytes_read = 0;
         unsafe {
             let raw_handle = handle.raw() as *mut winapi::ctypes::c_void;
-            if raw_handle != INVALID_HANDLE_VALUE as *mut winapi::ctypes::c_void && ReadFile(
-                raw_handle,
-                buffer.as_mut_ptr() as *mut winapi::ctypes::c_void,
-                buffer.len() as u32,
-                &mut bytes_read,
-                std::ptr::null_mut(),
-            ) != 0 {
+            if raw_handle != INVALID_HANDLE_VALUE as *mut winapi::ctypes::c_void
+                && ReadFile(
+                    raw_handle,
+                    buffer.as_mut_ptr() as *mut winapi::ctypes::c_void,
+                    buffer.len() as u32,
+                    &mut bytes_read,
+                    std::ptr::null_mut(),
+                ) != 0
+            {
                 bytes_read as i32
             } else {
                 0
@@ -199,8 +202,14 @@ mod test_suite {
         stderr_file.read_to_string(&mut stderr_content)?;
 
         // Check content
-        assert!(stdout_content.contains("to stdout"), "Expected 'to stdout' in '{stdout_content}'");
-        assert!(stderr_content.contains("to stderr"), "Expected 'to stderr' in '{stderr_content}'");
+        assert!(
+            stdout_content.contains("to stdout"),
+            "Expected 'to stdout' in '{stdout_content}'"
+        );
+        assert!(
+            stderr_content.contains("to stderr"),
+            "Expected 'to stderr' in '{stderr_content}'"
+        );
 
         Ok(())
     }
@@ -229,14 +238,18 @@ mod test_suite {
         let mut buffer = [0u8; 4096];
         loop {
             let n = stdout_file.read(&mut buffer)?;
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             stdout_capture.write_all(&buffer[0..n])?;
         }
         stdout_capture.flush()?;
 
         loop {
             let n = stderr_file.read(&mut buffer)?;
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             stderr_capture.write_all(&buffer[0..n])?;
         }
         stderr_capture.flush()?;
@@ -251,10 +264,14 @@ mod test_suite {
         stdout_capture.read_to_string(&mut stdout_capture_content)?;
         stderr_capture.read_to_string(&mut stderr_capture_content)?;
 
-        assert!(stdout_capture_content.contains("to both stdout"),
-                "Expected 'to both stdout' in '{stdout_capture_content}'");
-        assert!(stderr_capture_content.contains("to both stderr"),
-                "Expected 'to both stderr' in '{stderr_capture_content}'");
+        assert!(
+            stdout_capture_content.contains("to both stdout"),
+            "Expected 'to both stdout' in '{stdout_capture_content}'"
+        );
+        assert!(
+            stderr_capture_content.contains("to both stderr"),
+            "Expected 'to both stderr' in '{stderr_capture_content}'"
+        );
 
         Ok(())
     }
@@ -326,10 +343,14 @@ mod test_suite {
         stdout_file.read_to_string(&mut stdout_content)?;
 
         // Verify environment variables were correctly set
-        assert!(stdout_content.contains("TEST_VAR=test_value"),
-                "Expected 'TEST_VAR=test_value' in stdout, got: {stdout_content}");
-        assert!(stdout_content.contains("ANOTHER_VAR=another_value"),
-                "Expected 'ANOTHER_VAR=another_value' in stdout, got: {stdout_content}");
+        assert!(
+            stdout_content.contains("TEST_VAR=test_value"),
+            "Expected 'TEST_VAR=test_value' in stdout, got: {stdout_content}"
+        );
+        assert!(
+            stdout_content.contains("ANOTHER_VAR=another_value"),
+            "Expected 'ANOTHER_VAR=another_value' in stdout, got: {stdout_content}"
+        );
 
         Ok(())
     }
@@ -383,13 +404,21 @@ mod test_suite {
         let captured_path_buf = std::path::PathBuf::from(captured_path);
         let expected_path_buf = temp_path.clone();
 
-        let canonical_captured = captured_path_buf.canonicalize().unwrap_or(captured_path_buf);
-        let canonical_expected = expected_path_buf.canonicalize().unwrap_or(expected_path_buf);
+        let canonical_captured = captured_path_buf
+            .canonicalize()
+            .unwrap_or(captured_path_buf);
+        let canonical_expected = expected_path_buf
+            .canonicalize()
+            .unwrap_or(expected_path_buf);
 
         // Compare the canonicalized paths
-        assert_eq!(canonical_captured, canonical_expected,
-                  "Expected current working directory '{}', got '{}'",
-                  canonical_expected.display(), canonical_captured.display());
+        assert_eq!(
+            canonical_captured,
+            canonical_expected,
+            "Expected current working directory '{}', got '{}'",
+            canonical_expected.display(),
+            canonical_captured.display()
+        );
 
         // Now test that without setting cwd, pwd returns a different directory
         let mut stdout_file2 = NamedTempFile::new()?;
@@ -423,8 +452,11 @@ mod test_suite {
         stdout_file2.read_to_string(&mut stdout_content2)?;
 
         // Verify the working directory is different when not specified
-        assert_ne!(stdout_content2.trim(), temp_path_str.as_ref(),
-                  "Working directory should be different when cwd is not specified");
+        assert_ne!(
+            stdout_content2.trim(),
+            temp_path_str.as_ref(),
+            "Working directory should be different when cwd is not specified"
+        );
 
         Ok(())
     }
@@ -446,8 +478,7 @@ mod test_suite {
             config: CommandConfig,
             timeout: Duration,
         ) -> Result<std::result::Result<i32, Box<dyn std::error::Error + Send + Sync>>> {
-            let join_handle =
-                tokio::task::spawn_blocking(move || run_command_internal(config));
+            let join_handle = tokio::task::spawn_blocking(move || run_command_internal(config));
             match tokio::time::timeout(timeout, join_handle).await {
                 Err(_) => Err(anyhow!(
                     "run_command_internal did not return within {:?}",
@@ -480,7 +511,7 @@ mod test_suite {
         // Platform-specific read operation
         #[cfg(unix)]
         unsafe fn read_pipe(fd: i32, buffer: &mut [u8]) -> i32 {
-            libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) as i32
+            unsafe { libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) as i32 }
         }
 
         #[cfg(windows)]
@@ -675,7 +706,10 @@ mod test_suite {
                 let error_str = format!("{}", result.unwrap_err());
 
                 // Check error message attributes
-                assert!(error_str.contains("timed out after"), "Error should mention timeout duration");
+                assert!(
+                    error_str.contains("timed out after"),
+                    "Error should mention timeout duration"
+                );
 
                 Ok(())
             })

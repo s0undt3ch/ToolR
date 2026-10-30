@@ -53,8 +53,7 @@ pub fn enumerate_caches(cache_root: &Path) -> Result<Vec<CachedVenv>> {
         Ok(r) => r,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
         Err(e) => {
-            return Err(e)
-                .with_context(|| format!("reading cache root {}", cache_root.display()));
+            return Err(e).with_context(|| format!("reading cache root {}", cache_root.display()));
         }
     };
 

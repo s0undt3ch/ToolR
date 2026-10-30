@@ -28,7 +28,11 @@ pub(super) fn literal_str_list(expr: &Expr) -> Option<Vec<String>> {
         _ => return None,
     };
     let out: Vec<String> = elts.iter().filter_map(literal_str).collect();
-    if out.len() == elts.len() { Some(out) } else { None }
+    if out.len() == elts.len() {
+        Some(out)
+    } else {
+        None
+    }
 }
 
 pub(super) fn literal_u32(expr: &Expr) -> Option<u32> {

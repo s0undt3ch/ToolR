@@ -6,8 +6,8 @@ use anyhow::{Context, Result};
 
 use crate::cache::meta::Meta;
 use crate::discovery::discover_project_root;
-use crate::manifest_build::rebuild_manifest_full;
 use crate::hash::hash_file;
+use crate::manifest_build::rebuild_manifest_full;
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
     ResolvedVenv, UpgradeMode, compute_repo_key, resolve_venv_path, sync::sync_if_needed,
@@ -50,16 +50,21 @@ pub fn ensure_venv_ready(
     consent: ConsentMode,
     opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
-    let repo_root = discover_project_root(cwd)
-        .context("locating project root for the tools venv")?;
-    let resolved = resolve_venv_path(&repo_root)
-        .context("resolving the tools venv path")?;
+    let repo_root =
+        discover_project_root(cwd).context("locating project root for the tools venv")?;
+    let resolved = resolve_venv_path(&repo_root).context("resolving the tools venv path")?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
-    sync_if_needed(&uv, &tools, &resolved, opts.force_sync, opts.quiet, &opts.upgrade)
-        .with_context(|| format!("uv sync against {}", tools.display()))?;
-    validate_venv(&resolved.venv_dir, &resolved.python)
-        .context("validating the synced venv")?;
+    sync_if_needed(
+        &uv,
+        &tools,
+        &resolved,
+        opts.force_sync,
+        opts.quiet,
+        &opts.upgrade,
+    )
+    .with_context(|| format!("uv sync against {}", tools.display()))?;
+    validate_venv(&resolved.venv_dir, &resolved.python).context("validating the synced venv")?;
     if let Err(e) = finalize_sync(&repo_root, &resolved) {
         eprintln!("toolr: warning: failed to finalize sync (provenance/manifest): {e}");
     }
@@ -129,13 +134,10 @@ pub fn finalize_sync(repo_root: &Path, resolved: &ResolvedVenv) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
     use crate::venv::config::ToolrConfig;
     use std::path::PathBuf;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    /// Serialises the `XDG_CACHE_HOME`-mutating test below (process-global env).
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn make_resolved_cache(venv_dir: PathBuf, repo_key: &str) -> ResolvedVenv {
         ResolvedVenv {
@@ -163,6 +165,7 @@ mod tests {
 
     #[test]
     fn ensure_venv_ready_reports_missing_project_root() {
+        let _env = EnvGuard::read();
         // No pyproject.toml or marker - `ensure_venv_ready` must fail and
         // surface a clear error. On most hosts we hit "locating project
         // root" via `discover_project_root` returning NotFound. On GHA
@@ -177,7 +180,9 @@ mod tests {
         let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
         let expected_one_of = ["locating project root", "resolving the tools venv path"];
         assert!(
-            chain.iter().any(|m| expected_one_of.iter().any(|hint| m.contains(hint))),
+            chain
+                .iter()
+                .any(|m| expected_one_of.iter().any(|hint| m.contains(hint))),
             "expected one of {expected_one_of:?} in the error chain, got: {chain:?}"
         );
     }
@@ -196,11 +201,7 @@ mod tests {
         // In-tree venv (`repo_key` empty): the sidecar must live outside the
         // repo, under `$XDG_CACHE_HOME/toolr/<repo-key>` — exercises the
         // `compute_repo_key` + cache-dir branch.
-        let _guard = ENV_LOCK.lock().unwrap();
-        let xdg = TempDir::new().unwrap();
-        let prev = std::env::var_os("XDG_CACHE_HOME");
-        // SAFETY: serialised by ENV_LOCK; restored before returning.
-        unsafe { std::env::set_var("XDG_CACHE_HOME", xdg.path()) };
+        let (_env, xdg) = EnvGuard::temp_cache_home();
 
         let repo = TempDir::new().unwrap();
         let resolved = ResolvedVenv {
@@ -211,11 +212,6 @@ mod tests {
             config: ToolrConfig::default(),
         };
         let dir = provenance_cache_dir(repo.path(), &resolved);
-
-        match prev {
-            Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
-            None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
-        }
         let dir = dir.unwrap();
         assert!(
             dir.starts_with(xdg.path().join("toolr")),
@@ -226,8 +222,7 @@ mod tests {
     #[test]
     fn ensure_opts_with_upgrade_sets_mode() {
         use crate::venv::UpgradeMode;
-        let opts = EnsureOpts::default()
-            .with_upgrade(UpgradeMode::Packages(vec!["foo".into()]));
+        let opts = EnsureOpts::default().with_upgrade(UpgradeMode::Packages(vec!["foo".into()]));
         match opts.upgrade {
             UpgradeMode::Packages(ref p) => assert_eq!(p, &vec!["foo".to_string()]),
             other => panic!("expected Packages, got {other:?}"),
@@ -237,6 +232,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn finalize_sync_records_provenance_and_rebuilds_manifest() {
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = tempfile::tempdir().unwrap();
@@ -274,6 +270,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn finalize_sync_preserves_an_existing_sidecar() {
+        let (_env, _cache_home) = EnvGuard::temp_cache_home();
         // When a sidecar already exists, finalize_sync takes the
         // `Meta::load -> Ok(existing)` branch and preserves `created_at`
         // (rather than minting a fresh one), restamping the interpreter.
@@ -290,18 +287,27 @@ mod tests {
         let repo_root = tmp.path().join("proj");
         let tools = repo_root.join("tools");
         std::fs::create_dir_all(&tools).unwrap();
-        std::fs::write(tools.join("ci.py"), "\"\"\"CI.\"\"\"\ngroup = command_group(\"ci\", \"CI\")\n").unwrap();
+        std::fs::write(
+            tools.join("ci.py"),
+            "\"\"\"CI.\"\"\"\ngroup = command_group(\"ci\", \"CI\")\n",
+        )
+        .unwrap();
 
         // Pre-seed a sidecar so the `Ok(existing)` branch runs.
         let cache_dir = venv_dir.parent().unwrap();
-        Meta::new(&repo_root, "old-version", "3.13").write(cache_dir).unwrap();
+        Meta::new(&repo_root, "old-version", "3.13")
+            .write(cache_dir)
+            .unwrap();
         let created = Meta::load(cache_dir).unwrap().created_at;
 
         let resolved = make_resolved_cache(venv_dir.clone(), "abc");
         finalize_sync(&repo_root, &resolved).unwrap();
 
         let meta = Meta::load(cache_dir).unwrap();
-        assert_eq!(meta.created_at, created, "created_at preserved from the existing sidecar");
+        assert_eq!(
+            meta.created_at, created,
+            "created_at preserved from the existing sidecar"
+        );
         assert!(meta.interpreter_path.is_some(), "interpreter restamped");
     }
 }

@@ -58,7 +58,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-15-intel
-          - macos-14
+          - macos-15
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -170,7 +170,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-15-intel
-          - macos-14
+          - macos-15
           - windows-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -237,7 +237,6 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
           - macos-15-intel
-          # Not macos-14: its image lacks the `sha256sum` setup-virtualenv uses.
           - macos-15
           - windows-latest
     steps:

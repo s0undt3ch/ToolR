@@ -92,10 +92,10 @@ fn defines_django_command_class(module: &ModModule) -> bool {
         if target.id.as_str() != "Command" {
             continue;
         }
-        if let Expr::Name(value) = assign.value.as_ref() {
-            if top_level_classes.contains(value.id.as_str()) {
-                return true;
-            }
+        if let Expr::Name(value) = assign.value.as_ref()
+            && top_level_classes.contains(value.id.as_str())
+        {
+            return true;
         }
     }
     false
@@ -171,10 +171,10 @@ fn visit_stmt(stmt: &Stmt, out: &mut ScannedCommand) {
 /// Walk an expression looking for `.add_argument(...)` calls. We only
 /// need to inspect Calls — argparse usage is always a method call.
 fn visit_expr(expr: &Expr, out: &mut ScannedCommand) {
-    if let Expr::Call(call) = expr {
-        if let Some(arg) = try_extract_argument(call, &mut out.warnings) {
-            out.arguments.push(arg);
-        }
+    if let Expr::Call(call) = expr
+        && let Some(arg) = try_extract_argument(call, &mut out.warnings)
+    {
+        out.arguments.push(arg);
     }
 }
 
@@ -323,9 +323,10 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
             // "*" and REMAINDER are both zero-or-more.
             _ => Some(Nargs::Star),
         },
-        ArgumentKind::FixedArity => {
-            nargs.as_deref().and_then(|n| n.parse::<usize>().ok()).map(Nargs::Fixed)
-        }
+        ArgumentKind::FixedArity => nargs
+            .as_deref()
+            .and_then(|n| n.parse::<usize>().ok())
+            .map(Nargs::Fixed),
         _ => None,
     };
 
@@ -377,7 +378,11 @@ fn build_argument(positionals: &[String], call: &ExprCall, warnings: &mut Vec<St
     }
 }
 
-fn classify_kind(is_keyword_style: bool, action: Option<&str>, nargs: Option<&str>) -> ArgumentKind {
+fn classify_kind(
+    is_keyword_style: bool,
+    action: Option<&str>,
+    nargs: Option<&str>,
+) -> ArgumentKind {
     if !is_keyword_style {
         return match nargs {
             Some("+") | Some("*") | Some("REMAINDER") => ArgumentKind::VarPositional,
@@ -713,7 +718,10 @@ def add_arguments(self, parser):
         assert_eq!(scanned.arguments[1].metadata.nargs, Some(Nargs::Fixed(3)));
         assert!(scanned.arguments[1].long_flag.is_none());
         assert!(
-            scanned.warnings.iter().all(|w| !w.contains("unsupported nargs")),
+            scanned
+                .warnings
+                .iter()
+                .all(|w| !w.contains("unsupported nargs")),
             "fixed-arity nargs shouldn't warn any more, got {:?}",
             scanned.warnings
         );
@@ -731,7 +739,10 @@ def add_arguments(self, parser):
         let scanned = scan_source("cmd", source).unwrap();
         assert_eq!(scanned.arguments[0].kind, ArgumentKind::Repeated);
         assert!(
-            scanned.warnings.iter().any(|w| w.contains("--pairs") && w.contains("nargs=2")),
+            scanned
+                .warnings
+                .iter()
+                .any(|w| w.contains("--pairs") && w.contains("nargs=2")),
             "expected an unsupported-nargs warning, got {:?}",
             scanned.warnings
         );
@@ -811,7 +822,10 @@ def add_arguments(self, parser):
 "#;
         let scanned = scan_source("cmd", source).unwrap();
         assert!(
-            scanned.warnings.iter().any(|w| w.contains("--rest") && w.contains("REMAINDER")),
+            scanned
+                .warnings
+                .iter()
+                .any(|w| w.contains("--rest") && w.contains("REMAINDER")),
             "expected an unsupported-nargs warning, got {:?}",
             scanned.warnings
         );
@@ -833,7 +847,10 @@ def add_arguments(self, parser):
         assert_eq!(scanned.arguments[0].kind, ArgumentKind::Optional);
         assert_eq!(scanned.arguments[0].metadata.nargs, None);
         assert!(
-            scanned.warnings.iter().all(|w| !w.contains("--float-count")),
+            scanned
+                .warnings
+                .iter()
+                .all(|w| !w.contains("--float-count")),
             "a float nargs has no renderable repr, so it can't be warned about, got {:?}",
             scanned.warnings
         );
@@ -853,7 +870,10 @@ def add_arguments(self, parser):
         let scanned = scan_source("cmd", source).unwrap();
         assert_eq!(scanned.arguments[0].metadata.nargs, None);
         assert!(
-            scanned.warnings.iter().any(|w| w.contains("--dynamic") && w.contains("some_var")),
+            scanned
+                .warnings
+                .iter()
+                .any(|w| w.contains("--dynamic") && w.contains("some_var")),
             "expected an unsupported-nargs warning for the dynamic name, got {:?}",
             scanned.warnings
         );
@@ -915,7 +935,10 @@ def add_arguments(self, parser):
         assert_eq!(scanned.arguments.len(), 1);
         let arg = &scanned.arguments[0];
         assert_eq!(arg.name, "run-synchronously");
-        assert_eq!(arg.metadata.aliases, vec!["-s".to_string(), "-x".to_string()]);
+        assert_eq!(
+            arg.metadata.aliases,
+            vec!["-s".to_string(), "-x".to_string()]
+        );
     }
 
     #[test]
@@ -976,7 +999,10 @@ def add_arguments(self, parser):
         let source = "def f(): mylist.add_argument(42, default='x')";
         let scanned = scan_source("x", source).unwrap();
         assert!(scanned.arguments.is_empty());
-        assert!(scanned.warnings.is_empty(), "skipping non-argparse calls should not warn");
+        assert!(
+            scanned.warnings.is_empty(),
+            "skipping non-argparse calls should not warn"
+        );
     }
 
     #[test]
@@ -1046,7 +1072,11 @@ def add_arguments(self, parser):
         let project = tempfile::tempdir().unwrap();
         let cmds = project.path().join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
-        std::fs::write(cmds.join("migrate.py"), "def add_arguments(self, parser):\n    parser.add_argument('app_label')\n").unwrap();
+        std::fs::write(
+            cmds.join("migrate.py"),
+            "def add_arguments(self, parser):\n    parser.add_argument('app_label')\n",
+        )
+        .unwrap();
         std::fs::write(cmds.join("runserver.py"), "def add_arguments(self, parser):\n    parser.add_argument('--insecure', action='store_true')\n").unwrap();
         std::fs::write(cmds.join("broken.py"), "def add_arguments(self, parser:\n").unwrap(); // syntax error
 
@@ -1058,13 +1088,18 @@ def add_arguments(self, parser):
         .unwrap();
 
         // Expect migrate + runserver scanned successfully, broken recorded as a warning placeholder.
-        let names: std::collections::BTreeSet<_> = scanned.iter().map(|s| s.name.as_str()).collect();
+        let names: std::collections::BTreeSet<_> =
+            scanned.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains("migrate"));
         assert!(names.contains("runserver"));
         // The broken file should still produce a ScannedCommand placeholder with the
         // failure recorded in its `warnings` field — confirm at least one ScannedCommand
         // carries a warning mentioning "broken".
-        assert!(scanned.iter().any(|s| s.warnings.iter().any(|w| w.contains("broken"))));
+        assert!(
+            scanned
+                .iter()
+                .any(|s| s.warnings.iter().any(|w| w.contains("broken")))
+        );
     }
 
     #[test]

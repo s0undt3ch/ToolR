@@ -152,7 +152,10 @@ fn venv_with_dead_interpreter_is_rebuilt_before_dispatch() {
     );
     let log = p.fx.uv_argv();
     assert!(uv_synced(&log), "expected a `uv sync`, uv argv was:\n{log}");
-    assert!(p.sentinel.exists(), "the command should run after the rebuild");
+    assert!(
+        p.sentinel.exists(),
+        "the command should run after the rebuild"
+    );
 }
 
 #[test]
@@ -209,7 +212,10 @@ fn dispatch_stderr(p: &Project) -> String {
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     assert!(output.status.success(), "stderr:\n{stderr}");
-    assert!(p.sentinel.exists(), "a version mismatch warns but still runs");
+    assert!(
+        p.sentinel.exists(),
+        "a version mismatch warns but still runs"
+    );
     stderr
 }
 
@@ -234,7 +240,10 @@ fn newer_venv_toolr_py_warns_to_upgrade_the_binary() {
     install_toolr_py(&p, "999.0.0");
     let stderr = dispatch_stderr(&p);
     assert!(stderr.contains("toolr-py 999.0.0"), "stderr:\n{stderr}");
-    assert!(stderr.contains("upgrade the toolr binary"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("upgrade the toolr binary"),
+        "stderr:\n{stderr}"
+    );
     assert!(!stderr.contains("-P toolr-py"), "stderr:\n{stderr}");
 }
 

@@ -182,8 +182,8 @@ mod tests {
     /// Churn the venv from another thread while hashing repeatedly.
     #[test]
     fn hashing_survives_in_tree_venv_being_recreated_concurrently() {
-        use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
 
         let tmp = setup(&[("a.py", "x"), ("ci/b.py", "y")]);
         let tools = tmp.path().to_path_buf();

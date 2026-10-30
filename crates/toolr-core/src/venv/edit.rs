@@ -101,12 +101,21 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let stub = tmp.join("uv");
         let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nexit 0", argdump.display()).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nexit 0",
+            argdump.display()
+        )
+        .unwrap();
         drop(f);
         let mut perms = fs::metadata(&stub).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&stub, perms).unwrap();
-        UvBinary { path: stub, version: (0, 4, 0), source: UvSource::Path }
+        UvBinary {
+            path: stub,
+            version: (0, 4, 0),
+            source: UvSource::Path,
+        }
     }
 
     #[cfg(unix)]
@@ -160,8 +169,14 @@ mod tests {
         fs::create_dir_all(&venv).unwrap();
         let resolved = dummy_resolved(venv);
 
-        run_uv_add(&uv, tmp.path(), &resolved, &["foo".to_string()], /*quiet=*/ true)
-            .expect("stub uv should succeed");
+        run_uv_add(
+            &uv,
+            tmp.path(),
+            &resolved,
+            &["foo".to_string()],
+            /*quiet=*/ true,
+        )
+        .expect("stub uv should succeed");
 
         let dump = fs::read_to_string(&argdump).unwrap();
         assert!(dump.lines().any(|l| l == "--quiet"), "args: {dump}");

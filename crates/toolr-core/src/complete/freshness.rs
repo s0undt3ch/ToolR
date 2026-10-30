@@ -80,7 +80,10 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
 pub(crate) fn preserve_non_static_entries(fresh: &mut Manifest, cached: Manifest) {
     for group in cached.groups {
         if !matches!(group.origin, Origin::Static)
-            && !fresh.groups.iter().any(|g| g.full_path() == group.full_path())
+            && !fresh
+                .groups
+                .iter()
+                .any(|g| g.full_path() == group.full_path())
         {
             fresh.groups.push(group);
         }

@@ -275,7 +275,10 @@ fn tab_completion_does_not_persist_manifest() {
     // Manifest file must not have been rewritten.
     let after = fs::read_to_string(&manifest_path).unwrap();
     let mtime_after = fs::metadata(&manifest_path).unwrap().modified().unwrap();
-    assert_eq!(before, after, "tab completion rewrote the manifest contents");
+    assert_eq!(
+        before, after,
+        "tab completion rewrote the manifest contents"
+    );
     assert_eq!(mtime_before, mtime_after, "tab completion touched mtime");
 }
 

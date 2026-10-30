@@ -1,14 +1,13 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
-use toolr_core::{
-    CommandConfig, run_command_internal,
-    CommandExecutionError, CommandTimeoutExceededError, CommandNoOutputTimeoutError,
-    SimpleDocstringParser,
-};
 use pyo3::types::{PyDict, PyList};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use toolr_core::{
+    CommandConfig, CommandExecutionError, CommandNoOutputTimeoutError, CommandTimeoutExceededError,
+    SimpleDocstringParser, run_command_internal,
+};
 
 #[cfg(windows)]
 use std::os::windows::io::RawHandle;
@@ -54,18 +53,19 @@ pub(crate) fn run_command_impl(
     interactive: bool,
 ) -> PyResult<i32> {
     // If one of the file descriptors is provided, both must be
-    if (stdout_fd.is_some() && stderr_fd.is_none()) ||
-       (stdout_fd.is_none() && stderr_fd.is_some()) {
+    if (stdout_fd.is_some() && stderr_fd.is_none()) || (stdout_fd.is_none() && stderr_fd.is_some())
+    {
         return Err(CommandError::new_err(
-            "Both stdout_fd and stderr_fd must be provided together"
+            "Both stdout_fd and stderr_fd must be provided together",
         ));
     }
 
     // If one of the sys file descriptors is provided, both must be
-    if (sys_stdout_fd.is_some() && sys_stderr_fd.is_none()) ||
-       (sys_stdout_fd.is_none() && sys_stderr_fd.is_some()) {
+    if (sys_stdout_fd.is_some() && sys_stderr_fd.is_none())
+        || (sys_stdout_fd.is_none() && sys_stderr_fd.is_some())
+    {
         return Err(CommandError::new_err(
-            "Both sys_stdout_fd and sys_stderr_fd must be provided together"
+            "Both sys_stdout_fd and sys_stderr_fd must be provided together",
         ));
     }
 
@@ -87,21 +87,13 @@ pub(crate) fn run_command_impl(
         #[cfg(unix)]
         sys_stderr_fd,
         #[cfg(windows)]
-        stdout_fd: stdout_fd.map(|fd| {
-            ThreadSafeHandle::new(fd_to_handle(fd))
-        }),
+        stdout_fd: stdout_fd.map(|fd| ThreadSafeHandle::new(fd_to_handle(fd))),
         #[cfg(windows)]
-        stderr_fd: stderr_fd.map(|fd| {
-            ThreadSafeHandle::new(fd_to_handle(fd))
-        }),
+        stderr_fd: stderr_fd.map(|fd| ThreadSafeHandle::new(fd_to_handle(fd))),
         #[cfg(windows)]
-        sys_stdout_fd: sys_stdout_fd.map(|fd| {
-            ThreadSafeHandle::new(fd_to_handle(fd))
-        }),
+        sys_stdout_fd: sys_stdout_fd.map(|fd| ThreadSafeHandle::new(fd_to_handle(fd))),
         #[cfg(windows)]
-        sys_stderr_fd: sys_stderr_fd.map(|fd| {
-            ThreadSafeHandle::new(fd_to_handle(fd))
-        }),
+        sys_stderr_fd: sys_stderr_fd.map(|fd| ThreadSafeHandle::new(fd_to_handle(fd))),
         timeout_secs,
         no_output_timeout_secs,
         cwd: cwd_path,
@@ -116,7 +108,9 @@ pub(crate) fn run_command_impl(
             if let Some(timeout_err) = err.downcast_ref::<CommandTimeoutExceededError>() {
                 Err(CommandTimeoutError::new_err(timeout_err.to_string()))
             } else if let Some(no_output_err) = err.downcast_ref::<CommandNoOutputTimeoutError>() {
-                Err(CommandTimeoutNoOutputError::new_err(no_output_err.to_string()))
+                Err(CommandTimeoutNoOutputError::new_err(
+                    no_output_err.to_string(),
+                ))
             } else if let Some(cmd_err) = err.downcast_ref::<CommandExecutionError>() {
                 Err(CommandError::new_err(cmd_err.to_string()))
             } else {
@@ -151,8 +145,9 @@ impl DocstringParser {
 
     /// Parse a docstring string into a dictionary representation
     fn parse(&self, docstring: &str) -> PyResult<Py<PyAny>> {
-        let result = self.parser.parse(docstring)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Parse error: {}", e.message)))?;
+        let result = self.parser.parse(docstring).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Parse error: {}", e.message))
+        })?;
         // Compute the rendered full-description while `result` still
         // owns all its fields — the per-field `set_item` calls below
         // move them into the Python dict.
@@ -173,7 +168,6 @@ impl DocstringParser {
                 params.set_item(name, description)?;
             }
             dict.set_item("params", params)?;
-
 
             // Examples
             let examples = PyList::empty(py);
@@ -197,7 +191,6 @@ impl DocstringParser {
             // Notes
             let notes = result.notes.into_iter().collect::<Vec<_>>();
             dict.set_item("notes", notes)?;
-
 
             // Warnings
             let warnings = result.warnings.into_iter().collect::<Vec<_>>();
@@ -250,8 +243,14 @@ pub fn _rust_utils(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Register our exceptions
     m.add("CommandError", m.py().get_type::<CommandError>())?;
-    m.add("CommandTimeoutError", m.py().get_type::<CommandTimeoutError>())?;
-    m.add("CommandTimeoutNoOutputError", m.py().get_type::<CommandTimeoutNoOutputError>())?;
+    m.add(
+        "CommandTimeoutError",
+        m.py().get_type::<CommandTimeoutError>(),
+    )?;
+    m.add(
+        "CommandTimeoutNoOutputError",
+        m.py().get_type::<CommandTimeoutNoOutputError>(),
+    )?;
 
     // Register docstring parser
     m.add_class::<DocstringParser>()?;

@@ -1,5 +1,6 @@
 //! Locate a working uv binary on the host.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -44,8 +45,8 @@ pub fn probe(path: &Path, source: UvSource) -> Result<UvBinary, UvError> {
         ));
     }
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let version = parse_uv_version(&stdout)
-        .ok_or_else(|| UvError::UnparsableVersion(stdout.clone()))?;
+    let version =
+        parse_uv_version(&stdout).ok_or_else(|| UvError::UnparsableVersion(stdout.clone()))?;
     if version < MIN_UV_VERSION {
         return Err(UvError::VersionTooOld {
             found: version,
@@ -90,22 +91,20 @@ pub fn parse_uv_version(output: &str) -> Option<(u32, u32, u32)> {
 /// Naive PATH scan that returns the first `uv` (or `uv.exe` on Windows)
 /// found.
 pub fn which_uv() -> Result<Option<PathBuf>, UvError> {
+    Ok(which_uv_in(std::env::var_os("PATH")))
+}
+
+fn which_uv_in(path: Option<OsString>) -> Option<PathBuf> {
     let basename = if cfg!(windows) { "uv.exe" } else { "uv" };
-    let Some(path) = std::env::var_os("PATH") else {
-        return Ok(None);
-    };
-    for entry in std::env::split_paths(&path) {
-        let candidate = entry.join(basename);
-        if candidate.is_file() {
-            return Ok(Some(candidate));
-        }
-    }
-    Ok(None)
+    std::env::split_paths(&path?)
+        .map(|entry| entry.join(basename))
+        .find(|candidate| candidate.is_file())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
 
     #[test]
     fn parses_standard_uv_version_string() {
@@ -135,44 +134,15 @@ mod tests {
         assert!(msg.contains("0.1.0") || msg.contains("(0, 1, 0)"));
     }
 
-    /// Mutating `PATH` for the duration of a test is unavoidable for
-    /// `which_uv` / `find_uv_on_path` coverage. Serialise so cargo's
-    /// parallel runner doesn't race.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    fn with_path<R>(value: Option<&str>, f: impl FnOnce() -> R) -> R {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os("PATH");
-        // SAFETY: ENV_LOCK serialises the only tests in this module
-        // that touch PATH.
-        unsafe {
-            match value {
-                Some(v) => std::env::set_var("PATH", v),
-                None => std::env::remove_var("PATH"),
-            }
-        }
-        let r = f();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("PATH", v),
-                None => std::env::remove_var("PATH"),
-            }
-        }
-        r
-    }
-
     #[test]
     fn which_uv_returns_none_when_path_unset() {
-        let result = with_path(None, which_uv);
-        assert!(matches!(result, Ok(None)));
+        assert_eq!(which_uv_in(None), None);
     }
 
     #[test]
     fn which_uv_returns_none_when_no_directory_contains_uv() {
         let tmp = tempfile::tempdir().unwrap();
-        let path_value = tmp.path().to_string_lossy().into_owned();
-        let result = with_path(Some(&path_value), which_uv);
-        assert!(matches!(result, Ok(None)));
+        assert_eq!(which_uv_in(Some(tmp.path().into())), None);
     }
 
     #[cfg(unix)]
@@ -188,9 +158,7 @@ mod tests {
         perms.set_mode(0o755);
         std::fs::set_permissions(&stub, perms).unwrap();
 
-        let path_value = bin_dir.to_string_lossy().into_owned();
-        let found = with_path(Some(&path_value), which_uv).unwrap();
-        assert_eq!(found, Some(stub));
+        assert_eq!(which_uv_in(Some(bin_dir.into())), Some(stub));
     }
 
     #[cfg(unix)]
@@ -285,12 +253,18 @@ mod tests {
         let hint = err.user_message();
         // The hint mentions both the env override and the OS package
         // fallback so the user has at least two paths forward.
-        assert!(hint.contains("TOOLR_UV_LIBC"), "missing env override hint in: {hint}");
+        assert!(
+            hint.contains("TOOLR_UV_LIBC"),
+            "missing env override hint in: {hint}"
+        );
         assert!(hint.contains("musl"), "missing musl/gnu mention in: {hint}");
         // Path and io error are intentionally NOT duplicated in the hint
         // — they reach the user via the wrapped ExecFailed's Display,
         // which `into_anyhow()` keeps in the chain.
-        assert!(!hint.contains("/managed/uv"), "path leaked into hint: {hint}");
+        assert!(
+            !hint.contains("/managed/uv"),
+            "path leaked into hint: {hint}"
+        );
     }
 
     #[test]
@@ -303,8 +277,14 @@ mod tests {
         // `{:#}` joins the whole chain with `: ` — the hint should
         // appear first (outermost context) and the technical detail
         // (path + io error) should follow.
-        assert!(formatted.contains("TOOLR_UV_LIBC"), "hint missing in chain: {formatted}");
-        assert!(formatted.contains("/managed/uv"), "path missing in chain: {formatted}");
+        assert!(
+            formatted.contains("TOOLR_UV_LIBC"),
+            "hint missing in chain: {formatted}"
+        );
+        assert!(
+            formatted.contains("/managed/uv"),
+            "path missing in chain: {formatted}"
+        );
         // The io::Error display varies across platforms / kinds — the
         // synthetic `Error::from(NotFound)` here renders as "entity not
         // found" while a real ENOENT from execve renders as "No such
@@ -337,22 +317,11 @@ mod tests {
     #[test]
     fn find_managed_uv_returns_none_when_managed_path_absent() {
         // Constrain $XDG_DATA_HOME to an empty tempdir so managed_uv_path
-        // resolves into a non-existent file. Use ENV_LOCK to avoid
-        // colliding with sibling tests that also touch env vars.
+        // resolves into a non-existent file.
         let tmp = tempfile::tempdir().unwrap();
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os("XDG_DATA_HOME");
-        // SAFETY: serialised by the module-level ENV_LOCK.
-        unsafe {
-            std::env::set_var("XDG_DATA_HOME", tmp.path());
-        }
+        let mut env = EnvGuard::write();
+        env.set("XDG_DATA_HOME", tmp.path());
         let result = find_managed_uv();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("XDG_DATA_HOME", v),
-                None => std::env::remove_var("XDG_DATA_HOME"),
-            }
-        }
         assert!(matches!(result, Ok(None)));
     }
 }
