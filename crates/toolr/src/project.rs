@@ -10,7 +10,7 @@ use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
-use toolr_core::trust::{require_trust, TrustMode, TrustStore};
+use toolr_core::trust::{require_trust, TrustError, TrustMode, TrustStore};
 use toolr_core::uv::toolr_cache_dir;
 
 /// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
@@ -502,6 +502,10 @@ fn venv_sync_unattended_quiet_exit(
     result: &Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)>,
 ) -> Option<ExitCode> {
     let err = result.as_ref().err()?;
+    // The refusal names the repository path, which could contain a marker.
+    if err.chain().any(|e| e.downcast_ref::<TrustError>().is_some()) {
+        return None;
+    }
     let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
     let joined = chain.join(" :: ");
 
@@ -510,6 +514,8 @@ fn venv_sync_unattended_quiet_exit(
     // already produces — keep this list aligned with:
     //   - discover_project_root NotFound        → "locating project root"
     //   - resolve_venv_path missing pyproject   → "resolving the tools venv path"
+    //     (both run before the trust check, so an untrusted stray `tools/`
+    //     still exits quietly)
     //   - ensure_uv with never_prompt=true      → UvError::UserRefusedInstall
     //     whose Display is "user declined uv install; ..."
     // A trust refusal must never match: `--quiet` would turn it into exit 0.
@@ -764,6 +770,28 @@ mod tests {
     use crate::init_templates::{ScaffoldOptions, VenvLocation};
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn trust_refusal_is_never_a_benign_quiet_exit() {
+        let path = PathBuf::from("/x/locating project root/resolving the tools venv path");
+        for err in [
+            TrustError::Untrusted(path.clone()),
+            TrustError::StoreInsideRepo(path.clone()),
+        ] {
+            let bare: Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> =
+                Err(anyhow::anyhow!(err));
+            assert!(venv_sync_unattended_quiet_exit(&bare).is_none());
+            let wrapped = bare.context("user declined uv install");
+            assert!(venv_sync_unattended_quiet_exit(&wrapped).is_none());
+        }
+    }
+
+    #[test]
+    fn missing_pyproject_is_a_benign_quiet_exit() {
+        let result: Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> =
+            Err(anyhow::anyhow!("no pyproject")).context("resolving the tools venv path");
+        assert!(venv_sync_unattended_quiet_exit(&result).is_some());
+    }
 
     /// Mutating SHELL / PATH and observing their effects requires
     /// process-wide env coordination — serialise so cargo's parallel
