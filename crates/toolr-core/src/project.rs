@@ -58,9 +58,11 @@ pub fn ensure_venv_ready(
 ) -> Result<(ResolvedVenv, UvBinary)> {
     let repo_root = discover_project_root(cwd)
         .context("locating project root for the tools venv")?;
-    require_trust(&repo_root, opts.trust)?;
     let resolved = resolve_venv_path(&repo_root)
         .context("resolving the tools venv path")?;
+    // After the static pyproject read, so a stray `tools/` with no pyproject
+    // stays a benign `--quiet` exit; before anything repo-controlled runs.
+    require_trust(&repo_root, opts.trust)?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
     sync_if_needed(

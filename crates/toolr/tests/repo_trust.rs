@@ -226,6 +226,24 @@ fn trust_all_run_does_not_leave_trust_behind() {
 }
 
 #[test]
+fn quiet_sync_in_untrusted_stray_tools_dir_is_silent() {
+    let env = TrustEnv::new();
+    let dir = TempDir::new().unwrap();
+    fs::create_dir(dir.path().join("tools")).unwrap();
+    env.toolr(dir.path())
+        .args(["project", "venv", "sync", "--quiet"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    env.toolr(dir.path())
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout("");
+}
+
+#[test]
 fn project_init_records_trust_before_sync() {
     let env = TrustEnv::new();
     let dir = TempDir::new().unwrap();
