@@ -14,6 +14,8 @@ pub mod manifest;
 pub mod manifest_build;
 pub mod parser;
 pub mod project;
+#[cfg(test)]
+mod test_env;
 pub mod third_party;
 pub mod uv;
 pub mod venv;

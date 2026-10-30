@@ -134,13 +134,10 @@ pub fn finalize_sync(repo_root: &Path, resolved: &ResolvedVenv) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
     use crate::venv::config::ToolrConfig;
     use std::path::PathBuf;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    /// Serialises the `XDG_CACHE_HOME`-mutating test below (process-global env).
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn make_resolved_cache(venv_dir: PathBuf, repo_key: &str) -> ResolvedVenv {
         ResolvedVenv {
@@ -203,11 +200,9 @@ mod tests {
         // In-tree venv (`repo_key` empty): the sidecar must live outside the
         // repo, under `$XDG_CACHE_HOME/toolr/<repo-key>` — exercises the
         // `compute_repo_key` + cache-dir branch.
-        let _guard = ENV_LOCK.lock().unwrap();
+        let mut env = EnvGuard::lock();
         let xdg = TempDir::new().unwrap();
-        let prev = std::env::var_os("XDG_CACHE_HOME");
-        // SAFETY: serialised by ENV_LOCK; restored before returning.
-        unsafe { std::env::set_var("XDG_CACHE_HOME", xdg.path()) };
+        env.set("XDG_CACHE_HOME", xdg.path());
 
         let repo = TempDir::new().unwrap();
         let resolved = ResolvedVenv {
@@ -218,11 +213,7 @@ mod tests {
             config: ToolrConfig::default(),
         };
         let dir = provenance_cache_dir(repo.path(), &resolved);
-
-        match prev {
-            Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
-            None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
-        }
+        drop(env);
         let dir = dir.unwrap();
         assert!(
             dir.starts_with(xdg.path().join("toolr")),

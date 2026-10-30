@@ -338,6 +338,7 @@ fn extract_zip(archive: &Path, into: &Path) -> Result<(), UvError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
     use std::io::Write;
 
     #[test]
@@ -516,29 +517,20 @@ mod tests {
 
     #[test]
     fn consent_mode_from_env_reads_toolr_auto_install_uv() {
-        // Mutating process env is racy across tests in the same binary;
-        // serialise inside a single test by handling both states here.
-        let prev = std::env::var_os("TOOLR_AUTO_INSTALL_UV");
-        // SAFETY: single-threaded test, see comment above.
-        unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "1") };
+        let mut env = EnvGuard::lock();
+        env.set("TOOLR_AUTO_INSTALL_UV", "1");
         let on = ConsentMode::from_env(false);
         assert!(on.auto_install_env);
         assert!(!on.yes_flag);
 
-        unsafe { std::env::remove_var("TOOLR_AUTO_INSTALL_UV") };
+        env.remove("TOOLR_AUTO_INSTALL_UV");
         let off = ConsentMode::from_env(false);
         assert!(!off.auto_install_env);
 
         // Non-"1" value also counts as "not set" for our purposes.
-        unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", "true") };
+        env.set("TOOLR_AUTO_INSTALL_UV", "true");
         let other = ConsentMode::from_env(false);
         assert!(!other.auto_install_env);
-
-        // Restore prior value so we don't leak into sibling tests.
-        match prev {
-            Some(v) => unsafe { std::env::set_var("TOOLR_AUTO_INSTALL_UV", v) },
-            None => unsafe { std::env::remove_var("TOOLR_AUTO_INSTALL_UV") },
-        }
     }
 
     #[test]

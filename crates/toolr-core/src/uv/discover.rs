@@ -106,6 +106,7 @@ pub fn which_uv() -> Result<Option<PathBuf>, UvError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
 
     #[test]
     fn parses_standard_uv_version_string() {
@@ -135,30 +136,13 @@ mod tests {
         assert!(msg.contains("0.1.0") || msg.contains("(0, 1, 0)"));
     }
 
-    /// Mutating `PATH` for the duration of a test is unavoidable for
-    /// `which_uv` / `find_uv_on_path` coverage. Serialise so cargo's
-    /// parallel runner doesn't race.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     fn with_path<R>(value: Option<&str>, f: impl FnOnce() -> R) -> R {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os("PATH");
-        // SAFETY: ENV_LOCK serialises the only tests in this module
-        // that touch PATH.
-        unsafe {
-            match value {
-                Some(v) => std::env::set_var("PATH", v),
-                None => std::env::remove_var("PATH"),
-            }
+        let mut env = EnvGuard::lock();
+        match value {
+            Some(v) => env.set("PATH", v),
+            None => env.remove("PATH"),
         }
-        let r = f();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("PATH", v),
-                None => std::env::remove_var("PATH"),
-            }
-        }
-        r
+        f()
     }
 
     #[test]
@@ -349,22 +333,12 @@ mod tests {
     #[test]
     fn find_managed_uv_returns_none_when_managed_path_absent() {
         // Constrain $XDG_DATA_HOME to an empty tempdir so managed_uv_path
-        // resolves into a non-existent file. Use ENV_LOCK to avoid
-        // colliding with sibling tests that also touch env vars.
+        // resolves into a non-existent file.
         let tmp = tempfile::tempdir().unwrap();
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os("XDG_DATA_HOME");
-        // SAFETY: serialised by the module-level ENV_LOCK.
-        unsafe {
-            std::env::set_var("XDG_DATA_HOME", tmp.path());
-        }
+        let mut env = EnvGuard::lock();
+        env.set("XDG_DATA_HOME", tmp.path());
         let result = find_managed_uv();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("XDG_DATA_HOME", v),
-                None => std::env::remove_var("XDG_DATA_HOME"),
-            }
-        }
+        drop(env);
         assert!(matches!(result, Ok(None)));
     }
 }

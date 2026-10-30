@@ -218,6 +218,7 @@ pub fn ensure_uv(consent: ConsentMode) -> Result<UvBinary, UvError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
 
     #[test]
     fn min_uv_version_is_a_real_tuple() {
@@ -233,30 +234,13 @@ mod tests {
         let _ = managed_uv_path();
     }
 
-    /// Mutating XDG_DATA_HOME / XDG_CACHE_HOME and reading them back in
-    /// the same test is racy if siblings touch the same vars. Take a
-    /// per-module lock around every env-touching region.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     fn with_env_var<R>(key: &str, value: Option<&str>, f: impl FnOnce() -> R) -> R {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os(key);
-        // SAFETY: serialised by ENV_LOCK; no other thread in this crate
-        // mutates these XDG vars concurrently with this helper.
-        unsafe {
-            match value {
-                Some(v) => std::env::set_var(key, v),
-                None => std::env::remove_var(key),
-            }
+        let mut env = EnvGuard::lock();
+        match value {
+            Some(v) => env.set(key, v),
+            None => env.remove(key),
         }
-        let r = f();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var(key, v),
-                None => std::env::remove_var(key),
-            }
-        }
-        r
+        f()
     }
 
     #[test]

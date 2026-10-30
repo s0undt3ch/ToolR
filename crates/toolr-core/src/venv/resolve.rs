@@ -75,17 +75,9 @@ pub fn resolve_venv_path(repo_root: &Path) -> Result<ResolvedVenv> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
     use super::*;
+    use crate::test_env::EnvGuard;
     use tempfile::TempDir;
-
-    /// Serialise every test in this module: they all share the
-    /// process-wide environment (via `std::env::var`), and the
-    /// `TOOLR_VENV_LOCATION` override is read on every invocation
-    /// of `resolve_venv_path`. Running tests in parallel would let
-    /// one test's `set_var` bleed into another's expectations.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn setup_repo(body: &str) -> TempDir {
         let tmp = TempDir::new().unwrap();
@@ -97,9 +89,8 @@ mod tests {
 
     #[test]
     fn cache_default_uses_repo_key_subdir() {
-        let _env = ENV_LOCK.lock().unwrap();
-        let _guard = EnvVarGuard::new(VENV_LOCATION_ENV);
-        unsafe { std::env::remove_var(VENV_LOCATION_ENV) };
+        let mut env = EnvGuard::lock();
+        env.remove(VENV_LOCATION_ENV);
         let tmp = setup_repo("[project]\nname=\"x\"\nversion=\"0\"\n");
         let resolved = resolve_venv_path(tmp.path()).unwrap();
         assert!(resolved.venv_dir.ends_with("venv"));
@@ -114,9 +105,8 @@ mod tests {
 
     #[test]
     fn in_tree_lands_inside_tools_dot_venv() {
-        let _env = ENV_LOCK.lock().unwrap();
-        let _guard = EnvVarGuard::new(VENV_LOCATION_ENV);
-        unsafe { std::env::remove_var(VENV_LOCATION_ENV) };
+        let mut env = EnvGuard::lock();
+        env.remove(VENV_LOCATION_ENV);
         let tmp = setup_repo(
             "[project]\nname=\"x\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
         );
@@ -132,20 +122,17 @@ mod tests {
     /// than a one-way "force in-tree" flag.
     #[test]
     fn env_var_overrides_pyproject_venv_location() {
-        let _env = ENV_LOCK.lock().unwrap();
-        let _guard = EnvVarGuard::new(VENV_LOCATION_ENV);
+        let mut env = EnvGuard::lock();
 
         let tmp = setup_repo("[project]\nname=\"x\"\nversion=\"0\"\n");
-        // SAFETY: the EnvVarGuard above ensures we restore the
-        // previous value on drop.
-        unsafe { std::env::set_var(VENV_LOCATION_ENV, "in-tree") };
+        env.set(VENV_LOCATION_ENV, "in-tree");
         let resolved = resolve_venv_path(tmp.path()).unwrap();
         assert_eq!(resolved.venv_dir, tmp.path().join("tools").join(".venv"));
 
         let tmp_in = setup_repo(
             "[project]\nname=\"x\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
         );
-        unsafe { std::env::set_var(VENV_LOCATION_ENV, "cache") };
+        env.set(VENV_LOCATION_ENV, "cache");
         let resolved_cache = resolve_venv_path(tmp_in.path()).unwrap();
         // Cache mode lands under the toolr cache dir, not in-tree.
         assert!(!resolved_cache.venv_dir.starts_with(tmp_in.path()));
@@ -154,40 +141,12 @@ mod tests {
 
     #[test]
     fn env_var_invalid_value_is_an_error() {
-        let _env = ENV_LOCK.lock().unwrap();
-        let _guard = EnvVarGuard::new(VENV_LOCATION_ENV);
+        let mut env = EnvGuard::lock();
         let tmp = setup_repo("[project]\nname=\"x\"\nversion=\"0\"\n");
-        unsafe { std::env::set_var(VENV_LOCATION_ENV, "bogus") };
+        env.set(VENV_LOCATION_ENV, "bogus");
         let err = resolve_venv_path(tmp.path()).unwrap_err();
         let msg = format!("{err:?}");
         assert!(msg.contains("TOOLR_VENV_LOCATION"), "got: {msg}");
         assert!(msg.contains("bogus"), "got: {msg}");
-    }
-
-    /// RAII helper that restores (or removes) the original env var
-    /// value on drop. Necessary because Rust tests run with a shared
-    /// process env and setting `TOOLR_VENV_LOCATION` from one test
-    /// would otherwise bleed into the next.
-    struct EnvVarGuard {
-        key: &'static str,
-        previous: Option<String>,
-    }
-
-    impl EnvVarGuard {
-        fn new(key: &'static str) -> Self {
-            Self {
-                key,
-                previous: std::env::var(key).ok(),
-            }
-        }
-    }
-
-    impl Drop for EnvVarGuard {
-        fn drop(&mut self) {
-            match &self.previous {
-                Some(v) => unsafe { std::env::set_var(self.key, v) },
-                None => unsafe { std::env::remove_var(self.key) },
-            }
-        }
     }
 }
