@@ -10,7 +10,7 @@ use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
-use toolr_core::trust::{require_trust, TrustError, TrustMode, TrustStore};
+use toolr_core::trust::{require_trust, shown, TrustError, TrustMode, TrustStore};
 use toolr_core::uv::toolr_cache_dir;
 
 /// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
@@ -54,7 +54,7 @@ fn project_trust(matches: &ArgMatches) -> Result<ExitCode> {
     let store = TrustStore::open_default()?;
     store.migrate_once(toolr_cache_dir().as_deref(), &root);
     let record = store.trust(&root)?;
-    println!("{}", record.repo_path.display());
+    println!("{}", shown(&record.repo_path));
     Ok(ExitCode::SUCCESS)
 }
 
@@ -64,9 +64,9 @@ fn project_untrust(matches: &ArgMatches) -> Result<ExitCode> {
     // Migrate first, or the next check would re-import the record removed here.
     store.migrate_once(toolr_cache_dir().as_deref(), &root);
     if store.untrust(&root)? {
-        println!("{}", root.display());
+        println!("{}", shown(&root));
     } else {
-        eprintln!("toolr: {} was not trusted", root.display());
+        eprintln!("toolr: {} was not trusted", shown(&root));
     }
     Ok(ExitCode::SUCCESS)
 }

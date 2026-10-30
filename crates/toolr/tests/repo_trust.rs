@@ -44,11 +44,23 @@ impl Hostile {
         self.env.toolr(self.repo.path())
     }
 
-    /// The `meta.json` a successful sync leaves in toolr's cache root.
-    fn seed_cache_meta(&self) {
-        Meta::new(self.root(), "0.0.0", "3.13.1")
-            .write(&self.env.cache.path().join("toolr").join("seeded"))
+    /// The `meta.json` a pre-trust toolr left after a finished sync.
+    fn seed_synced_meta(&self) {
+        let mut meta = Meta::new(self.root(), "0.35.1", "3.13.1");
+        meta.interpreter_hash = Some("hash".into());
+        meta.write(&self.cache_entry()).unwrap();
+    }
+
+    /// The bare `meta.json` dispatch backfills, including for a run it then
+    /// refuses, and the one every sync writes once trust exists.
+    fn seed_backfilled_meta(&self) {
+        Meta::new(self.root(), "0.35.1", "3.13.1")
+            .write(&self.cache_entry())
             .unwrap();
+    }
+
+    fn cache_entry(&self) -> PathBuf {
+        self.env.cache.path().join("toolr").join("seeded")
     }
 }
 
@@ -150,7 +162,7 @@ fn trust_then_dispatch_runs() {
 #[test]
 fn untrust_then_refused() {
     let h = Hostile::new(true);
-    h.seed_cache_meta();
+    h.seed_synced_meta();
     h.toolr().args(["project", "trust"]).assert().success();
     h.toolr().args(["project", "untrust"]).assert().success();
     h.toolr()
@@ -216,7 +228,7 @@ fn trust_all_run_does_not_leave_trust_behind() {
     fs::remove_file(&h.sentinel).unwrap();
     // The fixture can't really sync, so stand in for the meta.json that a
     // successful sync under TOOLR_TRUST_ALL=1 would have written.
-    h.seed_cache_meta();
+    h.seed_backfilled_meta();
     h.toolr()
         .args(["hello", "world"])
         .assert()
@@ -284,4 +296,81 @@ fn home_with_tools_dir_can_be_trusted() {
         .assert()
         .success()
         .stdout(format!("{}\n", home_root.display()));
+}
+
+#[test]
+fn upgrade_trusts_a_repo_with_a_finished_sync() {
+    let h = Hostile::new(true);
+    h.seed_synced_meta();
+    h.toolr()
+        .args(["hello", "world"])
+        .assert()
+        .stderr(contains(REFUSAL).not());
+    assert!(h.sentinel.exists());
+}
+
+/// A pre-trust toolr refused to run this repo but still backfilled its
+/// cache sidecar. That is no consent, so the upgrade must not trust it.
+#[test]
+fn upgrade_does_not_trust_a_refused_attempt() {
+    let h = Hostile::new(true);
+    h.seed_backfilled_meta();
+    assert!(!h.cache_entry().join("venv").exists());
+    h.toolr()
+        .args(["project", "venv", "sync", "--quiet"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    h.toolr()
+        .args(["hello", "world"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    h.toolr()
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout("");
+    assert!(!h.sentinel.exists());
+}
+
+#[test]
+fn untrust_survives_a_wiped_trust_store() {
+    let h = Hostile::new(true);
+    h.seed_synced_meta();
+    h.toolr().args(["project", "untrust"]).assert().success();
+    fs::remove_dir_all(h.env.state.path().join("toolr").join("trust")).unwrap();
+    h.toolr()
+        .args(["hello", "world"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    assert!(!h.sentinel.exists());
+}
+
+#[test]
+fn trust_commands_escape_control_characters() {
+    let env = TrustEnv::new();
+    let parent = TempDir::new().unwrap();
+    let repo = fs::canonicalize(parent.path()).unwrap().join("evil\rLEGIT");
+    fs::create_dir_all(repo.join("tools")).unwrap();
+    let expected = format!(
+        "{}\\rLEGIT\n",
+        repo.parent().unwrap().join("evil").display()
+    );
+    env.toolr(&repo)
+        .args(["project", "trust"])
+        .assert()
+        .success()
+        .stdout(expected.clone());
+    env.toolr(&repo)
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout(expected.clone());
+    env.toolr(&repo)
+        .args(["project", "untrust"])
+        .assert()
+        .success()
+        .stdout(expected);
 }

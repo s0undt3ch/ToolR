@@ -86,7 +86,7 @@ back to toolr's data directory where there is none
 (`~/Library/Application Support/toolr/trust/` on macOS).
 
 The first time toolr checks trust after an upgrade, it trusts every
-repository it had already built a venv for. This happens once: after that,
+repository it had finished syncing a venv for. This happens once: after that,
 `toolr project untrust` sticks, and a venv built under `TOOLR_TRUST_ALL=1`
 doesn't make its repository trusted. `toolr project init` trusts the
 directory it writes to.

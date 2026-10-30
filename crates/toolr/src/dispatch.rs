@@ -15,6 +15,7 @@ use toolr_core::execute::{
     resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
 };
 use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
+use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_child_args};
@@ -413,13 +414,13 @@ fn run_self_trusted(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     for record in store.list()? {
         let root = &record.repo_path;
         if root.exists() {
-            println!("{}", root.display());
+            println!("{}", shown(root));
         } else if prune {
             if store.untrust(root)? {
-                eprintln!("toolr: pruned {}", root.display());
+                eprintln!("toolr: pruned {}", shown(root));
             }
         } else {
-            println!("{} (missing)", root.display());
+            println!("{} (missing)", shown(root));
         }
     }
     Ok(ExitCode::SUCCESS)

@@ -228,9 +228,14 @@ impl TrustStore {
         };
         for entry in entries.into_iter().flatten().flatten() {
             let cache_dir = entry.path();
+            // Only a finished sync recorded the interpreter hash. Dispatch
+            // also backfilled a bare sidecar for repos it then refused to run.
             let Ok(meta) = Meta::load(&cache_dir) else {
                 continue;
             };
+            if meta.interpreter_hash.is_none() {
+                continue;
+            }
             let Ok(repo) = fs::canonicalize(&meta.repo_path) else {
                 continue;
             };
@@ -277,7 +282,7 @@ fn resolves_inside(path: &Path, canonical_root: &Path, cwd: &Path) -> bool {
 
 /// A crafted directory name could otherwise use control characters to
 /// overwrite the path the user is asked to trust.
-fn shown(path: &Path) -> String {
+pub fn shown(path: &Path) -> String {
     path.display()
         .to_string()
         .chars()
@@ -318,11 +323,11 @@ pub fn decide(
     mode: TrustMode,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
 ) -> Result<(), TrustError> {
-    let root = canonical(root);
-    store.migrate_once(cache_root, &root);
     if all_env {
         return Ok(());
     }
+    let root = canonical(root);
+    store.migrate_once(cache_root, &root);
     store.guard(&root)?;
     if store.is_trusted(&root).unwrap_or(false) {
         return Ok(());
@@ -422,6 +427,13 @@ mod tests {
         }
     }
 
+    /// The sidecar a pre-trust toolr left after a finished sync.
+    fn synced_meta(root: impl Into<PathBuf>) -> Meta {
+        let mut meta = Meta::new(root, "0.0.0", "3.13.1");
+        meta.interpreter_hash = Some("hash".into());
+        meta
+    }
+
     const PROMPT: TrustMode = TrustMode {
         never_prompt: false,
     };
@@ -512,7 +524,7 @@ mod tests {
     #[test]
     fn cache_meta_migrates() {
         let f = Fixture::new();
-        Meta::new(f.root(), "0.0.0", "3.13.1")
+        synced_meta(f.root())
             .write(&f.cache.path().join("some-key"))
             .unwrap();
         let (r, _) = f.decide(None, PROMPT);
@@ -523,7 +535,7 @@ mod tests {
     #[test]
     fn migration_runs_once() {
         let f = Fixture::new();
-        Meta::new(f.root(), "0.0.0", "3.13.1")
+        synced_meta(f.root())
             .write(&f.cache.path().join("first"))
             .unwrap();
         assert!(f.decide(None, PROMPT).0.is_ok());
@@ -531,7 +543,7 @@ mod tests {
 
         let later = TempDir::new().unwrap();
         let later_root = fs::canonicalize(later.path()).unwrap();
-        Meta::new(&later_root, "0.0.0", "3.13.1")
+        synced_meta(&later_root)
             .write(&f.cache.path().join("second"))
             .unwrap();
         let r = decide(
@@ -549,7 +561,7 @@ mod tests {
     #[test]
     fn wiped_store_does_not_migrate_again() {
         let f = Fixture::new();
-        Meta::new(f.root(), "0.0.0", "3.13.1")
+        synced_meta(f.root())
             .write(&f.cache.path().join("first"))
             .unwrap();
         assert!(f.decide(None, PROMPT).0.is_ok());
@@ -562,7 +574,7 @@ mod tests {
     #[test]
     fn untrust_sticks_after_migration() {
         let f = Fixture::new();
-        Meta::new(f.root(), "0.0.0", "3.13.1")
+        synced_meta(f.root())
             .write(&f.cache.path().join("some-key"))
             .unwrap();
         assert!(f.decide(None, PROMPT).0.is_ok());
@@ -572,15 +584,33 @@ mod tests {
     }
 
     #[test]
-    fn trust_all_env_consumes_migration() {
+    fn trust_all_env_leaves_store_and_cache_alone() {
         let f = Fixture::new();
-        let store = f.store();
-        decide(&f.root(), &store, Some(f.cache.path()), true, PROMPT, None).unwrap();
-        Meta::new(f.root(), "0.0.0", "3.13.1")
+        synced_meta(f.root())
             .write(&f.cache.path().join("some-key"))
+            .unwrap();
+        decide(
+            &f.root(),
+            &f.store(),
+            Some(f.cache.path()),
+            true,
+            PROMPT,
+            None,
+        )
+        .unwrap();
+        assert!(!f.store().dir().exists());
+        assert!(!f.cache.path().join(MIGRATION_MARKER).exists());
+    }
+
+    #[test]
+    fn sidecar_without_a_finished_sync_is_not_migrated() {
+        let f = Fixture::new();
+        Meta::new(f.root(), "0.0.0", "3.13.1")
+            .write(&f.cache.path().join("backfilled"))
             .unwrap();
         let (r, _) = f.decide(None, PROMPT);
         assert!(matches!(r, Err(TrustError::Untrusted(_))));
+        assert!(f.store().dir().join(MIGRATION_MARKER).is_file());
     }
 
     #[test]
@@ -588,10 +618,10 @@ mod tests {
         let f = Fixture::new();
         let other = TempDir::new().unwrap();
         let other_root = fs::canonicalize(other.path()).unwrap();
-        Meta::new(&other_root, "0.0.0", "3.13.1")
+        synced_meta(&other_root)
             .write(&f.cache.path().join("other"))
             .unwrap();
-        Meta::new(f.root().join("gone"), "0.0.0", "3.13.1")
+        synced_meta(f.root().join("gone"))
             .write(&f.cache.path().join("gone"))
             .unwrap();
         fs::create_dir(f.cache.path().join("no-meta")).unwrap();
@@ -612,7 +642,7 @@ mod tests {
     fn cache_root_inside_checked_repo_is_not_read() {
         let f = Fixture::new();
         let cache = f.root().join("cache");
-        Meta::new(f.root(), "0.0.0", "3.13.1")
+        synced_meta(f.root())
             .write(&cache.join("some-key"))
             .unwrap();
         let r = decide(&f.root(), &f.store(), Some(&cache), false, PROMPT, None);
@@ -627,7 +657,7 @@ mod tests {
         let other = TempDir::new().unwrap();
         let other_root = fs::canonicalize(other.path()).unwrap();
         let cache = other_root.join("cache");
-        Meta::new(&other_root, "0.0.0", "3.13.1")
+        synced_meta(&other_root)
             .write(&cache.join("some-key"))
             .unwrap();
         let r = decide(&f.root(), &f.store(), Some(&cache), false, PROMPT, None);
@@ -647,7 +677,7 @@ mod tests {
     #[test]
     fn meta_inside_repo_is_ignored() {
         let f = Fixture::new();
-        Meta::new(f.root(), "0.0.0", "3.13.1")
+        synced_meta(f.root())
             .write(&f.root().join("tools"))
             .unwrap();
         let (r, _) = f.decide(None, PROMPT);
