@@ -78,11 +78,18 @@ Trust a repository in either of two ways:
 
 `toolr self trusted` lists the trusted repositories and marks the ones
 whose path no longer exists. `toolr self trusted --prune` removes those.
-Records live in toolr's state directory (`$XDG_STATE_HOME/toolr/trust/`),
-not in the cache, so `toolr self cache prune` leaves them alone.
+Records live in toolr's state directory, not in the cache, so
+`toolr self cache prune` leaves them alone. That's
+`$XDG_STATE_HOME/toolr/trust/` when `XDG_STATE_HOME` is set, otherwise the
+platform state directory (`~/.local/state/toolr/trust/` on Linux), falling
+back to toolr's data directory where there is none
+(`~/Library/Application Support/toolr/trust/` on macOS).
 
-A repository where toolr already built a venv is trusted automatically
-the first time. `toolr project init` trusts the directory it writes to.
+The first time toolr checks trust after an upgrade, it trusts every
+repository it had already built a venv for. This happens once: after that,
+`toolr project untrust` sticks, and a venv built under `TOOLR_TRUST_ALL=1`
+doesn't make its repository trusted. `toolr project init` trusts the
+directory it writes to.
 
 These never need trust, because nothing executes: `--help`, bare
 `toolr`, tab completion, `toolr project manifest rebuild` and

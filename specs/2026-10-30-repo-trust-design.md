@@ -63,9 +63,13 @@ The uv auto-install is not repo-controlled and keeps its own consent.
 `require_trust(repo_root: &Path, mode: TrustMode) -> Result<()>` in
 toolr-core, called in exactly three places:
 
-1. At the top of `toolr_core::project::ensure_venv_ready`, right after
-   `discover_project_root`. This covers every `project venv` subcommand
-   that syncs, and dispatch's resync.
+1. In `toolr_core::project::ensure_venv_ready`, right after
+   `resolve_venv_path` (a static read of `tools/pyproject.toml`) and before
+   `ensure_uv` and the sync. This covers every `project venv` subcommand
+   that syncs, and dispatch's resync. A directory with a stray `tools/` and
+   no `pyproject.toml` fails `resolve_venv_path` first, so
+   `project venv sync --quiet` (the mise `enter` hook) still exits 0 silently
+   there instead of reporting a refusal.
 2. In `crates/toolr/src/dispatch.rs`, before the spec is written and before
    the venv/host-Python split. This covers the no-`pyproject.toml` path.
 3. In `crates/toolr/src/project.rs` `venv_run`'s `--no-sync` arm.
@@ -74,10 +78,16 @@ toolr-core, called in exactly three places:
 
 1. `TOOLR_TRUST_ALL=1` in the environment → allowed.
 2. A trust record exists for the canonical root → allowed.
-3. **Migration:** a `meta.json` under toolr's *cache root* (via
-   `cache::enumerate_caches(toolr_cache_dir())`) has `repo_path` equal to
-   the canonical root → write a trust record, then allowed. Never read a
-   `meta.json` from inside the repo. A prior sync or dispatch is prior
+3. **Migration (one-shot):** if the store has no `.migrated-v1` marker,
+   scan `<toolr_cache_dir()>/*/meta.json` once and trust every `repo_path`
+   that still exists, then write the marker. Skip the pass when the cache
+   root resolves inside the repository being checked, and skip any
+   `meta.json` that lives inside the `repo_path` it names; per-entry errors
+   are logged, not fatal. Once the marker exists migration never runs
+   again, so `untrust` sticks and a cache entry written under
+   `TOOLR_TRUST_ALL=1` never becomes trust. The pass also runs before the
+   `TOOLR_TRUST_ALL` early return and in `project trust`/`project untrust`,
+   so the first of those consumes it. A prior sync or dispatch is prior
    consent.
 4. stdin is a terminal and `--quiet` was not passed → prompt. `y`/`yes`
    writes a record and allows; anything else, including bare Enter and EOF,
