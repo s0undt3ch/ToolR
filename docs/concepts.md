@@ -57,3 +57,52 @@ shell with `toolr self completion install <shell>`.
 venv + a `meta.json` sidecar with timestamps. Inspect with
 `toolr self cache list`; prune orphans or stale entries with
 `toolr self cache prune`. See [Internals → Cache layout](internals/cache.md).
+
+## Repository trust
+
+toolr refuses to run a repository's code until you have trusted that
+repository once. Running a command imports `tools/*.py`, and syncing the
+venv runs `uv` against `tools/pyproject.toml`. Both are code the
+repository controls.
+
+Trust is keyed on the repository's canonical root path. Content isn't
+hashed, so a dependency bump never asks again.
+
+Trust a repository in either of two ways:
+
+- Answer `y` at the prompt toolr shows on a terminal. Anything else,
+  including bare Enter, refuses. With `--quiet` or no terminal, toolr
+  never prompts and refuses.
+- Run `toolr project trust [PATH]`. `toolr project untrust [PATH]`
+  removes the record.
+
+`toolr self trusted` lists the trusted repositories and marks the ones
+whose path no longer exists. `toolr self trusted --prune` removes those.
+Records live in toolr's state directory (`$XDG_STATE_HOME/toolr/trust/`),
+not in the cache, so `toolr self cache prune` leaves them alone.
+
+A repository where toolr already built a venv is trusted automatically
+the first time. `toolr project init` trusts the directory it writes to.
+
+These never need trust, because nothing executes: `--help`, bare
+`toolr`, tab completion, `toolr project manifest rebuild` and
+`toolr self build-manifest`.
+
+For automation, set `TOOLR_TRUST_ALL=1`. The value must be exactly `1`.
+The `s0undt3ch/ToolR` GitHub Action sets it for you; see
+[Project configuration](project-config.md#venv-location). toolr doesn't infer it
+from `CI=true`.
+
+!!! warning "Trust is a one-way door"
+
+    Once a repository is trusted, its code runs as you. It can do
+    anything you can, including editing the trust store.
+
+Trust doesn't cover:
+
+- A trusted repository that later pulls hostile `tools/*.py` or
+  `[tool.uv]` changes.
+- Editor and LSP integrations that import `tools/*.py` themselves.
+- A compromised package index used by a trusted repository.
+- `toolr project init` in a directory that already holds someone else's
+  files. It records trust for content you didn't write.

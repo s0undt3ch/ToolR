@@ -33,6 +33,12 @@ drift.
 
 ## Workflow
 
+0. **Expect a trust prompt on the first run.** toolr won't import a
+   repository's `tools/*.py` or sync its venv until the repository is
+   trusted. On a terminal it asks once; elsewhere it refuses and says
+   to run `toolr project trust` there. Don't set `TOOLR_TRUST_ALL=1`
+   on the user's behalf in an interactive session; ask them to trust
+   the repository.
 1. **Confirm the project is a toolr project.** Look for `tools/` at
    the repo root with `tools/pyproject.toml`. If it doesn't exist,
    ask the user to run `toolr project init` first — that scaffolds

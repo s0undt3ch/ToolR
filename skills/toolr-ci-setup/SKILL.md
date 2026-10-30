@@ -231,6 +231,25 @@ lives in the repository's `tools/pyproject.toml`:
 venv-location = "in-tree"
 ```
 
+## Repository trust in CI
+
+toolr refuses to run a repository's `tools/*.py` or sync its tools venv
+until the repository is trusted. A CI runner has no one to answer the
+prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
+
+- **Using the action?** Do nothing.
+- **Running `toolr` in CI *without* the action?** Set it yourself. The
+  value must be exactly `1`; toolr does not infer trust from `CI=true`.
+
+  ```yaml
+  - run: toolr <group> <cmd>
+    env:
+      TOOLR_TRUST_ALL: "1"
+  ```
+
+`--help`, tab completion and manifest builds
+(`toolr self build-manifest`) never need trust.
+
 ## Common failure modes
 
 - **`refusing to install toolr <ver> — minimum supported version is

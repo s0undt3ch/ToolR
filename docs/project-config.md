@@ -67,6 +67,11 @@ spellings the TOML key does. Useful as a CI escape hatch — the
 automatically so workflows can cache `tools/.venv` directly without
 the per-repo config caring.
 
+The same action also sets `TOOLR_TRUST_ALL=1`, which skips toolr's
+[repository trust](concepts.md#repository-trust) check. The workflow has
+already checked out the code it is about to run. Outside the action, set
+`TOOLR_TRUST_ALL=1` yourself; the value must be exactly `1`.
+
 ### Editable installs {#editable-install}
 
 Editable installs are configured the uv-native way, via

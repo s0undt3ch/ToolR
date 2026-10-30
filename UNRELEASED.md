@@ -83,3 +83,9 @@ plugin is rebuilt.
 Building toolr from an sdist now needs Rust 1.99.1 or newer, the toolchain toolr is built and
 tested with. The crates declare it as `rust-version`, so an older toolchain fails with a clear
 message instead of a compile error inside a dependency.
+
+toolr now refuses to run a repository's commands or sync its tools venv until you trust that
+repository once: run `toolr project trust` there, or answer `y` at the prompt. Repositories where
+toolr already built a venv are trusted automatically. In CI, set `TOOLR_TRUST_ALL=1`; the
+`s0undt3ch/ToolR` GitHub Action sets it for you. `--help`, tab completion and manifest builds never
+need trust. The interpreter provenance check is removed; repository trust replaces it.

@@ -31,6 +31,9 @@ uv sync --all-extras --dev        # Python deps
 prek install --install-hooks      # pre-commit hooks
 ```
 
+Run `toolr project trust` once in your checkout. toolr won't run this repository's `tools/*.py` until
+you do.
+
 Run the dev binary against the dogfood `tools/` directory:
 
 ```sh
