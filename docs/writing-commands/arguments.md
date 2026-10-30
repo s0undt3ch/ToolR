@@ -153,6 +153,11 @@ Don't stack negatives, such as `no_skip` or `disable_no_cache`.
 For more than two states, use `Literal["auto", "always", "never"]` or an
 `Enum` instead of `bool | None`.
 
+A flag can also read its value from an environment variable with
+`Annotated[bool, arg(env="VERBOSE")]`. The variable must be `true` or
+`false`. Any other value, including `1`, `yes` or an empty string, is an
+error. Passing the flag on the command line wins over the variable.
+
 ## `Literal[...]` for choice-restricted values
 
 A `Literal["a", "b", "c"]` annotation produces a `--name {a,b,c}`

@@ -482,7 +482,8 @@ Args:
     metavar: Custom placeholder shown in ``--help``
         (e.g. ``"PATH"`` → ``--config <PATH>``).
     env: Read the default from this environment variable when the
-        flag isn't passed. Maps to clap ``Arg::env(...)``.
+        flag isn't passed. Maps to clap ``Arg::env(...)``. On a ``bool``
+        flag the variable must be ``true`` or ``false``.
     hide: When ``True``, omit the argument from ``--help`` output.
         Still parseable on the command line.
     help_section: An :class:`ArgSection` returned by

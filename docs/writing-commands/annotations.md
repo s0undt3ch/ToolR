@@ -27,7 +27,7 @@ def show(
 |---|---|
 | `aliases=["-n", "--also"]` | Extra short / long flag spellings. Single-char entries become clap shorts; longer entries become long aliases. |
 | `metavar="NAME"` | Custom placeholder shown in `--help` (`<NAME>` instead of `<sha>`). |
-| `env="VAR"` | Read the default from this env var when the flag isn't passed. |
+| `env="VAR"` | Read the default from this env var when the flag isn't passed. On a `bool` flag the variable must be `true` or `false`; any other value, including `1` or an empty string, is an error. |
 | `hide=True` | Omit from `--help` output. Still parseable on the CLI. |
 | `help_section=…` | Group related args under a named `--help` heading. See below. |
 | `display_order=N` | Lower values render first in `--help`. |
