@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::PathBuf;
 
 use assert_cmd::Command;
@@ -14,8 +16,7 @@ fn fixture_with_manifest(json: &str) -> TempDir {
 #[test]
 fn version_flag_works_with_no_project() {
     let tmp = TempDir::new().unwrap();
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(tmp.path())
         .arg("--version")
         .assert()
@@ -41,8 +42,7 @@ fn help_lists_groups_from_manifest() {
         ]
     }"#;
     let tmp = fixture_with_manifest(json);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .arg("--help")
         .output()
@@ -137,8 +137,7 @@ fn running_a_user_command_invokes_python_runner() {
     };
     let tmp = TempDir::new().unwrap();
     write_tools_demo(tmp.path());
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .env("TOOLR_PYTHON", &python)
         .env("PYTHONPATH", tmp.path())
@@ -160,8 +159,7 @@ fn project_manifest_rebuild_help_lists_command() {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");
     std::fs::create_dir(&tools).unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "manifest", "--help"])
         .output()
@@ -175,8 +173,7 @@ fn project_manifest_rebuild_help_lists_command() {
 
 #[test]
 fn self_build_manifest_help_works() {
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--help"])
         .output()
         .unwrap();
@@ -287,7 +284,7 @@ fn preflight_cache_home(repo: &std::path::Path) -> PathBuf {
 /// sandboxed `XDG_CACHE_HOME`, so the run never touches the real cache.
 #[cfg(unix)]
 fn preflight_cmd(repo: &std::path::Path) -> Command {
-    let mut cmd = Command::cargo_bin("toolr").unwrap();
+    let mut cmd = common::toolr();
     cmd.current_dir(repo)
         .env("XDG_CACHE_HOME", preflight_cache_home(repo));
     cmd
@@ -426,8 +423,7 @@ def boom(ctx) -> None:
         }]
     }"#;
     std::fs::write(tools_dir.join(".toolr-manifest.json"), manifest).unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .env("TOOLR_PYTHON", &python)
         .env("PYTHONPATH", tmp.path())
@@ -441,8 +437,7 @@ def boom(ctx) -> None:
 #[test]
 fn project_venv_sync_help_lists_force_and_quiet() {
     let tmp = TempDir::new().unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "sync", "--help"])
         .output()
@@ -463,8 +458,7 @@ fn project_venv_sync_help_lists_force_and_quiet() {
 #[test]
 fn project_deps_removed_prints_migration_hint() {
     let tmp = TempDir::new().unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "deps", "sync"])
         .output()
@@ -512,8 +506,7 @@ fn dispatch_uses_python3_from_path_without_tools_pyproject() {
     .unwrap();
     std::fs::set_permissions(&py, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(&repo)
         .env("PATH", &bin_dir)
         .env("XDG_CACHE_HOME", tmp.path().join("cache"))
@@ -541,8 +534,7 @@ fn dispatch_missing_toolr_python_without_tools_pyproject_skips_venv_sync_hint() 
     let repo = tmp.path().join("repo");
     write_tools_demo(&repo);
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(&repo)
         .env("XDG_CACHE_HOME", tmp.path().join("cache"))
         .env("TOOLR_PYTHON", tmp.path().join("missing").join("python"))

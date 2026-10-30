@@ -1,5 +1,7 @@
 //! Integration tests for `toolr project init`.
 
+mod common;
+
 use std::fs;
 use std::path::PathBuf;
 
@@ -7,7 +9,7 @@ use assert_cmd::Command;
 use tempfile::TempDir;
 
 fn cargo_bin() -> Command {
-    Command::cargo_bin("toolr").unwrap()
+    common::toolr()
 }
 
 fn detect_test_python() -> Option<PathBuf> {

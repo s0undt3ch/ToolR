@@ -11,7 +11,7 @@ mod common;
 use common::VenvFixture;
 
 fn cargo_bin() -> Command {
-    Command::cargo_bin("toolr").unwrap()
+    common::toolr()
 }
 
 #[test]
@@ -79,8 +79,7 @@ venv-location = "cache"
 #[test]
 fn remove_success_path_invokes_uv_remove() {
     let fx = VenvFixture::with_dependencies(&["requests", "httpx", "toolr-py>=0.21"]);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("PATH", &fx.bin_dir)
         .current_dir(&fx.root)
         .args(["project", "venv", "remove", "httpx"])

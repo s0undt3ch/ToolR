@@ -1,9 +1,10 @@
 //! Integration tests for `toolr self cache list`.
 
+mod common;
+
 use std::fs;
 use std::path::Path;
 
-use assert_cmd::Command;
 use chrono::Utc;
 use tempfile::TempDir;
 
@@ -29,8 +30,7 @@ fn write_entry(cache_root: &Path, key: &str, repo_path: &str, bytes: usize) {
 #[test]
 fn list_reports_no_caches_when_empty() {
     let tmp = TempDir::new().unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
@@ -56,8 +56,7 @@ fn list_renders_entries_with_size_and_last_used() {
     fs::create_dir_all(&cache_root).unwrap();
     write_entry(&cache_root, "key-a", "/repo/a", 4096);
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")

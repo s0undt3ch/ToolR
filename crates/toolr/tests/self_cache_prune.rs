@@ -1,9 +1,10 @@
 //! Integration tests for `toolr self cache prune` and `--all`.
 
+mod common;
+
 use std::fs;
 use std::path::Path;
 
-use assert_cmd::Command;
 use chrono::{Duration, Utc};
 use tempfile::TempDir;
 
@@ -48,8 +49,7 @@ fn prune_removes_orphan_entries() {
     fs::create_dir_all(&live_repo).unwrap();
     write_entry(&cache_root, "live-key", &live_repo, Utc::now());
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
@@ -89,8 +89,7 @@ fn prune_removes_stale_entries() {
         Utc::now() - Duration::days(2),
     );
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
@@ -121,8 +120,7 @@ fn prune_dry_run_leaves_disk_untouched() {
         Utc::now(),
     );
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
@@ -151,8 +149,7 @@ fn prune_all_with_yes_nukes_everything() {
     write_entry(&cache_root, "a", &live_repo, Utc::now());
     write_entry(&cache_root, "b", &live_repo, Utc::now());
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
@@ -183,8 +180,7 @@ fn passive_hint_appears_when_orphan_count_is_high() {
         );
     }
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env_remove("TOOLR_NO_CACHE_HINT")
@@ -212,8 +208,7 @@ fn passive_hint_is_suppressed_by_env_var() {
             Utc::now(),
         );
     }
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")
@@ -237,8 +232,7 @@ fn prune_all_refuses_without_yes_when_non_interactive() {
     fs::create_dir_all(&live_repo).unwrap();
     write_entry(&cache_root, "a", &live_repo, Utc::now());
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("XDG_CACHE_HOME", tmp.path())
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")

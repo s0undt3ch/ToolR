@@ -1,6 +1,8 @@
 //! End-to-end exercise of the toolr self cache surface against a
 //! fixture cache root.
 
+mod common;
+
 use std::fs;
 use std::path::Path;
 
@@ -35,7 +37,7 @@ fn write_entry(
 }
 
 fn cmd_in(tmp: &Path, args: &[&str]) -> Command {
-    let mut cmd = Command::cargo_bin("toolr").unwrap();
+    let mut cmd = common::toolr();
     cmd.env("XDG_CACHE_HOME", tmp)
         .env_remove("HOME")
         .env("TOOLR_NO_CACHE_HINT", "1")

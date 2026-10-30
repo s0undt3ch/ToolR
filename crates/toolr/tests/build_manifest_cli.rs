@@ -2,7 +2,8 @@
 //! installed `toolr` binary via `assert_cmd` so the assertions exercise
 //! the same code path users hit on the command line.
 
-use assert_cmd::Command;
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -43,8 +44,7 @@ fn source_dir_generates_manifest() {
     let tmp = TempDir::new().unwrap();
     let pkg = minimal_plugin(tmp.path(), "mypkg");
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg"])
@@ -79,8 +79,7 @@ fn check_passes_when_manifest_is_in_sync() {
     let tmp = TempDir::new().unwrap();
     let pkg = minimal_plugin(tmp.path(), "mypkg");
     // Generate once, then --check.
-    let generate = Command::cargo_bin("toolr")
-        .unwrap()
+    let generate = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg"])
@@ -88,8 +87,7 @@ fn check_passes_when_manifest_is_in_sync() {
         .unwrap();
     assert!(generate.status.success());
 
-    let check = Command::cargo_bin("toolr")
-        .unwrap()
+    let check = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg", "--check"])
@@ -109,8 +107,7 @@ fn check_emits_diff_and_exits_2_on_drift() {
     // Plant a stale manifest at the expected output path.
     fs::write(pkg.join("toolr-manifest.json"), "{\"stale\": true}\n").unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg", "--check"])
@@ -132,8 +129,7 @@ fn rejects_namespace_package() {
     fs::create_dir_all(&pkg).unwrap();
     // Deliberately no __init__.py.
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "nsp"])
@@ -152,8 +148,7 @@ fn package_positional_conflicts_with_source_dir() {
     let tmp = TempDir::new().unwrap();
     let pkg = minimal_plugin(tmp.path(), "mypkg");
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "mypkg", "--source-dir"])
         .arg(&pkg)
         .output()
@@ -174,8 +169,7 @@ fn python_flag_is_no_longer_accepted() {
     let tmp = TempDir::new().unwrap();
     let pkg = minimal_plugin(tmp.path(), "mypkg");
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg", "--python", "/usr/bin/python3"])
@@ -217,8 +211,7 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
 "#,
     );
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg"])
@@ -264,8 +257,7 @@ def bare(ctx: Context) -> None:
 "#,
     );
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg"])

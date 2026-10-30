@@ -1,9 +1,9 @@
 //! Integration tests for dispatch-time manifest freshness.
 
-use std::fs;
-use std::process::Command;
+mod common;
 
-use assert_cmd::prelude::*;
+use std::fs;
+
 use tempfile::TempDir;
 
 const EXAMPLE_PY: &str = r#"
@@ -56,8 +56,7 @@ fn new_tools_file_appears_in_help_without_explicit_rebuild() {
     // Drop a new `example.py` in tools/ after the manifest was seeded.
     fs::write(tmp.path().join("tools").join("example.py"), EXAMPLE_PY).unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .output()
@@ -109,8 +108,7 @@ fn syntax_error_in_tools_warns_and_serves_cached() {
     )
     .unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .output()
@@ -163,8 +161,7 @@ fn skip_list_argv_does_not_trigger_freshness() {
         vec!["self", "cache", "list"],
         vec!["project", "manifest", "--help"],
     ] {
-        let output = Command::cargo_bin("toolr")
-            .unwrap()
+        let output = common::toolr()
             .args(&argv)
             .current_dir(tmp.path())
             .output()
@@ -222,8 +219,7 @@ fn version_mismatch_without_venv_preserves_third_party_entries() {
     );
     fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .env("TOOLR_VENV_LOCATION", "bogus")
@@ -264,8 +260,7 @@ fn tab_completion_does_not_persist_manifest() {
     // Trigger a completion call. The exact tokens after `__complete` don't
     // matter — completion's only job here is to fire the freshness path
     // via `resolve_manifest_at_tab`, which is responsible for staying in-memory.
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["__complete", tmp.path().to_str().unwrap(), "toolr", ""])
         .current_dir(tmp.path())
         .output()
@@ -344,8 +339,7 @@ def run(ctx: Context, *, env: Environment = Environment.PRODUCTION) -> None:
     )
     .unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .output()
@@ -397,8 +391,7 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
     .unwrap();
 
     // Dispatch falls back to the cached manifest, so `kw` never appears.
-    let help = Command::cargo_bin("toolr")
-        .unwrap()
+    let help = common::toolr()
         .args(["kw", "read", "--help"])
         .current_dir(tmp.path())
         .output()
@@ -412,8 +405,7 @@ def read(ctx: Context, config: Annotated[Path, arg(path_must_exist=True)]) -> No
         "{help:?}"
     );
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["project", "manifest", "rebuild"])
         .current_dir(tmp.path())
         .output()
@@ -455,8 +447,7 @@ def bare(ctx: Context) -> None:
     )
     .unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["project", "manifest", "rebuild"])
         .current_dir(tmp.path())
         .output()
@@ -486,8 +477,7 @@ fn concurrent_dispatches_rebuild_a_stale_manifest_under_the_lock() {
 
     let children: Vec<_> = (0..8)
         .map(|_| {
-            Command::cargo_bin("toolr")
-                .unwrap()
+            common::toolr_std()
                 .arg("--help")
                 .current_dir(tmp.path())
                 .env("XDG_CACHE_HOME", xdg_cache.path())

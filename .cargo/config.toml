@@ -28,9 +28,3 @@ rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
 # transitive deps.
 [alias]
 xtask = "run --quiet --package xtask --"
-
-[env]
-# Every process cargo runs (tests included) skips the repository trust
-# check: integration tests spawn toolr against throwaway repos. Trust tests
-# opt back in with `.env_remove("TOOLR_TRUST_ALL")`.
-TOOLR_TRUST_ALL = "1"

@@ -2,11 +2,12 @@
 //! `tools/.toolr-manifest.json`, and an unreadable manifest never being
 //! silently replaced by an empty command set.
 
+mod common;
+
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
-use assert_cmd::cargo::cargo_bin;
 use tempfile::TempDir;
 
 /// Enough commands that the serialised manifest spans many write calls,
@@ -50,7 +51,7 @@ fn write_stale_manifest(root: &Path) {
 }
 
 fn toolr(root: &Path, args: &[&str]) -> Command {
-    let mut cmd = Command::new(cargo_bin("toolr"));
+    let mut cmd = common::toolr_std();
     cmd.args(args)
         .current_dir(root)
         .env("TOOLR_NO_CACHE_HINT", "1")

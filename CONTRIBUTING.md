@@ -34,6 +34,10 @@ prek install --install-hooks      # pre-commit hooks
 Run `toolr project trust` once in your checkout. toolr won't run this repository's `tools/*.py` until
 you do.
 
+Integration tests start toolr through `common::toolr()` (`crates/toolr/tests/common/mod.rs`), which
+turns the trust check off because every test drives a throwaway repository. Use it instead of
+`Command::cargo_bin("toolr")`. Trust tests use `TrustEnv`, which keeps the check on.
+
 Run the dev binary against the dogfood `tools/` directory:
 
 ```sh

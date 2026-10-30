@@ -8,7 +8,7 @@ mod common;
 use common::VenvFixture;
 
 fn cargo_bin() -> Command {
-    Command::cargo_bin("toolr").unwrap()
+    common::toolr()
 }
 
 #[test]
@@ -44,8 +44,7 @@ fn add_requires_at_least_one_package() {
 #[test]
 fn add_success_path_invokes_uv_add() {
     let fx = VenvFixture::new();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("PATH", &fx.bin_dir)
         .current_dir(&fx.root)
         .args(["project", "venv", "add", "httpx"])

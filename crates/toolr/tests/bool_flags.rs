@@ -1,10 +1,11 @@
 //! End-to-end checks for the boolean flag rules, through the real binary.
 
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 
-use assert_cmd::prelude::*;
 use tempfile::TempDir;
 
 fn project_with(module_source: &str) -> TempDir {
@@ -21,8 +22,7 @@ fn project_with(module_source: &str) -> TempDir {
 }
 
 fn toolr(tmp: &TempDir, args: &[&str]) -> Output {
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .args(args)
         .current_dir(tmp.path())
         .output()
@@ -107,7 +107,7 @@ fn spec_echo_python(dir: &Path) -> PathBuf {
 }
 
 fn run_with_env(root: &Path, python: &Path, verbose_env: Option<&str>, args: &[&str]) -> Output {
-    let mut cmd = Command::cargo_bin("toolr").unwrap();
+    let mut cmd = common::toolr();
     cmd.args(args)
         .current_dir(root)
         .env("TOOLR_PYTHON", python)

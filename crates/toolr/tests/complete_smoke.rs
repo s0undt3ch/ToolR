@@ -1,4 +1,5 @@
-use assert_cmd::Command;
+mod common;
+
 use tempfile::TempDir;
 
 /// Build a tmpdir containing a tools/ directory with one ci.py file and
@@ -33,8 +34,7 @@ def deploy(ctx, env: Literal["staging", "production"]):
     .unwrap();
 
     // Build the manifest in-process so the static_hash matches.
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(tmp.path())
         .arg("__build-static-manifest")
         .assert()
@@ -51,8 +51,7 @@ fn complete_raw(tmp: &TempDir, args: &[&str]) -> String {
     for a in args {
         full.push((*a).to_string());
     }
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(&full)
         .output()
@@ -183,8 +182,7 @@ fn completes_builtins_when_no_tools_dir_anywhere() {
         );
         return;
     }
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(&cwd)
         .args(["__complete", &cwd.to_string_lossy(), ""])
         .output()
@@ -280,8 +278,7 @@ fn completes_help_alongside_leaf_flags() {
 #[test]
 fn self_completion_print_emits_bash_script() {
     let tmp = TempDir::new().unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["self", "completion", "print", "bash"])
         .output()

@@ -12,7 +12,7 @@ mod common;
 use common::VenvFixture;
 
 fn cargo_bin() -> Command {
-    Command::cargo_bin("toolr").unwrap()
+    common::toolr()
 }
 
 /// `--help` lists the new -U / -P flags.
@@ -92,8 +92,7 @@ venv-location = "cache"
 #[test]
 fn lock_success_path_invokes_uv_lock() {
     let fx = VenvFixture::new();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("PATH", &fx.bin_dir)
         .current_dir(&fx.root)
         .args(["project", "venv", "lock"])
@@ -120,8 +119,7 @@ fn lock_success_path_invokes_uv_lock() {
 #[test]
 fn lock_with_dash_u_passes_upgrade_to_uv() {
     let fx = VenvFixture::new();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("PATH", &fx.bin_dir)
         .current_dir(&fx.root)
         .args(["project", "venv", "lock", "-U"])

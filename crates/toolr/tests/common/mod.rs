@@ -10,7 +10,7 @@
 //!     exits 0 for every other subcommand. Logs argv to a file so tests
 //!     can inspect what uv would have been called with.
 //!
-//! Tests run `Command::cargo_bin("toolr").env("PATH", &fx.bin_dir)
+//! Tests run `common::toolr().env("PATH", &fx.bin_dir)
 //! .current_dir(&fx.root)` to make toolr find the stub uv only.
 
 #![allow(dead_code)]
@@ -163,9 +163,9 @@ pub fn hostile_repo(sentinel: &Path, with_pyproject: bool) -> TempDir {
     tmp
 }
 
-/// Isolated toolr state for trust tests: no `TOOLR_TRUST_ALL` (which
-/// `.cargo/config.toml` sets for every cargo-run process) and private
-/// state/cache/data dirs, so the real trust store is never read or written.
+/// Isolated toolr state for trust tests: no `TOOLR_TRUST_ALL`, even one
+/// inherited from the caller's shell, and private state/cache/data dirs, so
+/// the real trust store is never read or written.
 pub struct TrustEnv {
     pub state: TempDir,
     pub cache: TempDir,
@@ -191,4 +191,19 @@ impl TrustEnv {
             .env("TOOLR_NO_CACHE_HINT", "1");
         cmd
     }
+}
+
+/// The toolr binary as tests run it. Every test drives a throwaway repository,
+/// so the trust check is off; trust tests use [`TrustEnv`] instead.
+pub fn toolr() -> assert_cmd::Command {
+    let mut cmd = assert_cmd::Command::cargo_bin("toolr").unwrap();
+    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd
+}
+
+/// [`toolr`] for tests that need a `std::process::Command`.
+pub fn toolr_std() -> std::process::Command {
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
+    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd
 }

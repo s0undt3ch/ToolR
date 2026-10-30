@@ -4,7 +4,6 @@
 
 mod common;
 
-use assert_cmd::Command;
 use predicates::prelude::PredicateBooleanExt;
 use tempfile::TempDir;
 
@@ -50,8 +49,7 @@ fn help_works_with_no_venv_and_shows_first_party_commands() {
     )
     .unwrap();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .assert()
@@ -82,8 +80,7 @@ fn help_builds_statically_with_an_existing_in_tree_venv() {
     // `build_static_manifest_with_venv` arm; no manifest committed.
     std::fs::write(tools.join(".venv").join("pyvenv.cfg"), "home = /usr\n").unwrap();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .assert()
@@ -115,8 +112,7 @@ fn manifest_rebuilds_when_a_venv_appears() {
 
     // First `--help`: no venv → static-only manifest with empty
     // third-party hash. The plugin group is absent.
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .assert()
@@ -147,8 +143,7 @@ fn manifest_rebuilds_when_a_venv_appears() {
     // Force the resolved venv to be this in-tree one so the freshness
     // check globs the fragment we just dropped. Root `--help` lists
     // groups, so the plugin's `plugins` group must now appear.
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .env("TOOLR_VENV_LOCATION", "in-tree")
@@ -199,8 +194,7 @@ fn v1_plugin_is_skipped_with_a_warning() {
     )
     .unwrap();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .env("TOOLR_VENV_LOCATION", "in-tree")
