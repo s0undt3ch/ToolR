@@ -252,8 +252,10 @@ pub fn decide(
     }
     let root = canonical(root);
     store.guard(&root)?;
-    if store.is_trusted(&root).unwrap_or(false) {
-        return Ok(());
+    match store.is_trusted(&root) {
+        Ok(true) => return Ok(()),
+        Ok(false) => {}
+        Err(e) => eprintln!("toolr: warning: could not read the trust store: {e:#}"),
     }
 
     if !mode.never_prompt {
@@ -269,11 +271,16 @@ pub fn decide(
     Err(TrustError::Untrusted(root))
 }
 
+/// `TOOLR_TRUST_ALL=1`, exactly: the automation bypass.
+pub fn trust_all_env() -> bool {
+    std::env::var_os("TOOLR_TRUST_ALL").is_some_and(|v| v == "1")
+}
+
 pub fn require_trust(root: &Path, mode: TrustMode) -> Result<()> {
     let root = fs::canonicalize(root)
         .with_context(|| format!("resolving repository root {}", root.display()))?;
     let store = TrustStore::open_default()?;
-    let all_env = std::env::var_os("TOOLR_TRUST_ALL").is_some_and(|v| v == "1");
+    let all_env = trust_all_env();
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let mut stderr = std::io::stderr();

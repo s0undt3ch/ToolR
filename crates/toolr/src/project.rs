@@ -10,7 +10,7 @@ use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
-use toolr_core::trust::{require_trust, shown, TrustError, TrustMode, TrustStore};
+use toolr_core::trust::{require_trust, shown, trust_all_env, TrustError, TrustMode, TrustStore};
 
 /// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
 /// uv install prompt; output and `venv sync`'s silent exit follow the
@@ -128,9 +128,20 @@ fn project_init(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         quiet,
         quiet || root_quiet,
         yes_all,
-        &TrustStore::open_default()?,
+        init_trust_store().as_ref(),
         &mut |dest| prompt_overwrite_file(dest, &cwd),
     )
+}
+
+/// `None` under `TOOLR_TRUST_ALL=1`, which makes trust irrelevant, or when no
+/// store can be located; init then leaves trust to the sync's own check.
+fn init_trust_store() -> Option<TrustStore> {
+    if trust_all_env() {
+        return None;
+    }
+    TrustStore::open_default()
+        .inspect_err(|e| eprintln!("toolr: warning: could not open the trust store: {e:#}"))
+        .ok()
 }
 
 /// Inner implementation, factored out so the confirm callback can be injected
@@ -144,7 +155,7 @@ pub(crate) fn run_project_init(
     quiet: bool,
     never_prompt: bool,
     yes_all: bool,
-    trust_store: &TrustStore,
+    trust_store: Option<&TrustStore>,
     confirm: &mut dyn FnMut(&Path) -> Result<bool>,
 ) -> Result<ExitCode> {
     let outcome = if force {
@@ -185,8 +196,13 @@ pub(crate) fn run_project_init(
     }
 
     // The user is authoring this repo; trust it before the sync below, which
-    // would otherwise refuse to run.
-    trust_store.trust(cwd)?;
+    // would otherwise refuse to run. The files are already written, so a
+    // failure only warns and leaves the sync's own check to prompt or refuse.
+    if let Some(store) = trust_store {
+        if let Err(e) = store.trust(cwd) {
+            eprintln!("toolr: warning: could not record trust for {}: {e:#}", shown(cwd));
+        }
+    }
 
     if no_sync {
         if !quiet {
@@ -854,7 +870,7 @@ mod tests {
             /*quiet=*/ true,
             /*never_prompt=*/ false,
             /*yes_all=*/ true,
-            &store.store(),
+            Some(&store.store()),
             &mut |_| unreachable!("confirm should not be called when yes_all=true"),
         )
         .unwrap();
@@ -882,7 +898,7 @@ mod tests {
             /*quiet=*/ true,
             /*never_prompt=*/ false,
             /*yes_all=*/ false,
-            &store.store(),
+            Some(&store.store()),
             &mut |_| Ok(false), // always decline
         )
         .unwrap();
@@ -912,7 +928,7 @@ mod tests {
             /*quiet=*/ true,
             /*never_prompt=*/ false,
             /*yes_all=*/ false,
-            &store.store(),
+            Some(&store.store()),
             &mut |dest| {
                 // Approve only pyproject.toml.
                 Ok(dest.ends_with("pyproject.toml"))

@@ -102,7 +102,7 @@ impl VenvFixture {
 }
 
 #[cfg(unix)]
-fn write_executable(path: &Path, body: &str) {
+pub fn write_executable(path: &Path, body: &str) {
     use std::os::unix::fs::PermissionsExt;
     fs::write(path, body).unwrap();
     let mut perms = fs::metadata(path).unwrap().permissions();
@@ -111,7 +111,7 @@ fn write_executable(path: &Path, body: &str) {
 }
 
 #[cfg(not(unix))]
-fn write_executable(path: &Path, body: &str) {
+pub fn write_executable(path: &Path, body: &str) {
     fs::write(path, body).unwrap();
 }
 

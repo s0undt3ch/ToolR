@@ -34,6 +34,3 @@ xtask = "run --quiet --package xtask --"
 # check: integration tests spawn toolr against throwaway repos. Trust tests
 # opt back in with `.env_remove("TOOLR_TRUST_ALL")`.
 TOOLR_TRUST_ALL = "1"
-# `project init` records trust even with the bypass on. Without this, every
-# test run adds records for deleted temp dirs to the developer's trust store.
-XDG_STATE_HOME = { value = "target/test-state", relative = true, force = true }

@@ -11,7 +11,7 @@ use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use tempfile::TempDir;
 
-use common::{TrustEnv, hostile_repo};
+use common::{TrustEnv, hostile_repo, write_executable};
 use toolr_core::cache::Meta;
 
 const REFUSAL: &str = "refusing to run code from an untrusted repository";
@@ -212,19 +212,67 @@ fn quiet_sync_in_untrusted_stray_tools_dir_is_silent() {
 }
 
 #[test]
-fn project_init_records_trust_before_sync() {
+fn project_init_records_trust_and_its_sync_passes_the_gate() {
     let env = TrustEnv::new();
     let dir = TempDir::new().unwrap();
+    let bin = TempDir::new().unwrap();
+    let uv_log = bin.path().join("uv.log");
+    write_executable(
+        &bin.path().join("uv"),
+        &format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> {}\n[ \"$1\" = --version ] && echo 'uv 0.5.0'\nexit 0\n",
+            uv_log.display()
+        ),
+    );
     env.toolr(dir.path())
-        .args(["project", "init", "--no-sync"])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.path().display()))
+        .args(["project", "init", "--python", ">=3.11"])
         .assert()
-        .success();
+        .stderr(contains(REFUSAL).not());
+    let calls = fs::read_to_string(&uv_log).unwrap_or_default();
+    assert!(
+        calls.lines().any(|l| l == "sync"),
+        "uv sync never ran: {calls:?}"
+    );
     let root = fs::canonicalize(dir.path()).unwrap().display().to_string();
     env.toolr(dir.path())
         .args(["self", "trusted"])
         .assert()
         .success()
         .stdout(format!("{root}\n"));
+}
+
+#[test]
+fn project_init_with_unwritable_store_warns_and_succeeds() {
+    use std::os::unix::fs::PermissionsExt;
+    let env = TrustEnv::new();
+    fs::set_permissions(env.state.path(), fs::Permissions::from_mode(0o500)).unwrap();
+    let dir = TempDir::new().unwrap();
+    let assert = env
+        .toolr(dir.path())
+        .args(["project", "init", "--no-sync"])
+        .assert();
+    fs::set_permissions(env.state.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    assert
+        .success()
+        .stderr(contains("warning: could not record trust"));
+    assert!(dir.path().join("tools").join("pyproject.toml").is_file());
+}
+
+#[test]
+fn project_init_under_trust_all_records_nothing() {
+    let env = TrustEnv::new();
+    let dir = TempDir::new().unwrap();
+    env.toolr(dir.path())
+        .env("TOOLR_TRUST_ALL", "1")
+        .args(["project", "init", "--no-sync"])
+        .assert()
+        .success();
+    env.toolr(dir.path())
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout("");
 }
 
 #[test]
