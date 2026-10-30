@@ -31,6 +31,8 @@ xtask = "run --quiet --package xtask --"
 
 # Every process cargo runs (tests included) skips the repository trust
 # check: integration tests spawn toolr against throwaway repos. Trust tests
-# opt back in with `.env_remove("TOOLR_TRUST_ALL")`.
+# opt back in with `.env_remove("TOOLR_TRUST_ALL")`. `project init` records
+# trust even so, which would fill the real trust store with temp dirs.
 [env]
 TOOLR_TRUST_ALL = "1"
+XDG_STATE_HOME = { value = "target/test-state", relative = true, force = true }
