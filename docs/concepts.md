@@ -85,6 +85,12 @@ platform state directory (`~/.local/state/toolr/trust/` on Linux), falling
 back to toolr's data directory where there is none
 (`~/Library/Application Support/toolr/trust/` on macOS).
 
+toolr refuses to use a trust store that sits inside the repository being
+checked, since that repository could ship its own records. Set
+`XDG_STATE_HOME` to a directory outside it. The one exception is a
+repository rooted at your home directory, for example because of a
+personal `~/tools/`: the default store always lives under it.
+
 Trust starts empty. A venv an older toolr built doesn't make its
 repository trusted, and neither does a run under `TOOLR_TRUST_ALL=1`.
 `toolr project init` trusts the directory it writes to.
@@ -105,6 +111,9 @@ from `CI=true`.
 
 Trust doesn't cover:
 
+- A different repository cloned to the path of a trusted one. Trust
+  follows the path, so run `toolr project untrust` before you delete a
+  checkout you won't recreate.
 - A trusted repository that later pulls hostile `tools/*.py` or
   `[tool.uv]` changes.
 - Editor and LSP integrations that import `tools/*.py` themselves.
