@@ -511,7 +511,7 @@ mod test_suite {
         // Platform-specific read operation
         #[cfg(unix)]
         unsafe fn read_pipe(fd: i32, buffer: &mut [u8]) -> i32 {
-            libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) as i32
+            unsafe { libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) as i32 }
         }
 
         #[cfg(windows)]

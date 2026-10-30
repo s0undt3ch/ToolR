@@ -20,7 +20,5 @@
 # rejects them on stable. The pre-existing defaults already match
 # what we want for those knobs, so leaving them out is harmless.
 
-edition = "2021"
-# Formatting style is independent of the language edition, which tracks Cargo.toml.
-style_edition = "2024"
+edition = "2024"
 max_width = 100

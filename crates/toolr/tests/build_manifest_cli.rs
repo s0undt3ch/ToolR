@@ -79,14 +79,14 @@ fn check_passes_when_manifest_is_in_sync() {
     let tmp = TempDir::new().unwrap();
     let pkg = minimal_plugin(tmp.path(), "mypkg");
     // Generate once, then --check.
-    let gen = Command::cargo_bin("toolr")
+    let generate = Command::cargo_bin("toolr")
         .unwrap()
         .args(["self", "build-manifest", "--source-dir"])
         .arg(&pkg)
         .args(["--package", "mypkg"])
         .output()
         .unwrap();
-    assert!(gen.status.success());
+    assert!(generate.status.success());
 
     let check = Command::cargo_bin("toolr")
         .unwrap()

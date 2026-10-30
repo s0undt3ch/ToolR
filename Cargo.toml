@@ -1,10 +1,10 @@
 [workspace]
 members = ["crates/toolr-core", "crates/toolr", "crates/toolr-py", "crates/xtask"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 version = "0.35.1"
-edition = "2021"
+edition = "2024"
 authors = ["Pedro Algarvio <pedro@algarvio.me>"]
 license = "Apache-2.0"
 repository = "https://github.com/s0undt3ch/toolr"
