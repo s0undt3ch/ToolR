@@ -70,7 +70,10 @@ parameters are listed at once. Rewrite each as follows:
   `Enum`.
 - `list[bool]`, `tuple[bool, ...]` and `*flags: bool`: no replacement. Use one `bool = False` flag per
   value.
-- Any other default, including `= None`, is rejected with the "must default to `False`" message.
+- Any other default, including `= None`, a computed value, or a constant imported from another
+  module (`verbose: bool = OFF`): write the literal `verbose: bool = False`. toolr can't read an
+  imported value without running your code, and a constant that turned out to be `True` would
+  bring back the silently ignored default. A constant defined in the same file still works.
 
 A parameter whose annotation is an alias of `bool`, such as `Verbose = Annotated[bool, arg(env="V")]`
 with `verbose: Verbose = False`, is now a flag. It used to take a `true`/`false` value

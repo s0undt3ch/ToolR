@@ -9,8 +9,8 @@ use crate::manifest::{Argument, ArgumentKind};
 pub enum BoolFlagError {
     /// `name: bool = True`; `suggested` is the negated name to use instead.
     DefaultTrue { suggested: String },
-    /// Keyword `bool` with no default.
-    NoDefault,
+    /// Keyword `bool` with no default, or one that isn't `True` or `False`.
+    NotFalseDefault,
     /// Positional or `*args` `bool`.
     NotKeyword,
     /// `bool` nested inside `Optional`, `list` or `tuple`.
@@ -31,9 +31,10 @@ impl BoolFlagError {
                  `Literal[...]`/an `Enum` for more than two states.",
                 cli = suggested.replace('_', "-"),
             ),
-            Self::NoDefault => write!(
+            Self::NotFalseDefault => write!(
                 f,
-                "boolean flags must default to `False`. Write `{argument}: bool = False`."
+                "boolean flags must default to the literal `False`. Write \
+                 `{argument}: bool = False`."
             ),
             Self::NotKeyword => write!(
                 f,
@@ -64,11 +65,11 @@ pub(super) fn check_bool_flag(
                 (ArgumentKind::Positional | ArgumentKind::VarPositional, _) => {
                     BoolFlagError::NotKeyword
                 }
-                (_, None) => BoolFlagError::NoDefault,
                 (_, Some("false")) => return Ok(()),
-                (_, Some(_)) => BoolFlagError::DefaultTrue {
+                (_, Some("true")) => BoolFlagError::DefaultTrue {
                     suggested: negated(&arg.name),
                 },
+                (_, _) => BoolFlagError::NotFalseDefault,
             }
         }
         _ if contains_bool(ty) => BoolFlagError::NotPlainFlag,

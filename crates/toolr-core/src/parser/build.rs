@@ -2150,7 +2150,38 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
     #[test]
     fn kwonly_bool_without_default_rejected() {
         let (error, _) = bool_flag_error("*, verbose: bool");
-        assert_eq!(error, BoolFlagError::NoDefault);
+        assert_eq!(error, BoolFlagError::NotFalseDefault);
+    }
+
+    #[test]
+    fn none_default_suggests_false_not_negated_name() {
+        let (error, msg) = bool_flag_error("*, verbose: bool = None");
+        assert_eq!(error, BoolFlagError::NotFalseDefault);
+        assert!(msg.contains("`verbose: bool = False`"), "{msg}");
+        assert!(!msg.contains("no_verbose"), "{msg}");
+    }
+
+    #[test]
+    fn imported_constant_default_suggests_literal_false() {
+        let errs = type_errors_for(&[
+            ("tools/defaults.py", "OFF = False\n"),
+            (
+                "tools/kw.py",
+                &kw_module(
+                    &format!("{TOOLR_IMPORTS}\nfrom .defaults import OFF"),
+                    "",
+                    "*, verbose: bool = OFF",
+                ),
+            ),
+        ]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        let UnsupportedType::BoolFlag { error, .. } = &errs[0].reason else {
+            panic!("expected BoolFlag, got {:?}", errs[0].reason)
+        };
+        assert_eq!(*error, BoolFlagError::NotFalseDefault);
+        let msg = errs[0].to_string();
+        assert!(msg.contains("literal `False`"), "{msg}");
+        assert!(!msg.contains("no_verbose"), "{msg}");
     }
 
     #[test]
