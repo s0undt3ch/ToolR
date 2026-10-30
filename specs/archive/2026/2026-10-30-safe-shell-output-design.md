@@ -1,6 +1,6 @@
 # Repo-derived strings must be safe to hand to a shell or terminal
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review findings F-01 (critical), F-13 and F-05.
 - **Plan:** [`2026-10-30-safe-shell-output-plan.md`](./2026-10-30-safe-shell-output-plan.md)
 - **Blocks:** `2026-10-30-repo-trust-design.md` (on `feat/repo-trust`)
@@ -62,6 +62,10 @@ New module `toolr_core::text` with:
 - `pub fn strip_control_chars(s: &str) -> String`: replaces each such
   char with a space, then collapses runs of spaces to one. (Replacing with
   a space keeps the word boundaries a stripped `\n` or `\t` used to mark.)
+- `pub fn strip_control_chars_per_line(s: &str) -> String`: strips each
+  line on its own, so clean lines keep their indentation and inner spacing.
+- `pub fn escape_control_chars(s: &str) -> String`: renders each control
+  char as `\u{..}` and leaves the rest alone.
 
 Used by:
 
@@ -71,6 +75,20 @@ Used by:
   dropped, never emitted. It can't be both shown faithfully and kept safe.
 - `main.rs`: each `plugin_warnings` message goes through
   `strip_control_chars` before printing.
+- `cli.rs`: group titles, summaries, descriptions, argument help, metavars
+  and section headings go through `strip_control_chars_per_line` before
+  clap renders them. Choices with control chars are filtered out, and a
+  default with control chars is dropped.
+- Build errors: names and group refs go through `escape_control_chars`.
+
+Names can't be stripped: clap and dispatch use them verbatim, so a cleaned
+name would point at nothing. `Manifest::drop_control_char_names` runs at
+load time, in `main.rs` and in `complete/freshness.rs`, so clap and TAB see
+the same commands. It drops each group whose path has a control char, and
+the whole command when its name, group or any argument identifier (id,
+long flag, aliases, `requires`, `conflicts_with`) has one. Each drop raises
+a `PluginWarningKind::Dropped` warning, held in memory only and never
+written to the manifest.
 
 ### C. The parser rejects them at build time
 
@@ -83,6 +101,8 @@ once, like the other `BuildError`s.
 |---|---|
 | Group name | a control char or whitespace |
 | Command CLI name | a control char or whitespace |
+| Command group reference (`Command.group`) | a control char or whitespace |
+| Argument name (`Argument.name`) | a control char or whitespace |
 | argparse-scanned flag spelling (`Argument.long_flag`) | a control char or whitespace |
 | `Literal` / `Enum` value (`Argument.allowed_values`) | a control char (spaces are allowed) |
 
@@ -94,7 +114,7 @@ Layer A quotes them, and rejecting them would break legitimate values.
 
 ## Scope and compatibility
 
-- **No schema change.** No new manifest fields.
+- **The manifest format is unchanged; the new warning kind is never written.**
 - **Third-party fragments and old manifests** are covered by layer B at
   output time. Layer C only affects manifests built by this version.
 - **Breaking only for names that are already broken:** a group or command
