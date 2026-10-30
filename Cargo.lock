@@ -3121,6 +3121,7 @@ dependencies = [
  "ruff_text_size",
  "serde",
  "serde-saphyr",
+ "tempfile",
  "toml",
  "toolr-core",
 ]
