@@ -93,6 +93,7 @@ def test_example_plugin_wheel_ships_manifest_and_commands(
     assert venv.toolr.is_file(), f"toolr binary not installed at {venv.toolr}"
     env = os.environ.copy()
     env["TOOLR_NO_CACHE_HINT"] = "1"
+    env["TOOLR_TRUST_ALL"] = "1"
     # `toolr --help` runs the manifest-freshness bootstrap, which writes a
     # venv meta sidecar under `$XDG_CACHE_HOME/toolr/`. Sandbox it here
     # like every other cache-touching test does -- otherwise this test

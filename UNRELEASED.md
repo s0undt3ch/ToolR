@@ -86,8 +86,10 @@ message instead of a compile error inside a dependency.
 
 toolr now refuses to run a repository's commands or sync its tools venv until you trust that
 repository once: run `toolr project trust` there, or answer `y` at the prompt. No repository is
-trusted after upgrading, including ones toolr already built a venv for. In CI, set `TOOLR_TRUST_ALL=1`; the
-`s0undt3ch/ToolR` GitHub Action sets it for you. `--help`, tab completion and manifest builds never
-need trust. The mise `enter` hook (`toolr project venv sync --quiet`) never prompts, so in an
-untrusted repository it prints the refusal, while a directory with no `tools/pyproject.toml` still
-exits silently. The interpreter provenance check is removed; repository trust replaces it.
+trusted after upgrading, including ones toolr already built a venv for. In CI, set
+`TOOLR_TRUST_ALL=1`; the `s0undt3ch/ToolR` GitHub Action sets it for you from this release on. An
+older pinned action run with a newer `version:` doesn't, so set `TOOLR_TRUST_ALL: "1"` yourself in
+that case. `--help`, tab completion and manifest builds never need trust. The mise `enter` hook
+(`toolr project venv sync --quiet`) never prompts, so in an untrusted repository it prints the
+refusal, while a directory with no `tools/pyproject.toml` still exits silently. The interpreter
+provenance check is removed; repository trust replaces it.

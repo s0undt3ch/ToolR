@@ -237,7 +237,9 @@ toolr refuses to run a repository's `tools/*.py` or sync its tools venv
 until the repository is trusted. A CI runner has no one to answer the
 prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
 
-- **Using the action?** Do nothing.
+- **Using the action?** Do nothing, as long as the action ref is at least the
+  release that added trust. An older pinned action with a newer `version:`
+  doesn't export it; set it yourself there.
 - **Running `toolr` in CI *without* the action?** Set it yourself. The
   value must be exactly `1`; toolr does not infer trust from `CI=true`.
 

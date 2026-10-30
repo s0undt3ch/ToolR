@@ -84,6 +84,8 @@ SNIPPETS: tuple[Snippet, ...] = (
         f"{CLI_FILES}/project-manifest-rebuild-help.txt",
         ("project", "manifest", "rebuild", "--help"),
     ),
+    Snippet(f"{CLI_FILES}/project-trust-help.txt", ("project", "trust", "--help")),
+    Snippet(f"{CLI_FILES}/project-untrust-help.txt", ("project", "untrust", "--help")),
     Snippet(
         f"{CLI_FILES}/self-completion-print-help.txt",
         ("self", "completion", "print", "--help"),
@@ -94,6 +96,7 @@ SNIPPETS: tuple[Snippet, ...] = (
     ),
     Snippet(f"{CLI_FILES}/self-cache-list-help.txt", ("self", "cache", "list", "--help")),
     Snippet(f"{CLI_FILES}/self-cache-prune-help.txt", ("self", "cache", "prune", "--help")),
+    Snippet(f"{CLI_FILES}/self-trusted-help.txt", ("self", "trusted", "--help")),
     Snippet(
         f"{CLI_FILES}/self-build-manifest-help.txt",
         ("self", "build-manifest", "--help"),
