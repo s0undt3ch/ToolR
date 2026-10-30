@@ -92,10 +92,10 @@ fn defines_django_command_class(module: &ModModule) -> bool {
         if target.id.as_str() != "Command" {
             continue;
         }
-        if let Expr::Name(value) = assign.value.as_ref() {
-            if top_level_classes.contains(value.id.as_str()) {
-                return true;
-            }
+        if let Expr::Name(value) = assign.value.as_ref()
+            && top_level_classes.contains(value.id.as_str())
+        {
+            return true;
         }
     }
     false
@@ -171,10 +171,10 @@ fn visit_stmt(stmt: &Stmt, out: &mut ScannedCommand) {
 /// Walk an expression looking for `.add_argument(...)` calls. We only
 /// need to inspect Calls — argparse usage is always a method call.
 fn visit_expr(expr: &Expr, out: &mut ScannedCommand) {
-    if let Expr::Call(call) = expr {
-        if let Some(arg) = try_extract_argument(call, &mut out.warnings) {
-            out.arguments.push(arg);
-        }
+    if let Expr::Call(call) = expr
+        && let Some(arg) = try_extract_argument(call, &mut out.warnings)
+    {
+        out.arguments.push(arg);
     }
 }
 

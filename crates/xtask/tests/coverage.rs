@@ -85,10 +85,10 @@ fn extract_dunder_all(source: &str) -> Option<Vec<String>> {
 fn extract_section_names(reference: &str) -> Vec<String> {
     let mut names = Vec::new();
     for line in reference.lines() {
-        if let Some(rest) = line.strip_prefix("### `") {
-            if let Some(end) = rest.find('`') {
-                names.push(rest[..end].to_string());
-            }
+        if let Some(rest) = line.strip_prefix("### `")
+            && let Some(end) = rest.find('`')
+        {
+            names.push(rest[..end].to_string());
         }
     }
     names
@@ -165,12 +165,11 @@ fn extract_top_level_keys_under(source: &str, section: &str) -> Vec<String> {
             }
             // Indented `<name>:` with exactly two leading spaces is a
             // key declaration; deeper indents are nested fields.
-            if let Some(rest) = line.strip_prefix("  ") {
-                if !rest.starts_with(char::is_whitespace) {
-                    if let Some(key) = rest.strip_suffix(':') {
-                        keys.push(key.to_string());
-                    }
-                }
+            if let Some(rest) = line.strip_prefix("  ")
+                && !rest.starts_with(char::is_whitespace)
+                && let Some(key) = rest.strip_suffix(':')
+            {
+                keys.push(key.to_string());
             }
         }
     }
@@ -183,10 +182,10 @@ fn extract_top_level_keys_under(source: &str, section: &str) -> Vec<String> {
 fn extract_backticked_names_in_tables(body: &str) -> Vec<String> {
     let mut names = Vec::new();
     for line in body.lines() {
-        if let Some(rest) = line.strip_prefix("| `") {
-            if let Some(end) = rest.find('`') {
-                names.push(rest[..end].to_string());
-            }
+        if let Some(rest) = line.strip_prefix("| `")
+            && let Some(end) = rest.find('`')
+        {
+            names.push(rest[..end].to_string());
         }
     }
     names

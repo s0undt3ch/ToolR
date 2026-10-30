@@ -237,16 +237,16 @@ pub fn run_command_internal(
     })?;
 
     // If there's input, write it to stdin
-    if let Some(input_data) = &config.input {
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(input_data).map_err(|e| {
-                Box::new(CommandExecutionError::new(format!(
-                    "Failed to write to stdin: {e}"
-                )))
-            })?;
-            // Explicitly drop stdin to close it
-            drop(stdin);
-        }
+    if let Some(input_data) = &config.input
+        && let Some(mut stdin) = child.stdin.take()
+    {
+        stdin.write_all(input_data).map_err(|e| {
+            Box::new(CommandExecutionError::new(format!(
+                "Failed to write to stdin: {e}"
+            )))
+        })?;
+        // Explicitly drop stdin to close it
+        drop(stdin);
     }
 
     // Take stdout and stderr pipes — `None` in interactive mode, where

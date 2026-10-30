@@ -41,11 +41,11 @@ impl Docstring {
     pub fn full_description(&self) -> String {
         let mut out = self.short_description.clone();
 
-        if let Some(long) = &self.long_description {
-            if !long.is_empty() {
-                out.push_str("\n\n");
-                out.push_str(long);
-            }
+        if let Some(long) = &self.long_description
+            && !long.is_empty()
+        {
+            out.push_str("\n\n");
+            out.push_str(long);
         }
 
         if !self.examples.is_empty() {
@@ -448,14 +448,14 @@ impl SimpleDocstringParser {
 
             // Google style: a line indented past its entry's opening line continues
             // that entry's description, even when it contains a `:`.
-            if let Some((entry_indent, _, description)) = current.as_mut() {
-                if indent(line) > *entry_indent {
-                    if !description.is_empty() {
-                        description.push(' ');
-                    }
-                    description.push_str(trimmed);
-                    continue;
+            if let Some((entry_indent, _, description)) = current.as_mut()
+                && indent(line) > *entry_indent
+            {
+                if !description.is_empty() {
+                    description.push(' ');
                 }
+                description.push_str(trimmed);
+                continue;
             }
 
             // Parse format: name (type): description

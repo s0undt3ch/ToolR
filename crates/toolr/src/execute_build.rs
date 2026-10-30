@@ -522,10 +522,10 @@ pub(crate) fn relative_path_warning(
 /// Side-effecting wrapper: resolve the invocation cwd and print the note (if
 /// any) to stderr. Called by the spec builders before the runner is spawned.
 fn warn_relative_paths(cmd: &Command, matches: &ArgMatches, repo_root: &Path) {
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Some(msg) = relative_path_warning(cmd, matches, repo_root, &cwd) {
-            eprintln!("{msg}");
-        }
+    if let Ok(cwd) = std::env::current_dir()
+        && let Some(msg) = relative_path_warning(cmd, matches, repo_root, &cwd)
+    {
+        eprintln!("{msg}");
     }
 }
 

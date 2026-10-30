@@ -72,14 +72,12 @@ pub fn verify_interpreter(
         .canonicalize()
         .unwrap_or_else(|_| repo_root.to_path_buf());
     if canon.starts_with(&repo_canon) {
-        if let Some(cache_dir) = cache_dir_for_repo {
-            if let Ok(meta) = Meta::load(cache_dir) {
-                if meta.interpreter_path.as_deref() == Some(canon.as_path())
-                    && meta.interpreter_hash.as_deref() == hash_file(&canon).ok().as_deref()
-                {
-                    return Ok(());
-                }
-            }
+        if let Some(cache_dir) = cache_dir_for_repo
+            && let Ok(meta) = Meta::load(cache_dir)
+            && meta.interpreter_path.as_deref() == Some(canon.as_path())
+            && meta.interpreter_hash.as_deref() == hash_file(&canon).ok().as_deref()
+        {
+            return Ok(());
         }
         // No/mismatched provenance record: accept a real toolr venv (uv- or
         // toolr-built), refuse a planted fake interpreter.

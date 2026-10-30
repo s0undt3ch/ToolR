@@ -74,10 +74,10 @@ pub fn extract_arguments(
     // resolver doesn't see it as an unsupported name.
     for p in &params.kwonlyargs {
         let annotation = p.parameter.annotation.as_deref();
-        if let Some(ann) = annotation {
-            if sources.is_dispatch_command(ann) {
-                continue;
-            }
+        if let Some(ann) = annotation
+            && sources.is_dispatch_command(ann)
+        {
+            continue;
         }
         let kind = classify_keyword_kind(annotation);
         out.push(build_argument(
@@ -195,10 +195,10 @@ fn collect_allowed_values(
     if !allowed.is_empty() {
         return allowed;
     }
-    if let Some(name) = referenced_name(annotation) {
-        if let Some((_module, vals)) = enums.lookup(name, module, all_imports) {
-            allowed = vals;
-        }
+    if let Some(name) = referenced_name(annotation)
+        && let Some((_module, vals)) = enums.lookup(name, module, all_imports)
+    {
+        allowed = vals;
     }
     allowed
 }

@@ -1002,12 +1002,12 @@ impl AttrLine<'_> {
                 }
                 continue;
             }
-            if bytes[i] == b'{' && !is_escaped(bytes, i) {
-                if let Some(len) = attr_list_len(&line[i..]) {
-                    if let Some(kept) = self.apply(i, len, code_end == Some(i))? {
-                        return Ok(kept);
-                    }
-                }
+            if bytes[i] == b'{'
+                && !is_escaped(bytes, i)
+                && let Some(len) = attr_list_len(&line[i..])
+                && let Some(kept) = self.apply(i, len, code_end == Some(i))?
+            {
+                return Ok(kept);
             }
             i += 1;
         }

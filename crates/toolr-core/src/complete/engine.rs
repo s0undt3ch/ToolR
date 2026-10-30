@@ -222,13 +222,13 @@ fn classify_leaf_args<'a>(command: &'a Command, arg_tokens: &[String], prefix: S
     }
     // If the user is past the last fixed positional but there's a
     // trailing variadic, keep completing against that.
-    if let Some(&arg) = positional_args.last() {
-        if matches!(arg.kind, ArgumentKind::VarPositional) {
-            return Slot::Positional {
-                argument: arg,
-                prefix,
-            };
-        }
+    if let Some(&arg) = positional_args.last()
+        && matches!(arg.kind, ArgumentKind::VarPositional)
+    {
+        return Slot::Positional {
+            argument: arg,
+            prefix,
+        };
     }
 
     // No positional candidate to suggest. If the command has any flags,

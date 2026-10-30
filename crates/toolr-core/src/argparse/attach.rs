@@ -56,15 +56,15 @@ pub fn validate_no_collisions(
         let mut seen: HashMap<&str, &str> = HashMap::new();
         for child in children {
             let source = child.dispatched_from.as_deref().unwrap_or("?");
-            if let Some(prev_source) = seen.get(child.name.as_str()) {
-                if *prev_source != source {
-                    return Err(AttachError::Collision {
-                        parent: parent.clone(),
-                        name: child.name.clone(),
-                        a: (*prev_source).into(),
-                        b: source.into(),
-                    });
-                }
+            if let Some(prev_source) = seen.get(child.name.as_str())
+                && *prev_source != source
+            {
+                return Err(AttachError::Collision {
+                    parent: parent.clone(),
+                    name: child.name.clone(),
+                    a: (*prev_source).into(),
+                    b: source.into(),
+                });
             }
             seen.insert(&child.name, source);
         }

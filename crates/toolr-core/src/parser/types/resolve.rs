@@ -82,10 +82,10 @@ pub fn resolve_arguments(
     // arguments slice. Skip the same params here so we don't run the
     // type resolver against a runtime injection slot.
     for p in &params.kwonlyargs {
-        if let Some(ann) = p.parameter.annotation.as_deref() {
-            if sources.is_dispatch_command(ann) {
-                continue;
-            }
+        if let Some(ann) = p.parameter.annotation.as_deref()
+            && sources.is_dispatch_command(ann)
+        {
+            continue;
         }
         resolve_one(
             p.parameter.annotation.as_deref(),
@@ -296,17 +296,16 @@ fn resolve_inner(
             // support above, which is a fixed, narrow, already-tested
             // surface). The root name being a tracked module binding is
             // enough to know exactly what to suggest instead.
-            if let Some(root) = rendered.split('.').next() {
-                if let Some(bound_module) = all_imports
+            if let Some(root) = rendered.split('.').next()
+                && let Some(bound_module) = all_imports
                     .get(module)
                     .and_then(|t| t.resolve_module_binding(root))
-                {
-                    let attr_name = rendered.rsplit('.').next().unwrap_or(&rendered);
-                    return Err(UnsupportedType::UnsupportedShape(format!(
-                        "`{rendered}` isn't supported as a type annotation — please \
-                         `from {bound_module} import {attr_name}` and use `{attr_name}` directly."
-                    )));
-                }
+            {
+                let attr_name = rendered.rsplit('.').next().unwrap_or(&rendered);
+                return Err(UnsupportedType::UnsupportedShape(format!(
+                    "`{rendered}` isn't supported as a type annotation — please \
+                     `from {bound_module} import {attr_name}` and use `{attr_name}` directly."
+                )));
             }
             Err(UnsupportedType::UnknownName(rendered))
         }

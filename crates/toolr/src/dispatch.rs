@@ -142,11 +142,11 @@ pub fn dispatch(
     // Intercept --help / -h before any other routing. Tab-completion
     // invocations (`__complete`) never set help flags, so they pass through
     // immediately.
-    if !matches!(matches.subcommand(), Some(("__complete", _))) {
-        if let Some((resolved_cmd, bin_path, mode)) = resolve_help_target(root, matches, &argv) {
-            help::print(&resolved_cmd, &bin_path, mode);
-            return Ok(ExitCode::SUCCESS);
-        }
+    if !matches!(matches.subcommand(), Some(("__complete", _)))
+        && let Some((resolved_cmd, bin_path, mode)) = resolve_help_target(root, matches, &argv)
+    {
+        help::print(&resolved_cmd, &bin_path, mode);
+        return Ok(ExitCode::SUCCESS);
     }
 
     if let Some(("__complete", sub)) = matches.subcommand() {
@@ -259,17 +259,17 @@ pub fn dispatch(
     // Backfill a fresh `meta.json` for cache entries that predate the
     // sidecar — without this, `toolr self cache list` would silently
     // hide venvs created by older binaries.
-    if let Some(venv) = &venv_dir {
-        if let Some(cache_dir) = venv.parent() {
-            let py_ver = python_version.as_deref().unwrap_or("");
-            if let Err(e) = toolr_core::cache::touch_or_backfill(
-                cache_dir,
-                &repo_root,
-                env!("CARGO_PKG_VERSION"),
-                py_ver,
-            ) {
-                eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
-            }
+    if let Some(venv) = &venv_dir
+        && let Some(cache_dir) = venv.parent()
+    {
+        let py_ver = python_version.as_deref().unwrap_or("");
+        if let Err(e) = toolr_core::cache::touch_or_backfill(
+            cache_dir,
+            &repo_root,
+            env!("CARGO_PKG_VERSION"),
+            py_ver,
+        ) {
+            eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
         }
     }
 

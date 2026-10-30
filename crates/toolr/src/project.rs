@@ -273,10 +273,8 @@ fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
 
     let result = toolr_core::project::ensure_venv_ready(&cwd, consent, opts);
 
-    if quiet {
-        if let Some(code) = venv_sync_unattended_quiet_exit(&result) {
-            return Ok(code);
-        }
+    if quiet && let Some(code) = venv_sync_unattended_quiet_exit(&result) {
+        return Ok(code);
     }
 
     let (resolved, uv) = result?;
@@ -486,29 +484,28 @@ fn pyproject_declares_dependency(pyproject: &Path, package: &str) -> Result<bool
         .and_then(|v| v.as_array())
     {
         for dep in deps {
-            if let Some(s) = dep.as_str() {
-                if dep_name_matches(s, package) {
-                    found = true;
-                    break;
-                }
+            if let Some(s) = dep.as_str()
+                && dep_name_matches(s, package)
+            {
+                found = true;
+                break;
             }
         }
     }
-    if !found {
-        if let Some(opt) = parsed
+    if !found
+        && let Some(opt) = parsed
             .get("project")
             .and_then(|p| p.get("optional-dependencies"))
             .and_then(|v| v.as_table())
-        {
-            for (_extra, list) in opt {
-                if let Some(deps) = list.as_array() {
-                    for dep in deps {
-                        if let Some(s) = dep.as_str() {
-                            if dep_name_matches(s, package) {
-                                found = true;
-                                break;
-                            }
-                        }
+    {
+        for (_extra, list) in opt {
+            if let Some(deps) = list.as_array() {
+                for dep in deps {
+                    if let Some(s) = dep.as_str()
+                        && dep_name_matches(s, package)
+                    {
+                        found = true;
+                        break;
                     }
                 }
             }
