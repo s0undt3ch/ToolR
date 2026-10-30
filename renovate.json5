@@ -105,12 +105,17 @@
 
     // ---- Grouping to cut PR noise ----
     {
-      // rust_version_lockstep.rs fails unless these two move together.
+      // rust_version_lockstep.rs fails unless these two move together. The bump raises the
+      // minimum Rust for sdist builds, so give each release a week before forcing it on users.
       description: "Bump the mise Rust pin and the workspace rust-version together",
       groupName: "Rust toolchain",
       matchManagers: ["mise", "custom.regex"],
       matchDepNames: ["rust"],
       addLabels: ["dependencies:rust"],
+      minimumReleaseAge: "7 days",
+      prBodyNotes: [
+        "This raises the minimum Rust for sdist builds: add an `UNRELEASED.md` line saying so before merging.",
+      ],
     },
     {
       // The three ruff_* crates share one astral-sh/ruff git tag —
