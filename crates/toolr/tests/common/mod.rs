@@ -10,7 +10,7 @@
 //!     exits 0 for every other subcommand. Logs argv to a file so tests
 //!     can inspect what uv would have been called with.
 //!
-//! Tests run `Command::cargo_bin("toolr").env("PATH", &fx.bin_dir)
+//! Tests run `common::toolr().env("PATH", &fx.bin_dir)
 //! .current_dir(&fx.root)` to make toolr find the stub uv only.
 
 #![allow(dead_code)]
@@ -102,7 +102,7 @@ impl VenvFixture {
 }
 
 #[cfg(unix)]
-fn write_executable(path: &Path, body: &str) {
+pub fn write_executable(path: &Path, body: &str) {
     use std::os::unix::fs::PermissionsExt;
     fs::write(path, body).unwrap();
     let mut perms = fs::metadata(path).unwrap().permissions();
@@ -111,6 +111,99 @@ fn write_executable(path: &Path, body: &str) {
 }
 
 #[cfg(not(unix))]
-fn write_executable(path: &Path, body: &str) {
+pub fn write_executable(path: &Path, body: &str) {
     fs::write(path, body).unwrap();
+}
+
+/// A repository whose code drops `sentinel` the moment any of it runs:
+/// `tools/hello.py` writes it at import time, and (with `tools/pyproject.toml`)
+/// a committed in-tree `tools/.venv/bin/python` writes it when executed.
+/// Without `tools/pyproject.toml` toolr never builds a manifest, so one is
+/// built first and left behind as if committed: `toolr hello world` always
+/// resolves, and dispatch is attempted.
+#[cfg(unix)]
+pub fn hostile_repo(sentinel: &Path, with_pyproject: bool) -> TempDir {
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    let sentinel_str = sentinel.display().to_string();
+    fs::write(
+        tools.join("hello.py"),
+        format!(
+            "\"\"\"Hi.\"\"\"\nopen({sentinel_str:?}, \"w\").write(\"pwned\")\n\
+             from toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n\
+             @group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname=\"evil\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
+    )
+    .unwrap();
+    if !with_pyproject {
+        let cache = TempDir::new().unwrap();
+        assert_cmd::Command::cargo_bin("toolr")
+            .unwrap()
+            .current_dir(tmp.path())
+            .env("XDG_CACHE_HOME", cache.path())
+            .arg("--help")
+            .assert()
+            .success();
+        assert!(tools.join(".toolr-manifest.json").is_file());
+        fs::remove_file(tools.join("pyproject.toml")).unwrap();
+    } else {
+        let venv_bin = tools.join(".venv").join("bin");
+        fs::create_dir_all(&venv_bin).unwrap();
+        write_executable(
+            &venv_bin.join("python"),
+            &format!("#!/bin/sh\necho pwned > {sentinel_str}\n"),
+        );
+    }
+    tmp
+}
+
+/// Isolated toolr state for trust tests: no `TOOLR_TRUST_ALL`, even one
+/// inherited from the caller's shell, and private state/cache/data dirs, so
+/// the real trust store is never read or written.
+pub struct TrustEnv {
+    pub state: TempDir,
+    pub cache: TempDir,
+    pub data: TempDir,
+}
+
+impl TrustEnv {
+    pub fn new() -> Self {
+        Self {
+            state: TempDir::new().unwrap(),
+            cache: TempDir::new().unwrap(),
+            data: TempDir::new().unwrap(),
+        }
+    }
+
+    pub fn toolr(&self, cwd: &Path) -> assert_cmd::Command {
+        let mut cmd = assert_cmd::Command::cargo_bin("toolr").unwrap();
+        cmd.current_dir(cwd)
+            .env_remove("TOOLR_TRUST_ALL")
+            .env("XDG_STATE_HOME", self.state.path())
+            .env("XDG_CACHE_HOME", self.cache.path())
+            .env("XDG_DATA_HOME", self.data.path())
+            .env("TOOLR_NO_CACHE_HINT", "1");
+        cmd
+    }
+}
+
+/// The toolr binary as tests run it. Every test drives a throwaway repository,
+/// so the trust check is off; trust tests use [`TrustEnv`] instead.
+pub fn toolr() -> assert_cmd::Command {
+    let mut cmd = assert_cmd::Command::cargo_bin("toolr").unwrap();
+    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd
+}
+
+/// [`toolr`] for tests that need a `std::process::Command`.
+pub fn toolr_std() -> std::process::Command {
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
+    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd
 }

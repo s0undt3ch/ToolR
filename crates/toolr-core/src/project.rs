@@ -6,8 +6,8 @@ use anyhow::{Context, Result};
 
 use crate::cache::meta::Meta;
 use crate::discovery::discover_project_root;
-use crate::hash::hash_file;
 use crate::manifest_build::rebuild_manifest_full;
+use crate::trust::{TrustMode, require_trust};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
     ResolvedVenv, UpgradeMode, compute_repo_key, resolve_venv_path, sync::sync_if_needed,
@@ -26,6 +26,8 @@ pub struct EnsureOpts {
     pub quiet: bool,
     /// Whether to pass `-U` / `-P` flags through to uv.
     pub upgrade: UpgradeMode,
+    /// How to ask for repository trust when the repo isn't trusted yet.
+    pub trust: TrustMode,
 }
 
 impl EnsureOpts {
@@ -41,6 +43,10 @@ impl EnsureOpts {
         self.upgrade = mode;
         self
     }
+    pub fn with_trust(mut self, mode: TrustMode) -> Self {
+        self.trust = mode;
+        self
+    }
 }
 
 /// One-stop "make the venv ready" entrypoint. Returns the resolved venv
@@ -53,6 +59,9 @@ pub fn ensure_venv_ready(
     let repo_root =
         discover_project_root(cwd).context("locating project root for the tools venv")?;
     let resolved = resolve_venv_path(&repo_root).context("resolving the tools venv path")?;
+    // After the static pyproject read, so a stray `tools/` with no pyproject
+    // stays a benign `--quiet` exit; before anything repo-controlled runs.
+    require_trust(&repo_root, opts.trust)?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
     sync_if_needed(
@@ -66,21 +75,21 @@ pub fn ensure_venv_ready(
     .with_context(|| format!("uv sync against {}", tools.display()))?;
     validate_venv(&resolved.venv_dir, &resolved.python).context("validating the synced venv")?;
     if let Err(e) = finalize_sync(&repo_root, &resolved) {
-        eprintln!("toolr: warning: failed to finalize sync (provenance/manifest): {e}");
+        eprintln!("toolr: warning: failed to finalize sync (meta/manifest): {e}");
     }
     Ok((resolved, uv))
 }
 
 /// Resolve the out-of-repo cache directory that holds this repo's
-/// `meta.json` provenance sidecar.
+/// `meta.json` sidecar.
 ///
 /// For cache-located venvs the sidecar lives next to the venv
 /// (`<cache>/<key>/meta.json`, the venv being `<cache>/<key>/venv`). For
-/// in-tree venvs (`tools/.venv`) the venv stays in the repo but its
-/// provenance record must live somewhere the repo cannot write, so it
-/// goes to `$XDG_CACHE_HOME/toolr/<repo-key>/` keyed by a hash of the
-/// canonical repo path.
-pub fn provenance_cache_dir(repo_root: &Path, resolved: &ResolvedVenv) -> Result<PathBuf> {
+/// in-tree venvs (`tools/.venv`) the venv stays in the repo but the
+/// sidecar must live somewhere the repo cannot write, so it goes to
+/// `$XDG_CACHE_HOME/toolr/<repo-key>/` keyed by a hash of the canonical
+/// repo path.
+pub fn meta_cache_dir(repo_root: &Path, resolved: &ResolvedVenv) -> Result<PathBuf> {
     if !resolved.repo_key.is_empty() {
         // Cache-located venv: sidecar sits beside the venv.
         return resolved
@@ -96,24 +105,14 @@ pub fn provenance_cache_dir(repo_root: &Path, resolved: &ResolvedVenv) -> Result
     Ok(base.join(key))
 }
 
-/// Final step of a successful sync: record interpreter provenance in the
-/// out-of-repo `meta.json` and rebuild the manifest so third-party
-/// plugin commands appear immediately (design §2 and §3).
-///
-/// The interpreter is canonicalised and content-hashed; the resulting
-/// record is what `venv::provenance::verify_interpreter` checks at
-/// dispatch time before executing an in-repo interpreter.
+/// Final step of a successful sync: write the out-of-repo `meta.json`
+/// sidecar (repo path, versions, timestamps) and rebuild the manifest so
+/// third-party plugin commands appear immediately (design §2 and §3).
 pub fn finalize_sync(repo_root: &Path, resolved: &ResolvedVenv) -> Result<()> {
-    let cache_dir = provenance_cache_dir(repo_root, resolved)?;
-    let canon_py = resolved
-        .python
-        .canonicalize()
-        .unwrap_or_else(|_| resolved.python.clone());
-    let py_hash = hash_file(&canon_py)
-        .with_context(|| format!("hashing interpreter {}", canon_py.display()))?;
+    let cache_dir = meta_cache_dir(repo_root, resolved)?;
 
     // Preserve created_at when a sidecar already exists; otherwise mint a
-    // fresh one. Either way, stamp the interpreter provenance.
+    // fresh one.
     let meta = match Meta::load(&cache_dir) {
         Ok(existing) => existing,
         Err(_) => Meta::new(
@@ -121,8 +120,7 @@ pub fn finalize_sync(repo_root: &Path, resolved: &ResolvedVenv) -> Result<()> {
             env!("CARGO_PKG_VERSION"),
             &resolved.python_version,
         ),
-    }
-    .with_interpreter(canon_py, py_hash);
+    };
     meta.write(&cache_dir)
         .with_context(|| format!("writing meta.json to {}", cache_dir.display()))?;
 
@@ -188,16 +186,16 @@ mod tests {
     }
 
     #[test]
-    fn provenance_cache_dir_for_cache_venv_is_venv_parent() {
+    fn meta_cache_dir_for_cache_venv_is_venv_parent() {
         // Cache-located venv (`repo_key` non-empty): the sidecar lives
         // next to the venv, never derived from the cache dir.
         let resolved = make_resolved_cache(PathBuf::from("/cache/toolr/abc/venv"), "abc");
-        let dir = provenance_cache_dir(&PathBuf::from("/repo"), &resolved).unwrap();
+        let dir = meta_cache_dir(&PathBuf::from("/repo"), &resolved).unwrap();
         assert_eq!(dir, PathBuf::from("/cache/toolr/abc"));
     }
 
     #[test]
-    fn provenance_cache_dir_for_in_tree_venv_uses_an_out_of_repo_cache_slot() {
+    fn meta_cache_dir_for_in_tree_venv_uses_an_out_of_repo_cache_slot() {
         // In-tree venv (`repo_key` empty): the sidecar must live outside the
         // repo, under `$XDG_CACHE_HOME/toolr/<repo-key>` — exercises the
         // `compute_repo_key` + cache-dir branch.
@@ -211,11 +209,11 @@ mod tests {
             python_version: "3.13".to_string(),
             config: ToolrConfig::default(),
         };
-        let dir = provenance_cache_dir(repo.path(), &resolved);
+        let dir = meta_cache_dir(repo.path(), &resolved);
         let dir = dir.unwrap();
         assert!(
             dir.starts_with(xdg.path().join("toolr")),
-            "in-tree provenance must live under the toolr cache dir, got {dir:?}"
+            "in-tree meta must live under the toolr cache dir, got {dir:?}"
         );
     }
 
@@ -231,12 +229,12 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn finalize_sync_records_provenance_and_rebuilds_manifest() {
+    fn finalize_sync_writes_meta_and_rebuilds_manifest() {
         let (_env, _cache_home) = EnvGuard::temp_cache_home();
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = tempfile::tempdir().unwrap();
-        // A cache-located venv keyed by "abc" so provenance lands next to it.
+        // A cache-located venv keyed by "abc" so the sidecar lands next to it.
         let cache_entry = tmp.path().join("cache-entry");
         let venv_dir = cache_entry.join("venv");
         let bin = venv_dir.join("bin");
@@ -258,11 +256,18 @@ mod tests {
         let resolved = make_resolved_cache(venv_dir.clone(), "abc");
         finalize_sync(&repo_root, &resolved).unwrap();
 
-        // Provenance recorded next to the venv.
+        // Sidecar written next to the venv; no interpreter fields recorded.
         let cache_dir = venv_dir.parent().unwrap();
         let meta = Meta::load(cache_dir).unwrap();
-        assert!(meta.interpreter_path.is_some(), "interpreter_path recorded");
-        assert!(meta.interpreter_hash.is_some(), "interpreter_hash recorded");
+        assert_eq!(meta.repo_path, repo_root);
+        assert!(
+            meta.interpreter_path.is_none(),
+            "interpreter_path not recorded"
+        );
+        assert!(
+            meta.interpreter_hash.is_none(),
+            "interpreter_hash not recorded"
+        );
         // Manifest rebuilt as the final step.
         assert!(tools.join(".toolr-manifest.json").is_file());
     }
@@ -273,7 +278,7 @@ mod tests {
         let (_env, _cache_home) = EnvGuard::temp_cache_home();
         // When a sidecar already exists, finalize_sync takes the
         // `Meta::load -> Ok(existing)` branch and preserves `created_at`
-        // (rather than minting a fresh one), restamping the interpreter.
+        // (rather than minting a fresh one).
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = tempfile::tempdir().unwrap();
@@ -308,6 +313,6 @@ mod tests {
             meta.created_at, created,
             "created_at preserved from the existing sidecar"
         );
-        assert!(meta.interpreter_path.is_some(), "interpreter restamped");
+        assert!(meta.interpreter_path.is_none());
     }
 }

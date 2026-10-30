@@ -6,17 +6,6 @@ use anyhow::Result;
 use blake3::Hasher;
 use walkdir::WalkDir;
 
-/// blake3-hash the raw bytes of a single file and return the hex digest.
-/// Used to fingerprint an interpreter for provenance verification.
-pub fn hash_file(path: &Path) -> Result<String> {
-    // `path` is an internal interpreter path resolved by toolr, not
-    // untrusted external input.
-    let bytes = std::fs::read(path)?; // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
-    let mut hasher = Hasher::new();
-    hasher.update(&bytes);
-    Ok(hasher.finalize().to_hex().to_string())
-}
-
 /// Hash all `*.py` files under `tools_dir`. Path order is deterministic
 /// (sorted) so the result is reproducible across runs and machines.
 pub fn hash_tools_dir(tools_dir: &Path) -> Result<String> {
@@ -109,18 +98,6 @@ mod tests {
             hash_tools_dir(a.path()).unwrap(),
             hash_tools_dir(b.path()).unwrap()
         );
-    }
-
-    #[test]
-    fn hash_file_is_deterministic_and_content_sensitive() {
-        let tmp = TempDir::new().unwrap();
-        let a = tmp.path().join("a");
-        let b = tmp.path().join("b");
-        std::fs::write(&a, b"hello").unwrap();
-        std::fs::write(&b, b"hello").unwrap();
-        assert_eq!(hash_file(&a).unwrap(), hash_file(&b).unwrap());
-        std::fs::write(&b, b"world").unwrap();
-        assert_ne!(hash_file(&a).unwrap(), hash_file(&b).unwrap());
     }
 
     /// #544: with `venv-location = "in-tree"` the venv lives at

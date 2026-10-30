@@ -8,7 +8,8 @@
 //! metadata round-trips through the manifest and into clap's
 //! `conflicts_with_all`, the dispatch surface our users actually hit.
 
-use assert_cmd::Command;
+mod common;
+
 use tempfile::TempDir;
 
 const MANIFEST: &str = r#"{
@@ -65,8 +66,7 @@ fn fixture() -> TempDir {
 #[test]
 fn conflicting_flags_are_rejected_at_parse_time() {
     let tmp = fixture();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["probe", "follow", "--follow", "--no-follow"])
         .output()
@@ -103,8 +103,7 @@ fn either_flag_alone_passes_clap_parse() {
     // doesn't depend on a working tools venv.
     for flag in ["--follow", "--no-follow"] {
         let tmp = fixture();
-        let output = Command::cargo_bin("toolr")
-            .unwrap()
+        let output = common::toolr()
             .current_dir(tmp.path())
             .args(["probe", "follow", flag])
             .output()
@@ -124,8 +123,7 @@ fn help_still_renders_with_conflicts_with_metadata() {
     // manifest here cross-references the names correctly, but we
     // verify `--help` builds the command tree cleanly all the same.
     let tmp = fixture();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["probe", "follow", "--help"])
         .output()

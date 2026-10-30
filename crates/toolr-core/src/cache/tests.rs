@@ -17,26 +17,13 @@ fn sample_meta() -> Meta {
 }
 
 #[test]
-fn loads_v1_sidecar_without_provenance_fields() {
+fn loads_v1_sidecar_without_interpreter_fields() {
     let tmp = TempDir::new().unwrap();
     let v1 = r#"{"schema_version":1,"repo_path":"/r","toolr_version":"0","python_version":"3.13","created_at":"2026-01-01T00:00:00Z","last_used_at":"2026-01-01T00:00:00Z"}"#;
     std::fs::write(tmp.path().join("meta.json"), v1).unwrap();
     let m = Meta::load(tmp.path()).unwrap();
     assert!(m.interpreter_path.is_none());
     assert!(m.interpreter_hash.is_none());
-}
-
-#[test]
-fn with_interpreter_records_provenance() {
-    let m = Meta::new("/r", "0", "3.13").with_interpreter(
-        PathBuf::from("/r/tools/.venv/bin/python"),
-        "deadbeef".into(),
-    );
-    assert_eq!(
-        m.interpreter_path,
-        Some(PathBuf::from("/r/tools/.venv/bin/python"))
-    );
-    assert_eq!(m.interpreter_hash.as_deref(), Some("deadbeef"));
 }
 
 #[test]

@@ -23,7 +23,7 @@ struct Project {
 
 impl Project {
     fn toolr(&self, path: &str) -> Command {
-        let mut cmd = Command::cargo_bin("toolr").unwrap();
+        let mut cmd = common::toolr();
         cmd.current_dir(&self.fx.root)
             .env("PATH", path)
             .env("XDG_CACHE_HOME", &self.cache)

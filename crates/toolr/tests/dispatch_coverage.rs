@@ -20,7 +20,8 @@
 //! - `output_options_from_matches()` flag propagation (366-390) — verified
 //!   indirectly by inspecting the spec the Python runner receives.
 
-use assert_cmd::Command;
+mod common;
+
 use tempfile::TempDir;
 
 // --------------------------------------------------------------------
@@ -66,11 +67,7 @@ fn no_subcommand_prints_root_help_and_exits_success() {
     // falls through every `if let Some(...) = matches.subcommand()` check
     // and lands in the `root.print_help()?` branch.
     let tmp = fixture_with_manifest(SINGLE_GROUP_MANIFEST);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(tmp.path())
-        .output()
-        .unwrap();
+    let output = common::toolr().current_dir(tmp.path()).output().unwrap();
     assert!(
         output.status.success(),
         "stderr:\n{}",
@@ -90,11 +87,7 @@ fn group_without_leaf_command_prints_help_and_exits_nonzero() {
     // `toolr ci` — a namespace with no subcommand — must show the group's
     // help rather than silently doing nothing (matches `self`/`project`).
     let tmp = fixture_with_manifest(SINGLE_GROUP_MANIFEST);
-    let assert = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(tmp.path())
-        .arg("ci")
-        .assert();
+    let assert = common::toolr().current_dir(tmp.path()).arg("ci").assert();
     let output = assert.get_output();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -118,8 +111,7 @@ fn group_without_leaf_command_prints_help_and_exits_nonzero() {
 fn self_completion_print_rejects_unknown_shell() {
     // Clap's value-parser on the `<shell>` arg should reject anything
     // outside the known set with a non-zero exit and a stderr message.
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .args(["self", "completion", "print", "tcsh"])
         .assert()
         .failure();
@@ -132,8 +124,7 @@ fn self_completion_install_writes_script_under_xdg_data_home() {
     let xdg = tmp.path().join("xdg-data");
     let home = tmp.path().join("home");
     std::fs::create_dir_all(&home).unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("HOME", &home)
         .env("XDG_DATA_HOME", &xdg)
         .env_remove("XDG_CONFIG_HOME")
@@ -163,8 +154,7 @@ fn self_completion_install_second_run_is_idempotent_or_force_required() {
     let xdg = tmp.path().join("xdg-data");
     let home = tmp.path().join("home");
     std::fs::create_dir_all(&home).unwrap();
-    let first = Command::cargo_bin("toolr")
-        .unwrap()
+    let first = common::toolr()
         .env("HOME", &home)
         .env("XDG_DATA_HOME", &xdg)
         .env_remove("XDG_CONFIG_HOME")
@@ -173,8 +163,7 @@ fn self_completion_install_second_run_is_idempotent_or_force_required() {
         .unwrap();
     assert!(first.status.success());
 
-    let second = Command::cargo_bin("toolr")
-        .unwrap()
+    let second = common::toolr()
         .env("HOME", &home)
         .env("XDG_DATA_HOME", &xdg)
         .env_remove("XDG_CONFIG_HOME")
@@ -204,8 +193,7 @@ fn self_completion_install_force_overwrites() {
     std::fs::create_dir_all(&target_dir).unwrap();
     std::fs::write(target_dir.join("toolr"), "# stale\n").unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("HOME", &home)
         .env("XDG_DATA_HOME", &xdg)
         .env_remove("XDG_CONFIG_HOME")
@@ -236,11 +224,7 @@ fn root_help_advertises_every_output_option() {
     // `--no-output-timeout-secs`. The clap definitions live in cli.rs
     // but the dispatcher binds them — this test guards against a regression
     // where a flag goes missing from one side without the other.
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
-        .arg("--help")
-        .output()
-        .unwrap();
+    let output = common::toolr().arg("--help").output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     for needle in [
         "--debug",
@@ -329,8 +313,7 @@ fn dispatcher_flag_typed_after_leaf_name_is_rejected() {
     // and forwarded to the wrapped command instead of routing to the
     // dispatcher's own flag.
     let tmp = fixture_with_manifest(JENKINS_JOB_MANIFEST);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["jenkins", "job", "wrapup_company", "12345", "--dry-run"])
         .output()
@@ -360,8 +343,7 @@ fn dispatcher_flag_typed_before_leaf_name_still_parses_past_the_guard() {
     // in this fixture, so the run still fails downstream; we only assert
     // it gets past the new rejection message.
     let tmp = fixture_with_manifest(JENKINS_JOB_MANIFEST);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["jenkins", "job", "--dry-run", "wrapup_company", "12345"])
         .output()

@@ -226,6 +226,33 @@ toolr project manifest rebuild --help
 --8<-- "docs/cli-files/project-manifest-rebuild-help.txt"
 ```
 
+### `toolr project trust [PATH]` {#project-trust}
+
+Trust the repository at `PATH` (default: the current directory's project
+root), so toolr will run its `tools/*.py` and sync its tools venv. Prints the
+trusted root. See [Repository trust](concepts.md#repository-trust).
+
+```sh
+toolr project trust --help
+```
+
+```text
+--8<-- "docs/cli-files/project-trust-help.txt"
+```
+
+### `toolr project untrust [PATH]` {#project-untrust}
+
+Remove the trust record for the repository at `PATH`. Prints the root when a
+record was removed; says so on stderr when there was none.
+
+```sh
+toolr project untrust --help
+```
+
+```text
+--8<-- "docs/cli-files/project-untrust-help.txt"
+```
+
 ## `toolr self ...`
 
 Operations on toolr itself (not on the project).
@@ -291,6 +318,19 @@ toolr self cache prune --help
 
 ```text
 --8<-- "docs/cli-files/self-cache-prune-help.txt"
+```
+
+### `toolr self trusted` {#self-trusted}
+
+List the trusted repositories. A root whose path no longer exists is marked
+`(missing)`; `--prune` removes those records instead.
+
+```sh
+toolr self trusted --help
+```
+
+```text
+--8<-- "docs/cli-files/self-trusted-help.txt"
 ```
 
 ### `toolr self build-manifest <package>` {#self-build-manifest}

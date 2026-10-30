@@ -10,6 +10,7 @@ use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
+use toolr_core::trust::{TrustError, TrustMode, TrustStore, require_trust, shown, trust_all_env};
 
 /// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
 /// uv install prompt; output and `venv sync`'s silent exit follow the
@@ -33,8 +34,37 @@ pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCo
             Some(("rebuild", _)) => manifest_rebuild(),
             _ => unreachable!("clap enforces subcommand_required"),
         },
+        Some(("trust", trust_m)) => project_trust(trust_m),
+        Some(("untrust", untrust_m)) => project_untrust(untrust_m),
         _ => unreachable!("clap enforces subcommand_required"),
     }
+}
+
+fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
+    let start = match matches.get_one::<PathBuf>("path") {
+        Some(p) => p.clone(),
+        None => std::env::current_dir()?,
+    };
+    Ok(toolr_core::discovery::discover_project_root(&start)?)
+}
+
+fn project_trust(matches: &ArgMatches) -> Result<ExitCode> {
+    let root = root_from_path_arg(matches)?;
+    let store = TrustStore::open_default()?;
+    let record = store.trust(&root)?;
+    println!("{}", shown(&record.repo_path));
+    Ok(ExitCode::SUCCESS)
+}
+
+fn project_untrust(matches: &ArgMatches) -> Result<ExitCode> {
+    let root = root_from_path_arg(matches)?;
+    let store = TrustStore::open_default()?;
+    if store.untrust(&root)? {
+        println!("{}", shown(&root));
+    } else {
+        eprintln!("toolr: {} was not trusted", shown(&root));
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Emit the migration hint for `toolr project deps <…>`. Returns exit
@@ -98,8 +128,20 @@ fn project_init(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         quiet,
         quiet || root_quiet,
         yes_all,
+        init_trust_store().as_ref(),
         &mut |dest| prompt_overwrite_file(dest, &cwd),
     )
+}
+
+/// `None` under `TOOLR_TRUST_ALL=1`, which makes trust irrelevant, or when no
+/// store can be located; init then leaves trust to the sync's own check.
+fn init_trust_store() -> Option<TrustStore> {
+    if trust_all_env() {
+        return None;
+    }
+    TrustStore::open_default()
+        .inspect_err(|e| eprintln!("toolr: warning: could not open the trust store: {e:#}"))
+        .ok()
 }
 
 /// Inner implementation, factored out so the confirm callback can be injected
@@ -113,6 +155,7 @@ pub(crate) fn run_project_init(
     quiet: bool,
     never_prompt: bool,
     yes_all: bool,
+    trust_store: Option<&TrustStore>,
     confirm: &mut dyn FnMut(&Path) -> Result<bool>,
 ) -> Result<ExitCode> {
     let outcome = if force {
@@ -152,6 +195,18 @@ pub(crate) fn run_project_init(
         }
     }
 
+    // The user is authoring this repo; trust it before the sync below, which
+    // would otherwise refuse to run. The files are already written, so a
+    // failure only warns and leaves the sync's own check to prompt or refuse.
+    if let Some(store) = trust_store
+        && let Err(e) = store.trust(cwd)
+    {
+        eprintln!(
+            "toolr: warning: could not record trust for {}: {e:#}",
+            shown(cwd)
+        );
+    }
+
     if no_sync {
         if !quiet {
             println!("toolr: skipping `uv sync` (--no-sync)");
@@ -168,7 +223,9 @@ pub(crate) fn run_project_init(
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         cwd,
         consent,
-        toolr_core::project::EnsureOpts::default().with_force_sync(true),
+        toolr_core::project::EnsureOpts::default()
+            .with_force_sync(true)
+            .with_trust(TrustMode { never_prompt }),
     )?;
     if !quiet {
         println!(
@@ -269,7 +326,10 @@ fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let opts = toolr_core::project::EnsureOpts::default()
         .with_force_sync(force)
         .with_quiet(quiet)
-        .with_upgrade(upgrade);
+        .with_upgrade(upgrade)
+        .with_trust(TrustMode {
+            never_prompt: quiet || root_quiet,
+        });
 
     let result = toolr_core::project::ensure_venv_ready(&cwd, consent, opts);
 
@@ -341,7 +401,11 @@ fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
-        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+        toolr_core::project::EnsureOpts::default()
+            .with_quiet(quiet)
+            .with_trust(TrustMode {
+                never_prompt: quiet || root_quiet,
+            }),
     )?;
 
     let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
@@ -372,7 +436,11 @@ fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
-        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+        toolr_core::project::EnsureOpts::default()
+            .with_quiet(quiet)
+            .with_trust(TrustMode {
+                never_prompt: quiet || root_quiet,
+            }),
     )?;
 
     let status = toolr_core::venv::run_uv_add(&uv, &tools_dir, &resolved, &specs, quiet)?;
@@ -418,7 +486,11 @@ fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let (resolved, uv) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
-        toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+        toolr_core::project::EnsureOpts::default()
+            .with_quiet(quiet)
+            .with_trust(TrustMode {
+                never_prompt: quiet || root_quiet,
+            }),
     )?;
 
     let status = toolr_core::venv::run_uv_remove(&uv, &tools_dir, &resolved, &packages, quiet)?;
@@ -445,6 +517,13 @@ fn venv_sync_unattended_quiet_exit(
     result: &Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)>,
 ) -> Option<ExitCode> {
     let err = result.as_ref().err()?;
+    // The refusal names the repository path, which could contain a marker.
+    if err
+        .chain()
+        .any(|e| e.downcast_ref::<TrustError>().is_some())
+    {
+        return None;
+    }
     let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
     let joined = chain.join(" :: ");
 
@@ -453,8 +532,11 @@ fn venv_sync_unattended_quiet_exit(
     // already produces — keep this list aligned with:
     //   - discover_project_root NotFound        → "locating project root"
     //   - resolve_venv_path missing pyproject   → "resolving the tools venv path"
+    //     (both run before the trust check, so an untrusted stray `tools/`
+    //     still exits quietly)
     //   - ensure_uv with never_prompt=true      → UvError::UserRefusedInstall
     //     whose Display is "user declined uv install; ..."
+    // A trust refusal must never match: `--quiet` would turn it into exit 0.
     let benign_markers = [
         "locating project root",
         "resolving the tools venv path",
@@ -550,7 +632,9 @@ fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
     let (resolved, _) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
-        toolr_core::project::EnsureOpts::default(),
+        toolr_core::project::EnsureOpts::default().with_trust(TrustMode {
+            never_prompt: root_quiet,
+        }),
     )?;
 
     let shell = default_shell_path();
@@ -582,6 +666,12 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         // validate, then run. Needs no uv / consent / network.
         let repo_root = toolr_core::discovery::discover_project_root(&cwd)
             .context("locating project root for the tools venv")?;
+        require_trust(
+            &repo_root,
+            TrustMode {
+                never_prompt: quiet || root_quiet,
+            },
+        )?;
         let resolved = toolr_core::venv::resolve_venv_path(&repo_root)
             .context("resolving the tools venv path")?;
         let tools = repo_root.join("tools");
@@ -608,7 +698,11 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         let (resolved, _uv) = toolr_core::project::ensure_venv_ready(
             &cwd,
             consent,
-            toolr_core::project::EnsureOpts::default().with_quiet(quiet),
+            toolr_core::project::EnsureOpts::default()
+                .with_quiet(quiet)
+                .with_trust(TrustMode {
+                    never_prompt: quiet || root_quiet,
+                }),
         )?;
         resolved
     };
@@ -701,6 +795,28 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    #[test]
+    fn trust_refusal_is_never_a_benign_quiet_exit() {
+        let path = PathBuf::from("/x/locating project root/resolving the tools venv path");
+        for err in [
+            TrustError::Untrusted(path.clone()),
+            TrustError::StoreInsideRepo(path.clone()),
+        ] {
+            let bare: Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> =
+                Err(anyhow::anyhow!(err));
+            assert!(venv_sync_unattended_quiet_exit(&bare).is_none());
+            let wrapped = bare.context("user declined uv install");
+            assert!(venv_sync_unattended_quiet_exit(&wrapped).is_none());
+        }
+    }
+
+    #[test]
+    fn missing_pyproject_is_a_benign_quiet_exit() {
+        let result: Result<(toolr_core::venv::ResolvedVenv, toolr_core::uv::UvBinary)> =
+            Err(anyhow::anyhow!("no pyproject")).context("resolving the tools venv path");
+        assert!(venv_sync_unattended_quiet_exit(&result).is_some());
+    }
+
     /// Mutating SHELL / PATH and observing their effects requires
     /// process-wide env coordination — serialise so cargo's parallel
     /// runner doesn't race.
@@ -727,6 +843,19 @@ mod tests {
         r
     }
 
+    /// A trust store outside the scaffolded repo, so tests never touch the
+    /// real one.
+    struct TrustDir(TempDir);
+
+    impl TrustDir {
+        fn new() -> Self {
+            Self(TempDir::new().unwrap())
+        }
+        fn store(&self) -> TrustStore {
+            TrustStore::at(self.0.path().join("trust"))
+        }
+    }
+
     fn init_opts() -> ScaffoldOptions {
         ScaffoldOptions {
             requires_python: ">=3.11".into(),
@@ -742,6 +871,7 @@ mod tests {
         let tools = tmp.path().join("tools");
         fs::create_dir(&tools).unwrap();
         fs::write(tools.join("pyproject.toml"), "# stale").unwrap();
+        let store = TrustDir::new();
 
         let opts = init_opts();
         run_project_init(
@@ -752,12 +882,14 @@ mod tests {
             /*quiet=*/ true,
             /*never_prompt=*/ false,
             /*yes_all=*/ true,
+            Some(&store.store()),
             &mut |_| unreachable!("confirm should not be called when yes_all=true"),
         )
         .unwrap();
 
         let content = fs::read_to_string(tools.join("pyproject.toml")).unwrap();
         assert!(content.contains(r#"name = "tools""#));
+        assert!(store.store().is_trusted(tmp.path()).unwrap());
     }
 
     /// run_project_init with a confirm closure that says "no" leaves conflicts intact.
@@ -767,6 +899,7 @@ mod tests {
         let tools = tmp.path().join("tools");
         fs::create_dir(&tools).unwrap();
         fs::write(tools.join("pyproject.toml"), "# stale").unwrap();
+        let store = TrustDir::new();
 
         let opts = init_opts();
         run_project_init(
@@ -777,6 +910,7 @@ mod tests {
             /*quiet=*/ true,
             /*never_prompt=*/ false,
             /*yes_all=*/ false,
+            Some(&store.store()),
             &mut |_| Ok(false), // always decline
         )
         .unwrap();
@@ -795,6 +929,7 @@ mod tests {
         fs::create_dir(&tools).unwrap();
         fs::write(tools.join("pyproject.toml"), "# stale-pyproject").unwrap();
         fs::write(tools.join(".gitignore"), "# stale-gitignore").unwrap();
+        let store = TrustDir::new();
 
         let opts = init_opts();
         run_project_init(
@@ -805,6 +940,7 @@ mod tests {
             /*quiet=*/ true,
             /*never_prompt=*/ false,
             /*yes_all=*/ false,
+            Some(&store.store()),
             &mut |dest| {
                 // Approve only pyproject.toml.
                 Ok(dest.ends_with("pyproject.toml"))

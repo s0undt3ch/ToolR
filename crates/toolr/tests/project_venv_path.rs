@@ -1,4 +1,5 @@
-use assert_cmd::Command;
+mod common;
+
 use tempfile::TempDir;
 
 fn write_pyproject(tools: &std::path::Path, body: &str) {
@@ -13,8 +14,7 @@ fn project_venv_path_prints_cache_path_by_default() {
         &tmp.path().join("tools"),
         "[project]\nname=\"x\"\nversion=\"0\"\n",
     );
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "path"])
         .output()
@@ -48,8 +48,7 @@ fn project_venv_path_prints_in_tree_path_when_configured() {
         &tmp.path().join("tools"),
         "[project]\nname=\"x\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
     );
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "path"])
         .output()
@@ -81,8 +80,7 @@ fn project_venv_path_prints_in_tree_path_when_configured() {
 fn project_venv_path_requires_pyproject() {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir(tmp.path().join("tools")).unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "path"])
         .output()

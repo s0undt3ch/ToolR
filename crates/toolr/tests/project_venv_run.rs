@@ -1,4 +1,5 @@
-use assert_cmd::Command;
+mod common;
+
 use tempfile::TempDir;
 
 /// A tools/pyproject.toml pinned to an in-tree venv so the resolved venv
@@ -16,8 +17,7 @@ fn write_tools(repo: &std::path::Path, pyproject: &str) {
 fn no_sync_errors_when_venv_missing() {
     let tmp = TempDir::new().unwrap();
     write_tools(tmp.path(), IN_TREE_PYPROJECT);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args([
             "project",
@@ -40,8 +40,7 @@ fn no_sync_errors_when_venv_missing() {
 fn requires_a_command() {
     let tmp = TempDir::new().unwrap();
     write_tools(tmp.path(), IN_TREE_PYPROJECT);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "run"])
         .output()
@@ -52,8 +51,7 @@ fn requires_a_command() {
 
 #[test]
 fn help_mentions_no_sync() {
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["project", "venv", "run", "--help"])
         .output()
         .unwrap();
@@ -147,8 +145,7 @@ fn no_sync_errors_when_stale() {
     std::fs::write(venv.join(".toolr-sync-stamp"), b"").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(20));
     std::fs::write(tmp.path().join("tools").join("uv.lock"), b"lock").unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "run", "--no-sync", "--", "python"])
         .output()
@@ -167,8 +164,7 @@ fn no_sync_errors_when_interpreter_is_gone() {
     let python = venv.join("bin").join("python");
     std::fs::remove_file(&python).unwrap();
     std::os::unix::fs::symlink(tmp.path().join("pruned").join("python3.13"), &python).unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "run", "--no-sync", "--", "python"])
         .output()
@@ -191,8 +187,7 @@ fn no_sync_fresh_passes_exit_code_through() {
     let tmp = TempDir::new().unwrap();
     let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nexit 3\n");
     mark_fresh(tmp.path(), &venv);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "run", "--no-sync", "--", "python"])
         .output()
@@ -216,8 +211,7 @@ fn no_sync_passes_args_verbatim() {
     );
     let venv = fake_in_tree_venv(tmp.path(), &body);
     mark_fresh(tmp.path(), &venv);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args([
             "project",
@@ -246,8 +240,7 @@ fn not_found_command_gets_nudge() {
     let tmp = TempDir::new().unwrap();
     let venv = fake_in_tree_venv_cross_platform(tmp.path(), true);
     mark_fresh(tmp.path(), &venv);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args([
             "project",
@@ -283,8 +276,7 @@ fn no_sync_errors_when_venv_is_incomplete() {
     let tmp = TempDir::new().unwrap();
     let venv = fake_in_tree_venv_cross_platform(tmp.path(), /* with_toolr_pkg */ false);
     mark_fresh(tmp.path(), &venv);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "run", "--no-sync", "--", "python"])
         .output()
@@ -310,8 +302,7 @@ fn no_sync_errors_when_base_python_is_removed() {
     )
     .unwrap();
     mark_fresh(tmp.path(), &venv);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "run", "--no-sync", "--", "python"])
         .output()
@@ -342,8 +333,7 @@ fn non_executable_command_surfaces_spawn_error_not_nudge() {
     std::fs::write(&blocked, "not executable\n").unwrap();
     std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o644)).unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args([
             "project",
@@ -372,8 +362,7 @@ fn project_init_next_steps_mention_venv_run() {
     let tmp = TempDir::new().unwrap();
     // --no-sync keeps this offline and fast; we only assert on the
     // scaffolding next-steps output, not on a real sync.
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "init", "--no-sync"])
         .output()
@@ -405,8 +394,7 @@ fn runs_in_a_real_synced_venv() {
         "[project]\nname=\"toolr-tools\"\nversion=\"0\"\nrequires-python=\">=3.11\"\ndependencies=[\"toolr\"]\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
     );
     // Default path auto-syncs, then runs `python` from the venv.
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args([
             "project",

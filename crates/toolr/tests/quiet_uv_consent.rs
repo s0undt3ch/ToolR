@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::Write;
 use std::os::fd::FromRawFd;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 
 use common::VenvFixture;
 use tempfile::TempDir;
@@ -43,7 +43,7 @@ fn run_with_tty_stdin(cwd: &Path, args: &[&str]) -> Output {
     // "install" and download uv.
     master.write_all(b"n\n").unwrap();
 
-    let child = Command::new(assert_cmd::cargo::cargo_bin("toolr"))
+    let child = common::toolr_std()
         .args(args)
         .current_dir(cwd)
         .env("PATH", empty.path())

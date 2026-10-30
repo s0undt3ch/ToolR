@@ -1,3 +1,5 @@
+mod common;
+
 use std::path::PathBuf;
 
 use assert_cmd::Command;
@@ -14,8 +16,7 @@ fn fixture_with_manifest(json: &str) -> TempDir {
 #[test]
 fn version_flag_works_with_no_project() {
     let tmp = TempDir::new().unwrap();
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(tmp.path())
         .arg("--version")
         .assert()
@@ -41,8 +42,7 @@ fn help_lists_groups_from_manifest() {
         ]
     }"#;
     let tmp = fixture_with_manifest(json);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .arg("--help")
         .output()
@@ -137,8 +137,7 @@ fn running_a_user_command_invokes_python_runner() {
     };
     let tmp = TempDir::new().unwrap();
     write_tools_demo(tmp.path());
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .env("TOOLR_PYTHON", &python)
         .env("PYTHONPATH", tmp.path())
@@ -160,8 +159,7 @@ fn project_manifest_rebuild_help_lists_command() {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");
     std::fs::create_dir(&tools).unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "manifest", "--help"])
         .output()
@@ -175,8 +173,7 @@ fn project_manifest_rebuild_help_lists_command() {
 
 #[test]
 fn self_build_manifest_help_works() {
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .args(["self", "build-manifest", "--help"])
         .output()
         .unwrap();
@@ -273,54 +270,21 @@ fn preflight_fixture(present_in_venv: &[&str]) -> tempfile::TempDir {
     perms.set_mode(0o755);
     fs::set_permissions(&py, perms).unwrap();
 
-    // Record interpreter provenance so the dispatch-time provenance gate
-    // treats this in-tree `tools/.venv/bin/python` as trusted (as if
-    // `toolr project venv sync` had provisioned it). The provenance lives
-    // in an out-of-repo cache dir keyed by the repo path; we point the
-    // binary at it via `XDG_CACHE_HOME` (see `preflight_cmd`).
-    record_intree_provenance(tmp.path(), &py);
-
     tmp
 }
 
-/// `$XDG_CACHE_HOME` value used by the preflight fixtures so the in-tree
-/// venv's provenance record lives somewhere the (simulated) repo can't
-/// write. It is a sibling of the repo under the same TempDir.
+/// `$XDG_CACHE_HOME` value used by the preflight fixtures: a sibling of
+/// the repo under the same TempDir.
 #[cfg(unix)]
 fn preflight_cache_home(repo: &std::path::Path) -> PathBuf {
     repo.join(".xdg-cache")
 }
 
-/// Write a `meta.json` provenance record for an in-tree interpreter into
-/// the out-of-repo cache slot, mirroring what `toolr project venv sync`
-/// does on a real machine.
-///
-/// The cache dir is computed directly from `preflight_cache_home` rather
-/// than via `toolr_cache_dir()` (which reads the global `XDG_CACHE_HOME`),
-/// so this never mutates process-wide env and is safe under parallel
-/// tests. The spawned binary reads the same `XDG_CACHE_HOME` value via
-/// `preflight_cmd`, resolving to the same slot.
-#[cfg(unix)]
-fn record_intree_provenance(repo: &std::path::Path, python: &std::path::Path) {
-    let cache_home = preflight_cache_home(repo);
-    // In-tree venvs resolve with an empty python_version (no pin), so the
-    // repo-key uses "".
-    let key = toolr_core::venv::compute_repo_key(repo, "").unwrap();
-    let cache_dir = cache_home.join("toolr").join(key);
-    let canon = python.canonicalize().unwrap();
-    let hash = toolr_core::hash::hash_file(&canon).unwrap();
-    toolr_core::cache::Meta::new(repo, "test", "")
-        .with_interpreter(canon, hash)
-        .write(&cache_dir)
-        .unwrap();
-}
-
 /// Build a `toolr` command for the preflight fixtures with the
-/// `XDG_CACHE_HOME` that holds the in-tree venv's provenance record, so
-/// the dispatch-time provenance gate accepts the fixture's interpreter.
+/// sandboxed `XDG_CACHE_HOME`, so the run never touches the real cache.
 #[cfg(unix)]
 fn preflight_cmd(repo: &std::path::Path) -> Command {
-    let mut cmd = Command::cargo_bin("toolr").unwrap();
+    let mut cmd = common::toolr();
     cmd.current_dir(repo)
         .env("XDG_CACHE_HOME", preflight_cache_home(repo));
     cmd
@@ -413,9 +377,6 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
     let mut perms = fs::metadata(&py).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&py, perms).unwrap();
-    // Re-record provenance: rewriting the interpreter changed its bytes,
-    // so the original recorded hash no longer matches.
-    record_intree_provenance(tmp.path(), &py);
 
     let output = preflight_cmd(tmp.path())
         .args(["ci", "hello"])
@@ -462,8 +423,7 @@ def boom(ctx) -> None:
         }]
     }"#;
     std::fs::write(tools_dir.join(".toolr-manifest.json"), manifest).unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .env("TOOLR_PYTHON", &python)
         .env("PYTHONPATH", tmp.path())
@@ -477,8 +437,7 @@ def boom(ctx) -> None:
 #[test]
 fn project_venv_sync_help_lists_force_and_quiet() {
     let tmp = TempDir::new().unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "venv", "sync", "--help"])
         .output()
@@ -499,8 +458,7 @@ fn project_venv_sync_help_lists_force_and_quiet() {
 #[test]
 fn project_deps_removed_prints_migration_hint() {
     let tmp = TempDir::new().unwrap();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["project", "deps", "sync"])
         .output()
@@ -548,8 +506,7 @@ fn dispatch_uses_python3_from_path_without_tools_pyproject() {
     .unwrap();
     std::fs::set_permissions(&py, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(&repo)
         .env("PATH", &bin_dir)
         .env("XDG_CACHE_HOME", tmp.path().join("cache"))
@@ -577,8 +534,7 @@ fn dispatch_missing_toolr_python_without_tools_pyproject_skips_venv_sync_hint() 
     let repo = tmp.path().join("repo");
     write_tools_demo(&repo);
 
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(&repo)
         .env("XDG_CACHE_HOME", tmp.path().join("cache"))
         .env("TOOLR_PYTHON", tmp.path().join("missing").join("python"))

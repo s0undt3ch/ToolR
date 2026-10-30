@@ -459,6 +459,28 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .disable_help_flag(true)
                             .about("Regenerate the static + dynamic manifest in place"),
                     ),
+            )
+            .subcommand(
+                Command::new("trust")
+                    .disable_help_flag(true)
+                    .about("Allow toolr to run this repository's code")
+                    .arg(
+                        Arg::new("path")
+                            .value_name("PATH")
+                            .value_parser(clap::value_parser!(std::path::PathBuf))
+                            .help("A path inside the repository (defaults to the current directory)"),
+                    ),
+            )
+            .subcommand(
+                Command::new("untrust")
+                    .disable_help_flag(true)
+                    .about("Revoke trust in this repository")
+                    .arg(
+                        Arg::new("path")
+                            .value_name("PATH")
+                            .value_parser(clap::value_parser!(std::path::PathBuf))
+                            .help("A path inside the repository (defaults to the current directory)"),
+                    ),
             ),
     );
 
@@ -555,6 +577,17 @@ pub fn build_command(manifest: &Manifest) -> Command {
                                     .action(ArgAction::SetTrue)
                                     .help("Skip confirmation when used with --all"),
                             ),
+                    ),
+            )
+            .subcommand(
+                Command::new("trusted")
+                    .disable_help_flag(true)
+                    .about("List the repositories toolr trusts to run code")
+                    .arg(
+                        Arg::new("prune")
+                            .long("prune")
+                            .action(ArgAction::SetTrue)
+                            .help("Forget repositories whose path no longer exists"),
                     ),
             )
             .subcommand(

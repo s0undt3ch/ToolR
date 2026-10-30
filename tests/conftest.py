@@ -165,6 +165,7 @@ def make_tools_project(tmp_path: Path, toolr_bin: Path) -> Callable[..., ToolsPr
             "PATH": str(toolr_bin.parent) + os.pathsep + env.get("PATH", ""),
             "XDG_CACHE_HOME": str(tmp_path / "cache"),
             "TOOLR_NO_CACHE_HINT": "1",
+            "TOOLR_TRUST_ALL": "1",
         }
         return ToolsProject(root=root, toolr_bin=toolr_bin, env=env)
 

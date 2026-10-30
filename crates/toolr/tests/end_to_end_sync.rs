@@ -3,7 +3,8 @@
 //!
 //!     cargo test --test end_to_end_sync -- --ignored --nocapture
 
-use assert_cmd::Command;
+mod common;
+
 use tempfile::TempDir;
 
 const PYPROJECT: &str = r#"
@@ -43,8 +44,7 @@ def hello(ctx):
     .unwrap();
 
     // 1. Build the static manifest.
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["__build-static-manifest"])
         .env("TOOLR_AUTO_INSTALL_UV", "1")
@@ -52,8 +52,7 @@ def hello(ctx):
         .success();
 
     // 2. Sync the venv (will install uv on first run if needed).
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(tmp.path())
         .args(["project", "deps", "sync"])
         .env("TOOLR_AUTO_INSTALL_UV", "1")
@@ -62,8 +61,7 @@ def hello(ctx):
 
     // 3. Run the user command — the runner now executes via the venv
     //    python.
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["ci", "hello"])
         .output()

@@ -84,6 +84,8 @@ SNIPPETS: tuple[Snippet, ...] = (
         f"{CLI_FILES}/project-manifest-rebuild-help.txt",
         ("project", "manifest", "rebuild", "--help"),
     ),
+    Snippet(f"{CLI_FILES}/project-trust-help.txt", ("project", "trust", "--help")),
+    Snippet(f"{CLI_FILES}/project-untrust-help.txt", ("project", "untrust", "--help")),
     Snippet(
         f"{CLI_FILES}/self-completion-print-help.txt",
         ("self", "completion", "print", "--help"),
@@ -94,6 +96,7 @@ SNIPPETS: tuple[Snippet, ...] = (
     ),
     Snippet(f"{CLI_FILES}/self-cache-list-help.txt", ("self", "cache", "list", "--help")),
     Snippet(f"{CLI_FILES}/self-cache-prune-help.txt", ("self", "cache", "prune", "--help")),
+    Snippet(f"{CLI_FILES}/self-trusted-help.txt", ("self", "trusted", "--help")),
     Snippet(
         f"{CLI_FILES}/self-build-manifest-help.txt",
         ("self", "build-manifest", "--help"),
@@ -248,6 +251,8 @@ def _capture(ctx: Context, toolr: Path, fixture: Path, snippet: Snippet) -> str:
     env = {
         **os.environ,
         "TOOLR_NO_CACHE_HINT": "1",
+        # The fixture is a throwaway copy of our own sample repo.
+        "TOOLR_TRUST_ALL": "1",
         # Pin terminal width so clap's adaptive `--help` layout is
         # deterministic across machines. Without this, local captures
         # (typically ~80 cols) drift from CI captures (CI sets

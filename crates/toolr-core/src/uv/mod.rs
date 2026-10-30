@@ -173,6 +173,17 @@ pub fn toolr_data_dir() -> Option<PathBuf> {
         .or_else(|| dirs::data_dir().map(|d| d.join("toolr")))
 }
 
+/// Where toolr keeps state that must survive a cache wipe, such as repository
+/// trust. Defaults to `$XDG_STATE_HOME/toolr`, then the platform state
+/// directory, then [`toolr_data_dir`] (`dirs::state_dir()` is `None` on macOS
+/// and Windows).
+pub fn toolr_state_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_STATE_HOME")
+        .map(|v| PathBuf::from(v).join("toolr"))
+        .or_else(|| dirs::state_dir().map(|d| d.join("toolr")))
+        .or_else(toolr_data_dir)
+}
+
 /// Where toolr keeps cached venvs and other transient files.
 /// Defaults to `$XDG_CACHE_HOME/toolr`, falling back to
 /// `~/.cache/toolr`.

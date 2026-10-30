@@ -2,9 +2,10 @@
 //! is spawned. The fixture manifest has no `tools/pyproject.toml`, so the
 //! binary uses it as written without a freshness rebuild.
 
+mod common;
+
 use std::fs;
 
-use assert_cmd::Command;
 use tempfile::TempDir;
 
 fn fixture(kind: &str) -> TempDir {
@@ -35,8 +36,7 @@ fn fixture(kind: &str) -> TempDir {
 
 fn assert_rejected(kind: &str, value: &str, message: &str) {
     let tmp = fixture(kind);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .current_dir(tmp.path())
         .args(["probe", "read", "--target", value])
         .output()

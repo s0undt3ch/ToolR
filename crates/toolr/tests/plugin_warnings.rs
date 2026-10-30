@@ -1,6 +1,8 @@
 //! Binary-level tests for plugin warnings: skipped plugins, shadowed plugin
 //! commands, nested groups and the freshness behaviour around them.
 
+mod common;
+
 use std::path::PathBuf;
 
 use assert_cmd::Command;
@@ -52,7 +54,7 @@ impl Project {
     }
 
     fn toolr(&self, args: &[&str]) -> Command {
-        let mut cmd = Command::cargo_bin("toolr").unwrap();
+        let mut cmd = common::toolr();
         cmd.args(args)
             .current_dir(self.tmp.path())
             .env("TOOLR_VENV_LOCATION", "in-tree")

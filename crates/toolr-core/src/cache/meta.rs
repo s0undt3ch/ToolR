@@ -20,8 +20,8 @@ use thiserror::Error;
 /// `Meta::load` rejects newer versions and silently upgrades older ones
 /// in-process if migrations are added.
 ///
-/// v2 adds interpreter provenance (`interpreter_path` + `interpreter_hash`).
-/// Both fields are `#[serde(default)]`, so v1 sidecars still load.
+/// v2 added `interpreter_path` + `interpreter_hash`. Both are deprecated and no
+/// longer written; they stay `#[serde(default)]` so older sidecars still parse.
 pub const SCHEMA_VERSION: u32 = 2;
 
 /// Filename used for the sidecar inside the per-repo cache directory.
@@ -42,12 +42,12 @@ pub struct Meta {
     pub created_at: DateTime<Utc>,
     /// Updated on every toolr invocation against this cache entry.
     pub last_used_at: DateTime<Utc>,
-    /// Canonical, symlink-resolved path of the interpreter toolr
-    /// provisioned for this repo. `None` for v1 sidecars (pre-provenance).
+    /// Deprecated: no longer written or read. Kept so older `meta.json`
+    /// files still parse.
     #[serde(default)]
     pub interpreter_path: Option<PathBuf>,
-    /// blake3 hex of the interpreter file's bytes at provision time.
-    /// `None` for v1 sidecars (pre-provenance).
+    /// Deprecated: no longer written or read. Kept so older `meta.json`
+    /// files still parse.
     #[serde(default)]
     pub interpreter_hash: Option<String>,
 }
@@ -85,16 +85,6 @@ impl Meta {
             interpreter_path: None,
             interpreter_hash: None,
         }
-    }
-
-    /// Record interpreter provenance: the canonical interpreter path and
-    /// the blake3 hex of its bytes at provision time. Used by
-    /// `venv::provenance::verify_interpreter` to decide whether an
-    /// in-repo interpreter is safe to execute.
-    pub fn with_interpreter(mut self, path: PathBuf, hash: String) -> Self {
-        self.interpreter_path = Some(path);
-        self.interpreter_hash = Some(hash);
-        self
     }
 
     /// Path of the sidecar file inside `cache_dir`.

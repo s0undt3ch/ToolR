@@ -15,6 +15,7 @@ use toolr_core::execute::{
     resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
 };
 use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
+use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_child_args};
@@ -196,6 +197,14 @@ pub fn dispatch(
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;
     let output_opts = output_options_from_matches(matches);
+    // Before anything of the repo's runs: the venv path may `uv sync`, and the
+    // host-Python path imports `tools/*.py` directly.
+    toolr_core::trust::require_trust(
+        &repo_root,
+        toolr_core::trust::TrustMode {
+            never_prompt: output_opts.verbosity == "quiet",
+        },
+    )?;
     // Dispatched leaves take a separate spec-shape: the runner sees
     // `dispatch: Some(...)` and routes to `invoke_dispatcher` instead
     // of calling `function` as a regular command. Pack the child first,
@@ -296,27 +305,10 @@ pub fn dispatch(
         );
     }
 
-    // Interpreter-provenance gate (SEC-01). This is the only point where
-    // toolr executes repository-adjacent code, so verify the interpreter
-    // is one toolr is allowed to run: under its own cache dir, or — for
-    // an in-tree `tools/.venv` — matching the provenance record written
-    // by `toolr project venv sync`. A committed fake `tools/.venv` has no
-    // record and is refused.
-    // A PATH or `$TOOLR_PYTHON` interpreter is the host's own, not repo
-    // code, so it stays outside this gate on purpose (#588).
-    if let Some(resolved) = &resolved_venv {
-        let cache_dir = toolr_core::project::provenance_cache_dir(&repo_root, resolved).ok();
-        if let Err(e) = toolr_core::venv::verify_interpreter(
-            &python,
-            &resolved.venv_dir,
-            &repo_root,
-            cache_dir.as_deref(),
-        ) {
-            anyhow::bail!("toolr: {e}");
-        }
-        if output_opts.verbosity != "quiet" {
-            warn_on_toolr_py_mismatch(&resolved.venv_dir);
-        }
+    if let Some(resolved) = &resolved_venv
+        && output_opts.verbosity != "quiet"
+    {
+        warn_on_toolr_py_mismatch(&resolved.venv_dir);
     }
 
     let mut child = spawn_runner(&python, tempfile.path(), &repo_root)
@@ -342,8 +334,8 @@ pub fn dispatch(
 
 /// Re-sync a venv that `tools/uv.lock` has moved past, so a lock bump
 /// never runs old code (#527), or whose interpreter was uninstalled
-/// under it (#609). A never-synced venv is left to the provenance gate,
-/// so a fresh clone installs nothing before it.
+/// under it (#609). A never-synced venv is left alone, so a fresh clone
+/// installs nothing before it.
 fn resync_if_needed(
     repo_root: &std::path::Path,
     resolved: toolr_core::venv::ResolvedVenv,
@@ -359,7 +351,11 @@ fn resync_if_needed(
         eprintln!("toolr: {problem}; syncing it first");
     }
     let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-    let opts = toolr_core::project::EnsureOpts::default().with_quiet(quiet);
+    let opts = toolr_core::project::EnsureOpts::default()
+        .with_quiet(quiet)
+        .with_trust(toolr_core::trust::TrustMode {
+            never_prompt: quiet,
+        });
     let (resolved, _uv) = toolr_core::project::ensure_venv_ready(repo_root, consent, opts)
         .with_context(|| {
             format!("{problem} and could not be synced; run `toolr project venv sync`")
@@ -395,6 +391,7 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     match matches.subcommand() {
         Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches),
         Some(("cache", cache_matches)) => crate::self_cache::dispatch(cache_matches),
+        Some(("trusted", trusted_matches)) => run_self_trusted(trusted_matches),
         Some(("completion", completion_matches)) => {
             let Some((action, action_matches)) = completion_matches.subcommand() else {
                 anyhow::bail!("expected a `self completion` subcommand");
@@ -407,6 +404,26 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
         }
         _ => anyhow::bail!("expected a `self` subcommand"),
     }
+}
+
+/// List trusted roots, one per line, marking those that no longer exist.
+/// `--prune` drops the missing ones and lists what's left.
+fn run_self_trusted(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    let store = toolr_core::trust::TrustStore::open_default()?;
+    let prune = matches.get_flag("prune");
+    for record in store.list()? {
+        let root = &record.repo_path;
+        if root.exists() {
+            println!("{}", shown(root));
+        } else if prune {
+            if store.untrust(root)? {
+                eprintln!("toolr: pruned {}", shown(root));
+            }
+        } else {
+            println!("{} (missing)", shown(root));
+        }
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {

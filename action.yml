@@ -293,7 +293,7 @@ runs:
         fi
         gh attestation verify "$ARCHIVE_PATH" --repo s0undt3ch/ToolR
 
-    - name: Force in-tree tools venv
+    - name: Force in-tree tools venv and trust the checkout
       shell: bash
       # Toolr supports two venv layouts (`in-tree` / `cache`); CI
       # works much better with in-tree because GitHub Actions can
@@ -309,8 +309,15 @@ runs:
       # 0.20.0 the env var is read but ignored and the venv falls
       # back to `~/.cache/toolr/<repo-key>/venv` — which is why the
       # cache step below grabs both candidate locations.
+      #
+      # `TOOLR_TRUST_ALL=1` skips toolr's repository-trust check
+      # (toolr >= the release that introduced it; older binaries
+      # ignore it). The workflow has already checked out the code
+      # it is about to run, so there is nobody to ask. It is exactly
+      # "1" on purpose: toolr does not infer trust from `CI=true`.
       run: |
         echo "TOOLR_VENV_LOCATION=in-tree" >> "$GITHUB_ENV"
+        echo "TOOLR_TRUST_ALL=1" >> "$GITHUB_ENV"
 
     - name: Install toolr binary
       id: install

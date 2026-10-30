@@ -182,16 +182,21 @@ in three benign situations:
 
 Genuine failures — an unparsable lock file, a `uv sync` that exits
 non-zero — still print their error to stderr and exit non-zero, so
-they aren't silently masked.
+they aren't silently masked. So does an untrusted repository: the hook
+never prompts, so it prints the
+[repository trust](../concepts.md#repository-trust) refusal until you
+trust the repository.
 
 ### First-time bootstrap
 
 The first time you set up a project, run `toolr project venv sync`
-once **without** `--quiet`. That's the run that will install uv if
-needed (with a normal consent prompt) and materialise the venv. From
-then on the enter-hook keeps it fresh:
+once **without** `--quiet`. That's the run that asks you to trust the
+repository, installs uv if needed (with a normal consent prompt) and
+materialises the venv. Run `toolr project trust` first instead if you'd
+rather not answer the prompt. From then on the enter-hook keeps it fresh:
 
 ```sh
+toolr project trust         # one-time, or answer `y` at the sync prompt
 toolr project venv sync     # one-time, interactive
 cd ..; cd back              # enter-hook now keeps it fresh
 ```

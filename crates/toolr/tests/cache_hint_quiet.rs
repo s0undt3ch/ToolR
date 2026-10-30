@@ -8,10 +8,11 @@
 //! silent in non-toolr directories regardless of the developer's cache
 //! state.
 
+mod common;
+
 use std::fs;
 use std::path::Path;
 
-use assert_cmd::Command;
 use chrono::Utc;
 use tempfile::TempDir;
 
@@ -46,8 +47,7 @@ fn dirty_cache() -> TempDir {
 }
 
 fn toolr(xdg_cache: &Path, work: &Path, args: &[&str]) -> std::process::Output {
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(work)
         .env("XDG_CACHE_HOME", xdg_cache)
         .env_remove("HOME")

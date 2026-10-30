@@ -16,7 +16,7 @@ mod common;
 use common::VenvFixture;
 
 fn cargo_bin() -> Command {
-    Command::cargo_bin("toolr").unwrap()
+    common::toolr()
 }
 
 /// `toolr project venv sync` (no flags) reports the missing project
@@ -168,8 +168,7 @@ venv-location = "cache"
 #[test]
 fn sync_dash_p_success_path_invokes_uv_sync_with_upgrade_package() {
     let fx = VenvFixture::new();
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("PATH", &fx.bin_dir)
         .current_dir(&fx.root)
         .args(["project", "venv", "sync", "-P", "requests"])
@@ -201,8 +200,7 @@ fn sync_dash_p_success_path_invokes_uv_sync_with_upgrade_package() {
 #[test]
 fn sync_dash_p_accepts_dependency_declared_with_underscores() {
     let fx = VenvFixture::with_dependencies(&["toolr_py"]);
-    let output = Command::cargo_bin("toolr")
-        .unwrap()
+    let output = common::toolr()
         .env("PATH", &fx.bin_dir)
         .current_dir(&fx.root)
         .args(["project", "venv", "sync", "-P", "toolr-py"])

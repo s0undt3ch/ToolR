@@ -1,76 +1,36 @@
-//! Untrusted-repository regression tests for SEC-01.
-//! A repo must not be able to run code via toolr's read-only surfaces.
+//! Untrusted-repository regression tests: toolr's read-only surfaces never
+//! run a repository's code, and need no trust to work. The trust gate on
+//! dispatch and venv commands is covered in `repo_trust.rs`.
 
-#[cfg(unix)]
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+mod common;
 
-use assert_cmd::Command;
 use predicates::prelude::PredicateBooleanExt;
 use tempfile::TempDir;
 
-/// Build a malicious repo: in-tree venv-location, a committed fake
-/// `tools/.venv/bin/python` that drops a sentinel when executed, and NO
-/// `.toolr-manifest.json`.
+#[test]
 #[cfg(unix)]
-fn malicious_repo(sentinel: &std::path::Path) -> TempDir {
-    let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    fs::create_dir_all(tools.join(".venv").join("bin")).unwrap();
-    fs::write(
-        tools.join("pyproject.toml"),
-        "[project]\nname=\"evil\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
-    )
-    .unwrap();
-    fs::write(tools.join("hello.py"), "\"\"\"Hi.\"\"\"\n").unwrap();
-    let py = tools.join(".venv").join("bin").join("python");
-    fs::write(
-        &py,
-        format!("#!/bin/sh\necho pwned > {}\n", sentinel.display()),
-    )
-    .unwrap();
-    fs::set_permissions(&py, fs::Permissions::from_mode(0o755)).unwrap();
-    tmp
+fn help_does_not_execute_repository_code() {
+    let out = TempDir::new().unwrap();
+    let sentinel = out.path().join("sentinel");
+    let repo = common::hostile_repo(&sentinel, true);
+    let env = common::TrustEnv::new();
+
+    env.toolr(repo.path()).arg("--help").assert().success();
+
+    assert!(!sentinel.exists(), "toolr --help executed repository code");
 }
 
 #[test]
 #[cfg(unix)]
-fn help_does_not_execute_committed_interpreter() {
+fn bare_invocation_does_not_execute_repository_code() {
     let out = TempDir::new().unwrap();
     let sentinel = out.path().join("sentinel");
-    let repo = malicious_repo(&sentinel);
+    let repo = common::hostile_repo(&sentinel, true);
+    let env = common::TrustEnv::new();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
-        .arg("--help")
-        .current_dir(repo.path())
-        .assert()
-        .success();
+    env.toolr(repo.path()).assert().success();
 
-    assert!(
-        !sentinel.exists(),
-        "toolr --help executed the committed interpreter"
-    );
-}
-
-#[test]
-#[cfg(unix)]
-fn bare_invocation_does_not_execute_committed_interpreter() {
-    let out = TempDir::new().unwrap();
-    let sentinel = out.path().join("sentinel");
-    let repo = malicious_repo(&sentinel);
-
-    // Bare `toolr` exits non-zero (no command) but must not run the interpreter.
-    let _ = Command::cargo_bin("toolr")
-        .unwrap()
-        .current_dir(repo.path())
-        .assert();
-
-    assert!(
-        !sentinel.exists(),
-        "bare toolr executed the committed interpreter"
-    );
+    assert!(!sentinel.exists(), "bare toolr executed repository code");
 }
 
 #[test]
@@ -89,8 +49,7 @@ fn help_works_with_no_venv_and_shows_first_party_commands() {
     )
     .unwrap();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .assert()
@@ -121,8 +80,7 @@ fn help_builds_statically_with_an_existing_in_tree_venv() {
     // `build_static_manifest_with_venv` arm; no manifest committed.
     std::fs::write(tools.join(".venv").join("pyvenv.cfg"), "home = /usr\n").unwrap();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .assert()
@@ -139,7 +97,7 @@ fn manifest_rebuilds_when_a_venv_appears() {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");
     std::fs::create_dir_all(&tools).unwrap();
-    // Cache-located venv (default) so no provenance gate is involved; this
+    // Cache-located venv (default); this
     // test only exercises the read-only `--help` freshness path.
     std::fs::write(
         tools.join("pyproject.toml"),
@@ -154,8 +112,7 @@ fn manifest_rebuilds_when_a_venv_appears() {
 
     // First `--help`: no venv → static-only manifest with empty
     // third-party hash. The plugin group is absent.
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .assert()
@@ -186,8 +143,7 @@ fn manifest_rebuilds_when_a_venv_appears() {
     // Force the resolved venv to be this in-tree one so the freshness
     // check globs the fragment we just dropped. Root `--help` lists
     // groups, so the plugin's `plugins` group must now appear.
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .env("TOOLR_VENV_LOCATION", "in-tree")
@@ -238,8 +194,7 @@ fn v1_plugin_is_skipped_with_a_warning() {
     )
     .unwrap();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .arg("--help")
         .current_dir(tmp.path())
         .env("TOOLR_VENV_LOCATION", "in-tree")
@@ -250,27 +205,4 @@ fn v1_plugin_is_skipped_with_a_warning() {
         .stderr(predicates::str::contains(
             "toolr: warning: skipping plugin demo_plugin",
         ));
-}
-
-#[test]
-#[cfg(unix)]
-fn dispatch_refuses_committed_interpreter() {
-    let out = TempDir::new().unwrap();
-    let sentinel = out.path().join("sentinel");
-    let repo = malicious_repo(&sentinel);
-    // give it a statically-parseable command so dispatch is attempted
-    std::fs::write(
-        repo.path().join("tools").join("hello.py"),
-        "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n",
-    )
-    .unwrap();
-
-    Command::cargo_bin("toolr")
-        .unwrap()
-        .args(["hello", "world"])
-        .current_dir(repo.path())
-        .assert()
-        .failure()
-        .stderr(predicates::str::contains("not provisioned by toolr"));
-    assert!(!sentinel.exists());
 }

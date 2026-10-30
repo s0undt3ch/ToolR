@@ -86,6 +86,8 @@ jobs:
           INPUTS_OS: ${{ inputs.os }}
           PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
           COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
+          # The tests run toolr against throwaway repos they build.
+          TOOLR_TRUST_ALL: "1"
         run: |
           uv run coverage run -m pytest -ra -s -v --color=yes --junitxml="junit-dist-${INPUTS_OS}.xml" tests/distribution/
 

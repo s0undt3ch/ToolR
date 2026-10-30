@@ -137,6 +137,9 @@ jobs:
       - name: Run startup bench
         id: bench
         shell: bash
+        env:
+          # The bench fixtures are throwaway repos generated above.
+          TOOLR_TRUST_ALL: "1"
         # `--toolr-py-find-links` pins the bench fixture's `toolr-py`
         # to the version of the wheel in that dir and exports
         # `UV_FIND_LINKS` so toolr's per-fixture `uv sync` resolves
