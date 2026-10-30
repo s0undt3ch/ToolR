@@ -7,12 +7,18 @@ example = command_group("example", "Example Commands", "Example command group")
 
 
 @example.command
-def process(ctx: Context, verbose: bool = False, dry_run: bool = False):
+def process(
+    ctx: Context,
+    verbose: bool = False,
+    dry_run: bool = False,
+    no_cache: bool = False,
+):
     """Process something with optional flags.
 
     Args:
         verbose: Whether to print verbose output.
         dry_run: Whether to perform a dry run (no changes will be made).
+        no_cache: Whether to skip the cache. The cache is used by default.
     """
     if verbose:
         ctx.info("Verbose mode enabled")
@@ -21,4 +27,5 @@ def process(ctx: Context, verbose: bool = False, dry_run: bool = False):
         ctx.info("Dry run mode - no changes will be made")
         return
 
-    ctx.info("Processing...")
+    cache = not no_cache
+    ctx.info(f"Processing (cache {'on' if cache else 'off'})...")

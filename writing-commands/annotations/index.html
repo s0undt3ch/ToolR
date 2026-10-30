@@ -1766,7 +1766,7 @@ a call to <a class="autorefs autorefs-internal" href="../../reference/arg/#toolr
 </tr>
 <tr>
 <td><code>env="VAR"</code></td>
-<td>Read the default from this env var when the flag isn't passed.</td>
+<td>Read the default from this env var when the flag isn't passed. On a <code>bool</code> flag the variable must be <code>true</code> or <code>false</code>; any other value, including <code>1</code> or an empty string, is an error.</td>
 </tr>
 <tr>
 <td><code>hide=True</code></td>
