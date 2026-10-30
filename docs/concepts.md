@@ -85,11 +85,9 @@ platform state directory (`~/.local/state/toolr/trust/` on Linux), falling
 back to toolr's data directory where there is none
 (`~/Library/Application Support/toolr/trust/` on macOS).
 
-The first time toolr checks trust after an upgrade, it trusts every
-repository it had finished syncing a venv for. This happens once: after that,
-`toolr project untrust` sticks, and a venv built under `TOOLR_TRUST_ALL=1`
-doesn't make its repository trusted. `toolr project init` trusts the
-directory it writes to.
+Trust starts empty. A venv an older toolr built doesn't make its
+repository trusted, and neither does a run under `TOOLR_TRUST_ALL=1`.
+`toolr project init` trusts the directory it writes to.
 
 These never need trust, because nothing executes: `--help`, bare
 `toolr`, tab completion, `toolr project manifest rebuild` and

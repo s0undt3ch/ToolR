@@ -9,12 +9,9 @@ use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::cache::Meta;
-use crate::uv::{toolr_cache_dir, toolr_state_dir};
+use crate::uv::toolr_state_dir;
 
 const RECORD_SCHEMA_VERSION: u32 = 1;
-/// Present once the one-time import of pre-trust cache entries has run.
-const MIGRATION_MARKER: &str = ".migrated-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrustRecord {
@@ -191,76 +188,6 @@ impl TrustStore {
             Err(_) => resolves_inside(&self.dir, canonical_root, Path::new("/")),
         }
     }
-
-    /// One-time import of trust from cache entries written before trust
-    /// existed: a prior sync was prior consent. It runs at most once per
-    /// store, so a later `untrust` (or a cache entry written under
-    /// `TOOLR_TRUST_ALL=1`) is never turned back into trust. `checking_root`
-    /// is the canonical root of the repository being acted on; nothing is
-    /// read from inside it. Delete this once upgrades from releases without
-    /// trust are no longer supported.
-    pub fn migrate_once(&self, cache_root: Option<&Path>, checking_root: &Path) {
-        let Some(cache_root) = cache_root else {
-            return;
-        };
-        let checking_root = &canonical(checking_root);
-        let cache_marker = cache_root.join(MIGRATION_MARKER);
-        if self.guard(checking_root).is_err()
-            || self.dir.join(MIGRATION_MARKER).exists()
-            || cache_marker.exists()
-        {
-            return;
-        }
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
-        if resolves_inside(cache_root, checking_root, &cwd) {
-            return;
-        }
-        let entries = match fs::read_dir(cache_root) {
-            Ok(entries) => Some(entries),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-            Err(e) => {
-                log::warn!(
-                    "could not read {} for trust migration: {e}",
-                    cache_root.display()
-                );
-                return;
-            }
-        };
-        for entry in entries.into_iter().flatten().flatten() {
-            let cache_dir = entry.path();
-            // Only a finished sync recorded the interpreter hash. Dispatch
-            // also backfilled a bare sidecar for repos it then refused to run.
-            let Ok(meta) = Meta::load(&cache_dir) else {
-                continue;
-            };
-            if meta.interpreter_hash.is_none() {
-                continue;
-            }
-            let Ok(repo) = fs::canonicalize(&meta.repo_path) else {
-                continue;
-            };
-            if !repo.is_dir() || canonical(&Meta::path_in(&cache_dir)).starts_with(&repo) {
-                continue;
-            }
-            if let Err(e) = self.trust(&repo) {
-                log::warn!("could not migrate trust for {}: {e:#}", repo.display());
-            }
-        }
-        // The cache keeps growing after migration, so a wiped or relocated
-        // store alone must not re-import it.
-        let record_cache = || -> Result<()> {
-            fs::create_dir_all(cache_root)?;
-            fs::write(&cache_marker, b"")?;
-            Ok(())
-        };
-        if let Err(e) = self
-            .ensure_dir()
-            .and_then(|()| fs::write(self.dir.join(MIGRATION_MARKER), b"").map_err(Into::into))
-            .and_then(|()| record_cache())
-        {
-            log::warn!("could not record trust migration: {e:#}");
-        }
-    }
 }
 
 /// True when `path` resolves under `canonical_root`. `path` may not exist
@@ -312,13 +239,10 @@ fn confirm(input: &mut dyn BufRead, out: &mut dyn Write, root: &Path) -> bool {
     }
 }
 
-/// The decision flow: one-time migration from pre-trust cache entries, env
-/// override, existing record, prompt, refuse. Migration runs even under the
-/// env override so the cache entry that run writes is never imported later.
+/// The decision flow: env override, existing record, prompt, refuse.
 pub fn decide(
     root: &Path,
     store: &TrustStore,
-    cache_root: Option<&Path>,
     all_env: bool,
     mode: TrustMode,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
@@ -327,7 +251,6 @@ pub fn decide(
         return Ok(());
     }
     let root = canonical(root);
-    store.migrate_once(cache_root, &root);
     store.guard(&root)?;
     if store.is_trusted(&root).unwrap_or(false) {
         return Ok(());
@@ -351,7 +274,6 @@ pub fn require_trust(root: &Path, mode: TrustMode) -> Result<()> {
         .with_context(|| format!("resolving repository root {}", root.display()))?;
     let store = TrustStore::open_default()?;
     let all_env = std::env::var_os("TOOLR_TRUST_ALL").is_some_and(|v| v == "1");
-    let cache_root = toolr_cache_dir();
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let mut stderr = std::io::stderr();
@@ -359,15 +281,7 @@ pub fn require_trust(root: &Path, mode: TrustMode) -> Result<()> {
         &mut input as &mut dyn BufRead,
         &mut stderr as &mut dyn Write,
     ));
-    decide(
-        &root,
-        &store,
-        cache_root.as_deref(),
-        all_env,
-        mode,
-        prompt_io,
-    )
-    .map_err(|e| anyhow!(e))
+    decide(&root, &store, all_env, mode, prompt_io).map_err(|e| anyhow!(e))
 }
 
 #[cfg(test)]
@@ -377,12 +291,10 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::cache::Meta;
 
     struct Fixture {
         repo: TempDir,
         store_dir: TempDir,
-        cache: TempDir,
     }
 
     impl Fixture {
@@ -390,7 +302,6 @@ mod tests {
             Self {
                 repo: TempDir::new().unwrap(),
                 store_dir: TempDir::new().unwrap(),
-                cache: TempDir::new().unwrap(),
             }
         }
         fn root(&self) -> PathBuf {
@@ -408,30 +319,15 @@ mod tests {
                     decide(
                         &self.root(),
                         &store,
-                        Some(self.cache.path()),
                         false,
                         mode,
                         Some((&mut cursor, &mut err)),
                     )
                 }
-                None => decide(
-                    &self.root(),
-                    &store,
-                    Some(self.cache.path()),
-                    false,
-                    mode,
-                    None,
-                ),
+                None => decide(&self.root(), &store, false, mode, None),
             };
             (result, String::from_utf8(err).unwrap())
         }
-    }
-
-    /// The sidecar a pre-trust toolr left after a finished sync.
-    fn synced_meta(root: impl Into<PathBuf>) -> Meta {
-        let mut meta = Meta::new(root, "0.0.0", "3.13.1");
-        meta.interpreter_hash = Some("hash".into());
-        meta
     }
 
     const PROMPT: TrustMode = TrustMode {
@@ -459,7 +355,7 @@ mod tests {
     fn trust_all_env_allows() {
         let f = Fixture::new();
         let store = f.store();
-        decide(&f.root(), &store, None, true, PROMPT, None).unwrap();
+        decide(&f.root(), &store, true, PROMPT, None).unwrap();
         assert!(!store.is_trusted(&f.root()).unwrap());
         assert!(store.list().unwrap().is_empty());
     }
@@ -521,169 +417,6 @@ mod tests {
         assert!(err.is_empty());
     }
 
-    #[test]
-    fn cache_meta_migrates() {
-        let f = Fixture::new();
-        synced_meta(f.root())
-            .write(&f.cache.path().join("some-key"))
-            .unwrap();
-        let (r, _) = f.decide(None, PROMPT);
-        assert!(r.is_ok());
-        assert!(f.store().is_trusted(&f.root()).unwrap());
-    }
-
-    #[test]
-    fn migration_runs_once() {
-        let f = Fixture::new();
-        synced_meta(f.root())
-            .write(&f.cache.path().join("first"))
-            .unwrap();
-        assert!(f.decide(None, PROMPT).0.is_ok());
-        assert!(f.store().dir().join(MIGRATION_MARKER).is_file());
-
-        let later = TempDir::new().unwrap();
-        let later_root = fs::canonicalize(later.path()).unwrap();
-        synced_meta(&later_root)
-            .write(&f.cache.path().join("second"))
-            .unwrap();
-        let r = decide(
-            &later_root,
-            &f.store(),
-            Some(f.cache.path()),
-            false,
-            PROMPT,
-            None,
-        );
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-        assert!(!f.store().is_trusted(&later_root).unwrap());
-    }
-
-    #[test]
-    fn wiped_store_does_not_migrate_again() {
-        let f = Fixture::new();
-        synced_meta(f.root())
-            .write(&f.cache.path().join("first"))
-            .unwrap();
-        assert!(f.decide(None, PROMPT).0.is_ok());
-        assert!(f.cache.path().join(MIGRATION_MARKER).is_file());
-        fs::remove_dir_all(f.store().dir()).unwrap();
-        let (r, _) = f.decide(None, PROMPT);
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-    }
-
-    #[test]
-    fn untrust_sticks_after_migration() {
-        let f = Fixture::new();
-        synced_meta(f.root())
-            .write(&f.cache.path().join("some-key"))
-            .unwrap();
-        assert!(f.decide(None, PROMPT).0.is_ok());
-        assert!(f.store().untrust(&f.root()).unwrap());
-        let (r, _) = f.decide(None, PROMPT);
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-    }
-
-    #[test]
-    fn trust_all_env_leaves_store_and_cache_alone() {
-        let f = Fixture::new();
-        synced_meta(f.root())
-            .write(&f.cache.path().join("some-key"))
-            .unwrap();
-        decide(
-            &f.root(),
-            &f.store(),
-            Some(f.cache.path()),
-            true,
-            PROMPT,
-            None,
-        )
-        .unwrap();
-        assert!(!f.store().dir().exists());
-        assert!(!f.cache.path().join(MIGRATION_MARKER).exists());
-    }
-
-    #[test]
-    fn sidecar_without_a_finished_sync_is_not_migrated() {
-        let f = Fixture::new();
-        Meta::new(f.root(), "0.0.0", "3.13.1")
-            .write(&f.cache.path().join("backfilled"))
-            .unwrap();
-        let (r, _) = f.decide(None, PROMPT);
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-        assert!(f.store().dir().join(MIGRATION_MARKER).is_file());
-    }
-
-    #[test]
-    fn migration_trusts_every_cached_repo_and_skips_missing() {
-        let f = Fixture::new();
-        let other = TempDir::new().unwrap();
-        let other_root = fs::canonicalize(other.path()).unwrap();
-        synced_meta(&other_root)
-            .write(&f.cache.path().join("other"))
-            .unwrap();
-        synced_meta(f.root().join("gone"))
-            .write(&f.cache.path().join("gone"))
-            .unwrap();
-        fs::create_dir(f.cache.path().join("no-meta")).unwrap();
-        fs::write(f.cache.path().join("stray-file"), b"").unwrap();
-        let (r, _) = f.decide(None, PROMPT);
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-        let listed: Vec<_> = f
-            .store()
-            .list()
-            .unwrap()
-            .into_iter()
-            .map(|r| r.repo_path)
-            .collect();
-        assert_eq!(listed, vec![other_root]);
-    }
-
-    #[test]
-    fn cache_root_inside_checked_repo_is_not_read() {
-        let f = Fixture::new();
-        let cache = f.root().join("cache");
-        synced_meta(f.root())
-            .write(&cache.join("some-key"))
-            .unwrap();
-        let r = decide(&f.root(), &f.store(), Some(&cache), false, PROMPT, None);
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-        assert!(!f.store().is_trusted(&f.root()).unwrap());
-        assert!(!f.store().dir().join(MIGRATION_MARKER).exists());
-    }
-
-    #[test]
-    fn meta_inside_the_repo_it_names_is_not_migrated() {
-        let f = Fixture::new();
-        let other = TempDir::new().unwrap();
-        let other_root = fs::canonicalize(other.path()).unwrap();
-        let cache = other_root.join("cache");
-        synced_meta(&other_root)
-            .write(&cache.join("some-key"))
-            .unwrap();
-        let r = decide(&f.root(), &f.store(), Some(&cache), false, PROMPT, None);
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-        assert!(!f.store().is_trusted(&other_root).unwrap());
-        assert!(f.store().dir().join(MIGRATION_MARKER).is_file());
-    }
-
-    #[test]
-    fn list_ignores_migration_marker() {
-        let f = Fixture::new();
-        f.store().migrate_once(Some(f.cache.path()), &f.root());
-        assert!(f.store().dir().join(MIGRATION_MARKER).is_file());
-        assert!(f.store().list().unwrap().is_empty());
-    }
-
-    #[test]
-    fn meta_inside_repo_is_ignored() {
-        let f = Fixture::new();
-        synced_meta(f.root())
-            .write(&f.root().join("tools"))
-            .unwrap();
-        let (r, _) = f.decide(None, PROMPT);
-        assert!(matches!(r, Err(TrustError::Untrusted(_))));
-    }
-
     #[cfg(unix)]
     #[test]
     fn trust_key_is_canonical_through_symlink() {
@@ -701,7 +434,7 @@ mod tests {
     fn store_inside_repo_is_rejected() {
         let f = Fixture::new();
         let store = TrustStore::at(f.root().join("state"));
-        let r = decide(&f.root(), &store, None, false, PROMPT, None);
+        let r = decide(&f.root(), &store, false, PROMPT, None);
         assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
         assert!(!f.root().join("state").exists());
     }
@@ -751,7 +484,7 @@ mod tests {
         let link = link_parent.path().join("link");
         std::os::unix::fs::symlink(f.root(), &link).unwrap();
         let store = TrustStore::at(link.join("state"));
-        let r = decide(&f.root(), &store, None, false, PROMPT, None);
+        let r = decide(&f.root(), &store, false, PROMPT, None);
         assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
         assert!(!f.root().join("state").exists());
     }
@@ -759,17 +492,13 @@ mod tests {
     // Windows reports a path under a file as NotFound, which reads as untrusted.
     #[cfg(unix)]
     #[test]
-    fn unusable_store_fails_closed_and_retries_migration() {
+    fn unusable_store_fails_closed() {
         let f = Fixture::new();
         fs::write(f.store().dir(), b"not a directory").unwrap();
-        synced_meta(f.root())
-            .write(&f.cache.path().join("some-key"))
-            .unwrap();
         let (r, _) = f.decide(None, PROMPT);
         assert!(matches!(r, Err(TrustError::Untrusted(_))));
         assert!(f.store().is_trusted(&f.root()).is_err());
         assert!(f.store().list().is_err());
-        assert!(!f.cache.path().join(MIGRATION_MARKER).exists());
     }
 
     #[test]
@@ -800,22 +529,6 @@ mod tests {
         store.trust(&f.root()).unwrap();
         fs::write(store.dir().join(".trust.abc123.tmp"), b"{}").unwrap();
         assert_eq!(store.list().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn unreadable_cache_root_leaves_migration_for_later() {
-        let f = Fixture::new();
-        let store = f.store();
-        let not_a_dir = f.cache.path().join("file");
-        fs::write(&not_a_dir, b"").unwrap();
-        store.migrate_once(Some(&not_a_dir), &f.root());
-        assert!(!store.dir().join(MIGRATION_MARKER).exists());
-
-        synced_meta(f.root())
-            .write(&f.cache.path().join("some-key"))
-            .unwrap();
-        store.migrate_once(Some(f.cache.path()), &f.root());
-        assert!(store.is_trusted(&f.root()).unwrap());
     }
 
     #[test]

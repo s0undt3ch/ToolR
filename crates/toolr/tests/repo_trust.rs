@@ -44,23 +44,13 @@ impl Hostile {
         self.env.toolr(self.repo.path())
     }
 
-    /// The `meta.json` a pre-trust toolr left after a finished sync.
-    fn seed_synced_meta(&self) {
+    /// The `meta.json` a pre-trust toolr left after finishing a sync.
+    fn seed_pre_trust_venv_cache(&self) {
+        let entry = self.env.cache.path().join("toolr").join("seeded");
         let mut meta = Meta::new(self.root(), "0.35.1", "3.13.1");
         meta.interpreter_hash = Some("hash".into());
-        meta.write(&self.cache_entry()).unwrap();
-    }
-
-    /// The bare `meta.json` dispatch backfills, including for a run it then
-    /// refuses, and the one every sync writes once trust exists.
-    fn seed_backfilled_meta(&self) {
-        Meta::new(self.root(), "0.35.1", "3.13.1")
-            .write(&self.cache_entry())
-            .unwrap();
-    }
-
-    fn cache_entry(&self) -> PathBuf {
-        self.env.cache.path().join("toolr").join("seeded")
+        meta.write(&entry).unwrap();
+        fs::create_dir_all(entry.join("venv")).unwrap();
     }
 }
 
@@ -162,7 +152,6 @@ fn trust_then_dispatch_runs() {
 #[test]
 fn untrust_then_refused() {
     let h = Hostile::new(true);
-    h.seed_synced_meta();
     h.toolr().args(["project", "trust"]).assert().success();
     h.toolr().args(["project", "untrust"]).assert().success();
     h.toolr()
@@ -196,9 +185,6 @@ fn trust_all_run_does_not_leave_trust_behind() {
         .assert()
         .stderr(contains(REFUSAL).not());
     fs::remove_file(&h.sentinel).unwrap();
-    // The fixture can't really sync, so stand in for the meta.json that a
-    // successful sync under TOOLR_TRUST_ALL=1 would have written.
-    h.seed_backfilled_meta();
     h.toolr()
         .args(["hello", "world"])
         .assert()
@@ -267,57 +253,6 @@ fn home_with_tools_dir_can_be_trusted() {
         .success()
         .stdout(format!("{}\n", home_root.display()));
 }
-
-#[test]
-fn upgrade_trusts_a_repo_with_a_finished_sync() {
-    let h = Hostile::new(true);
-    h.seed_synced_meta();
-    h.toolr()
-        .args(["hello", "world"])
-        .assert()
-        .stderr(contains(REFUSAL).not());
-    assert!(h.sentinel.exists());
-}
-
-/// A pre-trust toolr refused to run this repo but still backfilled its
-/// cache sidecar. That is no consent, so the upgrade must not trust it.
-#[test]
-fn upgrade_does_not_trust_a_refused_attempt() {
-    let h = Hostile::new(true);
-    h.seed_backfilled_meta();
-    assert!(!h.cache_entry().join("venv").exists());
-    h.toolr()
-        .args(["project", "venv", "sync", "--quiet"])
-        .assert()
-        .failure()
-        .stderr(contains(REFUSAL));
-    h.toolr()
-        .args(["hello", "world"])
-        .assert()
-        .failure()
-        .stderr(contains(REFUSAL));
-    h.toolr()
-        .args(["self", "trusted"])
-        .assert()
-        .success()
-        .stdout("");
-    assert!(!h.sentinel.exists());
-}
-
-#[test]
-fn untrust_survives_a_wiped_trust_store() {
-    let h = Hostile::new(true);
-    h.seed_synced_meta();
-    h.toolr().args(["project", "untrust"]).assert().success();
-    fs::remove_dir_all(h.env.state.path().join("toolr").join("trust")).unwrap();
-    h.toolr()
-        .args(["hello", "world"])
-        .assert()
-        .failure()
-        .stderr(contains(REFUSAL));
-    assert!(!h.sentinel.exists());
-}
-
 #[test]
 fn trust_commands_escape_control_characters() {
     let env = TrustEnv::new();
@@ -343,4 +278,28 @@ fn trust_commands_escape_control_characters() {
         .assert()
         .success()
         .stdout(expected);
+}
+
+/// Trust starts empty on upgrade: a venv an older toolr built is no
+/// consent to keep running the repository.
+#[test]
+fn a_venv_from_before_trust_does_not_trust_the_repo() {
+    let h = Hostile::new(true);
+    h.seed_pre_trust_venv_cache();
+    h.toolr()
+        .args(["project", "venv", "sync", "--quiet"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    h.toolr()
+        .args(["hello", "world"])
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    h.toolr()
+        .args(["self", "trusted"])
+        .assert()
+        .success()
+        .stdout("");
+    assert!(!h.sentinel.exists());
 }

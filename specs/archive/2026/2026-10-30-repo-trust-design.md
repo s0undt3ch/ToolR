@@ -78,17 +78,10 @@ toolr-core, called in exactly three places:
 
 1. `TOOLR_TRUST_ALL=1` in the environment → allowed.
 2. A trust record exists for the canonical root → allowed.
-3. **Migration (one-shot):** if the store has no `.migrated-v1` marker,
-   scan `<toolr_cache_dir()>/*/meta.json` once and trust every `repo_path`
-   that still exists, then write the marker. Skip the pass when the cache
-   root resolves inside the repository being checked, and skip any
-   `meta.json` that lives inside the `repo_path` it names; per-entry errors
-   are logged, not fatal. Once the marker exists migration never runs
-   again, so `untrust` sticks and a cache entry written under
-   `TOOLR_TRUST_ALL=1` never becomes trust. The pass also runs before the
-   `TOOLR_TRUST_ALL` early return and in `project trust`/`project untrust`,
-   so the first of those consumes it. A prior sync or dispatch is prior
-   consent.
+3. ~~Migration (one-shot) from `<toolr_cache_dir()>/*/meta.json`.~~
+   Dropped during review: trust starts empty on upgrade. Released dispatch
+   backfills `meta.json` for repos it then refuses to run, so a cache entry
+   is no proof of consent, and each fix to the import added new holes.
 4. stdin is a terminal and `--quiet` was not passed → prompt. `y`/`yes`
    writes a record and allows; anything else, including bare Enter and EOF,
    refuses.
