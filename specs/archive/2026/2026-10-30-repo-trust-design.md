@@ -1,6 +1,6 @@
 # Repository trust
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review findings F-33 (the provenance gate is
   satisfied by a committed fake venv) and F-34 (a committed manifest is
   trusted verbatim).
