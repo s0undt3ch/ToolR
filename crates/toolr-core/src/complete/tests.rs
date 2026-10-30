@@ -135,14 +135,8 @@ fn commands_carry_their_summary_as_description() {
 #[test]
 fn candidate_description_strips_embedded_tabs_and_newlines() {
     // A literal tab/newline would corrupt the one-line-per-candidate wire format.
-    let candidate = Candidate::new("x", "line one\nline two\twith a tab");
-    assert_eq!(candidate.description, "line one line two with a tab");
-}
-
-#[test]
-fn candidate_description_is_stripped() {
-    let candidate = Candidate::new("v", "a\x1b]0;t\x07b");
-    assert!(!crate::text::has_control_chars(&candidate.description));
+    let candidate = Candidate::new("x", "line one\nline two\twith a tab\x1b]0;t\x07");
+    assert_eq!(candidate.description, "line one line two with a tab ]0;t ");
 }
 
 #[test]

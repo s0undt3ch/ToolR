@@ -7,6 +7,8 @@ use crate::text::{escape_control_chars as escape, has_control_chars};
 pub enum NameItem {
     Group,
     Command,
+    GroupRef,
+    Argument,
     Flag,
     Choice,
 }
@@ -16,6 +18,8 @@ impl std::fmt::Display for NameItem {
         f.write_str(match self {
             Self::Group => "group name",
             Self::Command => "command name",
+            Self::GroupRef => "group reference",
+            Self::Argument => "argument name",
             Self::Flag => "flag",
             Self::Choice => "choice value",
         })
@@ -34,11 +38,11 @@ pub struct InvalidName {
     pub reason: &'static str,
 }
 
-const CONTROL: &str = "contains a control character";
-const WHITESPACE: &str = "contains whitespace";
+pub(crate) const CONTROL: &str = "contains a control character";
+pub(crate) const WHITESPACE: &str = "contains whitespace";
 
 /// One reason per value; a control character outranks whitespace.
-fn strict_reason(s: &str) -> Option<&'static str> {
+fn name_violation(s: &str) -> Option<&'static str> {
     if has_control_chars(s) {
         Some(CONTROL)
     } else if s.chars().any(char::is_whitespace) {
@@ -50,8 +54,9 @@ fn strict_reason(s: &str) -> Option<&'static str> {
 
 pub(crate) fn validate_names(groups: &[Group], commands: &[Command]) -> Vec<InvalidName> {
     let mut out = Vec::new();
+    let group_paths: Vec<String> = groups.iter().map(Group::full_path).collect();
     for g in groups {
-        if let Some(reason) = strict_reason(&g.name) {
+        if let Some(reason) = name_violation(&g.name) {
             out.push(InvalidName {
                 module: String::new(),
                 owner: escape(&g.full_path()),
@@ -71,16 +76,31 @@ pub(crate) fn validate_names(groups: &[Group], commands: &[Command]) -> Vec<Inva
                 reason,
             });
         };
-        if let Some(reason) = strict_reason(&c.name) {
+        if let Some(reason) = name_violation(&c.name) {
             push(NameItem::Command, &c.name, reason);
         }
+        // A ref under a declared group is already reported against that group.
+        if let Some(reason) = name_violation(&c.group) {
+            let under_declared = group_paths.iter().any(|p| {
+                c.group == *p
+                    || c.group
+                        .strip_prefix(p.as_str())
+                        .is_some_and(|r| r.starts_with('.'))
+            });
+            if !under_declared {
+                push(NameItem::GroupRef, &c.group, reason);
+            }
+        }
         for a in &c.arguments {
-            if let Some(reason) = a.long_flag.as_deref().and_then(strict_reason) {
+            // A bad flag usually derives the name too; report it once.
+            if let Some(reason) = a.long_flag.as_deref().and_then(name_violation) {
                 push(
                     NameItem::Flag,
                     a.long_flag.as_deref().unwrap_or_default(),
                     reason,
                 );
+            } else if let Some(reason) = name_violation(&a.name) {
+                push(NameItem::Argument, &a.name, reason);
             }
             for v in &a.allowed_values {
                 if has_control_chars(v) {

@@ -67,6 +67,8 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         crate::argparse::run_for_project(project_root, &parents).map_err(BuildError::Argparse)?;
 
     // Native names and grafted argparse flags are validated together.
+    // Unlike fragment builds, unknown-group refs were checked before names:
+    // names wait so grafted argparse flags land in the same batch.
     let mut parents_sorted: Vec<_> = grafted.children_by_parent.iter().collect();
     parents_sorted.sort_by(|a, b| a.0.cmp(b.0));
     let grafted_children: Vec<Command> = parents_sorted
@@ -499,26 +501,32 @@ pub struct UnknownGroupRef {
 }
 
 fn format_unknown_groups(errors: &[UnknownGroupRef]) -> String {
+    use crate::text::escape_control_chars;
     let mut s = String::new();
     for (i, err) in errors.iter().enumerate() {
         if i > 0 {
             s.push('\n');
         }
         use std::fmt::Write as _;
+        let module = escape_control_chars(&err.module);
+        let command = escape_control_chars(&err.command);
         if err.referenced.is_empty() {
             let _ = write!(
                 &mut s,
-                "  - {}::{}: `@command` is missing a `group=...` kwarg.",
-                err.module, err.command,
+                "  - {module}::{command}: `@command` is missing a `group=...` kwarg.",
             );
         } else {
             let _ = write!(
                 &mut s,
-                "  - {}::{}: references group `{}` which has no `command_group(...)` declaration.",
-                err.module, err.command, err.referenced,
+                "  - {module}::{command}: references group `{}` which has no `command_group(...)` declaration.",
+                escape_control_chars(&err.referenced),
             );
             if let Some(suggestion) = &err.suggestion {
-                let _ = write!(&mut s, " Did you mean `{suggestion}`?");
+                let _ = write!(
+                    &mut s,
+                    " Did you mean `{}`?",
+                    escape_control_chars(suggestion)
+                );
             }
         }
     }
@@ -616,7 +624,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 mod tests {
     use super::*;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
-    use crate::parser::names::NameItem;
+    use crate::parser::names::{CONTROL, NameItem, WHITESPACE};
     use crate::parser::types::{BoolFlagError, UnsupportedType};
     use tempfile::TempDir;
 
@@ -818,16 +826,39 @@ def hello(ctx):
         assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
     }
 
-    fn invalid_names_for(files: &[(&str, &str)]) -> Vec<InvalidName> {
+    fn invalid_names_for<S: AsRef<str>>(files: &[(&str, S)]) -> Vec<InvalidName> {
         let tmp = TempDir::new().unwrap();
         for (name, src) in files {
-            write(tmp.path(), name, src);
+            write(tmp.path(), name, src.as_ref());
         }
         let err = build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err();
         let BuildError::InvalidNames(errs) = err else {
             panic!("expected InvalidNames, got {err}");
         };
         errs
+    }
+
+    /// A `django` dispatcher in `group` with one scanned argparse argument.
+    fn django_argparse(group: &str, add_argument: &str) -> [(&'static str, String); 3] {
+        let parent = if group == "django" {
+            "django".to_string()
+        } else {
+            format!("{group}.django")
+        };
+        [
+            (
+                "tools/dispatcher.py",
+                format!("group = command_group(\"{group}\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"),
+            ),
+            (
+                "apps/x/management/commands/migrate.py",
+                format!("def add_arguments(self, parser):\n    parser.add_argument({add_argument})\n"),
+            ),
+            (
+                "tools/pyproject.toml",
+                format!("[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"{parent}\"\n"),
+            ),
+        ]
     }
 
     #[test]
@@ -838,7 +869,7 @@ def hello(ctx):
         )]);
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].item, NameItem::Group);
-        assert_eq!(errs[0].reason, "contains whitespace");
+        assert_eq!(errs[0].reason, WHITESPACE);
     }
 
     #[test]
@@ -850,7 +881,7 @@ def hello(ctx):
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].item, NameItem::Command);
         assert_eq!(errs[0].value, "a\\u{a}b");
-        assert_eq!(errs[0].reason, "contains a control character");
+        assert_eq!(errs[0].reason, CONTROL);
     }
 
     const LITERAL_SRC: &str = "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command\ndef hi(ctx, mode: Literal[LITERAL]):\n    \"\"\"Hi.\"\"\"\n";
@@ -861,9 +892,7 @@ def hello(ctx):
         let errs = invalid_names_for(&[("tools/g.py", &src)]);
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].item, NameItem::Choice);
-        let msg = BuildError::InvalidNames(errs).to_string();
-        assert!(msg.contains("bad\\u{1b}[2J"), "{msg}");
-        assert!(!msg.contains('\x1b'), "{msg:?}");
+        assert_eq!(errs[0].value, "bad\\u{1b}[2J");
     }
 
     #[test]
@@ -876,29 +905,74 @@ def hello(ctx):
 
     #[test]
     fn argparse_flag_with_space_rejected() {
+        let errs = invalid_names_for(&django_argparse(
+            "django",
+            "'--bad flag', action='store_true'",
+        ));
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Flag);
+        assert_eq!(errs[0].value, "--bad flag");
+    }
+
+    const DIRTY_GROUP_REF_SRC: &str = "group = command_group(\"g\", \"T\", \"D\")\n\n@command(group=\"no\\x1b]0;PWN\\x07pe\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n";
+
+    #[test]
+    fn command_group_ref_with_esc_rejected() {
         let tmp = TempDir::new().unwrap();
-        write(
-            tmp.path(),
-            "tools/dispatcher.py",
-            "group = command_group(\"django\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n",
-        );
-        write(
-            tmp.path(),
-            "apps/x/management/commands/migrate.py",
-            "def add_arguments(self, parser):\n    parser.add_argument('--bad flag', action='store_true')\n",
-        );
-        write(
-            tmp.path(),
-            "tools/pyproject.toml",
-            "[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"django\"\n",
-        );
-        let err = build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err();
+        write(tmp.path(), "tools/g.py", DIRTY_GROUP_REF_SRC);
+        let err = build_commands(&tmp.path().join("tools"), "tools").unwrap_err();
         let BuildError::InvalidNames(errs) = err else {
             panic!("expected InvalidNames, got {err}");
         };
         assert_eq!(errs.len(), 1, "{errs:?}");
-        assert_eq!(errs[0].item, NameItem::Flag);
-        assert_eq!(errs[0].value, "--bad flag");
+        assert_eq!(errs[0].item, NameItem::GroupRef);
+        assert_eq!(errs[0].value, "no\\u{1b}]0;PWN\\u{7}pe");
+    }
+
+    #[test]
+    fn local_build_escapes_a_dirty_group_ref() {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "tools/g.py", DIRTY_GROUP_REF_SRC);
+        let msg = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap_err()
+            .to_string();
+        assert!(msg.contains("no\\u{1b}]0;PWN\\u{7}pe"), "{msg}");
+        assert!(!msg.contains('\x1b') && !msg.contains('\x07'), "{msg:?}");
+    }
+
+    #[test]
+    fn argparse_positional_with_esc_rejected() {
+        let errs = invalid_names_for(&django_argparse("django", "'po\\x1b]0;POS\\x07s'"));
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Argument);
+        assert_eq!(errs[0].reason, CONTROL);
+    }
+
+    #[test]
+    fn local_build_escapes_a_dirty_command_with_an_unknown_group() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/g.py",
+            "@command(name=\"x\\x1b]0;PWN\\x07\", group=\"nope\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        );
+        let msg = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap_err()
+            .to_string();
+        assert!(!msg.contains('\x1b') && !msg.contains('\x07'), "{msg:?}");
+    }
+
+    #[test]
+    fn unknown_group_message_escapes_control_chars() {
+        let msg = BuildError::UnknownGroupRefs(vec![UnknownGroupRef {
+            command: "hi".into(),
+            module: "tools.g".into(),
+            referenced: "no\x1b]0;PWN\x07pe".into(),
+            suggestion: Some("s\x1b[2J".into()),
+        }])
+        .to_string();
+        assert!(msg.contains("no\\u{1b}]0;PWN\\u{7}pe"), "{msg}");
+        assert!(!msg.contains('\x1b') && !msg.contains('\x07'), "{msg:?}");
     }
 
     #[test]
@@ -915,38 +989,13 @@ def hello(ctx):
 
     #[test]
     fn bad_group_and_bad_argparse_flag_reported_together() {
-        let tmp = TempDir::new().unwrap();
-        write(
-            tmp.path(),
-            "tools/dispatcher.py",
-            "group = command_group(\"my group\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n",
-        );
-        write(
-            tmp.path(),
-            "apps/x/management/commands/migrate.py",
-            "def add_arguments(self, parser):\n    parser.add_argument('--bad flag', action='store_true')\n",
-        );
-        write(
-            tmp.path(),
-            "tools/pyproject.toml",
-            "[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"my group.django\"\n",
-        );
-        let err = build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err();
-        let BuildError::InvalidNames(errs) = err else {
-            panic!("expected InvalidNames, got {err}");
-        };
+        let errs = invalid_names_for(&django_argparse(
+            "my group",
+            "'--bad flag', action='store_true'",
+        ));
         assert_eq!(errs.len(), 2, "{errs:?}");
         assert!(errs.iter().any(|e| e.item == NameItem::Group), "{errs:?}");
         assert!(errs.iter().any(|e| e.item == NameItem::Flag), "{errs:?}");
-    }
-
-    #[test]
-    fn all_invalid_names_reported_together() {
-        let errs = invalid_names_for(&[(
-            "tools/g.py",
-            "group = command_group(\"my group\", \"T\", \"D\")\n\n@group.command(name=\"a b\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
-        )]);
-        assert_eq!(errs.len(), 2, "{errs:?}");
     }
 
     #[test]
@@ -1029,6 +1078,37 @@ def backend(ctx):
         assert!(msg.contains("ci.helm-diff-pre-comment"), "got: {msg}");
         assert!(msg.contains("Did you mean"), "got: {msg}");
         assert!(msg.contains("ci.helm-diff-pr-comment"), "got: {msg}");
+    }
+
+    /// Several bad references list one per line, in source order.
+    #[test]
+    fn unknown_group_refs_list_one_per_line() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/c.py",
+            r#""""CI utilities."""
+@command(group="nope")
+def first(ctx):
+    """First."""
+    pass
+
+@command(group="nada")
+def second(ctx):
+    """Second."""
+    pass
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        let lines: Vec<&str> = msg.lines().collect();
+        assert_eq!(lines.len(), 3, "got: {msg}");
+        assert!(
+            lines[0].starts_with("unknown group references (2)"),
+            "got: {msg}"
+        );
+        assert!(lines[1].contains("`nope`"), "got: {msg}");
+        assert!(lines[2].contains("`nada`"), "got: {msg}");
     }
 
     /// The user's `[tool.toolr.argparse.*]` blocks in
