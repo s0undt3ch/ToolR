@@ -196,6 +196,14 @@ pub fn dispatch(
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;
     let output_opts = output_options_from_matches(matches);
+    // Before anything of the repo's runs: the venv path may `uv sync`, and the
+    // host-Python path imports `tools/*.py` directly.
+    toolr_core::trust::require_trust(
+        &repo_root,
+        toolr_core::trust::TrustMode {
+            never_prompt: output_opts.verbosity == "quiet",
+        },
+    )?;
     // Dispatched leaves take a separate spec-shape: the runner sees
     // `dispatch: Some(...)` and routes to `invoke_dispatcher` instead
     // of calling `function` as a regular command. Pack the child first,
@@ -342,7 +350,11 @@ fn resync_if_needed(
         eprintln!("toolr: {problem}; syncing it first");
     }
     let consent = toolr_core::uv::install::ConsentMode::from_env(quiet);
-    let opts = toolr_core::project::EnsureOpts::default().with_quiet(quiet);
+    let opts = toolr_core::project::EnsureOpts::default()
+        .with_quiet(quiet)
+        .with_trust(toolr_core::trust::TrustMode {
+            never_prompt: quiet,
+        });
     let (resolved, _uv) = toolr_core::project::ensure_venv_ready(repo_root, consent, opts)
         .with_context(|| {
             format!("{problem} and could not be synced; run `toolr project venv sync`")
@@ -378,6 +390,7 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     match matches.subcommand() {
         Some(("build-manifest", bm_matches)) => run_self_build_manifest(bm_matches),
         Some(("cache", cache_matches)) => crate::self_cache::dispatch(cache_matches),
+        Some(("trusted", trusted_matches)) => run_self_trusted(trusted_matches),
         Some(("completion", completion_matches)) => {
             let Some((action, action_matches)) = completion_matches.subcommand() else {
                 anyhow::bail!("expected a `self completion` subcommand");
@@ -390,6 +403,26 @@ fn run_self(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
         }
         _ => anyhow::bail!("expected a `self` subcommand"),
     }
+}
+
+/// List trusted roots, one per line, marking those that no longer exist.
+/// `--prune` drops the missing ones and lists what's left.
+fn run_self_trusted(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
+    let store = toolr_core::trust::TrustStore::open_default()?;
+    let prune = matches.get_flag("prune");
+    for record in store.list()? {
+        let root = &record.repo_path;
+        if root.exists() {
+            println!("{}", root.display());
+        } else if prune {
+            if store.untrust(root)? {
+                eprintln!("toolr: pruned {}", root.display());
+            }
+        } else {
+            println!("{} (missing)", root.display());
+        }
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn run_self_build_manifest(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {

@@ -248,6 +248,8 @@ def _capture(ctx: Context, toolr: Path, fixture: Path, snippet: Snippet) -> str:
     env = {
         **os.environ,
         "TOOLR_NO_CACHE_HINT": "1",
+        # The fixture is a throwaway copy of our own sample repo.
+        "TOOLR_TRUST_ALL": "1",
         # Pin terminal width so clap's adaptive `--help` layout is
         # deterministic across machines. Without this, local captures
         # (typically ~80 cols) drift from CI captures (CI sets

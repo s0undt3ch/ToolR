@@ -103,7 +103,7 @@ def test_e2e_dispatch_through_argparse_scanner(
 
     # No `uv sync` needed: the fixture's `tools/.venv` symlinks the workspace
     # venv, which already has `toolr-py` for the introspect helper to import.
-    base_env = dict(os.environ)
+    base_env = {**os.environ, "TOOLR_TRUST_ALL": "1"}
 
     # 1. Explicit rebuild.
     subprocess.run(  # noqa: S603
@@ -218,7 +218,7 @@ def test_e2e_same_source_attached_to_two_parents(tmp_path: Path, toolr_bin: Path
         },
     )
 
-    env = dict(os.environ)
+    env = {**os.environ, "TOOLR_TRUST_ALL": "1"}
     subprocess.run(  # noqa: S603
         [str(toolr_bin), "project", "manifest", "rebuild"], check=True, cwd=project, env=env
     )
@@ -300,7 +300,7 @@ def test_e2e_collision_across_sources_fails_build(tmp_path: Path, toolr_bin: Pat
         },
     )
 
-    env = dict(os.environ)
+    env = {**os.environ, "TOOLR_TRUST_ALL": "1"}
     result = subprocess.run(  # noqa: S603
         [str(toolr_bin), "project", "manifest", "rebuild"],
         check=False,
@@ -329,7 +329,7 @@ def test_e2e_auto_rebuild_runs_argparse(
     manifest_path = project / "tools" / ".toolr-manifest.json"
     assert not manifest_path.exists()  # never built yet
 
-    env = {**os.environ, "E2E_SIDECAR": str(sidecar)}
+    env = {**os.environ, "E2E_SIDECAR": str(sidecar), "TOOLR_TRUST_ALL": "1"}
     subprocess.run(  # noqa: S603
         [str(toolr_bin), "django", "migrate", "--check"],
         check=True,
@@ -411,7 +411,7 @@ def test_e2e_dispatcher_outer_flags(tmp_path: Path, toolr_bin: Path) -> None:
     )
 
     sidecar = tmp_path / "captured.json"
-    env = {**os.environ, "E2E_SIDECAR": str(sidecar)}
+    env = {**os.environ, "E2E_SIDECAR": str(sidecar), "TOOLR_TRUST_ALL": "1"}
 
     subprocess.run(  # noqa: S603
         [str(toolr_bin), "project", "manifest", "rebuild"],

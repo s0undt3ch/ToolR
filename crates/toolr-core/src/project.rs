@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use crate::cache::meta::Meta;
 use crate::discovery::discover_project_root;
 use crate::manifest_build::rebuild_manifest_full;
+use crate::trust::{require_trust, TrustMode};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
     ResolvedVenv, UpgradeMode, compute_repo_key, resolve_venv_path, sync::sync_if_needed,
@@ -25,6 +26,8 @@ pub struct EnsureOpts {
     pub quiet: bool,
     /// Whether to pass `-U` / `-P` flags through to uv.
     pub upgrade: UpgradeMode,
+    /// How to ask for repository trust when the repo isn't trusted yet.
+    pub trust: TrustMode,
 }
 
 impl EnsureOpts {
@@ -40,6 +43,10 @@ impl EnsureOpts {
         self.upgrade = mode;
         self
     }
+    pub fn with_trust(mut self, mode: TrustMode) -> Self {
+        self.trust = mode;
+        self
+    }
 }
 
 /// One-stop "make the venv ready" entrypoint. Returns the resolved venv
@@ -49,9 +56,11 @@ pub fn ensure_venv_ready(
     consent: ConsentMode,
     opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
-    let repo_root =
-        discover_project_root(cwd).context("locating project root for the tools venv")?;
-    let resolved = resolve_venv_path(&repo_root).context("resolving the tools venv path")?;
+    let repo_root = discover_project_root(cwd)
+        .context("locating project root for the tools venv")?;
+    require_trust(&repo_root, opts.trust)?;
+    let resolved = resolve_venv_path(&repo_root)
+        .context("resolving the tools venv path")?;
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
     sync_if_needed(
