@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::hash::{hash_tools_dir, list_python_files};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
-use crate::parser::names::{validate_names, InvalidName};
+use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
@@ -831,7 +831,10 @@ def hello(ctx):
         for (name, src) in files {
             write(tmp.path(), name, src.as_ref());
         }
-        let err = build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err();
+        expect_invalid_names(build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err())
+    }
+
+    fn expect_invalid_names(err: BuildError) -> Vec<InvalidName> {
         let BuildError::InvalidNames(errs) = err else {
             panic!("expected InvalidNames, got {err}");
         };
@@ -848,15 +851,21 @@ def hello(ctx):
         [
             (
                 "tools/dispatcher.py",
-                format!("group = command_group(\"{group}\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"),
+                format!(
+                    "group = command_group(\"{group}\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"
+                ),
             ),
             (
                 "apps/x/management/commands/migrate.py",
-                format!("def add_arguments(self, parser):\n    parser.add_argument({add_argument})\n"),
+                format!(
+                    "def add_arguments(self, parser):\n    parser.add_argument({add_argument})\n"
+                ),
             ),
             (
                 "tools/pyproject.toml",
-                format!("[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"{parent}\"\n"),
+                format!(
+                    "[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"{parent}\"\n"
+                ),
             ),
         ]
     }
@@ -920,10 +929,8 @@ def hello(ctx):
     fn command_group_ref_with_esc_rejected() {
         let tmp = TempDir::new().unwrap();
         write(tmp.path(), "tools/g.py", DIRTY_GROUP_REF_SRC);
-        let err = build_commands(&tmp.path().join("tools"), "tools").unwrap_err();
-        let BuildError::InvalidNames(errs) = err else {
-            panic!("expected InvalidNames, got {err}");
-        };
+        let errs =
+            expect_invalid_names(build_commands(&tmp.path().join("tools"), "tools").unwrap_err());
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].item, NameItem::GroupRef);
         assert_eq!(errs[0].value, "no\\u{1b}]0;PWN\\u{7}pe");
@@ -985,6 +992,41 @@ def hello(ctx):
         let msg = BuildError::InvalidNames(errs).to_string();
         assert!(msg.contains("x\\u{1b}[2J"), "{msg}");
         assert!(!msg.contains('\x1b'), "{msg:?}");
+    }
+
+    #[test]
+    fn fragment_build_renders_command_group_ref_and_choice_violations() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/g.py",
+            "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@command(group=\"no\\x1b[2Jpe\")\ndef orphan(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"bad\\x1b[2J\"]):\n    \"\"\"Hi.\"\"\"\n",
+        );
+        let msg = BuildError::InvalidNames(expect_invalid_names(
+            build_commands(&tmp.path().join("tools"), "tools").unwrap_err(),
+        ))
+        .to_string();
+        assert_eq!(
+            msg,
+            "invalid names (3):\n\
+             \x20 - tools.g::named command name `a\\u{a}b`: contains a control character\n\
+             \x20 - tools.g::orphan group reference `no\\u{1b}[2Jpe`: contains a control character\n\
+             \x20 - tools.g::pick choice value `bad\\u{1b}[2J`: contains a control character"
+        );
+    }
+
+    #[test]
+    fn local_build_renders_group_flag_and_argument_violations() {
+        let mut files = django_argparse("my group", "'--bad flag', action='store_true'");
+        files[1].1 = "def add_arguments(self, parser):\n    parser.add_argument('--bad flag', action='store_true')\n    parser.add_argument('po\\x1b[2Js')\n".to_string();
+        let msg = BuildError::InvalidNames(invalid_names_for(&files)).to_string();
+        assert_eq!(
+            msg,
+            "invalid names (3):\n\
+             \x20 - my group group name `my group`: contains whitespace\n\
+             \x20 - tools.dispatcher::django flag `--bad flag`: contains whitespace\n\
+             \x20 - tools.dispatcher::django argument name `po\\u{1b}[2Js`: contains a control character"
+        );
     }
 
     #[test]
