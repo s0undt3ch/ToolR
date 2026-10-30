@@ -1,5 +1,6 @@
 //! Locate a working uv binary on the host.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -90,17 +91,14 @@ pub fn parse_uv_version(output: &str) -> Option<(u32, u32, u32)> {
 /// Naive PATH scan that returns the first `uv` (or `uv.exe` on Windows)
 /// found.
 pub fn which_uv() -> Result<Option<PathBuf>, UvError> {
+    Ok(which_uv_in(std::env::var_os("PATH")))
+}
+
+fn which_uv_in(path: Option<OsString>) -> Option<PathBuf> {
     let basename = if cfg!(windows) { "uv.exe" } else { "uv" };
-    let Some(path) = std::env::var_os("PATH") else {
-        return Ok(None);
-    };
-    for entry in std::env::split_paths(&path) {
-        let candidate = entry.join(basename);
-        if candidate.is_file() {
-            return Ok(Some(candidate));
-        }
-    }
-    Ok(None)
+    std::env::split_paths(&path?)
+        .map(|entry| entry.join(basename))
+        .find(|candidate| candidate.is_file())
 }
 
 #[cfg(test)]
@@ -136,27 +134,15 @@ mod tests {
         assert!(msg.contains("0.1.0") || msg.contains("(0, 1, 0)"));
     }
 
-    fn with_path<R>(value: Option<&str>, f: impl FnOnce() -> R) -> R {
-        let mut env = EnvGuard::lock();
-        match value {
-            Some(v) => env.set("PATH", v),
-            None => env.remove("PATH"),
-        }
-        f()
-    }
-
     #[test]
     fn which_uv_returns_none_when_path_unset() {
-        let result = with_path(None, which_uv);
-        assert!(matches!(result, Ok(None)));
+        assert_eq!(which_uv_in(None), None);
     }
 
     #[test]
     fn which_uv_returns_none_when_no_directory_contains_uv() {
         let tmp = tempfile::tempdir().unwrap();
-        let path_value = tmp.path().to_string_lossy().into_owned();
-        let result = with_path(Some(&path_value), which_uv);
-        assert!(matches!(result, Ok(None)));
+        assert_eq!(which_uv_in(Some(tmp.path().into())), None);
     }
 
     #[cfg(unix)]
@@ -172,9 +158,7 @@ mod tests {
         perms.set_mode(0o755);
         std::fs::set_permissions(&stub, perms).unwrap();
 
-        let path_value = bin_dir.to_string_lossy().into_owned();
-        let found = with_path(Some(&path_value), which_uv).unwrap();
-        assert_eq!(found, Some(stub));
+        assert_eq!(which_uv_in(Some(bin_dir.into())), Some(stub));
     }
 
     #[cfg(unix)]
