@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crate::cache::meta::Meta;
 use crate::discovery::discover_project_root;
 use crate::manifest_build::rebuild_manifest_full;
-use crate::trust::{require_trust, TrustMode};
+use crate::trust::{TrustMode, require_trust};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
     ResolvedVenv, UpgradeMode, compute_repo_key, resolve_venv_path, sync::sync_if_needed,
@@ -56,10 +56,9 @@ pub fn ensure_venv_ready(
     consent: ConsentMode,
     opts: EnsureOpts,
 ) -> Result<(ResolvedVenv, UvBinary)> {
-    let repo_root = discover_project_root(cwd)
-        .context("locating project root for the tools venv")?;
-    let resolved = resolve_venv_path(&repo_root)
-        .context("resolving the tools venv path")?;
+    let repo_root =
+        discover_project_root(cwd).context("locating project root for the tools venv")?;
+    let resolved = resolve_venv_path(&repo_root).context("resolving the tools venv path")?;
     // After the static pyproject read, so a stray `tools/` with no pyproject
     // stays a benign `--quiet` exit; before anything repo-controlled runs.
     require_trust(&repo_root, opts.trust)?;
@@ -261,8 +260,14 @@ mod tests {
         let cache_dir = venv_dir.parent().unwrap();
         let meta = Meta::load(cache_dir).unwrap();
         assert_eq!(meta.repo_path, repo_root);
-        assert!(meta.interpreter_path.is_none(), "interpreter_path not recorded");
-        assert!(meta.interpreter_hash.is_none(), "interpreter_hash not recorded");
+        assert!(
+            meta.interpreter_path.is_none(),
+            "interpreter_path not recorded"
+        );
+        assert!(
+            meta.interpreter_hash.is_none(),
+            "interpreter_hash not recorded"
+        );
         // Manifest rebuilt as the final step.
         assert!(tools.join(".toolr-manifest.json").is_file());
     }
@@ -304,7 +309,10 @@ mod tests {
         finalize_sync(&repo_root, &resolved).unwrap();
 
         let meta = Meta::load(cache_dir).unwrap();
-        assert_eq!(meta.created_at, created, "created_at preserved from the existing sidecar");
+        assert_eq!(
+            meta.created_at, created,
+            "created_at preserved from the existing sidecar"
+        );
         assert!(meta.interpreter_path.is_none());
     }
 }

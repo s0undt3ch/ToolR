@@ -10,7 +10,7 @@ use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
-use toolr_core::trust::{require_trust, shown, trust_all_env, TrustError, TrustMode, TrustStore};
+use toolr_core::trust::{TrustError, TrustMode, TrustStore, require_trust, shown, trust_all_env};
 
 /// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
 /// uv install prompt; output and `venv sync`'s silent exit follow the
@@ -198,10 +198,13 @@ pub(crate) fn run_project_init(
     // The user is authoring this repo; trust it before the sync below, which
     // would otherwise refuse to run. The files are already written, so a
     // failure only warns and leaves the sync's own check to prompt or refuse.
-    if let Some(store) = trust_store {
-        if let Err(e) = store.trust(cwd) {
-            eprintln!("toolr: warning: could not record trust for {}: {e:#}", shown(cwd));
-        }
+    if let Some(store) = trust_store
+        && let Err(e) = store.trust(cwd)
+    {
+        eprintln!(
+            "toolr: warning: could not record trust for {}: {e:#}",
+            shown(cwd)
+        );
     }
 
     if no_sync {
@@ -515,7 +518,10 @@ fn venv_sync_unattended_quiet_exit(
 ) -> Option<ExitCode> {
     let err = result.as_ref().err()?;
     // The refusal names the repository path, which could contain a marker.
-    if err.chain().any(|e| e.downcast_ref::<TrustError>().is_some()) {
+    if err
+        .chain()
+        .any(|e| e.downcast_ref::<TrustError>().is_some())
+    {
         return None;
     }
     let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
@@ -626,8 +632,9 @@ fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
     let (resolved, _) = toolr_core::project::ensure_venv_ready(
         &cwd,
         consent,
-        toolr_core::project::EnsureOpts::default()
-            .with_trust(TrustMode { never_prompt: root_quiet }),
+        toolr_core::project::EnsureOpts::default().with_trust(TrustMode {
+            never_prompt: root_quiet,
+        }),
     )?;
 
     let shell = default_shell_path();
@@ -659,7 +666,12 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         // validate, then run. Needs no uv / consent / network.
         let repo_root = toolr_core::discovery::discover_project_root(&cwd)
             .context("locating project root for the tools venv")?;
-        require_trust(&repo_root, TrustMode { never_prompt: quiet || root_quiet })?;
+        require_trust(
+            &repo_root,
+            TrustMode {
+                never_prompt: quiet || root_quiet,
+            },
+        )?;
         let resolved = toolr_core::venv::resolve_venv_path(&repo_root)
             .context("resolving the tools venv path")?;
         let tools = repo_root.join("tools");

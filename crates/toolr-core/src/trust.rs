@@ -258,15 +258,14 @@ pub fn decide(
         Err(e) => eprintln!("toolr: warning: could not read the trust store: {e:#}"),
     }
 
-    if !mode.never_prompt {
-        if let Some((input, out)) = prompt_io {
-            if confirm(input, out, &root) {
-                if let Err(e) = store.trust(&root) {
-                    let _ = writeln!(out, "warning: could not record trust: {e:#}");
-                }
-                return Ok(());
-            }
+    if !mode.never_prompt
+        && let Some((input, out)) = prompt_io
+        && confirm(input, out, &root)
+    {
+        if let Err(e) = store.trust(&root) {
+            let _ = writeln!(out, "warning: could not record trust: {e:#}");
         }
+        return Ok(());
     }
     Err(TrustError::Untrusted(root))
 }

@@ -305,10 +305,10 @@ pub fn dispatch(
         );
     }
 
-    if let Some(resolved) = &resolved_venv {
-        if output_opts.verbosity != "quiet" {
-            warn_on_toolr_py_mismatch(&resolved.venv_dir);
-        }
+    if let Some(resolved) = &resolved_venv
+        && output_opts.verbosity != "quiet"
+    {
+        warn_on_toolr_py_mismatch(&resolved.venv_dir);
     }
 
     let mut child = spawn_runner(&python, tempfile.path(), &repo_root)
