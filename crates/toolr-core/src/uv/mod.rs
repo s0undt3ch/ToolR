@@ -235,34 +235,27 @@ mod tests {
         let _ = managed_uv_path();
     }
 
-    fn with_env_var<R>(key: &str, value: Option<&str>, f: impl FnOnce() -> R) -> R {
-        let mut env = EnvGuard::lock();
-        match value {
-            Some(v) => env.set(key, v),
-            None => env.remove(key),
-        }
-        f()
-    }
-
     #[test]
     fn toolr_data_dir_uses_xdg_data_home_when_set() {
-        let result = with_env_var("XDG_DATA_HOME", Some("/tmp/test-xdg-data"), toolr_data_dir);
+        let mut env = EnvGuard::write();
+        env.set("XDG_DATA_HOME", "/tmp/test-xdg-data");
+        let result = toolr_data_dir();
         assert_eq!(result, Some(PathBuf::from("/tmp/test-xdg-data/toolr")));
     }
 
     #[test]
     fn toolr_cache_dir_uses_xdg_cache_home_when_set() {
-        let result = with_env_var(
-            "XDG_CACHE_HOME",
-            Some("/tmp/test-xdg-cache"),
-            toolr_cache_dir,
-        );
+        let mut env = EnvGuard::write();
+        env.set("XDG_CACHE_HOME", "/tmp/test-xdg-cache");
+        let result = toolr_cache_dir();
         assert_eq!(result, Some(PathBuf::from("/tmp/test-xdg-cache/toolr")));
     }
 
     #[test]
     fn managed_uv_path_lives_under_data_dir_bin() {
-        let result = with_env_var("XDG_DATA_HOME", Some("/tmp/test-xdg-data"), managed_uv_path);
+        let mut env = EnvGuard::write();
+        env.set("XDG_DATA_HOME", "/tmp/test-xdg-data");
+        let result = managed_uv_path();
         // `uv_basename()` is platform-specific; just assert the directory
         // structure so this still passes on Windows runners.
         let p = result.expect("XDG_DATA_HOME set → Some");

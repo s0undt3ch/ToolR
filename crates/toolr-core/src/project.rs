@@ -201,7 +201,7 @@ mod tests {
         // In-tree venv (`repo_key` empty): the sidecar must live outside the
         // repo, under `$XDG_CACHE_HOME/toolr/<repo-key>` — exercises the
         // `compute_repo_key` + cache-dir branch.
-        let (env, xdg) = EnvGuard::temp_cache_home();
+        let (_env, xdg) = EnvGuard::temp_cache_home();
 
         let repo = TempDir::new().unwrap();
         let resolved = ResolvedVenv {
@@ -212,7 +212,6 @@ mod tests {
             config: ToolrConfig::default(),
         };
         let dir = provenance_cache_dir(repo.path(), &resolved);
-        drop(env);
         let dir = dir.unwrap();
         assert!(
             dir.starts_with(xdg.path().join("toolr")),

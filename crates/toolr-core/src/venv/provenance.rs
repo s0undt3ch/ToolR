@@ -198,7 +198,7 @@ mod tests {
     fn accepts_interpreter_under_toolr_cache_dir() {
         // An interpreter under `$XDG_CACHE_HOME/toolr/` is trusted outright
         // (a repo can't write there) — exercises the cache-dir branch.
-        let (env, xdg) = EnvGuard::temp_cache_home();
+        let (_env, xdg) = EnvGuard::temp_cache_home();
 
         let py = xdg.path().join("toolr/abc/venv/bin/python");
         write_exec(&py, "#!/bin/sh\n");
@@ -206,7 +206,6 @@ mod tests {
         // Repo is elsewhere; the interpreter lives under the cache dir.
         let repo = TempDir::new().unwrap();
         let result = verify_interpreter(&py, &venv, repo.path(), None);
-        drop(env);
         assert!(
             result.is_ok(),
             "interpreter under the toolr cache dir must be trusted"

@@ -89,7 +89,7 @@ mod tests {
 
     #[test]
     fn cache_default_uses_repo_key_subdir() {
-        let mut env = EnvGuard::lock();
+        let mut env = EnvGuard::write();
         env.remove(VENV_LOCATION_ENV);
         let tmp = setup_repo("[project]\nname=\"x\"\nversion=\"0\"\n");
         let resolved = resolve_venv_path(tmp.path()).unwrap();
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn in_tree_lands_inside_tools_dot_venv() {
-        let mut env = EnvGuard::lock();
+        let mut env = EnvGuard::write();
         env.remove(VENV_LOCATION_ENV);
         let tmp = setup_repo(
             "[project]\nname=\"x\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
@@ -122,7 +122,7 @@ mod tests {
     /// than a one-way "force in-tree" flag.
     #[test]
     fn env_var_overrides_pyproject_venv_location() {
-        let mut env = EnvGuard::lock();
+        let mut env = EnvGuard::write();
 
         let tmp = setup_repo("[project]\nname=\"x\"\nversion=\"0\"\n");
         env.set(VENV_LOCATION_ENV, "in-tree");
@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn env_var_invalid_value_is_an_error() {
-        let mut env = EnvGuard::lock();
+        let mut env = EnvGuard::write();
         let tmp = setup_repo("[project]\nname=\"x\"\nversion=\"0\"\n");
         env.set(VENV_LOCATION_ENV, "bogus");
         let err = resolve_venv_path(tmp.path()).unwrap_err();

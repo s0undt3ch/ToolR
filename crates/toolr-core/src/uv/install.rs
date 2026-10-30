@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     fn consent_mode_from_env_reads_toolr_auto_install_uv() {
-        let mut env = EnvGuard::lock();
+        let mut env = EnvGuard::write();
         env.set("TOOLR_AUTO_INSTALL_UV", "1");
         let on = ConsentMode::from_env(false);
         assert!(on.auto_install_env);

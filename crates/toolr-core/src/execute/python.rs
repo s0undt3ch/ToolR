@@ -130,7 +130,7 @@ mod tests {
     /// Covers the env read in `resolve_python`; prefer `resolve_python_in` for anything else.
     #[test]
     fn toolr_python_env_var_wins() {
-        let mut env = EnvGuard::lock();
+        let mut env = EnvGuard::write();
         env.set("TOOLR_PYTHON", "/custom/python");
         let p = resolve_python().expect("should resolve");
         assert_eq!(p, PathBuf::from("/custom/python"));

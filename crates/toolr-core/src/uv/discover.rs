@@ -319,10 +319,9 @@ mod tests {
         // Constrain $XDG_DATA_HOME to an empty tempdir so managed_uv_path
         // resolves into a non-existent file.
         let tmp = tempfile::tempdir().unwrap();
-        let mut env = EnvGuard::lock();
+        let mut env = EnvGuard::write();
         env.set("XDG_DATA_HOME", tmp.path());
         let result = find_managed_uv();
-        drop(env);
         assert!(matches!(result, Ok(None)));
     }
 }
