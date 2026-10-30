@@ -57,6 +57,17 @@
       depNameTemplate: "jdx/mise",
       datasourceTemplate: "github-releases",
     },
+    {
+      // Same dep as the `rust` pin in mise.toml (the mise manager's datasource and
+      // package), so the "Rust toolchain" group below moves both in one PR.
+      customType: "regex",
+      description: "Track the workspace rust-version alongside the mise Rust pin",
+      managerFilePatterns: ["/^Cargo\\.toml$/"],
+      matchStrings: ['rust-version = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
+      depNameTemplate: "rust",
+      packageNameTemplate: "rust",
+      datasourceTemplate: "rust-version",
+    },
   ],
 
   assignees: ["s0undt3ch"],
@@ -93,6 +104,14 @@
     },
 
     // ---- Grouping to cut PR noise ----
+    {
+      // rust_version_lockstep.rs fails unless these two move together.
+      description: "Bump the mise Rust pin and the workspace rust-version together",
+      groupName: "Rust toolchain",
+      matchManagers: ["mise", "custom.regex"],
+      matchDepNames: ["rust"],
+      addLabels: ["dependencies:rust"],
+    },
     {
       // The three ruff_* crates share one astral-sh/ruff git tag —
       // they must move in lockstep. They're declared as cargo git

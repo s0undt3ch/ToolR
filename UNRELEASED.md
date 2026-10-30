@@ -79,3 +79,7 @@ A parameter whose annotation is an alias of `bool`, such as `Verbose = Annotated
 with `verbose: Verbose = False`, is now a flag. It used to take a `true`/`false` value
 (`--verbose true`). Plugin manifests that were already built keep their old behaviour until the
 plugin is rebuilt.
+
+Building toolr from an sdist now needs Rust 1.99.1 or newer, the toolchain toolr is built and
+tested with. The crates declare it as `rust-version`, so an older toolchain fails with a clear
+message instead of a compile error inside a dependency.
