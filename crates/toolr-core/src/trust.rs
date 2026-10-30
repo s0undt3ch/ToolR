@@ -756,6 +756,68 @@ mod tests {
         assert!(!f.root().join("state").exists());
     }
 
+    // Windows reports a path under a file as NotFound, which reads as untrusted.
+    #[cfg(unix)]
+    #[test]
+    fn unusable_store_fails_closed_and_retries_migration() {
+        let f = Fixture::new();
+        fs::write(f.store().dir(), b"not a directory").unwrap();
+        synced_meta(f.root())
+            .write(&f.cache.path().join("some-key"))
+            .unwrap();
+        let (r, _) = f.decide(None, PROMPT);
+        assert!(matches!(r, Err(TrustError::Untrusted(_))));
+        assert!(f.store().is_trusted(&f.root()).is_err());
+        assert!(f.store().list().is_err());
+        assert!(!f.cache.path().join(MIGRATION_MARKER).exists());
+    }
+
+    #[test]
+    fn yes_with_unusable_store_runs_and_warns() {
+        let f = Fixture::new();
+        fs::write(f.store().dir(), b"not a directory").unwrap();
+        let (r, err) = f.decide(Some("y\n"), PROMPT);
+        assert!(r.is_ok());
+        assert!(err.contains("warning: could not record trust"), "{err}");
+    }
+
+    #[test]
+    fn record_that_is_a_directory_is_an_error_not_untrusted() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        let record = store.record_path(&f.root());
+        fs::remove_file(&record).unwrap();
+        fs::create_dir(&record).unwrap();
+        assert!(store.is_trusted(&f.root()).is_err());
+        assert!(store.untrust(&f.root()).is_err());
+    }
+
+    #[test]
+    fn list_skips_leftover_temp_files() {
+        let f = Fixture::new();
+        let store = f.store();
+        store.trust(&f.root()).unwrap();
+        fs::write(store.dir().join(".trust.abc123.tmp"), b"{}").unwrap();
+        assert_eq!(store.list().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn unreadable_cache_root_leaves_migration_for_later() {
+        let f = Fixture::new();
+        let store = f.store();
+        let not_a_dir = f.cache.path().join("file");
+        fs::write(&not_a_dir, b"").unwrap();
+        store.migrate_once(Some(&not_a_dir), &f.root());
+        assert!(!store.dir().join(MIGRATION_MARKER).exists());
+
+        synced_meta(f.root())
+            .write(&f.cache.path().join("some-key"))
+            .unwrap();
+        store.migrate_once(Some(f.cache.path()), &f.root());
+        assert!(store.is_trusted(&f.root()).unwrap());
+    }
+
     #[test]
     fn list_skips_corrupt_records() {
         let f = Fixture::new();

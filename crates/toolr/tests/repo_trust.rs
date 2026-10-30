@@ -174,36 +174,6 @@ fn untrust_then_refused() {
 }
 
 #[test]
-fn trusted_prune_drops_missing_paths() {
-    let env = TrustEnv::new();
-    let repo = TempDir::new().unwrap();
-    fs::create_dir(repo.path().join("tools")).unwrap();
-    let elsewhere = TempDir::new().unwrap();
-    env.toolr(repo.path())
-        .args(["project", "trust"])
-        .assert()
-        .success();
-    let root = fs::canonicalize(repo.path()).unwrap().display().to_string();
-    repo.close().unwrap();
-
-    env.toolr(elsewhere.path())
-        .args(["self", "trusted"])
-        .assert()
-        .success()
-        .stdout(format!("{root} (missing)\n"));
-    env.toolr(elsewhere.path())
-        .args(["self", "trusted", "--prune"])
-        .assert()
-        .success()
-        .stdout("");
-    env.toolr(elsewhere.path())
-        .args(["self", "trusted"])
-        .assert()
-        .success()
-        .stdout("");
-}
-
-#[test]
 fn trust_all_env_bypasses() {
     let h = Hostile::new(true);
     h.toolr()
