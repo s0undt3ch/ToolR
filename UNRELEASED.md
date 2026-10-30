@@ -57,3 +57,22 @@ A tools venv whose Python was uninstalled under it (for example by `mise prune`)
 They then failed with "does not contain a python interpreter" or "Python interpreter not found"
 until the venv was deleted by hand. Now both re-sync it, and `toolr project venv run --no-sync`
 says the interpreter is gone and how to fix it.
+
+**Breaking:** a `bool` parameter on a native command must now be a flag that defaults to `False`.
+Every other shape fails the manifest build with "invalid parameter declarations", and all offending
+parameters are listed at once. Rewrite each as follows:
+
+- `colour: bool = True`: write `no_colour: bool = False` (CLI `--no-colour`) and test `if no_colour:`
+  in the body. Or rename it once at the top with `colour = not no_colour`.
+- `*, verbose: bool`, with no default: add `= False`. A positional `flag: bool` needs the default
+  too, and should be passed by keyword.
+- `colour: bool | None = None` or `Optional[bool]`: use `Literal["auto", "always", "never"]` or an
+  `Enum`.
+- `list[bool]`, `tuple[bool, ...]` and `*flags: bool`: no replacement. Use one `bool = False` flag per
+  value.
+- Any other default, including `= None`, is rejected with the "must default to `False`" message.
+
+A parameter whose annotation is an alias of `bool`, such as `Verbose = Annotated[bool, arg(env="V")]`
+with `verbose: Verbose = False`, is now a flag. It used to take a `true`/`false` value
+(`--verbose true`). Plugin manifests that were already built keep their old behaviour until the
+plugin is rebuilt.

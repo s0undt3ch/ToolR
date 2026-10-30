@@ -130,7 +130,8 @@ Options:
 
 ## Boolean flags
 
-A `bool` annotation with a default of `False` is declared as a flag:
+A `bool` parameter is a flag. It defaults to `False`, and passing the flag
+sets it to `True`:
 
 ```python
 from __future__ import annotations
@@ -142,12 +143,18 @@ example = command_group("example", "Example Commands", "Example command group")
 
 
 @example.command
-def process(ctx: Context, verbose: bool = False, dry_run: bool = False):
+def process(
+    ctx: Context,
+    verbose: bool = False,
+    dry_run: bool = False,
+    no_cache: bool = False,
+):
     """Process something with optional flags.
 
     Args:
         verbose: Whether to print verbose output.
         dry_run: Whether to perform a dry run (no changes will be made).
+        no_cache: Whether to skip the cache. The cache is used by default.
     """
     if verbose:
         ctx.info("Verbose mode enabled")
@@ -156,8 +163,35 @@ def process(ctx: Context, verbose: bool = False, dry_run: bool = False):
         ctx.info("Dry run mode - no changes will be made")
         return
 
-    ctx.info("Processing...")
+    cache = not no_cache
+    ctx.info(f"Processing (cache {'on' if cache else 'off'})...")
 ```
+
+Name a boolean after what passing the flag does: `dry_run`, `force`,
+`skip_tests`, `no_cache`.
+
+A `bool` that defaults to `True` is a build error, as is a `bool` with no
+default, `bool | None`, `*flags: bool`, or a `bool` inside `list[...]` or
+`tuple[...]`. toolr reports every such parameter at once.
+
+For a feature that is on by default, write the flag as `no_colour: bool = False`.
+It appears as `--no-colour`. In the body, either test it as written:
+
+```python
+if no_colour:
+    disable_colour()
+```
+
+or rename it once at the top and write positive logic below:
+
+```python
+colour = not no_colour
+```
+
+Don't stack negatives, such as `no_skip` or `disable_no_cache`.
+
+For more than two states, use `Literal["auto", "always", "never"]` or an
+`Enum` instead of `bool | None`.
 
 ## `Literal[...]` for choice-restricted values
 
