@@ -85,8 +85,7 @@ fn description_newline_does_not_forge_candidates() {
         "\"\"\"CI.\"\"\"\nfrom toolr import command_group\n\ngroup = command_group(\"ci\", \"x\\nevil\\tdesc\\x1b[2J\")\n",
     )
     .unwrap();
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(tmp.path())
         .arg("__build-static-manifest")
         .assert()

@@ -1,7 +1,7 @@
 //! Build-time rejection of names a terminal or shell would mishandle.
 
 use crate::manifest::{Command, Group};
-use crate::text::has_control_chars;
+use crate::text::{escape_control_chars as escape, has_control_chars};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameItem {
@@ -36,19 +36,6 @@ pub struct InvalidName {
 
 const CONTROL: &str = "contains a control character";
 const WHITESPACE: &str = "contains whitespace";
-
-/// Render control characters as `\u{..}` and leave everything else alone.
-fn escape(s: &str) -> String {
-    s.chars()
-        .flat_map(|c| {
-            if has_control_chars(c.encode_utf8(&mut [0; 4])) {
-                c.escape_unicode().collect::<Vec<_>>()
-            } else {
-                vec![c]
-            }
-        })
-        .collect()
-}
 
 /// One reason per value; a control character outranks whitespace.
 fn strict_reason(s: &str) -> Option<&'static str> {

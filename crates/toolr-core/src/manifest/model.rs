@@ -74,6 +74,9 @@ pub enum PluginWarningKind {
     Shadowed,
     /// A command defined by two or more plugins and no local command. It is disabled.
     Conflict,
+    /// A group, command or argument whose name carries a control character. It is dropped.
+    /// `path` and `package` are best-effort: the filter runs after the merge.
+    Dropped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -351,6 +354,55 @@ impl Argument {
 }
 
 impl Manifest {
+    /// Drop every group whose path, and every command whose name, group or any
+    /// argument identifier carries a control character, with one warning each.
+    /// Names reach clap and dispatch verbatim, so cleaning them would orphan the
+    /// entry; dropping one argument would run the command without it.
+    pub fn drop_control_char_names(&mut self) {
+        use crate::text::{escape_control_chars, has_control_chars};
+        let warnings = &mut self.plugin_warnings;
+        let mut warn = |module: &str, what: String| {
+            warnings.push(PluginWarning {
+                package: escape_control_chars(module.split('.').next().unwrap_or_default()),
+                path: PathBuf::from("tools/.toolr-manifest.json"),
+                kind: PluginWarningKind::Dropped,
+                message: format!("dropped {what}"),
+            });
+        };
+        self.groups.retain(|g| {
+            let path = g.full_path();
+            let keep = !has_control_chars(&path);
+            if !keep {
+                warn(
+                    "",
+                    format!(
+                        "group `{}`: its name contains a control character",
+                        escape_control_chars(&path)
+                    ),
+                );
+            }
+            keep
+        });
+        self.commands.retain(|c| {
+            let what = if has_control_chars(&c.group) || has_control_chars(&c.name) {
+                "its name or group"
+            } else if c.arguments.iter().any(argument_is_dirty) {
+                "an argument name or flag"
+            } else {
+                return true;
+            };
+            warn(
+                &c.module,
+                format!(
+                    "command `{} {}`: {what} contains a control character",
+                    escape_control_chars(&c.group),
+                    escape_control_chars(&c.name)
+                ),
+            );
+            false
+        });
+    }
+
     /// Runs [`Argument::validate`] over every argument in every command,
     /// returning the first violation found.
     pub fn validate_arguments(&self) -> Result<(), String> {
@@ -362,6 +414,20 @@ impl Manifest {
         }
         Ok(())
     }
+}
+
+/// Every argument identifier clap registers: id, long flag, aliases, and the
+/// ids `requires` and `conflicts_with` point at.
+fn argument_is_dirty(a: &Argument) -> bool {
+    use crate::text::has_control_chars;
+    has_control_chars(&a.name)
+        || a.long_flag.as_deref().is_some_and(has_control_chars)
+        || a.metadata
+            .aliases
+            .iter()
+            .chain(&a.metadata.requires)
+            .chain(&a.metadata.conflicts_with)
+            .any(|s| has_control_chars(s))
 }
 
 // region: SkillRefOrigin

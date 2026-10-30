@@ -3,85 +3,11 @@
 
 mod common;
 
-use std::path::PathBuf;
-
-use assert_cmd::Command;
-use tempfile::TempDir;
-
-const GREET: &str = "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n";
+use common::Project;
 
 const LOCAL_CI_LINT: &str = "\"\"\"CI.\"\"\"\nfrom toolr import command_group\nci = command_group(\"ci\", \"CI\")\n@ci.command\ndef lint(ctx):\n    \"\"\"Local lint.\"\"\"\n";
 
 const LOCAL_CI_IMAGE: &str = "\"\"\"CI.\"\"\"\nfrom toolr import command_group\nci = command_group(\"ci\", \"CI\")\nimage = ci.command_group(\"image\", \"Image\")\n@image.command\ndef build(ctx):\n    \"\"\"Local build.\"\"\"\n";
-
-struct Project {
-    tmp: TempDir,
-}
-
-impl Project {
-    /// A project with one local group and an (initially empty) in-tree venv.
-    fn new() -> Self {
-        let tmp = TempDir::new().unwrap();
-        let tools = tmp.path().join("tools");
-        std::fs::create_dir_all(&tools).unwrap();
-        std::fs::write(
-            tools.join("pyproject.toml"),
-            "[project]\nname=\"demo\"\nversion=\"0\"\n",
-        )
-        .unwrap();
-        std::fs::write(tools.join("greet.py"), GREET).unwrap();
-        let venv = tools.join(".venv");
-        std::fs::create_dir_all(&venv).unwrap();
-        std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
-        Self { tmp }
-    }
-
-    fn tools(&self) -> PathBuf {
-        self.tmp.path().join("tools")
-    }
-
-    fn write_tool(&self, name: &str, body: &str) {
-        std::fs::write(self.tools().join(name), body).unwrap();
-    }
-
-    fn add_plugin(&self, package: &str, fragment: &str) {
-        let dir = self
-            .tools()
-            .join(".venv/lib/python3.13/site-packages")
-            .join(package);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("toolr-manifest.json"), fragment).unwrap();
-    }
-
-    fn toolr(&self, args: &[&str]) -> Command {
-        let mut cmd = common::toolr();
-        cmd.args(args)
-            .current_dir(self.tmp.path())
-            .env("TOOLR_VENV_LOCATION", "in-tree")
-            .env("TOOLR_NO_CACHE_HINT", "1");
-        cmd
-    }
-
-    fn stderr(&self, args: &[&str]) -> String {
-        let out = self.toolr(args).output().unwrap();
-        assert!(
-            out.status.success(),
-            "toolr {args:?} failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        String::from_utf8(out.stderr).unwrap()
-    }
-
-    fn stdout(&self, args: &[&str]) -> String {
-        let out = self.toolr(args).output().unwrap();
-        assert!(out.status.success(), "toolr {args:?} failed");
-        String::from_utf8(out.stdout).unwrap()
-    }
-
-    fn manifest(&self) -> String {
-        std::fs::read_to_string(self.tools().join(".toolr-manifest.json")).unwrap()
-    }
-}
 
 fn fragment(schema: u32, package: &str, group: &str, parent: Option<&str>, cmd: &str) -> String {
     let parent = parent

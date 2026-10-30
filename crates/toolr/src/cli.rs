@@ -17,6 +17,7 @@ fn help_styles() -> Styles {
 }
 
 use toolr_core::manifest::{ArgumentKind, Group, Manifest};
+use toolr_core::text::strip_control_chars_per_line;
 
 const RESERVED_GROUPS: &[&str] = &["self", "project"];
 
@@ -64,9 +65,9 @@ fn build_group_subtree(
         .disable_help_flag(true)
         .subcommand_required(true)
         .arg_required_else_help(true)
-        .about(group.title.clone());
+        .about(strip_control_chars_per_line(&group.title));
     if !group.description.is_empty() {
-        g = g.long_about(group.description.clone());
+        g = g.long_about(strip_control_chars_per_line(&group.description));
     }
 
     // For each NON-grafted command in this group, decide whether to
@@ -683,11 +684,11 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
     // Notes / Warnings sections, so we hand it to clap as-is. The
     // ``Args:`` section never appears here because the parser folds
     // it into per-argument help instead.
-    let summary = cmd.summary.clone();
+    let summary = strip_control_chars_per_line(&cmd.summary);
     let long_about = if cmd.description.is_empty() {
         summary.clone()
     } else {
-        cmd.description.clone()
+        strip_control_chars_per_line(&cmd.description)
     };
     let mut c = Command::new(cmd.name.clone())
         .disable_help_flag(true)
@@ -695,7 +696,7 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
         .long_about(long_about);
     for arg in &cmd.arguments {
         let long_flag = arg.name.replace('_', "-");
-        let mut a = Arg::new(arg.name.clone()).help(arg.help.clone());
+        let mut a = Arg::new(arg.name.clone()).help(strip_control_chars_per_line(&arg.help));
         let is_optional_wrapper = matches!(
             arg.resolved_type,
             Some(toolr_core::parser::SupportedType::Optional(_))
@@ -717,7 +718,13 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
                     // as the value, so treat it the same as "no CLI
                     // default" and let Python's own default expression
                     // run instead.
-                    if !def.is_empty() && def != "<expr>" {
+                    // A default with control characters is dropped rather than
+                    // stripped: the stripped form could fall outside the
+                    // filtered choices and make clap reject its own default.
+                    if !def.is_empty()
+                        && def != "<expr>"
+                        && !toolr_core::text::has_control_chars(def)
+                    {
                         a = a.default_value(def.clone());
                     }
                 }
@@ -798,7 +805,7 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
             }
             a = crate::value_parsers::apply_value_parser(a, ty);
         } else if !arg.allowed_values.is_empty() {
-            a = a.value_parser(arg.allowed_values.clone());
+            a = a.value_parser(crate::value_parsers::printable_choices(&arg.allowed_values));
         }
         a = apply_arg_metadata(a, &arg.metadata);
         c = c.arg(a);
@@ -826,7 +833,7 @@ fn apply_arg_metadata(mut a: Arg, meta: &toolr_core::manifest::ArgMetadata) -> A
         }
     }
     if let Some(name) = &meta.metavar {
-        a = a.value_name(name.clone());
+        a = a.value_name(strip_control_chars_per_line(name));
     }
     if let Some(env) = &meta.env {
         a = a.env(env);
@@ -844,7 +851,7 @@ fn apply_arg_metadata(mut a: Arg, meta: &toolr_core::manifest::ArgMetadata) -> A
         a = a.requires_all(meta.requires.clone());
     }
     if let Some(section) = &meta.help_section {
-        a = a.help_heading(section.title.clone());
+        a = a.help_heading(strip_control_chars_per_line(&section.title));
     }
     a
 }

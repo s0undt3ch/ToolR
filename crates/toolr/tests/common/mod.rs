@@ -1,6 +1,6 @@
-//! Shared test scaffolding for the `project_venv_*` integration tests.
+//! Shared test scaffolding for the binary's integration tests.
 //!
-//! Builds a temp dir that mimics a working toolr-using project:
+//! `VenvFixture` builds a temp dir that mimics a working toolr-using project:
 //!   - `tools/pyproject.toml` with `venv-location = "in-tree"` and a
 //!     minimal `[project] dependencies = [...]` list.
 //!   - A fake tools venv at `tools/.venv/` with `bin/python` and a
@@ -18,6 +18,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use assert_cmd::Command;
 use tempfile::TempDir;
 
 pub struct VenvFixture {
@@ -98,6 +99,78 @@ impl VenvFixture {
     /// Read the captured uv argv lines (each token on a separate line).
     pub fn uv_argv(&self) -> String {
         fs::read_to_string(&self.uv_argv_log).unwrap_or_default()
+    }
+}
+
+pub const GREET: &str = "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"greet\", \"Greetings\")\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n";
+
+/// A toolr project with one local group and an in-tree venv for plugin fragments.
+pub struct Project {
+    pub tmp: TempDir,
+}
+
+impl Project {
+    /// A project with one local group and an (initially empty) in-tree venv.
+    pub fn new() -> Self {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        std::fs::write(
+            tools.join("pyproject.toml"),
+            "[project]\nname=\"demo\"\nversion=\"0\"\n",
+        )
+        .unwrap();
+        std::fs::write(tools.join("greet.py"), GREET).unwrap();
+        let venv = tools.join(".venv");
+        std::fs::create_dir_all(&venv).unwrap();
+        std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
+        Self { tmp }
+    }
+
+    pub fn tools(&self) -> PathBuf {
+        self.tmp.path().join("tools")
+    }
+
+    pub fn write_tool(&self, name: &str, body: &str) {
+        std::fs::write(self.tools().join(name), body).unwrap();
+    }
+
+    pub fn add_plugin(&self, package: &str, fragment: &str) {
+        let dir = self
+            .tools()
+            .join(".venv/lib/python3.13/site-packages")
+            .join(package);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("toolr-manifest.json"), fragment).unwrap();
+    }
+
+    pub fn toolr(&self, args: &[&str]) -> Command {
+        let mut cmd = toolr();
+        cmd.args(args)
+            .current_dir(self.tmp.path())
+            .env("TOOLR_VENV_LOCATION", "in-tree")
+            .env("TOOLR_NO_CACHE_HINT", "1");
+        cmd
+    }
+
+    pub fn stderr(&self, args: &[&str]) -> String {
+        let out = self.toolr(args).output().unwrap();
+        assert!(
+            out.status.success(),
+            "toolr {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stderr).unwrap()
+    }
+
+    pub fn stdout(&self, args: &[&str]) -> String {
+        let out = self.toolr(args).output().unwrap();
+        assert!(out.status.success(), "toolr {args:?} failed");
+        String::from_utf8(out.stdout).unwrap()
+    }
+
+    pub fn manifest(&self) -> String {
+        std::fs::read_to_string(self.tools().join(".toolr-manifest.json")).unwrap()
     }
 }
 

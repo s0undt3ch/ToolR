@@ -58,8 +58,9 @@ pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<Candidat
         Slot::Positional { argument, prefix } => values(argument, &prefix),
         Slot::None => Vec::new(),
     };
-    // Single choke point for every candidate source. A value can't be both
-    // shown faithfully and kept safe, so it is dropped.
+    // Every candidate source in the engine passes here; names are already
+    // dropped at load time. A value can't be both shown faithfully and kept
+    // safe, so it is dropped.
     out.retain(|c| !has_control_chars(&c.value));
     sort_and_dedup_by_value(&mut out);
     out

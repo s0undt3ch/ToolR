@@ -19,6 +19,17 @@ use uuid::Uuid;
 
 use toolr_core::parser::SupportedType;
 
+/// Choices clap lists in `[possible values: ...]`. Values with control
+/// characters are dropped, as the completion engine does, since they would
+/// reach the terminal raw through clap's own error output.
+pub fn printable_choices(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .filter(|v| !toolr_core::text::has_control_chars(v))
+        .cloned()
+        .collect()
+}
+
 /// Attach the right `value_parser` to a clap `Arg` for the given
 /// supported type. `Optional(T)` is unwrapped automatically — the
 /// optionality is expressed via `required=false` on the caller side.
@@ -66,8 +77,8 @@ pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
         // Count is wired via ArgAction::Count, which consumes no value
         // and stores a u8. No value_parser to set; let clap handle it.
         SupportedType::Count => arg,
-        SupportedType::Literal(values) => arg.value_parser(values.clone()),
-        SupportedType::Enum { values, .. } => arg.value_parser(values.clone()),
+        SupportedType::Literal(values) => arg.value_parser(printable_choices(values)),
+        SupportedType::Enum { values, .. } => arg.value_parser(printable_choices(values)),
         // For collection kinds we configure the *element* parser; clap's
         // `num_args` / `Append` semantics are set by the caller.
         SupportedType::List(elem) => apply_value_parser(arg, elem),
@@ -327,6 +338,26 @@ mod tests {
 
     fn build_command_with(ty: &SupportedType) -> Command {
         Command::new("test").arg(apply_value_parser(Arg::new("v").long("v"), ty))
+    }
+
+    #[test]
+    fn literal_and_enum_choices_drop_control_char_values() {
+        let values = vec!["ok".to_string(), "bad\x1b[2J".to_string()];
+        let literal = SupportedType::Literal(values.clone());
+        let err = build_command_with(&literal)
+            .try_get_matches_from(["test", "--v", "bad\x1b[2J"])
+            .unwrap_err();
+        assert!(!err.to_string().contains('\x1b'), "{err}");
+        let enumeration = SupportedType::Enum {
+            name: "E".into(),
+            module: "m".into(),
+            values,
+        };
+        assert!(
+            build_command_with(&enumeration)
+                .try_get_matches_from(["test", "--v", "ok"])
+                .is_ok()
+        );
     }
 
     use std::fs;
