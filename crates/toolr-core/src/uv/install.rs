@@ -348,6 +348,7 @@ mod tests {
 
     #[test]
     fn prompts_on_a_tty_and_follows_the_answer() {
+        let _env = EnvGuard::read();
         for (answer, expected) in [
             ("\n", InstallDecision::Install),
             ("M\n", InstallDecision::Refuse),
@@ -370,6 +371,7 @@ mod tests {
 
     #[test]
     fn prompt_for_consent_refuses_on_eof_and_ends_the_line() {
+        let _env = EnvGuard::read();
         let mut out = Vec::new();
         assert!(!prompt_for_consent(&mut std::io::Cursor::new(""), &mut out).unwrap());
         assert!(String::from_utf8(out).unwrap().ends_with("Choice [I/M] \n"));
@@ -377,6 +379,7 @@ mod tests {
 
     #[test]
     fn prompt_for_consent_relies_on_the_echoed_newline_for_answers() {
+        let _env = EnvGuard::read();
         for (answer, expected) in [("\n", true), ("M\n", false)] {
             let mut out = Vec::new();
             assert_eq!(

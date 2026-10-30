@@ -20,5 +20,6 @@
 # rejects them on stable. The pre-existing defaults already match
 # what we want for those knobs, so leaving them out is harmless.
 
+# Per-file rustfmt (the pre-commit hook) ignores Cargo.toml; keep in step with its edition.
 edition = "2024"
 max_width = 100
