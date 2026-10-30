@@ -1780,6 +1780,11 @@ reports, doc fixes, and well-scoped feature PRs are all welcome.</p>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras<span class="w"> </span>--dev<span class="w">        </span><span class="c1"># Python deps</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>prek<span class="w"> </span>install<span class="w"> </span>--install-hooks<span class="w">      </span><span class="c1"># pre-commit hooks</span>
 </span></code></pre></div>
+<p>Run <code>toolr project trust</code> once in your checkout. toolr won't run this repository's <code>tools/*.py</code> until
+you do.</p>
+<p>Integration tests start toolr through <code>common::toolr()</code> (<code>crates/toolr/tests/common/mod.rs</code>), which
+turns the trust check off because every test drives a throwaway repository. Use it instead of
+<code>Command::cargo_bin("toolr")</code>. Trust tests use <code>TrustEnv</code>, which keeps the check on.</p>
 <p>Run the dev binary against the dogfood <code>tools/</code> directory:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>cargo<span class="w"> </span>run<span class="w"> </span>-p<span class="w"> </span>toolr<span class="w"> </span>--<span class="w"> </span>--help
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>cargo<span class="w"> </span>run<span class="w"> </span>-p<span class="w"> </span>toolr<span class="w"> </span>--<span class="w"> </span>self<span class="w"> </span>build-manifest<span class="w"> </span>toolr_example_plugin

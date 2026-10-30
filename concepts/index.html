@@ -500,6 +500,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#repository-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repository trust
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1649,6 +1660,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#repository-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repository trust
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1716,6 +1738,61 @@ shell with <code>toolr self completion install &lt;shell&gt;</code>.</p>
 venv + a <code>meta.json</code> sidecar with timestamps. Inspect with
 <code>toolr self cache list</code>; prune orphans or stale entries with
 <code>toolr self cache prune</code>. See <a href="../internals/cache/">Internals → Cache layout</a>.</p>
+<h2 id="repository-trust">Repository trust<a class="headerlink" href="#repository-trust" title="Permanent link">&para;</a></h2>
+<p>toolr refuses to run a repository's code until you have trusted that
+repository once. Running a command imports <code>tools/*.py</code>, and syncing the
+venv runs <code>uv</code> against <code>tools/pyproject.toml</code>. Both are code the
+repository controls.</p>
+<p>Trust is keyed on the repository's canonical root path. Content isn't
+hashed, so a dependency bump never asks again.</p>
+<p>Trust a repository in either of two ways:</p>
+<ul>
+<li>Answer <code>y</code> at the prompt toolr shows on a terminal. Anything else,
+  including bare Enter, refuses. With <code>--quiet</code> or no terminal, toolr
+  never prompts and refuses.</li>
+<li>Run <code>toolr project trust [PATH]</code>. <code>toolr project untrust [PATH]</code>
+  removes the record.</li>
+</ul>
+<p><code>toolr self trusted</code> lists the trusted repositories and marks the ones
+whose path no longer exists. <code>toolr self trusted --prune</code> removes those.
+Records live in toolr's state directory, not in the cache, so
+<code>toolr self cache prune</code> leaves them alone. That's
+<code>$XDG_STATE_HOME/toolr/trust/</code> when <code>XDG_STATE_HOME</code> is set, otherwise the
+platform state directory (<code>~/.local/state/toolr/trust/</code> on Linux), falling
+back to toolr's data directory where there is none
+(<code>~/Library/Application Support/toolr/trust/</code> on macOS).</p>
+<p>toolr refuses to use a trust store that sits inside the repository being
+checked, since that repository could ship its own records. Set
+<code>XDG_STATE_HOME</code> to a directory outside it. The one exception is a
+repository rooted at your home directory, for example because of a
+personal <code>~/tools/</code>: the default store always lives under it.</p>
+<p>Trust starts empty. A venv an older toolr built doesn't make its
+repository trusted, and neither does a run under <code>TOOLR_TRUST_ALL=1</code>.
+<code>toolr project init</code> trusts the directory it writes to.</p>
+<p>These never need trust, because nothing executes: <code>--help</code>, bare
+<code>toolr</code>, tab completion, <code>toolr project manifest rebuild</code> and
+<code>toolr self build-manifest</code>.</p>
+<p>For automation, set <code>TOOLR_TRUST_ALL=1</code>. The value must be exactly <code>1</code>.
+The <code>s0undt3ch/ToolR</code> GitHub Action sets it for you; see
+<a href="../project-config/#venv-location">Project configuration</a>. toolr doesn't infer it
+from <code>CI=true</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Trust is a one-way door</p>
+<p>Once a repository is trusted, its code runs as you. It can do
+anything you can, including editing the trust store.</p>
+</div>
+<p>Trust doesn't cover:</p>
+<ul>
+<li>A different repository cloned to the path of a trusted one. Trust
+  follows the path, so run <code>toolr project untrust</code> before you delete a
+  checkout you won't recreate.</li>
+<li>A trusted repository that later pulls hostile <code>tools/*.py</code> or
+  <code>[tool.uv]</code> changes.</li>
+<li>Editor and LSP integrations that import <code>tools/*.py</code> themselves.</li>
+<li>A compromised package index used by a trusted repository.</li>
+<li><code>toolr project init</code> in a directory that already holds someone else's
+  files. It records trust for content you didn't write.</li>
+</ul>
 
 
 

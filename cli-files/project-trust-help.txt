@@ -1,0 +1,10 @@
+Allow toolr to run this repository's code
+
+Usage: toolr project trust [PATH]
+
+Arguments:
+  [PATH]  A path inside the repository (defaults to the current directory)
+
+Options:
+  -h, --help
+          Print help

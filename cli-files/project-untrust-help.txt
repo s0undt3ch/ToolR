@@ -1,0 +1,10 @@
+Revoke trust in this repository
+
+Usage: toolr project untrust [PATH]
+
+Arguments:
+  [PATH]  A path inside the repository (defaults to the current directory)
+
+Options:
+  -h, --help
+          Print help

@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev88-2026-10-30" class="md-nav__link">
+  <a href="#0352-dev114-2026-10-30" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev88 - 2026-10-30
+        0.35.2-dev114 - 2026-10-30
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev88 - 2026-10-30">
+    <nav class="md-nav" aria-label="0.35.2-dev114 - 2026-10-30">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev88-2026-10-30" class="md-nav__link">
+  <a href="#0352-dev114-2026-10-30" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev88 - 2026-10-30
+        0.35.2-dev114 - 2026-10-30
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev88 - 2026-10-30">
+    <nav class="md-nav" aria-label="0.35.2-dev114 - 2026-10-30">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev88-2026-10-30">0.35.2-dev88 - 2026-10-30<a class="headerlink" href="#0352-dev88-2026-10-30" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev114-2026-10-30">0.35.2-dev114 - 2026-10-30<a class="headerlink" href="#0352-dev114-2026-10-30" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7580,9 +7580,21 @@ plugin is rebuilt.</p>
 <p>Building toolr from an sdist now needs Rust 1.99.1 or newer, the toolchain toolr is built and
 tested with. The crates declare it as <code>rust-version</code>, so an older toolchain fails with a clear
 message instead of a compile error inside a dependency.</p>
+<p>toolr now refuses to run a repository's commands or sync its tools venv until you trust that
+repository once: run <code>toolr project trust</code> there, or answer <code>y</code> at the prompt. No repository is
+trusted after upgrading, including ones toolr already built a venv for. In CI, set
+<code>TOOLR_TRUST_ALL=1</code>; the <code>s0undt3ch/ToolR</code> GitHub Action sets it for you from this release on. An
+older pinned action run with a newer <code>version:</code> doesn't, so set <code>TOOLR_TRUST_ALL: "1"</code> yourself in
+that case. <code>--help</code>, tab completion and manifest builds never need trust. The mise <code>enter</code> hook
+(<code>toolr project venv sync --quiet</code>) never prompts, so in an untrusted repository it prints the
+refusal, while a directory with no <code>tools/pyproject.toml</code> still exits silently. The interpreter
+provenance check is removed; repository trust replaces it.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
+<li><em>(security)</em> Add repository trust store (<a href="https://github.com/s0undt3ch/ToolR/commit/8be516351ab84ef2336af3848eef90ad04965d58"><code>8be5163</code></a>)</li>
+<li><em>(security)</em> Require repository trust before running repo code (<a href="https://github.com/s0undt3ch/ToolR/commit/747a3b678fbf03525d86fb32ed62f7b564b391a1"><code>747a3b6</code></a>)</li>
+<li><em>(security)</em> [<strong>breaking</strong>] Start with no trusted repositories (<a href="https://github.com/s0undt3ch/ToolR/commit/e33d125591f3414509faff6c63a437d2ec52409e"><code>e33d125</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7607,6 +7619,14 @@ message instead of a compile error inside a dependency.</p>
 <li><em>(venv)</em> Detect a removed base Python through pyvenv.cfg (<a href="https://github.com/s0undt3ch/ToolR/commit/757829394554f1dcce6c47ffe8f139e8cd4f90f4"><code>7578293</code></a>)</li>
 <li><em>(venv)</em> Only treat a confirmed-missing pyvenv.cfg home as broken (<a href="https://github.com/s0undt3ch/ToolR/commit/bf7a01eb5ee2ea952239e637163b6c029083799d"><code>bf7a01e</code></a>)</li>
 <li><em>(parser)</em> Only suggest the no_<name> rewrite for a True default (<a href="https://github.com/s0undt3ch/ToolR/commit/7579d67cb3b3cdd5e44aa2b7201dbb5cd7b07fb5"><code>7579d67</code></a>)</li>
+<li><em>(security)</em> Enforce trust store location on every operation (<a href="https://github.com/s0undt3ch/ToolR/commit/dc692c3b6184a460daf8852b88812b01183454cb"><code>dc692c3</code></a>)</li>
+<li><em>(security)</em> Make trust migration one-shot (<a href="https://github.com/s0undt3ch/ToolR/commit/b04f6ef11957d8cea94aea5c2c2b6e83bb47eb8a"><code>b04f6ef</code></a>)</li>
+<li><em>(security)</em> Check trust after resolving the venv path (<a href="https://github.com/s0undt3ch/ToolR/commit/3d16565f6a0a9b70f5e8033ab78989eac777bfbe"><code>3d16565</code></a>)</li>
+<li><em>(security)</em> Never treat a trust refusal as a benign quiet exit (<a href="https://github.com/s0undt3ch/ToolR/commit/437122ad9038f71a93b384e80b254da89a6f33eb"><code>437122a</code></a>)</li>
+<li><em>(security)</em> Allow trust when the repository root is the home directory (<a href="https://github.com/s0undt3ch/ToolR/commit/509e42566a69f1db5d628bb9213757ec5443afd5"><code>509e425</code></a>)</li>
+<li><em>(security)</em> Keep trust migration one-shot across store resets (<a href="https://github.com/s0undt3ch/ToolR/commit/39ba5776f48ad3b5c45ca253bed9037c789cfe49"><code>39ba577</code></a>)</li>
+<li><em>(security)</em> Migrate trust only from finished syncs (<a href="https://github.com/s0undt3ch/ToolR/commit/c9087ec808652ba378b2e3a4c61c39ca7f4ec824"><code>c9087ec</code></a>)</li>
+<li><em>(security)</em> Never fail project init on a trust store problem (<a href="https://github.com/s0undt3ch/ToolR/commit/35035a9aa0e9cf6387d485653dfe77becbafada9"><code>35035a9</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7619,6 +7639,9 @@ message instead of a compile error inside a dependency.</p>
 <li><em>(parser)</em> Push type resolution errors from one place (<a href="https://github.com/s0undt3ch/ToolR/commit/517f8aaedf21f048da2efe1863399cb332e3a01b"><code>517f8aa</code></a>)</li>
 <li><em>(rust)</em> Collapse nested if-lets into let-chains (<a href="https://github.com/s0undt3ch/ToolR/commit/7c70131d76e08d070d7b8a291008de31fc4059c5"><code>7c70131</code></a>)</li>
 <li><em>(tests)</em> Tidy the env guard and move workspace gates to xtask (<a href="https://github.com/s0undt3ch/ToolR/commit/b57a34625bd13c55500066176edb439b6956b0b1"><code>b57a346</code></a>)</li>
+<li><em>(venv)</em> Drop interpreter provenance gate (<a href="https://github.com/s0undt3ch/ToolR/commit/1c573b5e573826e2749c2d42cdd9f2d82c99d450"><code>1c573b5</code></a>)</li>
+<li><em>(hash)</em> Drop hash_file, unused since the provenance gate went (<a href="https://github.com/s0undt3ch/ToolR/commit/2be595fd9247ad02e09c2e60a8b733f206df5573"><code>2be595f</code></a>)</li>
+<li><em>(security)</em> Tidy trust helpers and comments (<a href="https://github.com/s0undt3ch/ToolR/commit/c16aaaa31af44f7361ed02c873ad9e6cb75a12f5"><code>c16aaaa</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7635,10 +7658,17 @@ message instead of a compile error inside a dependency.</p>
 <li><em>(specs)</em> Archive bool flags design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b2cf911a484a501a8bdb8f814c763856c99becc4"><code>b2cf911</code></a>)</li>
 <li><em>(specs)</em> Mark bool flags design as implemented (<a href="https://github.com/s0undt3ch/ToolR/commit/bd58163c8c620e334b3ce17d2864718b609e863b"><code>bd58163</code></a>)</li>
 <li><em>(arguments)</em> Document env var values for boolean flags (<a href="https://github.com/s0undt3ch/ToolR/commit/b21969f93fe37e158789fa70b31ad0424f7990d5"><code>b21969f</code></a>)</li>
+<li><em>(specs)</em> Add repository trust design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/57319bcacb80bca454d6175e98edecb34c4e8842"><code>57319bc</code></a>)</li>
+<li><em>(security)</em> Document repository trust (<a href="https://github.com/s0undt3ch/ToolR/commit/88a93e2cb0dfb9a63e7882795c73f75a2f155bd0"><code>88a93e2</code></a>)</li>
+<li><em>(security)</em> Describe the trust store location and one-shot migration (<a href="https://github.com/s0undt3ch/ToolR/commit/c357fc7cb3d715e79842ad0f4d1ad9f6b9e374c3"><code>c357fc7</code></a>)</li>
+<li><em>(specs)</em> Archive repo trust design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/1e4157fe5bb4eae902429855fd6c51e74c8d6cdc"><code>1e4157f</code></a>)</li>
+<li><em>(security)</em> Document the store-location refusal and path-keyed trust (<a href="https://github.com/s0undt3ch/ToolR/commit/b765f0997055abdd9a5e59d6bc49c8f7745127c5"><code>b765f09</code></a>)</li>
+<li><em>(security)</em> Document the trust commands and the action version caveat (<a href="https://github.com/s0undt3ch/ToolR/commit/3e81f4de3a02c7a9becd7030c7845f6da59d0ed4"><code>3e81f4d</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(rust)</em> Apply rustfmt 2024 style and enforce it in pre-commit (<a href="https://github.com/s0undt3ch/ToolR/commit/d400d132fbc8d3ecd060d581ba92b5587bfd3fda"><code>d400d13</code></a>)</li>
+<li><em>(security)</em> Apply edition 2024 formatting and let-chains to repo trust (<a href="https://github.com/s0undt3ch/ToolR/commit/23135669b91cec64bc467f920fa34fb42f3220a7"><code>2313566</code></a>)</li>
 </ul>
 <h3 id="testing"><!-- 6 -->🧪 Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7657,6 +7687,9 @@ message instead of a compile error inside a dependency.</p>
 <li><em>(core)</em> Make tests that read mutated env vars take the env lock (<a href="https://github.com/s0undt3ch/ToolR/commit/960b28869416befaf8a8f79025ab34b02d90191a"><code>960b288</code></a>)</li>
 <li><em>(core)</em> Keep unit tests out of the real toolr cache (<a href="https://github.com/s0undt3ch/ToolR/commit/6ddb8b6616769d9f9a238bfa5e010652be6c833e"><code>6ddb8b6</code></a>)</li>
 <li><em>(core)</em> Take the env read lock in the uv consent prompt tests (<a href="https://github.com/s0undt3ch/ToolR/commit/68d75b504f1adb549a221cfe8714be85b3d85fbb"><code>68d75b5</code></a>)</li>
+<li>Keep cargo-launched toolr out of the real trust store (<a href="https://github.com/s0undt3ch/ToolR/commit/94a11550969d1ec628cf36203daf782be34594ce"><code>94a1155</code></a>)</li>
+<li><em>(security)</em> Cover trust store failure paths and run commands on Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/efaa190f736031f79954f43ec27e335b18eba4e2"><code>efaa190</code></a>)</li>
+<li>Turn the trust check off per test, not for every cargo process (<a href="https://github.com/s0undt3ch/ToolR/commit/ad135359e067582454f8e3cb91258fdc07a3f28c"><code>ad13535</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7671,6 +7704,7 @@ message instead of a compile error inside a dependency.</p>
 <li><em>(build)</em> Build macOS and Windows wheels with the mise Rust toolchain (<a href="https://github.com/s0undt3ch/ToolR/commit/f7f18c34d664edc9a61e84fffc2ddccdd58a5dc3"><code>f7f18c3</code></a>)</li>
 <li><em>(renovate)</em> Give Rust toolchain bumps a week before they land (<a href="https://github.com/s0undt3ch/ToolR/commit/2abd49ac19744b32e95291c2643f685e785d6edc"><code>2abd49a</code></a>)</li>
 <li>Move macOS arm64 jobs from macos-14 to macos-15 (<a href="https://github.com/s0undt3ch/ToolR/commit/e03ed13f8a88f5e499ccc9a4adb46df1ba670e08"><code>e03ed13</code></a>)</li>
+<li><em>(action)</em> Export TOOLR_TRUST_ALL (<a href="https://github.com/s0undt3ch/ToolR/commit/0e305afd117d44eb930485a4d100dc28b0fab889"><code>0e305af</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
