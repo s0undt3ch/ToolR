@@ -73,8 +73,7 @@ pub fn extract_groups(
             .and_then(|pv| resolve_var(&pv, &out, global_vars))
             .or_else(|| parent_kwarg_literal(call));
         let chosen_var = var_name.clone().unwrap_or_default();
-        let Some(mut binding) =
-            parse_group_call(call, &chosen_var, module_docstring, parent_path)
+        let Some(mut binding) = parse_group_call(call, &chosen_var, module_docstring, parent_path)
         else {
             continue;
         };
@@ -189,8 +188,7 @@ fn parse_group_call(
     // the long `description` (clap's `long_about`, shown on `--help`).
     // Either explicit positional title / `description=` still wins so callers
     // can override one side without losing the other.
-    let parsed_doc =
-        docstring_kwarg(call, module_docstring).and_then(|raw| parse_docstring(&raw));
+    let parsed_doc = docstring_kwarg(call, module_docstring).and_then(|raw| parse_docstring(&raw));
     let title = positional_title
         .or_else(|| parsed_doc.as_ref().map(|d| d.short_description.clone()))
         .unwrap_or_default();
@@ -295,7 +293,10 @@ mod tests {
             "Example single-line docstring for a group.",
             &HashMap::new(),
         );
-        assert_eq!(groups[0].group.title, "Example single-line docstring for a group.");
+        assert_eq!(
+            groups[0].group.title,
+            "Example single-line docstring for a group."
+        );
         assert_eq!(
             groups[0].group.description,
             "Example single-line docstring for a group."

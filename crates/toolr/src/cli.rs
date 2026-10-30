@@ -776,10 +776,7 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
 /// Translate the parser-harvested `ArgMetadata` into clap `Arg` calls.
 /// Every field is independently optional — empty / `None` means "leave
 /// clap's default behaviour alone."
-fn apply_arg_metadata(
-    mut a: Arg,
-    meta: &toolr_core::manifest::ArgMetadata,
-) -> Arg {
+fn apply_arg_metadata(mut a: Arg, meta: &toolr_core::manifest::ArgMetadata) -> Arg {
     for alias in &meta.aliases {
         if alias.is_empty() {
             continue;
@@ -898,12 +895,13 @@ mod cli_tree_tests {
         let mut children_map: std::collections::HashMap<Option<String>, Vec<&Group>> =
             std::collections::HashMap::new();
         for g in &groups {
-            children_map
-                .entry(g.parent.clone())
-                .or_default()
-                .push(g);
+            children_map.entry(g.parent.clone()).or_default().push(g);
         }
-        let top: Vec<&Group> = manifest.groups.iter().filter(|g| g.parent.is_none()).collect();
+        let top: Vec<&Group> = manifest
+            .groups
+            .iter()
+            .filter(|g| g.parent.is_none())
+            .collect();
         build_group_subtree(top[0], &manifest, &children_map)
     }
 
@@ -1136,7 +1134,10 @@ mod cli_tree_tests {
                 .collect::<Vec<_>>(),
             vec!["a"]
         );
-        assert_eq!(matches.get_one::<String>("env").map(String::as_str), Some("prod"));
+        assert_eq!(
+            matches.get_one::<String>("env").map(String::as_str),
+            Some("prod")
+        );
     }
 
     #[test]

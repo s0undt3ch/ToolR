@@ -154,8 +154,14 @@ fn api_surface(
         // Deliberately kept off `cargo fmt`'s preferred one-arg-per-line wrap: that
         // shape puts the `?` alone on its own line, which llvm-cov then reports as
         // an uncovered line even though the call executes on every iteration.
-        let entry =
-            resolve_entry(name, root_module, repo_root, &init_imports, &init_source, &init_module)?;
+        let entry = resolve_entry(
+            name,
+            root_module,
+            repo_root,
+            &init_imports,
+            &init_source,
+            &init_module,
+        )?;
         entries.push(entry);
     }
     // ASCII sort by name for stable output, irrespective of __all__'s
@@ -163,7 +169,10 @@ fn api_surface(
     entries.sort_by(|a, b| a.name.cmp(&b.name));
 
     let body = render_commands(&entries, heading, import_module, all_source_desc);
-    Ok(Generated { path: repo_root.join(output_rel_path), body })
+    Ok(Generated {
+        path: repo_root.join(output_rel_path),
+        body,
+    })
 }
 
 /// Build the `references/docstrings.md` file for the authoring skill.
@@ -1079,7 +1088,13 @@ mod tests {
         let src = "def b():\n    pass\n\n\ndef a():\n    pass\n";
         let m = module(src);
         let blocks = extract_example_blocks(&m, src, &["a", "b"]).expect("both names resolve");
-        assert_eq!(blocks, vec!["def a():\n    pass".to_string(), "def b():\n    pass".to_string()]);
+        assert_eq!(
+            blocks,
+            vec![
+                "def a():\n    pass".to_string(),
+                "def b():\n    pass".to_string()
+            ]
+        );
     }
 
     #[test]
@@ -1099,8 +1114,10 @@ mod tests {
     fn crlf_python_source_slices_byte_identically_to_lf() {
         let src = "import x\n\n\ndef f():\n    \"\"\"Doc.\n\n    More.\n    \"\"\"\n    return 1\n";
         let slice = |tag: &str, eol: &str| {
-            let path = std::env::temp_dir()
-                .join(format!("xtask-authoring-eol-{tag}-{}.py", std::process::id()));
+            let path = std::env::temp_dir().join(format!(
+                "xtask-authoring-eol-{tag}-{}.py",
+                std::process::id()
+            ));
             std::fs::write(&path, src.replace('\n', eol)).unwrap();
             let parsed = parse_with_source(&path);
             std::fs::remove_file(&path).unwrap();
@@ -1108,7 +1125,10 @@ mod tests {
             extract_example_blocks(&module, &source, &["f"]).unwrap()
         };
         let lf = slice("lf", "\n");
-        assert_eq!(lf, ["def f():\n    \"\"\"Doc.\n\n    More.\n    \"\"\"\n    return 1"]);
+        assert_eq!(
+            lf,
+            ["def f():\n    \"\"\"Doc.\n\n    More.\n    \"\"\"\n    return 1"]
+        );
         assert_eq!(slice("crlf", "\r\n"), lf);
     }
 }

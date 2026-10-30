@@ -23,7 +23,10 @@ fn remove_help_lists_package_positional() {
     assert!(output.status.success(), "help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("PACKAGE"), "help missing PACKAGE: {stdout}");
-    assert!(stdout.contains("uv remove"), "help should reference `uv remove`: {stdout}");
+    assert!(
+        stdout.contains("uv remove"),
+        "help should reference `uv remove`: {stdout}"
+    );
 }
 
 #[test]
@@ -83,10 +86,23 @@ fn remove_success_path_invokes_uv_remove() {
         .args(["project", "venv", "remove", "httpx"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let argv = fx.uv_argv();
-    assert!(argv.lines().any(|l| l == "remove"), "uv argv should contain `remove`; got:\n{argv}");
-    assert!(argv.contains("httpx"), "uv argv should contain `httpx`; got:\n{argv}");
+    assert!(
+        argv.lines().any(|l| l == "remove"),
+        "uv argv should contain `remove`; got:\n{argv}"
+    );
+    assert!(
+        argv.contains("httpx"),
+        "uv argv should contain `httpx`; got:\n{argv}"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("removed"), "expected `removed` in stdout, got: {stdout}");
+    assert!(
+        stdout.contains("removed"),
+        "expected `removed` in stdout, got: {stdout}"
+    );
 }

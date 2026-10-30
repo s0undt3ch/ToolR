@@ -102,7 +102,9 @@ fn end_to_end_list_then_prune_then_prune_all() {
     assert!(cache_root.join("fresh").exists());
 
     // --- prune: removes orphan + stale, keeps fresh ---
-    let out = cmd_in(tmp.path(), &["self", "cache", "prune"]).output().unwrap();
+    let out = cmd_in(tmp.path(), &["self", "cache", "prune"])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     assert!(!cache_root.join("orphan").exists());
     assert!(!cache_root.join("stale").exists());

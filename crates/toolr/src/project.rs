@@ -142,7 +142,10 @@ pub(crate) fn run_project_init(
     };
 
     if !quiet {
-        println!("toolr: scaffolded tools/ at {}", outcome.tools_dir.display());
+        println!(
+            "toolr: scaffolded tools/ at {}",
+            outcome.tools_dir.display()
+        );
         for path in &outcome.files_written {
             let rel = path.strip_prefix(cwd).unwrap_or(path).display();
             println!("toolr:   wrote {rel}");
@@ -162,12 +165,11 @@ pub(crate) fn run_project_init(
 
     // Auto-sync — same path as `toolr project venv sync --force`.
     let consent = toolr_core::uv::install::ConsentMode::from_env(never_prompt);
-    let (resolved, uv) =
-        toolr_core::project::ensure_venv_ready(
-            cwd,
-            consent,
-            toolr_core::project::EnsureOpts::default().with_force_sync(true),
-        )?;
+    let (resolved, uv) = toolr_core::project::ensure_venv_ready(
+        cwd,
+        consent,
+        toolr_core::project::EnsureOpts::default().with_force_sync(true),
+    )?;
     if !quiet {
         println!(
             "toolr: synced venv at {} using uv {}.{}.{}",
@@ -283,7 +285,9 @@ fn venv_sync(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         println!(
             "toolr: synced venv at {} using uv {}.{}.{}",
             resolved.venv_dir.display(),
-            uv.version.0, uv.version.1, uv.version.2,
+            uv.version.0,
+            uv.version.1,
+            uv.version.2,
         );
         println!(
             "toolr: run a command in it with `toolr project venv run -- <cmd>` (e.g. pytest tools/)"
@@ -344,10 +348,7 @@ fn venv_lock(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
 
     let status = toolr_core::venv::run_uv_lock(&uv, &tools_dir, &resolved, &upgrade, quiet)?;
     if !status.success() {
-        anyhow::bail!(
-            "`uv lock` failed with exit code {:?}",
-            status.code(),
-        );
+        anyhow::bail!("`uv lock` failed with exit code {:?}", status.code(),);
     }
 
     if !quiet {
@@ -382,7 +383,11 @@ fn venv_add(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     }
 
     if !quiet {
-        println!("toolr: added {} to {}", specs.join(", "), tools_dir.join("pyproject.toml").display());
+        println!(
+            "toolr: added {} to {}",
+            specs.join(", "),
+            tools_dir.join("pyproject.toml").display()
+        );
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -424,7 +429,11 @@ fn venv_remove(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     }
 
     if !quiet {
-        println!("toolr: removed {} from {}", packages.join(", "), pyproject.display());
+        println!(
+            "toolr: removed {} from {}",
+            packages.join(", "),
+            pyproject.display()
+        );
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -807,7 +816,10 @@ mod tests {
         .unwrap();
 
         let pyproject = fs::read_to_string(tools.join("pyproject.toml")).unwrap();
-        assert!(pyproject.contains(r#"name = "tools""#), "should be overwritten");
+        assert!(
+            pyproject.contains(r#"name = "tools""#),
+            "should be overwritten"
+        );
         assert_eq!(
             fs::read_to_string(tools.join(".gitignore")).unwrap(),
             "# stale-gitignore",
@@ -850,8 +862,7 @@ mod tests {
         } else {
             "/usr/bin:/bin"
         };
-        let result =
-            prepend_to_path(bin, Some(std::ffi::OsStr::new(existing))).unwrap();
+        let result = prepend_to_path(bin, Some(std::ffi::OsStr::new(existing))).unwrap();
         let paths: Vec<_> = std::env::split_paths(&result).collect();
         assert_eq!(paths[0], bin);
         assert!(paths.len() >= 2);
@@ -869,7 +880,10 @@ mod tests {
         assert!(dep_name_matches("toolr-py", "toolr-py"));
         assert!(dep_name_matches("toolr-py>=0.11", "toolr-py"));
         assert!(dep_name_matches("toolr-py[extra]", "toolr-py"));
-        assert!(dep_name_matches("toolr-py==0.11.2; python_version < \"3.13\"", "toolr-py"));
+        assert!(dep_name_matches(
+            "toolr-py==0.11.2; python_version < \"3.13\"",
+            "toolr-py"
+        ));
         assert!(!dep_name_matches("other", "toolr-py"));
     }
 

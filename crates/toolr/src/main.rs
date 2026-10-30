@@ -56,10 +56,12 @@ fn run() -> anyhow::Result<ExitCode> {
             use clap::error::ErrorKind;
             let want_help = argv.iter().any(|a| a == "--help");
             let want_short = !want_help && argv.iter().any(|a| a == "-h");
-            if (want_help || want_short) && matches!(
-                e.kind(),
-                ErrorKind::MissingSubcommand | ErrorKind::MissingRequiredArgument
-            ) {
+            if (want_help || want_short)
+                && matches!(
+                    e.kind(),
+                    ErrorKind::MissingSubcommand | ErrorKind::MissingRequiredArgument
+                )
+            {
                 // Help was requested but clap failed validation first.
                 // Delegate to dispatch with a synthesised "root" match by
                 // passing an empty argv so clap can build a valid root-level
@@ -188,8 +190,12 @@ mod tests {
 
     #[test]
     fn detects_long_and_short_quiet() {
-        assert!(argv_requests_quiet(&argv(&["project", "venv", "sync", "--quiet"])));
-        assert!(argv_requests_quiet(&argv(&["-q", "project", "venv", "sync"])));
+        assert!(argv_requests_quiet(&argv(&[
+            "project", "venv", "sync", "--quiet"
+        ])));
+        assert!(argv_requests_quiet(&argv(&[
+            "-q", "project", "venv", "sync"
+        ])));
         // Short cluster.
         assert!(argv_requests_quiet(&argv(&["-dq", "ci", "hello"])));
     }

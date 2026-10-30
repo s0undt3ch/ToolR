@@ -52,11 +52,7 @@ pub enum PriorState {
 }
 
 /// Compute the target install path for `shell`.
-pub fn install_path_for(
-    shell: Shell,
-    xdg_override: Option<&Path>,
-    home: &Path,
-) -> Result<PathBuf> {
+pub fn install_path_for(shell: Shell, xdg_override: Option<&Path>, home: &Path) -> Result<PathBuf> {
     match shell {
         Shell::Bash => {
             let base = xdg_override
@@ -77,21 +73,14 @@ pub fn install_path_for(
 /// Write the embedded script to the chosen location.
 pub fn install_script(opts: &InstallOptions) -> Result<InstallOutcome> {
     let path = match opts.shell {
-        Shell::Bash => {
-            install_path_for(opts.shell, opts.xdg_data_home.as_deref(), &opts.home)?
-        }
-        Shell::Fish => {
-            install_path_for(opts.shell, opts.xdg_config_home.as_deref(), &opts.home)?
-        }
+        Shell::Bash => install_path_for(opts.shell, opts.xdg_data_home.as_deref(), &opts.home)?,
+        Shell::Fish => install_path_for(opts.shell, opts.xdg_config_home.as_deref(), &opts.home)?,
         Shell::Zsh => install_path_for(opts.shell, None, &opts.home)?,
     };
 
     let payload = completion_script(opts.shell);
     if payload.is_empty() {
-        return Err(anyhow!(
-            "no embedded completion script for {}",
-            opts.shell
-        ));
+        return Err(anyhow!("no embedded completion script for {}", opts.shell));
     }
 
     let prior = match std::fs::read_to_string(&path) {

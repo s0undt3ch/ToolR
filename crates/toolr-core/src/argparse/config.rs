@@ -94,9 +94,7 @@ pub fn parse_blocks(toml_text: &str) -> Result<Vec<ArgparseBlock>, ConfigError> 
 }
 
 /// Public: read `pyproject.toml` from disk and parse.
-pub fn parse_blocks_from_pyproject(
-    pyproject: &Path,
-) -> Result<Vec<ArgparseBlock>, ConfigError> {
+pub fn parse_blocks_from_pyproject(pyproject: &Path) -> Result<Vec<ArgparseBlock>, ConfigError> {
     let text = std::fs::read_to_string(pyproject).map_err(|source| ConfigError::Io {
         path: pyproject.display().to_string(),
         source,
@@ -130,7 +128,11 @@ mod tests {
         assert_eq!(block.scan_paths, vec!["apps/*/management/commands/*.py"]);
         assert_eq!(block.common_args.len(), 1);
         assert_eq!(
-            block.attachments().iter().map(|a| a.parent.as_str()).collect::<Vec<_>>(),
+            block
+                .attachments()
+                .iter()
+                .map(|a| a.parent.as_str())
+                .collect::<Vec<_>>(),
             vec!["django", "jenkins.job"],
         );
     }

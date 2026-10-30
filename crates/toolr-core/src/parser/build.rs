@@ -10,14 +10,14 @@ use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
-        detect_name_conflicts, extract_commands, format_missing_docstrings, missing_docstrings,
-        CommandNameConflict, MissingDocstring,
+        CommandNameConflict, MissingDocstring, detect_name_conflicts, extract_commands,
+        format_missing_docstrings, missing_docstrings,
     },
     groups::extract_groups,
     parse_python_file,
     symbols::{ArgSectionTable, EnumTable, ImportTable, TypeAliasTable},
 };
-use crate::third_party::{discover_and_merge, ThirdPartyError};
+use crate::third_party::{ThirdPartyError, discover_and_merge};
 
 /// Build the static portion of a manifest from a tools directory.
 ///
@@ -60,8 +60,8 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
         .collect();
 
     let project_root = tools_dir.parent().unwrap_or(tools_dir);
-    let grafted = crate::argparse::run_for_project(project_root, &parents)
-        .map_err(BuildError::Argparse)?;
+    let grafted =
+        crate::argparse::run_for_project(project_root, &parents).map_err(BuildError::Argparse)?;
 
     // Splice grafted children into the manifest.
     for (_parent, mut children) in grafted.children_by_parent {
@@ -319,12 +319,18 @@ impl std::fmt::Display for PositionalArityErrorKind {
                 "two zero-or-one positionals `{first}` and `{second}`. Only one `T | None` positional \
                  is allowed per command; give one of them a default to make it a `--flag`."
             ),
-            Self::OptionalWithVarPositional { optional, var_positional } => write!(
+            Self::OptionalWithVarPositional {
+                optional,
+                var_positional,
+            } => write!(
                 f,
                 "the zero-or-one positional `{optional}` cannot coexist with the variadic positional \
                  `*{var_positional}` — both consume the trailing slot."
             ),
-            Self::RequiredAfterZeroOrOne { required, zero_or_one } => write!(
+            Self::RequiredAfterZeroOrOne {
+                required,
+                zero_or_one,
+            } => write!(
                 f,
                 "the required positional `{required}` follows the zero-or-one positional `{zero_or_one}`. \
                  Move required positionals before any `T | None` parameter."
@@ -1348,7 +1354,9 @@ def cmd_c(ctx, *, database: Database = Database.REPLICA) -> None:
         }
         let err = build_static_manifest_inner(&tmp.path().join("tools"))
             .expect_err("expected the build to fail");
-        let BuildError::UnsupportedTypes(errs) = err else { unreachable!("expected UnsupportedTypes") };
+        let BuildError::UnsupportedTypes(errs) = err else {
+            unreachable!("expected UnsupportedTypes")
+        };
         errs
     }
 
@@ -1405,7 +1413,10 @@ def documented(ctx: Context) -> None:
         let missing = missing_docstrings_for(&[("tools/doc.py", UNDOCUMENTED_PY)]);
         let functions: Vec<&str> = missing.iter().map(|m| m.function.as_str()).collect();
         assert_eq!(functions, ["bare", "empty", "blank", "sections_only"]);
-        assert!(missing.iter().all(|m| m.module == "tools.doc"), "{missing:?}");
+        assert!(
+            missing.iter().all(|m| m.module == "tools.doc"),
+            "{missing:?}"
+        );
         let msg = BuildError::MissingDocstrings(missing).to_string();
         assert!(
             msg.starts_with("commands without a docstring (4):\n  - tools.doc::bare: "),
@@ -1467,7 +1478,9 @@ def run(
         );
         assert_eq!(
             ty("scratch"),
-            Some(SupportedType::Optional(Box::new(SupportedType::WritableDirectoryPath)))
+            Some(SupportedType::Optional(Box::new(
+                SupportedType::WritableDirectoryPath
+            )))
         );
     }
 
@@ -1587,9 +1600,11 @@ def read(ctx: Context, *, name: Annotated[str, arg(metvar="NAME")] = "x") -> Non
         )]);
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].reason, unknown_keyword("metvar", Some("metavar")));
-        assert!(errs[0]
-            .to_string()
-            .ends_with("unknown `arg()` keyword `metvar` (did you mean `metavar`?)"));
+        assert!(
+            errs[0]
+                .to_string()
+                .ends_with("unknown `arg()` keyword `metvar` (did you mean `metavar`?)")
+        );
     }
 
     #[test]
@@ -1642,9 +1657,11 @@ def read(ctx: Context, name: Annotated[str, arg("x")]) -> None:
         )]);
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert_eq!(errs[0].reason, UnsupportedType::PositionalArgArgument);
-        assert!(errs[0]
-            .to_string()
-            .ends_with("`arg()` takes keyword arguments only"));
+        assert!(
+            errs[0]
+                .to_string()
+                .ends_with("`arg()` takes keyword arguments only")
+        );
     }
 
     #[test]
@@ -1810,7 +1827,8 @@ def read(ctx: Context, {signature}) -> None:
             &kw_module(TOOLR_IMPORTS, "A = B\nB = A", "config: A"),
         )]);
         assert!(
-            errs.iter().all(|e| !matches!(e.reason, UnsupportedType::UnknownArgKeyword { .. })),
+            errs.iter()
+                .all(|e| !matches!(e.reason, UnsupportedType::UnknownArgKeyword { .. })),
             "{errs:?}"
         );
     }
@@ -2055,7 +2073,11 @@ def read(ctx: Context, {signature}) -> None:
 
     #[test]
     fn non_arg_calls_inside_annotated_are_not_checked() {
-        for call in ["make().arg(foo=1)", "mylib.other(foo=1)", "FACTORIES[0](foo=1)"] {
+        for call in [
+            "make().arg(foo=1)",
+            "mylib.other(foo=1)",
+            "FACTORIES[0](foo=1)",
+        ] {
             assert_builds(&kw_module(
                 "from toolr import Context, command_group\nimport mylib\nfrom mylib import FACTORIES, make",
                 "",

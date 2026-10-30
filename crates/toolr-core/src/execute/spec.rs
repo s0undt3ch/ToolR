@@ -126,9 +126,7 @@ pub struct ExecutionSpec {
 /// Collect `class name -> declaring module` for every `Enum`-typed
 /// argument on `arguments` (peeling one `Optional` wrapper). Shared by
 /// `build_spec` and `build_dispatch_spec` in the `toolr` binary crate.
-pub fn enum_modules_for(
-    arguments: &[crate::manifest::Argument],
-) -> BTreeMap<String, String> {
+pub fn enum_modules_for(arguments: &[crate::manifest::Argument]) -> BTreeMap<String, String> {
     use crate::parser::SupportedType;
     let mut out = BTreeMap::new();
     for arg in arguments {
@@ -274,7 +272,10 @@ mod tests {
         assert_eq!(RUNNER_SCHEMA_VERSION, 3);
     }
 
-    fn arg_with_type(name: &str, ty: Option<crate::parser::SupportedType>) -> crate::manifest::Argument {
+    fn arg_with_type(
+        name: &str,
+        ty: Option<crate::parser::SupportedType>,
+    ) -> crate::manifest::Argument {
         crate::manifest::Argument {
             name: name.to_string(),
             kind: crate::manifest::ArgumentKind::Optional,

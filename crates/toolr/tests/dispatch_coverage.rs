@@ -71,11 +71,18 @@ fn no_subcommand_prints_root_help_and_exits_success() {
         .current_dir(tmp.path())
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Root help must mention the group from the manifest (proves the
     // dynamic clap tree was built before the help print).
-    assert!(stdout.contains("ci"), "expected `ci` group in root help, got:\n{stdout}");
+    assert!(
+        stdout.contains("ci"),
+        "expected `ci` group in root help, got:\n{stdout}"
+    );
 }
 
 #[test]
@@ -91,7 +98,10 @@ fn group_without_leaf_command_prints_help_and_exits_nonzero() {
     let output = assert.get_output();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Usage: toolr ci"), "expected `ci` group help, got:\n{stderr}");
+    assert!(
+        stderr.contains("Usage: toolr ci"),
+        "expected `ci` group help, got:\n{stderr}"
+    );
 }
 
 // --------------------------------------------------------------------
@@ -332,7 +342,10 @@ fn dispatcher_flag_typed_after_leaf_name_is_rejected() {
         String::from_utf8_lossy(&output.stderr),
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("--dry-run"), "expected flag name in stderr, got:\n{stderr}");
+    assert!(
+        stderr.contains("--dry-run"),
+        "expected flag name in stderr, got:\n{stderr}"
+    );
     assert!(
         stderr.contains("wrapup_company"),
         "expected leaf name in stderr, got:\n{stderr}"

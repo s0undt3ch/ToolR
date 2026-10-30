@@ -243,10 +243,7 @@ mod tests {
     fn missing_marker_or_lock_reports_missing() {
         let tmp = TempDir::new().unwrap();
         let resolved = dummy_resolved(tmp.path().join("venv"));
-        assert_eq!(
-            check_freshness(&resolved, tmp.path()),
-            Freshness::Missing
-        );
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Missing);
     }
 
     #[test]
@@ -258,10 +255,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         std::fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
         let resolved = dummy_resolved(venv);
-        assert_eq!(
-            check_freshness(&resolved, tmp.path()),
-            Freshness::Stale
-        );
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Stale);
     }
 
     #[test]
@@ -273,10 +267,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         touch_marker(&venv).unwrap();
         let resolved = dummy_resolved(venv);
-        assert_eq!(
-            check_freshness(&resolved, tmp.path()),
-            Freshness::Fresh
-        );
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
     }
 
     #[test]
@@ -285,7 +276,11 @@ mod tests {
         let venv = tmp.path().join("venv");
         venv_with_interpreter(&venv);
         let home = tmp.path().join("pruned").join("bin");
-        fs::write(venv.join("pyvenv.cfg"), format!("home = {}\n", home.display())).unwrap();
+        fs::write(
+            venv.join("pyvenv.cfg"),
+            format!("home = {}\n", home.display()),
+        )
+        .unwrap();
         fs::write(tmp.path().join("uv.lock"), b"locks").unwrap();
         std::thread::sleep(Duration::from_millis(20));
         touch_marker(&venv).unwrap();
@@ -301,10 +296,7 @@ mod tests {
     fn dead_interpreter_reports_broken_despite_fresh_marker() {
         let tmp = TempDir::new().unwrap();
         let resolved = dummy_resolved(fresh_venv_with_dead_interpreter(tmp.path()));
-        assert_eq!(
-            check_freshness(&resolved, tmp.path()),
-            Freshness::Broken
-        );
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Broken);
     }
 
     #[cfg(unix)]
@@ -355,7 +347,8 @@ mod tests {
 
         let uv = stub_uv(tmp.path(), 99);
         let resolved = dummy_resolved(venv);
-        sync_if_needed(&uv, tmp.path(), &resolved, false, false, &UpgradeMode::None).expect("fresh should short-circuit");
+        sync_if_needed(&uv, tmp.path(), &resolved, false, false, &UpgradeMode::None)
+            .expect("fresh should short-circuit");
     }
 
     #[cfg(unix)]
@@ -436,8 +429,14 @@ mod tests {
         fs::create_dir_all(&venv).unwrap();
         let resolved = dummy_resolved(venv);
 
-        run_uv_sync(&uv, tmp.path(), &resolved, &UpgradeMode::None, /*quiet=*/ true)
-            .expect("stub uv must exit 0");
+        run_uv_sync(
+            &uv,
+            tmp.path(),
+            &resolved,
+            &UpgradeMode::None,
+            /*quiet=*/ true,
+        )
+        .expect("stub uv must exit 0");
 
         let captured = fs::read_to_string(&argv_log).unwrap();
         assert!(
@@ -474,8 +473,14 @@ mod tests {
         fs::create_dir_all(&venv).unwrap();
         let resolved = dummy_resolved(venv);
 
-        run_uv_sync(&uv, tmp.path(), &resolved, &UpgradeMode::None, /*quiet=*/ false)
-            .expect("stub uv must exit 0");
+        run_uv_sync(
+            &uv,
+            tmp.path(),
+            &resolved,
+            &UpgradeMode::None,
+            /*quiet=*/ false,
+        )
+        .expect("stub uv must exit 0");
 
         let captured = fs::read_to_string(&argv_log).unwrap();
         assert!(
@@ -494,7 +499,12 @@ mod tests {
         let argdump = tmp.path().join("argdump");
         let stub = tmp.path().join("uv");
         let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}",
+            argdump.display()
+        )
+        .unwrap();
         drop(f);
         fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
         let uv = UvBinary {
@@ -507,7 +517,14 @@ mod tests {
         let mut resolved = dummy_resolved(venv);
         resolved.config.python_version = Some("3.13".into());
 
-        run_uv_sync(&uv, tmp.path(), &resolved, &UpgradeMode::None, /*quiet=*/ false).expect("stub uv should succeed");
+        run_uv_sync(
+            &uv,
+            tmp.path(),
+            &resolved,
+            &UpgradeMode::None,
+            /*quiet=*/ false,
+        )
+        .expect("stub uv should succeed");
         let dump = fs::read_to_string(&argdump).unwrap();
         assert!(dump.contains("sync"));
         assert!(dump.contains("--python"));
@@ -524,7 +541,12 @@ mod tests {
         let argdump = tmp.path().join("argdump");
         let stub = tmp.path().join("uv");
         let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}",
+            argdump.display()
+        )
+        .unwrap();
         drop(f);
         fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
         let uv = UvBinary {
@@ -537,8 +559,14 @@ mod tests {
         fs::create_dir_all(&venv).unwrap();
         let resolved = dummy_resolved(venv);
 
-        run_uv_sync(&uv, tmp.path(), &resolved, &UpgradeMode::All, /*quiet=*/ false)
-            .expect("stub uv should succeed");
+        run_uv_sync(
+            &uv,
+            tmp.path(),
+            &resolved,
+            &UpgradeMode::All,
+            /*quiet=*/ false,
+        )
+        .expect("stub uv should succeed");
 
         let dump = fs::read_to_string(&argdump).unwrap();
         assert!(dump.contains("sync"));
@@ -554,7 +582,12 @@ mod tests {
         let argdump = tmp.path().join("argdump");
         let stub = tmp.path().join("uv");
         let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}",
+            argdump.display()
+        )
+        .unwrap();
         drop(f);
         fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
         let uv = UvBinary {
@@ -596,7 +629,12 @@ mod tests {
         let argdump = tmp.path().join("argdump");
         let stub = tmp.path().join("uv");
         let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}",
+            argdump.display()
+        )
+        .unwrap();
         drop(f);
         fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
         let uv = UvBinary {
@@ -607,13 +645,22 @@ mod tests {
         let venv = tmp.path().join("venv");
         let resolved = dummy_resolved(venv);
 
-        run_uv_lock(&uv, tmp.path(), &resolved, &UpgradeMode::None, /*quiet=*/ false)
-            .expect("stub uv should succeed");
+        run_uv_lock(
+            &uv,
+            tmp.path(),
+            &resolved,
+            &UpgradeMode::None,
+            /*quiet=*/ false,
+        )
+        .expect("stub uv should succeed");
 
         let dump = fs::read_to_string(&argdump).unwrap();
         assert!(dump.contains("lock"), "args: {dump}");
         assert!(dump.contains("--project"), "args: {dump}");
-        assert!(!dump.contains("--upgrade"), "args should not contain --upgrade: {dump}");
+        assert!(
+            !dump.contains("--upgrade"),
+            "args should not contain --upgrade: {dump}"
+        );
     }
 
     #[cfg(unix)]
@@ -625,7 +672,12 @@ mod tests {
         let argdump = tmp.path().join("argdump");
         let stub = tmp.path().join("uv");
         let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}",
+            argdump.display()
+        )
+        .unwrap();
         drop(f);
         fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
         let uv = UvBinary {
@@ -636,8 +688,14 @@ mod tests {
         let venv = tmp.path().join("venv");
         let resolved = dummy_resolved(venv);
 
-        run_uv_lock(&uv, tmp.path(), &resolved, &UpgradeMode::All, /*quiet=*/ false)
-            .expect("stub uv should succeed");
+        run_uv_lock(
+            &uv,
+            tmp.path(),
+            &resolved,
+            &UpgradeMode::All,
+            /*quiet=*/ false,
+        )
+        .expect("stub uv should succeed");
 
         let dump = fs::read_to_string(&argdump).unwrap();
         assert!(dump.lines().any(|l| l == "--upgrade"), "args: {dump}");
@@ -652,7 +710,12 @@ mod tests {
         let argdump = tmp.path().join("argdump");
         let stub = tmp.path().join("uv");
         let mut f = fs::File::create(&stub).unwrap();
-        writeln!(f, "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}", argdump.display()).unwrap();
+        writeln!(
+            f,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}",
+            argdump.display()
+        )
+        .unwrap();
         drop(f);
         fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
         let uv = UvBinary {
@@ -669,7 +732,10 @@ mod tests {
 
         let dump = fs::read_to_string(&argdump).unwrap();
         let occurrences = dump.lines().filter(|l| *l == "--upgrade-package").count();
-        assert_eq!(occurrences, 2, "expected 2 --upgrade-package tokens: {dump}");
+        assert_eq!(
+            occurrences, 2,
+            "expected 2 --upgrade-package tokens: {dump}"
+        );
         assert!(dump.contains("foo"));
         assert!(dump.contains("bar"));
     }

@@ -99,7 +99,12 @@ fn returns_third_party_drift_when_plugin_manifest_added() {
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     make_venv(tmp.path(), &[]);
     let cached = manifest_for(tmp.path());
-    let site = tmp.path().join("venv").join("lib").join(PY_VERSION_DIR).join("site-packages");
+    let site = tmp
+        .path()
+        .join("venv")
+        .join("lib")
+        .join(PY_VERSION_DIR)
+        .join("site-packages");
     let pkg = site.join("foo");
     fs::create_dir(&pkg).unwrap();
     fs::write(pkg.join("toolr-manifest.json"), "{}").unwrap();
@@ -115,7 +120,13 @@ fn collapses_both_axes_to_third_party_drift() {
     make_venv(tmp.path(), &[("foo", "{}")]);
     let cached = manifest_for(tmp.path());
     fs::write(tmp.path().join("tools").join("a.py"), "x = 2\n").unwrap();
-    let pkg = tmp.path().join("venv").join("lib").join(PY_VERSION_DIR).join("site-packages").join("foo");
+    let pkg = tmp
+        .path()
+        .join("venv")
+        .join("lib")
+        .join(PY_VERSION_DIR)
+        .join("site-packages")
+        .join("foo");
     fs::write(pkg.join("toolr-manifest.json"), r#"{"v":2}"#).unwrap();
     let venv = tmp.path().join("venv");
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
@@ -128,7 +139,12 @@ fn unrelated_dist_info_returns_fresh() {
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     make_venv(tmp.path(), &[("foo", "{}")]);
     let cached = manifest_for(tmp.path());
-    let site = tmp.path().join("venv").join("lib").join(PY_VERSION_DIR).join("site-packages");
+    let site = tmp
+        .path()
+        .join("venv")
+        .join("lib")
+        .join(PY_VERSION_DIR)
+        .join("site-packages");
     fs::create_dir(site.join("unrelated-1.0.0.dist-info")).unwrap();
     let venv = tmp.path().join("venv");
     let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();

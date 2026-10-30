@@ -44,8 +44,8 @@ pub fn probe(path: &Path, source: UvSource) -> Result<UvBinary, UvError> {
         ));
     }
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let version = parse_uv_version(&stdout)
-        .ok_or_else(|| UvError::UnparsableVersion(stdout.clone()))?;
+    let version =
+        parse_uv_version(&stdout).ok_or_else(|| UvError::UnparsableVersion(stdout.clone()))?;
     if version < MIN_UV_VERSION {
         return Err(UvError::VersionTooOld {
             found: version,
@@ -285,12 +285,18 @@ mod tests {
         let hint = err.user_message();
         // The hint mentions both the env override and the OS package
         // fallback so the user has at least two paths forward.
-        assert!(hint.contains("TOOLR_UV_LIBC"), "missing env override hint in: {hint}");
+        assert!(
+            hint.contains("TOOLR_UV_LIBC"),
+            "missing env override hint in: {hint}"
+        );
         assert!(hint.contains("musl"), "missing musl/gnu mention in: {hint}");
         // Path and io error are intentionally NOT duplicated in the hint
         // — they reach the user via the wrapped ExecFailed's Display,
         // which `into_anyhow()` keeps in the chain.
-        assert!(!hint.contains("/managed/uv"), "path leaked into hint: {hint}");
+        assert!(
+            !hint.contains("/managed/uv"),
+            "path leaked into hint: {hint}"
+        );
     }
 
     #[test]
@@ -303,8 +309,14 @@ mod tests {
         // `{:#}` joins the whole chain with `: ` — the hint should
         // appear first (outermost context) and the technical detail
         // (path + io error) should follow.
-        assert!(formatted.contains("TOOLR_UV_LIBC"), "hint missing in chain: {formatted}");
-        assert!(formatted.contains("/managed/uv"), "path missing in chain: {formatted}");
+        assert!(
+            formatted.contains("TOOLR_UV_LIBC"),
+            "hint missing in chain: {formatted}"
+        );
+        assert!(
+            formatted.contains("/managed/uv"),
+            "path missing in chain: {formatted}"
+        );
         // The io::Error display varies across platforms / kinds — the
         // synthetic `Error::from(NotFound)` here renders as "entity not
         // found" while a real ENOENT from execve renders as "No such

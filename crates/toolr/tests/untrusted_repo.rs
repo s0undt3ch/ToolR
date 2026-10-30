@@ -25,7 +25,11 @@ fn malicious_repo(sentinel: &std::path::Path) -> TempDir {
     .unwrap();
     fs::write(tools.join("hello.py"), "\"\"\"Hi.\"\"\"\n").unwrap();
     let py = tools.join(".venv").join("bin").join("python");
-    fs::write(&py, format!("#!/bin/sh\necho pwned > {}\n", sentinel.display())).unwrap();
+    fs::write(
+        &py,
+        format!("#!/bin/sh\necho pwned > {}\n", sentinel.display()),
+    )
+    .unwrap();
     fs::set_permissions(&py, fs::Permissions::from_mode(0o755)).unwrap();
     tmp
 }
@@ -44,7 +48,10 @@ fn help_does_not_execute_committed_interpreter() {
         .assert()
         .success();
 
-    assert!(!sentinel.exists(), "toolr --help executed the committed interpreter");
+    assert!(
+        !sentinel.exists(),
+        "toolr --help executed the committed interpreter"
+    );
 }
 
 #[test]
@@ -60,7 +67,10 @@ fn bare_invocation_does_not_execute_committed_interpreter() {
         .current_dir(repo.path())
         .assert();
 
-    assert!(!sentinel.exists(), "bare toolr executed the committed interpreter");
+    assert!(
+        !sentinel.exists(),
+        "bare toolr executed the committed interpreter"
+    );
 }
 
 #[test]
@@ -155,7 +165,11 @@ fn manifest_rebuilds_when_a_venv_appears() {
 
     // A venv appears with a third-party fragment declaring a command.
     let venv = tools.join(".venv");
-    let sp = venv.join("lib").join("python3.13").join("site-packages").join("demo_plugin");
+    let sp = venv
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages")
+        .join("demo_plugin");
     std::fs::create_dir_all(&sp).unwrap();
     std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
     std::fs::write(
@@ -182,8 +196,7 @@ fn manifest_rebuilds_when_a_venv_appears() {
         .stdout(predicates::str::contains("plugins"));
 
     // The rebuilt manifest now carries the plugin's leaf command.
-    let manifest =
-        std::fs::read_to_string(tools.join(".toolr-manifest.json")).unwrap();
+    let manifest = std::fs::read_to_string(tools.join(".toolr-manifest.json")).unwrap();
     assert!(
         manifest.contains("from-plugin"),
         "manifest should include the third-party command after the venv appeared:\n{manifest}"
@@ -207,7 +220,11 @@ fn v1_plugin_is_skipped_with_a_warning() {
     )
     .unwrap();
     let venv = tools.join(".venv");
-    let sp = venv.join("lib").join("python3.13").join("site-packages").join("demo_plugin");
+    let sp = venv
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages")
+        .join("demo_plugin");
     std::fs::create_dir_all(&sp).unwrap();
     std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
     std::fs::write(
@@ -230,7 +247,9 @@ fn v1_plugin_is_skipped_with_a_warning() {
         .success()
         .stdout(predicates::str::contains("greet"))
         .stdout(predicates::str::contains("plugins").not())
-        .stderr(predicates::str::contains("toolr: warning: skipping plugin demo_plugin"));
+        .stderr(predicates::str::contains(
+            "toolr: warning: skipping plugin demo_plugin",
+        ));
 }
 
 #[test]

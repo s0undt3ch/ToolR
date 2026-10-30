@@ -551,9 +551,14 @@ impl std::fmt::Display for UnsupportedType {
                  a Literal[...] or Enum, or one of the aliases under `toolr.types`."
             ),
             Self::Inner(inner) => inner.fmt(f),
-            Self::UnsupportedUnion(s) => write!(f, "unsupported union `{s}`; only `T | None` is recognised."),
+            Self::UnsupportedUnion(s) => {
+                write!(f, "unsupported union `{s}`; only `T | None` is recognised.")
+            }
             Self::UnsupportedShape(s) => write!(f, "unsupported generic shape `{s}`."),
-            Self::UnknownArgKeyword { keyword, suggestion } => {
+            Self::UnknownArgKeyword {
+                keyword,
+                suggestion,
+            } => {
                 write!(f, "unknown `arg()` keyword `{keyword}`")?;
                 match (super::arg_keywords::keyword_hint(keyword), suggestion) {
                     (Some(hint), _) => write!(f, "; {hint}"),
@@ -598,12 +603,27 @@ mod tests {
         // Same list as `toolr_types_names_match_python_surface` in mod.rs,
         // which is itself pinned to tests/test_types_module.py.
         let names = [
-            "AbsolutePath", "Count", "Date", "DateTime", "DirectoryPath", "Email",
-            "ExecutablePath", "FilePath", "IPv4", "IPv6", "NewPath", "ResolvedPath",
-            "Time", "UUID", "Version", "WritableDirectoryPath",
+            "AbsolutePath",
+            "Count",
+            "Date",
+            "DateTime",
+            "DirectoryPath",
+            "Email",
+            "ExecutablePath",
+            "FilePath",
+            "IPv4",
+            "IPv6",
+            "NewPath",
+            "ResolvedPath",
+            "Time",
+            "UUID",
+            "Version",
+            "WritableDirectoryPath",
         ];
-        let annotations: Vec<&str> =
-            SupportedType::catalogue().iter().map(|d| d.annotation).collect();
+        let annotations: Vec<&str> = SupportedType::catalogue()
+            .iter()
+            .map(|d| d.annotation)
+            .collect();
         for name in names {
             let want = format!("toolr.types.{name}");
             assert!(
@@ -618,7 +638,10 @@ mod tests {
         for kind in SupportedTypeKind::ALL {
             assert_eq!(kind.representative().kind(), *kind);
         }
-        assert_eq!(SupportedType::catalogue().len(), SupportedTypeKind::ALL.len());
+        assert_eq!(
+            SupportedType::catalogue().len(),
+            SupportedTypeKind::ALL.len()
+        );
     }
 
     #[test]
@@ -626,7 +649,11 @@ mod tests {
         let rows = SupportedType::catalogue();
         let mut seen = std::collections::BTreeSet::new();
         for row in &rows {
-            assert!(seen.insert(row.annotation), "duplicate row {}", row.annotation);
+            assert!(
+                seen.insert(row.annotation),
+                "duplicate row {}",
+                row.annotation
+            );
             for field in [row.validated_by, row.wire_format, row.python_receives] {
                 assert!(!field.is_empty(), "empty column in {}", row.annotation);
             }
@@ -644,5 +671,4 @@ mod tests {
         let list_row = rows.iter().find(|d| d.annotation == "list[T]").unwrap();
         assert_eq!(list_row.note, "(T above)");
     }
-
 }

@@ -27,14 +27,12 @@ pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<Resolved
             "`<package>` and `--source-dir` are mutually exclusive; pass one or the other"
         ),
         (Some(dir), None) => {
-            let package_name = package_arg
-                .or_else(|| leaf_dir_name(&dir))
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "--source-dir {} has no inferable package name; pass --package PKG",
-                        dir.display()
-                    )
-                })?;
+            let package_name = package_arg.or_else(|| leaf_dir_name(&dir)).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "--source-dir {} has no inferable package name; pass --package PKG",
+                    dir.display()
+                )
+            })?;
             if !dir.is_dir() {
                 anyhow::bail!("--source-dir `{}` is not a directory", dir.display());
             }
@@ -45,10 +43,9 @@ pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<Resolved
         }
         (None, Some(pkg)) => {
             let cwd = std::env::current_dir().context("getting current directory")?;
-            let repo_root = discover_project_root(&cwd)
-                .context("resolving repo root for tools-venv lookup")?;
-            let resolved = resolve_venv_path(&repo_root)
-                .context("resolving tools-venv path")?;
+            let repo_root =
+                discover_project_root(&cwd).context("resolving repo root for tools-venv lookup")?;
+            let resolved = resolve_venv_path(&repo_root).context("resolving tools-venv path")?;
             let dir = find_in_venv(&resolved.venv_dir, &pkg).with_context(|| {
                 format!(
                     "package `{pkg}` not found under {}; run `uv sync` or pass --source-dir",
@@ -60,9 +57,9 @@ pub fn resolve_source_and_package(matches: &clap::ArgMatches) -> Result<Resolved
                 package_name: pkg,
             })
         }
-        (None, None) => anyhow::bail!(
-            "missing required argument: either `<package>` or `--source-dir PATH`"
-        ),
+        (None, None) => {
+            anyhow::bail!("missing required argument: either `<package>` or `--source-dir PATH`")
+        }
     }
 }
 

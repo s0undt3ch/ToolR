@@ -23,8 +23,8 @@ fn references_commands_md_covers_all_of_toolr_dunder_all() {
     let init = workspace.join("crates/toolr-py/python/toolr/__init__.py");
     let reference = workspace.join("skills/toolr-command-authoring/references/commands.md");
 
-    let init_source = fs::read_to_string(&init)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", init.display()));
+    let init_source =
+        fs::read_to_string(&init).unwrap_or_else(|e| panic!("reading {}: {e}", init.display()));
     let reference_body = fs::read_to_string(&reference)
         .unwrap_or_else(|e| panic!("reading {}: {e}", reference.display()));
 
@@ -32,9 +32,7 @@ fn references_commands_md_covers_all_of_toolr_dunder_all() {
         .unwrap_or_else(|| panic!("could not parse __all__ from {}", init.display()))
         .into_iter()
         .collect();
-    let documented: BTreeSet<String> = extract_section_names(&reference_body)
-        .into_iter()
-        .collect();
+    let documented: BTreeSet<String> = extract_section_names(&reference_body).into_iter().collect();
 
     let missing: Vec<&String> = declared.difference(&documented).collect();
     let extra: Vec<&String> = documented.difference(&declared).collect();
@@ -70,7 +68,9 @@ fn extract_dunder_all(source: &str) -> Option<Vec<String>> {
     let body = &source[start + lbracket + 1..start + lbracket + rbracket];
     let mut names = Vec::new();
     for raw in body.split(',') {
-        let token = raw.trim().trim_matches(|c: char| c.is_whitespace() || c == ',');
+        let token = raw
+            .trim()
+            .trim_matches(|c: char| c.is_whitespace() || c == ',');
         if token.is_empty() {
             continue;
         }
@@ -106,8 +106,7 @@ fn workspace_root() -> PathBuf {
 fn references_action_md_covers_every_input_and_output() {
     let workspace = workspace_root();
     let action_yml = workspace.join("action.yml");
-    let reference =
-        workspace.join("skills/toolr-ci-setup/references/action.md");
+    let reference = workspace.join("skills/toolr-ci-setup/references/action.md");
 
     let yaml_source = fs::read_to_string(&action_yml)
         .unwrap_or_else(|e| panic!("reading {}: {e}", action_yml.display()));
@@ -196,14 +195,11 @@ fn extract_backticked_names_in_tables(body: &str) -> Vec<String> {
 #[test]
 fn types_reference_lists_every_toolr_types_name() {
     let workspace = workspace_root();
-    let body = fs::read_to_string(
-        workspace.join("skills/toolr-command-authoring/references/types.md"),
-    )
-    .expect("types.md must exist; run `cargo xtask build-skill-refs`");
-    let init = fs::read_to_string(
-        workspace.join("crates/toolr-py/python/toolr/types/__init__.py"),
-    )
-    .unwrap();
+    let body =
+        fs::read_to_string(workspace.join("skills/toolr-command-authoring/references/types.md"))
+            .expect("types.md must exist; run `cargo xtask build-skill-refs`");
+    let init = fs::read_to_string(workspace.join("crates/toolr-py/python/toolr/types/__init__.py"))
+        .unwrap();
     for name in extract_dunder_all(&init).expect("parse toolr.types.__all__") {
         assert!(
             body.contains(&format!("`toolr.types.{name}`")),
@@ -223,5 +219,8 @@ fn arguments_reference_is_extracted_and_link_free() {
     assert!(body.contains("class Operation(StrEnum):"));
     assert!(!body.contains("--8<--"), "unexpanded include");
     assert!(!body.contains(".md)"), "docs-page link survived");
-    assert!(!body.contains("matrix above"), "dangling out-of-section pointer");
+    assert!(
+        !body.contains("matrix above"),
+        "dangling out-of-section pointer"
+    );
 }

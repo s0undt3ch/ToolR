@@ -81,7 +81,11 @@ fn dirty_cache_surfaces_hint_without_quiet() {
 fn quiet_suppresses_passive_cache_hint() {
     let cache = dirty_cache();
     let work = TempDir::new().unwrap();
-    let out = toolr(cache.path(), work.path(), &["project", "venv", "sync", "--quiet"]);
+    let out = toolr(
+        cache.path(),
+        work.path(),
+        &["project", "venv", "sync", "--quiet"],
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         !stderr.contains("cache has"),

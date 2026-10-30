@@ -236,13 +236,19 @@ mod tests {
         assert_eq!(derive_argument(&count).unwrap().kind, ArgumentKind::Count);
 
         let append = Arg::new("define").long("define").action(ArgAction::Append);
-        assert_eq!(derive_argument(&append).unwrap().kind, ArgumentKind::Repeated);
+        assert_eq!(
+            derive_argument(&append).unwrap().kind,
+            ArgumentKind::Repeated
+        );
 
         let set_true = Arg::new("force").long("force").action(ArgAction::SetTrue);
         assert_eq!(derive_argument(&set_true).unwrap().kind, ArgumentKind::Flag);
 
         let optional = Arg::new("prefix").long("prefix").action(ArgAction::Set);
-        assert_eq!(derive_argument(&optional).unwrap().kind, ArgumentKind::Optional);
+        assert_eq!(
+            derive_argument(&optional).unwrap().kind,
+            ArgumentKind::Optional
+        );
 
         // `help` and hidden args are dropped from completion output.
         let help = Arg::new("help").long("help").action(ArgAction::SetTrue);
@@ -311,7 +317,10 @@ mod tests {
     #[test]
     fn project_venv_sync_offers_force_and_quiet_flags() {
         let m = merged_empty_manifest();
-        let out = values(serve_completions(&m, &tokens(&["project", "venv", "sync", "--"])));
+        let out = values(serve_completions(
+            &m,
+            &tokens(&["project", "venv", "sync", "--"]),
+        ));
         for expected in ["--force", "--quiet"] {
             assert!(
                 out.contains(&expected.to_string()),
@@ -332,7 +341,10 @@ mod tests {
         // A leaf with an enum positional offers its possible values,
         // proving `allowed_values` is derived from clap's value_parser.
         let m = merged_empty_manifest();
-        let out = values(serve_completions(&m, &tokens(&["self", "completion", "install", ""])));
+        let out = values(serve_completions(
+            &m,
+            &tokens(&["self", "completion", "install", ""]),
+        ));
         assert_eq!(
             out,
             vec!["bash".to_string(), "fish".to_string(), "zsh".to_string()]
@@ -342,7 +354,10 @@ mod tests {
     #[test]
     fn self_cache_prune_offers_known_flags() {
         let m = merged_empty_manifest();
-        let out = values(serve_completions(&m, &tokens(&["self", "cache", "prune", "--"])));
+        let out = values(serve_completions(
+            &m,
+            &tokens(&["self", "cache", "prune", "--"]),
+        ));
         for expected in ["--all", "--stale-after-days", "--dry-run", "--yes"] {
             assert!(
                 out.contains(&expected.to_string()),
@@ -354,8 +369,10 @@ mod tests {
     #[test]
     fn project_init_offers_venv_location_values() {
         let m = merged_empty_manifest();
-        let out =
-            values(serve_completions(&m, &tokens(&["project", "init", "--venv-location", ""])));
+        let out = values(serve_completions(
+            &m,
+            &tokens(&["project", "init", "--venv-location", ""]),
+        ));
         assert_eq!(out, vec!["cache".to_string(), "in-tree".to_string()]);
     }
 

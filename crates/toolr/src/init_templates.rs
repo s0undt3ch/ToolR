@@ -115,7 +115,10 @@ mod tests {
     #[test]
     fn parse_venv_location_accepts_both_known_values() {
         assert_eq!(parse_venv_location("cache").unwrap(), VenvLocation::Cache);
-        assert_eq!(parse_venv_location("in-tree").unwrap(), VenvLocation::InTree);
+        assert_eq!(
+            parse_venv_location("in-tree").unwrap(),
+            VenvLocation::InTree
+        );
     }
 
     #[test]

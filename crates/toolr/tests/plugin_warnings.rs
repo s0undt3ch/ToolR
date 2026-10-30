@@ -321,8 +321,7 @@ fn static_drift_keeps_plugin_entries_when_the_venv_cannot_be_resolved() {
     assert!(after.contains("skipping plugin demo_plugin"), "{after}");
 }
 
-const CONFLICT_WARNING: &str =
-    "toolr: warning: deploy rollout is defined by more than one plugin (a_plugin, b_plugin), so it is disabled.";
+const CONFLICT_WARNING: &str = "toolr: warning: deploy rollout is defined by more than one plugin (a_plugin, b_plugin), so it is disabled.";
 
 /// A fresh project (no cached manifest) where `a_plugin` and `b_plugin` both ship `deploy rollout`,
 /// and `c_plugin` ships its own `extra run`.

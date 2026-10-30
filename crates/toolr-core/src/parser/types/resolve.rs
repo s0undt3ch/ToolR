@@ -242,8 +242,16 @@ fn resolve_boxed(
     module: &str,
     seen: &mut Vec<String>,
 ) -> Result<SupportedType, UnsupportedType> {
-    resolve_inner(annotation, enums, all_imports, imports, aliases, module, seen)
-        .map_err(|e| UnsupportedType::Inner(Box::new(e)))
+    resolve_inner(
+        annotation,
+        enums,
+        all_imports,
+        imports,
+        aliases,
+        module,
+        seen,
+    )
+    .map_err(|e| UnsupportedType::Inner(Box::new(e)))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -410,7 +418,7 @@ fn resolve_subscript(
         _ => {
             return Err(UnsupportedType::UnsupportedShape(annotation_to_label(
                 sub.value.as_ref(),
-            )))
+            )));
         }
     };
     match head {
@@ -423,7 +431,15 @@ fn resolve_subscript(
             }
         }
         "list" | "List" => {
-            let inner = resolve_boxed(sub.slice.as_ref(), enums, all_imports, imports, aliases, module, seen)?;
+            let inner = resolve_boxed(
+                sub.slice.as_ref(),
+                enums,
+                all_imports,
+                imports,
+                aliases,
+                module,
+                seen,
+            )?;
             Ok(SupportedType::List(Box::new(inner)))
         }
         "tuple" | "Tuple" => {
@@ -437,7 +453,15 @@ fn resolve_subscript(
             ))
         }
         "Optional" => {
-            let inner = resolve_boxed(sub.slice.as_ref(), enums, all_imports, imports, aliases, module, seen)?;
+            let inner = resolve_boxed(
+                sub.slice.as_ref(),
+                enums,
+                all_imports,
+                imports,
+                aliases,
+                module,
+                seen,
+            )?;
             Ok(SupportedType::Optional(Box::new(inner)))
         }
         "Annotated" => {

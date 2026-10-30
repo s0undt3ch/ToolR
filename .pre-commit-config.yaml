@@ -54,6 +54,12 @@ repos:
         args: [typos]
         stages: [commit-msg]
 
+      - id: system-tool
+        alias: rustfmt
+        name: rustfmt
+        args: [rustfmt]
+        types: [rust]
+
       - id: rumdl
         # Config picked up from .rumdl.toml.
 

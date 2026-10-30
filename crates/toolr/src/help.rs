@@ -142,7 +142,11 @@ fn push_usage(out: &mut String, cmd: &Command, bin_path: &str) {
         spec.push_str(&bracketed);
     }
     if has_subs {
-        spec.push_str(if subs_required { " <COMMAND>" } else { " [COMMAND]" });
+        spec.push_str(if subs_required {
+            " <COMMAND>"
+        } else {
+            " [COMMAND]"
+        });
     }
     out.push_str(&format!("**Usage:** `{bin_path}{spec}`\n\n"));
 }
@@ -312,7 +316,13 @@ fn push_synthetic_help_option(out: &mut String, width: usize) {
 /// `group_has_short` controls whether long-only options get a 4-column
 /// short-flag pad (clap's behavior: align only when at least one option
 /// in the group actually uses a short).
-fn push_one_option(out: &mut String, arg: &Arg, mode: HelpMode, width: usize, group_has_short: bool) {
+fn push_one_option(
+    out: &mut String,
+    arg: &Arg,
+    mode: HelpMode,
+    width: usize,
+    group_has_short: bool,
+) {
     let signature = render_option_signature(arg, group_has_short);
     out.push_str(&format!("  {signature}\n"));
 
@@ -403,10 +413,7 @@ fn render_option_signature(arg: &Arg, group_has_short: bool) -> String {
 /// longest in the group. Only emitted when the command has visible
 /// children.
 fn push_commands(out: &mut String, cmd: &Command) {
-    let children: Vec<&Command> = cmd
-        .get_subcommands()
-        .filter(|c| !c.is_hide_set())
-        .collect();
+    let children: Vec<&Command> = cmd.get_subcommands().filter(|c| !c.is_hide_set()).collect();
     if children.is_empty() {
         return;
     }
@@ -650,7 +657,10 @@ mod tests {
     fn usage_shows_command_optional_by_default() {
         let cmd = Command::new("root").subcommand(Command::new("kid"));
         let md = render_markdown(&cmd, "root", HelpMode::Long, 100);
-        assert!(md.contains("[COMMAND]"), "optional subcommand → [COMMAND]: {md}");
+        assert!(
+            md.contains("[COMMAND]"),
+            "optional subcommand → [COMMAND]: {md}"
+        );
     }
 
     #[test]
@@ -824,9 +834,6 @@ mod tests {
         let md = render_markdown(&cmd, "root", HelpMode::Long, 100);
         let cmd_pos = md.find("**Commands:**").expect("Commands block present");
         let opt_pos = md.find("**Options:**").expect("Options block present");
-        assert!(
-            cmd_pos < opt_pos,
-            "Commands renders before Options: {md}"
-        );
+        assert!(cmd_pos < opt_pos, "Commands renders before Options: {md}");
     }
 }

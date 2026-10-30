@@ -43,9 +43,8 @@ struct Output {
 pub fn action(repo_root: &Path) -> Result<Generated> {
     let yaml_path = repo_root.join("action.yml");
     let yaml = read_text(&yaml_path)?;
-    let body = render(&yaml).with_context(|| {
-        format!("rendering action surface from {}", yaml_path.display())
-    })?;
+    let body = render(&yaml)
+        .with_context(|| format!("rendering action surface from {}", yaml_path.display()))?;
     Ok(Generated {
         path: repo_root.join("skills/toolr-ci-setup/references/action.md"),
         body,
@@ -53,8 +52,7 @@ pub fn action(repo_root: &Path) -> Result<Generated> {
 }
 
 fn render(yaml: &str) -> Result<String> {
-    let action: Action =
-        serde_saphyr::from_str(yaml).context("parsing action.yml as YAML")?;
+    let action: Action = serde_saphyr::from_str(yaml).context("parsing action.yml as YAML")?;
     let mut body = String::new();
     body.push_str("# `s0undt3ch/ToolR` action surface\n\n");
     body.push_str(DO_NOT_EDIT);
@@ -98,12 +96,7 @@ fn render(yaml: &str) -> Result<String> {
         writeln!(body, "| Name | Description |").unwrap();
         writeln!(body, "| ---- | ----------- |").unwrap();
         for (name, output) in &action.outputs {
-            writeln!(
-                body,
-                "| `{name}` | {} |",
-                collapse(&output.description)
-            )
-            .unwrap();
+            writeln!(body, "| `{name}` | {} |", collapse(&output.description)).unwrap();
         }
     }
 

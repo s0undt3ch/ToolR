@@ -90,8 +90,8 @@ pub fn analyze_scaffold(cwd: &Path, opts: &ScaffoldOptions) -> Result<ScaffoldAn
     for f in rendered {
         let dest = tools_dir.join(f.relative_path);
         let status = if dest.exists() {
-            let existing = fs::read_to_string(&dest)
-                .with_context(|| format!("reading {}", dest.display()))?;
+            let existing =
+                fs::read_to_string(&dest).with_context(|| format!("reading {}", dest.display()))?;
             if existing == f.contents {
                 FileStatus::Identical
             } else {
@@ -203,7 +203,9 @@ pub fn scaffold(cwd: &Path, opts: &ScaffoldOptions, force: bool) -> Result<Scaff
         .collect();
 
     if !conflicts.is_empty() && !force {
-        return Err(anyhow::Error::new(ScaffoldConflictsError { files: conflicts }));
+        return Err(anyhow::Error::new(ScaffoldConflictsError {
+            files: conflicts,
+        }));
     }
 
     let overwrite: HashSet<PathBuf> = conflicts.into_iter().collect();
@@ -224,8 +226,7 @@ fn write_file(path: &Path, contents: &str) -> Result<()> {
     }
     if let Err(e) = fs::rename(&tmp, path) {
         let _ = fs::remove_file(&tmp);
-        return Err(e)
-            .with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()));
+        return Err(e).with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()));
     }
     Ok(())
 }
@@ -364,8 +365,18 @@ mod tests {
         let outcome = execute_scaffold(&analysis, &overwrite).unwrap();
 
         // pyproject.toml overwritten, .gitignore skipped (conflict but not approved).
-        assert!(outcome.files_written.iter().any(|p| p.ends_with("pyproject.toml")));
-        assert!(!outcome.files_written.iter().any(|p| p.ends_with(".gitignore")));
+        assert!(
+            outcome
+                .files_written
+                .iter()
+                .any(|p| p.ends_with("pyproject.toml"))
+        );
+        assert!(
+            !outcome
+                .files_written
+                .iter()
+                .any(|p| p.ends_with(".gitignore"))
+        );
         assert_eq!(
             fs::read_to_string(tools.join(".gitignore")).unwrap(),
             "# stale"
@@ -476,12 +487,28 @@ mod tests {
         fs::remove_file(tools.join("example.py")).unwrap();
 
         let analysis = analyze_scaffold(tmp.path(), &opts()).unwrap();
-        let pyproject = analysis.files.iter().find(|f| f.dest.ends_with("pyproject.toml")).unwrap();
-        let gitignore = analysis.files.iter().find(|f| f.dest.ends_with(".gitignore")).unwrap();
-        let example = analysis.files.iter().find(|f| f.dest.ends_with("example.py")).unwrap();
+        let pyproject = analysis
+            .files
+            .iter()
+            .find(|f| f.dest.ends_with("pyproject.toml"))
+            .unwrap();
+        let gitignore = analysis
+            .files
+            .iter()
+            .find(|f| f.dest.ends_with(".gitignore"))
+            .unwrap();
+        let example = analysis
+            .files
+            .iter()
+            .find(|f| f.dest.ends_with("example.py"))
+            .unwrap();
 
         assert_eq!(pyproject.status, FileStatus::Conflict);
-        assert_eq!(gitignore.status, FileStatus::Identical, "content: {gitignore_content:?}");
+        assert_eq!(
+            gitignore.status,
+            FileStatus::Identical,
+            "content: {gitignore_content:?}"
+        );
         assert_eq!(example.status, FileStatus::New);
     }
 
@@ -500,7 +527,10 @@ mod tests {
         let result = execute_scaffold(&analysis, &HashSet::new());
         assert!(result.is_err(), "expected error for symlinked tools/");
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("symlink"), "error should mention symlink: {msg}");
+        assert!(
+            msg.contains("symlink"),
+            "error should mention symlink: {msg}"
+        );
     }
 
     #[test]
@@ -508,8 +538,14 @@ mod tests {
         let path = std::path::Path::new("/some/dir/pyproject.toml");
         let tmp = with_extension(path, "tmp");
         let name = tmp.file_name().unwrap().to_string_lossy();
-        assert!(name.starts_with("pyproject.toml.tmp."), "unexpected name: {name}");
+        assert!(
+            name.starts_with("pyproject.toml.tmp."),
+            "unexpected name: {name}"
+        );
         let pid_str = name.strip_prefix("pyproject.toml.tmp.").unwrap();
-        assert!(pid_str.parse::<u32>().is_ok(), "suffix must be a PID: {pid_str}");
+        assert!(
+            pid_str.parse::<u32>().is_ok(),
+            "suffix must be a PID: {pid_str}"
+        );
     }
 }

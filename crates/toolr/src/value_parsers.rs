@@ -176,7 +176,13 @@ fn absolutise(path: &std::path::Path) -> Result<PathBuf, String> {
 }
 
 fn check_path(path: &std::path::Path, check: PathCheck, typed: &str) -> Result<(), String> {
-    let require = |ok: bool, msg: &str| if ok { Ok(()) } else { Err(format!("{msg}: {typed}")) };
+    let require = |ok: bool, msg: &str| {
+        if ok {
+            Ok(())
+        } else {
+            Err(format!("{msg}: {typed}"))
+        }
+    };
     match check {
         PathCheck::None => Ok(()),
         PathCheck::Exists => require(
@@ -585,7 +591,10 @@ mod tests {
                 .default_value(s(&missing).to_string()),
         );
         let err = cmd.try_get_matches_from(["test"]).unwrap_err();
-        assert!(err.to_string().contains("path does not exist"), "got: {err}");
+        assert!(
+            err.to_string().contains("path does not exist"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -599,7 +608,10 @@ mod tests {
         let err = cmd
             .try_get_matches_from(["test", "--v", s(&file), "--v", s(tmp.path())])
             .unwrap_err();
-        assert!(err.to_string().contains("path is not a regular file"), "got: {err}");
+        assert!(
+            err.to_string().contains("path is not a regular file"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -610,16 +622,16 @@ mod tests {
             .try_get_matches_from(["test", "--v", "42"])
             .unwrap();
         assert_eq!(*ok.get_one::<i64>("v").unwrap(), 42);
-        let err = cmd.try_get_matches_from(["test", "--v", "abc"]).unwrap_err();
+        let err = cmd
+            .try_get_matches_from(["test", "--v", "abc"])
+            .unwrap_err();
         assert!(err.to_string().contains("invalid"));
     }
 
     #[test]
     fn float_parser_accepts_floats() {
         let cmd = build_command_with(&SupportedType::Float);
-        let ok = cmd
-            .try_get_matches_from(["test", "--v", "2.5"])
-            .unwrap();
+        let ok = cmd.try_get_matches_from(["test", "--v", "2.5"]).unwrap();
         assert!((*ok.get_one::<f64>("v").unwrap() - 2.5).abs() < 1e-9);
     }
 
@@ -645,7 +657,10 @@ mod tests {
                 .try_get_matches_from(["test", "--v", "550e8400-e29b-41d4-a716-446655440000"])
                 .is_ok()
         );
-        assert!(cmd.try_get_matches_from(["test", "--v", "not-a-uuid"]).is_err());
+        assert!(
+            cmd.try_get_matches_from(["test", "--v", "not-a-uuid"])
+                .is_err()
+        );
     }
 
     #[test]
@@ -656,7 +671,10 @@ mod tests {
             .try_get_matches_from(["test", "--v", "10.0.0.1"])
             .unwrap();
         assert_eq!(ok.get_one::<String>("v").unwrap(), "10.0.0.1");
-        assert!(cmd.try_get_matches_from(["test", "--v", "10.0.0.999"]).is_err());
+        assert!(
+            cmd.try_get_matches_from(["test", "--v", "10.0.0.999"])
+                .is_err()
+        );
     }
 
     #[test]
@@ -667,7 +685,10 @@ mod tests {
             .try_get_matches_from(["test", "--v", "::1"])
             .unwrap();
         assert_eq!(ok.get_one::<String>("v").unwrap(), "::1");
-        assert!(cmd.try_get_matches_from(["test", "--v", "not-ipv6"]).is_err());
+        assert!(
+            cmd.try_get_matches_from(["test", "--v", "not-ipv6"])
+                .is_err()
+        );
     }
 
     #[test]
@@ -678,7 +699,10 @@ mod tests {
                 .try_get_matches_from(["test", "--v", "user@example.com"])
                 .is_ok()
         );
-        assert!(cmd.try_get_matches_from(["test", "--v", "not-an-email"]).is_err());
+        assert!(
+            cmd.try_get_matches_from(["test", "--v", "not-an-email"])
+                .is_err()
+        );
     }
 
     #[test]
@@ -710,11 +734,12 @@ mod tests {
 
     #[test]
     fn literal_parser_restricts_to_allowed_values() {
-        let cmd = build_command_with(&SupportedType::Literal(vec![
-            "a".into(),
-            "b".into(),
-        ]));
-        assert!(cmd.clone().try_get_matches_from(["test", "--v", "a"]).is_ok());
+        let cmd = build_command_with(&SupportedType::Literal(vec!["a".into(), "b".into()]));
+        assert!(
+            cmd.clone()
+                .try_get_matches_from(["test", "--v", "a"])
+                .is_ok()
+        );
         assert!(cmd.try_get_matches_from(["test", "--v", "c"]).is_err());
     }
 
@@ -774,7 +799,10 @@ mod tests {
         ] {
             let got = parse(&ty, s(value)).unwrap();
             let shown = got.to_string_lossy().into_owned();
-            assert!(!shown.starts_with(r"\\?\"), "{ty:?} got a verbatim path: {shown}");
+            assert!(
+                !shown.starts_with(r"\\?\"),
+                "{ty:?} got a verbatim path: {shown}"
+            );
             assert!(got.is_absolute(), "{ty:?} got: {shown}");
         }
     }

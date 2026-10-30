@@ -114,8 +114,14 @@ fn sync_help_lists_upgrade_flags() {
         .unwrap();
     assert!(output.status.success(), "help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--upgrade"), "help missing --upgrade: {stdout}");
-    assert!(stdout.contains("--upgrade-package"), "help missing --upgrade-package: {stdout}");
+    assert!(
+        stdout.contains("--upgrade"),
+        "help missing --upgrade: {stdout}"
+    );
+    assert!(
+        stdout.contains("--upgrade-package"),
+        "help missing --upgrade-package: {stdout}"
+    );
 }
 
 /// `venv sync -P` with an unknown package fails the pyproject pre-flight
@@ -169,14 +175,24 @@ fn sync_dash_p_success_path_invokes_uv_sync_with_upgrade_package() {
         .args(["project", "venv", "sync", "-P", "requests"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let argv = fx.uv_argv();
-    assert!(argv.lines().any(|l| l == "sync"), "uv argv should contain `sync`; got:\n{argv}");
+    assert!(
+        argv.lines().any(|l| l == "sync"),
+        "uv argv should contain `sync`; got:\n{argv}"
+    );
     assert!(
         argv.lines().any(|l| l == "--upgrade-package"),
         "uv argv should contain `--upgrade-package`; got:\n{argv}"
     );
-    assert!(argv.contains("requests"), "uv argv should contain `requests`; got:\n{argv}");
+    assert!(
+        argv.contains("requests"),
+        "uv argv should contain `requests`; got:\n{argv}"
+    );
 }
 
 /// Regression for #589: uv treats `toolr_py` and `toolr-py` as the same
@@ -192,7 +208,14 @@ fn sync_dash_p_accepts_dependency_declared_with_underscores() {
         .args(["project", "venv", "sync", "-P", "toolr-py"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let argv = fx.uv_argv();
-    assert!(argv.contains("toolr-py"), "uv argv should contain `toolr-py`; got:\n{argv}");
+    assert!(
+        argv.contains("toolr-py"),
+        "uv argv should contain `toolr-py`; got:\n{argv}"
+    );
 }

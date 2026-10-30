@@ -48,7 +48,10 @@ fn help_lists_groups_from_manifest() {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("ci"), "expected ci group in help, got:\n{stdout}");
+    assert!(
+        stdout.contains("ci"),
+        "expected ci group in help, got:\n{stdout}"
+    );
 }
 
 /// Returns `Some(path-to-python)` if a Python with msgspec + the local
@@ -194,9 +197,7 @@ fn self_build_manifest_help_works() {
 ///   when the runner is spawned (so we exercise stdout/stderr handling).
 /// - A `tools/.toolr-manifest.json` with one `ci hello` command.
 #[cfg(unix)]
-fn preflight_fixture(
-    present_in_venv: &[&str],
-) -> tempfile::TempDir {
+fn preflight_fixture(present_in_venv: &[&str]) -> tempfile::TempDir {
     use std::fs;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
@@ -236,8 +237,7 @@ fn preflight_fixture(
     // Fresh and doesn't rebuild it.
     let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
     let venv_dir = tools.join(".venv");
-    let third_party_hash =
-        toolr_core::manifest_build::compute_third_party_hash(&venv_dir).unwrap();
+    let third_party_hash = toolr_core::manifest_build::compute_third_party_hash(&venv_dir).unwrap();
     let toolr_version = env!("CARGO_PKG_VERSION");
 
     let manifest = format!(
@@ -352,7 +352,11 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
         .output()
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_ne!(output.status.code(), Some(0), "expected failure; stderr:\n{stderr}");
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "expected failure; stderr:\n{stderr}"
+    );
     assert!(
         stderr.contains("Python interpreter not found at"),
         "expected a 'Python interpreter not found at <path>' line; stderr:\n{stderr}"
@@ -364,7 +368,9 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
     // Anti-regression: the old bare `os error 2` line must not be the
     // entire message.
     assert!(
-        !stderr.trim().ends_with("No such file or directory (os error 2)")
+        !stderr
+            .trim()
+            .ends_with("No such file or directory (os error 2)")
             || stderr.contains("Python interpreter not found at"),
         "stderr should not be just the bare io::Error display; stderr:\n{stderr}"
     );
@@ -479,8 +485,14 @@ fn project_venv_sync_help_lists_force_and_quiet() {
         .expect("running toolr should succeed");
     assert!(output.status.success(), "exit: {:?}", output.status.code());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--force"), "missing --force in help:\n{stdout}");
-    assert!(stdout.contains("--quiet"), "missing --quiet in help:\n{stdout}");
+    assert!(
+        stdout.contains("--force"),
+        "missing --force in help:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("--quiet"),
+        "missing --quiet in help:\n{stdout}"
+    );
 }
 
 /// `toolr project venv sync` (removed) prints the migration hint and exits non-zero.
@@ -574,7 +586,11 @@ fn dispatch_missing_toolr_python_without_tools_pyproject_skips_venv_sync_hint() 
         .output()
         .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_ne!(output.status.code(), Some(0), "expected failure; stderr:\n{stderr}");
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "expected failure; stderr:\n{stderr}"
+    );
     assert!(stderr.contains("TOOLR_PYTHON"), "stderr:\n{stderr}");
     assert!(!stderr.contains("venv sync"), "stderr:\n{stderr}");
 }

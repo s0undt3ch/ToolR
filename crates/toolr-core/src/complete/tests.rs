@@ -142,10 +142,7 @@ fn candidate_description_strips_embedded_tabs_and_newlines() {
 #[test]
 fn allowed_values_have_no_description() {
     let out = serve_completions(&fixture(), &tokens(&["data", "load", ""]));
-    assert_eq!(
-        out,
-        vec![Candidate::bare("tall"), Candidate::bare("wide")]
-    );
+    assert_eq!(out, vec![Candidate::bare("tall"), Candidate::bare("wide")]);
 }
 
 #[test]
@@ -171,25 +168,37 @@ fn flag_prefix_lists_argument_flags() {
     // `--help` is offered alongside the command's own flags whenever the
     // user is explicitly probing flags (`--` prefix). clap injects it on
     // every leaf, so the engine reflects that.
-    let out = values(serve_completions(&fixture(), &tokens(&["ci", "hello", "--"])));
+    let out = values(serve_completions(
+        &fixture(),
+        &tokens(&["ci", "hello", "--"]),
+    ));
     assert_eq!(out, vec!["--help".to_string(), "--name".to_string()]);
 }
 
 #[test]
 fn flag_value_completes_to_allowed_values() {
-    let out = values(serve_completions(&fixture(), &tokens(&["ci", "deploy", "--env", ""])));
+    let out = values(serve_completions(
+        &fixture(),
+        &tokens(&["ci", "deploy", "--env", ""]),
+    ));
     assert_eq!(out, vec!["production".to_string(), "staging".to_string()]);
 }
 
 #[test]
 fn flag_value_partial_filters_allowed_values() {
-    let out = values(serve_completions(&fixture(), &tokens(&["ci", "deploy", "--env", "s"])));
+    let out = values(serve_completions(
+        &fixture(),
+        &tokens(&["ci", "deploy", "--env", "s"]),
+    ));
     assert_eq!(out, vec!["staging".to_string()]);
 }
 
 #[test]
 fn positional_value_completes_to_allowed_values() {
-    let out = values(serve_completions(&fixture(), &tokens(&["data", "load", ""])));
+    let out = values(serve_completions(
+        &fixture(),
+        &tokens(&["data", "load", ""]),
+    ));
     assert_eq!(out, vec!["tall".to_string(), "wide".to_string()]);
 }
 
@@ -202,7 +211,10 @@ fn unknown_group_returns_no_completions() {
 #[test]
 fn flag_without_allowed_values_returns_empty() {
     // `--name` has no allowed_values → shell falls back to filename completion.
-    let out = values(serve_completions(&fixture(), &tokens(&["ci", "hello", "--name", ""])));
+    let out = values(serve_completions(
+        &fixture(),
+        &tokens(&["ci", "hello", "--name", ""]),
+    ));
     assert!(out.is_empty());
 }
 
@@ -276,20 +288,28 @@ fn top_level_completion_lists_only_top_level_groups() {
 
 #[test]
 fn nested_group_completion_lists_child_groups() {
-    let out = values(serve_completions(&nested_fixture(), &tokens(&["docker", ""])));
+    let out = values(serve_completions(
+        &nested_fixture(),
+        &tokens(&["docker", ""]),
+    ));
     assert_eq!(out, vec!["container".to_string(), "image".to_string()]);
 }
 
 #[test]
 fn nested_command_completion_traverses_full_path() {
-    let out = values(serve_completions(&nested_fixture(), &tokens(&["docker", "image", ""])));
+    let out = values(serve_completions(
+        &nested_fixture(),
+        &tokens(&["docker", "image", ""]),
+    ));
     assert_eq!(out, vec!["build".to_string()]);
 }
 
 #[test]
 fn nested_command_completion_filters_by_prefix() {
-    let out =
-        values(serve_completions(&nested_fixture(), &tokens(&["docker", "container", "st"])));
+    let out = values(serve_completions(
+        &nested_fixture(),
+        &tokens(&["docker", "container", "st"]),
+    ));
     assert_eq!(out, vec!["start".to_string()]);
 }
 
@@ -308,7 +328,10 @@ fn root_flag_prefix_offers_help() {
 fn nested_group_flag_prefix_offers_help() {
     // Regression: `toolr docker --<TAB>` (sitting on a group, not a
     // leaf) also dropped to nothing. `--help` must still surface.
-    let out = values(serve_completions(&nested_fixture(), &tokens(&["docker", "--"])));
+    let out = values(serve_completions(
+        &nested_fixture(),
+        &tokens(&["docker", "--"]),
+    ));
     assert_eq!(out, vec!["--help".to_string()]);
 }
 
@@ -332,7 +355,10 @@ fn group_node_empty_prefix_does_not_offer_help() {
 fn leaf_help_prefix_filters_to_help_only() {
     // `toolr ci hello --he<TAB>` should narrow to `--help` even though
     // the leaf has no `help` argument of its own.
-    let out = values(serve_completions(&fixture(), &tokens(&["ci", "hello", "--he"])));
+    let out = values(serve_completions(
+        &fixture(),
+        &tokens(&["ci", "hello", "--he"]),
+    ));
     assert_eq!(out, vec!["--help".to_string()]);
 }
 
@@ -437,7 +463,10 @@ fn dispatcher_fixture() -> Manifest {
 fn dispatcher_completion_lists_grafted_children() {
     // Regression for the dashtastic case: `toolr jenkins job <TAB>`
     // returned nothing even though `--help` showed the children.
-    let out = values(serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", ""])));
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", ""]),
+    ));
     assert_eq!(
         out,
         vec!["delete_orphans".to_string(), "delete_stale".to_string()]
@@ -446,7 +475,10 @@ fn dispatcher_completion_lists_grafted_children() {
 
 #[test]
 fn dispatcher_completion_filters_children_by_prefix() {
-    let out = values(serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "delete_"])));
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "delete_"]),
+    ));
     assert_eq!(
         out,
         vec!["delete_orphans".to_string(), "delete_stale".to_string()]
@@ -458,7 +490,10 @@ fn dispatcher_flag_prefix_lists_dispatcher_flags_not_children() {
     // `toolr jenkins job --<TAB>` must offer the dispatcher's own
     // flags, not the grafted child names. `--help` is added by the
     // engine because clap injects it on every subcommand.
-    let out = values(serve_completions(&dispatcher_fixture(), &tokens(&["jenkins", "job", "--"])));
+    let out = values(serve_completions(
+        &dispatcher_fixture(),
+        &tokens(&["jenkins", "job", "--"]),
+    ));
     assert_eq!(
         out,
         vec![
@@ -516,7 +551,14 @@ fn dispatcher_flag_completes_after_hyphenated_flag_value_pair() {
     // manifest's `log_level`, so `debug` was taken for the child name.
     let out = values(serve_completions(
         &dispatcher_fixture(),
-        &tokens(&["jenkins", "job", "--log-level", "debug", "--on-demand", "--no-fol"]),
+        &tokens(&[
+            "jenkins",
+            "job",
+            "--log-level",
+            "debug",
+            "--on-demand",
+            "--no-fol",
+        ]),
     ));
     assert_eq!(out, vec!["--no-follow".to_string()]);
 }
@@ -556,7 +598,14 @@ fn dispatcher_flag_completes_after_long_alias_value_pair() {
 fn dispatcher_recurses_through_hyphenated_flag_value_pair() {
     let out = values(serve_completions(
         &dispatcher_fixture(),
-        &tokens(&["jenkins", "job", "--log-level", "debug", "delete_orphans", ""]),
+        &tokens(&[
+            "jenkins",
+            "job",
+            "--log-level",
+            "debug",
+            "delete_orphans",
+            "",
+        ]),
     ));
     assert_eq!(out, vec!["all".to_string(), "stale".to_string()]);
 }
@@ -697,8 +746,8 @@ fn leaf_with_only_flags_offers_flags_on_empty_prefix() {
 }
 
 use crate::complete::{ResolvedManifest, resolve_manifest_at_tab};
+use crate::manifest::write_manifest;
 use crate::manifest_build::empty_third_party_hash;
-use crate::manifest::{write_manifest};
 use tempfile::TempDir;
 
 fn make_tree(py_files: &[(&str, &str)]) -> TempDir {
@@ -827,7 +876,10 @@ fn errors_when_no_tools_dir_exists() {
     // the discovery walk succeed when it crawls past the drive root.
     // Same hazard on any host with `/tools`. Skip when the host
     // violates the test precondition.
-    let mut walker = tmp.path().canonicalize().unwrap_or_else(|_| tmp.path().to_path_buf());
+    let mut walker = tmp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| tmp.path().to_path_buf());
     let ancestor_has_tools = loop {
         if walker.join("tools").is_dir() {
             break true;
@@ -846,7 +898,10 @@ fn errors_when_no_tools_dir_exists() {
     }
     let err = resolve_manifest_at_tab(tmp.path()).expect_err("no tools/");
     let msg = err.to_string();
-    assert!(msg.contains("tools"), "expected hint about tools/, got: {msg}");
+    assert!(
+        msg.contains("tools"),
+        "expected hint about tools/, got: {msg}"
+    );
 }
 
 use crate::complete::{Shell, completion_script};
@@ -1112,7 +1167,8 @@ fn install_bash_without_xdg_falls_back_to_home_local_share() {
     let path = install_path_for(Shell::Bash, None, tmp.path()).unwrap();
     assert_eq!(
         path,
-        tmp.path().join(".local/share/bash-completion/completions/toolr")
+        tmp.path()
+            .join(".local/share/bash-completion/completions/toolr")
     );
 }
 

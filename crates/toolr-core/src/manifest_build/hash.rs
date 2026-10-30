@@ -21,14 +21,17 @@ use crate::third_party::glob::glob_manifests;
 /// blake3 of its contents. Adds, removes, or content edits all change
 /// the hash. Unrelated `.dist-info` churn does not.
 pub fn compute_third_party_hash(venv_root: &Path) -> Result<String> {
-    let paths = glob_manifests(venv_root)
-        .with_context(|| format!("globbing third-party manifests under {}", venv_root.display()))?;
+    let paths = glob_manifests(venv_root).with_context(|| {
+        format!(
+            "globbing third-party manifests under {}",
+            venv_root.display()
+        )
+    })?;
     let mut hasher = Hasher::new();
     for path in &paths {
         hasher.update(path.to_string_lossy().as_bytes());
         hasher.update(b"\0");
-        let contents = fs::read(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let contents = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
         let mut file_hasher = Hasher::new();
         file_hasher.update(&contents);
         hasher.update(file_hasher.finalize().as_bytes());
@@ -58,7 +61,11 @@ mod tests {
     /// a `toolr-manifest.json` whose contents are the supplied string.
     fn venv_with_manifests(entries: &[(&str, &str)]) -> TempDir {
         let tmp = TempDir::new().unwrap();
-        let site = tmp.path().join("lib").join("python3.13").join("site-packages");
+        let site = tmp
+            .path()
+            .join("lib")
+            .join("python3.13")
+            .join("site-packages");
         for (pkg, content) in entries {
             let pkg_dir = site.join(pkg);
             fs::create_dir_all(&pkg_dir).unwrap();
@@ -116,7 +123,11 @@ mod tests {
     fn unrelated_dist_info_does_not_change_hash() {
         let a = venv_with_manifests(&[("foo", "{}")]);
         let before = compute_third_party_hash(a.path()).unwrap();
-        let site = a.path().join("lib").join("python3.13").join("site-packages");
+        let site = a
+            .path()
+            .join("lib")
+            .join("python3.13")
+            .join("site-packages");
         fs::create_dir(site.join("unrelated_pkg-1.0.0.dist-info")).unwrap();
         let after = compute_third_party_hash(a.path()).unwrap();
         assert_eq!(before, after);

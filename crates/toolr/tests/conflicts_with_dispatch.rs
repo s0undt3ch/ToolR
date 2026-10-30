@@ -136,6 +136,12 @@ fn help_still_renders_with_conflicts_with_metadata() {
         String::from_utf8_lossy(&output.stderr),
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--follow"), "help missing --follow:\n{stdout}");
-    assert!(stdout.contains("--no-follow"), "help missing --no-follow:\n{stdout}");
+    assert!(
+        stdout.contains("--follow"),
+        "help missing --follow:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("--no-follow"),
+        "help missing --no-follow:\n{stdout}"
+    );
 }

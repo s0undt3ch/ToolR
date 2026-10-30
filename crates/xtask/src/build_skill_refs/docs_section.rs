@@ -894,7 +894,8 @@ pub(super) fn html_targets(text: &str) -> Vec<(std::ops::Range<usize>, String)> 
                         .find(|c: char| c.is_whitespace() || c == '>')
                         .unwrap_or(text.len() - from);
                     // `<a href=x.md/>`: the `/` closes the tag, it isn't part of the value.
-                    if text[from..from + len].ends_with('/') && text[from + len..].starts_with('>') {
+                    if text[from..from + len].ends_with('/') && text[from + len..].starts_with('>')
+                    {
                         len -= 1;
                     }
                     if len == 0 {
@@ -1772,13 +1773,18 @@ mod tests {
 
     #[test]
     fn unquoted_html_target_stops_before_a_self_closing_slash() {
-        assert_eq!(html_targets("<a href=x.md/>"), [(8..12, "x.md".to_string())]);
+        assert_eq!(
+            html_targets("<a href=x.md/>"),
+            [(8..12, "x.md".to_string())]
+        );
         assert_eq!(html_targets("<a href=d/ >"), [(8..10, "d/".to_string())]);
     }
 
     #[test]
     fn prefixed_local_raw_html_target_is_rejected() {
-        let err = transform("<img data-src=\"a.png\">\n", &fake(&[])).unwrap_err().to_string();
+        let err = transform("<img data-src=\"a.png\">\n", &fake(&[]))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("raw HTML target `a.png`"), "{err}");
     }
 

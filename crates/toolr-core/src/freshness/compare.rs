@@ -4,9 +4,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::manifest_build::compute_third_party_hash;
 use crate::hash::hash_tools_dir;
 use crate::manifest::Manifest;
+use crate::manifest_build::compute_third_party_hash;
 
 /// Outcome of comparing the live filesystem state to a cached manifest.
 ///
@@ -75,8 +75,8 @@ pub fn compare(
         return Ok(verdict);
     }
 
-    let live_static = hash_tools_dir(tools_dir)
-        .with_context(|| format!("hashing {}", tools_dir.display()))?;
+    let live_static =
+        hash_tools_dir(tools_dir).with_context(|| format!("hashing {}", tools_dir.display()))?;
 
     // Third-party axis is only checked when the caller actually has a
     // venv. When `venv_dir` is `None`, the caller has explicitly opted

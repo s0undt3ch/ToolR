@@ -79,7 +79,11 @@ pub fn candidate_site_packages(venv_dir: &Path) -> Vec<PathBuf> {
     } else {
         let lib = venv_dir.join("lib");
         if lib.is_dir() {
-            for entry in WalkDir::new(&lib).max_depth(1).into_iter().filter_map(|e| e.ok()) {
+            for entry in WalkDir::new(&lib)
+                .max_depth(1)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
                 let name = entry.file_name().to_string_lossy();
                 if name.starts_with("python") {
                     out.push(entry.path().join("site-packages"));
@@ -95,11 +99,17 @@ pub fn candidate_site_packages(venv_dir: &Path) -> Vec<PathBuf> {
 /// only: no file reads, no interpreter.
 pub fn installed_toolr_py_version(venv_dir: &Path) -> Option<String> {
     candidate_site_packages(venv_dir).iter().find_map(|sp| {
-        fs::read_dir(sp).ok()?.filter_map(Result::ok).find_map(|entry| {
-            let name = entry.file_name();
-            let version = name.to_str()?.strip_prefix("toolr_py-")?.strip_suffix(".dist-info")?;
-            Some(version.to_string())
-        })
+        fs::read_dir(sp)
+            .ok()?
+            .filter_map(Result::ok)
+            .find_map(|entry| {
+                let name = entry.file_name();
+                let version = name
+                    .to_str()?
+                    .strip_prefix("toolr_py-")?
+                    .strip_suffix(".dist-info")?;
+                Some(version.to_string())
+            })
     })
 }
 
@@ -180,7 +190,11 @@ mod tests {
     #[cfg(unix)]
     fn detects_toolr_package_via_pth_file() {
         let tmp = TempDir::new().unwrap();
-        let py_dir = tmp.path().join("lib").join("python3.13").join("site-packages");
+        let py_dir = tmp
+            .path()
+            .join("lib")
+            .join("python3.13")
+            .join("site-packages");
         std::fs::create_dir_all(&py_dir).unwrap();
         let bin = tmp.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
@@ -196,7 +210,10 @@ mod tests {
 
         let python = tmp.path().join("bin").join("python");
         let pkg = validate_venv(tmp.path(), &python).unwrap();
-        assert!(pkg.ends_with("toolr"), "expected path ending in toolr, got {pkg:?}");
+        assert!(
+            pkg.ends_with("toolr"),
+            "expected path ending in toolr, got {pkg:?}"
+        );
     }
 
     #[test]
@@ -204,10 +221,17 @@ mod tests {
     fn reads_installed_toolr_py_version_from_dist_info() {
         let tmp = TempDir::new().unwrap();
         fake_unix_venv(tmp.path(), true, true);
-        let sp = tmp.path().join("lib").join("python3.13").join("site-packages");
+        let sp = tmp
+            .path()
+            .join("lib")
+            .join("python3.13")
+            .join("site-packages");
         std::fs::create_dir_all(sp.join("toolr_py-0.32.0.dist-info")).unwrap();
         std::fs::create_dir_all(sp.join("toolr_example_plugin-1.0.0.dist-info")).unwrap();
-        assert_eq!(installed_toolr_py_version(tmp.path()).as_deref(), Some("0.32.0"));
+        assert_eq!(
+            installed_toolr_py_version(tmp.path()).as_deref(),
+            Some("0.32.0")
+        );
     }
 
     #[test]
@@ -221,9 +245,18 @@ mod tests {
     #[test]
     fn minor_version_order_ignores_patch_level() {
         use std::cmp::Ordering::{Equal, Greater, Less};
-        assert_eq!(super::compare_minor_versions("0.33.0", "0.33.4"), Some(Equal));
-        assert_eq!(super::compare_minor_versions("0.32.0", "0.33.0"), Some(Less));
-        assert_eq!(super::compare_minor_versions("1.0.0", "0.33.0"), Some(Greater));
+        assert_eq!(
+            super::compare_minor_versions("0.33.0", "0.33.4"),
+            Some(Equal)
+        );
+        assert_eq!(
+            super::compare_minor_versions("0.32.0", "0.33.0"),
+            Some(Less)
+        );
+        assert_eq!(
+            super::compare_minor_versions("1.0.0", "0.33.0"),
+            Some(Greater)
+        );
     }
 
     #[test]

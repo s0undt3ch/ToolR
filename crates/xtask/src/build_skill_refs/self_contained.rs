@@ -81,7 +81,15 @@ pub fn lint(repo_root: &Path) -> Result<()> {
     }
     let listing = violations
         .iter()
-        .map(|v| format!("{}:{}: {}: {}", slash_path(&v.file), v.line, v.rule, v.target))
+        .map(|v| {
+            format!(
+                "{}:{}: {}: {}",
+                slash_path(&v.file),
+                v.line,
+                v.rule,
+                v.target
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
     bail!("{listing}\nskills must be self-contained; see {DESIGN}");
@@ -173,7 +181,15 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
 /// maintainers. Symlinks are listed, not followed.
 fn shipped_files(skill_dir: &Path) -> Result<Vec<PathBuf>> {
     let out = Command::new("git")
-        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."])
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            ".",
+        ])
         .current_dir(skill_dir)
         .output()
         .with_context(|| format!("running git ls-files in {}", skill_dir.display()))?;
@@ -452,7 +468,8 @@ fn is_repo_url(url: &str, urls: &[String]) -> bool {
     let url = url.to_ascii_lowercase();
     let rest = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
     let rest = rest.strip_prefix("www.").unwrap_or(rest);
-    urls.iter().any(|p| rest.strip_prefix(p.as_str()).is_some_and(at_boundary))
+    urls.iter()
+        .any(|p| rest.strip_prefix(p.as_str()).is_some_and(at_boundary))
 }
 
 /// Whether a matched prefix ends on a segment boundary, so `<repo>` doesn't
@@ -642,7 +659,13 @@ mod tests {
     #[test]
     fn malformed_markdown_reports_the_offending_line() {
         let body = "Intro.\n\nfirst\nsecond\nthird ](b)\n";
-        let v = lint_file(Path::new("s"), Path::new("SKILL.md"), body, &exists_in(&[]), &urls());
+        let v = lint_file(
+            Path::new("s"),
+            Path::new("SKILL.md"),
+            body,
+            &exists_in(&[]),
+            &urls(),
+        );
         assert_eq!((v[0].rule, v[0].line), ("malformed-markdown", 5));
         assert_eq!(v[0].target, "`](` without a matching `[`");
     }
@@ -738,12 +761,18 @@ mod tests {
             "nested-tests",
             &[
                 ("skills/x/SKILL.md", "ok\n"),
-                ("skills/x/examples/tests/t.py", "# https://toolr.readthedocs.io/\n"),
+                (
+                    "skills/x/examples/tests/t.py",
+                    "# https://toolr.readthedocs.io/\n",
+                ),
             ],
         )
         .unwrap_err()
         .to_string();
-        assert!(err.contains("skills/x/examples/tests/t.py:1: repo-url"), "{err}");
+        assert!(
+            err.contains("skills/x/examples/tests/t.py:1: repo-url"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -797,7 +826,10 @@ mod tests {
         let err = lint(&root).unwrap_err().to_string();
         std::fs::remove_dir_all(&root).unwrap();
         assert!(err.contains("skills/x/loop:1: symlink: ."), "{err}");
-        assert!(err.contains("skills/x/outside:1: symlink: ../../outside"), "{err}");
+        assert!(
+            err.contains("skills/x/outside:1: symlink: ../../outside"),
+            "{err}"
+        );
         assert!(!err.contains("leak.md"), "{err}");
     }
 
@@ -814,7 +846,12 @@ mod tests {
             ["repo-path"]
         );
         assert!(
-            rules_in("references/r.md", "`../examples/a.py`\n", &["s/examples/a.py"]).is_empty()
+            rules_in(
+                "references/r.md",
+                "`../examples/a.py`\n",
+                &["s/examples/a.py"]
+            )
+            .is_empty()
         );
     }
 
@@ -917,7 +954,13 @@ mod tests {
 
     #[test]
     fn srcset_and_names_merely_ending_in_href_are_not_targets() {
-        assert!(rules("<img srcset=\"../../a.png 2x\"> <a xhref=\"../../x.md\">\n", &[]).is_empty());
+        assert!(
+            rules(
+                "<img srcset=\"../../a.png 2x\"> <a xhref=\"../../x.md\">\n",
+                &[]
+            )
+            .is_empty()
+        );
     }
 
     #[test]

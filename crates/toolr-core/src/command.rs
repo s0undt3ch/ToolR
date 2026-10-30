@@ -1,20 +1,20 @@
 use std::collections::HashMap;
+use std::env;
+use std::error::Error;
+use std::fmt;
+use std::fs::File;
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use std::fs::File;
-use std::error::Error;
-use std::fmt;
-use std::path::PathBuf;
-use std::env;
 
 #[cfg(unix)]
-use std::os::unix::io::{RawFd, FromRawFd};
+use std::os::unix::io::{FromRawFd, RawFd};
 
 #[cfg(windows)]
-use std::os::windows::io::{RawHandle, FromRawHandle};
+use std::os::windows::io::{FromRawHandle, RawHandle};
 
 // Custom error types
 #[derive(Debug)]
@@ -32,7 +32,9 @@ impl Error for CommandExecutionError {}
 
 impl CommandExecutionError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self {
+            message: message.into(),
+        }
     }
 }
 
@@ -51,7 +53,9 @@ impl Error for CommandTimeoutExceededError {}
 
 impl CommandTimeoutExceededError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self {
+            message: message.into(),
+        }
     }
 }
 
@@ -70,7 +74,9 @@ impl Error for CommandNoOutputTimeoutError {}
 
 impl CommandNoOutputTimeoutError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self {
+            message: message.into(),
+        }
     }
 }
 
@@ -103,24 +109,24 @@ pub struct CommandConfig {
     pub env: HashMap<String, String>,
     pub input: Option<Vec<u8>>,
     #[cfg(unix)]
-    pub stdout_fd: Option<RawFd>,     // For capturing output to file
+    pub stdout_fd: Option<RawFd>, // For capturing output to file
     #[cfg(unix)]
-    pub stderr_fd: Option<RawFd>,     // For capturing output to file
+    pub stderr_fd: Option<RawFd>, // For capturing output to file
     #[cfg(unix)]
     pub sys_stdout_fd: Option<RawFd>, // For streaming to output
     #[cfg(unix)]
     pub sys_stderr_fd: Option<RawFd>, // For streaming to error
     #[cfg(windows)]
-    pub stdout_fd: Option<ThreadSafeHandle>,     // For capturing output to file
+    pub stdout_fd: Option<ThreadSafeHandle>, // For capturing output to file
     #[cfg(windows)]
-    pub stderr_fd: Option<ThreadSafeHandle>,     // For capturing output to file
+    pub stderr_fd: Option<ThreadSafeHandle>, // For capturing output to file
     #[cfg(windows)]
     pub sys_stdout_fd: Option<ThreadSafeHandle>, // For streaming to output
     #[cfg(windows)]
     pub sys_stderr_fd: Option<ThreadSafeHandle>, // For streaming to error
     pub timeout_secs: Option<f64>,
     pub no_output_timeout_secs: Option<f64>,
-    pub cwd: Option<PathBuf>,       // Current working directory
+    pub cwd: Option<PathBuf>, // Current working directory
     /// Inherit stdin/stdout/stderr directly from the parent instead of
     /// piping them — required for interactive children (editors, prompts)
     /// that check `isatty()` on any of the three streams.
@@ -151,7 +157,7 @@ impl Default for CommandConfig {
             sys_stderr_fd: None,
             timeout_secs: None,
             no_output_timeout_secs: None,
-            cwd: env::current_dir().ok(),  // Default to current working directory
+            cwd: env::current_dir().ok(), // Default to current working directory
             interactive: false,
         }
     }
@@ -186,7 +192,9 @@ impl CommandConfig {
 }
 
 // Core implementation used by both Rust and Python
-pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_command_internal(
+    config: CommandConfig,
+) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
     // Create a command with the given arguments and environment variables
     let mut command = Command::new(&config.args[0]);
     command.args(&config.args[1..]);
@@ -223,14 +231,18 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
 
     // Start the command
     let mut child = command.spawn().map_err(|e| {
-        Box::new(CommandExecutionError::new(format!("Failed to execute command: {e}")))
+        Box::new(CommandExecutionError::new(format!(
+            "Failed to execute command: {e}"
+        )))
     })?;
 
     // If there's input, write it to stdin
     if let Some(input_data) = &config.input {
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(input_data).map_err(|e| {
-                Box::new(CommandExecutionError::new(format!("Failed to write to stdin: {e}")))
+                Box::new(CommandExecutionError::new(format!(
+                    "Failed to write to stdin: {e}"
+                )))
             })?;
             // Explicitly drop stdin to close it
             drop(stdin);
@@ -239,8 +251,10 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
 
     // Take stdout and stderr pipes — `None` in interactive mode, where
     // stdio was inherited above rather than piped.
-    let stdout = (!config.interactive).then(|| child.stdout.take().expect("Failed to get stdout handle"));
-    let stderr = (!config.interactive).then(|| child.stderr.take().expect("Failed to get stderr handle"));
+    let stdout =
+        (!config.interactive).then(|| child.stdout.take().expect("Failed to get stdout handle"));
+    let stderr =
+        (!config.interactive).then(|| child.stderr.take().expect("Failed to get stderr handle"));
 
     // Track last output time for no_output_timeout_secs
     let last_output = Arc::new(Mutex::new(Instant::now()));
@@ -259,85 +273,79 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
     #[cfg(unix)]
     let sys_stdout_fd = config.sys_stdout_fd;
 
-    let stdout_thread = stdout.map(|stdout| thread::spawn(move || {
-        let mut buffer = [0; 8192];
-        let mut reader = stdout;
+    let stdout_thread = stdout.map(|stdout| {
+        thread::spawn(move || {
+            let mut buffer = [0; 8192];
+            let mut reader = stdout;
 
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break, // EOF
-                Ok(n) => {
-                    // Update last output time
-                    if let Ok(mut last) = last_output_clone.lock() {
-                        *last = Instant::now();
-                    }
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        // Update last output time
+                        if let Ok(mut last) = last_output_clone.lock() {
+                            *last = Instant::now();
+                        }
 
-                    // Write to capture file if requested
-                    #[cfg(unix)]
-                    if let Some(fd) = stdout_fd {
-                        let mut file = unsafe {
-                            File::from_raw_fd(fd)
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        // Write to capture file if requested
+                        #[cfg(unix)]
+                        if let Some(fd) = stdout_fd {
+                            let mut file = unsafe { File::from_raw_fd(fd) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the file descriptor - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the file descriptor - it's owned by Python
-                        std::mem::forget(file);
-                    }
 
-                    #[cfg(windows)]
-                    if let Some(ref handle) = stdout_fd_clone {
-                        let mut file = unsafe {
-                            File::from_raw_handle(handle.raw())
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        #[cfg(windows)]
+                        if let Some(ref handle) = stdout_fd_clone {
+                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the handle - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the handle - it's owned by Python
-                        std::mem::forget(file);
-                    }
 
-                    // Stream to stdout if requested
-                    #[cfg(unix)]
-                    if let Some(fd) = sys_stdout_fd {
-                        let mut file = unsafe {
-                            File::from_raw_fd(fd)
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        // Stream to stdout if requested
+                        #[cfg(unix)]
+                        if let Some(fd) = sys_stdout_fd {
+                            let mut file = unsafe { File::from_raw_fd(fd) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the file descriptor - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the file descriptor - it's owned by Python
-                        std::mem::forget(file);
-                    }
 
-                    #[cfg(windows)]
-                    if let Some(ref handle) = sys_stdout_fd_clone {
-                        let mut file = unsafe {
-                            File::from_raw_handle(handle.raw())
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        #[cfg(windows)]
+                        if let Some(ref handle) = sys_stdout_fd_clone {
+                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the handle - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the handle - it's owned by Python
-                        std::mem::forget(file);
                     }
+                    Err(_) => break,
                 }
-                Err(_) => break,
             }
-        }
-    }));
+        })
+    });
 
     // Setup stderr handling - similar to stdout
     let last_output_clone = Arc::clone(&last_output);
@@ -353,85 +361,79 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
     #[cfg(unix)]
     let sys_stderr_fd = config.sys_stderr_fd;
 
-    let stderr_thread = stderr.map(|stderr| thread::spawn(move || {
-        let mut buffer = [0; 8192];
-        let mut reader = stderr;
+    let stderr_thread = stderr.map(|stderr| {
+        thread::spawn(move || {
+            let mut buffer = [0; 8192];
+            let mut reader = stderr;
 
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break, // EOF
-                Ok(n) => {
-                    // Update last output time
-                    if let Ok(mut last) = last_output_clone.lock() {
-                        *last = Instant::now();
-                    }
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        // Update last output time
+                        if let Ok(mut last) = last_output_clone.lock() {
+                            *last = Instant::now();
+                        }
 
-                    // Write to capture file if requested
-                    #[cfg(unix)]
-                    if let Some(fd) = stderr_fd {
-                        let mut file = unsafe {
-                            File::from_raw_fd(fd)
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        // Write to capture file if requested
+                        #[cfg(unix)]
+                        if let Some(fd) = stderr_fd {
+                            let mut file = unsafe { File::from_raw_fd(fd) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the file descriptor - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the file descriptor - it's owned by Python
-                        std::mem::forget(file);
-                    }
 
-                    #[cfg(windows)]
-                    if let Some(ref handle) = stderr_fd_clone {
-                        let mut file = unsafe {
-                            File::from_raw_handle(handle.raw())
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        #[cfg(windows)]
+                        if let Some(ref handle) = stderr_fd_clone {
+                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the handle - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the handle - it's owned by Python
-                        std::mem::forget(file);
-                    }
 
-                    // Stream to stderr if requested
-                    #[cfg(unix)]
-                    if let Some(fd) = sys_stderr_fd {
-                        let mut file = unsafe {
-                            File::from_raw_fd(fd)
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        // Stream to stderr if requested
+                        #[cfg(unix)]
+                        if let Some(fd) = sys_stderr_fd {
+                            let mut file = unsafe { File::from_raw_fd(fd) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the file descriptor - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the file descriptor - it's owned by Python
-                        std::mem::forget(file);
-                    }
 
-                    #[cfg(windows)]
-                    if let Some(ref handle) = sys_stderr_fd_clone {
-                        let mut file = unsafe {
-                            File::from_raw_handle(handle.raw())
-                        };
-                        if file.write_all(&buffer[0..n]).is_err() {
-                            break;
+                        #[cfg(windows)]
+                        if let Some(ref handle) = sys_stderr_fd_clone {
+                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
+                            if file.write_all(&buffer[0..n]).is_err() {
+                                break;
+                            }
+                            if file.flush().is_err() {
+                                break;
+                            }
+                            // Don't close the handle - it's owned by Python
+                            std::mem::forget(file);
                         }
-                        if file.flush().is_err() {
-                            break;
-                        }
-                        // Don't close the handle - it's owned by Python
-                        std::mem::forget(file);
                     }
+                    Err(_) => break,
                 }
-                Err(_) => break,
             }
-        }
-    }));
+        })
+    });
 
     // Wait for command completion with timeout handling
     let start_time = Instant::now();
@@ -446,11 +448,11 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                     let timeout_duration = Duration::from_secs_f64(timeout);
                     if start_time.elapsed() > timeout_duration {
                         let _ = child.kill();
-                        let _ = child.wait();  // Make sure it's dead
+                        let _ = child.wait(); // Make sure it's dead
 
-                        return Err(Box::new(CommandTimeoutExceededError::new(
-                            format!("Command timed out after {timeout:.2} seconds")
-                        )));
+                        return Err(Box::new(CommandTimeoutExceededError::new(format!(
+                            "Command timed out after {timeout:.2} seconds"
+                        ))));
                     }
                 }
 
@@ -462,20 +464,20 @@ pub fn run_command_internal(config: CommandConfig) -> Result<i32, Box<dyn std::e
                     let no_output_duration = Duration::from_secs_f64(no_output_timeout);
                     if last_output_time.elapsed() > no_output_duration {
                         let _ = child.kill();
-                        let _ = child.wait();  // Make sure it's dead
+                        let _ = child.wait(); // Make sure it's dead
 
-                        return Err(Box::new(CommandNoOutputTimeoutError::new(
-                            format!("Command timed out due to no output for {no_output_timeout:.2} seconds")
-                        )));
+                        return Err(Box::new(CommandNoOutputTimeoutError::new(format!(
+                            "Command timed out due to no output for {no_output_timeout:.2} seconds"
+                        ))));
                     }
                 }
 
                 thread::sleep(Duration::from_millis(10));
-            },
+            }
             Err(e) => {
-                return Err(Box::new(CommandExecutionError::new(
-                    format!("Failed to wait for process: {e}")
-                )));
+                return Err(Box::new(CommandExecutionError::new(format!(
+                    "Failed to wait for process: {e}"
+                ))));
             }
         }
     };

@@ -20,13 +20,23 @@ fn project_venv_path_prints_cache_path_by_default() {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(
         stdout.contains("venv"),
         "expected a path containing `venv`, got: {stdout}"
     );
     assert!(
-        !stdout.contains(tmp.path().join("tools").join(".venv").to_string_lossy().as_ref()),
+        !stdout.contains(
+            tmp.path()
+                .join("tools")
+                .join(".venv")
+                .to_string_lossy()
+                .as_ref()
+        ),
         "default config should not land in-tree, got: {stdout}"
     );
 }
@@ -44,7 +54,11 @@ fn project_venv_path_prints_in_tree_path_when_configured() {
         .args(["project", "venv", "path"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Canonicalise the expected path so the comparison matches toolr's
     // output across platforms. On Windows `TempDir` paths return the

@@ -87,9 +87,7 @@ pub fn validate_no_collisions(
 /// Cross-source collisions remain a hard error — they're a structural
 /// configuration problem that needs the user's resolution before any
 /// build can produce a stable manifest. See [`validate_no_collisions`].
-pub fn dedup_intra_source(
-    children_by_parent: &mut HashMap<String, Vec<Command>>,
-) -> Vec<String> {
+pub fn dedup_intra_source(children_by_parent: &mut HashMap<String, Vec<Command>>) -> Vec<String> {
     let mut warnings = Vec::new();
     for (parent, children) in children_by_parent.iter_mut() {
         let mut seen: std::collections::HashSet<(String, String)> =
@@ -113,10 +111,7 @@ pub fn dedup_intra_source(
     warnings
 }
 
-fn closest_parent_hint(
-    target: &str,
-    candidates: &std::collections::BTreeSet<&str>,
-) -> String {
+fn closest_parent_hint(target: &str, candidates: &std::collections::BTreeSet<&str>) -> String {
     let mut best: Option<(usize, &str)> = None;
     for candidate in candidates {
         let dist = edit_distance(target, candidate);
@@ -208,8 +203,8 @@ mod tests {
 
     #[test]
     fn unknown_parent_with_hint() {
-        let err = validate_attachments(&[block("django", "djnago")], &parents_with_django())
-            .unwrap_err();
+        let err =
+            validate_attachments(&[block("django", "djnago")], &parents_with_django()).unwrap_err();
         match err {
             AttachError::UnknownParent { hint, .. } => {
                 assert!(
@@ -271,7 +266,10 @@ mod tests {
         assert_eq!(children["django"][0].module, "apps.billing", "first wins");
         assert_eq!(warnings.len(), 2, "one warning per discarded duplicate");
         for w in &warnings {
-            assert!(w.contains("sync"), "warning {w:?} should name the duplicate");
+            assert!(
+                w.contains("sync"),
+                "warning {w:?} should name the duplicate"
+            );
             assert!(w.contains("django"), "warning {w:?} should name the parent");
             assert!(
                 w.contains("argparse:django"),

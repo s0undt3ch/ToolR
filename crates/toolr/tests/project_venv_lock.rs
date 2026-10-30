@@ -24,8 +24,14 @@ fn lock_help_lists_upgrade_flags() {
         .unwrap();
     assert!(output.status.success(), "help should exit 0");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--upgrade"), "help missing --upgrade: {stdout}");
-    assert!(stdout.contains("--upgrade-package"), "help missing --upgrade-package: {stdout}");
+    assert!(
+        stdout.contains("--upgrade"),
+        "help missing --upgrade: {stdout}"
+    );
+    assert!(
+        stdout.contains("--upgrade-package"),
+        "help missing --upgrade-package: {stdout}"
+    );
 }
 
 /// `venv lock` (no flags) reports the missing project root when run
@@ -99,9 +105,15 @@ fn lock_success_path_invokes_uv_lock() {
         String::from_utf8_lossy(&output.stderr)
     );
     let argv = fx.uv_argv();
-    assert!(argv.contains("lock"), "uv argv should include `lock`; got:\n{argv}");
+    assert!(
+        argv.contains("lock"),
+        "uv argv should include `lock`; got:\n{argv}"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("refreshed"), "expected `refreshed` in stdout, got: {stdout}");
+    assert!(
+        stdout.contains("refreshed"),
+        "expected `refreshed` in stdout, got: {stdout}"
+    );
 }
 
 #[cfg(unix)]
@@ -115,7 +127,14 @@ fn lock_with_dash_u_passes_upgrade_to_uv() {
         .args(["project", "venv", "lock", "-U"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let argv = fx.uv_argv();
-    assert!(argv.lines().any(|l| l == "--upgrade"), "missing --upgrade; got:\n{argv}");
+    assert!(
+        argv.lines().any(|l| l == "--upgrade"),
+        "missing --upgrade; got:\n{argv}"
+    );
 }

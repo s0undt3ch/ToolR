@@ -46,12 +46,19 @@ mod full_description_test {
         // ``Examples:`` is a multi-entry section; each example gets
         // a ``- `` bullet unless the line already starts with one.
         // Entries are blank-line separated in the source docstring.
-        let out = render(
-            "Short.\n\nExamples:\n    First example.\n\n    Second example.\n",
+        let out = render("Short.\n\nExamples:\n    First example.\n\n    Second example.\n");
+        assert!(
+            out.contains("## Examples"),
+            "missing Examples header: {out}"
         );
-        assert!(out.contains("## Examples"), "missing Examples header: {out}");
-        assert!(out.contains("- First example."), "missing first example bullet: {out}");
-        assert!(out.contains("- Second example."), "missing second example bullet: {out}");
+        assert!(
+            out.contains("- First example."),
+            "missing first example bullet: {out}"
+        );
+        assert!(
+            out.contains("- Second example."),
+            "missing second example bullet: {out}"
+        );
     }
 
     #[test]
@@ -104,22 +111,40 @@ Examples:
     #[test]
     fn warnings_section_renders_as_bullet_list() {
         let out = render("Short.\n\nWarnings:\n    Be careful here.\n");
-        assert!(out.contains("## Warnings\n"), "missing Warnings header: {out}");
-        assert!(out.contains("- Be careful here."), "missing warning bullet: {out}");
+        assert!(
+            out.contains("## Warnings\n"),
+            "missing Warnings header: {out}"
+        );
+        assert!(
+            out.contains("- Be careful here."),
+            "missing warning bullet: {out}"
+        );
     }
 
     #[test]
     fn see_also_section_renders_as_bullet_list() {
         let out = render("Short.\n\nSee Also:\n    other_function\n    related_module\n");
-        assert!(out.contains("## See Also\n"), "missing See Also header: {out}");
-        assert!(out.contains("- other_function"), "missing first see-also: {out}");
-        assert!(out.contains("- related_module"), "missing second see-also: {out}");
+        assert!(
+            out.contains("## See Also\n"),
+            "missing See Also header: {out}"
+        );
+        assert!(
+            out.contains("- other_function"),
+            "missing first see-also: {out}"
+        );
+        assert!(
+            out.contains("- related_module"),
+            "missing second see-also: {out}"
+        );
     }
 
     #[test]
     fn references_section_renders_as_bullet_list() {
         let out = render("Short.\n\nReferences:\n    https://example.com/spec\n");
-        assert!(out.contains("## References\n"), "missing References header: {out}");
+        assert!(
+            out.contains("## References\n"),
+            "missing References header: {out}"
+        );
         assert!(
             out.contains("- https://example.com/spec"),
             "missing reference bullet: {out}"
@@ -141,7 +166,10 @@ Examples:
         // ``Deprecated:`` is a single-string field, not a list — the
         // renderer emits ``Deprecated:\n<text>`` (no bullet).
         let out = render("Short.\n\nDeprecated:\n    Removed in 2.0.\n");
-        assert!(out.contains("## Deprecated\n"), "missing Deprecated header: {out}");
+        assert!(
+            out.contains("## Deprecated\n"),
+            "missing Deprecated header: {out}"
+        );
         assert!(
             out.contains("Removed in 2.0."),
             "missing deprecated body: {out}"
@@ -204,7 +232,9 @@ mod backtick_normalization {
     #[test]
     fn double_backticks_collapse_to_single_in_short_description() {
         let parser = SimpleDocstringParser::new();
-        let doc = parser.parse("Demonstrates a call to ``ctx.print``.").unwrap();
+        let doc = parser
+            .parse("Demonstrates a call to ``ctx.print``.")
+            .unwrap();
         assert_eq!(doc.short_description, "Demonstrates a call to `ctx.print`.");
     }
 
@@ -227,10 +257,7 @@ mod backtick_normalization {
             .parse("Short.\n\nLong body with ```rust\nfn main() {}\n``` code block.")
             .unwrap();
         assert!(
-            doc.long_description
-                .as_deref()
-                .unwrap()
-                .contains("```rust"),
+            doc.long_description.as_deref().unwrap().contains("```rust"),
             "triple backticks should pass through unchanged"
         );
     }

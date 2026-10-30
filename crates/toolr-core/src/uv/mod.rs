@@ -107,12 +107,10 @@ impl UvError {
     /// so `main`'s `"toolr: {e:#}"` prefix lands once and only once).
     pub fn user_message(&self) -> String {
         match self {
-            Self::UserRefusedInstall => {
-                "uv is required for this command. Install from \
+            Self::UserRefusedInstall => "uv is required for this command. Install from \
                  https://docs.astral.sh/uv/getting-started/installation/ \
                  and rerun, or set TOOLR_AUTO_INSTALL_UV=1."
-                    .into()
-            }
+                .into(),
             Self::VersionTooOld { found, required } => format!(
                 "uv on PATH is {}.{}.{}, but toolr requires \
                  >= {}.{}.{}. Upgrade uv and try again.",
@@ -127,9 +125,7 @@ impl UvError {
             // and reach the user via the anyhow chain (see
             // [`Self::into_anyhow`]); the hint here is purely the
             // recovery advice.
-            Self::ExecFailed { source, .. }
-                if source.kind() == std::io::ErrorKind::NotFound =>
-            {
+            Self::ExecFailed { source, .. } if source.kind() == std::io::ErrorKind::NotFound => {
                 "uv exists on disk but couldn't be executed. This \
                  usually means the binary's dynamic loader is missing \
                  — for example a glibc-linked uv on a musl host, or \
@@ -271,18 +267,17 @@ mod tests {
 
     #[test]
     fn toolr_cache_dir_uses_xdg_cache_home_when_set() {
-        let result =
-            with_env_var("XDG_CACHE_HOME", Some("/tmp/test-xdg-cache"), toolr_cache_dir);
+        let result = with_env_var(
+            "XDG_CACHE_HOME",
+            Some("/tmp/test-xdg-cache"),
+            toolr_cache_dir,
+        );
         assert_eq!(result, Some(PathBuf::from("/tmp/test-xdg-cache/toolr")));
     }
 
     #[test]
     fn managed_uv_path_lives_under_data_dir_bin() {
-        let result = with_env_var(
-            "XDG_DATA_HOME",
-            Some("/tmp/test-xdg-data"),
-            managed_uv_path,
-        );
+        let result = with_env_var("XDG_DATA_HOME", Some("/tmp/test-xdg-data"), managed_uv_path);
         // `uv_basename()` is platform-specific; just assert the directory
         // structure so this still passes on Windows runners.
         let p = result.expect("XDG_DATA_HOME set → Some");
@@ -309,11 +304,7 @@ mod tests {
                 .to_string()
                 .contains("garbage")
         );
-        assert!(
-            UvError::UserRefusedInstall
-                .to_string()
-                .contains("declined")
-        );
+        assert!(UvError::UserRefusedInstall.to_string().contains("declined"));
         let io = std::io::Error::new(std::io::ErrorKind::NotFound, "nope");
         assert!(UvError::Io(io).to_string().contains("nope"));
         assert!(
@@ -326,7 +317,11 @@ mod tests {
                 .to_string()
                 .contains("uv sync failed")
         );
-        assert!(UvError::SyncFailed(None).to_string().contains("uv sync failed"));
+        assert!(
+            UvError::SyncFailed(None)
+                .to_string()
+                .contains("uv sync failed")
+        );
     }
 
     #[test]

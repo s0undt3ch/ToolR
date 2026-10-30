@@ -136,8 +136,7 @@ mod tests {
         let py = venv.join("bin/python");
         write_exec(&py, "#!/bin/sh\n");
         let cache = TempDir::new().unwrap(); // empty: no meta.json
-        let err =
-            verify_interpreter(&py, &venv, repo.path(), Some(cache.path())).unwrap_err();
+        let err = verify_interpreter(&py, &venv, repo.path(), Some(cache.path())).unwrap_err();
         assert!(matches!(err, ProvenanceError::UntrustedInRepo(_)));
     }
 
@@ -182,8 +181,7 @@ mod tests {
             .with_interpreter(canon.clone(), "deadbeef".into())
             .write(cache.path())
             .unwrap();
-        let err =
-            verify_interpreter(&py, &venv, repo.path(), Some(cache.path())).unwrap_err();
+        let err = verify_interpreter(&py, &venv, repo.path(), Some(cache.path())).unwrap_err();
         assert!(matches!(err, ProvenanceError::UntrustedInRepo(_)));
     }
 
@@ -218,6 +216,9 @@ mod tests {
             Some(v) => unsafe { std::env::set_var("XDG_CACHE_HOME", v) },
             None => unsafe { std::env::remove_var("XDG_CACHE_HOME") },
         }
-        assert!(result.is_ok(), "interpreter under the toolr cache dir must be trusted");
+        assert!(
+            result.is_ok(),
+            "interpreter under the toolr cache dir must be trusted"
+        );
     }
 }

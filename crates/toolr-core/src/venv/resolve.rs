@@ -43,9 +43,8 @@ pub fn resolve_venv_path(repo_root: &Path) -> Result<ResolvedVenv> {
     // An invalid spelling is a hard error so a typo doesn't silently
     // fall back to the file-configured value.
     let venv_location = match std::env::var(VENV_LOCATION_ENV) {
-        Ok(raw) if !raw.is_empty() => VenvLocation::from_str(&raw).map_err(|e| {
-            anyhow::anyhow!("{VENV_LOCATION_ENV}={raw:?} is invalid: {e}")
-        })?,
+        Ok(raw) if !raw.is_empty() => VenvLocation::from_str(&raw)
+            .map_err(|e| anyhow::anyhow!("{VENV_LOCATION_ENV}={raw:?} is invalid: {e}"))?,
         _ => config.venv_location,
     };
 

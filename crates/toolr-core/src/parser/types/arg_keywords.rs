@@ -117,14 +117,21 @@ impl<'a> Walker<'a> {
         // Star imports from modules we never parsed stay unexpanded: guessing
         // from the merged table could fail a legitimate build.
         table.star_import_modules().iter().find_map(|m| {
-            self.aliases.lookup_in(m, name).map(|target| (target, m.clone()))
+            self.aliases
+                .lookup_in(m, name)
+                .map(|target| (target, m.clone()))
         })
     }
 }
 
 fn check_call(call: &ExprCall, problems: &mut Vec<UnsupportedType>) {
     // Splats can't be checked statically; Python validates them at call time.
-    if call.arguments.args.iter().any(|a| !matches!(a, Expr::Starred(_))) {
+    if call
+        .arguments
+        .args
+        .iter()
+        .any(|a| !matches!(a, Expr::Starred(_)))
+    {
         problems.push(UnsupportedType::PositionalArgArgument);
     }
     for kw in &call.arguments.keywords {
@@ -173,7 +180,9 @@ fn calls_toolr_arg(call: &ExprCall, table: &ImportTable) -> bool {
             let Expr::Name(r) = root else {
                 return false;
             };
-            table.resolve_module_binding(r.id.as_str()).is_some_and(is_toolr_module)
+            table
+                .resolve_module_binding(r.id.as_str())
+                .is_some_and(is_toolr_module)
                 || table
                     .candidates(r.id.as_str())
                     .iter()
@@ -268,8 +277,7 @@ mod tests {
             .collect();
         let rust: BTreeSet<&str> = rust_list.iter().copied().collect();
         assert_eq!(
-            python,
-            rust,
+            python, rust,
             "`arg()` keyword drift: update ACTIVE_ARG_KEYWORDS / DEPRECATED_ARG_KEYWORDS in \
              crates/toolr-core/src/parser/types/arg_keywords.rs and the `arg` signature in \
              {shown} together",
