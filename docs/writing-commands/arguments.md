@@ -120,11 +120,43 @@ toolr greeting hello --help
 
 ## Boolean flags
 
-A `bool` annotation with a default of `False` is declared as a flag:
+A `bool` parameter is a flag. It defaults to `False`, and passing the flag
+sets it to `True`:
 
 ```python
 --8<-- "docs/writing-commands/files/flags-example.py"
 ```
+
+Name a boolean after what passing the flag does: `dry_run`, `force`,
+`skip_tests`, `no_cache`.
+
+A `bool` that defaults to `True` is a build error, as is a `bool` with no
+default, `bool | None`, `*flags: bool`, or a `bool` inside `list[...]` or
+`tuple[...]`. toolr reports every such parameter at once.
+
+For a feature that is on by default, write the flag as `no_colour: bool = False`.
+It appears as `--no-colour`. In the body, either test it as written:
+
+```python
+if no_colour:
+    disable_colour()
+```
+
+or rename it once at the top and write positive logic below:
+
+```python
+colour = not no_colour
+```
+
+Don't stack negatives, such as `no_skip` or `disable_no_cache`.
+
+For more than two states, use `Literal["auto", "always", "never"]` or an
+`Enum` instead of `bool | None`.
+
+A flag can also read its value from an environment variable with
+`Annotated[bool, arg(env="VERBOSE")]`. The variable must be `true` or
+`false`. Any other value, including `1`, `yes` or an empty string, is an
+error. Passing the flag on the command line wins over the variable.
 
 ## `Literal[...]` for choice-restricted values
 

@@ -505,6 +505,11 @@ pub enum UnsupportedType {
     },
     /// `arg(...)` called with a positional argument; it is keyword-only.
     PositionalArgArgument,
+    /// A `bool` parameter that isn't `name: bool = False`.
+    BoolFlag {
+        argument: String,
+        error: super::BoolFlagError,
+    },
 }
 
 /// A typed-annotation rejection with full context for diagnostic output.
@@ -557,6 +562,7 @@ impl std::fmt::Display for UnsupportedType {
                 }
             }
             Self::PositionalArgArgument => write!(f, "`arg()` takes keyword arguments only"),
+            Self::BoolFlag { argument, error } => error.render(argument, f),
         }
     }
 }

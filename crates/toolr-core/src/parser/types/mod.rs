@@ -13,6 +13,7 @@
 
 mod arg_keywords;
 mod arg_metadata;
+mod bool_flag;
 mod imports;
 mod literals;
 mod resolve;
@@ -20,6 +21,7 @@ mod supported;
 
 pub use arg_keywords::{ACTIVE_ARG_KEYWORDS, DEPRECATED_ARG_KEYWORDS};
 pub use arg_metadata::extract_arg_metadata;
+pub use bool_flag::BoolFlagError;
 pub use imports::{SourcesImports, TypeImports};
 pub use resolve::{resolve, resolve_arguments};
 pub use supported::{

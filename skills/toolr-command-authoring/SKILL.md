@@ -100,6 +100,13 @@ def hello(ctx: Context, who: str = "world", *, loud: bool = False) -> None:
 
 Add this to `tools/greet.py`, then `toolr greet hello --help` works.
 
+A `bool` parameter is a flag and must default to `False`. A `True` default,
+no default, `bool | None`, `*flags: bool` and `list[bool]` are build errors.
+For a feature that is on by default, invert the name: write
+`no_colour: bool = False` (CLI `--no-colour`) and test `if no_colour:`, or
+rename it once (`colour = not no_colour`). For more than two states, use
+`Literal[...]` or an `Enum`.
+
 ## Common authoring moves
 
 - **Group across files.** Pass `group="ci.build"` to `@command` from
