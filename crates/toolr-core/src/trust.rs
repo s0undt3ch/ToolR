@@ -35,13 +35,13 @@ pub enum TrustError {
     #[error(
         "refusing to run code from an untrusted repository: {}\n\
          Run `toolr project trust` there once to allow it, or set TOOLR_TRUST_ALL=1 for automation.",
-        .0.display()
+        shown(.0)
     )]
     Untrusted(PathBuf),
     #[error(
         "refusing to use a trust store inside the repository being checked: {}\n\
          Set XDG_STATE_HOME to a directory outside the repository.",
-        .0.display()
+        shown(.0)
     )]
     StoreInsideRepo(PathBuf),
 }
@@ -207,7 +207,11 @@ impl TrustStore {
             return;
         };
         let checking_root = &canonical(checking_root);
-        if self.guard(checking_root).is_err() || self.dir.join(MIGRATION_MARKER).exists() {
+        let cache_marker = cache_root.join(MIGRATION_MARKER);
+        if self.guard(checking_root).is_err()
+            || self.dir.join(MIGRATION_MARKER).exists()
+            || cache_marker.exists()
+        {
             return;
         }
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
@@ -240,9 +244,17 @@ impl TrustStore {
                 log::warn!("could not migrate trust for {}: {e:#}", repo.display());
             }
         }
+        // The cache keeps growing after migration, so a wiped or relocated
+        // store alone must not re-import it.
+        let record_cache = || -> Result<()> {
+            fs::create_dir_all(cache_root)?;
+            fs::write(&cache_marker, b"")?;
+            Ok(())
+        };
         if let Err(e) = self
             .ensure_dir()
             .and_then(|()| fs::write(self.dir.join(MIGRATION_MARKER), b"").map_err(Into::into))
+            .and_then(|()| record_cache())
         {
             log::warn!("could not record trust migration: {e:#}");
         }
@@ -266,13 +278,29 @@ fn resolves_inside(path: &Path, canonical_root: &Path, cwd: &Path) -> bool {
     }
 }
 
+/// A crafted directory name could otherwise use control characters to
+/// overwrite the path the user is asked to trust.
+fn shown(path: &Path) -> String {
+    path.display()
+        .to_string()
+        .chars()
+        .map(|c| {
+            if c.is_control() {
+                c.escape_default().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
 fn confirm(input: &mut dyn BufRead, out: &mut dyn Write, root: &Path) -> bool {
     let _ = write!(
         out,
         "toolr hasn't run code from this repository before:\n  {}\n\
          Running its commands executes tools/*.py and syncs tools/pyproject.toml with uv.\n\
          Trust it? [y/N] ",
-        root.display()
+        shown(root)
     );
     let _ = out.flush();
     let mut answer = String::new();
@@ -469,6 +497,14 @@ mod tests {
     }
 
     #[test]
+    fn shown_escapes_control_characters() {
+        assert_eq!(
+            shown(Path::new("evil\r~/mine\x1b[2K")),
+            "evil\\r~/mine\\u{1b}[2K"
+        );
+    }
+
+    #[test]
     fn never_prompt_refuses_even_on_tty() {
         let f = Fixture::new();
         let (r, err) = f.decide(Some("y\n"), TrustMode { never_prompt: true });
@@ -511,6 +547,19 @@ mod tests {
         );
         assert!(matches!(r, Err(TrustError::Untrusted(_))));
         assert!(!f.store().is_trusted(&later_root).unwrap());
+    }
+
+    #[test]
+    fn wiped_store_does_not_migrate_again() {
+        let f = Fixture::new();
+        Meta::new(f.root(), "0.0.0", "3.13.1")
+            .write(&f.cache.path().join("first"))
+            .unwrap();
+        assert!(f.decide(None, PROMPT).0.is_ok());
+        assert!(f.cache.path().join(MIGRATION_MARKER).is_file());
+        fs::remove_dir_all(f.store().dir()).unwrap();
+        let (r, _) = f.decide(None, PROMPT);
+        assert!(matches!(r, Err(TrustError::Untrusted(_))));
     }
 
     #[test]
