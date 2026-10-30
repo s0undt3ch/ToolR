@@ -228,6 +228,7 @@ mod tests {
 
     #[test]
     fn data_dir_resolves_or_returns_none_on_exotic_envs() {
+        let _env = EnvGuard::read();
         // We don't assert a specific path: this just exercises the call.
         let _ = toolr_data_dir();
         let _ = toolr_cache_dir();

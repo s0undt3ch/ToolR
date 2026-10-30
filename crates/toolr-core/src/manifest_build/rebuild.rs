@@ -49,10 +49,12 @@ pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::EnvGuard;
     use tempfile::TempDir;
 
     #[test]
     fn full_rebuild_writes_static_manifest() {
+        let _env = EnvGuard::read();
         let tmp = TempDir::new().unwrap();
         let project = tmp.path();
         let tools = project.join("tools");
@@ -75,6 +77,7 @@ mod tests {
 
     #[test]
     fn full_rebuild_reports_plugin_warnings() {
+        let _env = EnvGuard::read();
         let tmp = TempDir::new().unwrap();
         let project = tmp.path();
         std::fs::create_dir(project.join("tools")).unwrap();

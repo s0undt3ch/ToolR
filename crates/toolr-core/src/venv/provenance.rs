@@ -123,6 +123,7 @@ mod tests {
 
     #[test]
     fn rejects_unrecorded_fake_interpreter_without_toolr_package() {
+        let _env = EnvGuard::read();
         // A committed `#!/bin/sh` fake with no toolr package: no provenance
         // record AND `validate_venv` fails → refused.
         let repo = TempDir::new().unwrap();
@@ -136,6 +137,7 @@ mod tests {
 
     #[test]
     fn accepts_real_in_repo_venv_without_a_provenance_record() {
+        let _env = EnvGuard::read();
         // A real toolr venv built directly with uv (no `toolr project venv
         // sync`, so no record) is the legitimate in-tree case → accepted via
         // the `validate_venv` fallback.
@@ -147,6 +149,7 @@ mod tests {
 
     #[test]
     fn accepts_recorded_in_repo_interpreter() {
+        let _env = EnvGuard::read();
         let repo = TempDir::new().unwrap();
         let venv = repo.path().join("tools/.venv");
         let py = venv.join("bin/python");
@@ -162,6 +165,7 @@ mod tests {
 
     #[test]
     fn rejects_fake_interpreter_even_with_stale_record_and_no_valid_venv() {
+        let _env = EnvGuard::read();
         // Wrong recorded hash → record doesn't match; the interpreter is a
         // bare fake with no toolr package → `validate_venv` also fails →
         // refused.
@@ -181,6 +185,7 @@ mod tests {
 
     #[test]
     fn allows_interpreter_outside_repo_and_cache() {
+        let _env = EnvGuard::read();
         let repo = TempDir::new().unwrap();
         let elsewhere = TempDir::new().unwrap();
         let venv = elsewhere.path().join(".venv");

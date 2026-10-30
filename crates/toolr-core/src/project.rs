@@ -165,6 +165,7 @@ mod tests {
 
     #[test]
     fn ensure_venv_ready_reports_missing_project_root() {
+        let _env = EnvGuard::read();
         // No pyproject.toml or marker - `ensure_venv_ready` must fail and
         // surface a clear error. On most hosts we hit "locating project
         // root" via `discover_project_root` returning NotFound. On GHA
@@ -234,6 +235,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn finalize_sync_records_provenance_and_rebuilds_manifest() {
+        let _env = EnvGuard::read();
         use std::os::unix::fs::PermissionsExt;
 
         let tmp = tempfile::tempdir().unwrap();
@@ -271,6 +273,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn finalize_sync_preserves_an_existing_sidecar() {
+        let _env = EnvGuard::read();
         // When a sidecar already exists, finalize_sync takes the
         // `Meta::load -> Ok(existing)` branch and preserves `created_at`
         // (rather than minting a fresh one), restamping the interpreter.
