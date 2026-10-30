@@ -19,13 +19,13 @@ use uuid::Uuid;
 
 use toolr_core::parser::SupportedType;
 
-/// Choices clap lists in `[possible values: ...]`. Values with control
-/// characters are dropped, as the completion engine does, since they would
-/// reach the terminal raw through clap's own error output.
+/// Choices clap lists in `[possible values: ...]`. Values with control or
+/// invisible format characters are dropped, as the completion engine does,
+/// since they would reach the terminal raw through clap's own error output.
 pub fn printable_choices(values: &[String]) -> Vec<String> {
     values
         .iter()
-        .filter(|v| !toolr_core::text::has_control_chars(v))
+        .filter(|v| !toolr_core::text::has_unsafe_name_chars(v))
         .cloned()
         .collect()
 }

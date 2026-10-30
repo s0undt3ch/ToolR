@@ -168,7 +168,7 @@ fn fragment_with_dirty_names_never_reaches_clap() {
 
 /// A committed manifest edited by hand keeps its freshness hashes, so
 /// toolr trusts it without a rebuild.
-fn project_with_hand_edited_manifest() -> Project {
+fn project_with_manifest_edit(edit: impl FnOnce(&mut serde_json::Value)) -> Project {
     let p = Project::new();
     p.toolr(&["__build-static-manifest"]).assert().success();
     // The first run stamps the third-party hash, so the edit below stays fresh.
@@ -177,26 +177,33 @@ fn project_with_hand_edited_manifest() -> Project {
     let path = p.tools().join(".toolr-manifest.json");
     let mut manifest: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    let cmd = |name: &str, group: &str, arg: &str| {
-        serde_json::json!({
-            "name": name, "group": group, "module": "tools.greet", "function": "hi",
-            "summary": "Edited", "description": "",
-            "arguments": [{"name": arg, "kind": "optional", "default": "a", "help": "H"}],
-            "imports": [], "origin": "static"
-        })
-    };
-    manifest["groups"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({
-            "name": "ev\u{1b}]0;X\u{7}il", "title": "Evil", "description": "", "origin": "static"
-        }));
-    let commands = manifest["commands"].as_array_mut().unwrap();
-    commands.push(cmd("x\u{1b}]0;X\u{7}y", "greet", "mode"));
-    commands.push(cmd("inner", "ev\u{1b}]0;X\u{7}il", "mode"));
-    commands.push(cmd("flagged", "greet", "m\u{1b}]0;X\u{7}ode"));
+    edit(&mut manifest);
     std::fs::write(&path, serde_json::to_string(&manifest).unwrap()).unwrap();
     p
+}
+
+fn edited_command(name: &str, group: &str, arg: &str) -> serde_json::Value {
+    serde_json::json!({
+        "name": name, "group": group, "module": "tools.greet", "function": "hi",
+        "summary": "Edited", "description": "",
+        "arguments": [{"name": arg, "kind": "optional", "default": "a", "help": "H"}],
+        "imports": [], "origin": "static"
+    })
+}
+
+fn project_with_hand_edited_manifest() -> Project {
+    project_with_manifest_edit(|manifest| {
+        manifest["groups"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name": "ev\u{1b}]0;X\u{7}il", "title": "Evil", "description": "", "origin": "static"
+            }));
+        let commands = manifest["commands"].as_array_mut().unwrap();
+        commands.push(edited_command("x\u{1b}]0;X\u{7}y", "greet", "mode"));
+        commands.push(edited_command("inner", "ev\u{1b}]0;X\u{7}il", "mode"));
+        commands.push(edited_command("flagged", "greet", "m\u{1b}]0;X\u{7}ode"));
+    })
 }
 
 #[test]
@@ -330,4 +337,99 @@ fn dirty_metavar_and_help_section_title_are_cleaned() {
         text.contains("Sec ]0;X Title:"),
         "cleaned section title missing:\n{text}"
     );
+}
+
+/// Zero-width and bidi characters: a ZWSP command name that would pass for
+/// `deploy`, an RLO choice, a ZWSP default, and an RLM in prose that must
+/// survive untouched.
+const INVISIBLE_FRAGMENT: &str = r#"{"toolr_schema_version":2,"package":"invisible",
+    "groups":[{"name":"tidy","title":"Tidy","description":"","origin":"third_party"}],
+    "commands":[{"name":"de\u200bploy","group":"tidy","module":"invisible.commands",
+        "function":"spoof_fn","summary":"Spoof","description":"","arguments":[],"origin":"third_party"},
+        {"name":"deploy","group":"tidy","module":"invisible.commands",
+        "function":"deploy_fn","summary":"Deploy","description":"",
+        "arguments":[{"name":"mode","kind":"optional","default":"fast",
+            "help":"Mode\u200f mark","allowed_values":["fast","\u202eslow"]},
+            {"name":"level","kind":"optional","default":"a\u200bb",
+            "help":"Level","allowed_values":["a","b"]}],
+        "origin":"third_party"}]}"#;
+
+fn invisible_project() -> Project {
+    let p = project_with_fragment(INVISIBLE_FRAGMENT);
+    let (ok, text) = run(&p, &["--help"]);
+    assert!(ok, "{text}");
+    p
+}
+
+fn assert_no_invisible_names(text: &str) {
+    assert!(!text.contains('\u{200b}'), "ZWSP leaked:\n{text:?}");
+    assert!(!text.contains('\u{202e}'), "RLO leaked:\n{text:?}");
+}
+
+#[test]
+fn zero_width_command_name_is_dropped_with_an_escaped_warning() {
+    let p = invisible_project();
+    let (ok, text) = run(&p, &["tidy", "--help"]);
+    assert!(ok, "{text}");
+    assert_no_invisible_names(&text);
+    assert!(!text.contains("Spoof"), "{text}");
+    assert!(text.contains("Deploy"), "{text}");
+    assert!(
+        text.contains("dropped command `tidy de\\u{200b}ploy`"),
+        "no escaped warning:\n{text}"
+    );
+    let (ok, text) = run(&p, &["tidy", "de\u{200b}ploy", "--help"]);
+    assert!(!ok, "spoofed command must not run:\n{text}");
+}
+
+#[test]
+fn bidi_choice_and_zero_width_default_never_reach_clap() {
+    let p = invisible_project();
+    let (ok, text) = run(&p, &["tidy", "deploy", "--help"]);
+    assert!(ok, "{text}");
+    assert_no_invisible_names(&text);
+    assert!(text.contains("fast"), "{text}");
+    let (ok, text) = run(&p, &["tidy", "deploy", "--mode", "nope"]);
+    assert!(!ok);
+    assert_no_invisible_names(&text);
+    assert!(text.contains("possible values"), "{text}");
+    let (ok, text) = run(&p, &["tidy", "deploy", "--mode", "\u{202e}slow"]);
+    assert!(!ok, "a dropped choice must not be accepted:\n{text}");
+}
+
+#[test]
+fn rlm_in_help_text_is_kept_verbatim() {
+    let p = invisible_project();
+    let (ok, text) = run(&p, &["tidy", "deploy", "--help"]);
+    assert!(ok, "{text}");
+    assert!(
+        text.contains("Mode\u{200f} mark"),
+        "RLM stripped:\n{text:?}"
+    );
+}
+
+#[test]
+fn completion_never_offers_invisible_names_or_values() {
+    let p = invisible_project();
+    let commands = complete(&p, &["tidy", ""]);
+    assert!(commands.contains("deploy"), "{commands}");
+    assert_no_invisible_names(&commands);
+    let values = complete(&p, &["tidy", "deploy", "--mode", ""]);
+    assert!(values.contains("fast"), "{values}");
+    assert_no_invisible_names(&values);
+}
+
+#[test]
+fn hand_edited_manifest_with_a_zero_width_name_is_dropped() {
+    let p = project_with_manifest_edit(|manifest| {
+        let commands = manifest["commands"].as_array_mut().unwrap();
+        commands.push(edited_command("h\u{200b}i", "greet", "mode"));
+    });
+    let (ok, text) = run(&p, &["greet", "--help"]);
+    assert!(ok, "{text}");
+    assert_no_invisible_names(&text);
+    assert!(text.contains("hi") && !text.contains("Edited"), "{text}");
+    let commands = complete(&p, &["greet", ""]);
+    assert!(commands.contains("hi"), "{commands}");
+    assert_no_invisible_names(&commands);
 }

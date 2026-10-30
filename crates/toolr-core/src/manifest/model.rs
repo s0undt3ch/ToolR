@@ -355,11 +355,12 @@ impl Argument {
 
 impl Manifest {
     /// Drop every group whose path, and every command whose name, group or any
-    /// argument identifier carries a control character, with one warning each.
-    /// Names reach clap and dispatch verbatim, so cleaning them would orphan the
-    /// entry; dropping one argument would run the command without it.
-    pub fn drop_control_char_names(&mut self) {
-        use crate::text::{escape_control_chars, has_control_chars};
+    /// argument identifier carries a control or invisible format character,
+    /// with one warning each. Names reach clap and dispatch verbatim, so
+    /// cleaning them would orphan the entry; dropping one argument would run
+    /// the command without it.
+    pub fn drop_unsafe_names(&mut self) {
+        use crate::text::{escape_control_chars, has_unsafe_name_chars};
         let warnings = &mut self.plugin_warnings;
         let mut warn = |module: &str, what: String| {
             warnings.push(PluginWarning {
@@ -371,12 +372,12 @@ impl Manifest {
         };
         self.groups.retain(|g| {
             let path = g.full_path();
-            let keep = !has_control_chars(&path);
+            let keep = !has_unsafe_name_chars(&path);
             if !keep {
                 warn(
                     "",
                     format!(
-                        "group `{}`: its name contains a control character",
+                        "group `{}`: its name contains a control or invisible character",
                         escape_control_chars(&path)
                     ),
                 );
@@ -384,7 +385,7 @@ impl Manifest {
             keep
         });
         self.commands.retain(|c| {
-            let what = if has_control_chars(&c.group) || has_control_chars(&c.name) {
+            let what = if has_unsafe_name_chars(&c.group) || has_unsafe_name_chars(&c.name) {
                 "its name or group"
             } else if c.arguments.iter().any(argument_is_dirty) {
                 "an argument name or flag"
@@ -394,7 +395,7 @@ impl Manifest {
             warn(
                 &c.module,
                 format!(
-                    "command `{} {}`: {what} contains a control character",
+                    "command `{} {}`: {what} contains a control or invisible character",
                     escape_control_chars(&c.group),
                     escape_control_chars(&c.name)
                 ),
@@ -419,15 +420,15 @@ impl Manifest {
 /// Every argument identifier clap registers: id, long flag, aliases, and the
 /// ids `requires` and `conflicts_with` point at.
 fn argument_is_dirty(a: &Argument) -> bool {
-    use crate::text::has_control_chars;
-    has_control_chars(&a.name)
-        || a.long_flag.as_deref().is_some_and(has_control_chars)
+    use crate::text::has_unsafe_name_chars;
+    has_unsafe_name_chars(&a.name)
+        || a.long_flag.as_deref().is_some_and(has_unsafe_name_chars)
         || a.metadata
             .aliases
             .iter()
             .chain(&a.metadata.requires)
             .chain(&a.metadata.conflicts_with)
-            .any(|s| has_control_chars(s))
+            .any(|s| has_unsafe_name_chars(s))
 }
 
 // region: SkillRefOrigin

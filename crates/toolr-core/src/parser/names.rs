@@ -1,7 +1,7 @@
 //! Build-time rejection of names a terminal or shell would mishandle.
 
 use crate::manifest::{Command, Group};
-use crate::text::{escape_control_chars as escape, has_control_chars};
+use crate::text::{escape_control_chars as escape, has_control_chars, has_invisible_format_chars};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameItem {
@@ -39,12 +39,24 @@ pub struct InvalidName {
 }
 
 pub(crate) const CONTROL: &str = "contains a control character";
+pub(crate) const INVISIBLE: &str = "contains an invisible formatting character";
 pub(crate) const WHITESPACE: &str = "contains whitespace";
 
-/// One reason per value; a control character outranks whitespace.
-fn name_violation(s: &str) -> Option<&'static str> {
+/// Choices may hold spaces; they reach the shell quoted.
+fn choice_violation(s: &str) -> Option<&'static str> {
     if has_control_chars(s) {
         Some(CONTROL)
+    } else if has_invisible_format_chars(s) {
+        Some(INVISIBLE)
+    } else {
+        None
+    }
+}
+
+/// One reason per value, in order: control, invisible, whitespace.
+fn name_violation(s: &str) -> Option<&'static str> {
+    if let Some(reason) = choice_violation(s) {
+        Some(reason)
     } else if s.chars().any(char::is_whitespace) {
         Some(WHITESPACE)
     } else {
@@ -103,8 +115,8 @@ pub(crate) fn validate_names(groups: &[Group], commands: &[Command]) -> Vec<Inva
                 push(NameItem::Argument, &a.name, reason);
             }
             for v in &a.allowed_values {
-                if has_control_chars(v) {
-                    push(NameItem::Choice, v, CONTROL);
+                if let Some(reason) = choice_violation(v) {
+                    push(NameItem::Choice, v, reason);
                 }
             }
         }

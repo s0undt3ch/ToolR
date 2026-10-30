@@ -1016,6 +1016,26 @@ def hello(ctx):
     }
 
     #[test]
+    fn fragment_build_renders_zero_width_and_bidi_violations() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/g.py",
+            "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"de\u{200b}ploy\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"\u{202e}gnp.exe\"]):\n    \"\"\"Hi.\"\"\"\n",
+        );
+        let msg = BuildError::InvalidNames(expect_invalid_names(
+            build_commands(&tmp.path().join("tools"), "tools").unwrap_err(),
+        ))
+        .to_string();
+        assert_eq!(
+            msg,
+            "invalid names (2):\n\
+             \x20 - tools.g::named command name `de\\u{200b}ploy`: contains an invisible formatting character\n\
+             \x20 - tools.g::pick choice value `\\u{202e}gnp.exe`: contains an invisible formatting character"
+        );
+    }
+
+    #[test]
     fn local_build_renders_group_flag_and_argument_violations() {
         let mut files = django_argparse("my group", "'--bad flag', action='store_true'");
         files[1].1 = "def add_arguments(self, parser):\n    parser.add_argument('--bad flag', action='store_true')\n    parser.add_argument('po\\x1b[2Js')\n".to_string();

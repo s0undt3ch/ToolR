@@ -718,12 +718,13 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
                     // as the value, so treat it the same as "no CLI
                     // default" and let Python's own default expression
                     // run instead.
-                    // A default with control characters is dropped rather than
-                    // stripped: the stripped form could fall outside the
-                    // filtered choices and make clap reject its own default.
+                    // A default with control or invisible characters is
+                    // dropped rather than stripped: the stripped form could
+                    // fall outside the filtered choices and make clap reject
+                    // its own default.
                     if !def.is_empty()
                         && def != "<expr>"
-                        && !toolr_core::text::has_control_chars(def)
+                        && !toolr_core::text::has_unsafe_name_chars(def)
                     {
                         a = a.default_value(def.clone());
                     }

@@ -40,7 +40,7 @@ fn run() -> anyhow::Result<ExitCode> {
     };
     // Covers fragments and a hand-edited committed manifest alike. Tab
     // completion drops the same entries in `resolve_manifest_at_tab`.
-    manifest.drop_control_char_names();
+    manifest.drop_unsafe_names();
     if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
         for w in &manifest.plugin_warnings {
             eprintln!(

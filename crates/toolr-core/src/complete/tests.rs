@@ -153,6 +153,20 @@ fn engine_drops_control_char_values() {
 }
 
 #[test]
+fn engine_drops_invisible_format_values() {
+    let mut manifest = fixture();
+    let load = manifest
+        .commands
+        .iter_mut()
+        .find(|c| c.name == "load")
+        .unwrap();
+    load.arguments[0].allowed_values =
+        vec!["ok".into(), "o\u{200b}k".into(), "\u{202e}kayo".into()];
+    let out = serve_completions(&manifest, &tokens(&["data", "load", ""]));
+    assert_eq!(out, vec![Candidate::bare("ok")]);
+}
+
+#[test]
 fn allowed_values_have_no_description() {
     let out = serve_completions(&fixture(), &tokens(&["data", "load", ""]));
     assert_eq!(out, vec![Candidate::bare("tall"), Candidate::bare("wide")]);

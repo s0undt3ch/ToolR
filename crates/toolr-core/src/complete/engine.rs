@@ -1,7 +1,7 @@
 //! Pure prefix-matching completion engine. No I/O.
 
 use crate::manifest::{Argument, ArgumentKind, Command, Manifest};
-use crate::text::{has_control_chars, strip_control_chars};
+use crate::text::{has_unsafe_name_chars, strip_control_chars};
 
 /// A single completion candidate: the word to insert, plus an optional
 /// one-line description (a group's `title`, a command's `summary`, or a
@@ -61,7 +61,7 @@ pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<Candidat
     // Every candidate source in the engine passes here; names are already
     // dropped at load time. A value can't be both shown faithfully and kept
     // safe, so it is dropped.
-    out.retain(|c| !has_control_chars(&c.value));
+    out.retain(|c| !has_unsafe_name_chars(&c.value));
     sort_and_dedup_by_value(&mut out);
     out
 }
