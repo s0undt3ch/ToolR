@@ -17,6 +17,7 @@ pub mod project;
 #[cfg(test)]
 mod test_env;
 pub mod third_party;
+pub mod trust;
 pub mod uv;
 pub mod venv;
 
