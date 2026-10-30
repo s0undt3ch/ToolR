@@ -9,29 +9,36 @@ _toolr_complete() {
     local cur prev words cword
     _init_completion || return
 
-    # `cword` and `prev` are populated by `_init_completion` per
-    # bash-completion convention even though only `cur` and `words` are
-    # used below.
-    : "$cword" "$prev"
+    # `prev` is populated by `_init_completion` per bash-completion
+    # convention but unused below.
+    : "$prev"
 
-    # Pass everything after `toolr` (words[0]) to the binary. `cur` is
-    # already the trailing in-progress word; include it as the final
-    # element so the engine treats it as the prefix.
-    local args=("${words[@]:1}")
+    # A prefix bash inserted earlier arrives backslash-escaped (`dry\ `),
+    # while the engine matches raw values.
+    local raw_cur=${cur//\\/}
+
+    # Words after the cursor are dropped; `raw_cur` stands in for words[cword].
+    local args=("${words[@]:1:cword-1}" "$raw_cur")
 
     local raw
     raw=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null) || return 0
     [[ -z "$raw" ]] && return 0
 
-    # Each line is `value<TAB>description` — bash has no per-candidate
+    # Each line is `value<TAB>description` - bash has no per-candidate
     # description support, so drop everything from the tab onward.
-    local values=() line
-    while IFS=$'\t' read -r line _; do
-        values+=("$line")
+    # Candidates are repo-derived data: `compgen -W` would expand `$(...)`
+    # inside a value, so compare literally and quote with `printf %q`.
+    local value q bare_tilde
+    # Bash < 5 `%q` leaves `~` bare, and bash tilde-expands it at a word start or after `=`.
+    printf -v bare_tilde '%q' '~'
+    while IFS=$'\t' read -r value _; do
+        printf -v q '%q' "$value"
+        [[ $bare_tilde == '~' ]] && q=${q//\~/\\~}
+        # `cur` may already hold the quoted form from an earlier insertion.
+        if [[ $value == "$raw_cur"* || $q == "$cur"* ]]; then
+            COMPREPLY+=("$q")
+        fi
     done <<< "$raw"
-
-    # shellcheck disable=SC2207
-    COMPREPLY=($(compgen -W "${values[*]}" -- "$cur"))
 }
 
 complete -F _toolr_complete toolr
