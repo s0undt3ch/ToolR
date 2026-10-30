@@ -11,6 +11,7 @@ use clap::ArgMatches;
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
 use toolr_core::trust::{require_trust, TrustMode, TrustStore};
+use toolr_core::uv::toolr_cache_dir;
 
 /// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
 /// uv install prompt; output and `venv sync`'s silent exit follow the
@@ -50,14 +51,19 @@ fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
 
 fn project_trust(matches: &ArgMatches) -> Result<ExitCode> {
     let root = root_from_path_arg(matches)?;
-    let record = TrustStore::open_default()?.trust(&root)?;
+    let store = TrustStore::open_default()?;
+    store.migrate_once(toolr_cache_dir().as_deref(), &root);
+    let record = store.trust(&root)?;
     println!("{}", record.repo_path.display());
     Ok(ExitCode::SUCCESS)
 }
 
 fn project_untrust(matches: &ArgMatches) -> Result<ExitCode> {
     let root = root_from_path_arg(matches)?;
-    if TrustStore::open_default()?.untrust(&root)? {
+    let store = TrustStore::open_default()?;
+    // Migrate first, or the next check would re-import the record removed here.
+    store.migrate_once(toolr_cache_dir().as_deref(), &root);
+    if store.untrust(&root)? {
         println!("{}", root.display());
     } else {
         eprintln!("toolr: {} was not trusted", root.display());
