@@ -305,3 +305,29 @@ fn completion_agrees_with_clap_on_dirty_arguments() {
     let flags = complete(&p, &["tidy", "ok", "--"]);
     assert!(flags.contains("--level"), "{flags}");
 }
+
+/// A dirty metavar and help-section title on one argument.
+const DIRTY_META_FRAGMENT: &str = r#"{"toolr_schema_version":2,"package":"dirty_meta",
+    "groups":[{"name":"tidy","title":"Tidy","description":"","origin":"third_party"}],
+    "commands":[{"name":"meta","group":"tidy","module":"dirty_meta.commands",
+        "function":"meta_fn","summary":"Meta","description":"",
+        "arguments":[{"name":"mode","kind":"optional","default":"a","help":"Mode",
+            "metadata":{"metavar":"ME\u001b]0;X\u0007TA","help_section":{"title":"Sec\u001b]0;X\u0007Title"}}}],
+        "origin":"third_party"}]}"#;
+
+#[test]
+fn dirty_metavar_and_help_section_title_are_cleaned() {
+    let p = project_with_fragment(DIRTY_META_FRAGMENT);
+    let (ok, text) = run(&p, &["tidy", "meta", "--help"]);
+    assert!(ok, "{text}");
+    assert_clean(&text);
+    assert_no_dirty_names(&text);
+    assert!(
+        text.contains("--mode <ME ]0;X TA>"),
+        "cleaned metavar missing:\n{text}"
+    );
+    assert!(
+        text.contains("Sec ]0;X Title:"),
+        "cleaned section title missing:\n{text}"
+    );
+}
