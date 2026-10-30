@@ -273,51 +273,18 @@ fn preflight_fixture(present_in_venv: &[&str]) -> tempfile::TempDir {
     perms.set_mode(0o755);
     fs::set_permissions(&py, perms).unwrap();
 
-    // Record interpreter provenance so the dispatch-time provenance gate
-    // treats this in-tree `tools/.venv/bin/python` as trusted (as if
-    // `toolr project venv sync` had provisioned it). The provenance lives
-    // in an out-of-repo cache dir keyed by the repo path; we point the
-    // binary at it via `XDG_CACHE_HOME` (see `preflight_cmd`).
-    record_intree_provenance(tmp.path(), &py);
-
     tmp
 }
 
-/// `$XDG_CACHE_HOME` value used by the preflight fixtures so the in-tree
-/// venv's provenance record lives somewhere the (simulated) repo can't
-/// write. It is a sibling of the repo under the same TempDir.
+/// `$XDG_CACHE_HOME` value used by the preflight fixtures: a sibling of
+/// the repo under the same TempDir.
 #[cfg(unix)]
 fn preflight_cache_home(repo: &std::path::Path) -> PathBuf {
     repo.join(".xdg-cache")
 }
 
-/// Write a `meta.json` provenance record for an in-tree interpreter into
-/// the out-of-repo cache slot, mirroring what `toolr project venv sync`
-/// does on a real machine.
-///
-/// The cache dir is computed directly from `preflight_cache_home` rather
-/// than via `toolr_cache_dir()` (which reads the global `XDG_CACHE_HOME`),
-/// so this never mutates process-wide env and is safe under parallel
-/// tests. The spawned binary reads the same `XDG_CACHE_HOME` value via
-/// `preflight_cmd`, resolving to the same slot.
-#[cfg(unix)]
-fn record_intree_provenance(repo: &std::path::Path, python: &std::path::Path) {
-    let cache_home = preflight_cache_home(repo);
-    // In-tree venvs resolve with an empty python_version (no pin), so the
-    // repo-key uses "".
-    let key = toolr_core::venv::compute_repo_key(repo, "").unwrap();
-    let cache_dir = cache_home.join("toolr").join(key);
-    let canon = python.canonicalize().unwrap();
-    let hash = toolr_core::hash::hash_file(&canon).unwrap();
-    toolr_core::cache::Meta::new(repo, "test", "")
-        .with_interpreter(canon, hash)
-        .write(&cache_dir)
-        .unwrap();
-}
-
 /// Build a `toolr` command for the preflight fixtures with the
-/// `XDG_CACHE_HOME` that holds the in-tree venv's provenance record, so
-/// the dispatch-time provenance gate accepts the fixture's interpreter.
+/// sandboxed `XDG_CACHE_HOME`, so the run never touches the real cache.
 #[cfg(unix)]
 fn preflight_cmd(repo: &std::path::Path) -> Command {
     let mut cmd = Command::cargo_bin("toolr").unwrap();
@@ -413,9 +380,6 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
     let mut perms = fs::metadata(&py).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&py, perms).unwrap();
-    // Re-record provenance: rewriting the interpreter changed its bytes,
-    // so the original recorded hash no longer matches.
-    record_intree_provenance(tmp.path(), &py);
 
     let output = preflight_cmd(tmp.path())
         .args(["ci", "hello"])

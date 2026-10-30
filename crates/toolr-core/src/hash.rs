@@ -7,7 +7,6 @@ use blake3::Hasher;
 use walkdir::WalkDir;
 
 /// blake3-hash the raw bytes of a single file and return the hex digest.
-/// Used to fingerprint an interpreter for provenance verification.
 pub fn hash_file(path: &Path) -> Result<String> {
     // `path` is an internal interpreter path resolved by toolr, not
     // untrusted external input.

@@ -94,7 +94,7 @@ def test_example_plugin_wheel_ships_manifest_and_commands(
     env = os.environ.copy()
     env["TOOLR_NO_CACHE_HINT"] = "1"
     # `toolr --help` runs the manifest-freshness bootstrap, which writes a
-    # venv provenance stub under `$XDG_CACHE_HOME/toolr/`. Sandbox it here
+    # venv meta sidecar under `$XDG_CACHE_HOME/toolr/`. Sandbox it here
     # like every other cache-touching test does -- otherwise this test
     # leaks a stub into the real developer/CI cache dir on every run.
     env["XDG_CACHE_HOME"] = str(tmp_path / "cache-home")

@@ -296,24 +296,7 @@ pub fn dispatch(
         );
     }
 
-    // Interpreter-provenance gate (SEC-01). This is the only point where
-    // toolr executes repository-adjacent code, so verify the interpreter
-    // is one toolr is allowed to run: under its own cache dir, or — for
-    // an in-tree `tools/.venv` — matching the provenance record written
-    // by `toolr project venv sync`. A committed fake `tools/.venv` has no
-    // record and is refused.
-    // A PATH or `$TOOLR_PYTHON` interpreter is the host's own, not repo
-    // code, so it stays outside this gate on purpose (#588).
     if let Some(resolved) = &resolved_venv {
-        let cache_dir = toolr_core::project::provenance_cache_dir(&repo_root, resolved).ok();
-        if let Err(e) = toolr_core::venv::verify_interpreter(
-            &python,
-            &resolved.venv_dir,
-            &repo_root,
-            cache_dir.as_deref(),
-        ) {
-            anyhow::bail!("toolr: {e}");
-        }
         if output_opts.verbosity != "quiet" {
             warn_on_toolr_py_mismatch(&resolved.venv_dir);
         }
@@ -342,8 +325,8 @@ pub fn dispatch(
 
 /// Re-sync a venv that `tools/uv.lock` has moved past, so a lock bump
 /// never runs old code (#527), or whose interpreter was uninstalled
-/// under it (#609). A never-synced venv is left to the provenance gate,
-/// so a fresh clone installs nothing before it.
+/// under it (#609). A never-synced venv is left alone, so a fresh clone
+/// installs nothing before it.
 fn resync_if_needed(
     repo_root: &std::path::Path,
     resolved: toolr_core::venv::ResolvedVenv,
