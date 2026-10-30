@@ -74,8 +74,18 @@ impl TrustStore {
         self.dir.join(format!("{}.json", digest.to_hex()))
     }
 
+    /// Every store operation passes through here: the store must not resolve
+    /// inside the repository whose trust it holds.
+    fn guard(&self, canonical_root: &Path) -> Result<(), TrustError> {
+        if self.is_inside(canonical_root) {
+            return Err(TrustError::StoreInsideRepo(self.dir.clone()));
+        }
+        Ok(())
+    }
+
     pub fn is_trusted(&self, root: &Path) -> Result<bool> {
         let root = canonical(root);
+        self.guard(&root)?;
         let bytes = match fs::read(self.record_path(&root)) {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -88,6 +98,7 @@ impl TrustStore {
 
     pub fn trust(&self, root: &Path) -> Result<TrustRecord> {
         let root = canonical(root);
+        self.guard(&root)?;
         let record = TrustRecord {
             schema_version: RECORD_SCHEMA_VERSION,
             repo_path: root.clone(),
@@ -115,6 +126,7 @@ impl TrustStore {
     /// Returns whether a record existed.
     pub fn untrust(&self, root: &Path) -> Result<bool> {
         let root = canonical(root);
+        self.guard(&root)?;
         match fs::remove_file(self.record_path(&root)) {
             Ok(()) => Ok(true),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -156,7 +168,17 @@ impl TrustStore {
     /// True when the store directory resolves under `canonical_root`. The
     /// directory may not exist yet, so the nearest existing ancestor stands in.
     fn is_inside(&self, canonical_root: &Path) -> bool {
-        let mut probe = self.dir.as_path();
+        match std::env::current_dir() {
+            Ok(cwd) => self.is_inside_from(canonical_root, &cwd),
+            Err(_) => self.is_inside_from(canonical_root, Path::new("/")),
+        }
+    }
+
+    /// A relative store dir (say, from a relative `XDG_STATE_HOME`) is
+    /// resolved against `cwd` before probing.
+    fn is_inside_from(&self, canonical_root: &Path, cwd: &Path) -> bool {
+        let absolute = cwd.join(&self.dir);
+        let mut probe = absolute.as_path();
         loop {
             if let Ok(resolved) = fs::canonicalize(probe) {
                 return resolved.starts_with(canonical_root);
@@ -199,9 +221,7 @@ pub fn decide(
         return Ok(());
     }
     let root = canonical(root);
-    if store.is_inside(&root) {
-        return Err(TrustError::StoreInsideRepo(store.dir.clone()));
-    }
+    store.guard(&root)?;
     if store.is_trusted(&root).unwrap_or(false) {
         return Ok(());
     }
@@ -427,6 +447,44 @@ mod tests {
     fn store_inside_repo_is_rejected() {
         let f = Fixture::new();
         let store = TrustStore::at(f.root().join("state"));
+        let r = decide(&f.root(), &store, None, false, PROMPT, None);
+        assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
+        assert!(!f.root().join("state").exists());
+    }
+
+    #[test]
+    fn direct_operations_reject_store_inside_repo() {
+        let f = Fixture::new();
+        let store = TrustStore::at(f.root().join("state"));
+        for err in [
+            store.trust(&f.root()).unwrap_err(),
+            store.untrust(&f.root()).unwrap_err(),
+            store.is_trusted(&f.root()).unwrap_err(),
+        ] {
+            assert!(matches!(
+                err.downcast_ref::<TrustError>(),
+                Some(TrustError::StoreInsideRepo(_))
+            ));
+        }
+        assert!(!f.root().join("state").exists());
+    }
+
+    #[test]
+    fn relative_store_inside_repo_is_rejected() {
+        let f = Fixture::new();
+        let store = TrustStore::at(PathBuf::from("state/trust"));
+        assert!(store.is_inside_from(&f.root(), &f.root()));
+        assert!(!store.is_inside_from(&f.root(), f.store_dir.path()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn store_reaching_repo_through_symlink_is_rejected() {
+        let f = Fixture::new();
+        let link_parent = TempDir::new().unwrap();
+        let link = link_parent.path().join("link");
+        std::os::unix::fs::symlink(f.root(), &link).unwrap();
+        let store = TrustStore::at(link.join("state"));
         let r = decide(&f.root(), &store, None, false, PROMPT, None);
         assert!(matches!(r, Err(TrustError::StoreInsideRepo(_))));
         assert!(!f.root().join("state").exists());
