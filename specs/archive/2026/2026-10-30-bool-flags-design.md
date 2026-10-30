@@ -1,6 +1,6 @@
 # Boolean parameters are flags that default to `False`
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-02. A `bool = True` parameter's
   default was silently ignored.
 - **Plan:** [`2026-10-30-bool-flags-plan.md`](./2026-10-30-bool-flags-plan.md)
