@@ -7,6 +7,7 @@ use anyhow::Result;
 
 use crate::hash::{hash_tools_dir, list_python_files};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
+use crate::parser::names::{validate_names, InvalidName};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
@@ -33,7 +34,9 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
 }
 
 fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
-    let (all_groups, all_commands) = build_commands(tools_dir, "tools")?;
+    // Name validation is deferred so argparse-scanned flags are reported in
+    // the same batch as the native names.
+    let (all_groups, all_commands) = build_commands_inner(tools_dir, "tools", false)?;
 
     let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
     let mut manifest = Manifest {
@@ -63,6 +66,20 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let grafted =
         crate::argparse::run_for_project(project_root, &parents).map_err(BuildError::Argparse)?;
 
+    // Native names and grafted argparse flags are validated together.
+    let mut parents_sorted: Vec<_> = grafted.children_by_parent.iter().collect();
+    parents_sorted.sort_by(|a, b| a.0.cmp(b.0));
+    let grafted_children: Vec<Command> = parents_sorted
+        .into_iter()
+        .flat_map(|(_, children)| children.iter().cloned())
+        .collect();
+    let mut checked = manifest.commands.clone();
+    checked.extend(grafted_children);
+    let name_errors = validate_names(&manifest.groups, &checked);
+    if !name_errors.is_empty() {
+        return Err(BuildError::InvalidNames(name_errors));
+    }
+
     // Splice grafted children into the manifest.
     for (_parent, mut children) in grafted.children_by_parent {
         manifest.commands.append(&mut children);
@@ -83,6 +100,14 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
 pub(crate) fn build_commands(
     source_root: &Path,
     module_prefix: &str,
+) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
+    build_commands_inner(source_root, module_prefix, true)
+}
+
+fn build_commands_inner(
+    source_root: &Path,
+    module_prefix: &str,
+    check_names: bool,
 ) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
     let py_files = list_python_files(source_root);
 
@@ -181,6 +206,13 @@ pub(crate) fn build_commands(
         return Err(BuildError::InvalidPositionalArity(arity_errors));
     }
 
+    if check_names {
+        let name_errors = validate_names(&all_groups, &all_commands);
+        if !name_errors.is_empty() {
+            return Err(BuildError::InvalidNames(name_errors));
+        }
+    }
+
     // Validate that every command points at a registered group. Catches
     // typos in `@command(group="ci.helm-diff-pre-comment")` and missing
     // `command_group("…")` declarations.
@@ -260,8 +292,27 @@ pub enum BuildError {
     InvalidPositionalArity(Vec<PositionalArityError>),
     #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
     ConflictingCommandName(Vec<CommandNameConflict>),
+    #[error("invalid names ({count}):\n{details}", count = .0.len(), details = format_invalid_names(.0))]
+    InvalidNames(Vec<InvalidName>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
+}
+
+fn format_invalid_names(errors: &[InvalidName]) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::new();
+    for (i, e) in errors.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        let place = if e.module.is_empty() {
+            e.owner.clone()
+        } else {
+            format!("{}::{}", e.module, e.owner)
+        };
+        let _ = write!(&mut s, "  - {place} {} `{}`: {}", e.item, e.value, e.reason);
+    }
+    s
 }
 
 fn format_name_conflicts(conflicts: &[CommandNameConflict]) -> String {
@@ -565,6 +616,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 mod tests {
     use super::*;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
+    use crate::parser::names::NameItem;
     use crate::parser::types::{BoolFlagError, UnsupportedType};
     use tempfile::TempDir;
 
@@ -764,6 +816,137 @@ def hello(ctx):
             })
             .collect();
         assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
+    }
+
+    fn invalid_names_for(files: &[(&str, &str)]) -> Vec<InvalidName> {
+        let tmp = TempDir::new().unwrap();
+        for (name, src) in files {
+            write(tmp.path(), name, src);
+        }
+        let err = build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err();
+        let BuildError::InvalidNames(errs) = err else {
+            panic!("expected InvalidNames, got {err}");
+        };
+        errs
+    }
+
+    #[test]
+    fn group_name_with_space_rejected() {
+        let errs = invalid_names_for(&[(
+            "tools/g.py",
+            "group = command_group(\"my group\", \"T\", \"D\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Group);
+        assert_eq!(errs[0].reason, "contains whitespace");
+    }
+
+    #[test]
+    fn command_override_name_with_newline_rejected() {
+        let errs = invalid_names_for(&[(
+            "tools/g.py",
+            "group = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Command);
+        assert_eq!(errs[0].value, "a\\u{a}b");
+        assert_eq!(errs[0].reason, "contains a control character");
+    }
+
+    const LITERAL_SRC: &str = "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command\ndef hi(ctx, mode: Literal[LITERAL]):\n    \"\"\"Hi.\"\"\"\n";
+
+    #[test]
+    fn literal_value_with_esc_rejected() {
+        let src = LITERAL_SRC.replace("LITERAL", "\"ok\", \"bad\\x1b[2J\"");
+        let errs = invalid_names_for(&[("tools/g.py", &src)]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Choice);
+        let msg = BuildError::InvalidNames(errs).to_string();
+        assert!(msg.contains("bad\\u{1b}[2J"), "{msg}");
+        assert!(!msg.contains('\x1b'), "{msg:?}");
+    }
+
+    #[test]
+    fn literal_value_with_space_and_dollar_allowed() {
+        let src = LITERAL_SRC.replace("LITERAL", "\"dry run\", \"$(x)\"");
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "tools/g.py", &src);
+        build_static_manifest(&tmp.path().join("tools")).unwrap();
+    }
+
+    #[test]
+    fn argparse_flag_with_space_rejected() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/dispatcher.py",
+            "group = command_group(\"django\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n",
+        );
+        write(
+            tmp.path(),
+            "apps/x/management/commands/migrate.py",
+            "def add_arguments(self, parser):\n    parser.add_argument('--bad flag', action='store_true')\n",
+        );
+        write(
+            tmp.path(),
+            "tools/pyproject.toml",
+            "[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"django\"\n",
+        );
+        let err = build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err();
+        let BuildError::InvalidNames(errs) = err else {
+            panic!("expected InvalidNames, got {err}");
+        };
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Flag);
+        assert_eq!(errs[0].value, "--bad flag");
+    }
+
+    #[test]
+    fn group_name_with_esc_is_escaped_in_the_message() {
+        let errs = invalid_names_for(&[(
+            "tools/g.py",
+            "group = command_group(\"x\\x1b[2J\", \"T\", \"D\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        let msg = BuildError::InvalidNames(errs).to_string();
+        assert!(msg.contains("x\\u{1b}[2J"), "{msg}");
+        assert!(!msg.contains('\x1b'), "{msg:?}");
+    }
+
+    #[test]
+    fn bad_group_and_bad_argparse_flag_reported_together() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/dispatcher.py",
+            "group = command_group(\"my group\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n",
+        );
+        write(
+            tmp.path(),
+            "apps/x/management/commands/migrate.py",
+            "def add_arguments(self, parser):\n    parser.add_argument('--bad flag', action='store_true')\n",
+        );
+        write(
+            tmp.path(),
+            "tools/pyproject.toml",
+            "[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"my group.django\"\n",
+        );
+        let err = build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err();
+        let BuildError::InvalidNames(errs) = err else {
+            panic!("expected InvalidNames, got {err}");
+        };
+        assert_eq!(errs.len(), 2, "{errs:?}");
+        assert!(errs.iter().any(|e| e.item == NameItem::Group), "{errs:?}");
+        assert!(errs.iter().any(|e| e.item == NameItem::Flag), "{errs:?}");
+    }
+
+    #[test]
+    fn all_invalid_names_reported_together() {
+        let errs = invalid_names_for(&[(
+            "tools/g.py",
+            "group = command_group(\"my group\", \"T\", \"D\")\n\n@group.command(name=\"a b\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        )]);
+        assert_eq!(errs.len(), 2, "{errs:?}");
     }
 
     #[test]

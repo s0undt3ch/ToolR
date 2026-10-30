@@ -33,6 +33,8 @@ pub use types::{
     SourcesImports, SupportedType, TypeImports, UnsupportedType, resolve as resolve_type,
 };
 
+pub mod names;
+
 pub mod build;
 pub use build::{BuildError, build_static_manifest, build_static_manifest_with_venv};
 
