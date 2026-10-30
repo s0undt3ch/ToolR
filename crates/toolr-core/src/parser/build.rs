@@ -2101,7 +2101,11 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
     }
 
     fn bool_flag_error(signature: &str) -> (BoolFlagError, String) {
-        let errs = type_errors_for(&[("tools/kw.py", &kw_module(TOOLR_IMPORTS, "", signature))]);
+        bool_flag_error_in(&[("tools/kw.py", &kw_module(TOOLR_IMPORTS, "", signature))])
+    }
+
+    fn bool_flag_error_in(files: &[(&str, &str)]) -> (BoolFlagError, String) {
+        let errs = type_errors_for(files);
         assert_eq!(errs.len(), 1, "{errs:?}");
         let UnsupportedType::BoolFlag { error, .. } = &errs[0].reason else {
             panic!("expected BoolFlag, got {:?}", errs[0].reason)
@@ -2163,7 +2167,7 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
 
     #[test]
     fn imported_constant_default_suggests_literal_false() {
-        let errs = type_errors_for(&[
+        let (error, msg) = bool_flag_error_in(&[
             ("tools/defaults.py", "OFF = False\n"),
             (
                 "tools/kw.py",
@@ -2174,12 +2178,7 @@ def wrap(ctx: Context, *, name: str = "x", loud: bool = False) -> None:
                 ),
             ),
         ]);
-        assert_eq!(errs.len(), 1, "{errs:?}");
-        let UnsupportedType::BoolFlag { error, .. } = &errs[0].reason else {
-            panic!("expected BoolFlag, got {:?}", errs[0].reason)
-        };
-        assert_eq!(*error, BoolFlagError::NotFalseDefault);
-        let msg = errs[0].to_string();
+        assert_eq!(error, BoolFlagError::NotFalseDefault);
         assert!(msg.contains("literal `False`"), "{msg}");
         assert!(!msg.contains("no_verbose"), "{msg}");
     }

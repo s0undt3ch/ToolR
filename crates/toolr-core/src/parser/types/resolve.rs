@@ -140,7 +140,7 @@ fn resolve_one(
             reason,
         });
     }
-    match resolve(expr, enums, all_imports, type_imports, aliases, module) {
+    let reason = match resolve(expr, enums, all_imports, type_imports, aliases, module) {
         Ok(ty) => {
             // Post-resolution kind override: `toolr.types.Count` is the
             // only type that flips the inferred kind, since the type
@@ -161,25 +161,22 @@ fn resolve_one(
                 // mirrors the `Count` override above.
                 arg.kind = ArgumentKind::Repeated;
             }
-            if let Err(reason) = check_bool_flag(&ty, arg) {
-                errors.push(TypeResolutionError {
-                    module: module.to_string(),
-                    function: function.to_string(),
-                    argument: arg.name.clone(),
-                    annotation: arg.type_annotation.clone().unwrap_or_default(),
-                    reason,
-                });
-            }
+            let checked = check_bool_flag(&ty, arg);
             arg.resolved_type = Some(ty);
+            match checked {
+                Ok(()) => return,
+                Err(reason) => reason,
+            }
         }
-        Err(reason) => errors.push(TypeResolutionError {
-            module: module.to_string(),
-            function: function.to_string(),
-            argument: arg.name.clone(),
-            annotation: arg.type_annotation.clone().unwrap_or_default(),
-            reason,
-        }),
-    }
+        Err(reason) => reason,
+    };
+    errors.push(TypeResolutionError {
+        module: module.to_string(),
+        function: function.to_string(),
+        argument: arg.name.clone(),
+        annotation: arg.type_annotation.clone().unwrap_or_default(),
+        reason,
+    });
 }
 
 fn is_count_type(ty: &SupportedType) -> bool {
