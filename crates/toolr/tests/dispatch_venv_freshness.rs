@@ -1,6 +1,6 @@
-//! Dispatch must not run a tools venv that is out of date with
-//! `tools/uv.lock` (#527): a stale venv is re-synced first, and when that
-//! can't happen the command is refused rather than run on old code. It also
+//! Dispatch must not run a tools venv that is out of date with a sync input
+//! such as `tools/uv.lock` (#527; see `check_freshness`): a stale venv is
+//! re-synced first, and when that can't happen the command is refused rather than run on old code. It also
 //! warns when the venv's `toolr-py` minor version differs from the binary (#529).
 #![cfg(unix)]
 
@@ -12,6 +12,7 @@ use assert_cmd::Command;
 #[path = "common/mod.rs"]
 mod common;
 use common::VenvFixture;
+use toolr_core::venv::SYNC_INPUTS_DESCRIPTION;
 
 const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
 
@@ -136,6 +137,22 @@ fn stale_venv_is_synced_before_dispatch() {
 }
 
 #[test]
+fn pyproject_edit_resyncs_before_dispatch() {
+    let p = synced_project();
+    p.fx.add_unlocked_dependency();
+    p.toolr(&p.path_with_uv())
+        .args(["hello", "world"])
+        .assert()
+        .success();
+    let log = p.fx.uv_argv();
+    assert!(
+        uv_synced(&log),
+        "expected a `uv sync` before dispatch, uv argv was:\n{log}"
+    );
+    assert!(p.sentinel.exists(), "the command should run after the sync");
+}
+
+#[test]
 fn venv_with_dead_interpreter_is_rebuilt_before_dispatch() {
     let p = synced_project();
     p.prune_interpreter();
@@ -186,7 +203,7 @@ fn stale_venv_without_uv_refuses_to_run() {
         "a stale venv must not run; stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("out of date with tools/uv.lock"),
+        stderr.contains(&format!("out of date with {SYNC_INPUTS_DESCRIPTION}")),
         "stderr:\n{stderr}"
     );
     assert!(

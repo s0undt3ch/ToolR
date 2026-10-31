@@ -352,13 +352,13 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     .subcommand(
                         Command::new("sync")
                             .disable_help_flag(true)
-                            .about("Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)")
+                            .about("Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed since the last sync)")
                             .arg(
                                 Arg::new("force")
                                     .long("force")
                                     .short('f')
                                     .action(ArgAction::SetTrue)
-                                    .help("Re-run `uv sync` even when the freshness stamp says the venv is up to date"),
+                                    .help("Re-run `uv sync` even when none of those files changed (e.g. after changing UV_* environment variables or user-level uv config)"),
                             )
                             .arg(
                                 Arg::new("quiet")

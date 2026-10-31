@@ -100,8 +100,8 @@ fn sync_help_lists_force_and_quiet() {
     assert!(stdout.contains("--force"), "help missing --force: {stdout}");
     assert!(stdout.contains("--quiet"), "help missing --quiet: {stdout}");
     assert!(
-        stdout.contains("no-op when fresh") || stdout.contains("freshness stamp"),
-        "help should describe the new no-op-when-fresh default: {stdout}"
+        stdout.contains("no-op unless") && stdout.contains("pyproject.toml"),
+        "help should describe the no-op-when-fresh default and its inputs: {stdout}"
     );
 }
 
@@ -215,5 +215,53 @@ fn sync_dash_p_accepts_dependency_declared_with_underscores() {
     assert!(
         argv.contains("toolr-py"),
         "uv argv should contain `toolr-py`; got:\n{argv}"
+    );
+}
+
+/// Run `toolr project venv sync` against the fixture's stub uv.
+#[cfg(unix)]
+fn venv_sync(fx: &VenvFixture) {
+    common::toolr()
+        .env("PATH", &fx.bin_dir)
+        .current_dir(&fx.root)
+        .args(["project", "venv", "sync"])
+        .assert()
+        .success();
+}
+
+/// A synced fixture whose `tools/pyproject.toml` then gains a dependency
+/// without a re-lock, with the uv argv log cleared.
+#[cfg(unix)]
+fn synced_then_pyproject_edited() -> VenvFixture {
+    let fx = VenvFixture::new();
+    venv_sync(&fx);
+    fs::remove_file(&fx.uv_argv_log).unwrap();
+    fx.add_unlocked_dependency();
+    fx
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_runs_uv_after_pyproject_edit() {
+    let fx = synced_then_pyproject_edited();
+    venv_sync(&fx);
+    assert!(
+        fx.uv_ran_sync(),
+        "a pyproject edit must trigger `uv sync`; uv argv was:\n{}",
+        fx.uv_argv()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn second_sync_after_pyproject_edit_is_a_no_op() {
+    let fx = synced_then_pyproject_edited();
+    venv_sync(&fx);
+    fs::remove_file(&fx.uv_argv_log).unwrap();
+    venv_sync(&fx);
+    assert!(
+        !fx.uv_ran_sync(),
+        "one sync must make the venv fresh; uv argv was:\n{}",
+        fx.uv_argv()
     );
 }

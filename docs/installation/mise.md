@@ -132,7 +132,8 @@ mise run ci
 
 ## Auto-sync the tools venv on shell-enter
 
-When `tools/uv.lock` changes — say you've pulled a branch that
+When `tools/uv.lock`, `tools/pyproject.toml`, `tools/uv.toml` or
+`tools/.python-version` changes — say you've pulled a branch that
 bumped a dependency — the next `toolr` command you run re-syncs the
 tools venv before doing its real work. That sync only
 happens when you actually run a `toolr` command, so the latency
@@ -154,7 +155,7 @@ That's the entire recipe. No `[tasks]` block, no
 `sources`/`outputs` configuration — `toolr project venv sync`
 honours its own freshness stamp internally, so when nothing has
 changed it exits in tens of milliseconds without spawning uv. When
-the lock file has moved, it runs `uv sync --quiet` exactly once and
+one of those files has changed, it runs `uv sync --quiet` exactly once and
 updates the stamp.
 
 The recipe works identically for every project, regardless of
