@@ -42,7 +42,9 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
 
     if matches!(verdict, crate::freshness::FreshnessVerdict::Fresh) {
         // compare() returns Fresh only when cached is Some.
-        let cached = cached.expect("Fresh verdict requires a cached manifest");
+        let mut cached = cached.expect("Fresh verdict requires a cached manifest");
+        // Dispatch drops the same entries in `main.rs`; clap and TAB must agree.
+        cached.drop_unsafe_names();
         return Ok(ResolvedManifest {
             manifest: cached,
             from_cache: true,
@@ -59,6 +61,7 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     if let Some(cached) = cached {
         preserve_non_static_entries(&mut fresh, cached);
     }
+    fresh.drop_unsafe_names();
 
     Ok(ResolvedManifest {
         manifest: fresh,

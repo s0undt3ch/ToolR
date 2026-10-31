@@ -107,7 +107,7 @@ fn apply(outputs: Vec<Generated>, check: bool) -> Result<()> {
 /// `xtask` lives at `<repo>/crates/xtask`, so `repo_root` is
 /// `manifest_dir/../..` — robust against the working directory the
 /// alias is invoked from.
-fn repo_root() -> Result<PathBuf> {
+pub(crate) fn repo_root() -> Result<PathBuf> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let root = Path::new(manifest_dir)
         .parent()

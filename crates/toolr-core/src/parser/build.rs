@@ -7,6 +7,7 @@ use anyhow::Result;
 
 use crate::hash::{hash_tools_dir, list_python_files};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
+use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
@@ -33,7 +34,9 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
 }
 
 fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
-    let (all_groups, all_commands) = build_commands(tools_dir, "tools")?;
+    // Name validation is deferred so argparse-scanned flags are reported in
+    // the same batch as the native names.
+    let (all_groups, all_commands) = build_commands_inner(tools_dir, "tools", false)?;
 
     let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
     let mut manifest = Manifest {
@@ -63,6 +66,22 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let grafted =
         crate::argparse::run_for_project(project_root, &parents).map_err(BuildError::Argparse)?;
 
+    // Native names and grafted argparse flags are validated together.
+    // Unlike fragment builds, unknown-group refs were checked before names:
+    // names wait so grafted argparse flags land in the same batch.
+    let mut parents_sorted: Vec<_> = grafted.children_by_parent.iter().collect();
+    parents_sorted.sort_by(|a, b| a.0.cmp(b.0));
+    let grafted_children: Vec<Command> = parents_sorted
+        .into_iter()
+        .flat_map(|(_, children)| children.iter().cloned())
+        .collect();
+    let mut checked = manifest.commands.clone();
+    checked.extend(grafted_children);
+    let name_errors = validate_names(&manifest.groups, &checked);
+    if !name_errors.is_empty() {
+        return Err(BuildError::InvalidNames(name_errors));
+    }
+
     // Splice grafted children into the manifest.
     for (_parent, mut children) in grafted.children_by_parent {
         manifest.commands.append(&mut children);
@@ -83,6 +102,14 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
 pub(crate) fn build_commands(
     source_root: &Path,
     module_prefix: &str,
+) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
+    build_commands_inner(source_root, module_prefix, true)
+}
+
+fn build_commands_inner(
+    source_root: &Path,
+    module_prefix: &str,
+    check_names: bool,
 ) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
     let py_files = list_python_files(source_root);
 
@@ -181,6 +208,13 @@ pub(crate) fn build_commands(
         return Err(BuildError::InvalidPositionalArity(arity_errors));
     }
 
+    if check_names {
+        let name_errors = validate_names(&all_groups, &all_commands);
+        if !name_errors.is_empty() {
+            return Err(BuildError::InvalidNames(name_errors));
+        }
+    }
+
     // Validate that every command points at a registered group. Catches
     // typos in `@command(group="ci.helm-diff-pre-comment")` and missing
     // `command_group("…")` declarations.
@@ -260,8 +294,27 @@ pub enum BuildError {
     InvalidPositionalArity(Vec<PositionalArityError>),
     #[error("conflicting command name ({count}):\n{details}", count = .0.len(), details = format_name_conflicts(.0))]
     ConflictingCommandName(Vec<CommandNameConflict>),
+    #[error("invalid names ({count}):\n{details}", count = .0.len(), details = format_invalid_names(.0))]
+    InvalidNames(Vec<InvalidName>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
+}
+
+fn format_invalid_names(errors: &[InvalidName]) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::new();
+    for (i, e) in errors.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        let place = if e.module.is_empty() {
+            e.owner.clone()
+        } else {
+            format!("{}::{}", e.module, e.owner)
+        };
+        let _ = write!(&mut s, "  - {place} {} `{}`: {}", e.item, e.value, e.reason);
+    }
+    s
 }
 
 fn format_name_conflicts(conflicts: &[CommandNameConflict]) -> String {
@@ -448,26 +501,32 @@ pub struct UnknownGroupRef {
 }
 
 fn format_unknown_groups(errors: &[UnknownGroupRef]) -> String {
+    use crate::text::escape_control_chars;
     let mut s = String::new();
     for (i, err) in errors.iter().enumerate() {
         if i > 0 {
             s.push('\n');
         }
         use std::fmt::Write as _;
+        let module = escape_control_chars(&err.module);
+        let command = escape_control_chars(&err.command);
         if err.referenced.is_empty() {
             let _ = write!(
                 &mut s,
-                "  - {}::{}: `@command` is missing a `group=...` kwarg.",
-                err.module, err.command,
+                "  - {module}::{command}: `@command` is missing a `group=...` kwarg.",
             );
         } else {
             let _ = write!(
                 &mut s,
-                "  - {}::{}: references group `{}` which has no `command_group(...)` declaration.",
-                err.module, err.command, err.referenced,
+                "  - {module}::{command}: references group `{}` which has no `command_group(...)` declaration.",
+                escape_control_chars(&err.referenced),
             );
             if let Some(suggestion) = &err.suggestion {
-                let _ = write!(&mut s, " Did you mean `{suggestion}`?");
+                let _ = write!(
+                    &mut s,
+                    " Did you mean `{}`?",
+                    escape_control_chars(suggestion)
+                );
             }
         }
     }
@@ -565,6 +624,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 mod tests {
     use super::*;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
+    use crate::parser::names::{CONTROL, NameItem, WHITESPACE};
     use crate::parser::types::{BoolFlagError, UnsupportedType};
     use tempfile::TempDir;
 
@@ -766,6 +826,240 @@ def hello(ctx):
         assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
     }
 
+    fn invalid_names_for<S: AsRef<str>>(files: &[(&str, S)]) -> Vec<InvalidName> {
+        let tmp = TempDir::new().unwrap();
+        for (name, src) in files {
+            write(tmp.path(), name, src.as_ref());
+        }
+        expect_invalid_names(build_static_manifest_inner(&tmp.path().join("tools")).unwrap_err())
+    }
+
+    fn expect_invalid_names(err: BuildError) -> Vec<InvalidName> {
+        let BuildError::InvalidNames(errs) = err else {
+            panic!("expected InvalidNames, got {err}");
+        };
+        errs
+    }
+
+    /// A `django` dispatcher in `group` with one scanned argparse argument.
+    fn django_argparse(group: &str, add_argument: &str) -> [(&'static str, String); 3] {
+        let parent = if group == "django" {
+            "django".to_string()
+        } else {
+            format!("{group}.django")
+        };
+        [
+            (
+                "tools/dispatcher.py",
+                format!(
+                    "group = command_group(\"{group}\", \"Django\")\n\n@group.command\ndef django(ctx):\n    \"\"\"Dispatch.\"\"\"\n"
+                ),
+            ),
+            (
+                "apps/x/management/commands/migrate.py",
+                format!(
+                    "def add_arguments(self, parser):\n    parser.add_argument({add_argument})\n"
+                ),
+            ),
+            (
+                "tools/pyproject.toml",
+                format!(
+                    "[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"{parent}\"\n"
+                ),
+            ),
+        ]
+    }
+
+    #[test]
+    fn group_name_with_space_rejected() {
+        let errs = invalid_names_for(&[(
+            "tools/g.py",
+            "group = command_group(\"my group\", \"T\", \"D\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Group);
+        assert_eq!(errs[0].reason, WHITESPACE);
+    }
+
+    #[test]
+    fn command_override_name_with_newline_rejected() {
+        let errs = invalid_names_for(&[(
+            "tools/g.py",
+            "group = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Command);
+        assert_eq!(errs[0].value, "a\\u{a}b");
+        assert_eq!(errs[0].reason, CONTROL);
+    }
+
+    const LITERAL_SRC: &str = "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command\ndef hi(ctx, mode: Literal[LITERAL]):\n    \"\"\"Hi.\"\"\"\n";
+
+    #[test]
+    fn literal_value_with_esc_rejected() {
+        let src = LITERAL_SRC.replace("LITERAL", "\"ok\", \"bad\\x1b[2J\"");
+        let errs = invalid_names_for(&[("tools/g.py", &src)]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Choice);
+        assert_eq!(errs[0].value, "bad\\u{1b}[2J");
+    }
+
+    #[test]
+    fn literal_value_with_space_and_dollar_allowed() {
+        let src = LITERAL_SRC.replace("LITERAL", "\"dry run\", \"$(x)\"");
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "tools/g.py", &src);
+        build_static_manifest(&tmp.path().join("tools")).unwrap();
+    }
+
+    #[test]
+    fn argparse_flag_with_space_rejected() {
+        let errs = invalid_names_for(&django_argparse(
+            "django",
+            "'--bad flag', action='store_true'",
+        ));
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Flag);
+        assert_eq!(errs[0].value, "--bad flag");
+    }
+
+    const DIRTY_GROUP_REF_SRC: &str = "group = command_group(\"g\", \"T\", \"D\")\n\n@command(group=\"no\\x1b]0;PWN\\x07pe\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n";
+
+    #[test]
+    fn command_group_ref_with_esc_rejected() {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "tools/g.py", DIRTY_GROUP_REF_SRC);
+        let errs =
+            expect_invalid_names(build_commands(&tmp.path().join("tools"), "tools").unwrap_err());
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::GroupRef);
+        assert_eq!(errs[0].value, "no\\u{1b}]0;PWN\\u{7}pe");
+    }
+
+    #[test]
+    fn local_build_escapes_a_dirty_group_ref() {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "tools/g.py", DIRTY_GROUP_REF_SRC);
+        let msg = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap_err()
+            .to_string();
+        assert!(msg.contains("no\\u{1b}]0;PWN\\u{7}pe"), "{msg}");
+        assert!(!msg.contains('\x1b') && !msg.contains('\x07'), "{msg:?}");
+    }
+
+    #[test]
+    fn argparse_positional_with_esc_rejected() {
+        let errs = invalid_names_for(&django_argparse("django", "'po\\x1b]0;POS\\x07s'"));
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(errs[0].item, NameItem::Argument);
+        assert_eq!(errs[0].reason, CONTROL);
+    }
+
+    #[test]
+    fn local_build_escapes_a_dirty_command_with_an_unknown_group() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/g.py",
+            "@command(name=\"x\\x1b]0;PWN\\x07\", group=\"nope\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        );
+        let msg = build_static_manifest_inner(&tmp.path().join("tools"))
+            .unwrap_err()
+            .to_string();
+        assert!(!msg.contains('\x1b') && !msg.contains('\x07'), "{msg:?}");
+    }
+
+    #[test]
+    fn unknown_group_message_escapes_control_chars() {
+        let msg = BuildError::UnknownGroupRefs(vec![UnknownGroupRef {
+            command: "hi".into(),
+            module: "tools.g".into(),
+            referenced: "no\x1b]0;PWN\x07pe".into(),
+            suggestion: Some("s\x1b[2J".into()),
+        }])
+        .to_string();
+        assert!(msg.contains("no\\u{1b}]0;PWN\\u{7}pe"), "{msg}");
+        assert!(!msg.contains('\x1b') && !msg.contains('\x07'), "{msg:?}");
+    }
+
+    #[test]
+    fn group_name_with_esc_is_escaped_in_the_message() {
+        let errs = invalid_names_for(&[(
+            "tools/g.py",
+            "group = command_group(\"x\\x1b[2J\", \"T\", \"D\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+        )]);
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        let msg = BuildError::InvalidNames(errs).to_string();
+        assert!(msg.contains("x\\u{1b}[2J"), "{msg}");
+        assert!(!msg.contains('\x1b'), "{msg:?}");
+    }
+
+    #[test]
+    fn fragment_build_renders_command_group_ref_and_choice_violations() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/g.py",
+            "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@command(group=\"no\\x1b[2Jpe\")\ndef orphan(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"bad\\x1b[2J\"]):\n    \"\"\"Hi.\"\"\"\n",
+        );
+        let msg = BuildError::InvalidNames(expect_invalid_names(
+            build_commands(&tmp.path().join("tools"), "tools").unwrap_err(),
+        ))
+        .to_string();
+        assert_eq!(
+            msg,
+            "invalid names (3):\n\
+             \x20 - tools.g::named command name `a\\u{a}b`: contains a control character\n\
+             \x20 - tools.g::orphan group reference `no\\u{1b}[2Jpe`: contains a control character\n\
+             \x20 - tools.g::pick choice value `bad\\u{1b}[2J`: contains a control character"
+        );
+    }
+
+    #[test]
+    fn fragment_build_renders_zero_width_and_bidi_violations() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/g.py",
+            "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"de\u{200b}ploy\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"\u{202e}gnp.exe\"]):\n    \"\"\"Hi.\"\"\"\n",
+        );
+        let msg = BuildError::InvalidNames(expect_invalid_names(
+            build_commands(&tmp.path().join("tools"), "tools").unwrap_err(),
+        ))
+        .to_string();
+        assert_eq!(
+            msg,
+            "invalid names (2):\n\
+             \x20 - tools.g::named command name `de\\u{200b}ploy`: contains an invisible formatting character\n\
+             \x20 - tools.g::pick choice value `\\u{202e}gnp.exe`: contains an invisible formatting character"
+        );
+    }
+
+    #[test]
+    fn local_build_renders_group_flag_and_argument_violations() {
+        let mut files = django_argparse("my group", "'--bad flag', action='store_true'");
+        files[1].1 = "def add_arguments(self, parser):\n    parser.add_argument('--bad flag', action='store_true')\n    parser.add_argument('po\\x1b[2Js')\n".to_string();
+        let msg = BuildError::InvalidNames(invalid_names_for(&files)).to_string();
+        assert_eq!(
+            msg,
+            "invalid names (3):\n\
+             \x20 - my group group name `my group`: contains whitespace\n\
+             \x20 - tools.dispatcher::django flag `--bad flag`: contains whitespace\n\
+             \x20 - tools.dispatcher::django argument name `po\\u{1b}[2Js`: contains a control character"
+        );
+    }
+
+    #[test]
+    fn bad_group_and_bad_argparse_flag_reported_together() {
+        let errs = invalid_names_for(&django_argparse(
+            "my group",
+            "'--bad flag', action='store_true'",
+        ));
+        assert_eq!(errs.len(), 2, "{errs:?}");
+        assert!(errs.iter().any(|e| e.item == NameItem::Group), "{errs:?}");
+        assert!(errs.iter().any(|e| e.item == NameItem::Flag), "{errs:?}");
+    }
+
     #[test]
     fn builds_manifest_from_single_tools_file() {
         let tmp = TempDir::new().unwrap();
@@ -846,6 +1140,37 @@ def backend(ctx):
         assert!(msg.contains("ci.helm-diff-pre-comment"), "got: {msg}");
         assert!(msg.contains("Did you mean"), "got: {msg}");
         assert!(msg.contains("ci.helm-diff-pr-comment"), "got: {msg}");
+    }
+
+    /// Several bad references list one per line, in source order.
+    #[test]
+    fn unknown_group_refs_list_one_per_line() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/c.py",
+            r#""""CI utilities."""
+@command(group="nope")
+def first(ctx):
+    """First."""
+    pass
+
+@command(group="nada")
+def second(ctx):
+    """Second."""
+    pass
+"#,
+        );
+        let err = build_static_manifest(&tmp.path().join("tools")).unwrap_err();
+        let msg = err.to_string();
+        let lines: Vec<&str> = msg.lines().collect();
+        assert_eq!(lines.len(), 3, "got: {msg}");
+        assert!(
+            lines[0].starts_with("unknown group references (2)"),
+            "got: {msg}"
+        );
+        assert!(lines[1].contains("`nope`"), "got: {msg}");
+        assert!(lines[2].contains("`nada`"), "got: {msg}");
     }
 
     /// The user's `[tool.toolr.argparse.*]` blocks in

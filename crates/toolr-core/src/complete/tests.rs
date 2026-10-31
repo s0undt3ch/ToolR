@@ -135,8 +135,35 @@ fn commands_carry_their_summary_as_description() {
 #[test]
 fn candidate_description_strips_embedded_tabs_and_newlines() {
     // A literal tab/newline would corrupt the one-line-per-candidate wire format.
-    let candidate = Candidate::new("x", "line one\nline two\twith a tab");
-    assert_eq!(candidate.description, "line one line two with a tab");
+    let candidate = Candidate::new("x", "line one\nline two\twith a tab\x1b]0;t\x07");
+    assert_eq!(candidate.description, "line one line two with a tab ]0;t ");
+}
+
+#[test]
+fn engine_drops_control_char_values() {
+    let mut manifest = fixture();
+    let load = manifest
+        .commands
+        .iter_mut()
+        .find(|c| c.name == "load")
+        .unwrap();
+    load.arguments[0].allowed_values = vec!["ok".into(), "bad\x1b[2J".into()];
+    let out = serve_completions(&manifest, &tokens(&["data", "load", ""]));
+    assert_eq!(out, vec![Candidate::bare("ok")]);
+}
+
+#[test]
+fn engine_drops_invisible_format_values() {
+    let mut manifest = fixture();
+    let load = manifest
+        .commands
+        .iter_mut()
+        .find(|c| c.name == "load")
+        .unwrap();
+    load.arguments[0].allowed_values =
+        vec!["ok".into(), "o\u{200b}k".into(), "\u{202e}kayo".into()];
+    let out = serve_completions(&manifest, &tokens(&["data", "load", ""]));
+    assert_eq!(out, vec![Candidate::bare("ok")]);
 }
 
 #[test]

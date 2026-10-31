@@ -93,3 +93,15 @@ that case. `--help`, tab completion and manifest builds never need trust. The mi
 (`toolr project venv sync --quiet`) never prompts, so in an untrusted repository it prints the
 refusal, while a directory with no `tools/pyproject.toml` still exits silently. The interpreter
 provenance check is removed; repository trust replaces it.
+
+Bash tab completion no longer expands candidate values: a value such as `$(…)` declared in a
+repository's `tools/` used to run when you pressed TAB. Values are now shell-quoted when inserted, and
+values containing spaces complete as one word. Control characters in command names, choices, help text
+and plugin warnings are no longer passed to your terminal, and the manifest build rejects group names,
+command names and argparse flags containing whitespace or control characters, and choice values
+containing control characters. Re-run `toolr self completion install bash` (or re-source the script) to
+pick up the fix.
+
+The same name and choice checks now also reject zero-width and bidi characters (such as U+200B or
+U+202E), which could make one command or value display as another. Help text and descriptions keep
+them, so right-to-left text and emoji sequences still render.

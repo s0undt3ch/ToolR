@@ -41,7 +41,7 @@ pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<Re
         warnings: manifest
             .plugin_warnings
             .iter()
-            .map(|w| w.message.clone())
+            .map(|w| crate::text::strip_control_chars(&w.message))
             .collect(),
     })
 }

@@ -8,6 +8,7 @@
 
 mod build_skill_refs;
 mod cli;
+mod patch_coverage;
 
 use anyhow::Result;
 use clap::Parser;
@@ -18,5 +19,17 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::BuildSkillRefs { check } => build_skill_refs::run(check),
+        Command::PatchCoverage {
+            base,
+            lcov,
+            fail_under,
+            root,
+        } => {
+            let root = match root {
+                Some(root) => root,
+                None => build_skill_refs::repo_root()?,
+            };
+            patch_coverage::run(&root, &base, &lcov, fail_under)
+        }
     }
 }

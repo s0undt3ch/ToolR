@@ -34,13 +34,19 @@ fn run() -> anyhow::Result<ExitCode> {
     // and `--help` (which would otherwise exit inside clap) still see it.
     maybe_emit_cache_hint_from_argv();
     bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv)?;
-    let manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv)? {
+    let mut manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv)? {
         Some(m) => m,
         None => load_or_empty(&cwd, &argv)?,
     };
+    // Covers fragments and a hand-edited committed manifest alike. Tab
+    // completion drops the same entries in `resolve_manifest_at_tab`.
+    manifest.drop_unsafe_names();
     if !bootstrap::should_skip_auto_rebuild(&argv) && !argv_requests_quiet(&argv) {
         for w in &manifest.plugin_warnings {
-            eprintln!("toolr: warning: {}", w.message);
+            eprintln!(
+                "toolr: warning: {}",
+                toolr_core::text::strip_control_chars(&w.message)
+            );
         }
     }
     let mut command = cli::build_command(&manifest);

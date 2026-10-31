@@ -42,6 +42,24 @@ cargo run -p toolr -- self build-manifest toolr_example_plugin
 prek run --all-files              # run every pre-commit hook
 ```
 
+### Coverage
+
+Codecov gates every PR (`.codecov.yml`): changed lines need **99% patch coverage**, and each crate's
+project coverage can't drop below its base. `tests/`, `crates/*/tests`, `crates/toolr-py/src` and
+`crates/toolr-core/src/complete/scripts` are ignored, but `#[cfg(test)]` modules inside `src/` count.
+
+```sh
+# Rust: the CI command, with lcov output for local inspection (several minutes)
+cargo llvm-cov --workspace --exclude toolr-py --tests --lcov \
+  --output-path target/coverage/lcov.info -- --test-threads=1
+# Python
+uv run coverage run -m pytest && uv run coverage report
+```
+
+For patch coverage, run `cargo xtask patch-coverage --base <base>` against that lcov file. It fails
+under 99% and lists the missed changed lines. `<base>` is the PR's base branch, not always `main`
+for a stacked PR.
+
 ### Where things live
 
 - Release notes queue: `UNRELEASED.md` (folded into `CHANGELOG.md` on release).

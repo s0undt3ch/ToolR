@@ -16,6 +16,7 @@ pub mod parser;
 pub mod project;
 #[cfg(test)]
 mod test_env;
+pub mod text;
 pub mod third_party;
 pub mod trust;
 pub mod uv;
