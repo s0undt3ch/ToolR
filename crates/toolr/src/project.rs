@@ -680,7 +680,8 @@ fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
                 "the tools venv hasn't been created yet — run `toolr project venv sync`"
             ),
             toolr_core::venv::Freshness::Stale => anyhow::bail!(
-                "the tools venv is out of date with tools/pyproject.toml, uv.lock, uv.toml or .python-version — run `toolr project venv sync` (or drop --no-sync)"
+                "the tools venv is out of date with {} — run `toolr project venv sync` (or drop --no-sync)",
+                toolr_core::venv::SYNC_INPUTS_DESCRIPTION
             ),
             toolr_core::venv::Freshness::Broken => anyhow::bail!(
                 "the tools venv's Python interpreter no longer exists (was it uninstalled?) — run `toolr project venv sync` to rebuild it (or drop --no-sync)"

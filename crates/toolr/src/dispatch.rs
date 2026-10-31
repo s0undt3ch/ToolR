@@ -341,12 +341,12 @@ fn resync_if_needed(
     resolved: toolr_core::venv::ResolvedVenv,
     quiet: bool,
 ) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
-    use toolr_core::venv::{Freshness, check_freshness};
+    use toolr_core::venv::{Freshness, SYNC_INPUTS_DESCRIPTION, check_freshness};
     let problem = match check_freshness(&resolved, &repo_root.join("tools")) {
         Freshness::Stale => {
-            "the tools venv is out of date with tools/pyproject.toml, uv.lock, uv.toml or .python-version"
+            format!("the tools venv is out of date with {SYNC_INPUTS_DESCRIPTION}")
         }
-        Freshness::Broken => "the tools venv's Python interpreter no longer exists",
+        Freshness::Broken => "the tools venv's Python interpreter no longer exists".to_owned(),
         Freshness::Missing | Freshness::Fresh => return Ok(resolved),
     };
     if !quiet {
