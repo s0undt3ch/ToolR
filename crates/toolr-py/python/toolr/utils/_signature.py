@@ -11,11 +11,12 @@ from typing import Any
 from typing import Literal
 from typing import TypeAlias
 from typing import TypeVar
-from typing import get_type_hints
 
 from msgspec import Struct
 
 from toolr._exc import ToolrDeprecationWarning
+from toolr.utils._annotations import resolve_hints
+from toolr.utils._annotations import signature
 
 F = TypeVar("F", bound=Callable[..., Any])
 NargsType: TypeAlias = Literal["*", "+", "?"] | int
@@ -317,23 +318,10 @@ def detect_dispatch_parameter(func: Callable[..., Any]) -> str | None:
     # toolr.utils._signature.
     from toolr.sources import DispatchCommand  # noqa: PLC0415
 
-    sig = inspect.signature(func)
-    # Resolve string annotations (PEP 563 / ``from __future__ import annotations``)
-    # so the identity check against ``DispatchCommand`` works regardless of
-    # how the caller declared the parameter.
-    #
-    # Forward references that can't be resolved at runtime (NameError /
-    # AttributeError) — typically TYPE_CHECKING-only imports — fall back
-    # to whatever ``inspect.signature`` recorded. A ``TypeError`` here,
-    # however, comes from evaluating ``Annotated[..., metadata(...)]``
-    # where the metadata constructor itself rejected its arguments
-    # (e.g. ``arg(conflicts_with="foo")`` instead of ``[...]``). That's
-    # a real bug in the caller's annotation that masks dispatch detection
-    # if swallowed, so we let it propagate with its original message.
-    try:
-        resolved = get_type_hints(func)
-    except (NameError, AttributeError):
-        resolved = {}
+    sig = signature(func)
+    # Per-parameter, so one unresolvable annotation can't hide the
+    # DispatchCommand one; unresolved parameters fall back to the raw annotation.
+    resolved = resolve_hints(func).hints
 
     found_kw: list[str] = []
     for name, param in sig.parameters.items():

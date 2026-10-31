@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from types import ModuleType
 from typing import Annotated
 
 import pytest
 
 from toolr import arg
+from toolr._exc import SpecError
 from toolr.sources import DispatchCommand
 from toolr.utils._signature import DispatcherDetectionError
 from toolr.utils._signature import detect_dispatch_parameter
@@ -59,5 +62,27 @@ def test_malformed_arg_metadata_propagates_typeerror():
         follow: Annotated[bool, arg(conflicts_with="no_follow")] = False,
     ) -> None: ...
 
-    with pytest.raises(TypeError, match=r"conflicts_with=.*bare `str`"):
+    with pytest.raises(SpecError, match=r"conflicts_with=.*bare `str`"):
         detect_dispatch_parameter(cmd)
+
+
+def test_dispatch_detected_despite_unresolvable_sibling() -> None:
+    def cmd(ctx, other: DoesNotExist, *, cmd: DispatchCommand) -> None: ...  # type: ignore[name-defined]  # noqa: F821
+
+    assert detect_dispatch_parameter(cmd) == "cmd"
+
+
+def test_dispatch_detected_with_type_checking_dispatchcommand_import(
+    make_tools_module: Callable[..., ModuleType],
+) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from toolr.sources import DispatchCommand
+
+        def cmd(ctx, *, target: DispatchCommand) -> None: ...
+        """
+    )
+    assert detect_dispatch_parameter(mod.cmd) == "target"
