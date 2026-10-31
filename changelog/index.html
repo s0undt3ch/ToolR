@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev147-2026-10-31" class="md-nav__link">
+  <a href="#0352-dev158-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev147 - 2026-10-31
+        0.35.2-dev158 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev147 - 2026-10-31">
+    <nav class="md-nav" aria-label="0.35.2-dev158 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev147-2026-10-31" class="md-nav__link">
+  <a href="#0352-dev158-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev147 - 2026-10-31
+        0.35.2-dev158 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev147 - 2026-10-31">
+    <nav class="md-nav" aria-label="0.35.2-dev158 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev147-2026-10-31">0.35.2-dev147 - 2026-10-31<a class="headerlink" href="#0352-dev147-2026-10-31" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev158-2026-10-31">0.35.2-dev158 - 2026-10-31<a class="headerlink" href="#0352-dev158-2026-10-31" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7608,6 +7608,11 @@ changing <code>UV_*</code> environment variables or a user-level <code>uv.toml</
 checked out under <code>~/src/[wip]/</code>) are found again. toolr used to treat those characters as glob
 syntax, so it dropped the plugin's commands without a warning. The same fix applies to argparse
 <code>scan_paths</code> under such a project root and to <code>toolr self build-manifest &lt;package&gt;</code>.</p>
+<p>Command arguments are now converted to their annotated types even when the annotation's import
+sits under <code>if TYPE_CHECKING:</code> (as ruff's TC001-TC003 rules arrange). One such annotation used to
+stop conversion for every argument of that command, so <code>count: int</code> arrived as the string <code>"3"</code>.
+When toolr can't resolve an annotation, it now names the argument in a warning instead of silently
+passing the raw string.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7657,6 +7662,11 @@ syntax, so it dropped the plugin's commands without a warning. The same fix appl
 <li><em>(plugins)</em> Escape venv and project paths before globbing (<a href="https://github.com/s0undt3ch/ToolR/commit/301d8b095e6f176b940e4a4aab432f2b53609188"><code>301d8b0</code></a>)</li>
 <li><em>(plugins)</em> Keep the Windows path prefix verbatim when escaping (<a href="https://github.com/s0undt3ch/ToolR/commit/17400fd89798077fcf4683a5b828db2ea564f0c5"><code>17400fd</code></a>)</li>
 <li><em>(plugins)</em> Match the escaped venv path case-sensitively (<a href="https://github.com/s0undt3ch/ToolR/commit/61f8adaef9abd95472b122e4815754e67f42317d"><code>61f8ada</code></a>)</li>
+<li><em>(runner)</em> Resolve command type hints one parameter at a time (<a href="https://github.com/s0undt3ch/ToolR/commit/c3036b15b40d65c392bbadd6cfed1887561bae23"><code>c3036b1</code></a>)</li>
+<li><em>(dispatch)</em> Detect DispatchCommand when another annotation can't resolve (<a href="https://github.com/s0undt3ch/ToolR/commit/9f4cb10810634b65409f2d3c560d06f8d39c13a1"><code>9f4cb10</code></a>)</li>
+<li><em>(runner)</em> Read lazy 3.14+ annotations without evaluating them eagerly (<a href="https://github.com/s0undt3ch/ToolR/commit/8acbd36ed2fc7db07a72620275a3afe3744af601"><code>8acbd36</code></a>)</li>
+<li><em>(runner)</em> Rescue aliased TYPE_CHECKING guards and report failed rescue imports (<a href="https://github.com/s0undt3ch/ToolR/commit/4f46b71a4e3866e8b0954b881ac85b7e141d279b"><code>4f46b71</code></a>)</li>
+<li><em>(runner)</em> Rescue every sibling submodule imported under TYPE_CHECKING (<a href="https://github.com/s0undt3ch/ToolR/commit/a0d8bb1db59b212861b8042381df578073f9a3b4"><code>a0d8bb1</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7675,6 +7685,7 @@ syntax, so it dropped the plugin's commands without a warning. The same fix appl
 <li><em>(security)</em> Tidy trust helpers and comments (<a href="https://github.com/s0undt3ch/ToolR/commit/c16aaaa31af44f7361ed02c873ad9e6cb75a12f5"><code>c16aaaa</code></a>)</li>
 <li><em>(venv)</em> Share the freshness inputs message and fixture edit helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/a9ffd24721aafd608382636b90a7aa70e1f1641c"><code>a9ffd24</code></a>)</li>
 <li><em>(plugins)</em> Flatten venv layouts and qualify glob_path::escape_path (<a href="https://github.com/s0undt3ch/ToolR/commit/7df3b9ec035ed1594af91b85a26df47e4b05a0b2"><code>7df3b9e</code></a>)</li>
+<li><em>(runner)</em> Simplify per-parameter hint resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/f604bf3db28b28933e5a8bb3ae4e0f8181679de0"><code>f604bf3</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7710,6 +7721,9 @@ syntax, so it dropped the plugin's commands without a warning. The same fix appl
 <li><em>(unreleased)</em> Note glob escaping of venv and project paths (<a href="https://github.com/s0undt3ch/ToolR/commit/633fa67fa7ae84acd1aaa3a66a93880cae7c341b"><code>633fa67</code></a>)</li>
 <li><em>(specs)</em> Archive plugin glob escape design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/267a4ed769d338285e8a289784f1b24b3c3969f3"><code>267a4ed</code></a>)</li>
 <li><em>(specs)</em> Point the archived glob escape plan at the shipped approach (<a href="https://github.com/s0undt3ch/ToolR/commit/1b1d73ff7968a63198c70d86e61888bec1c5705e"><code>1b1d73f</code></a>)</li>
+<li><em>(specs)</em> Design and plan for per-parameter type hint resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/525b740928b62d5748b976bc170eed35aa31fd5f"><code>525b740</code></a>)</li>
+<li><em>(arguments)</em> Document TYPE_CHECKING imports in command signatures (<a href="https://github.com/s0undt3ch/ToolR/commit/86361e9d827e1e6d33f32dd0911f89a71f6bbe1d"><code>86361e9</code></a>)</li>
+<li><em>(specs)</em> Archive runner type hints design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/853ea14a82006dcc8e9cfe79813b243a3dd3879f"><code>853ea14</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7739,6 +7753,7 @@ syntax, so it dropped the plugin's commands without a warning. The same fix appl
 <li><em>(parser)</em> Render every invalid-name item kind through real builds (<a href="https://github.com/s0undt3ch/ToolR/commit/e29e130a189503862d143d4244919a089786cafd"><code>e29e130</code></a>)</li>
 <li><em>(cli)</em> Cover control characters in metavar and help-section title (<a href="https://github.com/s0undt3ch/ToolR/commit/ccb5b22da088e85cfec2716144e3cc18f024e8df"><code>ccb5b22</code></a>)</li>
 <li><em>(plugins)</em> Cover the glob escape error and dot-component paths (<a href="https://github.com/s0undt3ch/ToolR/commit/66ecfb78edb89ab58855047e18ee316aeaef4e88"><code>66ecfb7</code></a>)</li>
+<li><em>(runner)</em> Cover the remaining TYPE_CHECKING rescue paths (<a href="https://github.com/s0undt3ch/ToolR/commit/b60141dec2dd9a99aa26ab5d57921c86850a5b1e"><code>b60141d</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
