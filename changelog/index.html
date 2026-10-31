@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev129-2026-10-31" class="md-nav__link">
+  <a href="#0352-dev137-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev129 - 2026-10-31
+        0.35.2-dev137 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev129 - 2026-10-31">
+    <nav class="md-nav" aria-label="0.35.2-dev137 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev129-2026-10-31" class="md-nav__link">
+  <a href="#0352-dev137-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev129 - 2026-10-31
+        0.35.2-dev137 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev129 - 2026-10-31">
+    <nav class="md-nav" aria-label="0.35.2-dev137 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev129-2026-10-31">0.35.2-dev129 - 2026-10-31<a class="headerlink" href="#0352-dev129-2026-10-31" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev137-2026-10-31">0.35.2-dev137 - 2026-10-31<a class="headerlink" href="#0352-dev137-2026-10-31" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7599,6 +7599,11 @@ pick up the fix.</p>
 <p>The same name and choice checks now also reject zero-width and bidi characters (such as U+200B or
 U+202E), which could make one command or value display as another. Help text and descriptions keep
 them, so right-to-left text and emoji sequences still render.</p>
+<p>Editing <code>tools/pyproject.toml</code>, <code>tools/uv.toml</code> or <code>tools/.python-version</code> now marks the tools venv
+as out of date, the same way a changed <code>tools/uv.lock</code> does. The next command, or <code>toolr project
+venv sync</code>, re-syncs it. Before, a dependency added to <code>pyproject.toml</code> without re-locking was never
+installed: <code>venv sync</code> printed "synced" without running uv. <code>--force</code> is now only needed after
+changing <code>UV_*</code> environment variables or a user-level <code>uv.toml</code>.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7643,6 +7648,8 @@ them, so right-to-left text and emoji sequences still render.</p>
 <li><em>(cli)</em> Keep control characters in manifests away from clap (<a href="https://github.com/s0undt3ch/ToolR/commit/20b0268984bcdd128ce69474f46694ef2b6cf3b1"><code>20b0268</code></a>)</li>
 <li><em>(parser)</em> Reject control characters in group refs and argument names (<a href="https://github.com/s0undt3ch/ToolR/commit/7129c364cb1dbc84f07c7db38c7acde94e3b913f"><code>7129c36</code></a>)</li>
 <li><em>(parser)</em> Reject bidi and zero-width characters in names (<a href="https://github.com/s0undt3ch/ToolR/commit/73dbd3cd5892ab910ffb5d8286b0facf8d5a0c5a"><code>73dbd3c</code></a>)</li>
+<li><em>(venv)</em> Treat pyproject.toml and .python-version edits as a stale venv (<a href="https://github.com/s0undt3ch/ToolR/commit/a791d7097e6fe623af88db3508e8003f238a0ff5"><code>a791d70</code></a>)</li>
+<li><em>(venv)</em> Treat tools/uv.toml edits as a stale venv too (<a href="https://github.com/s0undt3ch/ToolR/commit/8dbc5d2c85c2b5343cbd166a521e9a43cff79b15"><code>8dbc5d2</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7659,6 +7666,7 @@ them, so right-to-left text and emoji sequences still render.</p>
 <li><em>(venv)</em> Drop interpreter provenance gate (<a href="https://github.com/s0undt3ch/ToolR/commit/1c573b5e573826e2749c2d42cdd9f2d82c99d450"><code>1c573b5</code></a>)</li>
 <li><em>(hash)</em> Drop hash_file, unused since the provenance gate went (<a href="https://github.com/s0undt3ch/ToolR/commit/2be595fd9247ad02e09c2e60a8b733f206df5573"><code>2be595f</code></a>)</li>
 <li><em>(security)</em> Tidy trust helpers and comments (<a href="https://github.com/s0undt3ch/ToolR/commit/c16aaaa31af44f7361ed02c873ad9e6cb75a12f5"><code>c16aaaa</code></a>)</li>
+<li><em>(venv)</em> Share the freshness inputs message and fixture edit helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/a9ffd24721aafd608382636b90a7aa70e1f1641c"><code>a9ffd24</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7686,6 +7694,10 @@ them, so right-to-left text and emoji sequences still render.</p>
 <li><em>(claude)</em> Document coverage commands and gates (<a href="https://github.com/s0undt3ch/ToolR/commit/ca83f28475ec1ddf5d2b0e8f0aa3681ef1ae0187"><code>ca83f28</code></a>)</li>
 <li><em>(specs)</em> Archive safe shell output design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0439292987ecf659ecbb572f0771a5d123684573"><code>0439292</code></a>)</li>
 <li><em>(unreleased)</em> Note zero-width and bidi rejection in names (<a href="https://github.com/s0undt3ch/ToolR/commit/b8a230ca8867b0e4bf359f2f28d58afc03f5ea7c"><code>b8a230c</code></a>)</li>
+<li><em>(specs)</em> Design and plan for venv freshness covering pyproject edits (<a href="https://github.com/s0undt3ch/ToolR/commit/711ae3c477b5ca1858411efca4a5f991048488ce"><code>711ae3c</code></a>)</li>
+<li><em>(venv)</em> Describe which tools/ files make the venv stale (<a href="https://github.com/s0undt3ch/ToolR/commit/113c0da0338d1f6ccf8df834a5252e34b965885a"><code>113c0da</code></a>)</li>
+<li><em>(specs)</em> Archive venv freshness inputs design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/084cf42789a4bfc5fb2fbc4ddef51f61cfbbe489"><code>084cf42</code></a>)</li>
+<li><em>(venv)</em> Say a python-version change needs a sync on cache venvs (<a href="https://github.com/s0undt3ch/ToolR/commit/170fcf66b4da2dde65b9b9d316cb5a8294f3ff41"><code>170fcf6</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>

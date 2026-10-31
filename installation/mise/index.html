@@ -2167,7 +2167,8 @@ packslip backend, wire it into tasks like any other binary:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mise<span class="w"> </span>run<span class="w"> </span>ci
 </span></code></pre></div>
 <h2 id="auto-sync-the-tools-venv-on-shell-enter">Auto-sync the tools venv on shell-enter<a class="headerlink" href="#auto-sync-the-tools-venv-on-shell-enter" title="Permanent link">&para;</a></h2>
-<p>When <code>tools/uv.lock</code> changes — say you've pulled a branch that
+<p>When <code>tools/uv.lock</code>, <code>tools/pyproject.toml</code>, <code>tools/uv.toml</code> or
+<code>tools/.python-version</code> changes — say you've pulled a branch that
 bumped a dependency — the next <code>toolr</code> command you run re-syncs the
 tools venv before doing its real work. That sync only
 happens when you actually run a <code>toolr</code> command, so the latency
@@ -2185,7 +2186,7 @@ venv that's already fresh by the time your prompt returns:</p>
 <code>sources</code>/<code>outputs</code> configuration — <code>toolr project venv sync</code>
 honours its own freshness stamp internally, so when nothing has
 changed it exits in tens of milliseconds without spawning uv. When
-the lock file has moved, it runs <code>uv sync --quiet</code> exactly once and
+one of those files has changed, it runs <code>uv sync --quiet</code> exactly once and
 updates the stamp.</p>
 <p>The recipe works identically for every project, regardless of
 whether <code>[tool.toolr] venv-location</code> is <code>cache</code> (the default, under

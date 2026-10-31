@@ -2260,9 +2260,11 @@ opts in."</p>
 <p>See also: <a href="../quickstart/">Quickstart</a>, <a href="../project-config/">Project configuration</a>.</p>
 <h3 id="project-venv-sync"><code>toolr project venv sync</code><a class="headerlink" href="#project-venv-sync" title="Permanent link">&para;</a></h3>
 <p>Sync the tools venv against <code>tools/pyproject.toml</code> and <code>tools/uv.lock</code>.</p>
-<p>Default behaviour is idempotent — when the freshness stamp says the
-venv is up to date, <code>sync</code> exits immediately without spawning <code>uv</code>.
-Pass <code>--force</code> to re-run unconditionally. Pass <code>--quiet</code> for an
+<p>Default behaviour is idempotent. <code>sync</code> runs <code>uv sync</code> only when
+<code>tools/pyproject.toml</code>, <code>tools/uv.lock</code>, <code>tools/uv.toml</code> or
+<code>tools/.python-version</code> changed since the last sync. Otherwise it exits without spawning <code>uv</code>.
+Pass <code>--force</code> to re-run unconditionally, for example after changing
+<code>UV_*</code> environment variables or a user-level <code>uv.toml</code>. Pass <code>--quiet</code> for an
 unattended-safe path (silent on success, silent on benign exits like
 "not a toolr repo" or "uv install needs consent"); see
 <a href="../installation/mise/#auto-sync-the-tools-venv-on-shell-enter">Auto-sync the tools venv on shell-enter</a>
@@ -2272,23 +2274,25 @@ before syncing, or <code>-P &lt;pkg&gt;</code> (repeatable) to re-resolve specif
 packages only.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>sync<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Usage: toolr project venv sync [OPTIONS]
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>Options:
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  -f, --force
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>          Re-run uv sync even when the freshness stamp says the venv is up to date
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  -q, --quiet
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>          Silent on success and on benign unattended-mode exits (no toolr/uv output)
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>  -U, --upgrade
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>          Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>          packages.
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>  -P, --upgrade-package &lt;PACKAGE&gt;
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>          Re-resolve a single package; pass repeatedly for multiple. Each &lt;PACKAGE&gt; must be declared
-</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>          in tools/pyproject.toml.
-</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>  -h, --help
-</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>          Print help
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>since the last sync)
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>Usage: toolr project venv sync [OPTIONS]
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>Options:
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>  -f, --force
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>          Re-run uv sync even when none of those files changed (e.g. after changing UV_*
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>          environment variables or user-level uv config)
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>  -q, --quiet
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>          Silent on success and on benign unattended-mode exits (no toolr/uv output)
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>  -U, --upgrade
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>          Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>          packages.
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>  -P, --upgrade-package &lt;PACKAGE&gt;
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>          Re-resolve a single package; pass repeatedly for multiple. Each &lt;PACKAGE&gt; must be declared
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>          in tools/pyproject.toml.
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>  -h, --help
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>          Print help
 </span></code></pre></div>
 <p>Runs the full sync flow (see <a href="../project-config/#interaction-with-toolr-project-venv-sync">Project configuration → sync
 interaction</a>).</p>

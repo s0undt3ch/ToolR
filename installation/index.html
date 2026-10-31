@@ -1861,10 +1861,16 @@ host. If it guesses wrong, set <code>TOOLR_UV_LIBC=gnu</code> or
 <code>tools/.python-version</code> file but not one at the repo root. uv settings
 such as <code>UV_PYTHON</code>, <code>UV_PYTHON_PREFERENCE</code> and <code>UV_PYTHON_DOWNLOADS</code>
 apply as usual.</p>
-<p>Changes to <code>python-version</code>, <code>requires-python</code>, <code>tools/.python-version</code>
-or the <code>UV_*</code> settings only take effect when toolr runs uv, which it
-does when <code>tools/uv.lock</code> changes. After changing any of them, rebuild
-the venv with <code>toolr project venv sync --force</code>.</p>
+<p>Editing <code>tools/pyproject.toml</code>, <code>tools/uv.toml</code> or
+<code>tools/.python-version</code> marks the venv out of date, the same as a changed <code>tools/uv.lock</code>, so the next
+<code>toolr</code> command re-syncs it. With the default <code>venv-location</code>, the
+Python version is part of the venv's cache path. Changing
+<code>python-version</code>, or <code>requires-python</code> when <code>python-version</code> is unset,
+therefore points toolr at a new venv that doesn't exist yet. Run
+<code>toolr project venv sync</code> to create it.</p>
+<p><code>UV_*</code> environment variables and a user-level <code>uv.toml</code> aren't
+tracked. After changing them, rebuild the
+venv with <code>toolr project venv sync --force</code>.</p>
 <p>Two cases don't go through uv:</p>
 <ul>
 <li>A repo with no <code>tools/pyproject.toml</code> has no tools venv. Toolr runs

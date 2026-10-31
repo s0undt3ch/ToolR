@@ -1,10 +1,12 @@
-Sync the tools venv against tools/pyproject.toml + tools/uv.lock (no-op when fresh)
+Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed
+since the last sync)
 
 Usage: toolr project venv sync [OPTIONS]
 
 Options:
   -f, --force
-          Re-run uv sync even when the freshness stamp says the venv is up to date
+          Re-run uv sync even when none of those files changed (e.g. after changing UV_*
+          environment variables or user-level uv config)
   -q, --quiet
           Silent on success and on benign unattended-mode exits (no toolr/uv output)
   -U, --upgrade
