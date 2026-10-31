@@ -9,10 +9,13 @@
 //!
 //! We try both patterns and concatenate the results so the same code
 //! path works on every supported platform.
+//!
+//! The venv path is escaped before the wildcard tail is appended, so a
+//! `[`, `]`, `*` or `?` in it matches literally.
 
 use std::path::{Path, PathBuf};
 
-use glob::{MatchOptions, glob_with};
+use glob::{MatchOptions, Pattern, glob_with};
 
 use super::parse::ThirdPartyError;
 
@@ -33,20 +36,18 @@ pub fn glob_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError
         require_literal_leading_dot: false,
     };
 
+    let venv_str = tools_venv
+        .to_str()
+        .ok_or_else(|| ThirdPartyError::NonUtf8Path(tools_venv.to_path_buf()))?;
+    let prefix = Pattern::escape(venv_str);
+
     let mut out = Vec::new();
     for layout_segments in candidate_layouts() {
-        let mut pattern = tools_venv.to_path_buf();
-        for segment in *layout_segments {
-            pattern = pattern.join(segment);
-        }
-        pattern = pattern
-            .join("site-packages")
-            .join("*")
-            .join("toolr-manifest.json");
-        let pattern_str = pattern
-            .to_str()
-            .ok_or_else(|| ThirdPartyError::NonUtf8Path(pattern.clone()))?;
-        for entry in glob_with(pattern_str, opts).map_err(ThirdPartyError::Pattern)? {
+        let pattern = format!(
+            "{prefix}/{}/site-packages/*/toolr-manifest.json",
+            layout_segments.join("/")
+        );
+        for entry in glob_with(&pattern, opts).map_err(ThirdPartyError::Pattern)? {
             match entry {
                 Ok(path) => out.push(path),
                 Err(e) => return Err(ThirdPartyError::Glob(e)),

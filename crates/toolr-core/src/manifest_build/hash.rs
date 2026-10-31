@@ -75,6 +75,21 @@ mod tests {
     }
 
     #[test]
+    fn third_party_hash_sees_fragments_under_bracketed_venv() {
+        let tmp = TempDir::new().unwrap();
+        let empty = tmp.path().join("[empty]").join("venv");
+        fs::create_dir_all(&empty).unwrap();
+        let populated = tmp.path().join("[wip]").join("venv");
+        let pkg_dir = populated.join("lib/python3.13/site-packages/foo");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(pkg_dir.join("toolr-manifest.json"), "{}").unwrap();
+        assert_ne!(
+            compute_third_party_hash(&empty).unwrap(),
+            compute_third_party_hash(&populated).unwrap()
+        );
+    }
+
+    #[test]
     fn empty_venv_returns_stable_hash() {
         let tmp = TempDir::new().unwrap();
         let h = compute_third_party_hash(tmp.path()).unwrap();
