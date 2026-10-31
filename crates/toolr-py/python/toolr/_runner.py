@@ -478,9 +478,14 @@ def _coerce_args(
         for name, exc in resolved.unresolved.items():
             if name == "ctx":
                 continue
+            advice = (
+                " Import it at runtime, not only under `if TYPE_CHECKING:`."
+                if isinstance(exc, (NameError, AttributeError))
+                else ""
+            )
             print(  # noqa: T201
                 f"toolr: warning: can't resolve the type of `{name}` on {where} ({exc}); "
-                "passing the raw value. Import it at runtime, not only under `if TYPE_CHECKING:`.",
+                f"passing the raw value.{advice}",
                 file=sys.stderr,
             )
     var_positional_name = next(

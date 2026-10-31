@@ -230,3 +230,57 @@ def test_lazy_annotations_keep_closure_names(make_tools_module: ModuleFactory) -
     resolved = resolve_hints(mod.f)
     assert resolved.unresolved == {}
     assert resolved.hints == {"x": mod.Decimal, "path": Path}
+
+
+@pytest.mark.parametrize(
+    "guard",
+    [
+        "from typing import TYPE_CHECKING as TC\nif TC:",
+        "import typing as t\nif t.TYPE_CHECKING:",
+        "import typing_extensions\nif typing_extensions.TYPE_CHECKING:",
+    ],
+)
+def test_aliased_type_checking_guard_is_scanned(
+    make_tools_module: ModuleFactory, guard: str
+) -> None:
+    mod = make_tools_module(
+        f"from __future__ import annotations\n{guard}\n    from pathlib import Path\n\ndef f(ctx, path: Path): ...\n"
+    )
+    assert resolve_hints(mod.f).hints == {"path": Path}
+
+
+def test_failed_rescue_reports_the_import_error(
+    make_tools_module: ModuleFactory, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from not_installed_anywhere import Thing
+
+        def f(ctx, thing: Thing): ...
+        """
+    )
+    resolved = resolve_hints(mod.f)
+    assert isinstance(resolved.unresolved["thing"], ImportError)
+    assert isinstance(resolved.unresolved["thing"].__context__, NameError)
+    _coerce_args(mod.f, {"thing": "raw"})
+    err = capsys.readouterr().err
+    assert "No module named 'not_installed_anywhere'" in err
+    assert "not only under `if TYPE_CHECKING:`" not in err
+
+
+@pytest.mark.parametrize("future", ["from __future__ import annotations\n", ""])
+def test_literal_annotation_error_becomes_spec_error(
+    make_tools_module: ModuleFactory, future: str
+) -> None:
+    if not future and sys.version_info < (3, 14):
+        pytest.skip("without __future__ the module fails at import before 3.14")
+    mod = make_tools_module(
+        f"{future}from typing import Annotated\n\ndef f(ctx, broken: Annotated[int, 1 / 0], count: int): ...\n"
+    )
+    with pytest.raises(SpecError, match=r"tc_mod\.f.*division by zero"):
+        _coerce_args(mod.f, {"count": "1"})
+    with pytest.raises(SpecError, match=r"tc_mod\.f.*division by zero"):
+        detect_dispatch_parameter(mod.f)

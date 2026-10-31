@@ -63,13 +63,31 @@ _TYPE_CHECKING_IMPORTS: weakref.WeakKeyDictionary[ModuleType, dict[str, _Binding
 )
 
 
+def _where(target: Callable[..., Any]) -> str:
+    return f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}"
+
+
+def _annotation_error(exc: Exception, where: str, what: str) -> SpecError:
+    if isinstance(exc, TypeError):
+        error = unknown_arg_keyword_error(exc, where)
+        if error is not None:
+            return error
+    return SpecError(f"can't evaluate {what} on {where}: {exc}")
+
+
 def _raw_annotations(target: Callable[..., Any]) -> dict[str, Any]:
     if sys.version_info >= (3, 14):
         import annotationlib  # noqa: PLC0415
 
         # FORWARDREF keeps closure-bound names and turns unbound ones into
         # ForwardRefs, where VALUE would raise on the first of them.
-        return dict(annotationlib.get_annotations(target, format=annotationlib.Format.FORWARDREF))
+        try:
+            return dict(
+                annotationlib.get_annotations(target, format=annotationlib.Format.FORWARDREF)
+            )
+        except Exception as exc:
+            # A lazy annotation that fails even without names, such as `1 / 0`.
+            raise _annotation_error(exc, _where(target), "the annotations") from exc
     return dict(inspect.get_annotations(target))
 
 
@@ -78,18 +96,40 @@ def signature(target: Callable[..., Any]) -> inspect.Signature:
     if sys.version_info >= (3, 14):
         import annotationlib  # noqa: PLC0415
 
-        return inspect.signature(target, annotation_format=annotationlib.Format.FORWARDREF)
+        try:
+            return inspect.signature(target, annotation_format=annotationlib.Format.FORWARDREF)
+        except Exception as exc:
+            raise _annotation_error(exc, _where(target), "the annotations") from exc
     return inspect.signature(target)
 
 
-def _is_type_checking_test(node: ast.expr) -> bool:
+_TYPING_MODULES = frozenset({"typing", "typing_extensions"})
+
+
+def _type_checking_guards(tree: ast.Module) -> tuple[set[str], set[str]]:
+    """Names bound to `TYPE_CHECKING`, and names bound to a module that defines it."""
+    flags = {"TYPE_CHECKING"}
+    modules = {"typing"}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module in _TYPING_MODULES and not node.level:
+            flags.update(
+                alias.asname or alias.name for alias in node.names if alias.name == "TYPE_CHECKING"
+            )
+        elif isinstance(node, ast.Import):
+            modules.update(
+                alias.asname or alias.name for alias in node.names if alias.name in _TYPING_MODULES
+            )
+    return flags, modules
+
+
+def _is_type_checking_test(node: ast.expr, flags: set[str], modules: set[str]) -> bool:
     if isinstance(node, ast.Name):
-        return node.id == "TYPE_CHECKING"
+        return node.id in flags
     return (
         isinstance(node, ast.Attribute)
         and node.attr == "TYPE_CHECKING"
         and isinstance(node.value, ast.Name)
-        and node.value.id == "typing"
+        and node.value.id in modules
     )
 
 
@@ -99,9 +139,10 @@ def _scan_type_checking_imports(module: ModuleType) -> dict[str, _Binding]:
     except (OSError, TypeError, SyntaxError):
         return {}
     package = getattr(module, "__package__", None) or ""
+    flags, modules = _type_checking_guards(tree)
     table: dict[str, _Binding] = {}
     for node in tree.body:
-        if not (isinstance(node, ast.If) and _is_type_checking_test(node.test)):
+        if not (isinstance(node, ast.If) and _is_type_checking_test(node.test, flags, modules)):
             continue
         for stmt in node.body:
             if isinstance(stmt, ast.Import):
@@ -158,11 +199,12 @@ def resolve_hints(
 ) -> ResolvedHints:
     """Evaluate each parameter annotation of ``target`` on its own.
 
-    ``NameError``/``AttributeError`` leave that parameter in ``unresolved``.
-    Any other failure raises :class:`SpecError` naming the parameter.
+    ``NameError``/``AttributeError``, or a failed import from the module's
+    `TYPE_CHECKING` block, leave that parameter in ``unresolved``. Any other
+    failure raises :class:`SpecError` naming the parameter.
     """
     unwrapped = inspect.unwrap(target)
-    where = f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}"
+    where = _where(target)
     module = sys.modules.get(getattr(unwrapped, "__module__", "") or "")
     globalns: dict[str, Any] = getattr(unwrapped, "__globals__", None) or (
         vars(module) if module is not None else {}
@@ -191,20 +233,14 @@ def resolve_hints(
                 tried.add(missing)
                 try:
                     local[missing] = _import_binding(missing, binding)
-                except Exception:  # noqa: BLE001 — a failed rescue leaves the parameter unresolved.
-                    unresolved[name] = exc
+                except Exception as rescue_exc:  # noqa: BLE001 — a failed rescue leaves the parameter unresolved.
+                    # Raised inside `except NameError`, so `__context__` keeps the NameError.
+                    unresolved[name] = rescue_exc
                     break
                 continue
             except AttributeError as exc:
                 unresolved[name] = exc
-            except TypeError as exc:
-                error = unknown_arg_keyword_error(exc, where)
-                if error is not None:
-                    raise error from exc
-                msg = f"can't evaluate the annotation of `{name}` on {where}: {exc}"
-                raise SpecError(msg) from exc
             except Exception as exc:
-                msg = f"can't evaluate the annotation of `{name}` on {where}: {exc}"
-                raise SpecError(msg) from exc
+                raise _annotation_error(exc, where, f"the annotation of `{name}`") from exc
             break
     return ResolvedHints(hints=hints, unresolved=unresolved)
