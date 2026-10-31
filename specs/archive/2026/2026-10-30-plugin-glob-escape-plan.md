@@ -11,7 +11,7 @@ appends the wildcard tail unescaped.
 
 **Tech Stack:** Rust, `glob` 0.3, `assert_cmd`.
 
-**Spec:** [`specs/2026-10-30-plugin-glob-escape-design.md`](./2026-10-30-plugin-glob-escape-design.md)
+**Spec:** [`specs/archive/2026/2026-10-30-plugin-glob-escape-design.md`](./2026-10-30-plugin-glob-escape-design.md)
 
 ## Global Constraints
 
