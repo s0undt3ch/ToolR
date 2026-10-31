@@ -12,21 +12,25 @@ use crate::uv::{UvBinary, UvError};
 use super::resolve::ResolvedVenv;
 
 /// Marker file written into the venv after each successful sync.
-/// Its mtime is compared against `tools/uv.lock`'s mtime to decide
+/// Its mtime is compared against the [`SYNC_INPUTS`] mtimes to decide
 /// whether re-sync is needed.
 const FRESHNESS_MARKER: &str = ".toolr-sync-stamp";
+
+/// Optional files in `tools/` that uv reads to build the venv, besides the
+/// required `uv.lock`.
+const SYNC_INPUTS: [&str; 2] = ["pyproject.toml", ".python-version"];
 
 /// Decision returned by `check_freshness`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
     /// Venv has never been synced (marker absent or venv missing).
     Missing,
-    /// Lock has been edited since last sync.
+    /// `uv.lock`, `pyproject.toml` or `.python-version` changed since the last sync.
     Stale,
     /// Synced once, but the interpreter no longer resolves — typically its
     /// base Python was uninstalled (e.g. `mise prune`). `uv sync` rebuilds it.
     Broken,
-    /// Marker mtime >= lock mtime, and the interpreter is still there.
+    /// Marker at least as new as every sync input, and the interpreter is still there.
     Fresh,
 }
 
@@ -64,8 +68,9 @@ impl UpgradeMode {
     }
 }
 
-/// Precedence is `Missing`, then `Broken`, then `Stale` or `Fresh`. Besides the
-/// two mtimes it stats the interpreter and reads `pyvenv.cfg`.
+/// Precedence is `Missing`, then `Broken`, then `Stale` or `Fresh`. `uv.lock`
+/// is required; an absent [`SYNC_INPUTS`] file is ignored. Besides the mtimes
+/// it stats the interpreter and reads `pyvenv.cfg`.
 pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     let marker = resolved.venv_dir.join(FRESHNESS_MARKER);
     let lock = tools_dir.join("uv.lock");
@@ -76,9 +81,13 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
     if !resolved.python.is_file() || base_python_removed(&resolved.venv_dir) {
         return Freshness::Broken;
     }
-    let marker_t = marker_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-    let lock_t = lock_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-    if marker_t >= lock_t {
+    let mtime = |meta: fs::Metadata| meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+    let newest_input = SYNC_INPUTS
+        .iter()
+        .filter_map(|name| fs::metadata(tools_dir.join(name)).ok())
+        .map(mtime)
+        .fold(mtime(lock_meta), SystemTime::max);
+    if mtime(marker_meta) >= newest_input {
         Freshness::Fresh
     } else {
         Freshness::Stale
@@ -268,6 +277,53 @@ mod tests {
         touch_marker(&venv).unwrap();
         let resolved = dummy_resolved(venv);
         assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
+    }
+
+    /// Write `uv.lock` (and any `extra` inputs), then the marker, so the
+    /// venv starts `Fresh`.
+    fn synced_venv(tmp: &Path, extra: &[&str]) -> ResolvedVenv {
+        let venv = tmp.join("venv");
+        venv_with_interpreter(&venv);
+        fs::write(tmp.join("uv.lock"), b"locks").unwrap();
+        for name in extra {
+            fs::write(tmp.join(name), b"x").unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(20));
+        touch_marker(&venv).unwrap();
+        dummy_resolved(venv)
+    }
+
+    #[test]
+    fn pyproject_newer_than_marker_reports_stale() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = synced_venv(tmp.path(), &["pyproject.toml"]);
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(tmp.path().join("pyproject.toml"), b"edited").unwrap();
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Stale);
+    }
+
+    #[test]
+    fn python_version_newer_than_marker_reports_stale() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = synced_venv(tmp.path(), &["pyproject.toml", ".python-version"]);
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(tmp.path().join(".python-version"), b"3.14").unwrap();
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Stale);
+    }
+
+    #[test]
+    fn absent_python_version_is_ignored() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = synced_venv(tmp.path(), &["pyproject.toml"]);
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Fresh);
+    }
+
+    #[test]
+    fn missing_lock_still_reports_missing_with_pyproject_present() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = synced_venv(tmp.path(), &["pyproject.toml"]);
+        fs::remove_file(tmp.path().join("uv.lock")).unwrap();
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Missing);
     }
 
     #[test]

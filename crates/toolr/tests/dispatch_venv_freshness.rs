@@ -1,5 +1,5 @@
 //! Dispatch must not run a tools venv that is out of date with
-//! `tools/uv.lock` (#527): a stale venv is re-synced first, and when that
+//! `tools/uv.lock` (#527) or `tools/pyproject.toml`: a stale venv is re-synced first, and when that
 //! can't happen the command is refused rather than run on old code. It also
 //! warns when the venv's `toolr-py` minor version differs from the binary (#529).
 #![cfg(unix)]
@@ -46,6 +46,18 @@ impl Project {
     fn bump_lock(&self) {
         std::thread::sleep(std::time::Duration::from_millis(20));
         fs::write(self.fx.tools_dir.join("uv.lock"), "version = 1\n# bumped\n").unwrap();
+    }
+
+    /// Add a dependency to `tools/pyproject.toml` without re-locking.
+    fn bump_pyproject(&self) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let pyproject = self.fx.tools_dir.join("pyproject.toml");
+        let body = fs::read_to_string(&pyproject).unwrap();
+        fs::write(
+            &pyproject,
+            body.replace("\"requests\",", "\"requests\",\n    \"rich\","),
+        )
+        .unwrap();
     }
 
     /// Leave `bin/python` dangling as `mise prune` does (#609); the swapped uv
@@ -136,6 +148,22 @@ fn stale_venv_is_synced_before_dispatch() {
 }
 
 #[test]
+fn pyproject_edit_resyncs_before_dispatch() {
+    let p = synced_project();
+    p.bump_pyproject();
+    p.toolr(&p.path_with_uv())
+        .args(["hello", "world"])
+        .assert()
+        .success();
+    let log = p.fx.uv_argv();
+    assert!(
+        uv_synced(&log),
+        "expected a `uv sync` before dispatch, uv argv was:\n{log}"
+    );
+    assert!(p.sentinel.exists(), "the command should run after the sync");
+}
+
+#[test]
 fn venv_with_dead_interpreter_is_rebuilt_before_dispatch() {
     let p = synced_project();
     p.prune_interpreter();
@@ -186,7 +214,7 @@ fn stale_venv_without_uv_refuses_to_run() {
         "a stale venv must not run; stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("out of date with tools/uv.lock"),
+        stderr.contains("out of date with tools/pyproject.toml, uv.lock or .python-version"),
         "stderr:\n{stderr}"
     );
     assert!(

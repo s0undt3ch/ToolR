@@ -100,8 +100,8 @@ fn sync_help_lists_force_and_quiet() {
     assert!(stdout.contains("--force"), "help missing --force: {stdout}");
     assert!(stdout.contains("--quiet"), "help missing --quiet: {stdout}");
     assert!(
-        stdout.contains("no-op when fresh") || stdout.contains("freshness stamp"),
-        "help should describe the new no-op-when-fresh default: {stdout}"
+        stdout.contains("no-op unless") && stdout.contains("pyproject.toml"),
+        "help should describe the no-op-when-fresh default and its inputs: {stdout}"
     );
 }
 
@@ -215,5 +215,65 @@ fn sync_dash_p_accepts_dependency_declared_with_underscores() {
     assert!(
         argv.contains("toolr-py"),
         "uv argv should contain `toolr-py`; got:\n{argv}"
+    );
+}
+
+/// Run `toolr project venv sync` against the fixture's stub uv.
+#[cfg(unix)]
+fn venv_sync(fx: &VenvFixture) {
+    common::toolr()
+        .env("PATH", &fx.bin_dir)
+        .current_dir(&fx.root)
+        .args(["project", "venv", "sync"])
+        .assert()
+        .success();
+}
+
+#[cfg(unix)]
+fn uv_synced(fx: &VenvFixture) -> bool {
+    fx.uv_argv().lines().any(|l| l == "sync")
+}
+
+/// A synced fixture whose `tools/pyproject.toml` then gains a dependency
+/// without a re-lock, with the uv argv log cleared.
+#[cfg(unix)]
+fn synced_then_pyproject_edited() -> VenvFixture {
+    let fx = VenvFixture::new();
+    venv_sync(&fx);
+    fs::remove_file(&fx.uv_argv_log).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let pyproject = fx.tools_dir.join("pyproject.toml");
+    let body = fs::read_to_string(&pyproject).unwrap();
+    fs::write(
+        &pyproject,
+        body.replace("\"requests\",", "\"requests\",\n    \"rich\","),
+    )
+    .unwrap();
+    fx
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_runs_uv_after_pyproject_edit() {
+    let fx = synced_then_pyproject_edited();
+    venv_sync(&fx);
+    assert!(
+        uv_synced(&fx),
+        "a pyproject edit must trigger `uv sync`; uv argv was:\n{}",
+        fx.uv_argv()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn second_sync_after_pyproject_edit_is_a_no_op() {
+    let fx = synced_then_pyproject_edited();
+    venv_sync(&fx);
+    fs::remove_file(&fx.uv_argv_log).unwrap();
+    venv_sync(&fx);
+    assert!(
+        !uv_synced(&fx),
+        "one sync must make the venv fresh; uv argv was:\n{}",
+        fx.uv_argv()
     );
 }
