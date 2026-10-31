@@ -156,6 +156,30 @@ fn no_sync_errors_when_stale() {
 
 #[cfg(unix)]
 #[test]
+fn no_sync_refuses_after_pyproject_edit() {
+    let tmp = TempDir::new().unwrap();
+    let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nexit 0\n");
+    mark_fresh(tmp.path(), &venv);
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    write_tools(
+        tmp.path(),
+        &format!("{IN_TREE_PYPROJECT}\n[dependency-groups]\ndev = [\"rich\"]\n"),
+    );
+    let output = common::toolr()
+        .current_dir(tmp.path())
+        .args(["project", "venv", "run", "--no-sync", "--", "true"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("out of date with tools/pyproject.toml, uv.lock or .python-version"),
+        "stderr:\n{stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn no_sync_errors_when_interpreter_is_gone() {
     let tmp = TempDir::new().unwrap();
     let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nexit 0\n");
