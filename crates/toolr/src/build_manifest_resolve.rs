@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use toolr_core::discovery::discover_project_root;
+use toolr_core::glob_path;
 use toolr_core::venv::resolve_venv_path;
 
 pub struct ResolvedSource {
@@ -73,10 +74,11 @@ fn leaf_dir_name(dir: &Path) -> Option<String> {
 /// plugin's source directory. Picks the first match lexicographically
 /// when more than one Python version is present.
 fn find_in_venv(venv_dir: &Path, package: &str) -> Result<PathBuf> {
+    let venv_prefix = glob_path::escape_path(venv_dir)
+        .with_context(|| format!("non-UTF-8 venv path {}", venv_dir.display()))?;
     let pattern = format!(
-        "{}/lib/python*/site-packages/{}",
-        venv_dir.display(),
-        package
+        "{venv_prefix}/lib/python*/site-packages/{}",
+        glob::Pattern::escape(package)
     );
     let entries = glob::glob(&pattern)
         .with_context(|| format!("globbing `{pattern}`"))?
@@ -114,6 +116,15 @@ mod tests {
             "got: {}",
             found.display()
         );
+    }
+
+    #[test]
+    fn find_in_venv_under_bracketed_venv() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("[wip]").join("venv");
+        std::fs::create_dir_all(venv.join("lib/python3.13/site-packages/pkg")).unwrap();
+        let found = find_in_venv(&venv, "pkg").unwrap();
+        assert_eq!(found, venv.join("lib/python3.13/site-packages/pkg"));
     }
 
     #[test]

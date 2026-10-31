@@ -23,6 +23,9 @@ uv venvs use different layouts per platform:
 
 We try both patterns and concatenate the results so the same code
 path works on every supported platform.
+
+The venv path is escaped before the wildcard tail is appended, so a
+`[`, `]`, `*` or `?` in it matches literally.
 ```
 
 Either layout works on every supported platform. If your wheel installs `<pkg>/toolr-manifest.json` next to the package's `__init__.py`, the glob picks it up.

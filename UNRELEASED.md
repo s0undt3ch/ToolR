@@ -111,3 +111,8 @@ as out of date, the same way a changed `tools/uv.lock` does. The next command, o
 venv sync`, re-syncs it. Before, a dependency added to `pyproject.toml` without re-locking was never
 installed: `venv sync` printed "synced" without running uv. `--force` is now only needed after
 changing `UV_*` environment variables or a user-level `uv.toml`.
+
+Plugins installed in a tools venv whose path contains `[`, `]`, `*` or `?` (for example a repo
+checked out under `~/src/[wip]/`) are found again. toolr used to treat those characters as glob
+syntax, so it dropped the plugin's commands without a warning. The same fix applies to argparse
+`scan_paths` under such a project root and to `toolr self build-manifest <package>`.
