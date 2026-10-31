@@ -606,6 +606,16 @@ def test_coerce_args_quiet_suppresses_unresolved_warning(
     assert capsys.readouterr().err == ""
 
 
+def test_coerce_args_does_not_warn_about_an_unresolved_ctx(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def _fn(ctx: DoesNotExist, n: int) -> None: ...  # type: ignore[name-defined]  # noqa: F821
+
+    _, keyword = _coerce_args(_fn, {"n": "2"})
+    assert keyword == {"n": 2}
+    assert capsys.readouterr().err == ""
+
+
 def test_optional_positional_with_type_checking_import_gets_none(
     make_tools_module: Callable[..., ModuleType],
 ) -> None:

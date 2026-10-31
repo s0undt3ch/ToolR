@@ -304,3 +304,118 @@ def test_sibling_dotted_imports_are_all_rescued(make_tools_module: ModuleFactory
     resolved = resolve_hints(mod.f)
     assert resolved.unresolved == {}
     assert resolved.hints == {"x": sys.modules["tcpkg.b"].B, "y": sys.modules["tcpkg.c"].C}
+
+
+def test_aliased_dotted_module_import_is_rescued(make_tools_module: ModuleFactory) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            import tcpkg.b as tb
+
+        def f(ctx, x: tb.B): ...
+        """,
+        name="cmd",
+        package="tcpkg",
+        files={"b.py": "class B:\n    pass\n"},
+    )
+    assert resolve_hints(mod.f).hints == {"x": sys.modules["tcpkg.b"].B}
+
+
+def test_from_package_import_of_unloaded_submodule_is_rescued(
+    make_tools_module: ModuleFactory,
+) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from tcpkg import b
+
+        def f(ctx, x: b.B): ...
+        """,
+        name="cmd",
+        package="tcpkg",
+        files={"b.py": "class B:\n    pass\n"},
+    )
+    assert "tcpkg.b" not in sys.modules
+    assert resolve_hints(mod.f).hints == {"x": sys.modules["tcpkg.b"].B}
+
+
+def test_other_statements_in_type_checking_block_are_skipped(
+    make_tools_module: ModuleFactory,
+) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            Alias = int
+            from pathlib import Path
+
+        def f(ctx, path: Path, alias: Alias): ...
+        """
+    )
+    resolved = resolve_hints(mod.f)
+    assert resolved.hints == {"path": Path}
+    assert isinstance(resolved.unresolved["alias"], NameError)
+
+
+@pytest.mark.parametrize(
+    "block_import",
+    [
+        pytest.param("from pathlib import *", id="star-import"),
+        pytest.param("from .pathlib import Path", id="relative-import-outside-package"),
+    ],
+)
+def test_type_checking_import_binding_nothing_leaves_parameter_unresolved(
+    make_tools_module: ModuleFactory, block_import: str
+) -> None:
+    mod = make_tools_module(
+        "from __future__ import annotations\n"
+        "from typing import TYPE_CHECKING\n"
+        f"if TYPE_CHECKING:\n    {block_import}\n\n"
+        "def f(ctx, path: Path, count: int): ...\n"
+    )
+    resolved = resolve_hints(mod.f)
+    assert resolved.hints == {"count": int}
+    assert isinstance(resolved.unresolved["path"], NameError)
+
+
+def test_module_without_source_leaves_parameter_unresolved(
+    make_tools_module: ModuleFactory,
+) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from pathlib import Path
+
+        def f(ctx, path: Path, count: int): ...
+        """
+    )
+    # The `.py` file is gone after import, as when only bytecode ships.
+    assert mod.__file__ is not None
+    Path(mod.__file__).unlink()
+    resolved = resolve_hints(mod.f)
+    assert resolved.hints == {"count": int}
+    assert isinstance(resolved.unresolved["path"], NameError)
+
+
+def test_function_of_unloaded_module_skips_the_rescue(make_tools_module: ModuleFactory) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from pathlib import Path
+
+        def f(ctx, path: Path, count: int): ...
+        """
+    )
+    del sys.modules[mod.__name__]
+    resolved = resolve_hints(mod.f)
+    assert resolved.hints == {"count": int}
+    assert isinstance(resolved.unresolved["path"], NameError)
