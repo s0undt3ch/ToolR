@@ -91,9 +91,11 @@ See also: [Quickstart](quickstart.md), [Project configuration](project-config.md
 
 Sync the tools venv against `tools/pyproject.toml` and `tools/uv.lock`.
 
-Default behaviour is idempotent — when the freshness stamp says the
-venv is up to date, `sync` exits immediately without spawning `uv`.
-Pass `--force` to re-run unconditionally. Pass `--quiet` for an
+Default behaviour is idempotent. `sync` runs `uv sync` only when
+`tools/pyproject.toml`, `tools/uv.lock` or `tools/.python-version`
+changed since the last sync. Otherwise it exits without spawning `uv`.
+Pass `--force` to re-run unconditionally, for example after changing
+`UV_*` environment settings. Pass `--quiet` for an
 unattended-safe path (silent on success, silent on benign exits like
 "not a toolr repo" or "uv install needs consent"); see
 [Auto-sync the tools venv on shell-enter](installation/mise.md#auto-sync-the-tools-venv-on-shell-enter)
