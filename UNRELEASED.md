@@ -94,8 +94,8 @@ that case. `--help`, tab completion and manifest builds never need trust. The mi
 refusal, while a directory with no `tools/pyproject.toml` still exits silently. The interpreter
 provenance check is removed; repository trust replaces it.
 
-Editing `tools/pyproject.toml` or `tools/.python-version` now marks the tools venv as out of date,
-the same way a changed `tools/uv.lock` does. The next command, or `toolr project venv sync`,
-re-syncs it. Before, a dependency added to `pyproject.toml` without re-locking was never installed:
-`venv sync` printed "synced" without running uv. `--force` is now only needed after changing `UV_*`
-settings.
+Editing `tools/pyproject.toml`, `tools/uv.toml` or `tools/.python-version` now marks the tools venv
+as out of date, the same way a changed `tools/uv.lock` does. The next command, or `toolr project
+venv sync`, re-syncs it. Before, a dependency added to `pyproject.toml` without re-locking was never
+installed: `venv sync` printed "synced" without running uv. `--force` is now only needed after
+changing `UV_*` environment variables or a user-level `uv.toml`.

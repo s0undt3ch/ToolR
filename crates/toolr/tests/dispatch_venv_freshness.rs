@@ -214,7 +214,8 @@ fn stale_venv_without_uv_refuses_to_run() {
         "a stale venv must not run; stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("out of date with tools/pyproject.toml, uv.lock or .python-version"),
+        stderr
+            .contains("out of date with tools/pyproject.toml, uv.lock, uv.toml or .python-version"),
         "stderr:\n{stderr}"
     );
     assert!(

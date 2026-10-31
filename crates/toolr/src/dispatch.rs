@@ -332,7 +332,7 @@ pub fn dispatch(
     Ok(ExitCode::from(clamped))
 }
 
-/// Re-sync a venv that `tools/uv.lock`, `pyproject.toml` or `.python-version`
+/// Re-sync a venv that a `tools/` file uv reads (see `check_freshness`)
 /// has moved past, so a lock bump never runs old code (#527), or whose
 /// interpreter was uninstalled under it (#609). A never-synced venv is left
 /// alone, so a fresh clone installs nothing before it.
@@ -344,7 +344,7 @@ fn resync_if_needed(
     use toolr_core::venv::{Freshness, check_freshness};
     let problem = match check_freshness(&resolved, &repo_root.join("tools")) {
         Freshness::Stale => {
-            "the tools venv is out of date with tools/pyproject.toml, uv.lock or .python-version"
+            "the tools venv is out of date with tools/pyproject.toml, uv.lock, uv.toml or .python-version"
         }
         Freshness::Broken => "the tools venv's Python interpreter no longer exists",
         Freshness::Missing | Freshness::Fresh => return Ok(resolved),

@@ -132,7 +132,7 @@ mise run ci
 
 ## Auto-sync the tools venv on shell-enter
 
-When `tools/uv.lock`, `tools/pyproject.toml` or
+When `tools/uv.lock`, `tools/pyproject.toml`, `tools/uv.toml` or
 `tools/.python-version` changes — say you've pulled a branch that
 bumped a dependency — the next `toolr` command you run re-syncs the
 tools venv before doing its real work. That sync only
