@@ -27,12 +27,10 @@ use crate::glob_path::escape_path;
 /// parsing happens later in `parse_fragment`.
 pub fn glob_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError> {
     let opts = MatchOptions {
-        // Case-insensitive globbing: NTFS treats `Lib` and `lib` as the
-        // same directory, and we want a single pattern to work whether
-        // a downstream tool happened to lowercase the path or not.
-        // glob's `case_sensitive: false` matches POSIX behavior on
-        // case-insensitive filesystems and is a no-op everywhere else.
-        case_sensitive: false,
+        // Escaped venv components are matched, not joined, so a case-insensitive
+        // match would pull in a sibling venv like `[WIP]` next to `[wip]`.
+        // Case-insensitive filesystems still resolve the literal `Lib` either way.
+        case_sensitive: true,
         require_literal_separator: true,
         require_literal_leading_dot: false,
     };

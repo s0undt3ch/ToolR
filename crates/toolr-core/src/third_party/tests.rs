@@ -66,6 +66,21 @@ fn glob_ignores_sibling_matched_by_bracket_class() {
     assert_eq!(package_names(&found), ["own_pkg"]);
 }
 
+// Needs a case-sensitive filesystem to create both siblings.
+#[cfg(target_os = "linux")]
+#[test]
+fn glob_ignores_sibling_venv_differing_only_in_case() {
+    let tmp = TempDir::new().unwrap();
+    let venv = tmp.path().join("[WIP]").join("venv");
+    setup_fake_venv_at(&venv, &[("own_pkg", "{}")]);
+    setup_fake_venv_at(
+        &tmp.path().join("[wip]").join("venv"),
+        &[("sibling_pkg", "{}")],
+    );
+    let found = glob_manifests(&venv).unwrap();
+    assert_eq!(package_names(&found), ["own_pkg"]);
+}
+
 #[cfg(unix)]
 #[test]
 fn glob_finds_fragments_under_star_and_question_venv() {
