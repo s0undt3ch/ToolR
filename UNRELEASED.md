@@ -116,3 +116,9 @@ Plugins installed in a tools venv whose path contains `[`, `]`, `*` or `?` (for 
 checked out under `~/src/[wip]/`) are found again. toolr used to treat those characters as glob
 syntax, so it dropped the plugin's commands without a warning. The same fix applies to argparse
 `scan_paths` under such a project root and to `toolr self build-manifest <package>`.
+
+Command arguments are now converted to their annotated types even when the annotation's import
+sits under `if TYPE_CHECKING:` (as ruff's TC001-TC003 rules arrange). One such annotation used to
+stop conversion for every argument of that command, so `count: int` arrived as the string `"3"`.
+When toolr can't resolve an annotation, it now names the argument in a warning instead of silently
+passing the raw string.
