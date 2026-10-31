@@ -1,6 +1,6 @@
 # Escape filesystem paths before they become glob patterns
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-07 (high).
 - **Plan:** [`2026-10-30-plugin-glob-escape-plan.md`](./2026-10-30-plugin-glob-escape-plan.md)
 
