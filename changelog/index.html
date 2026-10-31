@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev114-2026-10-30" class="md-nav__link">
+  <a href="#0352-dev129-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev114 - 2026-10-30
+        0.35.2-dev129 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev114 - 2026-10-30">
+    <nav class="md-nav" aria-label="0.35.2-dev129 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev114-2026-10-30" class="md-nav__link">
+  <a href="#0352-dev129-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev114 - 2026-10-30
+        0.35.2-dev129 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev114 - 2026-10-30">
+    <nav class="md-nav" aria-label="0.35.2-dev129 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev114-2026-10-30">0.35.2-dev114 - 2026-10-30<a class="headerlink" href="#0352-dev114-2026-10-30" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev129-2026-10-31">0.35.2-dev129 - 2026-10-31<a class="headerlink" href="#0352-dev129-2026-10-31" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7589,6 +7589,16 @@ that case. <code>--help</code>, tab completion and manifest builds never need tr
 (<code>toolr project venv sync --quiet</code>) never prompts, so in an untrusted repository it prints the
 refusal, while a directory with no <code>tools/pyproject.toml</code> still exits silently. The interpreter
 provenance check is removed; repository trust replaces it.</p>
+<p>Bash tab completion no longer expands candidate values: a value such as <code>$(…)</code> declared in a
+repository's <code>tools/</code> used to run when you pressed TAB. Values are now shell-quoted when inserted, and
+values containing spaces complete as one word. Control characters in command names, choices, help text
+and plugin warnings are no longer passed to your terminal, and the manifest build rejects group names,
+command names and argparse flags containing whitespace or control characters, and choice values
+containing control characters. Re-run <code>toolr self completion install bash</code> (or re-source the script) to
+pick up the fix.</p>
+<p>The same name and choice checks now also reject zero-width and bidi characters (such as U+200B or
+U+202E), which could make one command or value display as another. Help text and descriptions keep
+them, so right-to-left text and emoji sequences still render.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7627,10 +7637,17 @@ provenance check is removed; repository trust replaces it.</p>
 <li><em>(security)</em> Keep trust migration one-shot across store resets (<a href="https://github.com/s0undt3ch/ToolR/commit/39ba5776f48ad3b5c45ca253bed9037c789cfe49"><code>39ba577</code></a>)</li>
 <li><em>(security)</em> Migrate trust only from finished syncs (<a href="https://github.com/s0undt3ch/ToolR/commit/c9087ec808652ba378b2e3a4c61c39ca7f4ec824"><code>c9087ec</code></a>)</li>
 <li><em>(security)</em> Never fail project init on a trust store problem (<a href="https://github.com/s0undt3ch/ToolR/commit/35035a9aa0e9cf6387d485653dfe77becbafada9"><code>35035a9</code></a>)</li>
+<li><em>(complete)</em> Quote bash candidates instead of expanding them (<a href="https://github.com/s0undt3ch/ToolR/commit/0acb99280107b9d16f10687fabc3ae22cbbed215"><code>0acb992</code></a>)</li>
+<li><em>(complete)</em> Strip control characters from completion and warnings (<a href="https://github.com/s0undt3ch/ToolR/commit/22307f577cf23f9017ef66434464b2bb93efe4c4"><code>22307f5</code></a>)</li>
+<li><em>(parser)</em> Reject control characters and whitespace in names (<a href="https://github.com/s0undt3ch/ToolR/commit/ee7969b0b7b234434e4d0b061a6afd3ce56826cb"><code>ee7969b</code></a>)</li>
+<li><em>(cli)</em> Keep control characters in manifests away from clap (<a href="https://github.com/s0undt3ch/ToolR/commit/20b0268984bcdd128ce69474f46694ef2b6cf3b1"><code>20b0268</code></a>)</li>
+<li><em>(parser)</em> Reject control characters in group refs and argument names (<a href="https://github.com/s0undt3ch/ToolR/commit/7129c364cb1dbc84f07c7db38c7acde94e3b913f"><code>7129c36</code></a>)</li>
+<li><em>(parser)</em> Reject bidi and zero-width characters in names (<a href="https://github.com/s0undt3ch/ToolR/commit/73dbd3cd5892ab910ffb5d8286b0facf8d5a0c5a"><code>73dbd3c</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(rust)</em> Declare rust-version as the pinned mise toolchain (<a href="https://github.com/s0undt3ch/ToolR/commit/c93ae5a328c433fec10858a33dab62bcd2f10615"><code>c93ae5a</code></a>)</li>
+<li><em>(xtask)</em> Add patch-coverage to check changed-line coverage (<a href="https://github.com/s0undt3ch/ToolR/commit/b0fe96fbe83bfdab2261e9dd6d6af4b99ece7cd0"><code>b0fe96f</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7664,6 +7681,11 @@ provenance check is removed; repository trust replaces it.</p>
 <li><em>(specs)</em> Archive repo trust design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/1e4157fe5bb4eae902429855fd6c51e74c8d6cdc"><code>1e4157f</code></a>)</li>
 <li><em>(security)</em> Document the store-location refusal and path-keyed trust (<a href="https://github.com/s0undt3ch/ToolR/commit/b765f0997055abdd9a5e59d6bc49c8f7745127c5"><code>b765f09</code></a>)</li>
 <li><em>(security)</em> Document the trust commands and the action version caveat (<a href="https://github.com/s0undt3ch/ToolR/commit/3e81f4de3a02c7a9becd7030c7845f6da59d0ed4"><code>3e81f4d</code></a>)</li>
+<li><em>(specs)</em> Add safe shell output design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/c30a9414fe947b9b99c9bae089c737b40303b37d"><code>c30a941</code></a>)</li>
+<li><em>(unreleased)</em> Note safe shell output fixes (<a href="https://github.com/s0undt3ch/ToolR/commit/4984b2bb51bea3232459e733133fd7cb8df5e3e8"><code>4984b2b</code></a>)</li>
+<li><em>(claude)</em> Document coverage commands and gates (<a href="https://github.com/s0undt3ch/ToolR/commit/ca83f28475ec1ddf5d2b0e8f0aa3681ef1ae0187"><code>ca83f28</code></a>)</li>
+<li><em>(specs)</em> Archive safe shell output design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0439292987ecf659ecbb572f0771a5d123684573"><code>0439292</code></a>)</li>
+<li><em>(unreleased)</em> Note zero-width and bidi rejection in names (<a href="https://github.com/s0undt3ch/ToolR/commit/b8a230ca8867b0e4bf359f2f28d58afc03f5ea7c"><code>b8a230c</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7690,6 +7712,8 @@ provenance check is removed; repository trust replaces it.</p>
 <li>Keep cargo-launched toolr out of the real trust store (<a href="https://github.com/s0undt3ch/ToolR/commit/94a11550969d1ec628cf36203daf782be34594ce"><code>94a1155</code></a>)</li>
 <li><em>(security)</em> Cover trust store failure paths and run commands on Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/efaa190f736031f79954f43ec27e335b18eba4e2"><code>efaa190</code></a>)</li>
 <li>Turn the trust check off per test, not for every cargo process (<a href="https://github.com/s0undt3ch/ToolR/commit/ad135359e067582454f8e3cb91258fdc07a3f28c"><code>ad13535</code></a>)</li>
+<li><em>(parser)</em> Render every invalid-name item kind through real builds (<a href="https://github.com/s0undt3ch/ToolR/commit/e29e130a189503862d143d4244919a089786cafd"><code>e29e130</code></a>)</li>
+<li><em>(cli)</em> Cover control characters in metavar and help-section title (<a href="https://github.com/s0undt3ch/ToolR/commit/ccb5b22da088e85cfec2716144e3cc18f024e8df"><code>ccb5b22</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
