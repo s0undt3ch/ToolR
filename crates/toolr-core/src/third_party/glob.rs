@@ -15,9 +15,10 @@
 
 use std::path::{Path, PathBuf};
 
-use glob::{MatchOptions, Pattern, glob_with};
+use glob::{MatchOptions, glob_with};
 
 use super::parse::ThirdPartyError;
+use crate::glob_path::escape_path;
 
 /// Glob all third-party manifest fragments under `tools_venv`.
 ///
@@ -36,10 +37,8 @@ pub fn glob_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError
         require_literal_leading_dot: false,
     };
 
-    let venv_str = tools_venv
-        .to_str()
+    let prefix = escape_path(tools_venv)
         .ok_or_else(|| ThirdPartyError::NonUtf8Path(tools_venv.to_path_buf()))?;
-    let prefix = Pattern::escape(venv_str);
 
     let mut out = Vec::new();
     for layout_segments in candidate_layouts() {

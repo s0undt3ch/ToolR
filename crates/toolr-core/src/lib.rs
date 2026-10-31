@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod docstrings;
 pub mod execute;
 pub mod freshness;
+pub mod glob_path;
 pub mod hash;
 pub mod manifest;
 pub mod manifest_build;
