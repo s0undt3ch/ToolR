@@ -332,19 +332,21 @@ pub fn dispatch(
     Ok(ExitCode::from(clamped))
 }
 
-/// Re-sync a venv that `tools/uv.lock` has moved past, so a lock bump
-/// never runs old code (#527), or whose interpreter was uninstalled
-/// under it (#609). A never-synced venv is left alone, so a fresh clone
-/// installs nothing before it.
+/// Re-sync a venv that a `tools/` file uv reads (see `check_freshness`)
+/// has moved past, so a lock bump never runs old code (#527), or whose
+/// interpreter was uninstalled under it (#609). A never-synced venv is left
+/// alone, so a fresh clone installs nothing before it.
 fn resync_if_needed(
     repo_root: &std::path::Path,
     resolved: toolr_core::venv::ResolvedVenv,
     quiet: bool,
 ) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
-    use toolr_core::venv::{Freshness, check_freshness};
+    use toolr_core::venv::{Freshness, SYNC_INPUTS_DESCRIPTION, check_freshness};
     let problem = match check_freshness(&resolved, &repo_root.join("tools")) {
-        Freshness::Stale => "the tools venv is out of date with tools/uv.lock",
-        Freshness::Broken => "the tools venv's Python interpreter no longer exists",
+        Freshness::Stale => {
+            format!("the tools venv is out of date with {SYNC_INPUTS_DESCRIPTION}")
+        }
+        Freshness::Broken => "the tools venv's Python interpreter no longer exists".to_owned(),
         Freshness::Missing | Freshness::Fresh => return Ok(resolved),
     };
     if !quiet {
