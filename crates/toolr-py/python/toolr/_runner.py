@@ -48,6 +48,7 @@ from toolr._exc import ToolrDeprecationWarning
 from toolr.sources import CommandSchema
 from toolr.sources import DispatchCommand
 from toolr.utils._annotations import resolve_hints
+from toolr.utils._annotations import signature
 from toolr.utils._annotations import unknown_arg_keyword_error
 from toolr.utils._console import Consoles
 from toolr.utils._console import ConsoleVerbosity
@@ -440,7 +441,7 @@ def _hints_and_signature(
     Postponed or lazy (3.14+) annotations only evaluate here, so a stale
     `arg()` keyword surfaces here rather than at import.
     """
-    return resolve_hints(target, localns), inspect.signature(target)
+    return resolve_hints(target, localns), signature(target)
 
 
 def _coerce_args(

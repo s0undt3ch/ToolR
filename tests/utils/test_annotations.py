@@ -14,6 +14,7 @@ import pytest
 from toolr._exc import SpecError
 from toolr._runner import _coerce_args
 from toolr.utils._annotations import resolve_hints
+from toolr.utils._signature import detect_dispatch_parameter
 
 ModuleFactory = Callable[..., ModuleType]
 
@@ -191,10 +192,41 @@ def test_lazy_annotations_resolve_per_parameter(make_tools_module: ModuleFactory
         from typing import TYPE_CHECKING
         if TYPE_CHECKING:
             from pathlib import Path
+            from toolr.sources import DispatchCommand
 
         def f(ctx, path: Path, x: DoesNotExist, count: int = 1): ...
+        def opt(ctx, p: Path | None): ...
+        def disp(ctx, other: DoesNotExist, *, cmd: DispatchCommand): ...
         """
     )
     resolved = resolve_hints(mod.f)
     assert resolved.hints == {"path": Path, "count": int}
     assert list(resolved.unresolved) == ["x"]
+    _, keyword = _coerce_args(mod.f, {"path": "some/dir", "x": "raw", "count": "3"}, quiet=True)
+    assert keyword == {"path": Path("some/dir"), "x": "raw", "count": 3}
+    assert _coerce_args(mod.opt, {})[1] == {"p": None}
+    assert detect_dispatch_parameter(mod.disp) == "cmd"
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="lazy annotations need Python 3.14+")
+def test_lazy_annotations_keep_closure_names(make_tools_module: ModuleFactory) -> None:
+    mod = make_tools_module(
+        """
+        from decimal import Decimal
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from pathlib import Path
+
+        def make():
+            D = Decimal
+
+            def f(ctx, x: D, path: Path): ...
+
+            return f
+
+        f = make()
+        """
+    )
+    resolved = resolve_hints(mod.f)
+    assert resolved.unresolved == {}
+    assert resolved.hints == {"x": mod.Decimal, "path": Path}
