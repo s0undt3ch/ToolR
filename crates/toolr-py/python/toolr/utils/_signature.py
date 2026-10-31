@@ -312,7 +312,8 @@ def detect_dispatch_parameter(func: Callable[..., Any]) -> str | None:
     parameter is annotated with `toolr.sources.DispatchCommand`. The
     parameter name itself is free. Subclasses are not supported in v1.
     Returns `None` when the function isn't a dispatcher; raises
-    `DispatcherDetectionError` on a malformed usage.
+    `DispatcherDetectionError` on a malformed usage, and `SpecError` when
+    an annotation can't be evaluated.
     """
     # Local import: keep toolr.sources out of the import-time graph of
     # toolr.utils._signature.

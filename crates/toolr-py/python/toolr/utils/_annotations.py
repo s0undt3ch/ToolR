@@ -65,7 +65,8 @@ _TYPE_CHECKING_IMPORTS: weakref.WeakKeyDictionary[ModuleType, dict[str, _Binding
 )
 
 
-def _where(target: Callable[..., Any]) -> str:
+def qualified_name(target: Callable[..., Any]) -> str:
+    """`module.qualname` of ``target``, as used in warnings and errors."""
     return f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}"
 
 
@@ -89,7 +90,7 @@ def _raw_annotations(target: Callable[..., Any]) -> dict[str, Any]:
             )
         except Exception as exc:
             # A lazy annotation that fails even without names, such as `1 / 0`.
-            raise _annotation_error(exc, _where(target), "the annotations") from exc
+            raise _annotation_error(exc, qualified_name(target), "the annotations") from exc
     return dict(inspect.get_annotations(target))
 
 
@@ -101,7 +102,7 @@ def signature(target: Callable[..., Any]) -> inspect.Signature:
         try:
             return inspect.signature(target, annotation_format=annotationlib.Format.FORWARDREF)
         except Exception as exc:
-            raise _annotation_error(exc, _where(target), "the annotations") from exc
+            raise _annotation_error(exc, qualified_name(target), "the annotations") from exc
     return inspect.signature(target)
 
 
@@ -153,6 +154,7 @@ def _scan_type_checking_imports(module: ModuleType) -> dict[str, _Binding]:
                         table[alias.asname] = _Binding(alias.name, None)
                     else:
                         top = alias.name.partition(".")[0]
+                        # Merge only into an earlier bare `import top...`, not a `from x import top`.
                         previous = table.get(top)
                         submodules = (
                             previous.submodules if previous and previous.module == top else ()
@@ -180,7 +182,7 @@ def _type_checking_imports(module: ModuleType) -> dict[str, _Binding]:
         return table
 
 
-def _import_binding(name: str, binding: _Binding) -> Any:
+def _import_binding(binding: _Binding) -> Any:
     """Return the object `binding` names, or raise ImportError/AttributeError."""
     module = importlib.import_module(binding.module)
     for submodule in binding.submodules:
@@ -195,10 +197,42 @@ def _import_binding(name: str, binding: _Binding) -> Any:
 
 
 def _evaluate(annotation: Any, globalns: dict[str, Any], localns: dict[str, Any]) -> Any:
+    # A one-entry holder keeps `get_type_hints`' handling of strings, ForwardRefs and `None`.
     def holder() -> None: ...
 
     holder.__annotations__ = {"value": annotation}
     return get_type_hints(holder, globalns=globalns, localns=localns, include_extras=False)["value"]
+
+
+class _RescueFailedError(Exception):
+    """Importing a name from the `TYPE_CHECKING` block raised ``error``."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(str(error))
+        self.error = error
+
+
+def _resolve_one(
+    annotation: Any, module: ModuleType | None, globalns: dict[str, Any], local: dict[str, Any]
+) -> Any:
+    """Evaluate one annotation, importing missing names from the module's `TYPE_CHECKING` block."""
+    tried: set[str] = set()
+    while True:
+        try:
+            return _evaluate(annotation, globalns, local)
+        except NameError as exc:
+            missing = exc.name or ""
+            binding = None
+            if module is not None and missing not in tried:
+                binding = _type_checking_imports(module).get(missing)
+            if binding is None:
+                raise
+            tried.add(missing)
+            try:
+                local[missing] = _import_binding(binding)
+            except Exception as error:  # noqa: BLE001 — any import failure leaves the parameter unresolved.
+                # Raised inside `except NameError`, so `error.__context__` keeps the NameError.
+                raise _RescueFailedError(error) from None
 
 
 def resolve_hints(
@@ -211,7 +245,7 @@ def resolve_hints(
     failure raises :class:`SpecError` naming the parameter.
     """
     unwrapped = inspect.unwrap(target)
-    where = _where(target)
+    where = qualified_name(target)
     module = sys.modules.get(getattr(unwrapped, "__module__", "") or "")
     globalns: dict[str, Any] = getattr(unwrapped, "__globals__", None) or (
         vars(module) if module is not None else {}
@@ -223,31 +257,12 @@ def resolve_hints(
     for name, annotation in _raw_annotations(target).items():
         if name == "return":
             continue
-        tried: set[str] = set()
-        while True:
-            try:
-                hints[name] = _evaluate(annotation, globalns, local)
-            except NameError as exc:
-                missing: str = exc.name or ""
-                binding = (
-                    _type_checking_imports(module).get(missing)
-                    if module is not None and missing and missing not in tried
-                    else None
-                )
-                if binding is None:
-                    unresolved[name] = exc
-                    break
-                tried.add(missing)
-                try:
-                    local[missing] = _import_binding(missing, binding)
-                except Exception as rescue_exc:  # noqa: BLE001 — a failed rescue leaves the parameter unresolved.
-                    # Raised inside `except NameError`, so `__context__` keeps the NameError.
-                    unresolved[name] = rescue_exc
-                    break
-                continue
-            except AttributeError as exc:
-                unresolved[name] = exc
-            except Exception as exc:
-                raise _annotation_error(exc, where, f"the annotation of `{name}`") from exc
-            break
+        try:
+            hints[name] = _resolve_one(annotation, module, globalns, local)
+        except (NameError, AttributeError) as exc:
+            unresolved[name] = exc
+        except _RescueFailedError as exc:
+            unresolved[name] = exc.error
+        except Exception as exc:
+            raise _annotation_error(exc, where, f"the annotation of `{name}`") from exc
     return ResolvedHints(hints=hints, unresolved=unresolved)

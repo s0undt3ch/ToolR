@@ -47,6 +47,7 @@ from toolr._exc import SpecError
 from toolr._exc import ToolrDeprecationWarning
 from toolr.sources import CommandSchema
 from toolr.sources import DispatchCommand
+from toolr.utils._annotations import qualified_name
 from toolr.utils._annotations import resolve_hints
 from toolr.utils._annotations import signature
 from toolr.utils._annotations import unknown_arg_keyword_error
@@ -56,8 +57,6 @@ from toolr.utils._signature import detect_dispatch_parameter
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from toolr.utils._annotations import ResolvedHints
 
 # Promote toolr's own deprecation warnings to visible-by-default. The
 # stdlib silences DeprecationWarning by default for non-__main__ code,
@@ -402,17 +401,14 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
 def _localns_for_enum_modules(enum_modules: dict[str, str]) -> dict[str, Any]:
     """Import each enum class named in ``enum_modules`` for ``localns``.
 
-    This is what makes a `TYPE_CHECKING`-only enum import actually work:
-    `get_type_hints` resolves annotation strings against the target
-    function's own module globals by default, which never contain a
-    class that module only imports under `if TYPE_CHECKING:` (that
-    branch never runs for real). Importing the real module here --
-    lazily, at coercion time, long after every module has finished its
-    own import phase -- sidesteps that entirely without forcing the
-    guarded block to execute at the target module's own import time
-    (which could import something else not meant to run, and could
-    reintroduce the circular-import problem `TYPE_CHECKING` exists to
-    avoid).
+    These seed the ``localns`` that
+    :func:`toolr.utils._annotations.resolve_hints` evaluates against,
+    ahead of its own `TYPE_CHECKING` rescue. They still matter when the
+    rescue can't follow the target module's import, such as a class
+    re-exported from another module. The import happens lazily, at
+    coercion time, long after every module has finished its own import
+    phase, so it can't reintroduce the circular import `TYPE_CHECKING`
+    exists to avoid.
 
     A class that fails to import is skipped. Its annotation then goes
     through :func:`toolr.utils._annotations.resolve_hints`'s own
@@ -430,18 +426,6 @@ def _localns_for_enum_modules(enum_modules: dict[str, str]) -> dict[str, Any]:
         if cls is not None:
             localns[class_name] = cls
     return localns
-
-
-def _hints_and_signature(
-    target: Callable[..., Any],
-    localns: dict[str, Any] | None,
-) -> tuple[ResolvedHints, inspect.Signature]:
-    """Resolve ``target``'s type hints per parameter, and its signature.
-
-    Postponed or lazy (3.14+) annotations only evaluate here, so a stale
-    `arg()` keyword surfaces here rather than at import.
-    """
-    return resolve_hints(target, localns), signature(target)
 
 
 def _coerce_args(
@@ -471,11 +455,12 @@ def _coerce_args(
     warning on stderr unless ``quiet``.
     """
     localns = _localns_for_enum_modules(enum_modules) if enum_modules else None
-    resolved, sig = _hints_and_signature(target, localns)
+    resolved, sig = resolve_hints(target, localns), signature(target)
     hints = resolved.hints
     if not quiet:
-        where = f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}"
+        where = qualified_name(target)
         for name, exc in resolved.unresolved.items():
+            # The runner passes `ctx` itself and never converts it.
             if name == "ctx":
                 continue
             advice = (
@@ -653,7 +638,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # lives on the Rust side, which knows the cwd, arg types, and values.
         _append_repo_root(str(repo_root))
         target = _import_target(spec)
-        quiet = spec.context.verbosity == "quiet"
+        quiet = ctx.verbosity is ConsoleVerbosity.QUIET
         if spec.dispatch is not None:
             # Dispatched leaf: `target` is the parent dispatcher, `args`
             # carries the parent's own kwargs, `dispatch` carries the
