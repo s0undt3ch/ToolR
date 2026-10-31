@@ -560,6 +560,7 @@ pub fn scan_block_paths(
         message: "non-utf8 project root".into(),
     })?;
     for pattern in scan_paths {
+        // An absolute entry replaces the root, as `Path::join` did.
         let pattern_str = if Path::new(pattern).is_absolute() {
             pattern.clone()
         } else {
