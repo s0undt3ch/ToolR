@@ -1,6 +1,6 @@
 # Resolve command type hints one parameter at a time
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-03 (high).
 - **Plan:** [`2026-10-30-runner-type-hints-plan.md`](./2026-10-30-runner-type-hints-plan.md)
 

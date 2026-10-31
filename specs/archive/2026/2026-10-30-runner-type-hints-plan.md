@@ -12,7 +12,7 @@ a time. On `NameError` it rescues the name from the module's `TYPE_CHECKING` imp
 
 **Tech Stack:** Python 3.11-3.15 (`annotationlib` on 3.14+), `ast`, pytest.
 
-**Spec:** [`specs/2026-10-30-runner-type-hints-design.md`](./2026-10-30-runner-type-hints-design.md)
+**Spec:** [`specs/archive/2026/2026-10-30-runner-type-hints-design.md`](./2026-10-30-runner-type-hints-design.md)
 
 ## Global Constraints
 
