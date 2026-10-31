@@ -99,6 +99,25 @@ impl VenvFixture {
     pub fn uv_argv(&self) -> String {
         fs::read_to_string(&self.uv_argv_log).unwrap_or_default()
     }
+
+    /// Whether the stub uv has been called with `sync`.
+    pub fn uv_ran_sync(&self) -> bool {
+        self.uv_argv().lines().any(|token| token == "sync")
+    }
+
+    /// Add `rich` to `tools/pyproject.toml` without re-locking. Sleeps first
+    /// so the edit is newer than any sync stamp.
+    pub fn add_unlocked_dependency(&self) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let pyproject = self.tools_dir.join("pyproject.toml");
+        let body = fs::read_to_string(&pyproject).unwrap();
+        let edited = body.replace("\"requests\",", "\"requests\",\n    \"rich\",");
+        assert_ne!(
+            body, edited,
+            "fixture pyproject has no \"requests\" entry to extend"
+        );
+        fs::write(&pyproject, edited).unwrap();
+    }
 }
 
 #[cfg(unix)]

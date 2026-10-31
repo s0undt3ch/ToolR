@@ -1,6 +1,6 @@
-//! Dispatch must not run a tools venv that is out of date with
-//! `tools/uv.lock` (#527) or `tools/pyproject.toml`: a stale venv is re-synced first, and when that
-//! can't happen the command is refused rather than run on old code. It also
+//! Dispatch must not run a tools venv that is out of date with a sync input
+//! such as `tools/uv.lock` (#527; see `check_freshness`): a stale venv is
+//! re-synced first, and when that can't happen the command is refused rather than run on old code. It also
 //! warns when the venv's `toolr-py` minor version differs from the binary (#529).
 #![cfg(unix)]
 
@@ -12,6 +12,7 @@ use assert_cmd::Command;
 #[path = "common/mod.rs"]
 mod common;
 use common::VenvFixture;
+use toolr_core::venv::SYNC_INPUTS_DESCRIPTION;
 
 const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
 
@@ -46,18 +47,6 @@ impl Project {
     fn bump_lock(&self) {
         std::thread::sleep(std::time::Duration::from_millis(20));
         fs::write(self.fx.tools_dir.join("uv.lock"), "version = 1\n# bumped\n").unwrap();
-    }
-
-    /// Add a dependency to `tools/pyproject.toml` without re-locking.
-    fn bump_pyproject(&self) {
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        let pyproject = self.fx.tools_dir.join("pyproject.toml");
-        let body = fs::read_to_string(&pyproject).unwrap();
-        fs::write(
-            &pyproject,
-            body.replace("\"requests\",", "\"requests\",\n    \"rich\","),
-        )
-        .unwrap();
     }
 
     /// Leave `bin/python` dangling as `mise prune` does (#609); the swapped uv
@@ -150,7 +139,7 @@ fn stale_venv_is_synced_before_dispatch() {
 #[test]
 fn pyproject_edit_resyncs_before_dispatch() {
     let p = synced_project();
-    p.bump_pyproject();
+    p.fx.add_unlocked_dependency();
     p.toolr(&p.path_with_uv())
         .args(["hello", "world"])
         .assert()
@@ -214,8 +203,7 @@ fn stale_venv_without_uv_refuses_to_run() {
         "a stale venv must not run; stderr:\n{stderr}"
     );
     assert!(
-        stderr
-            .contains("out of date with tools/pyproject.toml, uv.lock, uv.toml or .python-version"),
+        stderr.contains(&format!("out of date with {SYNC_INPUTS_DESCRIPTION}")),
         "stderr:\n{stderr}"
     );
     assert!(

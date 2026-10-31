@@ -229,11 +229,6 @@ fn venv_sync(fx: &VenvFixture) {
         .success();
 }
 
-#[cfg(unix)]
-fn uv_synced(fx: &VenvFixture) -> bool {
-    fx.uv_argv().lines().any(|l| l == "sync")
-}
-
 /// A synced fixture whose `tools/pyproject.toml` then gains a dependency
 /// without a re-lock, with the uv argv log cleared.
 #[cfg(unix)]
@@ -241,14 +236,7 @@ fn synced_then_pyproject_edited() -> VenvFixture {
     let fx = VenvFixture::new();
     venv_sync(&fx);
     fs::remove_file(&fx.uv_argv_log).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(20));
-    let pyproject = fx.tools_dir.join("pyproject.toml");
-    let body = fs::read_to_string(&pyproject).unwrap();
-    fs::write(
-        &pyproject,
-        body.replace("\"requests\",", "\"requests\",\n    \"rich\","),
-    )
-    .unwrap();
+    fx.add_unlocked_dependency();
     fx
 }
 
@@ -258,7 +246,7 @@ fn sync_runs_uv_after_pyproject_edit() {
     let fx = synced_then_pyproject_edited();
     venv_sync(&fx);
     assert!(
-        uv_synced(&fx),
+        fx.uv_ran_sync(),
         "a pyproject edit must trigger `uv sync`; uv argv was:\n{}",
         fx.uv_argv()
     );
@@ -272,7 +260,7 @@ fn second_sync_after_pyproject_edit_is_a_no_op() {
     fs::remove_file(&fx.uv_argv_log).unwrap();
     venv_sync(&fx);
     assert!(
-        !uv_synced(&fx),
+        !fx.uv_ran_sync(),
         "one sync must make the venv fresh; uv argv was:\n{}",
         fx.uv_argv()
     );

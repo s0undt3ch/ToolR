@@ -173,8 +173,10 @@ fn no_sync_refuses_after_pyproject_edit() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "stderr:\n{stderr}");
     assert!(
-        stderr
-            .contains("out of date with tools/pyproject.toml, uv.lock, uv.toml or .python-version"),
+        stderr.contains(&format!(
+            "out of date with {}",
+            toolr_core::venv::SYNC_INPUTS_DESCRIPTION
+        )),
         "stderr:\n{stderr}"
     );
 }

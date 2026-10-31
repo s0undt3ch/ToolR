@@ -20,6 +20,10 @@ const FRESHNESS_MARKER: &str = ".toolr-sync-stamp";
 /// required `uv.lock`.
 const SYNC_INPUTS: [&str; 3] = ["pyproject.toml", "uv.toml", ".python-version"];
 
+/// `uv.lock` plus [`SYNC_INPUTS`], for messages that name them.
+pub const SYNC_INPUTS_DESCRIPTION: &str =
+    "tools/pyproject.toml, uv.lock, uv.toml or .python-version";
+
 /// Decision returned by `check_freshness`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
