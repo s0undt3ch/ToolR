@@ -43,7 +43,13 @@ fn package_names(paths: &[PathBuf]) -> Vec<String> {
 #[test]
 fn glob_finds_fragments_under_bracketed_venv() {
     let tmp = TempDir::new().unwrap();
-    let venv = tmp.path().join("[wip]").join("venv");
+    // Canonical, so Windows sees the `\\?\` prefix an in-tree venv carries.
+    let venv = tmp
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("[wip]")
+        .join("venv");
     setup_fake_venv_at(&venv, &[("a_pkg", "{}"), ("b_pkg", "{}")]);
     let found = glob_manifests(&venv).unwrap();
     assert_eq!(package_names(&found), ["a_pkg", "b_pkg"]);

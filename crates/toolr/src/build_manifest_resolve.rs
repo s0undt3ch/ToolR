@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use toolr_core::discovery::discover_project_root;
+use toolr_core::glob_path::escape_path;
 use toolr_core::venv::resolve_venv_path;
 
 pub struct ResolvedSource {
@@ -73,12 +74,10 @@ fn leaf_dir_name(dir: &Path) -> Option<String> {
 /// plugin's source directory. Picks the first match lexicographically
 /// when more than one Python version is present.
 fn find_in_venv(venv_dir: &Path, package: &str) -> Result<PathBuf> {
-    let venv_str = venv_dir
-        .to_str()
+    let venv_prefix = escape_path(venv_dir)
         .with_context(|| format!("non-UTF-8 venv path {}", venv_dir.display()))?;
     let pattern = format!(
-        "{}/lib/python*/site-packages/{}",
-        glob::Pattern::escape(venv_str),
+        "{venv_prefix}/lib/python*/site-packages/{}",
         glob::Pattern::escape(package)
     );
     let entries = glob::glob(&pattern)

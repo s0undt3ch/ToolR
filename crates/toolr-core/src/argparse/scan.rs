@@ -554,14 +554,17 @@ pub fn scan_block_paths(
     django: bool,
 ) -> Result<Vec<ScannedCommand>, ScanError> {
     let mut all_paths: Vec<std::path::PathBuf> = Vec::new();
-    let root_str = root.to_str().ok_or_else(|| ScanError::Parse {
+    // The root is a literal path; only the user's `scan_paths` entry is a glob.
+    let root_prefix = crate::glob_path::escape_path(root).ok_or_else(|| ScanError::Parse {
         path: root.display().to_string(),
         message: "non-utf8 project root".into(),
     })?;
-    // The root is a literal path; only the user's `scan_paths` entry is a glob.
-    let root_prefix = glob::Pattern::escape(root_str);
     for pattern in scan_paths {
-        let pattern_str = format!("{root_prefix}/{pattern}");
+        let pattern_str = if Path::new(pattern).is_absolute() {
+            pattern.clone()
+        } else {
+            format!("{root_prefix}/{pattern}")
+        };
         // Bad glob pattern is a hard error so the user finds their typo.
         for path in glob::glob(&pattern_str)
             .map_err(|e| ScanError::Parse {
@@ -1107,7 +1110,13 @@ def add_arguments(self, parser):
     #[test]
     fn scan_paths_glob_under_bracketed_root() {
         let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().join("[wip]").join("project");
+        // Canonical, so Windows sees the `\\?\` prefix `discover_project_root` hands over.
+        let root = tmp
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("[wip]")
+            .join("project");
         let cmds = root.join("apps/x/management/commands");
         std::fs::create_dir_all(&cmds).unwrap();
         std::fs::write(
@@ -1127,6 +1136,24 @@ def add_arguments(self, parser):
         let names: std::collections::BTreeSet<_> =
             scanned.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, ["migrate", "runserver"].into());
+    }
+
+    #[test]
+    fn absolute_scan_path_ignores_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ext = tmp.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        std::fs::write(
+            ext.join("migrate.py"),
+            "def add_arguments(self, parser):\n    parser.add_argument('app_label')\n",
+        )
+        .unwrap();
+        let pattern = format!("{}/*.py", ext.display());
+
+        let scanned = scan_block_paths(&tmp.path().join("root"), &[pattern], false).unwrap();
+
+        let names: Vec<_> = scanned.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["migrate"]);
     }
 
     #[test]

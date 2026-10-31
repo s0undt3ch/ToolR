@@ -45,8 +45,13 @@ wraps metacharacters as `[[]`, `[]]`, `[*]`, `[?]`, which are valid path
 characters, so `Path::join` works too. Either is fine, as long as the
 escaped prefix is never re-parsed as a path for anything but globbing.
 
-Windows: `glob` treats `\` as a separator there, not an escape, and
-`Pattern::escape` uses bracket classes, so the same code works.
+Windows: escape each normal path component, not the whole string. A
+canonical Windows path starts with `\\?\C:`, and escaping its `?` turns
+the prefix into a UNC share that doesn't exist. The first implementation
+escaped the whole string and broke argparse scanning on Windows. The
+shared `toolr_core::glob_path::escape_path` helper keeps the prefix and
+root verbatim. An absolute `scan_paths` entry is used as given, as
+`Path::join` did before.
 
 ## Scope and compatibility
 
