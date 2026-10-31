@@ -294,6 +294,37 @@ Aliases compose with any supported type (see the supported-types
 table), including `list[…]`, `Literal[…]`, `T | None`, and
 `toolr.types.*`.
 
+## Imports under `TYPE_CHECKING`
+
+An import used only in annotations can sit under `if TYPE_CHECKING:`, as
+ruff's TC001-TC003 rules arrange. toolr still converts the argument to that
+type: when the name isn't bound at run time, the runner imports it from the
+module's `TYPE_CHECKING` block.
+
+```python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from toolr import Context, command_group
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+files = command_group("files", title="File helpers")
+
+
+@files.command
+def count(ctx: Context, path: Path, limit: int = 10) -> None: ...
+```
+
+If toolr can't find the name at all, that one argument gets the raw string
+and toolr prints a warning naming it:
+
+```text
+toolr: warning: can't resolve the type of `path` on tools.files.count (name 'Path' is not defined); passing the raw value. Import it at runtime, not only under `if TYPE_CHECKING:`.
+```
+
 ## Heterogeneous tuples
 
 A `tuple[T1, T2, …]` parameter declares a fixed-arity positional

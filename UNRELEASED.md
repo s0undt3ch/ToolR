@@ -93,3 +93,9 @@ that case. `--help`, tab completion and manifest builds never need trust. The mi
 (`toolr project venv sync --quiet`) never prompts, so in an untrusted repository it prints the
 refusal, while a directory with no `tools/pyproject.toml` still exits silently. The interpreter
 provenance check is removed; repository trust replaces it.
+
+Command arguments are now converted to their annotated types even when the annotation's import
+sits under `if TYPE_CHECKING:` (as ruff's TC001-TC003 rules arrange). One such annotation used to
+stop conversion for every argument of that command, so `count: int` arrived as the string `"3"`.
+When toolr can't resolve an annotation, it now names the argument in a warning instead of silently
+passing the raw string.
