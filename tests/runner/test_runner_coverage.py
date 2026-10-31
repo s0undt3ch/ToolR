@@ -26,6 +26,7 @@ import textwrap
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import Annotated
 from typing import Any
 from typing import Literal
@@ -33,11 +34,11 @@ from typing import Literal
 import pytest
 from packaging.version import Version
 
+from toolr._exc import SpecError
 from toolr._runner import SCHEMA_VERSION
 from toolr._runner import ContextSpec
 from toolr._runner import DispatchPayloadSpec
 from toolr._runner import RunnerSpec
-from toolr._runner import SpecError
 from toolr._runner import _build_context
 from toolr._runner import _coerce_args
 from toolr._runner import _dec_hook
@@ -342,7 +343,7 @@ def test_run_reports_unknown_arg_keyword_in_a_parameter_annotation(
     assert getattr(sys.modules.get(module), "CALLED", []) == []
 
 
-def test_coerce_args_falls_back_to_raw_values_on_an_unrelated_hint_type_error(
+def test_coerce_args_reports_an_unrelated_hint_type_error(
     importable_module: Callable[[str, str], str],
 ) -> None:
     module = importable_module(
@@ -355,8 +356,10 @@ def test_coerce_args_falls_back_to_raw_values_on_an_unrelated_hint_type_error(
         """,
     )
     target = importlib.import_module(module).read
-    _, keyword = _coerce_args(target, {"count": "3"})
-    assert keyword == {"count": "3"}
+    with pytest.raises(
+        SpecError, match=r"`count` on unrelated_hint_type_error_mod\.read: .*has no len\(\)"
+    ):
+        _coerce_args(target, {"count": "3"})
 
 
 def test_import_target_leaves_other_import_time_type_errors_alone(
@@ -579,14 +582,55 @@ def test_coerce_args_strips_annotated_metadata() -> None:
     assert keyword == {"port": 8080}
 
 
-def test_coerce_args_falls_back_when_get_type_hints_raises() -> None:
-    # A forward reference to an undefined name makes `get_type_hints` raise
-    # NameError; the runner's `except Exception` swallows that and falls
-    # back to raw values.
-    def _fn(ctx, x: DoesNotExist) -> None: ...  # type: ignore[name-defined]  # noqa: F821
+def test_coerce_args_resolves_other_params_when_one_hint_fails(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def _fn(ctx, x: DoesNotExist, n: int) -> None: ...  # type: ignore[name-defined]  # noqa: F821
 
-    _, keyword = _coerce_args(_fn, {"x": "raw"})
-    assert keyword == {"x": "raw"}
+    _, keyword = _coerce_args(_fn, {"x": "raw", "n": "2"})
+    assert keyword == {"x": "raw", "n": 2}
+    assert capsys.readouterr().err == (
+        f"toolr: warning: can't resolve the type of `x` on {_fn.__module__}.{_fn.__qualname__} "
+        "(name 'DoesNotExist' is not defined); passing the raw value. "
+        "Import it at runtime, not only under `if TYPE_CHECKING:`.\n"
+    )
+
+
+def test_coerce_args_quiet_suppresses_unresolved_warning(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def _fn(ctx, x: DoesNotExist, n: int) -> None: ...  # type: ignore[name-defined]  # noqa: F821
+
+    _, keyword = _coerce_args(_fn, {"x": "raw", "n": "2"}, quiet=True)
+    assert keyword == {"x": "raw", "n": 2}
+    assert capsys.readouterr().err == ""
+
+
+def test_coerce_args_does_not_warn_about_an_unresolved_ctx(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def _fn(ctx: DoesNotExist, n: int) -> None: ...  # type: ignore[name-defined]  # noqa: F821
+
+    _, keyword = _coerce_args(_fn, {"n": "2"})
+    assert keyword == {"n": 2}
+    assert capsys.readouterr().err == ""
+
+
+def test_optional_positional_with_type_checking_import_gets_none(
+    make_tools_module: Callable[..., ModuleType],
+) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from pathlib import Path
+
+        def f(ctx, p: Path | None): ...
+        """
+    )
+    _, keyword = _coerce_args(mod.f, {})
+    assert keyword == {"p": None}
 
 
 def test_coerce_args_fills_none_for_absent_optional_positional() -> None:

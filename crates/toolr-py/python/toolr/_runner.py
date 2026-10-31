@@ -22,7 +22,6 @@ import inspect
 import ipaddress
 import os
 import pathlib
-import re
 import stat
 import sys
 import traceback
@@ -38,16 +37,20 @@ from typing import TypeVar
 from typing import Union
 from typing import get_args
 from typing import get_origin
-from typing import get_type_hints
 
 import msgspec
 from packaging.version import Version
 
 from toolr._context import Context
 from toolr._context import _current_ctx
+from toolr._exc import SpecError
 from toolr._exc import ToolrDeprecationWarning
 from toolr.sources import CommandSchema
 from toolr.sources import DispatchCommand
+from toolr.utils._annotations import qualified_name
+from toolr.utils._annotations import resolve_hints
+from toolr.utils._annotations import signature
+from toolr.utils._annotations import unknown_arg_keyword_error
 from toolr.utils._console import Consoles
 from toolr.utils._console import ConsoleVerbosity
 from toolr.utils._signature import detect_dispatch_parameter
@@ -112,10 +115,6 @@ an older runner lacking :func:`_append_repo_root` — a silent
 _SPEC_ENV_VAR = "TOOLR_SPEC_FILE"
 
 
-class SpecError(Exception):
-    """Raised when the spec file is missing, malformed, or unsupported."""
-
-
 class ContextSpec(msgspec.Struct, frozen=True):
     """Subset of the ``Context`` reconstructable from the Rust front-end."""
 
@@ -166,10 +165,10 @@ class RunnerSpec(msgspec.Struct, frozen=True):
     args: dict[str, Any]
     context: ContextSpec
     #: Enum class name -> the dotted module that actually declares it.
-    #: Lets `_coerce_args` import the real class itself and inject it
-    #: into `get_type_hints`'s `localns`, independent of whether the
-    #: target module's own import of that class (possibly guarded by
-    #: `if TYPE_CHECKING:`) ever executed. Mirrors
+    #: Lets `_coerce_args` import the real class itself and seed it into
+    #: the `localns` that `resolve_hints` evaluates against, before its own
+    #: `TYPE_CHECKING` rescue runs. It still matters when that rescue can't
+    #: see the import, such as a name re-exported from another module. Mirrors
     #: `ExecutionSpec::enum_modules` in `crates/toolr-core/src/execute/spec.rs`.
     enum_modules: dict[str, str] = {}
     dispatch: DispatchPayloadSpec | None = None
@@ -329,26 +328,6 @@ def _build_context(spec: RunnerSpec) -> Context:
     )
 
 
-_UNKNOWN_ARG_KEYWORD = re.compile(r"arg\(\) got an unexpected keyword argument '(?P<keyword>\w+)'")
-
-
-def _unknown_arg_keyword_error(exc: TypeError, where: str) -> SpecError | None:
-    """A clear error for stale code passing a keyword `arg()` no longer takes.
-
-    The static build rejects such code, but a cached manifest or a plugin
-    fragment built by an older toolr still reaches the runner.
-    """
-    match = _UNKNOWN_ARG_KEYWORD.match(str(exc))
-    if match is None:
-        return None
-    msg = (
-        f"{where}: `arg()` has no `{match['keyword']}` keyword. "
-        "Run `toolr project manifest rebuild` to see the replacement; "
-        "if the module ships in a plugin, rebuild the plugin against this toolr release."
-    )
-    return SpecError(msg)
-
-
 def _import_target(spec: RunnerSpec) -> Any:
     """Import ``spec.module`` and return the attribute named ``spec.function``."""
     try:
@@ -360,7 +339,7 @@ def _import_target(spec: RunnerSpec) -> Any:
         msg = f"failed to import {spec.module}: {exc}"
         raise SpecError(msg) from exc
     except TypeError as exc:
-        error = _unknown_arg_keyword_error(exc, f"failed to import {spec.module}")
+        error = unknown_arg_keyword_error(exc, f"failed to import {spec.module}")
         if error is None:
             raise
         raise error from exc
@@ -422,21 +401,19 @@ def _dec_hook(target_type: type, obj: Any) -> Any:  # noqa: PLR0911
 def _localns_for_enum_modules(enum_modules: dict[str, str]) -> dict[str, Any]:
     """Import each enum class named in ``enum_modules`` for ``localns``.
 
-    This is what makes a `TYPE_CHECKING`-only enum import actually work:
-    `get_type_hints` resolves annotation strings against the target
-    function's own module globals by default, which never contain a
-    class that module only imports under `if TYPE_CHECKING:` (that
-    branch never runs for real). Importing the real module here --
-    lazily, at coercion time, long after every module has finished its
-    own import phase -- sidesteps that entirely without forcing the
-    guarded block to execute at the target module's own import time
-    (which could import something else not meant to run, and could
-    reintroduce the circular-import problem `TYPE_CHECKING` exists to
-    avoid).
+    These seed the ``localns`` that
+    :func:`toolr.utils._annotations.resolve_hints` evaluates against,
+    ahead of its own `TYPE_CHECKING` rescue. They still matter when the
+    rescue can't follow the target module's import, such as a class
+    re-exported from another module. The import happens lazily, at
+    coercion time, long after every module has finished its own import
+    phase, so it can't reintroduce the circular import `TYPE_CHECKING`
+    exists to avoid.
 
-    A class that fails to import is silently skipped -- `get_type_hints`
-    then raises its own `NameError` for that name, same as if this
-    function didn't exist. This is a best-effort assist, not a new
+    A class that fails to import is skipped. Its annotation then goes
+    through :func:`toolr.utils._annotations.resolve_hints`'s own
+    `TYPE_CHECKING` rescue, and stays unresolved (raw value plus a
+    warning) if that fails too. This is a best-effort assist, not a new
     failure mode.
     """
     localns: dict[str, Any] = {}
@@ -451,32 +428,12 @@ def _localns_for_enum_modules(enum_modules: dict[str, str]) -> dict[str, Any]:
     return localns
 
 
-def _hints_and_signature(
-    target: Callable[..., Any],
-    localns: dict[str, Any] | None,
-) -> tuple[dict[str, Any], inspect.Signature]:
-    """Resolve ``target``'s type hints (best-effort) and its signature.
-
-    Postponed or lazy (3.14+) annotations only evaluate here, so a stale
-    `arg()` keyword surfaces here rather than at import.
-    """
-    where = f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}"
-    try:
-        hints = get_type_hints(target, localns=localns, include_extras=False)
-    except TypeError as exc:
-        error = _unknown_arg_keyword_error(exc, where)
-        if error is not None:
-            raise error from exc
-        hints = {}
-    except Exception:  # noqa: BLE001 — best-effort; fall back to raw values.
-        hints = {}
-    return hints, inspect.signature(target)
-
-
 def _coerce_args(
     target: Callable[..., Any],
     raw: dict[str, Any],
     enum_modules: dict[str, str] | None = None,
+    *,
+    quiet: bool = False,
 ) -> tuple[list[Any], dict[str, Any]]:
     """Coerce `raw` against `target`'s actual type hints.
 
@@ -492,13 +449,30 @@ def _coerce_args(
     untouched so the function can raise a clear ``TypeError`` itself.
 
     ``enum_modules`` (class name → declaring module, from
-    :class:`RunnerSpec`) is passed as ``get_type_hints``'s ``localns`` so
-    that succeeds even when an Enum-typed annotation is only bound in the
-    target module under ``if TYPE_CHECKING:`` — see
-    :func:`_localns_for_enum_modules`.
+    :class:`RunnerSpec`) seeds the ``localns`` the annotations are
+    evaluated against — see :func:`_localns_for_enum_modules`. A parameter
+    whose annotation still can't be resolved gets its raw value, and a
+    warning on stderr unless ``quiet``.
     """
     localns = _localns_for_enum_modules(enum_modules) if enum_modules else None
-    hints, sig = _hints_and_signature(target, localns)
+    resolved, sig = resolve_hints(target, localns), signature(target)
+    hints = resolved.hints
+    if not quiet:
+        where = qualified_name(target)
+        for name, exc in resolved.unresolved.items():
+            # The runner passes `ctx` itself and never converts it.
+            if name == "ctx":
+                continue
+            advice = (
+                " Import it at runtime, not only under `if TYPE_CHECKING:`."
+                if isinstance(exc, (NameError, AttributeError))
+                else ""
+            )
+            print(  # noqa: T201
+                f"toolr: warning: can't resolve the type of `{name}` on {where} ({exc}); "
+                f"passing the raw value.{advice}",
+                file=sys.stderr,
+            )
     var_positional_name = next(
         (name for name, p in sig.parameters.items() if p.kind == p.VAR_POSITIONAL),
         None,
@@ -664,13 +638,14 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         # lives on the Rust side, which knows the cwd, arg types, and values.
         _append_repo_root(str(repo_root))
         target = _import_target(spec)
+        quiet = ctx.verbosity is ConsoleVerbosity.QUIET
         if spec.dispatch is not None:
             # Dispatched leaf: `target` is the parent dispatcher, `args`
             # carries the parent's own kwargs, `dispatch` carries the
             # child name/args/schema. Coerce the parent kwargs against
             # the parent's hints — `invoke_dispatcher` injects the
             # `DispatchCommand` keyword on top of those.
-            _, parent_kwargs = _coerce_args(target, spec.args, spec.enum_modules)
+            _, parent_kwargs = _coerce_args(target, spec.args, spec.enum_modules, quiet=quiet)
             invoke_dispatcher(
                 ctx=ctx,
                 func=target,
@@ -680,7 +655,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
                 child_schema=spec.dispatch.schema,
             )
         else:
-            var_args, kw_args = _coerce_args(target, spec.args, spec.enum_modules)
+            var_args, kw_args = _coerce_args(target, spec.args, spec.enum_modules, quiet=quiet)
             target(ctx, *var_args, **kw_args)
     except SystemExit as exc:
         code = exc.code

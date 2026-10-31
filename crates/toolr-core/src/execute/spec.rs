@@ -101,12 +101,11 @@ pub struct ExecutionSpec {
     pub context: ContextSpec,
     /// Enum class name → the dotted module that actually declares it,
     /// for every `Enum`-typed argument on this command (peeling one
-    /// `Optional` wrapper). The runner's `get_type_hints` call is
-    /// against the *target function's own* module globals, which don't
-    /// contain a class that module only imports under `if
-    /// TYPE_CHECKING:` — this lets the runner import the real class
-    /// itself and inject it as `localns`, independent of whether the
-    /// target module's own guarded import ever executed. Empty when no
+    /// `Optional` wrapper). The runner seeds these classes into the
+    /// `localns` its per-parameter `resolve_hints` evaluates against,
+    /// before its own `if TYPE_CHECKING:` rescue runs, so an Enum
+    /// resolves even when the rescue can't follow the target module's
+    /// guarded import. Empty when no
     /// argument on this command is Enum-typed. Adding this field is a
     /// non-breaking, optional addition — no `RUNNER_SCHEMA_VERSION`
     /// bump needed (see that constant's doc comment).

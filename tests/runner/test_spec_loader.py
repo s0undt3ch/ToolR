@@ -8,8 +8,8 @@ from typing import Final
 
 import pytest
 
+from toolr._exc import SpecError
 from toolr._runner import SCHEMA_VERSION
-from toolr._runner import SpecError
 from toolr._runner import load_spec
 from toolr._runner import load_spec_from_env
 

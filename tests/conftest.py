@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import importlib
 import importlib.metadata
 import json
 import os
@@ -11,6 +12,7 @@ import textwrap
 from collections.abc import Callable
 from collections.abc import Iterator
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from packaging.version import Version
@@ -170,3 +172,39 @@ def make_tools_project(tmp_path: Path, toolr_bin: Path) -> Callable[..., ToolsPr
         return ToolsProject(root=root, toolr_bin=toolr_bin, env=env)
 
     return _make
+
+
+@pytest.fixture
+def make_tools_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Callable[..., ModuleType]]:
+    """Factory: write a module (optionally inside a package) under `tmp_path` and import it.
+
+    Extra package files go in `files` as `{relative path: source}`. Every
+    module imported from `tmp_path` leaves `sys.modules` on teardown.
+    """
+    root = tmp_path / "modules"
+    root.mkdir()
+    monkeypatch.syspath_prepend(str(root))
+
+    def _make(
+        source: str,
+        name: str = "tc_mod",
+        package: str | None = None,
+        files: dict[str, str] | None = None,
+    ) -> ModuleType:
+        base = root
+        if package is not None:
+            base = root / package
+            base.mkdir(exist_ok=True)
+            (base / "__init__.py").write_text("")
+        for rel, body in (files or {}).items():
+            (base / rel).write_text(textwrap.dedent(body))
+        (base / f"{name}.py").write_text(textwrap.dedent(source))
+        importlib.invalidate_caches()
+        return importlib.import_module(name if package is None else f"{package}.{name}")
+
+    yield _make
+    for mod_name, mod in list(sys.modules.items()):
+        if str(getattr(mod, "__file__", None) or "").startswith(str(root)):
+            del sys.modules[mod_name]

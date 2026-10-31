@@ -24,6 +24,10 @@ class SignatureError(SignatureParameterError):
         super().__init__(message)
 
 
+class SpecError(Exception):
+    """Raised when the runner spec, or the command it names, can't be used."""
+
+
 class NoCurrentContextError(ToolrError):
     """Raised by `current_context()` when no `Context` is set for the running task/thread."""
 
