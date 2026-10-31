@@ -1,6 +1,6 @@
 # The tools venv goes stale when its project config changes
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-04 (high).
 - **Plan:** [`2026-10-30-venv-freshness-inputs-plan.md`](./2026-10-30-venv-freshness-inputs-plan.md)
 

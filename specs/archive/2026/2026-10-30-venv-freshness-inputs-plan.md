@@ -11,7 +11,7 @@ optional `.python-version`. Every caller inherits the fix. Messages and docs nam
 
 **Tech Stack:** Rust (toolr-core, toolr), `assert_cmd`, the `VenvFixture` uv stub in `crates/toolr/tests/common/`.
 
-**Spec:** [`specs/2026-10-30-venv-freshness-inputs-design.md`](./2026-10-30-venv-freshness-inputs-design.md)
+**Spec:** [`specs/archive/2026/2026-10-30-venv-freshness-inputs-design.md`](./2026-10-30-venv-freshness-inputs-design.md)
 
 ## Global Constraints
 
