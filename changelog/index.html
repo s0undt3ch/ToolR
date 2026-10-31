@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev137-2026-10-31" class="md-nav__link">
+  <a href="#0352-dev147-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev137 - 2026-10-31
+        0.35.2-dev147 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev137 - 2026-10-31">
+    <nav class="md-nav" aria-label="0.35.2-dev147 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev137-2026-10-31" class="md-nav__link">
+  <a href="#0352-dev147-2026-10-31" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev137 - 2026-10-31
+        0.35.2-dev147 - 2026-10-31
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev137 - 2026-10-31">
+    <nav class="md-nav" aria-label="0.35.2-dev147 - 2026-10-31">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev137-2026-10-31">0.35.2-dev137 - 2026-10-31<a class="headerlink" href="#0352-dev137-2026-10-31" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev147-2026-10-31">0.35.2-dev147 - 2026-10-31<a class="headerlink" href="#0352-dev147-2026-10-31" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7604,6 +7604,10 @@ as out of date, the same way a changed <code>tools/uv.lock</code> does. The next
 venv sync</code>, re-syncs it. Before, a dependency added to <code>pyproject.toml</code> without re-locking was never
 installed: <code>venv sync</code> printed "synced" without running uv. <code>--force</code> is now only needed after
 changing <code>UV_*</code> environment variables or a user-level <code>uv.toml</code>.</p>
+<p>Plugins installed in a tools venv whose path contains <code>[</code>, <code>]</code>, <code>*</code> or <code>?</code> (for example a repo
+checked out under <code>~/src/[wip]/</code>) are found again. toolr used to treat those characters as glob
+syntax, so it dropped the plugin's commands without a warning. The same fix applies to argparse
+<code>scan_paths</code> under such a project root and to <code>toolr self build-manifest &lt;package&gt;</code>.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7650,6 +7654,9 @@ changing <code>UV_*</code> environment variables or a user-level <code>uv.toml</
 <li><em>(parser)</em> Reject bidi and zero-width characters in names (<a href="https://github.com/s0undt3ch/ToolR/commit/73dbd3cd5892ab910ffb5d8286b0facf8d5a0c5a"><code>73dbd3c</code></a>)</li>
 <li><em>(venv)</em> Treat pyproject.toml and .python-version edits as a stale venv (<a href="https://github.com/s0undt3ch/ToolR/commit/a791d7097e6fe623af88db3508e8003f238a0ff5"><code>a791d70</code></a>)</li>
 <li><em>(venv)</em> Treat tools/uv.toml edits as a stale venv too (<a href="https://github.com/s0undt3ch/ToolR/commit/8dbc5d2c85c2b5343cbd166a521e9a43cff79b15"><code>8dbc5d2</code></a>)</li>
+<li><em>(plugins)</em> Escape venv and project paths before globbing (<a href="https://github.com/s0undt3ch/ToolR/commit/301d8b095e6f176b940e4a4aab432f2b53609188"><code>301d8b0</code></a>)</li>
+<li><em>(plugins)</em> Keep the Windows path prefix verbatim when escaping (<a href="https://github.com/s0undt3ch/ToolR/commit/17400fd89798077fcf4683a5b828db2ea564f0c5"><code>17400fd</code></a>)</li>
+<li><em>(plugins)</em> Match the escaped venv path case-sensitively (<a href="https://github.com/s0undt3ch/ToolR/commit/61f8adaef9abd95472b122e4815754e67f42317d"><code>61f8ada</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7667,6 +7674,7 @@ changing <code>UV_*</code> environment variables or a user-level <code>uv.toml</
 <li><em>(hash)</em> Drop hash_file, unused since the provenance gate went (<a href="https://github.com/s0undt3ch/ToolR/commit/2be595fd9247ad02e09c2e60a8b733f206df5573"><code>2be595f</code></a>)</li>
 <li><em>(security)</em> Tidy trust helpers and comments (<a href="https://github.com/s0undt3ch/ToolR/commit/c16aaaa31af44f7361ed02c873ad9e6cb75a12f5"><code>c16aaaa</code></a>)</li>
 <li><em>(venv)</em> Share the freshness inputs message and fixture edit helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/a9ffd24721aafd608382636b90a7aa70e1f1641c"><code>a9ffd24</code></a>)</li>
+<li><em>(plugins)</em> Flatten venv layouts and qualify glob_path::escape_path (<a href="https://github.com/s0undt3ch/ToolR/commit/7df3b9ec035ed1594af91b85a26df47e4b05a0b2"><code>7df3b9e</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7698,6 +7706,10 @@ changing <code>UV_*</code> environment variables or a user-level <code>uv.toml</
 <li><em>(venv)</em> Describe which tools/ files make the venv stale (<a href="https://github.com/s0undt3ch/ToolR/commit/113c0da0338d1f6ccf8df834a5252e34b965885a"><code>113c0da</code></a>)</li>
 <li><em>(specs)</em> Archive venv freshness inputs design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/084cf42789a4bfc5fb2fbc4ddef51f61cfbbe489"><code>084cf42</code></a>)</li>
 <li><em>(venv)</em> Say a python-version change needs a sync on cache venvs (<a href="https://github.com/s0undt3ch/ToolR/commit/170fcf66b4da2dde65b9b9d316cb5a8294f3ff41"><code>170fcf6</code></a>)</li>
+<li><em>(specs)</em> Design and plan for escaping paths before globbing (<a href="https://github.com/s0undt3ch/ToolR/commit/5fd2d721eb772c61d892eb54eabbc5bc253cd902"><code>5fd2d72</code></a>)</li>
+<li><em>(unreleased)</em> Note glob escaping of venv and project paths (<a href="https://github.com/s0undt3ch/ToolR/commit/633fa67fa7ae84acd1aaa3a66a93880cae7c341b"><code>633fa67</code></a>)</li>
+<li><em>(specs)</em> Archive plugin glob escape design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/267a4ed769d338285e8a289784f1b24b3c3969f3"><code>267a4ed</code></a>)</li>
+<li><em>(specs)</em> Point the archived glob escape plan at the shipped approach (<a href="https://github.com/s0undt3ch/ToolR/commit/1b1d73ff7968a63198c70d86e61888bec1c5705e"><code>1b1d73f</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7726,6 +7738,7 @@ changing <code>UV_*</code> environment variables or a user-level <code>uv.toml</
 <li>Turn the trust check off per test, not for every cargo process (<a href="https://github.com/s0undt3ch/ToolR/commit/ad135359e067582454f8e3cb91258fdc07a3f28c"><code>ad13535</code></a>)</li>
 <li><em>(parser)</em> Render every invalid-name item kind through real builds (<a href="https://github.com/s0undt3ch/ToolR/commit/e29e130a189503862d143d4244919a089786cafd"><code>e29e130</code></a>)</li>
 <li><em>(cli)</em> Cover control characters in metavar and help-section title (<a href="https://github.com/s0undt3ch/ToolR/commit/ccb5b22da088e85cfec2716144e3cc18f024e8df"><code>ccb5b22</code></a>)</li>
+<li><em>(plugins)</em> Cover the glob escape error and dot-component paths (<a href="https://github.com/s0undt3ch/ToolR/commit/66ecfb78edb89ab58855047e18ee316aeaef4e88"><code>66ecfb7</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
