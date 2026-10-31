@@ -1139,6 +1139,18 @@ def add_arguments(self, parser):
         assert_eq!(names, ["migrate", "runserver"].into());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_root_is_a_parse_error() {
+        use std::os::unix::ffi::OsStrExt;
+        let root = Path::new(std::ffi::OsStr::from_bytes(b"/src/\xff/project"));
+
+        let err = scan_block_paths(root, &["*.py".to_string()], false).unwrap_err();
+
+        let ScanError::Parse { message, .. } = err;
+        assert_eq!(message, "non-utf8 project root");
+    }
+
     #[test]
     fn absolute_scan_path_ignores_the_root() {
         let tmp = tempfile::tempdir().unwrap();

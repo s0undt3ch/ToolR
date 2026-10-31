@@ -124,11 +124,7 @@ mod tests {
         let venv = tmp.path().join("[wip]").join("venv");
         std::fs::create_dir_all(venv.join("lib/python3.13/site-packages/pkg")).unwrap();
         let found = find_in_venv(&venv, "pkg").unwrap();
-        assert!(
-            found.ends_with("lib/python3.13/site-packages/pkg"),
-            "got: {}",
-            found.display()
-        );
+        assert_eq!(found, venv.join("lib/python3.13/site-packages/pkg"));
     }
 
     #[test]

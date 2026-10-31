@@ -53,6 +53,13 @@ mod tests {
         assert_eq!(escaped, format!("a{MAIN_SEPARATOR}[[]b[]]"));
     }
 
+    #[test]
+    fn dot_components_stay_unescaped() {
+        let escaped = escape_path(Path::new("./[a]/../b")).unwrap();
+        let sep = MAIN_SEPARATOR;
+        assert_eq!(escaped, format!(".{sep}[[]a[]]{sep}..{sep}b"));
+    }
+
     #[cfg(windows)]
     #[test]
     fn verbatim_prefix_stays_literal() {
