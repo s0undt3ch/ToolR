@@ -67,13 +67,19 @@ def _raw_annotations(target: Callable[..., Any]) -> dict[str, Any]:
     if sys.version_info >= (3, 14):
         import annotationlib  # noqa: PLC0415
 
-        # VALUE keeps closure-bound names; STRING is the fallback because
-        # VALUE evaluates every annotation and raises on the first unbound one.
-        try:
-            return dict(annotationlib.get_annotations(target))
-        except Exception:  # noqa: BLE001
-            return dict(annotationlib.get_annotations(target, format=annotationlib.Format.STRING))
+        # FORWARDREF keeps closure-bound names and turns unbound ones into
+        # ForwardRefs, where VALUE would raise on the first of them.
+        return dict(annotationlib.get_annotations(target, format=annotationlib.Format.FORWARDREF))
     return dict(inspect.get_annotations(target))
+
+
+def signature(target: Callable[..., Any]) -> inspect.Signature:
+    """`inspect.signature` that doesn't evaluate lazy (3.14+) annotations eagerly."""
+    if sys.version_info >= (3, 14):
+        import annotationlib  # noqa: PLC0415
+
+        return inspect.signature(target, annotation_format=annotationlib.Format.FORWARDREF)
+    return inspect.signature(target)
 
 
 def _is_type_checking_test(node: ast.expr) -> bool:

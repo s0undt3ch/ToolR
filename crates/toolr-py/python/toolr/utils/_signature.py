@@ -16,6 +16,7 @@ from msgspec import Struct
 
 from toolr._exc import ToolrDeprecationWarning
 from toolr.utils._annotations import resolve_hints
+from toolr.utils._annotations import signature
 
 F = TypeVar("F", bound=Callable[..., Any])
 NargsType: TypeAlias = Literal["*", "+", "?"] | int
@@ -317,7 +318,7 @@ def detect_dispatch_parameter(func: Callable[..., Any]) -> str | None:
     # toolr.utils._signature.
     from toolr.sources import DispatchCommand  # noqa: PLC0415
 
-    sig = inspect.signature(func)
+    sig = signature(func)
     # Per-parameter, so one unresolvable annotation can't hide the
     # DispatchCommand one; unresolved parameters fall back to the raw annotation.
     resolved = resolve_hints(func).hints
