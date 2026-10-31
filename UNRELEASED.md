@@ -106,8 +106,8 @@ The same name and choice checks now also reject zero-width and bidi characters (
 U+202E), which could make one command or value display as another. Help text and descriptions keep
 them, so right-to-left text and emoji sequences still render.
 
-Editing `tools/pyproject.toml` or `tools/.python-version` now marks the tools venv as out of date,
-the same way a changed `tools/uv.lock` does. The next command, or `toolr project venv sync`,
-re-syncs it. Before, a dependency added to `pyproject.toml` without re-locking was never installed:
-`venv sync` printed "synced" without running uv. `--force` is now only needed after changing `UV_*`
-settings.
+Editing `tools/pyproject.toml`, `tools/uv.toml` or `tools/.python-version` now marks the tools venv
+as out of date, the same way a changed `tools/uv.lock` does. The next command, or `toolr project
+venv sync`, re-syncs it. Before, a dependency added to `pyproject.toml` without re-locking was never
+installed: `venv sync` printed "synced" without running uv. `--force` is now only needed after
+changing `UV_*` environment variables or a user-level `uv.toml`.

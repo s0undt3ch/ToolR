@@ -18,14 +18,14 @@ const FRESHNESS_MARKER: &str = ".toolr-sync-stamp";
 
 /// Optional files in `tools/` that uv reads to build the venv, besides the
 /// required `uv.lock`.
-const SYNC_INPUTS: [&str; 2] = ["pyproject.toml", ".python-version"];
+const SYNC_INPUTS: [&str; 3] = ["pyproject.toml", "uv.toml", ".python-version"];
 
 /// Decision returned by `check_freshness`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
     /// Venv has never been synced (marker absent or venv missing).
     Missing,
-    /// `uv.lock`, `pyproject.toml` or `.python-version` changed since the last sync.
+    /// `uv.lock` or a [`SYNC_INPUTS`] file changed since the last sync.
     Stale,
     /// Synced once, but the interpreter no longer resolves — typically its
     /// base Python was uninstalled (e.g. `mise prune`). `uv sync` rebuilds it.
@@ -308,6 +308,19 @@ mod tests {
         let resolved = synced_venv(tmp.path(), &["pyproject.toml", ".python-version"]);
         std::thread::sleep(Duration::from_millis(20));
         fs::write(tmp.path().join(".python-version"), b"3.14").unwrap();
+        assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Stale);
+    }
+
+    #[test]
+    fn uv_toml_newer_than_marker_reports_stale() {
+        let tmp = TempDir::new().unwrap();
+        let resolved = synced_venv(tmp.path(), &["pyproject.toml"]);
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(
+            tmp.path().join("uv.toml"),
+            b"exclude-newer = \"2024-01-01T00:00:00Z\"",
+        )
+        .unwrap();
         assert_eq!(check_freshness(&resolved, tmp.path()), Freshness::Stale);
     }
 
