@@ -126,13 +126,26 @@ pub const GREET: &str = "\"\"\"Greetings.\"\"\"\nfrom toolr import command_group
 /// A toolr project with one local group and an in-tree venv for plugin fragments.
 pub struct Project {
     pub tmp: TempDir,
+    pub root: PathBuf,
 }
 
 impl Project {
     /// A project with one local group and an (initially empty) in-tree venv.
     pub fn new() -> Self {
         let tmp = TempDir::new().unwrap();
-        let tools = tmp.path().join("tools");
+        let root = tmp.path().to_path_buf();
+        Self::at(tmp, root)
+    }
+
+    /// Like `new`, but rooted at `<tmp>/<subdir>`.
+    pub fn under(subdir: &str) -> Self {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join(subdir);
+        Self::at(tmp, root)
+    }
+
+    fn at(tmp: TempDir, root: PathBuf) -> Self {
+        let tools = root.join("tools");
         std::fs::create_dir_all(&tools).unwrap();
         std::fs::write(
             tools.join("pyproject.toml"),
@@ -143,11 +156,11 @@ impl Project {
         let venv = tools.join(".venv");
         std::fs::create_dir_all(&venv).unwrap();
         std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
-        Self { tmp }
+        Self { tmp, root }
     }
 
     pub fn tools(&self) -> PathBuf {
-        self.tmp.path().join("tools")
+        self.root.join("tools")
     }
 
     pub fn write_tool(&self, name: &str, body: &str) {
@@ -166,7 +179,7 @@ impl Project {
     pub fn toolr(&self, args: &[&str]) -> Command {
         let mut cmd = toolr();
         cmd.args(args)
-            .current_dir(self.tmp.path())
+            .current_dir(&self.root)
             .env("TOOLR_VENV_LOCATION", "in-tree")
             .env("TOOLR_NO_CACHE_HINT", "1");
         cmd

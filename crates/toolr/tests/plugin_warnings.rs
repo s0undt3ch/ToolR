@@ -38,6 +38,18 @@ fn project_with_skipped_plugin() -> Project {
     p
 }
 
+#[test]
+fn plugin_found_under_bracketed_repo_path() {
+    let p = Project::under("[wip]/repo");
+    p.add_plugin(
+        "good_plugin",
+        &fragment(2, "good_plugin", "good", None, "run"),
+    );
+    let help = p.stdout(&["--help"]);
+    assert!(help.contains("good"), "help:\n{help}");
+    assert!(p.manifest().contains("good_plugin.commands"));
+}
+
 const SKIP_WARNING: &str = "toolr: warning: skipping plugin demo_plugin";
 
 #[test]
@@ -119,7 +131,7 @@ fn quiet_suppresses_the_warning() {
 #[test]
 fn completion_never_warns() {
     let p = project_with_skipped_plugin();
-    let cwd = p.tmp.path().to_string_lossy().to_string();
+    let cwd = p.root.to_string_lossy().to_string();
     let stderr = p.stderr(&["__complete", &cwd, ""]);
     assert!(!stderr.contains("warning: skipping"), "stderr:\n{stderr}");
 }
@@ -358,7 +370,7 @@ fn conflicting_plugins_disable_only_that_command() {
         !String::from_utf8_lossy(&deploy_help.stdout).contains("rollout"),
         "{deploy_help:?}"
     );
-    let cwd = p.tmp.path().to_string_lossy().to_string();
+    let cwd = p.root.to_string_lossy().to_string();
     let completions = p.stdout(&["__complete", &cwd, "deploy", ""]);
     assert!(
         !completions.contains("rollout"),
