@@ -166,11 +166,16 @@ uv runs against the `tools/` project, so it honours a
 such as `UV_PYTHON`, `UV_PYTHON_PREFERENCE` and `UV_PYTHON_DOWNLOADS`
 apply as usual.
 
-Changes to `python-version`, `requires-python` or `tools/.python-version`
-apply on the next `toolr` command: editing `tools/pyproject.toml` or
-`tools/.python-version` marks the venv out of date, the same as a
-changed `tools/uv.lock`. The `UV_*` settings aren't tracked. After
-changing them, rebuild the venv with `toolr project venv sync --force`.
+Editing `tools/pyproject.toml` or `tools/.python-version` marks the
+venv out of date, the same as a changed `tools/uv.lock`, so the next
+`toolr` command re-syncs it. With the default `venv-location`, the
+Python version is part of the venv's cache path. Changing
+`python-version`, or `requires-python` when `python-version` is unset,
+therefore points toolr at a new venv that doesn't exist yet. Run
+`toolr project venv sync` to create it.
+
+The `UV_*` settings aren't tracked. After changing them, rebuild the
+venv with `toolr project venv sync --force`.
 
 Two cases don't go through uv:
 
