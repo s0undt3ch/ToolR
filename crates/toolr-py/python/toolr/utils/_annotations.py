@@ -56,6 +56,8 @@ class ResolvedHints:
 class _Binding:
     module: str
     attr: str | None
+    #: Unaliased `import a.b` / `import a.c` all bind `a`; import every one.
+    submodules: tuple[str, ...] = ()
 
 
 _TYPE_CHECKING_IMPORTS: weakref.WeakKeyDictionary[ModuleType, dict[str, _Binding]] = (
@@ -151,7 +153,13 @@ def _scan_type_checking_imports(module: ModuleType) -> dict[str, _Binding]:
                         table[alias.asname] = _Binding(alias.name, None)
                     else:
                         top = alias.name.partition(".")[0]
-                        table[top] = _Binding(alias.name, None)
+                        previous = table.get(top)
+                        submodules = (
+                            previous.submodules if previous and previous.module == top else ()
+                        )
+                        if alias.name != top:
+                            submodules = (*submodules, alias.name)
+                        table[top] = _Binding(top, None, submodules)
             elif isinstance(stmt, ast.ImportFrom):
                 name = "." * stmt.level + (stmt.module or "")
                 try:
@@ -175,15 +183,14 @@ def _type_checking_imports(module: ModuleType) -> dict[str, _Binding]:
 def _import_binding(name: str, binding: _Binding) -> Any:
     """Return the object `binding` names, or raise ImportError/AttributeError."""
     module = importlib.import_module(binding.module)
+    for submodule in binding.submodules:
+        importlib.import_module(submodule)
     if binding.attr is not None:
         try:
             return getattr(module, binding.attr)
         except AttributeError:
             # `from pkg import submodule`
             return importlib.import_module(f"{binding.module}.{binding.attr}")
-    if name == binding.module.partition(".")[0] and "." in binding.module:
-        # Unaliased `import a.b` binds the top-level package.
-        return sys.modules[name]
     return module
 
 

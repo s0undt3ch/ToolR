@@ -166,10 +166,10 @@ class RunnerSpec(msgspec.Struct, frozen=True):
     args: dict[str, Any]
     context: ContextSpec
     #: Enum class name -> the dotted module that actually declares it.
-    #: Lets `_coerce_args` import the real class itself and inject it
-    #: into `get_type_hints`'s `localns`, independent of whether the
-    #: target module's own import of that class (possibly guarded by
-    #: `if TYPE_CHECKING:`) ever executed. Mirrors
+    #: Lets `_coerce_args` import the real class itself and seed it into
+    #: the `localns` that `resolve_hints` evaluates against, before its own
+    #: `TYPE_CHECKING` rescue runs. It still matters when that rescue can't
+    #: see the import, such as a name re-exported from another module. Mirrors
     #: `ExecutionSpec::enum_modules` in `crates/toolr-core/src/execute/spec.rs`.
     enum_modules: dict[str, str] = {}
     dispatch: DispatchPayloadSpec | None = None

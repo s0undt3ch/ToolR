@@ -284,3 +284,23 @@ def test_literal_annotation_error_becomes_spec_error(
         _coerce_args(mod.f, {"count": "1"})
     with pytest.raises(SpecError, match=r"tc_mod\.f.*division by zero"):
         detect_dispatch_parameter(mod.f)
+
+
+def test_sibling_dotted_imports_are_all_rescued(make_tools_module: ModuleFactory) -> None:
+    mod = make_tools_module(
+        """
+        from __future__ import annotations
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            import tcpkg.b
+            import tcpkg.c
+
+        def f(ctx, x: tcpkg.b.B, y: tcpkg.c.C): ...
+        """,
+        name="cmd",
+        package="tcpkg",
+        files={"b.py": "class B:\n    pass\n", "c.py": "class C:\n    pass\n"},
+    )
+    resolved = resolve_hints(mod.f)
+    assert resolved.unresolved == {}
+    assert resolved.hints == {"x": sys.modules["tcpkg.b"].B, "y": sys.modules["tcpkg.c"].C}
