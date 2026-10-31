@@ -15,14 +15,27 @@ const LOCAL_CI_LINT: &str = "\"\"\"CI.\"\"\"\nfrom toolr import command_group\nc
 const LOCAL_CI_IMAGE: &str = "\"\"\"CI.\"\"\"\nfrom toolr import command_group\nci = command_group(\"ci\", \"CI\")\nimage = ci.command_group(\"image\", \"Image\")\n@image.command\ndef build(ctx):\n    \"\"\"Local build.\"\"\"\n";
 
 struct Project {
-    tmp: TempDir,
+    _tmp: TempDir,
+    root: PathBuf,
 }
 
 impl Project {
     /// A project with one local group and an (initially empty) in-tree venv.
     fn new() -> Self {
         let tmp = TempDir::new().unwrap();
-        let tools = tmp.path().join("tools");
+        let root = tmp.path().to_path_buf();
+        Self::at(tmp, root)
+    }
+
+    /// Like `new`, but rooted at `<tmp>/<subdir>`.
+    fn under(subdir: &str) -> Self {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join(subdir);
+        Self::at(tmp, root)
+    }
+
+    fn at(tmp: TempDir, root: PathBuf) -> Self {
+        let tools = root.join("tools");
         std::fs::create_dir_all(&tools).unwrap();
         std::fs::write(
             tools.join("pyproject.toml"),
@@ -33,11 +46,11 @@ impl Project {
         let venv = tools.join(".venv");
         std::fs::create_dir_all(&venv).unwrap();
         std::fs::write(venv.join("pyvenv.cfg"), "home = /usr\n").unwrap();
-        Self { tmp }
+        Self { _tmp: tmp, root }
     }
 
     fn tools(&self) -> PathBuf {
-        self.tmp.path().join("tools")
+        self.root.join("tools")
     }
 
     fn write_tool(&self, name: &str, body: &str) {
@@ -56,7 +69,7 @@ impl Project {
     fn toolr(&self, args: &[&str]) -> Command {
         let mut cmd = common::toolr();
         cmd.args(args)
-            .current_dir(self.tmp.path())
+            .current_dir(&self.root)
             .env("TOOLR_VENV_LOCATION", "in-tree")
             .env("TOOLR_NO_CACHE_HINT", "1");
         cmd
@@ -112,6 +125,18 @@ fn project_with_skipped_plugin() -> Project {
     p
 }
 
+#[test]
+fn plugin_found_under_bracketed_repo_path() {
+    let p = Project::under("[wip]/repo");
+    p.add_plugin(
+        "good_plugin",
+        &fragment(2, "good_plugin", "good", None, "run"),
+    );
+    let help = p.stdout(&["--help"]);
+    assert!(help.contains("good"), "help:\n{help}");
+    assert!(p.manifest().contains("good_plugin.commands"));
+}
+
 const SKIP_WARNING: &str = "toolr: warning: skipping plugin demo_plugin";
 
 #[test]
@@ -155,7 +180,7 @@ fn quiet_suppresses_the_warning() {
 #[test]
 fn completion_never_warns() {
     let p = project_with_skipped_plugin();
-    let cwd = p.tmp.path().to_string_lossy().to_string();
+    let cwd = p.root.to_string_lossy().to_string();
     let stderr = p.stderr(&["__complete", &cwd, ""]);
     assert!(!stderr.contains("warning: skipping"), "stderr:\n{stderr}");
 }
@@ -394,7 +419,7 @@ fn conflicting_plugins_disable_only_that_command() {
         !String::from_utf8_lossy(&deploy_help.stdout).contains("rollout"),
         "{deploy_help:?}"
     );
-    let cwd = p.tmp.path().to_string_lossy().to_string();
+    let cwd = p.root.to_string_lossy().to_string();
     let completions = p.stdout(&["__complete", &cwd, "deploy", ""]);
     assert!(
         !completions.contains("rollout"),

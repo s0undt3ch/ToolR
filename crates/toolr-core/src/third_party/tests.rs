@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::glob::glob_manifests;
 use super::model::*;
@@ -13,18 +13,82 @@ use tempfile::TempDir;
 
 fn setup_fake_venv(packages: &[(&str, &str)]) -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let site = tmp
-        .path()
-        .join("lib")
-        .join("python3.13")
-        .join("site-packages");
+    setup_fake_venv_at(tmp.path(), packages);
+    tmp
+}
+
+fn setup_fake_venv_at(root: &Path, packages: &[(&str, &str)]) {
+    let site = root.join("lib").join("python3.13").join("site-packages");
     std::fs::create_dir_all(&site).unwrap();
     for (pkg, contents) in packages {
         let pkg_dir = site.join(pkg);
         std::fs::create_dir_all(&pkg_dir).unwrap();
         std::fs::write(pkg_dir.join("toolr-manifest.json"), contents).unwrap();
     }
-    tmp
+}
+
+fn package_names(paths: &[PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|p| {
+            p.parent()
+                .and_then(|d| d.file_name())
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn glob_finds_fragments_under_bracketed_venv() {
+    let tmp = TempDir::new().unwrap();
+    // Canonical, so Windows sees the `\\?\` prefix an in-tree venv carries.
+    let venv = tmp
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("[wip]")
+        .join("venv");
+    setup_fake_venv_at(&venv, &[("a_pkg", "{}"), ("b_pkg", "{}")]);
+    let found = glob_manifests(&venv).unwrap();
+    assert_eq!(package_names(&found), ["a_pkg", "b_pkg"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn glob_ignores_sibling_matched_by_bracket_class() {
+    let tmp = TempDir::new().unwrap();
+    let venv = tmp.path().join("[ab]").join("venv");
+    setup_fake_venv_at(&venv, &[("own_pkg", "{}")]);
+    setup_fake_venv_at(&tmp.path().join("a").join("venv"), &[("sibling_pkg", "{}")]);
+    let found = glob_manifests(&venv).unwrap();
+    assert_eq!(package_names(&found), ["own_pkg"]);
+}
+
+// Needs a case-sensitive filesystem to create both siblings.
+#[cfg(target_os = "linux")]
+#[test]
+fn glob_ignores_sibling_venv_differing_only_in_case() {
+    let tmp = TempDir::new().unwrap();
+    let venv = tmp.path().join("[WIP]").join("venv");
+    setup_fake_venv_at(&venv, &[("own_pkg", "{}")]);
+    setup_fake_venv_at(
+        &tmp.path().join("[wip]").join("venv"),
+        &[("sibling_pkg", "{}")],
+    );
+    let found = glob_manifests(&venv).unwrap();
+    assert_eq!(package_names(&found), ["own_pkg"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn glob_finds_fragments_under_star_and_question_venv() {
+    let tmp = TempDir::new().unwrap();
+    let venv = tmp.path().join("x*y?").join("venv");
+    setup_fake_venv_at(&venv, &[("a_pkg", "{}")]);
+    let found = glob_manifests(&venv).unwrap();
+    assert_eq!(package_names(&found), ["a_pkg"]);
 }
 
 #[test]

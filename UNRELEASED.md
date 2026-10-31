@@ -93,3 +93,8 @@ that case. `--help`, tab completion and manifest builds never need trust. The mi
 (`toolr project venv sync --quiet`) never prompts, so in an untrusted repository it prints the
 refusal, while a directory with no `tools/pyproject.toml` still exits silently. The interpreter
 provenance check is removed; repository trust replaces it.
+
+Plugins installed in a tools venv whose path contains `[`, `]`, `*` or `?` (for example a repo
+checked out under `~/src/[wip]/`) are found again. toolr used to treat those characters as glob
+syntax, so it dropped the plugin's commands without a warning. The same fix applies to argparse
+`scan_paths` under such a project root and to `toolr self build-manifest <package>`.

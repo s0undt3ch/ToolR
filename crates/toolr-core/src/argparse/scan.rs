@@ -554,14 +554,20 @@ pub fn scan_block_paths(
     django: bool,
 ) -> Result<Vec<ScannedCommand>, ScanError> {
     let mut all_paths: Vec<std::path::PathBuf> = Vec::new();
+    // The root is a literal path; only the user's `scan_paths` entry is a glob.
+    let root_prefix = crate::glob_path::escape_path(root).ok_or_else(|| ScanError::Parse {
+        path: root.display().to_string(),
+        message: "non-utf8 project root".into(),
+    })?;
     for pattern in scan_paths {
-        let abs = root.join(pattern);
+        // An absolute entry replaces the root, as `Path::join` did.
+        let pattern_str = if Path::new(pattern).is_absolute() {
+            pattern.clone()
+        } else {
+            format!("{root_prefix}/{pattern}")
+        };
         // Bad glob pattern is a hard error so the user finds their typo.
-        let pattern_str = abs.to_str().ok_or_else(|| ScanError::Parse {
-            path: pattern.clone(),
-            message: "non-utf8 path in scan_paths".into(),
-        })?;
-        for path in glob::glob(pattern_str)
+        for path in glob::glob(&pattern_str)
             .map_err(|e| ScanError::Parse {
                 path: pattern.clone(),
                 message: e.to_string(),
@@ -1100,6 +1106,55 @@ def add_arguments(self, parser):
                 .iter()
                 .any(|s| s.warnings.iter().any(|w| w.contains("broken")))
         );
+    }
+
+    #[test]
+    fn scan_paths_glob_under_bracketed_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Canonical, so Windows sees the `\\?\` prefix `discover_project_root` hands over.
+        let root = tmp
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("[wip]")
+            .join("project");
+        let cmds = root.join("apps/x/management/commands");
+        std::fs::create_dir_all(&cmds).unwrap();
+        std::fs::write(
+            cmds.join("migrate.py"),
+            "def add_arguments(self, parser):\n    parser.add_argument('app_label')\n",
+        )
+        .unwrap();
+        std::fs::write(cmds.join("runserver.py"), "def add_arguments(self, parser):\n    parser.add_argument('--insecure', action='store_true')\n").unwrap();
+
+        let scanned = scan_block_paths(
+            &root,
+            &["apps/*/management/commands/*.py".to_string()],
+            false,
+        )
+        .unwrap();
+
+        let names: std::collections::BTreeSet<_> =
+            scanned.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["migrate", "runserver"].into());
+    }
+
+    #[test]
+    fn absolute_scan_path_ignores_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ext = tmp.path().join("ext");
+        std::fs::create_dir_all(&ext).unwrap();
+        std::fs::write(
+            ext.join("migrate.py"),
+            "def add_arguments(self, parser):\n    parser.add_argument('app_label')\n",
+        )
+        .unwrap();
+        let pattern = format!("{}/*.py", ext.display());
+
+        let scanned = scan_block_paths(&tmp.path().join("root"), &[pattern], false).unwrap();
+
+        let names: Vec<_> = scanned.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["migrate"]);
     }
 
     #[test]
