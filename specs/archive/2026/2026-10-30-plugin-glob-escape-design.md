@@ -39,12 +39,6 @@ appending the wildcard tail. The tail stays a pattern.
 - `find_in_venv`: escape `venv_dir` and `package`. A package name is a
   literal, never a pattern.
 
-Build the pattern as a string from the escaped prefix plus `/`-joined
-segments rather than `Path::join` on the escaped string. `Pattern::escape`
-wraps metacharacters as `[[]`, `[]]`, `[*]`, `[?]`, which are valid path
-characters, so `Path::join` works too. Either is fine, as long as the
-escaped prefix is never re-parsed as a path for anything but globbing.
-
 Windows: escape each normal path component, not the whole string. A
 canonical Windows path starts with `\\?\C:`, and escaping its `?` turns
 the prefix into a UNC share that doesn't exist. The first implementation

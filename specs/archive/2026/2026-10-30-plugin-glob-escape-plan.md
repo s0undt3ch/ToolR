@@ -6,10 +6,13 @@
 **Goal:** A `[`, `]`, `*` or `?` in a venv or project path no longer hides plugins, argparse commands or
 `build-manifest` packages (F-07).
 
-**Architecture:** Each of the three glob call sites escapes its literal path prefix with `glob::Pattern::escape` and
+**Architecture:** Each of the three glob call sites escapes its literal path prefix and
 appends the wildcard tail unescaped.
 
 **Tech Stack:** Rust, `glob` 0.3, `assert_cmd`.
+
+> **Superseded detail:** escaping the whole prefix with `glob::Pattern::escape` broke Windows `\\?\` paths. The
+> shipped code escapes per component with `toolr_core::glob_path::escape_path`; see the design's Windows note.
 
 **Spec:** [`specs/archive/2026/2026-10-30-plugin-glob-escape-design.md`](./2026-10-30-plugin-glob-escape-design.md)
 
