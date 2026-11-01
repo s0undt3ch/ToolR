@@ -255,7 +255,8 @@ Limits:
   built with `toolr.testing.make_context`, checks nothing.
 - A string default, such as `config: FilePath = "pyproject.toml"`, is checked by the binary. The
   type checker rejects it, so it needs `# type: ignore[assignment]`. A relative string default
-  resolves against the working directory, not the repo root.
+  resolves from the repo root, like the command itself; a value typed on the command line resolves
+  from the current directory.
 - A `Path(...)` default isn't checked. It type-checks only if the parameter is a bare `Path`.
 - Commands shipped in a plugin don't run these checks yet
   (#520). The value still arrives as a `pathlib.Path`.

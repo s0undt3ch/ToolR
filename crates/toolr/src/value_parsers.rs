@@ -7,7 +7,7 @@
 //! everything else, with values pre-validated by these parsers).
 
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use clap::Arg;
@@ -17,6 +17,7 @@ use email_address::EmailAddress;
 use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
+use toolr_core::manifest::{Argument, ArgumentKind};
 use toolr_core::parser::SupportedType;
 
 /// Choices clap lists in `[possible values: ...]`. Values with control or
@@ -154,36 +155,68 @@ fn path_hint(check: PathCheck) -> ValueHint {
     }
 }
 
-/// Error messages name the path as the user typed it.
+/// Error messages name the path as the user typed it. Relative values
+/// resolve against the process cwd.
 fn path_parser(form: PathForm, check: PathCheck) -> ValueParser {
     ValueParser::new(move |s: &str| -> Result<PathBuf, String> {
-        let typed = std::path::Path::new(s);
-        let path = match form {
-            PathForm::AsTyped => typed.to_path_buf(),
-            PathForm::Absolute => absolutise(typed)?,
-            PathForm::Canonical => {
-                if !typed
-                    .try_exists()
-                    .map_err(|e| format!("invalid path `{s}`: {e}"))?
-                {
-                    return Err(format!("path does not exist: {s}"));
-                }
-                // `dunce` drops Windows' `\\?\` verbatim prefix when the plain
-                // form is valid; elsewhere it is `std::fs::canonicalize`.
-                dunce::canonicalize(typed).map_err(|e| format!("invalid path `{s}`: {e}"))?
-            }
-        };
-        check_path(&path, check, s)?;
-        Ok(path)
+        let cwd = std::env::current_dir().map_err(|e| format!("could not resolve cwd: {e}"))?;
+        resolve_with(form, check, Path::new(s), &cwd)
     })
 }
 
-fn absolutise(path: &std::path::Path) -> Result<PathBuf, String> {
-    if path.is_absolute() {
-        return Ok(path.to_path_buf());
-    }
-    let cwd = std::env::current_dir().map_err(|e| format!("could not resolve cwd: {e}"))?;
-    Ok(cwd.join(path))
+/// Resolve and check a path value of type `ty` (path-typed, possibly
+/// `Optional`-wrapped) against `base` rather than the process cwd. Errors
+/// name `raw` as given, in the same wording as the clap value parser.
+pub fn resolve_path(ty: &SupportedType, raw: &Path, base: &Path) -> Result<PathBuf, String> {
+    let (form, check) = path_rule(unwrap_optional(ty)).expect("resolve_path takes a path type");
+    resolve_with(form, check, raw, base)
+}
+
+/// True when `arg` gets a relative literal clap default on a path type
+/// that resolves on disk, so the default must be resolved from the repo
+/// root after parsing instead of by clap against the cwd. Bare `Path`
+/// is left alone: Python resolves it after the runner's chdir.
+pub fn defers_path_resolution(arg: &Argument) -> bool {
+    let resolves = arg
+        .resolved_type
+        .as_ref()
+        .and_then(|ty| path_rule(unwrap_optional(ty)))
+        .is_some_and(|(form, _)| form != PathForm::AsTyped);
+    resolves
+        && arg.kind == ArgumentKind::Optional
+        && arg.default.as_deref().is_some_and(|def| {
+            !def.is_empty()
+                && def != "<expr>"
+                && !toolr_core::text::has_unsafe_name_chars(def)
+                && !Path::new(def).is_absolute()
+        })
+}
+
+fn resolve_with(
+    form: PathForm,
+    check: PathCheck,
+    raw: &Path,
+    base: &Path,
+) -> Result<PathBuf, String> {
+    let s = raw.to_string_lossy();
+    let path = match form {
+        PathForm::AsTyped => raw.to_path_buf(),
+        PathForm::Absolute => base.join(raw),
+        PathForm::Canonical => {
+            let joined = base.join(raw);
+            if !joined
+                .try_exists()
+                .map_err(|e| format!("invalid path `{s}`: {e}"))?
+            {
+                return Err(format!("path does not exist: {s}"));
+            }
+            // `dunce` drops Windows' `\\?\` verbatim prefix when the plain
+            // form is valid; elsewhere it is `std::fs::canonicalize`.
+            dunce::canonicalize(&joined).map_err(|e| format!("invalid path `{s}`: {e}"))?
+        }
+    };
+    check_path(&path, check, &s)?;
+    Ok(path)
 }
 
 fn check_path(path: &std::path::Path, check: PathCheck, typed: &str) -> Result<(), String> {
@@ -626,6 +659,93 @@ mod tests {
             err.to_string().contains("path does not exist"),
             "got: {err}"
         );
+    }
+
+    #[test]
+    fn resolve_path_uses_the_given_base() {
+        let base = TempDir::new().unwrap();
+        fs::create_dir(base.path().join("tools")).unwrap();
+        fs::write(base.path().join("tools").join("a.toml"), "x").unwrap();
+        let got = resolve_path(
+            &SupportedType::FilePath,
+            Path::new("tools/a.toml"),
+            base.path(),
+        );
+        assert_eq!(
+            got,
+            Ok(dunce::canonicalize(base.path().join("tools").join("a.toml")).unwrap())
+        );
+    }
+
+    #[test]
+    fn resolve_path_errors_name_the_raw_value() {
+        let base = TempDir::new().unwrap();
+        let got = resolve_path(
+            &SupportedType::Optional(Box::new(SupportedType::FilePath)),
+            Path::new("tools/missing.toml"),
+            base.path(),
+        );
+        assert_eq!(
+            got,
+            Err("path does not exist: tools/missing.toml".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_path_absolute_form_joins_base() {
+        let base = TempDir::new().unwrap();
+        let got = resolve_path(
+            &SupportedType::AbsolutePath,
+            Path::new("build/out"),
+            base.path(),
+        );
+        assert_eq!(got, Ok(base.path().join("build/out")));
+    }
+
+    fn optional_arg(ty: SupportedType, default: Option<&str>) -> Argument {
+        Argument {
+            name: "cfg".into(),
+            kind: ArgumentKind::Optional,
+            help: String::new(),
+            default: default.map(str::to_string),
+            type_annotation: None,
+            resolved_type: Some(ty),
+            allowed_values: vec![],
+            metadata: toolr_core::manifest::ArgMetadata::default(),
+            long_flag: None,
+        }
+    }
+
+    #[test]
+    fn defers_path_resolution_cases() {
+        let opt = |ty| SupportedType::Optional(Box::new(ty));
+        for (ty, default) in [
+            (SupportedType::FilePath, "tools/pyproject.toml"),
+            (opt(SupportedType::DirectoryPath), "."),
+            (SupportedType::NewPath, "out"),
+        ] {
+            let arg = optional_arg(ty.clone(), Some(default));
+            assert!(defers_path_resolution(&arg), "{ty:?} = {default:?}");
+        }
+        let absolute = std::env::temp_dir();
+        for (ty, default) in [
+            (SupportedType::Path, Some("tools/pyproject.toml")),
+            (SupportedType::FilePath, absolute.to_str()),
+            (SupportedType::FilePath, Some("")),
+            (SupportedType::FilePath, Some("<expr>")),
+            (SupportedType::FilePath, Some("bad\x1b[2J.toml")),
+            (SupportedType::Str, Some("tools/pyproject.toml")),
+            (SupportedType::FilePath, None),
+        ] {
+            let arg = optional_arg(ty.clone(), default);
+            assert!(!defers_path_resolution(&arg), "{ty:?} = {default:?}");
+        }
+        let mut positional = optional_arg(SupportedType::FilePath, Some("tools/pyproject.toml"));
+        positional.kind = ArgumentKind::Positional;
+        assert!(!defers_path_resolution(&positional));
+        let mut untyped = optional_arg(SupportedType::FilePath, Some("tools/pyproject.toml"));
+        untyped.resolved_type = None;
+        assert!(!defers_path_resolution(&untyped));
     }
 
     #[test]
