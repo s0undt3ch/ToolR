@@ -1,5 +1,6 @@
 #![allow(non_local_definitions)]
 
+// Only `command` and `docstrings` build without `full`: toolr-py links those alone.
 #[cfg(feature = "full")]
 pub mod argparse;
 #[cfg(feature = "full")]
