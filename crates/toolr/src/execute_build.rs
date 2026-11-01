@@ -14,7 +14,7 @@ use toolr_core::execute::{
 use toolr_core::manifest::{Argument, ArgumentKind, Command, Nargs};
 use toolr_core::parser::SupportedType;
 
-use crate::value_parsers::{defers_path_resolution, resolve_path};
+use crate::value_parsers::{DeferredPath, deferred_path, passes_path_as_typed};
 
 /// Build the spec to write to disk, given:
 ///
@@ -32,8 +32,9 @@ pub fn build_spec(
     output_opts: &OutputOptions,
 ) -> anyhow::Result<ExecutionSpec> {
     let repo_root = bases.repo_root;
-    // SEC-02: the runner chdirs to repo_root, so a relative path typed from a
-    // subdirectory resolves from the repo root, not the user's cwd. Warn here
+    // SEC-02: the runner chdirs to repo_root, so a relative bare `Path` typed
+    // from a subdirectory resolves from the repo root, not the user's cwd
+    // (every other path type is resolved here, against the cwd). Warn here
     // (the Rust layer knows the cwd, the arg types, and which values the user
     // actually typed) rather than after coercion in Python.
     warn_relative_paths(cmd, matches, bases);
@@ -184,7 +185,12 @@ fn arg_long_flag_spelling(arg: &Argument) -> Option<String> {
         | ArgumentKind::OptionalPositional
         | ArgumentKind::VarPositional => false,
     };
-    has_long_flag.then(|| format!("--{}", arg.name.replace('_', "-")))
+    has_long_flag.then(|| long_flag(&arg.name))
+}
+
+/// The `--kebab-case` long flag clap gives the arg named `name`.
+fn long_flag(name: &str) -> String {
+    format!("--{}", name.replace('_', "-"))
 }
 
 /// Guard against dispatcher-level flags (e.g. `--dry-run`) typed *after*
@@ -426,10 +432,10 @@ fn extract_scalar(
     bases: &PathBases,
 ) -> anyhow::Result<Option<Value>> {
     let name = arg.name.as_str();
-    if defers_path_resolution(arg) {
+    if let Some(deferred) = deferred_path(arg) {
         return matches
             .get_one::<PathBuf>(name)
-            .map(|raw| resolve_deferred(arg, matches, raw, bases))
+            .map(|raw| resolve_deferred(arg, deferred, matches, raw, bases))
             .transpose();
     }
     Ok(match scalar_element_type(arg) {
@@ -460,13 +466,12 @@ pub(crate) enum PathValueOrigin {
 }
 
 /// A deferred path value that failed its check. `dispatch` renders it as a
-/// clap error against the command that owns `arg`; `Display` is the
-/// fallback with the plain long-flag spelling.
+/// clap error against the command that owns `arg`; `Display` spells the arg
+/// as its plain long flag.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PathValueError {
     /// The clap arg id (the manifest argument name).
     pub arg: String,
-    pub flag: String,
     pub value: String,
     pub origin: PathValueOrigin,
     pub reason: String,
@@ -491,7 +496,7 @@ impl PathValueError {
 
 impl std::fmt::Display for PathValueError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message(&self.flag))
+        f.write_str(&self.message(&long_flag(&self.arg)))
     }
 }
 
@@ -501,34 +506,35 @@ impl std::error::Error for PathValueError {}
 /// the default, from the cwd when typed or read from its env var.
 fn resolve_deferred(
     arg: &Argument,
+    deferred: DeferredPath,
     matches: &ArgMatches,
     raw: &Path,
     bases: &PathBases,
 ) -> anyhow::Result<Value> {
-    let ty = arg
-        .resolved_type
-        .as_ref()
-        .expect("a deferred path arg has a resolved type");
     let origin = match matches.value_source(arg.name.as_str()) {
         Some(ValueSource::DefaultValue) => PathValueOrigin::Default {
             repo_root: bases.repo_root.to_path_buf(),
         },
-        Some(ValueSource::EnvVariable) => {
-            PathValueOrigin::Env(arg.metadata.env.clone().unwrap_or_default())
-        }
+        Some(ValueSource::EnvVariable) => PathValueOrigin::Env(
+            arg.metadata
+                .env
+                .clone()
+                .expect("clap only reads an env var for an arg that names one"),
+        ),
         _ => PathValueOrigin::Typed,
     };
     let base = match origin {
         PathValueOrigin::Default { .. } => bases.repo_root,
         _ => bases.cwd,
     };
-    let path = resolve_path(ty, raw, base).map_err(|reason| PathValueError {
-        arg: arg.name.clone(),
-        flag: arg_long_flag_spelling(arg).unwrap_or_default(),
-        value: raw.display().to_string(),
-        origin,
-        reason,
-    })?;
+    let path = deferred
+        .resolve(raw, base)
+        .map_err(|reason| PathValueError {
+            arg: arg.name.clone(),
+            value: raw.display().to_string(),
+            origin,
+            reason,
+        })?;
     Ok(Value::String(path.to_string_lossy().into_owned()))
 }
 
@@ -564,16 +570,15 @@ fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
     }
 }
 
-/// True when `arg` is a path-typed argument whose value the user typed on
+/// True when `arg` is a bare `Path` argument whose value the user typed on
 /// the command line (not a default) and that value is a relative path.
 ///
-/// Type-driven: only path types (`SupportedType::is_path`) count — never a `str` arg
-/// that merely looks path-like. Source-precise: `ValueSource::CommandLine` only, so a
-/// relative *default* never warns.
+/// Type-driven: only a path type that reaches Python as typed counts. Every
+/// other path type is resolved against the cwd here, so it never surprises,
+/// and a `str` arg that merely looks path-like never counts. Source-precise:
+/// `ValueSource::CommandLine` only, so a relative *default* never warns.
 fn arg_has_relative_cli_path(arg: &Argument, matches: &ArgMatches) -> bool {
-    let is_path = scalar_element_type(arg).is_some_and(SupportedType::is_path);
-    // A deferred arg's typed value resolves from the cwd, not the repo root.
-    if !is_path || defers_path_resolution(arg) {
+    if !scalar_element_type(arg).is_some_and(passes_path_as_typed) {
         return false;
     }
     let name = arg.name.as_str();
@@ -943,8 +948,7 @@ mod tests {
     }
 
     /// `cli` swaps a deferred arg to an unchecked `PathBuf` parser and
-    /// `extract_scalar` reads it back as one; both ask
-    /// `defers_path_resolution`. Pins that pairing for every path type,
+    /// `extract_scalar` reads it back as one; both ask `deferred_path`. Pins that pairing for every path type,
     /// bare and `Optional`, typed and defaulted, so a divergence fails here
     /// rather than as a clap type-mismatch panic at run time.
     #[test]
@@ -962,7 +966,7 @@ mod tests {
             ] {
                 let cmd = deferred_cmd(ty.clone(), "missing/out");
                 assert_eq!(
-                    defers_path_resolution(&cmd.arguments[0]),
+                    deferred_path(&cmd.arguments[0]).is_some(),
                     inner != SupportedType::Path,
                     "{ty:?}"
                 );
