@@ -253,11 +253,6 @@ jobs:
             '-->' \
             > UNRELEASED.md
 
-      - name: Show Changes Diff
-        shell: bash
-        run: |
-          git diff --color
-
       - name: Commit changes
         id: commit-release
         shell: bash
@@ -284,10 +279,10 @@ jobs:
           prek run --all-files --show-diff-on-failure
           git commit -am "chore(release): Prepare for ${RELEASE_VERSION} release"
 
-      - name: Tag the release
+      - name: Show Changes Diff
         shell: bash
         run: |
-          git tag -a "${{ env.RELEASE_VERSION }}" -m "Release ${{ env.RELEASE_VERSION }}"
+          git show --color --stat --patch HEAD
 
       - name: Create Release Patch
         shell: bash
