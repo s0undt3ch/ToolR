@@ -377,6 +377,20 @@ def test_isolated_sys_path_drops_tools_providers_and_cwd(tmp_path: Path) -> None
     assert _isolated_sys_path(search_path, saved) == [str(search_path), str(plain)]
 
 
+def test_isolated_sys_path_matches_the_tools_name_exactly(tmp_path: Path) -> None:
+    """A `Tools/` directory doesn't count as a `tools` provider, even on a
+    case-insensitive filesystem, and a missing entry is kept as is."""
+    capitalised = tmp_path / "capitalised"
+    (capitalised / "Tools").mkdir(parents=True)
+    missing = tmp_path / "missing"
+    search_path = tmp_path / "search"
+    assert _isolated_sys_path(search_path, [str(capitalised), str(missing)]) == [
+        str(search_path),
+        str(capitalised),
+        str(missing),
+    ]
+
+
 def test_isolated_sys_path_keeps_site_packages_with_tools(tmp_path: Path) -> None:
     """A site-packages directory is kept even when it holds a `tools` package."""
     site_packages = tmp_path / "lib" / "site-packages"

@@ -96,6 +96,23 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
                 _import_package_modules(module, errors, seen)
 
 
+def _provides_tools(entry: str) -> bool:
+    """Whether ``entry`` holds a ``tools/`` directory or ``tools.py``.
+
+    Matches the exact name, so ``Tools/`` doesn't count on a case-insensitive
+    filesystem (the import system wouldn't use it either).
+    """
+    try:
+        with os.scandir(entry) as it:
+            return any(
+                (child.name == "tools" and child.is_dir())
+                or (child.name == "tools.py" and child.is_file())
+                for child in it
+            )
+    except OSError:
+        return False
+
+
 def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     """Return ``saved`` with ``search_path`` first and no other ``tools`` provider.
 
@@ -112,7 +129,7 @@ def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
         if entry in ("", str(search_path)):
             continue
         is_site_packages = "site-packages" in entry or "dist-packages" in entry
-        provides_tools = Path(entry, "tools").is_dir() or Path(entry, "tools.py").is_file()
+        provides_tools = _provides_tools(entry)
         if provides_tools and not is_site_packages:
             continue
         kept.append(entry)
