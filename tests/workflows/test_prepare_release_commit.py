@@ -155,12 +155,13 @@ def test_commit_step_rejects_fixes_outside_release_files(
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
 ) -> None:
-    bin_dir = stub_prek([f"printf '\\n' >> docs/other.md; {PREK_FAILS}", PREK_OK])
+    bin_dir = stub_prek([f"printf 'Fixed by a hook\\n' >> docs/other.md; {PREK_FAILS}", PREK_OK])
 
     result = run_commit_step(release_repo, bin_dir)
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert "docs/other.md" in result.stderr
+    assert "+Fixed by a hook" in result.stderr
     assert commit_count(release_repo) == 1
     assert prek_calls(bin_dir) == 1
 
@@ -177,7 +178,7 @@ def test_commit_step_rejects_new_untracked_files(
     result = run_commit_step(release_repo, bin_dir)
 
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "skills/new.md" in result.stderr
+    assert "Untracked files prek created:\n  skills/new.md" in result.stderr
     assert commit_count(release_repo) == 1
     assert prek_calls(bin_dir) == 1
 

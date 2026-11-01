@@ -278,9 +278,23 @@ jobs:
           after=$(changed_paths)
           outside=$(LC_ALL=C comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))
           if [ -n "$outside" ]; then
+            tracked=()
+            untracked=()
             while IFS= read -r path; do
               echo "::error file=${path}::prek changed ${path}, which the release didn't touch. Fix it on main in its own PR." >&2
+              if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+                tracked+=("$path")
+              else
+                untracked+=("$path")
+              fi
             done <<< "$outside"
+            if [ "${#tracked[@]}" -gt 0 ]; then
+              git --no-pager diff -- "${tracked[@]}" >&2
+            fi
+            if [ "${#untracked[@]}" -gt 0 ]; then
+              echo "Untracked files prek created:" >&2
+              printf '  %s\n' "${untracked[@]}" >&2
+            fi
             exit 1
           fi
           # Strict pass: anything still failing is a real failure.
