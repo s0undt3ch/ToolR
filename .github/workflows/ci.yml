@@ -125,6 +125,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Load shared env vars
@@ -160,6 +161,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           prek run --all-files --show-diff-on-failure
+
+      - name: Check release notes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: toolr release-notes check --base "origin/${BASE_REF}"
 
   prepare-release:
     name: Prepare Release
