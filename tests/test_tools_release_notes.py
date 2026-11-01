@@ -11,11 +11,13 @@ from pathlib import Path
 
 import pytest
 from tools.release_notes import NOTE_NAME_RE
+from tools.release_notes import _file_problems
 from tools.release_notes import _github_env_block
 from tools.release_notes import _note_filename
 from tools.release_notes import _render
 from tools.release_notes import _slug_from_branch
 from tools.release_notes import add
+from tools.release_notes import check
 from tools.release_notes import clear
 from tools.release_notes import render
 
@@ -308,3 +310,102 @@ def test_clear_rendered_guard_no_notes(
     rendered = tmp_path / "rendered.md"
     rendered.write_text("## v1\n")
     clear(make_context(tmp_path), rendered=str(rendered))
+
+
+GOOD = "2026-11-01.14-03-27.foo.md"
+
+
+def test_valid_tree_no_problems(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path
+) -> None:
+    notes_dir({"README.md": "how", GOOD: "Text\n\n```sh\n# comment\n```\n"})
+    assert _file_problems(tmp_path) == []
+
+
+def test_missing_dir_no_problems(tmp_path: Path) -> None:
+    assert _file_problems(tmp_path) == []
+
+
+@pytest.mark.parametrize("name", ["foo.md", "2026-11-01-foo.md", "2026-11-01.14-03-27.Foo.md"])
+def test_bad_name(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, name: str) -> None:
+    notes_dir({name: "Text"})
+    (problem,) = _file_problems(tmp_path)
+    assert name in problem
+
+
+@pytest.mark.parametrize("name", ["2026-02-30.10-00-00.x.md", "2026-01-01.25-00-00.x.md"])
+def test_impossible_date(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, name: str
+) -> None:
+    notes_dir({name: "Text"})
+    (problem,) = _file_problems(tmp_path)
+    assert name in problem
+
+
+def test_subdirectory_flagged(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
+    directory = notes_dir({})
+    (directory / "sub").mkdir()
+    (problem,) = _file_problems(tmp_path)
+    assert "sub" in problem
+
+
+@pytest.mark.parametrize("content", ["", "  \n"])
+def test_empty_note(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, content: str
+) -> None:
+    notes_dir({GOOD: content})
+    (problem,) = _file_problems(tmp_path)
+    assert GOOD in problem
+    assert "empty" in problem
+
+
+def test_heading_flagged(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
+    notes_dir({GOOD: "Text\n\n## Heading"})
+    (problem,) = _file_problems(tmp_path)
+    assert GOOD in problem
+    assert "heading" in problem
+
+
+@pytest.mark.parametrize("fence", ["```", "~~~"])
+def test_heading_inside_fence_ok(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, fence: str
+) -> None:
+    notes_dir({GOOD: f"{fence}sh\n# comment\n{fence}"})
+    assert _file_problems(tmp_path) == []
+
+
+def test_unreleased_md_flagged(tmp_path: Path) -> None:
+    (tmp_path / "UNRELEASED.md").write_text("old")
+    (problem,) = _file_problems(tmp_path)
+    assert "UNRELEASED.md" in problem
+    assert "toolr release-notes add" in problem
+
+
+def test_check_command_exit(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
+    directory = notes_dir({GOOD: "Text"})
+    check(make_context(tmp_path))
+    (directory / "foo.md").write_text("x")
+    (directory / "2026-11-01.14-03-28.bar.md").write_text("")
+    ctx = make_context(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        check(ctx)
+    assert exc.value.code != 0
+    assert "foo.md" in ctx.stderr
+    assert "2026-11-01.14-03-28.bar.md" in ctx.stderr
+
+
+def test_check_accepts_base(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
+    notes_dir({GOOD: "Text"})
+    check(make_context(tmp_path), base="origin/main")
+
+
+def test_render_refuses_invalid_tree(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path
+) -> None:
+    notes_dir({GOOD: ""})
+    ctx = make_context(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        render(ctx)
+    assert exc.value.code != 0
+    assert ctx.stdout == ""
+    assert GOOD in ctx.stderr

@@ -19,6 +19,8 @@ NOTE_NAME_RE: Final[re.Pattern[str]] = re.compile(
 )
 SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BREAKING_PREFIX: Final[str] = "**Breaking:**"
+HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^#{1,6}(\s|$)")
+FENCE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(```|~~~)")
 
 group = command_group("release-notes", "Manage queued release notes", docstring=__doc__)
 
@@ -70,6 +72,62 @@ def _github_env_block(name: str, value: str) -> str:
     return f"{name}<<{delimiter}\n{value}\n{delimiter}\n"
 
 
+def _has_heading(text: str) -> bool:
+    in_fence = False
+    for line in text.splitlines():
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+        elif not in_fence and HEADING_RE.match(line):
+            return True
+    return False
+
+
+def _file_problems(repo_root: Path) -> list[str]:
+    """Return one line per structural problem in the queued notes."""
+    problems: list[str] = []
+    if (repo_root / "UNRELEASED.md").exists():
+        problems.append(
+            "UNRELEASED.md is no longer used: move its content into a note with `toolr release-notes add`"
+        )
+    for path in _note_paths(repo_root / NOTES_DIR):
+        label = f"{NOTES_DIR}/{path.name}"
+        if path.is_dir():
+            problems.append(f"{label}: subdirectories are not allowed")
+            continue
+        match = NOTE_NAME_RE.match(path.name)
+        if match is None:
+            problems.append(f"{label}: name must be <YYYY-MM-DD>.<HH-MM-SS>.<slug>.md")
+            continue
+        try:
+            datetime.strptime(f"{match['date']} {match['time']}", "%Y-%m-%d %H-%M-%S")  # noqa: DTZ007
+        except ValueError:
+            problems.append(f"{label}: timestamp is not a valid date and time")
+            continue
+        text = _read_note(path)
+        if not text:
+            problems.append(f"{label}: note is empty")
+        elif _has_heading(text):
+            problems.append(f"{label}: notes must not contain markdown headings")
+    return problems
+
+
+def _exit_on_problems(ctx: Context, problems: list[str]) -> None:
+    if problems:
+        for problem in problems:
+            ctx.error(problem)
+        ctx.exit(1)
+
+
+@group.command
+def check(ctx: Context, base: str | None = None) -> None:
+    """Validate the queued notes.
+
+    Args:
+        base: Git ref to compare against. Reserved for the pull-request gate.
+    """
+    _exit_on_problems(ctx, _file_problems(ctx.repo_root))
+
+
 @group.command
 def render(ctx: Context, github_env: str | None = None) -> None:
     """Print the queued notes, breaking ones first.
@@ -77,6 +135,7 @@ def render(ctx: Context, github_env: str | None = None) -> None:
     Args:
         github_env: Append the notes to this `$GITHUB_ENV` file as `TOOLR_RELEASE_NOTES` instead of printing.
     """
+    _exit_on_problems(ctx, _file_problems(ctx.repo_root))
     text = _render(ctx.repo_root / NOTES_DIR)
     if github_env:
         with Path(github_env).open("a", encoding="utf-8") as f:
