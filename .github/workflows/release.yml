@@ -433,13 +433,28 @@ jobs:
           if git push --atomic origin "HEAD:refs/heads/${GITHUB_REF_NAME}" "refs/tags/v${RELEASE_VERSION}"; then
             exit 0
           fi
-          # A re-run after a later step failed finds the tag the first run pushed.
-          if ! published_tag="$(git ls-remote origin "refs/tags/v${RELEASE_VERSION}")"; then
-            echo "::error::Pushing v${RELEASE_VERSION} failed and origin could not be queried to tell whether it was already published. Check origin before retrying." >&2
-          elif [[ -n "${published_tag}" ]]; then
-            echo "::error::v${RELEASE_VERSION} and its release commit are already published, from an earlier attempt of this run. Finish the remaining steps by hand, or delete the tag to retry." >&2
+          unreachable() {
+            echo "::error::Pushing v${RELEASE_VERSION} failed and origin could not be queried to tell what, if anything, was published. Check origin before retrying." >&2
+            exit 1
+          }
+          tag="refs/tags/v${RELEASE_VERSION}"
+          tag_lines="$(git ls-remote origin "${tag}" "${tag}^{}")" || unreachable
+          if [[ -n "${tag_lines}" ]]; then
+            # The peeled line names an annotated tag's commit; a lightweight tag has only the plain one.
+            tag_commit="$(awk -v ref="${tag}^{}" '$2 == ref { print $1 }' <<<"${tag_lines}")"
+            tag_commit="${tag_commit:-$(awk -v ref="${tag}" '$2 == ref { print $1 }' <<<"${tag_lines}")}"
+            if [[ "${tag_commit}" == "$(git rev-parse HEAD)" ]]; then
+              echo "::error::v${RELEASE_VERSION} and its release commit were already published by an earlier attempt of this release. Finish the remaining steps by hand." >&2
+            else
+              echo "::error::v${RELEASE_VERSION} already exists on origin but points at a different commit (${tag_commit}), not this release commit. Stop and find out where it came from." >&2
+            fi
+            exit 1
+          fi
+          branch_lines="$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}")" || unreachable
+          if [[ "${branch_lines%%[[:space:]]*}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Pushing v${RELEASE_VERSION} failed and nothing was published: ${GITHUB_REF_NAME} moved since the run was dispatched, so dispatch the release again from its new tip." >&2
           else
-            echo "::error::Pushing v${RELEASE_VERSION} failed and nothing was published. If ${GITHUB_REF_NAME} moved since the run was dispatched, dispatch the release again from its new tip; re-running this run fails the same way." >&2
+            echo "::error::Pushing v${RELEASE_VERSION} failed and nothing was published; ${GITHUB_REF_NAME} has not moved, so the cause is elsewhere (network, token, a server-side hook). Once that is fixed, re-running this job is safe." >&2
           fi
           exit 1
 
