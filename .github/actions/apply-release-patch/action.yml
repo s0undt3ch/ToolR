@@ -24,7 +24,8 @@ runs:
         RELEASE_PATCH_NAME: ${{ inputs.release-patch-name }}
       run: |
         git am --committer-date-is-author-date "$RELEASE_PATCH_NAME"
-        # The patch was built on the dispatched commit; a release tagged on any other base ships an untested tree.
+        # Safety net: actions/checkout lands on GITHUB_SHA, where the patch was built; this fails if a
+        # future checkout change (e.g. `ref: main`) would tag a tree the release never built.
         base="$(git rev-parse HEAD^)"
         if [[ "$base" != "$GITHUB_SHA" ]]; then
           echo "::error::The release patch was applied on ${base}, not on the dispatched commit ${GITHUB_SHA}" >&2

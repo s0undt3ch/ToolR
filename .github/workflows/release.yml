@@ -430,10 +430,18 @@ jobs:
             exit 1
           fi
           # Atomic, so a branch that moved since dispatch can't leave a tag on an orphaned commit.
-          if ! git push --atomic origin "HEAD:refs/heads/${GITHUB_REF_NAME}" "refs/tags/v${RELEASE_VERSION}"; then
-            echo "::error::Pushing v${RELEASE_VERSION} failed and nothing was published. If ${GITHUB_REF_NAME} moved since the run was dispatched, dispatch the release again from its new tip; re-running this run fails the same way." >&2
-            exit 1
+          if git push --atomic origin "HEAD:refs/heads/${GITHUB_REF_NAME}" "refs/tags/v${RELEASE_VERSION}"; then
+            exit 0
           fi
+          # A re-run after a later step failed finds the tag the first run pushed.
+          if ! published_tag="$(git ls-remote origin "refs/tags/v${RELEASE_VERSION}")"; then
+            echo "::error::Pushing v${RELEASE_VERSION} failed and origin could not be queried to tell whether it was already published. Check origin before retrying." >&2
+          elif [[ -n "${published_tag}" ]]; then
+            echo "::error::v${RELEASE_VERSION} and its release commit are already published, from an earlier attempt of this run. Finish the remaining steps by hand, or delete the tag to retry." >&2
+          else
+            echo "::error::Pushing v${RELEASE_VERSION} failed and nothing was published. If ${GITHUB_REF_NAME} moved since the run was dispatched, dispatch the release again from its new tip; re-running this run fails the same way." >&2
+          fi
+          exit 1
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -476,7 +484,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
           RELEASE_NOTES: ${{ needs.prepare-release.outputs.release-notes-filename }}
-        # --verify-tag relies on the "Push tag" step above having run.
+        # --verify-tag relies on the "Push the release commit and tag" step above having run.
         run: |
           gh release create "v${RELEASE_VERSION}" \
             --repo "${GITHUB_REPOSITORY}" \

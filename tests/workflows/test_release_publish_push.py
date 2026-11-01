@@ -148,3 +148,23 @@ def test_push_refuses_non_branch_ref(
     assert result.returncode != 0, result.stdout + result.stderr
     assert "refs/heads/" in result.stderr
     assert git(origin, "show-ref") == refs_before
+
+
+def test_push_rerun_reports_tag_already_published(
+    release_remote: Callable[..., tuple[Path, Path]],
+    run_push_step: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    """A re-run after a later step failed finds the tag it pushed the first time."""
+    origin, workdir = release_remote(advance_main=False)
+    first = run_push_step(workdir)
+    assert first.returncode == 0, first.stdout + first.stderr
+    published_tag = remote_sha(origin, "refs/tags/v9.9.9")
+    # The re-run tags again, so the local tag object differs from the published one.
+    git(workdir, "tag", "-f", "-m", "chore(release): Release v9.9.9 (re-run)", "-a", "v9.9.9")
+
+    result = run_push_step(workdir)
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "already published" in result.stderr
+    assert "nothing was published" not in result.stderr
+    assert remote_sha(origin, "refs/tags/v9.9.9") == published_tag
