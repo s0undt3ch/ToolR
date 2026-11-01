@@ -7,7 +7,8 @@ inputs:
     description: |
       ToolR version to install, with or without a leading `v`
       (e.g. `0.20.0` or `v0.20.0`). The special value `latest`
-      resolves to the most recent release tag.
+      resolves to the most recent `s0undt3ch/ToolR` release,
+      whichever repository runs the workflow.
 
       The default is bumped to the current release version by
       `toolr version bump` during release prep — so callers who pin
@@ -115,14 +116,11 @@ runs:
         version="${raw#v}"
 
         if [ "$version" = "latest" ]; then
-          # `gh release view --json tagName` returns `vX.Y.Z` for our
-          # release tags; strip the leading `v` for consistency.
-          version=$(gh release view --repo "${GITHUB_REPOSITORY:-s0undt3ch/ToolR}" --json tagName --jq '.tagName' 2>/dev/null | sed 's/^v//')
-          if [ -z "$version" ]; then
-            # Fallback for forks or downstream consumers: the action's
-            # canonical repo, not the calling workflow's.
-            version=$(gh release view --repo s0undt3ch/ToolR --json tagName --jq '.tagName' | sed 's/^v//')
-          fi
+          # Always ask s0undt3ch/ToolR, where the download step fetches
+          # from. The calling workflow's repository (`GITHUB_REPOSITORY`)
+          # is deliberately not consulted: its own releases are never
+          # toolr's. `gh` stderr is kept so a failed lookup is readable.
+          version=$(gh release view --repo s0undt3ch/ToolR --json tagName --jq '.tagName' | sed 's/^v//')
           if [ -z "$version" ]; then
             echo "setup-toolr: could not resolve 'latest' to a release tag" >&2
             exit 1
