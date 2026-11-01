@@ -755,6 +755,96 @@ mod test_suite {
                 Ok(())
             })
         }
+
+        /// Script that fills its stdout pipe before it reads stdin (F-08).
+        const OUTPUT_FIRST_SCRIPT: &str =
+            "import sys; sys.stdout.write('x'*200000); sys.stdout.flush(); sys.stdin.buffer.read()";
+
+        #[test]
+        fn input_larger_than_pipe_with_output_first_does_not_deadlock() -> Result<()> {
+            require_python!(
+                python,
+                "input_larger_than_pipe_with_output_first_does_not_deadlock"
+            );
+            let rt = Runtime::new()?;
+
+            rt.block_on(async {
+                let mut stdout_file = NamedTempFile::new()?;
+                let stderr_file = NamedTempFile::new()?;
+                let stdout_fd = get_file_descriptor(stdout_file.as_file());
+                let stderr_fd = get_file_descriptor(stderr_file.as_file());
+
+                let config = CommandConfig {
+                    args: vec![python, "-c".to_string(), OUTPUT_FIRST_SCRIPT.to_string()],
+                    input: Some(vec![b'y'; 200000]),
+                    stdout_fd: wrap_fd(stdout_fd),
+                    stderr_fd: wrap_fd(stderr_fd),
+                    timeout_secs: Some(30.0),
+                    ..Default::default()
+                };
+
+                let result = bounded_run_command(config, Duration::from_secs(5)).await?;
+                assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+
+                stdout_file.seek(SeekFrom::Start(0))?;
+                let mut captured = Vec::new();
+                stdout_file.read_to_end(&mut captured)?;
+                assert_eq!(captured.len(), 200000);
+
+                Ok(())
+            })
+        }
+
+        #[test]
+        fn child_closing_stdin_early_is_not_an_error() -> Result<()> {
+            require_python!(python, "child_closing_stdin_early_is_not_an_error");
+            let rt = Runtime::new()?;
+
+            rt.block_on(async {
+                let config = CommandConfig {
+                    args: vec![
+                        python,
+                        "-c".to_string(),
+                        "import sys; sys.stdin.buffer.read(1)".to_string(),
+                    ],
+                    input: Some(vec![b'y'; 200000]),
+                    ..Default::default()
+                };
+
+                let result = bounded_run_command(config, Duration::from_secs(5)).await?;
+                assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+
+                Ok(())
+            })
+        }
+
+        #[test]
+        fn timeout_fires_while_child_ignores_stdin() -> Result<()> {
+            require_python!(python, "timeout_fires_while_child_ignores_stdin");
+            let rt = Runtime::new()?;
+
+            rt.block_on(async {
+                let config = CommandConfig {
+                    args: vec![
+                        python,
+                        "-c".to_string(),
+                        "import time; time.sleep(10)".to_string(),
+                    ],
+                    input: Some(vec![b'y'; 200000]),
+                    timeout_secs: Some(0.5),
+                    ..Default::default()
+                };
+
+                let result = bounded_run_command(config, Duration::from_secs(5)).await?;
+                let err = result.expect_err("the stdin write must not outlast timeout_secs");
+                assert!(
+                    err.to_string().contains("timed out after"),
+                    "expected a timeout error, got: {err}"
+                );
+
+                Ok(())
+            })
+        }
     }
 
     // --------------------------------------------------------------------
@@ -836,6 +926,22 @@ mod test_suite {
             msg.contains("Failed to execute command"),
             "expected spawn-failure prefix, got: {msg}",
         );
+    }
+
+    #[test]
+    fn stdin_write_errors_other_than_broken_pipe_are_reported() -> Result<()> {
+        use crate::command::{join_stdin_writer, spawn_stdin_writer};
+
+        // A read-only handle rejects writes with an error that is not `BrokenPipe`.
+        let file = NamedTempFile::new()?;
+        let read_only = File::open(file.path())?;
+        let err = join_stdin_writer(spawn_stdin_writer(read_only, b"data".to_vec()))
+            .expect_err("a write to a read-only handle must fail");
+        assert!(
+            err.to_string().starts_with("Failed to write to stdin: "),
+            "unexpected message: {err}"
+        );
+        Ok(())
     }
 
     #[test]
