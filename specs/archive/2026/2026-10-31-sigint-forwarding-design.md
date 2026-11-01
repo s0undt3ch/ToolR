@@ -1,6 +1,6 @@
 # Stop forwarding SIGINT to the runner
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-29 (low, plausible; reproduced below).
 - **Plan:** [`2026-10-31-sigint-forwarding-plan.md`](./2026-10-31-sigint-forwarding-plan.md)
 
