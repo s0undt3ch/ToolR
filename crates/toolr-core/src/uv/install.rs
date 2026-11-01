@@ -5,6 +5,7 @@ use std::io::{BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use super::{UvBinary, UvError, UvSource, managed_uv_path, probe};
+use crate::path_search::find_on_path_in;
 
 /// What the discovery + consent flow tells the caller to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,7 +233,15 @@ fn detect_linux_libc_from(
 /// `musl`. glibc's ldd writes to stdout, musl's ldd writes to stderr
 /// (and exits non-zero), so we concatenate both before searching.
 fn ldd_reports_musl() -> bool {
-    let Ok(output) = std::process::Command::new("ldd").arg("--version").output() else {
+    ldd_reports_musl_in(std::env::var_os("PATH"))
+}
+
+/// Only an `ldd` in an absolute `PATH` directory runs; none means not musl.
+fn ldd_reports_musl_in(path: Option<std::ffi::OsString>) -> bool {
+    let Some(ldd) = find_on_path_in("ldd", path) else {
+        return false;
+    };
+    let Ok(output) = std::process::Command::new(ldd).arg("--version").output() else {
         return false;
     };
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -655,6 +664,35 @@ mod tests {
     fn detect_linux_libc_empty_env_override_falls_through() {
         let libc = detect_linux_libc_from(Some(""), || true, || false);
         assert_eq!(libc, LinuxLibc::Musl);
+    }
+
+    #[cfg(unix)]
+    fn stub_ldd(dir: &Path, stdout: &str, stderr: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let ldd = dir.join("ldd");
+        fs::write(
+            &ldd,
+            format!("#!/bin/sh\necho '{stdout}'\necho '{stderr}' >&2\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&ldd, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ldd_reports_musl_reads_both_streams() {
+        let musl = tempfile::tempdir().unwrap();
+        stub_ldd(musl.path(), "", "musl libc (x86_64)");
+        assert!(ldd_reports_musl_in(Some(musl.path().into())));
+        let gnu = tempfile::tempdir().unwrap();
+        stub_ldd(gnu.path(), "ldd (GNU libc) 2.39", "");
+        assert!(!ldd_reports_musl_in(Some(gnu.path().into())));
+    }
+
+    #[test]
+    fn ldd_reports_musl_is_false_without_an_absolute_ldd() {
+        assert!(!ldd_reports_musl_in(None));
+        assert!(!ldd_reports_musl_in(Some(".:bin".into())));
     }
 
     #[test]
