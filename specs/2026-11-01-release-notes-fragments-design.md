@@ -99,18 +99,29 @@ Without `--base`, check the files only. This is the pre-commit mode.
 With `--base REF`, run the file checks, then the gate. This is the CI mode.
 
 - Commits in scope: non-merge commits in `REF..HEAD` (two dots: on HEAD, not on `REF`).
-- A note is required when any in-scope commit's subject is `feat` or `fix` (any scope, with or
-  without `!`), or carries `!` on any type.
-- Exempt: commits whose scope is `deps`, unless they carry `!`. A breaking commit always needs a
+- Zero in-scope commits is an error. A PR always has at least one, so an empty range means a wrong
+  `--base` or a shallow fetch. (Adversarial-review call.)
+- A commit is breaking when its subject carries `!` on any type, or its body has a `BREAKING CHANGE:`
+  or `BREAKING-CHANGE:` footer, as Conventional Commits 1.0.0 defines and git-cliff renders.
+- A note is required when any in-scope commit's type is `feat`, `fix` or `revert`, or the commit is
+  breaking. Non-conventional subjects (`Merge …`, GitHub's `Revert "…"`) need nothing: git-cliff's
+  `filter_unconventional` drops them too.
+- Exempt: commits whose scope starts with `deps`, unless they are breaking. A breaking commit always needs a
   note. (Builder-check call.)
 - Exempt: commits carrying the existing `Changelog: skip` trailer. git-cliff hides those, so they
   aren't user-visible. (Builder-check call.)
 - Escape hatch: a `Release-Notes: skip` trailer in the body of any in-scope commit passes the gate
   for the whole PR. It mirrors the existing `Changelog: skip` trailer.
 - Satisfied when `git diff --diff-filter=AM --name-only REF...HEAD -- release-notes/` lists at least
-  one note (not `README.md`). Modifying an existing note counts, so `--append` satisfies it.
-- On failure, list the commits that triggered the gate and print both remedies: `toolr release-notes
-  add`, or the trailer.
+  one note (not `README.md`). Modifying an existing note counts, so `--append` satisfies it. A
+  `revert` commit is also satisfied by a deleted note (`--diff-filter=D`), since reverting a feature
+  should drop its note.
+- When any in-scope commit is breaking, at least one added or modified note must start with
+  `**Breaking:**`, so the Breaking-first goal holds. (Adversarial-review call.)
+- On failure, list the commits that triggered the gate and print the remedies: `toolr release-notes
+  add`, the `**Breaking:**` prefix when relevant, the note deletion for a revert, or the trailer.
+- Accepted risks: the trailer on any commit exempts the whole PR, and editing any existing note
+  satisfies the gate. Both keep the gate simple; tighten later if agents abuse them.
 
 **`toolr release-notes render [--github-env PATH]`**
 
@@ -123,9 +134,12 @@ With `--base REF`, run the file checks, then the gate. This is the CI mode.
   syntax (`NAME<<DELIM … DELIM`). Generate a random delimiter, and check that it doesn't appear in
   the content.
 
-**`toolr release-notes clear`**
+**`toolr release-notes clear [--rendered PATH]`**
 
 - Delete every note, keeping `README.md`. Deleting nothing is fine.
+- With `--rendered PATH`: if any note exists and `PATH` doesn't contain a `### Notes` line, fail and
+  delete nothing. This is the guard against a release silently losing every queued note when
+  `TOOLR_RELEASE_NOTES` never reached git-cliff. (Adversarial-review call.)
 - Only unlink the files. The release workflow's `git commit -am` stages the deletions.
 
 ### Release workflow: `.github/workflows/_prepare-release.yml`
@@ -133,19 +147,24 @@ With `--base REF`, run the file checks, then the gate. This is the CI mode.
 - Replace "Load UNRELEASED.md into TOOLR_RELEASE_NOTES env var" with `toolr release-notes render
   --github-env "$GITHUB_ENV"`.
 - Delete the "Get the Python Binary path from Mise" step if nothing else uses its output.
-- Replace the "Reset UNRELEASED.md" `printf` step with `toolr release-notes clear`. It must run after
-  both git-cliff steps, as the reset does today.
+- Replace the "Reset UNRELEASED.md" `printf` step with `toolr release-notes clear --rendered
+  .release-changes.md`. It must run after both git-cliff steps, as the reset does today.
+  `.release-changes.md` is the GH-release git-cliff output; it still exists at that point.
 - Update the comments that describe `UNRELEASED.md`.
 
 ### CI gate: `.github/workflows/ci.yml`
 
 - A new step in the existing `pre-commit` job runs `toolr release-notes check --base
-  "origin/${{ github.base_ref }}"`, guarded by `if: github.event_name == 'pull_request'`. That job
+  "origin/${BASE_REF}"`, with `BASE_REF: ${{ github.base_ref }}` passed through `env:` (the repo's
+  convention for `run:` bodies), guarded by `if: github.event_name == 'pull_request'`. That job
   already sets up the toolr binary and tools venv, and needs no `pipeline-gate` change.
 - The job's checkout needs `fetch-depth: 0`. A shallow clone makes the range empty, and the gate
   would pass silently. `check --base` also fails outright if `REF` doesn't resolve.
 - `github.base_ref` is the PR's base branch, which is the parent branch for a git-spice stack. A
   child PR is therefore only judged on its own commits.
+- After a parent PR merges, its branch is deleted (`delete_branch_on_merge`) and a manual re-run of
+  the child's old CI fails because `origin/<parent>` is gone. Restack and push instead; the new run
+  sees the retargeted base. Document this in `release-notes/README.md`.
 
 ### Pre-commit hook: `.pre-commit-config.yaml`
 
@@ -180,8 +199,9 @@ With `--base REF`, run the file checks, then the gate. This is the CI mode.
   `fix/tester-discover-errors`, #624 `fix/action-latest-repo`, #622
   `fix/ancestor-tools-discovery`), moving their entries into notes.
 - #625 `fix/release-prek-failures` rewrites `_prepare-release.yml` and makes its `prek run
-  --all-files` strict. Once both land, the new `check` hook runs during release prep, so an invalid
-  note on `main` blocks a release. That is acceptable: the same hook already blocks the note's PR.
+  --all-files` strict. That prek run happens after `clear`, so the hook only sees `README.md` there.
+  An invalid note on `main` still blocks a release earlier, because `render` runs the file checks
+  first. That is intended: the same hook already blocks the note's PR.
 
 ### References to update
 
