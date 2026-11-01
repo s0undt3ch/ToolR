@@ -127,3 +127,8 @@ passing the raw string.
 repository you haven't trusted. toolr builds the command list in memory there instead, so inspecting
 an unfamiliar checkout leaves it untouched. Trusted repositories, and runs with `TOOLR_TRUST_ALL=1`,
 still cache the manifest as before.
+
+`ctx.run(..., input=...)` no longer hangs when the command writes a lot of output before it reads
+its input. toolr now feeds stdin from a separate thread, so the timeouts apply while the command
+runs and reads it. A command that exits without reading all of its input no longer raises "Failed
+to write to stdin"; its exit code is returned as usual.

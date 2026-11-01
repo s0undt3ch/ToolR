@@ -461,32 +461,32 @@ mod test_suite {
         Ok(())
     }
 
-    mod tokio_tests {
+    mod subprocess_tests {
         use super::*;
+        use std::sync::mpsc;
         use tokio::runtime::Runtime;
 
-        /// Run `run_command_internal` on a blocking worker thread, bounded by a
-        /// wall-clock timeout. Returns the inner result on completion, or an
-        /// `Err` describing the wall-clock breach.
+        /// Run `run_command_internal` on its own thread, bounded by a wall-clock
+        /// timeout. Returns the inner result on completion, or an `Err` describing
+        /// the wall-clock breach.
         ///
         /// The bound exists so a future regression that wedges
         /// `run_command_internal` (a stuck forwarder thread, a missed kill, etc.)
         /// fails the test fast instead of hanging the entire workspace test run.
         /// See issue #247 for the original `cargo test --workspace` hang this
-        /// guards against.
-        async fn bounded_run_command(
+        /// guards against. A plain thread, not `spawn_blocking`: a tokio runtime
+        /// waits for its blocking tasks when dropped, so a wedged call would hang
+        /// the test anyway. On timeout the thread is leaked.
+        fn bounded_run_command(
             config: CommandConfig,
             timeout: Duration,
         ) -> Result<std::result::Result<i32, Box<dyn std::error::Error + Send + Sync>>> {
-            let join_handle = tokio::task::spawn_blocking(move || run_command_internal(config));
-            match tokio::time::timeout(timeout, join_handle).await {
-                Err(_) => Err(anyhow!(
-                    "run_command_internal did not return within {:?}",
-                    timeout
-                )),
-                Ok(Err(e)) => Err(anyhow!("worker task failed: {e}")),
-                Ok(Ok(inner)) => Ok(inner),
-            }
+            let (tx, rx) = mpsc::channel();
+            thread::spawn(move || {
+                let _ = tx.send(run_command_internal(config));
+            });
+            rx.recv_timeout(timeout)
+                .map_err(|_| anyhow!("run_command_internal did not return within {:?}", timeout))
         }
 
         // Cross-platform pipe creation
@@ -683,55 +683,48 @@ mod test_suite {
         #[test]
         fn test_timeout_exception() -> Result<()> {
             require_python!(python, "test_timeout_exception");
-            let rt = Runtime::new()?;
+            // Create a command that will run longer than our timeout
+            let config = CommandConfig {
+                args: vec![
+                    python,
+                    "-c".to_string(),
+                    "import time; time.sleep(10)".to_string(),
+                ],
+                timeout_secs: Some(0.5), // Short timeout; 0.5s tolerates workspace contention
+                ..Default::default()
+            };
 
-            rt.block_on(async {
-                // Create a command that will run longer than our timeout
-                let config = CommandConfig {
-                    args: vec![
-                        python,
-                        "-c".to_string(),
-                        "import time; time.sleep(10)".to_string(),
-                    ],
-                    timeout_secs: Some(0.5), // Short timeout; 0.5s tolerates workspace contention
-                    ..Default::default()
-                };
+            // Wall-clock-bounded so the workspace test run can't hang if the
+            // internal kill+wait path ever wedges. See issue #247.
+            let result = bounded_run_command(config, Duration::from_secs(5))?;
 
-                // Wall-clock-bounded so the workspace test run can't hang if the
-                // internal kill+wait path ever wedges. See issue #247.
-                let result = bounded_run_command(config, Duration::from_secs(5)).await?;
+            // Should fail with timeout
+            assert!(result.is_err());
+            let error_str = format!("{}", result.unwrap_err());
 
-                // Should fail with timeout
-                assert!(result.is_err());
-                let error_str = format!("{}", result.unwrap_err());
+            // Check error message attributes
+            assert!(
+                error_str.contains("timed out after"),
+                "Error should mention timeout duration"
+            );
 
-                // Check error message attributes
-                assert!(
-                    error_str.contains("timed out after"),
-                    "Error should mention timeout duration"
-                );
-
-                Ok(())
-            })
+            Ok(())
         }
 
         #[test]
         fn test_no_output_timeout() -> Result<()> {
             require_python!(python, "test_no_output_timeout");
-            let rt = Runtime::new()?;
-
-            rt.block_on(async {
-                // Create a command that outputs once then waits, triggering no-output timeout.
-                //
-                // We intentionally do not wire up a `sys_stdout_fd` pipe here: the no-output
-                // watchdog updates `last_output` from the stdout-forwarder thread's read
-                // against `child.stdout` (the parent-owned pipe), which works whether or not
-                // a sys-fd consumer is present. Earlier revisions of this test passed a
-                // test-owned pipe and called `read_pipe` *before* `handle.join()`; under
-                // `cargo test --workspace` contention the watchdog could fire and kill
-                // python before any byte made it to that pipe, leaving the test stuck in a
-                // blocking read on a writer that nobody had closed. See issue #247.
-                let config = CommandConfig {
+            // Create a command that outputs once then waits, triggering no-output timeout.
+            //
+            // We intentionally do not wire up a `sys_stdout_fd` pipe here: the no-output
+            // watchdog updates `last_output` from the stdout-forwarder thread's read
+            // against `child.stdout` (the parent-owned pipe), which works whether or not
+            // a sys-fd consumer is present. Earlier revisions of this test passed a
+            // test-owned pipe and called `read_pipe` *before* `handle.join()`; under
+            // `cargo test --workspace` contention the watchdog could fire and kill
+            // python before any byte made it to that pipe, leaving the test stuck in a
+            // blocking read on a writer that nobody had closed. See issue #247.
+            let config = CommandConfig {
                     args: vec![
                         python,
                         "-c".to_string(),
@@ -741,19 +734,107 @@ mod test_suite {
                     ..Default::default()
                 };
 
-                // Bound the call with a wall-clock guard so any future regression that
-                // wedges `run_command_internal` fails fast instead of hanging the
-                // workspace. The watchdog should trip in ~0.5s; 5s is generous headroom.
-                let result = bounded_run_command(config, Duration::from_secs(5)).await?;
+            // Bound the call with a wall-clock guard so any future regression that
+            // wedges `run_command_internal` fails fast instead of hanging the
+            // workspace. The watchdog should trip in ~0.5s; 5s is generous headroom.
+            let result = bounded_run_command(config, Duration::from_secs(5))?;
 
-                // Should fail with no-output timeout
-                assert!(result.is_err());
-                let error_str = format!("{}", result.unwrap_err());
+            // Should fail with no-output timeout
+            assert!(result.is_err());
+            let error_str = format!("{}", result.unwrap_err());
 
-                assert!(error_str.contains("no output for"), "Error should mention no-output timeout");
+            assert!(
+                error_str.contains("no output for"),
+                "Error should mention no-output timeout"
+            );
 
-                Ok(())
-            })
+            Ok(())
+        }
+
+        /// Must exceed the OS pipe buffer (~64 KiB), or the test passes against the deadlock.
+        const PAST_PIPE_BUFFER: usize = 200_000;
+
+        /// Child that fills its stdout pipe before it reads stdin. Shared with
+        /// `test_input_larger_than_pipe_buffer_with_output_first` in
+        /// `tests/utils/command/test_command.py`.
+        fn output_first_script() -> String {
+            format!(
+                "import sys; sys.stdout.write('x'*{PAST_PIPE_BUFFER}); sys.stdout.flush(); sys.stdin.buffer.read()"
+            )
+        }
+
+        #[test]
+        fn input_larger_than_pipe_with_output_first_does_not_deadlock() -> Result<()> {
+            require_python!(
+                python,
+                "input_larger_than_pipe_with_output_first_does_not_deadlock"
+            );
+            let mut stdout_file = NamedTempFile::new()?;
+            let stderr_file = NamedTempFile::new()?;
+            let stdout_fd = get_file_descriptor(stdout_file.as_file());
+            let stderr_fd = get_file_descriptor(stderr_file.as_file());
+
+            let config = CommandConfig {
+                args: vec![python, "-c".to_string(), output_first_script()],
+                input: Some(vec![b'y'; PAST_PIPE_BUFFER]),
+                stdout_fd: wrap_fd(stdout_fd),
+                stderr_fd: wrap_fd(stderr_fd),
+                timeout_secs: Some(30.0),
+                ..Default::default()
+            };
+
+            let result = bounded_run_command(config, Duration::from_secs(5))?;
+            assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+
+            stdout_file.seek(SeekFrom::Start(0))?;
+            let mut captured = Vec::new();
+            stdout_file.read_to_end(&mut captured)?;
+            assert_eq!(captured.len(), PAST_PIPE_BUFFER);
+
+            Ok(())
+        }
+
+        #[test]
+        fn child_closing_stdin_early_is_not_an_error() -> Result<()> {
+            require_python!(python, "child_closing_stdin_early_is_not_an_error");
+            let config = CommandConfig {
+                args: vec![
+                    python,
+                    "-c".to_string(),
+                    "import sys; sys.stdin.buffer.read(1)".to_string(),
+                ],
+                input: Some(vec![b'y'; PAST_PIPE_BUFFER]),
+                ..Default::default()
+            };
+
+            let result = bounded_run_command(config, Duration::from_secs(5))?;
+            assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+
+            Ok(())
+        }
+
+        #[test]
+        fn timeout_fires_while_child_ignores_stdin() -> Result<()> {
+            require_python!(python, "timeout_fires_while_child_ignores_stdin");
+            let config = CommandConfig {
+                args: vec![
+                    python,
+                    "-c".to_string(),
+                    "import time; time.sleep(10)".to_string(),
+                ],
+                input: Some(vec![b'y'; PAST_PIPE_BUFFER]),
+                timeout_secs: Some(0.5),
+                ..Default::default()
+            };
+
+            let result = bounded_run_command(config, Duration::from_secs(5))?;
+            let err = result.expect_err("the stdin write must not outlast timeout_secs");
+            assert!(
+                err.to_string().contains("timed out after"),
+                "expected a timeout error, got: {err}"
+            );
+
+            Ok(())
         }
     }
 
@@ -836,6 +917,22 @@ mod test_suite {
             msg.contains("Failed to execute command"),
             "expected spawn-failure prefix, got: {msg}",
         );
+    }
+
+    #[test]
+    fn stdin_write_errors_other_than_broken_pipe_are_reported() -> Result<()> {
+        use crate::command::{join_stdin_writer, spawn_stdin_writer};
+
+        // A read-only handle rejects writes with an error that is not `BrokenPipe`.
+        let file = NamedTempFile::new()?;
+        let read_only = File::open(file.path())?;
+        let err = join_stdin_writer(spawn_stdin_writer(read_only, b"data".to_vec()))
+            .expect_err("a write to a read-only handle must fail");
+        assert!(
+            err.to_string().starts_with("Failed to write to stdin: "),
+            "unexpected message: {err}"
+        );
+        Ok(())
     }
 
     #[test]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import threading
@@ -15,6 +16,9 @@ from toolr.utils.command import CommandTimeoutError
 from toolr.utils.command import CommandTimeoutNoOutputError
 from toolr.utils.command import run
 from toolr.utils.command import run_command_impl
+
+# Must exceed the OS pipe buffer (~64 KiB), or the deadlock test passes against the deadlocking code.
+PAST_PIPE_BUFFER = 200_000
 
 IS_WINDOWS = sys.platform.startswith("win")
 
@@ -54,6 +58,30 @@ def test_input_bytes(stdin_cat_command):
     assert result.returncode == 0
     result.stdout.seek(0)
     assert b"hello bytes" in result.stdout.read()
+
+
+def test_input_larger_than_pipe_buffer_with_output_first():
+    """A child that fills its stdout pipe before reading stdin must not deadlock.
+
+    Mirrors `input_larger_than_pipe_with_output_first_does_not_deadlock` in
+    `crates/toolr-core/src/command/command_test.rs`, which uses the same child script.
+    """
+    child = f"import sys; sys.stdout.write('x'*{PAST_PIPE_BUFFER}); sys.stdout.flush(); sys.stdin.buffer.read()"
+    # Under the pre-fix code `timeout_secs` was armed only after the stdin write, and
+    # `run_command_impl` holds the GIL for the whole call, so only another process can bound it.
+    driver = (
+        "import sys\n"
+        "from toolr.utils.command import run\n"
+        f"result = run([sys.executable, '-c', {child!r}], input=b'y' * {PAST_PIPE_BUFFER},\n"
+        "             capture_output=True, text=False, timeout_secs=30)\n"
+        "result.stdout.seek(0)\n"
+        "print(result.returncode, len(result.stdout.read()))\n"
+    )
+    proc = subprocess.run(  # noqa: S603  # interpreter + script are test-controlled
+        [sys.executable, "-c", driver], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.split() == ["0", str(PAST_PIPE_BUFFER)]
 
 
 def test_text_mode(echo_command):

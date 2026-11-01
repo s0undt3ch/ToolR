@@ -3,11 +3,11 @@ use std::env;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{self, ErrorKind, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
@@ -191,9 +191,32 @@ impl CommandConfig {
     // Add other builder methods as needed...
 }
 
+/// Feed `input` to the child from its own thread, dropping `stdin` afterwards to send EOF.
+///
+/// `BrokenPipe` means the child stopped reading; its exit status says why, as with
+/// `subprocess.communicate`.
+fn spawn_stdin_writer<W: Write + Send + 'static>(
+    mut stdin: W,
+    input: Vec<u8>,
+) -> JoinHandle<io::Result<()>> {
+    thread::spawn(move || match stdin.write_all(&input) {
+        Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
+        result => result,
+    })
+}
+
+fn join_stdin_writer(handle: JoinHandle<io::Result<()>>) -> Result<(), CommandExecutionError> {
+    match handle.join() {
+        Ok(Err(e)) => Err(CommandExecutionError::new(format!(
+            "Failed to write to stdin: {e}"
+        ))),
+        _ => Ok(()),
+    }
+}
+
 // Core implementation used by both Rust and Python
 pub fn run_command_internal(
-    config: CommandConfig,
+    mut config: CommandConfig,
 ) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
     // Create a command with the given arguments and environment variables
     let mut command = Command::new(&config.args[0]);
@@ -236,18 +259,9 @@ pub fn run_command_internal(
         )))
     })?;
 
-    // If there's input, write it to stdin
-    if let Some(input_data) = &config.input
-        && let Some(mut stdin) = child.stdin.take()
-    {
-        stdin.write_all(input_data).map_err(|e| {
-            Box::new(CommandExecutionError::new(format!(
-                "Failed to write to stdin: {e}"
-            )))
-        })?;
-        // Explicitly drop stdin to close it
-        drop(stdin);
-    }
+    // Written from its own thread once the readers run: a child that fills its
+    // stdout pipe before reading stdin would otherwise deadlock us.
+    let stdin_payload = child.stdin.take().zip(config.input.take());
 
     // Take stdout and stderr pipes — `None` in interactive mode, where
     // stdio was inherited above rather than piped.
@@ -435,6 +449,10 @@ pub fn run_command_internal(
         })
     });
 
+    // Spawned after the readers. On timeout the kill closes the pipe and the
+    // thread ends on its own, unless a grandchild still holds stdin (a known gap).
+    let stdin_thread = stdin_payload.map(|(stdin, input)| spawn_stdin_writer(stdin, input));
+
     // Wait for command completion with timeout handling
     let start_time = Instant::now();
     let status = loop {
@@ -482,6 +500,8 @@ pub fn run_command_internal(
         }
     };
 
+    let stdin_result = stdin_thread.map_or(Ok(()), join_stdin_writer);
+
     // Wait for stdout/stderr threads to finish (absent in interactive mode)
     if let Some(t) = stdout_thread {
         let _ = t.join();
@@ -489,6 +509,9 @@ pub fn run_command_internal(
     if let Some(t) = stderr_thread {
         let _ = t.join();
     }
+
+    // Returned only now, so a write error doesn't leave the readers unjoined.
+    stdin_result.map_err(Box::new)?;
 
     // Get exit code and return it, regardless of value
     let returncode = status.code().unwrap_or(-1);
