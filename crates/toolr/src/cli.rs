@@ -670,7 +670,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
     root
 }
 
-fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
+pub(crate) fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
     // Run the docstring prose through the markdown→ANSI renderer
     // before handing it to clap. On a non-TTY (piped / captured help
     // text) the renderer returns plain text, so doc-snippet captures
@@ -805,6 +805,11 @@ fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
                 a = a.num_args(arity);
             }
             a = crate::value_parsers::apply_value_parser(a, ty);
+            // A relative default names a path under the repo root, so clap
+            // keeps it unchecked and `execute_build` resolves it after parsing.
+            if crate::value_parsers::defers_path_resolution(arg) {
+                a = a.value_parser(clap::value_parser!(std::path::PathBuf));
+            }
         } else if !arg.allowed_values.is_empty() {
             a = a.value_parser(crate::value_parsers::printable_choices(&arg.allowed_values));
         }
@@ -1085,6 +1090,25 @@ mod cli_tree_tests {
             .try_get_matches_from(vec!["sync"])
             .expect("omitting the flag must still parse");
         assert_eq!(matches.get_one::<String>("root"), None);
+    }
+
+    #[test]
+    fn relative_path_default_parses_without_touching_disk() {
+        let mut arg = empty_arg("cfg", ArgumentKind::Optional);
+        arg.default = Some("tools/pyproject.toml".to_string());
+        arg.resolved_type = Some(toolr_core::parser::SupportedType::FilePath);
+        let mut cmd = normal_leaf("hello", "demo");
+        cmd.arguments = vec![arg];
+
+        let clap_cmd = build_user_command(&cmd);
+        let defaults: Vec<_> = clap_cmd
+            .get_arguments()
+            .find(|a| a.get_id() == "cfg")
+            .unwrap()
+            .get_default_values()
+            .to_vec();
+        assert_eq!(defaults, ["tools/pyproject.toml"]);
+        assert!(clap_cmd.try_get_matches_from(vec!["hello"]).is_ok());
     }
 
     #[test]
