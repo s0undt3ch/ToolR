@@ -36,6 +36,9 @@ Two smaller problems sit in the same loop:
 
 ## Decision
 
+> **Superseded in part** by [Revision](#revision-forward-process-sent-sigint-on-linux): Linux also forwards a SIGINT
+> another process sent.
+
 toolr keeps SIGINT registered, so it doesn't die on Ctrl-C and still reports the runner's exit code, but **it no longer
 forwards SIGINT**. It forwards SIGTERM only. This is the POSIX `system()` convention: the foreground group already got
 the SIGINT from the terminal, so the parent's job is to wait.
@@ -52,7 +55,8 @@ Process group, polling loop and Windows path stay as they are.
 - **Forward SIGINT only when toolr's group is not the terminal's foreground group** (`tcgetpgrp`). With no terminal, as
   under CI or a process manager that signals the whole group, it still double-delivers. That is also the only shape a
   test can produce without a pseudo-terminal.
-- **Filter on the signal's origin** (`siginfo`, `signal_hook`'s `WithOrigin`). A `killpg` from a process manager looks
+- **Filter on the signal's origin** (`siginfo`, `signal_hook`'s `WithOrigin`). *Adopted for Linux by the Revision
+  below.* A `killpg` from a process manager looks
   the same as a `kill` aimed at toolr alone, so it double-delivers in the same cases. It also needs the
   `extended-siginfo` feature, and the kernel's origin reporting for terminal signals differs between Linux and macOS.
 - **Forward from the `signal_hook` listener thread instead of polling.** The main thread would block in `child.wait()`,
@@ -63,7 +67,7 @@ Process group, polling loop and Windows path stay as they are.
 
 Review found that SIGTERM-only forwarding drops a SIGINT sent to toolr's pid alone (`Popen.send_signal`,
 `timeout --foreground -s INT`, `docker run` without `-t`): the command ran to completion and toolr exited 0. The
-second rejected alternative above (filter on the signal's origin) was revisited per platform.
+third rejected alternative above (filter on the signal's origin) was revisited per platform.
 
 - **Linux:** a terminal-generated SIGINT arrives with `si_code == SI_KERNEL` (`n_tty`'s `isig()` calls
   `kill_pgrp(..., 1)`, the kernel's privileged send); `kill`, `killpg`, `tgkill` and `sigqueue` give `SI_USER`,
@@ -80,9 +84,10 @@ SIGINT on Linux.
 
 ## Scope and compatibility
 
-- **Behaviour change:** `kill -INT <toolr pid>`, aimed at toolr alone, no longer reaches the runner. toolr keeps waiting
-  for it. Send SIGINT to the process group (`kill -INT -<pgid>`) or SIGTERM instead. Ctrl-C, and anything that signals
-  the whole group, delivers SIGINT exactly once.
+- **Behaviour change** (as revised): Ctrl-C delivers SIGINT to the command exactly once on every platform. On Linux,
+  `kill -INT <toolr pid>` still reaches the runner, and a process-sent `killpg` reaches it twice. On macOS and other
+  Unix, `kill -INT <toolr pid>` no longer reaches the runner; toolr keeps waiting for it. Send SIGINT to the process
+  group (`kill -INT -<pgid>`) or SIGTERM instead.
 - **No schema bump.** Nothing in the runner JSON spec changes.
 - **Out of scope:** `toolr project venv run` and `venv shell` wait with `Command::status()` and no handler, so Ctrl-C
   kills toolr itself. Routing them through `wait_with_signals` is a follow-up once this lands.
@@ -99,6 +104,9 @@ SIGINT on Linux.
 ```markdown
 Pressing Ctrl-C during a toolr command now interrupts it once. toolr used to forward the terminal's SIGINT to the
 command as well, so a second `KeyboardInterrupt` could cut a `finally:` or `except KeyboardInterrupt:` block short.
-toolr now forwards SIGTERM only, so `kill -INT` aimed at the `toolr` process alone no longer reaches the command; signal
-the process group or send SIGTERM instead.
+toolr now forwards SIGTERM, and forwards SIGINT only when it can tell another process sent it. On Linux, a SIGINT sent
+to the `toolr` process alone (`kill -INT`, `Popen.send_signal`) still reaches the command, while one sent to the whole
+process group with `killpg` reaches it twice. On macOS, where a Ctrl-C and a `kill` look the same, toolr never forwards
+SIGINT, so `kill -INT` aimed at the `toolr` process alone no longer reaches the command; signal the process group or
+send SIGTERM instead.
 ```

@@ -1,5 +1,8 @@
 # SIGINT Forwarding Implementation Plan
 
+> **Superseded in part:** Linux also forwards a process-sent SIGINT; see the design's
+> [Revision](./2026-10-31-sigint-forwarding-design.md#revision-forward-process-sent-sigint-on-linux).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
