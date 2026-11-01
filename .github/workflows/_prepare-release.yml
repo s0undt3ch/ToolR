@@ -143,6 +143,7 @@ jobs:
         uses: ./.github/actions/configure-git
 
       - name: Check skill references
+        id: check-skill-refs
         # The regeneration after the bump would otherwise sweep any stale
         # reference already on main into the release commit.
         shell: bash
@@ -162,6 +163,7 @@ jobs:
           toolr version bump --write --check-existing-tag --include-action "${new_version_arg[@]}"
 
       - name: Regenerate skill references
+        id: regen-skill-refs
         # The toolr-ci-setup reference is generated from `action.yml`, which the
         # bump just rewrote. The commit step rejects prek fixes outside the
         # release's own changes, so the reference has to be one of them.
@@ -274,6 +276,7 @@ jobs:
         env:
           # `pin-github-actions` resolves pins through `gh api`.
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+        # Inputs come from env vars only, no `${{ }}` in the body: tests run it directly.
         run: |
           set -euo pipefail
           # NUL-separated so names with spaces or non-ASCII characters stay verbatim.
@@ -283,31 +286,38 @@ jobs:
             git diff --name-only -z HEAD > "$1"
             git ls-files --others --exclude-standard -z >> "$1"
           }
+          # Print, NUL-separated, the paths in list file $2 that aren't in list file $1.
+          newly_changed() {
+            local path seen known
+            while IFS= read -r -d '' path; do
+              known=false
+              while IFS= read -r -d '' seen; do
+                if [ "$seen" = "$path" ]; then
+                  known=true
+                  break
+                fi
+              done < "$1"
+              if [ "$known" = false ]; then
+                printf '%s\0' "$path"
+              fi
+            done < "$2"
+          }
           scratch=$(mktemp -d)
           list_changed "$scratch/before"
           # Fixing pass: let the auto-fixers tidy the release's own files.
           prek run --all-files || true
           list_changed "$scratch/after"
+          newly_changed "$scratch/before" "$scratch/after" > "$scratch/outside"
           tracked=()
           untracked=()
           while IFS= read -r -d '' path; do
-            known=false
-            while IFS= read -r -d '' seen; do
-              if [ "$seen" = "$path" ]; then
-                known=true
-                break
-              fi
-            done < "$scratch/before"
-            if [ "$known" = true ]; then
-              continue
-            fi
             echo "::error file=${path}::prek changed ${path}, which the release didn't touch. Fix it on main in its own PR." >&2
             if GIT_LITERAL_PATHSPECS=1 git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
               tracked+=("$path")
             else
               untracked+=("$path")
             fi
-          done < "$scratch/after"
+          done < "$scratch/outside"
           if [ "${#tracked[@]}" -gt 0 ]; then
             GIT_LITERAL_PATHSPECS=1 git --no-pager diff -- "${tracked[@]}" >&2
           fi

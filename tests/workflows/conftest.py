@@ -34,23 +34,13 @@ def git(repo: Path, *args: str) -> str:
     ).stdout
 
 
-@pytest.fixture
-def workflow_step_script() -> Callable[[Path, str, str], str]:
-    """Return a callable that pulls a step's `run:` body out of a workflow or composite action.
-
-    Pass `""` as the job id for a composite action (`runs.steps`).
-    """
-
-    def extract(path: Path, job: str, step_id: str) -> str:
-        data = yaml.safe_load(path.read_text())
-        steps = data["jobs"][job]["steps"] if job else data["runs"]["steps"]
-        for step in steps:
-            if step.get("id") == step_id:
-                return str(step["run"])
-        where = f"job `{job}` of {path.name}" if job else path.name
-        pytest.fail(f"no step with id `{step_id}` in {where}")
-
-    return extract
+def workflow_step_script(path: Path, job: str, step_id: str) -> str:
+    """Return the `run:` body of step `step_id` in job `job` of the workflow at `path`."""
+    data = yaml.safe_load(path.read_text())
+    for step in data["jobs"][job]["steps"]:
+        if step.get("id") == step_id:
+            return str(step["run"])
+    pytest.fail(f"no step with id `{step_id}` in job `{job}` of {path.name}")
 
 
 @pytest.fixture

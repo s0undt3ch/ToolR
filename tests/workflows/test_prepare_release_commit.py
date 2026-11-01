@@ -18,6 +18,7 @@ import yaml
 
 from tests.workflows.conftest import git
 from tests.workflows.conftest import git_env
+from tests.workflows.conftest import workflow_step_script
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
@@ -81,7 +82,7 @@ def release_repo(git_repo: Callable[..., Path]) -> Path:
 
 @pytest.fixture
 def run_commit_step(
-    workflow_step_script: Callable[[Path, str, str], str], tmp_path: Path
+    tmp_path: Path,
 ) -> Callable[[Path, Path], subprocess.CompletedProcess[str]]:
     """Return a callable that runs the commit step in `repo` with the stub `prek` in `bin_dir`."""
     bash = shutil.which("bash")
@@ -216,11 +217,9 @@ def test_skill_refs_checked_before_bump_and_regenerated_after() -> None:
     """
     steps = yaml.safe_load(PREPARE_RELEASE_YML.read_text())["jobs"]["prepare-release"]["steps"]
     ids = [step.get("id") for step in steps]
-    runs = [step.get("run", "").strip() for step in steps]
-    check = [
-        index for index, run in enumerate(runs) if run == "cargo xtask build-skill-refs --check"
-    ]
-    regen = [index for index, run in enumerate(runs) if run == "cargo xtask build-skill-refs"]
-    assert check, "no step runs `cargo xtask build-skill-refs --check`"
-    assert regen, "no step runs `cargo xtask build-skill-refs`"
-    assert check[0] < ids.index("bump-version") < regen[0] < ids.index("commit-release")
+    order = ["check-skill-refs", "bump-version", "regen-skill-refs", "commit-release"]
+    missing = [step_id for step_id in order if step_id not in ids]
+    assert not missing, f"steps missing from the prepare-release job: {missing}"
+    assert [ids.index(step_id) for step_id in order] == sorted(
+        ids.index(step_id) for step_id in order
+    )
