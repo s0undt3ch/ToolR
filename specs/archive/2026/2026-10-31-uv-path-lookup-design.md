@@ -1,6 +1,8 @@
 # Skip relative `PATH` entries when looking up uv and Python
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented. The Python half moved to `toolr project init`'s `python3` probe, because PR #622
+  deletes `resolve_python_in` and the `which` dependency. The uv and init lookups share a public
+  `toolr_core::path_search::{absolute_search_path, find_on_path}`.
 - **Origin:** whole-project review finding F-35 (low).
 - **Plan:** [`2026-10-31-uv-path-lookup-plan.md`](./2026-10-31-uv-path-lookup-plan.md)
 
