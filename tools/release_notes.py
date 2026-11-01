@@ -20,7 +20,7 @@ NOTE_NAME_RE: Final[re.Pattern[str]] = re.compile(
 SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BREAKING_PREFIX: Final[str] = "**Breaking:**"
 HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^#{1,6}(\s|$)")
-FENCE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(```|~~~)")
+FENCE_OPEN_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 
 group = command_group("release-notes", "Manage queued release notes", docstring=__doc__)
 
@@ -73,12 +73,23 @@ def _github_env_block(name: str, value: str) -> str:
 
 
 def _has_heading(text: str) -> bool:
-    in_fence = False
+    fence: str | None = None
     for line in text.splitlines():
-        if FENCE_RE.match(line):
-            in_fence = not in_fence
-        elif not in_fence and HEADING_RE.match(line):
-            return True
+        if fence is None:
+            opener = FENCE_OPEN_RE.match(line)
+            if opener and not (opener["fence"][0] == "`" and "`" in opener["info"]):
+                fence = opener["fence"]
+            elif HEADING_RE.match(line):
+                return True
+        else:
+            stripped = line.strip()
+            if (
+                len(line) - len(line.lstrip(" ")) < 4
+                and stripped
+                and set(stripped) == {fence[0]}
+                and len(stripped) >= len(fence)
+            ):
+                fence = None
     return False
 
 
@@ -103,7 +114,11 @@ def _file_problems(repo_root: Path) -> list[str]:
         except ValueError:
             problems.append(f"{label}: timestamp is not a valid date and time")
             continue
-        text = _read_note(path)
+        try:
+            text = _read_note(path)
+        except UnicodeDecodeError:
+            problems.append(f"{label}: note is not valid UTF-8")
+            continue
         if not text:
             problems.append(f"{label}: note is empty")
         elif _has_heading(text):

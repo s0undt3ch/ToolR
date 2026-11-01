@@ -409,3 +409,33 @@ def test_render_refuses_invalid_tree(
     assert exc.value.code != 0
     assert ctx.stdout == ""
     assert GOOD in ctx.stderr
+
+
+@pytest.mark.parametrize(
+    ("content", "flagged"),
+    [
+        ("````\n```\n## Heading\n```\n````", False),
+        ("```\n~~~\n# x\n```", False),
+        ("```\n```sh\n# x\n```", False),
+        ("    ```\n# x", True),
+        ("```\ncode\n```\n# x", True),
+        ("```\n# unclosed", False),
+        ("~~~\n# x\n~~~\n## y", True),
+        ("``` a`b\n# x", True),
+        ("#hashtag", False),
+        ("#!/bin/sh", False),
+    ],
+)
+def test_fence_tracking(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, content: str, flagged: bool
+) -> None:
+    notes_dir({GOOD: content})
+    assert bool(_file_problems(tmp_path)) is flagged
+
+
+def test_invalid_utf8_flagged(tmp_path: Path) -> None:
+    directory = tmp_path / "release-notes"
+    directory.mkdir()
+    (directory / GOOD).write_bytes(b"\xff\xfe")
+    (problem,) = _file_problems(tmp_path)
+    assert "not valid UTF-8" in problem
