@@ -1,6 +1,6 @@
 # Make `CommandsTester.discover()` fail on import errors and keep the stdlib importable
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-09 (medium).
 - **Plan:** [`2026-10-31-tester-discover-errors-plan.md`](./2026-10-31-tester-discover-errors-plan.md)
 

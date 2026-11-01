@@ -11,7 +11,7 @@ import stdlib modules under it (F-09).
 
 **Tech Stack:** Python 3.11+, pytest ≥ 9 (`ExceptionInfo.group_contains`), attrs.
 
-**Spec:** [`specs/2026-10-31-tester-discover-errors-design.md`](./2026-10-31-tester-discover-errors-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-tester-discover-errors-design.md`](./2026-10-31-tester-discover-errors-design.md)
 
 ## Global Constraints
 
