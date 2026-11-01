@@ -11,10 +11,12 @@ from pathlib import Path
 
 import pytest
 from tools.release_notes import NOTE_NAME_RE
+from tools.release_notes import Commit
 from tools.release_notes import _file_problems
 from tools.release_notes import _github_env_block
 from tools.release_notes import _note_filename
 from tools.release_notes import _render
+from tools.release_notes import _requires_note
 from tools.release_notes import _slug_from_branch
 from tools.release_notes import add
 from tools.release_notes import check
@@ -394,11 +396,6 @@ def test_check_command_exit(notes_dir: Callable[[dict[str, str]], Path], tmp_pat
     assert "2026-11-01.14-03-28.bar.md" in ctx.stderr
 
 
-def test_check_accepts_base(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
-    notes_dir({GOOD: "Text"})
-    check(make_context(tmp_path), base="origin/main")
-
-
 def test_render_refuses_invalid_tree(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path
 ) -> None:
@@ -439,3 +436,170 @@ def test_invalid_utf8_flagged(tmp_path: Path) -> None:
     (directory / GOOD).write_bytes(b"\xff\xfe")
     (problem,) = _file_problems(tmp_path)
     assert "not valid UTF-8" in problem
+
+
+@pytest.mark.parametrize(
+    ("subject", "body", "required"),
+    [
+        ("feat: x", "", True),
+        ("fix(cli): x", "", True),
+        ("revert: x", "", True),
+        ("refactor!: x", "", True),
+        ("refactor: x", "BREAKING CHANGE: y", True),
+        ("fix(deps): x", "", False),
+        ("fix(deps)!: x", "", True),
+        ("chore: x", "", False),
+        ("docs(release-notes): x", "", False),
+        ("fix: x", "Changelog: skip", False),
+        ('Revert "feat: x"', "", False),
+        ("Merge branch 'x'", "", False),
+    ],
+)
+def test_requires_note(subject: str, body: str, required: bool) -> None:
+    assert _requires_note(Commit("0" * 40, subject, body)) is required
+
+
+@pytest.fixture
+def gate_repo(git_repo: Callable[..., Path]) -> Callable[..., Path]:
+    """Factory: ``git_repo`` on a ``feature`` branch, optionally with a note committed on ``main``."""
+
+    def _make(main_note: str | None = None) -> Path:
+        repo = git_repo()
+        if main_note is not None:
+            _commit(repo, "docs(release-notes): seed", {f"release-notes/{GOOD}": main_note})
+        _git(repo, "checkout", "-b", "feature")
+        return repo
+
+    return _make
+
+
+def _commit(repo: Path, message: str, files: dict[str, str | None] | None = None) -> None:
+    for name, text in (files or {}).items():
+        path = repo / name
+        if text is None:
+            _git(repo, "rm", "-q", "--", name)
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        _git(repo, "add", "--", name)
+    _git(repo, "commit", "--allow-empty", "-q", "-m", message)
+
+
+def _gate(repo: Path, base: str = "main") -> None:
+    check(make_context(repo), base=base)
+
+
+def _gate_fails(repo: Path, base: str = "main") -> str:
+    ctx = make_context(repo)
+    with pytest.raises(SystemExit) as exc:
+        check(ctx, base=base)
+    assert exc.value.code != 0
+    return ctx.stderr
+
+
+NOTE = "release-notes/2026-11-01.15-00-00.bar.md"
+
+
+def test_gate_feat_without_note_fails(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat(cli): add frobnicate")
+    stderr = _gate_fails(repo)
+    assert "feat(cli): add frobnicate" in stderr
+    assert "toolr release-notes add" in stderr
+    assert "Release-Notes: skip" in stderr
+
+
+def test_gate_feat_with_note_passes(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat: a", {NOTE: "Added a."})
+    _gate(repo)
+
+
+def test_gate_appended_existing_note_passes(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo(main_note="Old.")
+    _commit(repo, "fix: a", {f"release-notes/{GOOD}": "Old.\n\nNew."})
+    _gate(repo)
+
+
+def test_gate_readme_only_change_fails(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat: a", {"release-notes/README.md": "how"})
+    assert "feat: a" in _gate_fails(repo)
+
+
+def test_gate_breaking_needs_breaking_note(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat!: drop x", {NOTE: "Dropped x."})
+    stderr = _gate_fails(repo)
+    assert "feat!: drop x" in stderr
+    assert "**Breaking:**" in stderr
+    _commit(repo, "docs(release-notes): mark breaking", {NOTE: "**Breaking:** Dropped x."})
+    _gate(repo)
+
+
+def test_gate_revert_with_deleted_note_passes(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo(main_note="Added a.")
+    _commit(repo, "revert: feat: a", {f"release-notes/{GOOD}": None})
+    _gate(repo)
+
+
+def test_gate_chore_only_passes(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "chore: tidy")
+    _gate(repo)
+
+
+def test_gate_empty_range_fails(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    assert "main" in _gate_fails(repo)
+
+
+def test_gate_trailer_in_any_commit(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat: a")
+    _commit(repo, "chore: b\n\nRelease-Notes: skip")
+    _gate(repo)
+
+
+def test_gate_ignores_base_side_commits(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "chore: branch work")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "feat: on main")
+    _git(repo, "checkout", "-q", "feature")
+    _gate(repo)
+
+
+@pytest.mark.parametrize("with_note", [True, False])
+def test_gate_on_pr_merge_commit(gate_repo: Callable[..., Path], with_note: bool) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat: a", {NOTE: "Added a."} if with_note else None)
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "chore: unrelated", {"other.txt": "x"})
+    base = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "merge", "--no-ff", "-q", "-m", "Merge feature into main", "feature")
+    if with_note:
+        _gate(repo, base=base)
+    else:
+        assert "feat: a" in _gate_fails(repo, base=base)
+
+
+def test_gate_unknown_base_fails(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "chore: x")
+    assert "nope" in _gate_fails(repo, base="nope")
+
+
+def test_gate_runs_file_checks_too(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "chore: x", {"release-notes/bad.md": "x"})
+    assert "bad.md" in _gate_fails(repo)
+
+
+def test_gate_git_failure_fails(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat: a", {NOTE: "Added a."})
+    _git(repo, "checkout", "-q", "--orphan", "unrelated")
+    _commit(repo, "chore: unrelated root")
+    _git(repo, "checkout", "-q", "feature")
+    assert "git diff failed" in _gate_fails(repo, base="unrelated")

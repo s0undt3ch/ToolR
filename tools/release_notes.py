@@ -8,6 +8,7 @@ from datetime import UTC
 from datetime import datetime
 from pathlib import Path
 from typing import Final
+from typing import NamedTuple
 
 from toolr import Context
 from toolr import command_group
@@ -21,6 +22,11 @@ SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BREAKING_PREFIX: Final[str] = "**Breaking:**"
 HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^#{1,6}(\s|$)")
 FENCE_OPEN_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+SUBJECT_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?:"
+)
+BREAKING_FOOTER_RE: Final[re.Pattern[str]] = re.compile(r"^BREAKING[ -]CHANGE:", re.MULTILINE)
+NOTE_TYPES: Final[frozenset[str]] = frozenset({"feat", "fix", "revert"})
 
 group = command_group("release-notes", "Manage queued release notes", docstring=__doc__)
 
@@ -133,14 +139,150 @@ def _exit_on_problems(ctx: Context, problems: list[str]) -> None:
         ctx.exit(1)
 
 
+class Commit(NamedTuple):
+    """A commit in the gated range."""
+
+    sha: str
+    subject: str
+    body: str
+
+
+class NoteChanges(NamedTuple):
+    """Note paths added or modified, and deleted, since the base (README excluded)."""
+
+    changed: list[str]
+    deleted: list[str]
+
+
+def _is_breaking(commit: Commit) -> bool:
+    match = SUBJECT_RE.match(commit.subject)
+    return bool(match and match["bang"]) or bool(BREAKING_FOOTER_RE.search(commit.body))
+
+
+def _requires_note(commit: Commit) -> bool:
+    """Whether git-cliff would show ``commit``, so it needs a release note."""
+    match = SUBJECT_RE.match(commit.subject)
+    if match is None:
+        return False
+    if _is_breaking(commit):
+        return True
+    if (match["scope"] or "").startswith("deps"):
+        return False
+    if re.search("Changelog: skip", commit.body):
+        return False
+    return match["type"] in NOTE_TYPES
+
+
+def _has_skip_trailer(body: str) -> bool:
+    return bool(re.search(r"^Release-Notes:\s*skip\s*$", body, re.MULTILINE))
+
+
+def _gate_failures(commits: list[Commit], notes: NoteChanges, breaking_note: bool) -> list[str]:
+    """Return one line per commit whose release-note requirement isn't met."""
+    if any(_has_skip_trailer(c.body) for c in commits):
+        return []
+    failures: list[str] = []
+    for commit in commits:
+        label = f"{commit.sha[:12]} {commit.subject!r}"
+        if _requires_note(commit):
+            match = SUBJECT_RE.match(commit.subject)
+            is_revert = match is not None and match["type"] == "revert"
+            if not notes.changed and not (is_revert and notes.deleted):
+                hint = " (or delete the reverted note)" if is_revert else ""
+                failures.append(
+                    f"{label} needs a release note: run `toolr release-notes add`{hint}, "
+                    "or add a `Release-Notes: skip` trailer to a commit"
+                )
+        if _is_breaking(commit) and not breaking_note:
+            failures.append(
+                f"{label} is breaking: an added or modified note must start with `{BREAKING_PREFIX}`"
+            )
+    return failures
+
+
+def _git_output(ctx: Context, *args: str) -> str:
+    ret = ctx.run(
+        "git",
+        "-C",
+        str(ctx.repo_root),
+        *args,
+        capture_output=True,
+        stream_output=False,
+    )
+    if ret.returncode:
+        ctx.error(f"git {args[0]} failed with exit code {ret.returncode}")
+        ctx.exit(ret.returncode)
+    output: str = ret.stdout.read()  # type: ignore[assignment]
+    return output
+
+
+def _commits_in_range(ctx: Context, base: str) -> list[Commit]:
+    out = _git_output(ctx, "log", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e", f"{base}..HEAD")
+    commits: list[Commit] = []
+    for raw in out.split("\x1e"):
+        record = raw.strip("\n")
+        if record:
+            sha, subject, body = record.split("\x1f", 2)
+            commits.append(Commit(sha, subject, body))
+    return commits
+
+
+def _note_changes(ctx: Context, base: str) -> NoteChanges:
+    out = _git_output(
+        ctx, "diff", "--no-renames", "--name-status", f"{base}...HEAD", "--", f"{NOTES_DIR}/"
+    )
+    changes = NoteChanges(changed=[], deleted=[])
+    for line in out.splitlines():
+        status, _, path = line.partition("\t")
+        if not path or path == f"{NOTES_DIR}/{README_NAME}":
+            continue
+        if status in {"A", "M"}:
+            changes.changed.append(path)
+        elif status == "D":
+            changes.deleted.append(path)
+    return changes
+
+
+def _is_breaking_note(path: Path) -> bool:
+    try:
+        return path.is_file() and _read_note(path).startswith(BREAKING_PREFIX)
+    except UnicodeDecodeError:
+        return False
+
+
+def _gate_problems(ctx: Context, base: str) -> list[str]:
+    ret = ctx.run(
+        "git",
+        "-C",
+        str(ctx.repo_root),
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        f"{base}^{{commit}}",
+        capture_output=True,
+        stream_output=False,
+    )
+    if ret.returncode:
+        return [f"--base {base!r} does not resolve to a commit"]
+    commits = _commits_in_range(ctx, base)
+    if not commits:
+        return [f"No commits in {base}..HEAD: check --base and that the history isn't shallow"]
+    notes = _note_changes(ctx, base)
+    breaking_note = any(_is_breaking_note(ctx.repo_root / p) for p in notes.changed)
+    return _gate_failures(commits, notes, breaking_note)
+
+
 @group.command
 def check(ctx: Context, base: str | None = None) -> None:
     """Validate the queued notes.
 
     Args:
-        base: Git ref to compare against. Reserved for the pull-request gate.
+        base: Git ref to compare against. Also require a note when commits since it need one.
     """
-    _exit_on_problems(ctx, _file_problems(ctx.repo_root))
+    problems = _file_problems(ctx.repo_root)
+    if base is not None:
+        problems += _gate_problems(ctx, base)
+    _exit_on_problems(ctx, problems)
 
 
 @group.command
