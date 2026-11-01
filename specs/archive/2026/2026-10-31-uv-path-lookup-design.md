@@ -1,8 +1,9 @@
 # Skip relative `PATH` entries when looking up uv and Python
 
 - **Status:** implemented. Beyond this design, `toolr project init`'s `python3` probe and the uv
-  installer's `ldd` probe also go through `toolr_core::path_search`, whose finder requires an exec
-  bit on unix. PR #622 later deletes `resolve_python_in`.
+  installer's `ldd` probe also go through `toolr_core::path_search`. On unix its finder asks
+  `access(X_OK)`, as `execvp` does, so a file this user can't run is skipped. An unset `PATH` finds
+  nothing; libc's default search path isn't emulated. PR #622 later deletes `resolve_python_in`.
 - **Origin:** whole-project review finding F-35 (low).
 - **Plan:** [`2026-10-31-uv-path-lookup-plan.md`](./2026-10-31-uv-path-lookup-plan.md)
 
