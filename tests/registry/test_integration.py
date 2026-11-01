@@ -100,6 +100,81 @@ def test_discover_reports_every_failing_module(
     assert "2 module(s)" in str(excinfo.value)
 
 
+def test_discover_reports_a_failing_subpackage_and_keeps_walking(
+    tmp_path: Path, tools_repo: Callable[[dict[str, str]], Path]
+) -> None:
+    """A subpackage whose `__init__` raises is reported like any module: its
+    body runs once and the walk goes on to the modules after it."""
+    runs = tmp_path / "runs.txt"
+    repo = tools_repo(
+        {
+            "tools/a_sub/__init__.py": (
+                f"with open({str(runs)!r}, 'a') as fh:\n"
+                "    fh.write('x')\n"
+                "raise RuntimeError('sub boom')\n"
+            ),
+            "tools/a_sub/inner.py": "",
+            "tools/zz.py": "raise ValueError('zz boom')\n",
+        }
+    )
+    with CommandsTester(search_path=repo) as tester, pytest.raises(ExceptionGroup) as excinfo:
+        tester.discover()
+    assert excinfo.group_contains(RuntimeError, match="sub boom")
+    assert excinfo.group_contains(ValueError, match="zz boom")
+    assert len(excinfo.value.exceptions) == 2
+    assert runs.read_text() == "x"
+
+
+def test_discover_reports_an_undocumented_command_in_a_nested_group(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """An undocumented command in a group package's `__init__.py` is reported
+    in the group, not raised bare."""
+    repo = tools_repo(
+        {
+            "tools/docker/__init__.py": (
+                "from toolr import command_group\n"
+                'docker = command_group("docker", "Docker", "Docker tools")\n'
+                "@docker.command\n"
+                "def nodoc(ctx):\n"
+                "    pass\n"
+            ),
+            "tools/zz.py": CI_MODULE,
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        with pytest.raises(ExceptionGroup) as excinfo:
+            tester.discover()
+        walked = "tools.zz" in sys.modules
+    assert excinfo.group_contains(ValueError, match="add a docstring")
+    assert walked
+
+
+def test_discover_imports_submodules_of_a_nested_package(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """Modules inside a `tools` subpackage are imported too."""
+    repo = tools_repo(
+        {
+            "tools/docker/__init__.py": (
+                "from toolr import command_group\n"
+                'docker = command_group("docker", "Docker", "Docker tools")\n'
+            ),
+            "tools/docker/image.py": (
+                "from toolr import command_group\n"
+                'image = command_group("docker.image", "Images", "Image tools")\n'
+                "@image.command\n"
+                "def build(ctx):\n"
+                '    """Build an image."""\n'
+            ),
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    assert {"tools.docker", "tools.docker.image"} <= groups.keys()
+
+
 def test_discover_raises_when_tools_package_import_fails(
     tools_repo: Callable[[dict[str, str]], Path],
 ) -> None:

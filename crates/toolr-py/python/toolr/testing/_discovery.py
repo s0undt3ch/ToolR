@@ -42,22 +42,35 @@ def _import_tools_modules() -> list[Exception]:
         exc.add_note("raised while importing `tools`")
         return [exc]
 
-    search_paths = getattr(tools_pkg, "__path__", None)
-    if not search_paths:
-        return []
-
     errors: list[Exception] = []
-    for module_info in pkgutil.walk_packages(search_paths, prefix="tools."):
+    _import_package_modules(tools_pkg, errors)
+    return errors
+
+
+def _import_package_modules(package: ModuleType, errors: list[Exception]) -> None:
+    """Import every module under ``package``, recursing into subpackages.
+
+    ``pkgutil.walk_packages`` isn't used: it imports each subpackage itself,
+    so a subpackage that raises anything but ``ImportError`` would escape and
+    stop the walk, and its body would run a second time on our own import.
+    A subpackage is only descended into once it imported cleanly.
+    """
+    search_paths = getattr(package, "__path__", None)
+    if not search_paths:
+        return
+    for module_info in pkgutil.iter_modules(search_paths, prefix=f"{package.__name__}."):
         try:
             # `module_info.name` is enumerated by pkgutil from the local
             # `tools` package path, not user input — safe to import.
-            importlib.import_module(
+            module = importlib.import_module(
                 module_info.name
             )  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
         except Exception as exc:  # noqa: BLE001  # we want every error
             exc.add_note(f"raised while importing `{module_info.name}`")
             errors.append(exc)
-    return errors
+            continue
+        if module_info.ispkg:
+            _import_package_modules(module, errors)
 
 
 def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
