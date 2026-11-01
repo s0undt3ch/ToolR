@@ -11,9 +11,7 @@ use toolr_core::complete::{
     sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
-use toolr_core::execute::{
-    resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
-};
+use toolr_core::execute::{spawn_runner, wait_with_signals, write_spec_to_tempfile};
 use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
 use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
@@ -243,35 +241,17 @@ pub fn dispatch(
     };
 
     let tempfile = write_spec_to_tempfile(&spec)?;
-    // Prefer the resolved tools-venv python. Fall back to the
-    // PATH/TOOLR_PYTHON lookup only when there is no
-    // `tools/pyproject.toml` — i.e. projects that never opted into
-    // the per-repo venv layer.
-    let resolved_venv: Option<toolr_core::venv::ResolvedVenv> =
-        if repo_root.join("tools").join("pyproject.toml").is_file() {
-            let resolved = resolve_venv_path(&repo_root)?;
-            let quiet = output_opts.verbosity == "quiet";
-            Some(resync_if_needed(&repo_root, resolved, quiet)?)
-        } else {
-            None
-        };
-    let (python, venv_dir, python_version) = match &resolved_venv {
-        Some(resolved) => (
-            resolved.python.clone(),
-            Some(resolved.venv_dir.clone()),
-            Some(resolved.python_version.clone()),
-        ),
-        None => (resolve_python()?, None, None),
-    };
+    let resolved = resolve_venv_path(&repo_root)?;
+    let quiet = output_opts.verbosity == "quiet";
+    let resolved = resync_if_needed(&repo_root, resolved, quiet)?;
+    let python = resolved.python.clone();
 
     // Touch last_used_at on every invocation against a cached venv.
     // Backfill a fresh `meta.json` for cache entries that predate the
     // sidecar — without this, `toolr self cache list` would silently
     // hide venvs created by older binaries.
-    if let Some(venv) = &venv_dir
-        && let Some(cache_dir) = venv.parent()
-    {
-        let py_ver = python_version.as_deref().unwrap_or("");
+    if let Some(cache_dir) = resolved.venv_dir.parent() {
+        let py_ver = resolved.python_version.as_str();
         if let Err(e) = toolr_core::cache::touch_or_backfill(
             cache_dir,
             &repo_root,
@@ -292,22 +272,13 @@ pub fn dispatch(
     // as `toolr: No such file or directory (os error 2)` — uninformative
     // and gives no recovery hint.
     if !python.is_file() {
-        let hint = if resolved_venv.is_some() {
-            "Run `toolr project venv sync` to materialise the tools venv."
-        } else {
-            // `resolve_python` returns PATH hits absolute and probed, so only
-            // an explicit `TOOLR_PYTHON` path can be missing here.
-            "It came from TOOLR_PYTHON; point it at an existing interpreter."
-        };
         anyhow::bail!(
-            "Python interpreter not found at {}.\n{hint}",
+            "Python interpreter not found at {}.\nRun `toolr project venv sync` to materialise the tools venv.",
             python.display()
         );
     }
 
-    if let Some(resolved) = &resolved_venv
-        && output_opts.verbosity != "quiet"
-    {
+    if output_opts.verbosity != "quiet" {
         warn_on_toolr_py_mismatch(&resolved.venv_dir);
     }
 

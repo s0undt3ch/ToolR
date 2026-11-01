@@ -7,9 +7,7 @@ use tempfile::TempDir;
 
 fn fixture_with_manifest(json: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    std::fs::create_dir(&tools).unwrap();
-    std::fs::write(tools.join(".toolr-manifest.json"), json).unwrap();
+    common::write_fresh_manifest(tmp.path(), json);
     tmp
 }
 
@@ -58,12 +56,9 @@ fn help_lists_groups_from_manifest() {
 /// `toolr` package installed is available, otherwise `None`. We accept
 /// the project's own dev venv (created by `uv sync`) as the runner.
 ///
-/// These smoke tests deliberately exercise the no-pyproject fallback
-/// path in `dispatch.rs`: they write a `tools/.toolr-manifest.json`
-/// but no `tools/pyproject.toml`, so the dispatcher resolves Python
-/// via `TOOLR_PYTHON` rather than the tools venv. The full
-/// venv-driven path is covered by the network-dependent
-/// `end_to_end_sync` test.
+/// The fixtures link that venv in as the project's in-tree tools venv, so
+/// dispatch runs it without `uv`. The full sync-driven path is covered by
+/// the network-dependent `end_to_end_sync` test.
 fn detect_test_python() -> Option<PathBuf> {
     let candidate = std::env::var_os("TOOLR_TEST_PYTHON").map(PathBuf::from);
     let candidate = candidate.or_else(|| {
@@ -89,12 +84,30 @@ fn detect_test_python() -> Option<PathBuf> {
     if status.success() { Some(python) } else { None }
 }
 
-fn write_tools_demo(repo_root: &std::path::Path) {
-    let tools_dir = repo_root.join("tools");
-    std::fs::create_dir_all(&tools_dir).unwrap();
+/// Make `repo_root` a project whose `tools/<module>.py` holds `source`, with
+/// `python`'s venv linked in as the in-tree tools venv and a fresh manifest.
+#[cfg(unix)]
+fn write_demo_project(
+    repo_root: &std::path::Path,
+    python: &std::path::Path,
+    source: &str,
+    manifest: &str,
+) {
+    let tools_dir = common::write_project(repo_root);
+    // A regular package, so this checkout's own `tools/` (on the dev venv's
+    // path ahead of the appended repo root) can't shadow it.
     std::fs::write(tools_dir.join("__init__.py"), "").unwrap();
-    std::fs::write(
-        tools_dir.join("demo.py"),
+    std::fs::write(tools_dir.join("demo.py"), source).unwrap();
+    let venv = python.parent().and_then(std::path::Path::parent).unwrap();
+    std::os::unix::fs::symlink(venv, tools_dir.join(".venv")).unwrap();
+    common::write_fresh_manifest(repo_root, manifest);
+}
+
+#[cfg(unix)]
+fn write_tools_demo(repo_root: &std::path::Path, python: &std::path::Path) {
+    write_demo_project(
+        repo_root,
+        python,
         r#"
 from toolr import command_group
 
@@ -102,12 +115,10 @@ group = command_group("demo", "Demo", description="demo group")
 
 @group.command
 def hello(ctx, name: str = "world") -> None:
+    """Say hi."""
     ctx.print(f"hi {name}")
 "#,
-    )
-    .unwrap();
-    let manifest = r#"{
-        "schema_version": 2, "static_hash": "h", "third_party_hash": "",
+        r#"{
         "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
         "commands": [{
             "name": "hello", "group": "demo", "module": "tools.demo",
@@ -121,11 +132,12 @@ def hello(ctx, name: str = "world") -> None:
             ],
             "origin": "static"
         }]
-    }"#;
-    std::fs::write(tools_dir.join(".toolr-manifest.json"), manifest).unwrap();
+    }"#,
+    );
 }
 
 #[test]
+#[cfg(unix)]
 fn running_a_user_command_invokes_python_runner() {
     let Some(python) = detect_test_python() else {
         eprintln!(
@@ -136,11 +148,10 @@ fn running_a_user_command_invokes_python_runner() {
         return;
     };
     let tmp = TempDir::new().unwrap();
-    write_tools_demo(tmp.path());
+    write_tools_demo(tmp.path(), &python);
     let output = common::toolr()
         .current_dir(tmp.path())
-        .env("TOOLR_PYTHON", &python)
-        .env("PYTHONPATH", tmp.path())
+        .env("XDG_CACHE_HOME", tmp.path().join(".cache"))
         .args(["demo", "hello", "--name", "Alice"])
         .output()
         .unwrap();
@@ -391,17 +402,16 @@ fn dispatch_passes_runner_traceback_through_unaltered() {
 }
 
 #[test]
+#[cfg(unix)]
 fn user_command_propagates_nonzero_exit() {
     let Some(python) = detect_test_python() else {
         eprintln!("skipping: no test python (see above)");
         return;
     };
     let tmp = TempDir::new().unwrap();
-    let tools_dir = tmp.path().join("tools");
-    std::fs::create_dir_all(&tools_dir).unwrap();
-    std::fs::write(tools_dir.join("__init__.py"), "").unwrap();
-    std::fs::write(
-        tools_dir.join("demo.py"),
+    write_demo_project(
+        tmp.path(),
+        &python,
         r#"
 from toolr import command_group
 
@@ -409,24 +419,21 @@ group = command_group("demo", "Demo", description="demo group")
 
 @group.command
 def boom(ctx) -> None:
+    """Fail."""
     ctx.exit(7, "failing on purpose")
 "#,
-    )
-    .unwrap();
-    let manifest = r#"{
-        "schema_version": 2, "static_hash": "h", "third_party_hash": "",
+        r#"{
         "groups": [{"name": "demo", "title": "Demo", "description": "", "origin": "static"}],
         "commands": [{
             "name": "boom", "group": "demo", "module": "tools.demo",
             "function": "boom", "summary": "", "description": "",
             "arguments": [], "origin": "static"
         }]
-    }"#;
-    std::fs::write(tools_dir.join(".toolr-manifest.json"), manifest).unwrap();
+    }"#,
+    );
     let output = common::toolr()
         .current_dir(tmp.path())
-        .env("TOOLR_PYTHON", &python)
-        .env("PYTHONPATH", tmp.path())
+        .env("XDG_CACHE_HOME", tmp.path().join(".cache"))
         .args(["demo", "boom"])
         .output()
         .unwrap();
@@ -473,80 +480,4 @@ fn project_deps_removed_prints_migration_hint() {
         stderr.contains("toolr project venv"),
         "stderr missing pointer to new path:\n{stderr}"
     );
-}
-
-/// Regression for #588: in a repo with no `tools/pyproject.toml`, dispatch
-/// falls back to `python3` on `PATH`. That fallback used to come back as the
-/// bare name `python3`, which the `is_file()` pre-check resolved against the
-/// cwd, so every command failed with "Python interpreter not found".
-#[test]
-#[cfg(unix)]
-fn dispatch_uses_python3_from_path_without_tools_pyproject() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let tmp = TempDir::new().unwrap();
-    let repo = tmp.path().join("repo");
-    write_tools_demo(&repo);
-
-    // The stub answers the resolver's `--version` probe without touching the
-    // marker, so the marker proves dispatch itself ran it.
-    let bin_dir = tmp.path().join("bin");
-    std::fs::create_dir_all(&bin_dir).unwrap();
-    let marker = tmp.path().join("reached");
-    let py = bin_dir.join("python3");
-    std::fs::write(
-        &py,
-        format!(
-            "#!/bin/sh\n\
-             if [ \"$1\" = --version ]; then echo 'Python 3.12.0'; exit 0; fi\n\
-             : > '{}'\nexit 0\n",
-            marker.display()
-        ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&py, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-    let output = common::toolr()
-        .current_dir(&repo)
-        .env("PATH", &bin_dir)
-        .env("XDG_CACHE_HOME", tmp.path().join("cache"))
-        .env_remove("TOOLR_PYTHON")
-        .args(["demo", "hello"])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !stderr.contains("Python interpreter not found"),
-        "PATH python3 should be accepted; stderr:\n{stderr}"
-    );
-    assert!(
-        marker.exists(),
-        "dispatch never reached the PATH python3; stderr:\n{stderr}"
-    );
-}
-
-/// Without a tools venv, a missing interpreter can only come from an explicit
-/// `$TOOLR_PYTHON` path, so the error must not point at `venv sync`, which
-/// needs a `tools/pyproject.toml` to work.
-#[test]
-fn dispatch_missing_toolr_python_without_tools_pyproject_skips_venv_sync_hint() {
-    let tmp = TempDir::new().unwrap();
-    let repo = tmp.path().join("repo");
-    write_tools_demo(&repo);
-
-    let output = common::toolr()
-        .current_dir(&repo)
-        .env("XDG_CACHE_HOME", tmp.path().join("cache"))
-        .env("TOOLR_PYTHON", tmp.path().join("missing").join("python"))
-        .args(["demo", "hello"])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_ne!(
-        output.status.code(),
-        Some(0),
-        "expected failure; stderr:\n{stderr}"
-    );
-    assert!(stderr.contains("TOOLR_PYTHON"), "stderr:\n{stderr}");
-    assert!(!stderr.contains("venv sync"), "stderr:\n{stderr}");
 }

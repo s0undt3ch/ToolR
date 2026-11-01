@@ -7,8 +7,7 @@ use tempfile::TempDir;
 /// happy path: the cached manifest's static_hash matches the live tree.
 fn fixture() -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    std::fs::create_dir(&tools).unwrap();
+    let tools = common::write_project(tmp.path());
     std::fs::write(
         tools.join("ci.py"),
         r#""""CI utilities."""
@@ -78,8 +77,7 @@ fn complete(tmp: &TempDir, args: &[&str]) -> String {
 #[test]
 fn description_newline_does_not_forge_candidates() {
     let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    std::fs::create_dir(&tools).unwrap();
+    let tools = common::write_project(tmp.path());
     std::fs::write(
         tools.join("ci.py"),
         "\"\"\"CI.\"\"\"\nfrom toolr import command_group\n\ngroup = command_group(\"ci\", \"x\\nevil\\tdesc\\x1b[2J\")\n",
@@ -180,14 +178,12 @@ def shiny(ctx):
 fn completes_builtins_when_no_tools_dir_anywhere() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().to_path_buf();
-    // GHA Windows runners ship with `C:\tools\` populated, so the
-    // ancestor walk succeeds when it crawls past the drive root.
-    // Same hazard on Unix hosts with `/tools`. Skip when the host
-    // violates the test precondition (no tools/ anywhere up the
-    // chain from the tempdir).
+    // Only an ancestor `tools/pyproject.toml` makes a project, so a bare
+    // host `tools/` (the Windows runners' `C:\tools\`) is harmless. Skip
+    // when the tempdir sits inside a real project.
     let mut walker = cwd.canonicalize().unwrap_or_else(|_| cwd.clone());
     let ancestor_has_tools = loop {
-        if walker.join("tools").is_dir() {
+        if walker.join("tools").join("pyproject.toml").is_file() {
             break true;
         }
         if !walker.pop() {
@@ -196,7 +192,7 @@ fn completes_builtins_when_no_tools_dir_anywhere() {
     };
     if ancestor_has_tools {
         eprintln!(
-            "skipping: an ancestor of {} has a tools/ dir; \
+            "skipping: an ancestor of {} has a tools/pyproject.toml; \
              this host violates the test precondition.",
             cwd.display(),
         );

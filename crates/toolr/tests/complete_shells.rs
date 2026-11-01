@@ -2,6 +2,8 @@
 //! A `Literal[...]` value such as `$(touch X)` must never execute on TAB.
 #![cfg(unix)]
 
+mod common;
+
 use assert_cmd::Command;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
@@ -40,8 +42,7 @@ fn fixture() -> Fixture {
     let tmp = TempDir::new().unwrap();
     let sentinel = tmp.path().join("sentinel-one");
     let sentinel2 = tmp.path().join("sentinel-two");
-    let tools = tmp.path().join("tools");
-    std::fs::create_dir(&tools).unwrap();
+    common::write_project(tmp.path());
     let fx = Fixture {
         tmp,
         sentinel,

@@ -221,13 +221,10 @@ pub fn write_executable(path: &Path, body: &str) {
 }
 
 /// A repository whose code drops `sentinel` the moment any of it runs:
-/// `tools/hello.py` writes it at import time, and (with `tools/pyproject.toml`)
-/// a committed in-tree `tools/.venv/bin/python` writes it when executed.
-/// Without `tools/pyproject.toml` toolr never builds a manifest, so one is
-/// built first and left behind as if committed: `toolr hello world` always
-/// resolves, and dispatch is attempted.
+/// `tools/hello.py` writes it at import time, and a committed in-tree
+/// `tools/.venv/bin/python` writes it when executed.
 #[cfg(unix)]
-pub fn hostile_repo(sentinel: &Path, with_pyproject: bool) -> TempDir {
+pub fn hostile_repo(sentinel: &Path) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");
     fs::create_dir_all(&tools).unwrap();
@@ -246,27 +243,12 @@ pub fn hostile_repo(sentinel: &Path, with_pyproject: bool) -> TempDir {
         "[project]\nname=\"evil\"\nversion=\"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
     )
     .unwrap();
-    if !with_pyproject {
-        let cache = TempDir::new().unwrap();
-        assert_cmd::Command::cargo_bin("toolr")
-            .unwrap()
-            .current_dir(tmp.path())
-            .env("XDG_CACHE_HOME", cache.path())
-            // The seed must persist, and toolr only writes it for a trusted repo.
-            .env("TOOLR_TRUST_ALL", "1")
-            .arg("--help")
-            .assert()
-            .success();
-        assert!(tools.join(".toolr-manifest.json").is_file());
-        fs::remove_file(tools.join("pyproject.toml")).unwrap();
-    } else {
-        let venv_bin = tools.join(".venv").join("bin");
-        fs::create_dir_all(&venv_bin).unwrap();
-        write_executable(
-            &venv_bin.join("python"),
-            &format!("#!/bin/sh\necho pwned > {sentinel_str}\n"),
-        );
-    }
+    let venv_bin = tools.join(".venv").join("bin");
+    fs::create_dir_all(&venv_bin).unwrap();
+    write_executable(
+        &venv_bin.join("python"),
+        &format!("#!/bin/sh\necho pwned > {sentinel_str}\n"),
+    );
     tmp
 }
 
@@ -313,4 +295,37 @@ pub fn toolr_std() -> std::process::Command {
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
     cmd.env("TOOLR_TRUST_ALL", "1");
     cmd
+}
+
+/// `tools/pyproject.toml` for fixtures: toolr only treats a `tools/` with one
+/// as a project. The in-tree venv keeps the fixture away from the real cache.
+pub const TOOLS_PYPROJECT: &str = "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n";
+
+/// Make `root` a toolr project: create `tools/` and its `pyproject.toml`.
+/// Returns the `tools/` path.
+pub fn write_project(root: &Path) -> PathBuf {
+    let tools = root.join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(tools.join("pyproject.toml"), TOOLS_PYPROJECT).unwrap();
+    tools
+}
+
+/// Write a hand-built manifest into `root`'s project, stamped fresh against
+/// the `tools/*.py` already there and the in-tree venv, so the freshness
+/// check keeps it as written instead of rebuilding it from source.
+pub fn write_fresh_manifest(root: &Path, manifest_json: &str) {
+    let tools = write_project(root);
+    let mut manifest: serde_json::Value = serde_json::from_str(manifest_json).unwrap();
+    manifest["schema_version"] = toolr_core::manifest::SCHEMA_VERSION.into();
+    manifest["toolr_version"] = env!("CARGO_PKG_VERSION").into();
+    manifest["static_hash"] = toolr_core::hash::hash_tools_dir(&tools).unwrap().into();
+    manifest["third_party_hash"] =
+        toolr_core::manifest_build::compute_third_party_hash(&tools.join(".venv"))
+            .unwrap()
+            .into();
+    fs::write(
+        tools.join(".toolr-manifest.json"),
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
 }

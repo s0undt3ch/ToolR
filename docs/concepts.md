@@ -17,6 +17,12 @@ A directory at the root of your repo where your commands live. Each
 directory is a [PEP 420 namespace package][pep-420] — **no
 `__init__.py` is needed**. See [Writing commands](writing-commands/index.md).
 
+A `tools/` is a toolr project only if it contains a `pyproject.toml`
+(`toolr project init` creates one). toolr finds the project by walking up
+from the current directory to the nearest `tools/pyproject.toml`, so a
+`tools/` without one, such as a `src/pkg/tools/` package in your code or a
+scripts directory above your repo, is ignored.
+
 [pep-420]: https://peps.python.org/pep-0420/
 
 ## `tools/pyproject.toml`

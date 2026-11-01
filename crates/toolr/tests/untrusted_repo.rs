@@ -12,7 +12,7 @@ use tempfile::TempDir;
 fn help_does_not_execute_repository_code() {
     let out = TempDir::new().unwrap();
     let sentinel = out.path().join("sentinel");
-    let repo = common::hostile_repo(&sentinel, true);
+    let repo = common::hostile_repo(&sentinel);
     let env = common::TrustEnv::new();
 
     env.toolr(repo.path()).arg("--help").assert().success();
@@ -25,7 +25,7 @@ fn help_does_not_execute_repository_code() {
 fn bare_invocation_does_not_execute_repository_code() {
     let out = TempDir::new().unwrap();
     let sentinel = out.path().join("sentinel");
-    let repo = common::hostile_repo(&sentinel, true);
+    let repo = common::hostile_repo(&sentinel);
     let env = common::TrustEnv::new();
 
     env.toolr(repo.path()).assert().success();

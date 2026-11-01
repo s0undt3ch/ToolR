@@ -1,9 +1,9 @@
 //! CI gate: `MIN_PYTHON_MINOR` must match the lower bound of toolr-py's
 //! `requires-python`.
 //!
-//! The PATH fallback rejects interpreters older than `MIN_PYTHON_MINOR`. If
-//! toolr-py raises its floor and the constant stays behind, the probe accepts
-//! an interpreter that then fails with a raw `ModuleNotFoundError`.
+//! `toolr project init` never writes a `requires-python` below
+//! `MIN_PYTHON_MINOR`. If toolr-py raises its floor and the constant stays
+//! behind, init scaffolds a project that can't install toolr-py.
 
 use std::fs;
 use std::path::PathBuf;

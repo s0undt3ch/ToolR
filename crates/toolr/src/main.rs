@@ -14,7 +14,7 @@ mod value_parsers;
 
 use std::process::ExitCode;
 
-use toolr_core::discovery::discover_project_root;
+use toolr_core::discovery::{DiscoveryError, discover_project_root};
 use toolr_core::manifest::{Manifest, ManifestError, SCHEMA_VERSION, load_manifest};
 
 fn main() -> ExitCode {
@@ -149,8 +149,19 @@ fn argv_requests_quiet(argv: &[String]) -> bool {
 /// subcommand` (#542). Built-ins don't need the user's commands, and
 /// `project manifest rebuild` is the repair path, so they only warn.
 fn load_or_empty(cwd: &std::path::Path, argv: &[String]) -> anyhow::Result<Manifest> {
-    let Ok(root) = discover_project_root(cwd) else {
-        return Ok(empty_manifest());
+    let root = match discover_project_root(cwd) {
+        Ok(root) => root,
+        Err(e) => {
+            // A bare `tools/` explains why a user command is missing; plain
+            // `--help` stays quiet, since an unrelated `tools/` (such as
+            // `C:\tools`) may sit above any directory.
+            if matches!(e, DiscoveryError::MissingPyproject { .. })
+                && bootstrap::names_user_command(argv)
+            {
+                eprintln!("toolr: warning: {e}");
+            }
+            return Ok(empty_manifest());
+        }
     };
     let manifest_path = root.join("tools").join(".toolr-manifest.json");
     match load_manifest(&manifest_path) {

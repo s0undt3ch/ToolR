@@ -25,10 +25,10 @@ struct Hostile {
 }
 
 impl Hostile {
-    fn new(with_pyproject: bool) -> Self {
+    fn new() -> Self {
         let out = TempDir::new().unwrap();
         let sentinel = out.path().join("sentinel");
-        let repo = hostile_repo(&sentinel, with_pyproject);
+        let repo = hostile_repo(&sentinel);
         Self {
             env: TrustEnv::new(),
             _out: out,
@@ -57,7 +57,7 @@ impl Hostile {
 
 #[test]
 fn untrusted_dispatch_is_refused() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.toolr()
         .args(["hello", "world"])
         .assert()
@@ -71,22 +71,8 @@ fn untrusted_dispatch_is_refused() {
 }
 
 #[test]
-fn untrusted_repo_without_pyproject_is_refused() {
-    let h = Hostile::new(false);
-    h.toolr()
-        .args(["hello", "world"])
-        .assert()
-        .failure()
-        .stderr(contains(REFUSAL));
-    assert!(
-        !h.sentinel.exists(),
-        "untrusted dispatch ran repository code"
-    );
-}
-
-#[test]
 fn quiet_sync_refusal_is_not_swallowed() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.toolr()
         .args(["project", "venv", "sync", "--quiet"])
         .assert()
@@ -97,7 +83,7 @@ fn quiet_sync_refusal_is_not_swallowed() {
 
 #[test]
 fn venv_run_no_sync_is_refused() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.toolr()
         .args([
             "project",
@@ -117,7 +103,7 @@ fn venv_run_no_sync_is_refused() {
 
 #[test]
 fn help_and_complete_need_no_trust() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.toolr().arg("--help").assert().success();
     h.toolr()
         .args(["__complete", &h.repo.path().to_string_lossy(), ""])
@@ -128,7 +114,7 @@ fn help_and_complete_need_no_trust() {
 
 #[test]
 fn trust_then_dispatch_runs() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     let root = h.root().display().to_string();
     h.toolr()
         .args(["project", "trust"])
@@ -152,7 +138,7 @@ fn trust_then_dispatch_runs() {
 
 #[test]
 fn untrust_then_refused() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.toolr().args(["project", "trust"]).assert().success();
     h.toolr().args(["project", "untrust"]).assert().success();
     h.toolr()
@@ -165,7 +151,7 @@ fn untrust_then_refused() {
 
 #[test]
 fn trust_all_env_bypasses() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.toolr()
         .env("TOOLR_TRUST_ALL", "1")
         .args(["hello", "world"])
@@ -179,7 +165,7 @@ fn trust_all_env_bypasses() {
 
 #[test]
 fn trust_all_run_does_not_leave_trust_behind() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.toolr()
         .env("TOOLR_TRUST_ALL", "1")
         .args(["hello", "world"])
@@ -280,7 +266,7 @@ fn project_init_under_trust_all_records_nothing() {
 fn home_with_tools_dir_can_be_trusted() {
     let home = TempDir::new().unwrap();
     let home_root = fs::canonicalize(home.path()).unwrap();
-    fs::create_dir(home_root.join("tools")).unwrap();
+    common::write_project(&home_root);
     let proj = home_root.join("proj");
     fs::create_dir(&proj).unwrap();
     let env = TrustEnv::new();
@@ -307,7 +293,7 @@ fn trust_commands_escape_control_characters() {
     let env = TrustEnv::new();
     let parent = TempDir::new().unwrap();
     let repo = fs::canonicalize(parent.path()).unwrap().join("evil\rLEGIT");
-    fs::create_dir_all(repo.join("tools")).unwrap();
+    common::write_project(&repo);
     let expected = format!(
         "{}\\rLEGIT\n",
         repo.parent().unwrap().join("evil").display()
@@ -333,7 +319,7 @@ fn trust_commands_escape_control_characters() {
 /// consent to keep running the repository.
 #[test]
 fn a_venv_from_before_trust_does_not_trust_the_repo() {
-    let h = Hostile::new(true);
+    let h = Hostile::new();
     h.seed_pre_trust_venv_cache();
     h.toolr()
         .args(["project", "venv", "sync", "--quiet"])

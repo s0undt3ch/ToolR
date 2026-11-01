@@ -780,6 +780,7 @@ use tempfile::TempDir;
 fn make_tree(py_files: &[(&str, &str)]) -> TempDir {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir(tmp.path().join("tools")).unwrap();
+    std::fs::write(tmp.path().join("tools").join("pyproject.toml"), "").unwrap();
     for (name, contents) in py_files {
         let path = tmp.path().join("tools").join(name);
         if let Some(parent) = path.parent() {

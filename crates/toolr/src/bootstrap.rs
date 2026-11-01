@@ -46,9 +46,6 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         return Ok(());
     };
     let tools = root.join("tools");
-    if !tools.join("pyproject.toml").is_file() {
-        return Ok(());
-    }
     if tools.join(".toolr-manifest.json").is_file() {
         return Ok(());
     }
@@ -79,6 +76,9 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
     Ok(())
 }
 
+/// Top-level subcommands toolr itself provides.
+const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
+
 /// Decide whether the pre-clap bootstrap should skip building a missing
 /// manifest for this argv.
 ///
@@ -93,7 +93,6 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
 /// binary metadata only). `--help` and bare `toolr` take the static
 /// build so help renders the user's command tree.
 pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
-    const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
     const VERSION_FLAGS: &[&str] = &["--version", "-V"];
 
     // `--version` prints binary metadata only — never needs the user
@@ -105,14 +104,26 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
     {
         return true;
     }
-    // First positional (= first arg after `toolr` that doesn't start with `-`).
     // `--help` / bare `toolr` fall through to the static build so both
     // surfaces render the user's command tree.
-    let first_positional = argv.iter().skip(1).find(|a| !a.starts_with('-'));
-    match first_positional {
+    match first_positional(argv) {
         None => false, // `toolr` alone (with or without `--help`) → static build so help shows user groups
-        Some(name) => BUILTINS.contains(&name.as_str()),
+        Some(name) => BUILTINS.contains(&name),
     }
+}
+
+/// Whether `argv` names a command that isn't one of toolr's built-ins, i.e.
+/// one that can only come from the project's manifest.
+pub(crate) fn names_user_command(argv: &[String]) -> bool {
+    first_positional(argv).is_some_and(|name| !BUILTINS.contains(&name))
+}
+
+/// First arg after `toolr` that doesn't start with `-`.
+fn first_positional(argv: &[String]) -> Option<&str> {
+    argv.iter()
+        .skip(1)
+        .map(String::as_str)
+        .find(|a| !a.starts_with('-'))
 }
 
 /// Dispatch-time freshness step: detect a stale manifest, rebuild it
@@ -134,9 +145,6 @@ pub(crate) fn ensure_manifest_fresh(
         return Ok(None);
     };
     let tools = root.join("tools");
-    if !tools.join("pyproject.toml").is_file() {
-        return Ok(None);
-    }
     if should_skip_auto_rebuild(argv) {
         return Ok(None);
     }

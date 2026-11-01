@@ -225,6 +225,7 @@ fn init_example_has_all_four_commands() {
 /// End-to-end: scaffold + run `toolr example hello` against the result.
 /// Skipped if no usable Python is available.
 #[test]
+#[cfg(unix)]
 fn init_then_run_example_hello() {
     let Some(python) = detect_test_python() else {
         eprintln!("skipping: no .venv/bin/python with toolr installed");
@@ -233,26 +234,24 @@ fn init_then_run_example_hello() {
     let tmp = TempDir::new().unwrap();
     cargo_bin()
         .current_dir(tmp.path())
-        .args(["project", "init", "--no-sync", "--quiet"])
+        .args([
+            "project",
+            "init",
+            "--no-sync",
+            "--quiet",
+            "--venv-location",
+            "in-tree",
+        ])
         .assert()
         .success();
-    // Remove the scaffolded pyproject so the dispatcher falls back to
-    // the legacy TOOLR_PYTHON path (otherwise it would try to resolve a
-    // real tools venv via uv, which this test isn't set up for).
-    fs::remove_file(tmp.path().join("tools/pyproject.toml")).unwrap();
-
-    // Build the static manifest so dispatch knows about the `example`
-    // group/command. Without this clap has no subcommand registered.
-    cargo_bin()
-        .current_dir(tmp.path())
-        .arg("__build-static-manifest")
-        .assert()
-        .success();
+    // Link the test python's venv in as the in-tree tools venv, so dispatch
+    // runs it without `uv`.
+    let venv = python.parent().and_then(std::path::Path::parent).unwrap();
+    std::os::unix::fs::symlink(venv, tmp.path().join("tools/.venv")).unwrap();
 
     let output = cargo_bin()
         .current_dir(tmp.path())
-        .env("TOOLR_PYTHON", &python)
-        .env("PYTHONPATH", tmp.path())
+        .env("XDG_CACHE_HOME", tmp.path().join(".cache"))
         .args(["example", "hello", "--name", "Plan10"])
         .output()
         .unwrap();
