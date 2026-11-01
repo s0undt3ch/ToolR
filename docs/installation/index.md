@@ -113,7 +113,9 @@ venv to uv, and uv picks the interpreter.
 
 Toolr uses the first uv it finds:
 
-1. `uv` on `PATH`.
+1. `uv` in an absolute `PATH` directory. Toolr skips empty and relative
+   `PATH` entries (`.`, `bin`, `~/bin`), so a `uv` inside the repository
+   never runs by accident.
 2. A toolr-managed copy at `$XDG_DATA_HOME/toolr/bin/uv` (`uv.exe` on
    Windows). When `XDG_DATA_HOME` is unset, toolr uses the platform data
    directory: `~/.local/share` on Linux, `~/Library/Application Support`
