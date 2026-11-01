@@ -44,6 +44,10 @@ code_blocks = false
 tables = false
 headings = false
 
+[per-file-ignores]
+# Notes are joined into the release body and `release-notes add --text` writes one line.
+"release-notes/*.md" = ["MD013"]
+
 [MD007]
 indent = 4
 
