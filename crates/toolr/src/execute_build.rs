@@ -451,8 +451,9 @@ fn extract_scalar(
     })
 }
 
-/// Resolve a deferred path arg's raw value: from the cwd when typed, from
-/// the repo root when it is the default. Errors read like clap's.
+/// Resolve a deferred path arg's raw value: from the repo root when it is
+/// the default, from the cwd when typed or read from its env var. Errors
+/// read like clap's.
 fn resolve_deferred(
     arg: &Argument,
     matches: &ArgMatches,
@@ -464,17 +465,25 @@ fn resolve_deferred(
         .as_ref()
         .expect("a deferred path arg has a resolved type");
     let flag = arg_long_flag_spelling(arg).unwrap_or_default();
-    let typed = matches.value_source(arg.name.as_str()) == Some(ValueSource::CommandLine);
-    let base = if typed { bases.cwd } else { bases.repo_root };
+    let source = matches.value_source(arg.name.as_str());
+    let is_default = source == Some(ValueSource::DefaultValue);
+    let base = if is_default {
+        bases.repo_root
+    } else {
+        bases.cwd
+    };
     let path = resolve_path(ty, raw, base).map_err(|e| {
-        if typed {
-            anyhow::anyhow!("invalid value '{}' for '{flag}': {e}", raw.display())
-        } else {
-            anyhow::anyhow!(
-                "default '{}' for '{flag}' (resolved from the repo root {}): {e}",
-                raw.display(),
+        let raw = raw.display();
+        match source {
+            Some(ValueSource::DefaultValue) => anyhow::anyhow!(
+                "default '{raw}' for '{flag}' (resolved from the repo root {}): {e}",
                 bases.repo_root.display(),
-            )
+            ),
+            Some(ValueSource::EnvVariable) => {
+                let var = arg.metadata.env.as_deref().unwrap_or_default();
+                anyhow::anyhow!("invalid value '{raw}' for '{flag}' (from {var}): {e}")
+            }
+            _ => anyhow::anyhow!("invalid value '{raw}' for '{flag}': {e}"),
         }
     })?;
     Ok(Value::String(path.to_string_lossy().into_owned()))
@@ -849,6 +858,44 @@ mod tests {
         assert_eq!(
             args["cfg"],
             path_value(&dunce::canonicalize(layout.repo.path()).unwrap())
+        );
+    }
+
+    /// A deferred arg bound to `env_name` (clap's `.env()`, via the
+    /// manifest metadata), parsed with that variable set and no flag typed.
+    fn env_spec(
+        layout: &Layout,
+        env_name: &str,
+        value: &str,
+    ) -> anyhow::Result<BTreeMap<String, Value>> {
+        let mut cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
+        cmd.arguments[0].metadata.env = Some(env_name.into());
+        // SAFETY: the variable name is unique to the calling test.
+        unsafe { std::env::set_var(env_name, value) };
+        let matches = user_matches(&cmd, &["test"]);
+        unsafe { std::env::remove_var(env_name) };
+        build_spec(&cmd, &matches, &layout.bases(), &OutputOptions::default()).map(|s| s.args)
+    }
+
+    #[test]
+    fn env_value_for_deferred_arg_resolves_against_cwd() {
+        let layout = Layout::new();
+        let local = layout.write("sub/dir/local.toml");
+        let args = env_spec(&layout, "TOOLR_TEST_DEFERRED_ENV_OK", "local.toml").unwrap();
+        assert_eq!(
+            args["cfg"],
+            path_value(&dunce::canonicalize(local).unwrap())
+        );
+    }
+
+    #[test]
+    fn env_value_error_names_the_env_var_not_a_default() {
+        let layout = Layout::new();
+        let err = env_spec(&layout, "TOOLR_TEST_DEFERRED_ENV_BAD", "nope.toml").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid value 'nope.toml' for '--cfg' (from TOOLR_TEST_DEFERRED_ENV_BAD): \
+             path does not exist: nope.toml"
         );
     }
 
