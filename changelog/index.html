@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev175-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev187-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev175 - 2026-11-01
+        0.35.2-dev187 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev175 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev187 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev175-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev187-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev175 - 2026-11-01
+        0.35.2-dev187 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev175 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev187 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev175-2026-11-01">0.35.2-dev175 - 2026-11-01<a class="headerlink" href="#0352-dev175-2026-11-01" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev187-2026-11-01">0.35.2-dev187 - 2026-11-01<a class="headerlink" href="#0352-dev187-2026-11-01" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7677,6 +7677,11 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(runner)</em> Rescue every sibling submodule imported under TYPE_CHECKING (<a href="https://github.com/s0undt3ch/ToolR/commit/a0d8bb1db59b212861b8042381df578073f9a3b4"><code>a0d8bb1</code></a>)</li>
 <li><em>(security)</em> Don't write the manifest into an untrusted repository (<a href="https://github.com/s0undt3ch/ToolR/commit/e09520dbc2115d7313b591709ddda169bd4667c3"><code>e09520d</code></a>)</li>
 <li><em>(command)</em> Write ctx.run stdin from its own thread (<a href="https://github.com/s0undt3ch/ToolR/commit/989d481e457ec4894466bac3a8cc2cb668c54961"><code>989d481</code></a>)</li>
+<li><em>(release)</em> Fail release prep when a prek hook fails (<a href="https://github.com/s0undt3ch/ToolR/commit/c012c4ddf872ecfe1042cb9459a9e1d34cd108cc"><code>c012c4d</code></a>)</li>
+<li><em>(release)</em> Regenerate skill references right after the version bump (<a href="https://github.com/s0undt3ch/ToolR/commit/80e170ef5e2694252e66b8f7478249c519748811"><code>80e170e</code></a>)</li>
+<li><em>(release)</em> Show what prek changed outside the release before failing (<a href="https://github.com/s0undt3ch/ToolR/commit/4268e68c492c96600fa771d60f2e26b86d808391"><code>4268e68</code></a>)</li>
+<li><em>(release)</em> Fail release prep on skill reference drift already on main (<a href="https://github.com/s0undt3ch/ToolR/commit/6852da9b04671551524f4efa58c6e4bba79f35e2"><code>6852da9</code></a>)</li>
+<li><em>(release)</em> Handle quoted paths and show the diff when prek fails (<a href="https://github.com/s0undt3ch/ToolR/commit/0d958d3ef0e0a595611a7c60071483db6d7a6a98"><code>0d958d3</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7698,6 +7703,7 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(runner)</em> Simplify per-parameter hint resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/f604bf3db28b28933e5a8bb3ae4e0f8181679de0"><code>f604bf3</code></a>)</li>
 <li><em>(bootstrap)</em> Decide manifest persistence once per run (<a href="https://github.com/s0undt3ch/ToolR/commit/4b92c7e7855a10d50d99875ea55d0989c69fcc62"><code>4b92c7e</code></a>)</li>
 <li><em>(command)</em> Tidy the stdin deadlock tests and comments (<a href="https://github.com/s0undt3ch/ToolR/commit/cfe1f2f5682e8b295f10d18559df3af34406fc52"><code>cfe1f2f</code></a>)</li>
+<li><em>(release)</em> Split the commit step's path comparison from its reporting (<a href="https://github.com/s0undt3ch/ToolR/commit/1f70d9949439f3a5b347779b97ac0ee1c4366bac"><code>1f70d99</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7743,6 +7749,9 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(specs)</em> Spec and plan F-08 ctx.run input deadlock (<a href="https://github.com/s0undt3ch/ToolR/commit/cd2718aa426bdac5c6ab9b64e3110e97f1ed499f"><code>cd2718a</code></a>)</li>
 <li><em>(unreleased)</em> Note the ctx.run input deadlock fix (<a href="https://github.com/s0undt3ch/ToolR/commit/05f7b239520ab59854685271bb99b52bd219a6f3"><code>05f7b23</code></a>)</li>
 <li><em>(specs)</em> Archive ctx.run input deadlock design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/a1fa76a40b508f3b34affba6bf025e1ec7a8e2e3"><code>a1fa76a</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-24 release prek failures (<a href="https://github.com/s0undt3ch/ToolR/commit/d1994c6c854a80aa7ac2feb44b1876a30e67a8d7"><code>d1994c6</code></a>)</li>
+<li><em>(specs)</em> Archive release prek failures design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/77573adcff21de5ecbf98ff6e21791757664e5b1"><code>77573ad</code></a>)</li>
+<li><em>(specs)</em> Note the pre-bump skill reference check in the release prek design (<a href="https://github.com/s0undt3ch/ToolR/commit/e71a3935064482dcc77052c7a5f756aa9dfc539a"><code>e71a393</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7775,6 +7784,7 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(runner)</em> Cover the remaining TYPE_CHECKING rescue paths (<a href="https://github.com/s0undt3ch/ToolR/commit/b60141dec2dd9a99aa26ab5d57921c86850a5b1e"><code>b60141d</code></a>)</li>
 <li><em>(command)</em> Bound the stdin deadlock regression test from outside (<a href="https://github.com/s0undt3ch/ToolR/commit/2e227314d12ddd593a66fec6e0cb12aacce924dd"><code>2e22731</code></a>)</li>
 <li><em>(command)</em> Make the stdin deadlock tests fail instead of hang (<a href="https://github.com/s0undt3ch/ToolR/commit/e0cd89584b1fe7515231af7fe93dfe9701939c84"><code>e0cd895</code></a>)</li>
+<li><em>(release)</em> Prove the strict prek pass is what fails the commit step (<a href="https://github.com/s0undt3ch/ToolR/commit/75d0f8ff9d4ddcc491810c66a14df9b3aeb5c452"><code>75d0f8f</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7790,6 +7800,7 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(renovate)</em> Give Rust toolchain bumps a week before they land (<a href="https://github.com/s0undt3ch/ToolR/commit/2abd49ac19744b32e95291c2643f685e785d6edc"><code>2abd49a</code></a>)</li>
 <li>Move macOS arm64 jobs from macos-14 to macos-15 (<a href="https://github.com/s0undt3ch/ToolR/commit/e03ed13f8a88f5e499ccc9a4adb46df1ba670e08"><code>e03ed13</code></a>)</li>
 <li><em>(action)</em> Export TOOLR_TRUST_ALL (<a href="https://github.com/s0undt3ch/ToolR/commit/0e305afd117d44eb930485a4d100dc28b0fab889"><code>0e305af</code></a>)</li>
+<li><em>(release)</em> Show the committed release diff and drop the unused local tag (<a href="https://github.com/s0undt3ch/ToolR/commit/aa0478cc997a9714dfb926d1d931fb97e7c4c855"><code>aa0478c</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
