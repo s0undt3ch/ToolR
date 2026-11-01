@@ -196,20 +196,20 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      # toolr-py builds toolr-core without its `full` feature, but feature
-      # unification means no workspace build ever does, so check both here.
-      - id: cargo-check-toolr-core-lean
-        name: clippy (toolr-core without default features, and toolr-py)
+      # toolr-py builds toolr-core without its `full` feature, which no
+      # workspace build does because of feature unification, so lint it here.
+      - id: clippy-toolr-py-lean
+        name: clippy (toolr-core without `full`, and toolr-py)
         entry: bash -c 'cargo clippy -p toolr-core --no-default-features --all-targets -- -D warnings && cargo clippy -p toolr-py --all-targets -- -D warnings'
         language: system
         pass_filenames: false
         files: ^(crates/toolr-(core|py)/.*\.rs|Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
 
-      # The extension needs only toolr-core's `command` and `docstrings`; keep
-      # the CLI's async, HTTP, archive and parser stacks out of its build.
-      - id: toolr-py-deps
-        name: toolr-py links no CLI-only crates
-        entry: bash -c 'tree=$(cargo tree -p toolr-py -e normal --prefix none) || exit 1; ! grep -E "^(tokio|reqwest|hyper|rustls|ruff_python_parser|ruff_python_ast|zip|tar) " <<<"$tree"'
+      # toolr-py links whatever toolr-core needs without `full`; a new
+      # dependency must be optional and listed in `full`, or added here.
+      - id: toolr-core-lean-deps
+        name: toolr-core without `full` depends only on allowlisted crates
+        entry: bash -c 'allowed="serde"; tree=$(cargo tree -p toolr-core --no-default-features -e normal --depth 1 --prefix none --target all) || exit 1; deps=$(awk "NR > 1 { print \$1 }" <<<"$tree" | sort -u | paste -sd " " -); [ "$deps" = "$allowed" ] || { echo "toolr-core without full depends on \"$deps\", expected \"$allowed\"" >&2; exit 1; }'
         language: system
         pass_filenames: false
         files: ^(Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
