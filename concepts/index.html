@@ -1772,6 +1772,10 @@ repository trusted, and neither does a run under <code>TOOLR_TRUST_ALL=1</code>.
 <p>These never need trust, because nothing executes: <code>--help</code>, bare
 <code>toolr</code>, tab completion, <code>toolr project manifest rebuild</code> and
 <code>toolr self build-manifest</code>.</p>
+<p>toolr doesn't write <code>tools/.toolr-manifest.json</code> into an untrusted
+repository on its own. There, <code>--help</code>, bare <code>toolr</code>, tab completion and
+refused commands build the manifest in memory. Only an explicit
+<code>toolr project manifest rebuild</code> or <code>toolr self build-manifest</code> writes it.</p>
 <p>For automation, set <code>TOOLR_TRUST_ALL=1</code>. The value must be exactly <code>1</code>.
 The <code>s0undt3ch/ToolR</code> GitHub Action sets it for you; see
 <a href="../project-config/#venv-location">Project configuration</a>. toolr doesn't infer it

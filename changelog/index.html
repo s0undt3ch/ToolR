@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev160-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev167-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev160 - 2026-11-01
+        0.35.2-dev167 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev160 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev167 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev160-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev167-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev160 - 2026-11-01
+        0.35.2-dev167 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev160 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev167 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev160-2026-11-01">0.35.2-dev160 - 2026-11-01<a class="headerlink" href="#0352-dev160-2026-11-01" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev167-2026-11-01">0.35.2-dev167 - 2026-11-01<a class="headerlink" href="#0352-dev167-2026-11-01" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7613,6 +7613,10 @@ sits under <code>if TYPE_CHECKING:</code> (as ruff's TC001-TC003 rules arrange).
 stop conversion for every argument of that command, so <code>count: int</code> arrived as the string <code>"3"</code>.
 When toolr can't resolve an annotation, it now names the argument in a warning instead of silently
 passing the raw string.</p>
+<p><code>toolr --help</code>, bare <code>toolr</code> and a refused command no longer write <code>tools/.toolr-manifest.json</code> into a
+repository you haven't trusted. toolr builds the command list in memory there instead, so inspecting
+an unfamiliar checkout leaves it untouched. Trusted repositories, and runs with <code>TOOLR_TRUST_ALL=1</code>,
+still cache the manifest as before.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7667,6 +7671,7 @@ passing the raw string.</p>
 <li><em>(runner)</em> Read lazy 3.14+ annotations without evaluating them eagerly (<a href="https://github.com/s0undt3ch/ToolR/commit/8acbd36ed2fc7db07a72620275a3afe3744af601"><code>8acbd36</code></a>)</li>
 <li><em>(runner)</em> Rescue aliased TYPE_CHECKING guards and report failed rescue imports (<a href="https://github.com/s0undt3ch/ToolR/commit/4f46b71a4e3866e8b0954b881ac85b7e141d279b"><code>4f46b71</code></a>)</li>
 <li><em>(runner)</em> Rescue every sibling submodule imported under TYPE_CHECKING (<a href="https://github.com/s0undt3ch/ToolR/commit/a0d8bb1db59b212861b8042381df578073f9a3b4"><code>a0d8bb1</code></a>)</li>
+<li><em>(security)</em> Don't write the manifest into an untrusted repository (<a href="https://github.com/s0undt3ch/ToolR/commit/e09520dbc2115d7313b591709ddda169bd4667c3"><code>e09520d</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7686,6 +7691,7 @@ passing the raw string.</p>
 <li><em>(venv)</em> Share the freshness inputs message and fixture edit helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/a9ffd24721aafd608382636b90a7aa70e1f1641c"><code>a9ffd24</code></a>)</li>
 <li><em>(plugins)</em> Flatten venv layouts and qualify glob_path::escape_path (<a href="https://github.com/s0undt3ch/ToolR/commit/7df3b9ec035ed1594af91b85a26df47e4b05a0b2"><code>7df3b9e</code></a>)</li>
 <li><em>(runner)</em> Simplify per-parameter hint resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/f604bf3db28b28933e5a8bb3ae4e0f8181679de0"><code>f604bf3</code></a>)</li>
+<li><em>(bootstrap)</em> Decide manifest persistence once per run (<a href="https://github.com/s0undt3ch/ToolR/commit/4b92c7e7855a10d50d99875ea55d0989c69fcc62"><code>4b92c7e</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7724,6 +7730,10 @@ passing the raw string.</p>
 <li><em>(specs)</em> Design and plan for per-parameter type hint resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/525b740928b62d5748b976bc170eed35aa31fd5f"><code>525b740</code></a>)</li>
 <li><em>(arguments)</em> Document TYPE_CHECKING imports in command signatures (<a href="https://github.com/s0undt3ch/ToolR/commit/86361e9d827e1e6d33f32dd0911f89a71f6bbe1d"><code>86361e9</code></a>)</li>
 <li><em>(specs)</em> Archive runner type hints design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/853ea14a82006dcc8e9cfe79813b243a3dd3879f"><code>853ea14</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-27 help untrusted manifest write (<a href="https://github.com/s0undt3ch/ToolR/commit/cf46debf64ea5b3d199a4e87aca78d5424fae999"><code>cf46deb</code></a>)</li>
+<li><em>(security)</em> Note that untrusted repos get no manifest file (<a href="https://github.com/s0undt3ch/ToolR/commit/fe4e330fdfacaedb7f1ff246d0a97f70057bc089"><code>fe4e330</code></a>)</li>
+<li><em>(specs)</em> Archive help untrusted manifest write design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/72a0af6534397364354889af573b04d0d2de961b"><code>72a0af6</code></a>)</li>
+<li><em>(security)</em> Narrow the untrusted-manifest promise to automatic rebuilds (<a href="https://github.com/s0undt3ch/ToolR/commit/3b01fd1f214e875e52d8728b6e55257746ebd123"><code>3b01fd1</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>

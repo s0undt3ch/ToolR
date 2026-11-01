@@ -1906,6 +1906,9 @@ the static layer.</p>
   available to re-glob third-party fragments too.</li>
 <li>The user explicitly runs <code>toolr project manifest rebuild</code>.</li>
 </ul>
+<p>Automatic rebuilds are written to disk only in a trusted repository (see
+<a href="../../concepts/#repository-trust">Repository trust</a>). In an untrusted one the
+rebuilt manifest stays in memory and an existing file is left as found.</p>
 <h2 id="manual-rebuild">Manual rebuild<a class="headerlink" href="#manual-rebuild" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>manifest<span class="w"> </span>rebuild
 </span></code></pre></div>
