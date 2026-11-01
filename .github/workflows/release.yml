@@ -419,12 +419,21 @@ jobs:
         run: |
           git tag -m "chore(release): Release v${RELEASE_VERSION}" -a "v${RELEASE_VERSION}"
 
-      - name: Push tag
+      - name: Push the release commit and tag
+        id: push-release
         env:
           RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
         run: |
-          git push origin "v${RELEASE_VERSION}"
-          git push
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != refs/heads/* ]]; then
+            echo "::error::Releases must be dispatched on a branch (refs/heads/...), not ${GITHUB_REF}" >&2
+            exit 1
+          fi
+          # Atomic, so a branch that moved since dispatch can't leave a tag on an orphaned commit.
+          if ! git push --atomic origin "HEAD:refs/heads/${GITHUB_REF_NAME}" "refs/tags/v${RELEASE_VERSION}"; then
+            echo "::error::Pushing v${RELEASE_VERSION} failed and nothing was published. If ${GITHUB_REF_NAME} moved since the run was dispatched, dispatch the release again from its new tip; re-running this run fails the same way." >&2
+            exit 1
+          fi
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
