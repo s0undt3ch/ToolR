@@ -14,7 +14,7 @@ name = "_rust_utils"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-toolr-core = { path = "../toolr-core" }
+toolr-core = { path = "../toolr-core", default-features = false }
 pyo3.workspace = true
 
 [target.'cfg(windows)'.dependencies]

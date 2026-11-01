@@ -1,5 +1,6 @@
 //! A command built from `tools/` and the same command shipped in a plugin fragment must merge
 //! into identical manifest entries, bar the module prefix and the origin.
+#![cfg(feature = "full")]
 
 use std::fs;
 use std::path::Path;

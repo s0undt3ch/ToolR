@@ -4,6 +4,7 @@
 //! `toolr project init` never writes a `requires-python` below
 //! `MIN_PYTHON_MINOR`. If toolr-py raises its floor and the constant stays
 //! behind, init scaffolds a project that can't install toolr-py.
+#![cfg(feature = "full")]
 
 use std::fs;
 use std::path::PathBuf;

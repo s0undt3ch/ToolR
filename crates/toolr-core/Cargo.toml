@@ -9,38 +9,67 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
-[dependencies]
-tokio.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-blake3.workspace = true
-chrono.workspace = true
-uuid.workspace = true
-libc.workspace = true
-email_address.workspace = true
-pep440_rs.workspace = true
-walkdir.workspace = true
-ruff_python_parser.workspace = true
-ruff_python_ast.workspace = true
-tempfile.workspace = true
-signal-hook.workspace = true
-toml.workspace = true
-dirs.workspace = true
-glob.workspace = true
-humansize.workspace = true
-log.workspace = true
-reqwest.workspace = true
-flate2.workspace = true
-tar.workspace = true
-zip.workspace = true
+[features]
+default = ["full"]
+# Everything except the `command` and `docstrings` modules, which are all toolr-py links.
+full = [
+    "dep:serde_json",
+    "dep:anyhow",
+    "dep:thiserror",
+    "dep:blake3",
+    "dep:chrono",
+    "dep:uuid",
+    "dep:libc",
+    "dep:email_address",
+    "dep:pep440_rs",
+    "dep:walkdir",
+    "dep:ruff_python_parser",
+    "dep:ruff_python_ast",
+    "dep:tempfile",
+    "dep:signal-hook",
+    "dep:toml",
+    "dep:dirs",
+    "dep:glob",
+    "dep:humansize",
+    "dep:log",
+    "dep:reqwest",
+    "dep:flate2",
+    "dep:tar",
+    "dep:zip",
+]
 
-[target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["handleapi", "namedpipeapi", "processthreadsapi", "winnt", "fileapi", "minwinbase"] }
+[dependencies]
+serde.workspace = true
+serde_json = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+blake3 = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+libc = { workspace = true, optional = true }
+email_address = { workspace = true, optional = true }
+pep440_rs = { workspace = true, optional = true }
+walkdir = { workspace = true, optional = true }
+ruff_python_parser = { workspace = true, optional = true }
+ruff_python_ast = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+signal-hook = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+glob = { workspace = true, optional = true }
+humansize = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+flate2 = { workspace = true, optional = true }
+tar = { workspace = true, optional = true }
+zip = { workspace = true, optional = true }
 
 [dev-dependencies]
+tokio.workspace = true
 tempfile.workspace = true
 anyhow.workspace = true
 libc.workspace = true
 assert_cmd.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+winapi = { version = "0.3", features = ["handleapi", "namedpipeapi", "processthreadsapi", "winnt", "fileapi", "minwinbase"] }
