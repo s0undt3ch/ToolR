@@ -92,6 +92,21 @@ def test_github_env_block_avoids_delimiter_in_value(monkeypatch: pytest.MonkeyPa
     )
 
 
+def test_render_command_stdout_is_verbatim(
+    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path]
+) -> None:
+    note = (
+        "Fixed `Optional[bool]` handling; see [link](url) and ~/src/[wip]/ for details. "
+        + "word " * 30
+        + "end :smile:"
+    )
+    assert len(note.splitlines()[0]) > 120
+    notes_dir({"2026-01-01.00-00-00.a.md": note})
+    ctx = make_context(repo_root=tmp_path)
+    render(ctx)
+    assert ctx.stdout == note + "\n"
+
+
 def test_render_command_stdout(tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path]) -> None:
     notes_dir({"2026-01-01.00-00-00.a.md": "A"})
     ctx = make_context(repo_root=tmp_path)

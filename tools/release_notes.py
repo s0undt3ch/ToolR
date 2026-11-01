@@ -298,7 +298,7 @@ def render(ctx: Context, github_env: str | None = None) -> None:
         with Path(github_env).open("a", encoding="utf-8") as f:
             f.write(_github_env_block("TOOLR_RELEASE_NOTES", text))
         return
-    ctx.print(text)
+    ctx.print(text, markup=False, highlight=False, emoji=False, soft_wrap=True)
 
 
 @group.command
@@ -363,7 +363,7 @@ def add(
     if ret.returncode:
         ctx.error(f"git add failed with exit code {ret.returncode}")
         ctx.exit(ret.returncode)
-    ctx.print(str(rel))
+    ctx.print(str(rel), markup=False, highlight=False, emoji=False, soft_wrap=True)
 
 
 @group.command
