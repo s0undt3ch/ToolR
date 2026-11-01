@@ -8,6 +8,7 @@
 //! pass when they diverge.
 //!
 //! See `crates/toolr-core/src/execute/spec.rs` for the bump policy.
+#![cfg(feature = "full")]
 
 use std::fs;
 use std::path::PathBuf;

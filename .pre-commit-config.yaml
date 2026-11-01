@@ -195,3 +195,21 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+
+      # toolr-py builds toolr-core without its `full` feature, which no
+      # workspace build does because of feature unification, so lint it here.
+      - id: clippy-toolr-py-lean
+        name: clippy (toolr-core without `full`, and toolr-py)
+        entry: bash -c 'cargo clippy -p toolr-core --no-default-features --all-targets -- -D warnings && cargo clippy -p toolr-py --all-targets -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: ^(crates/toolr-(core|py)/.*\.rs|Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
+
+      # toolr-py links whatever toolr-core needs without `full`; a new
+      # dependency must be optional and listed in `full`, or added here.
+      - id: toolr-core-lean-deps
+        name: toolr-core without `full` depends only on allowlisted crates
+        entry: bash -c 'allowed="serde"; tree=$(cargo tree -p toolr-core --no-default-features -e normal --depth 1 --prefix none --target all) || exit 1; deps=$(awk "NR > 1 { print \$1 }" <<<"$tree" | sort -u | paste -sd " " -); [ "$deps" = "$allowed" ] || { echo "toolr-core without full depends on \"$deps\", expected \"$allowed\"" >&2; exit 1; }'
+        language: system
+        pass_filenames: false
+        files: ^(Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$

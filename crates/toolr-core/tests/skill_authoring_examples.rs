@@ -10,6 +10,7 @@
 //! cargo test -p toolr-core --test skill_authoring_examples -- \
 //!     --ignored regenerate
 //! ```
+#![cfg(feature = "full")]
 
 use std::fs;
 use std::path::PathBuf;
