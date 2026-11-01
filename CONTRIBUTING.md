@@ -134,7 +134,7 @@ toolr release-notes check --base <parent>     # the CI gate, run locally
 ```
 
 CI fails a PR with a `feat`, `fix`, `revert` or breaking commit and no note. A `Release-Notes: skip`
-trailer on any commit exempts the PR. The full rules are in [`release-notes/README.md`](release-notes/README.md).
+trailer on any commit exempts the PR. The full rules are in [`release-notes/README.md`](https://github.com/s0undt3ch/ToolR/blob/main/release-notes/README.md).
 
 ## Pre-commit hooks
 
