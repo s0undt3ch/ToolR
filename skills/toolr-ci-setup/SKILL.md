@@ -266,10 +266,13 @@ prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
   installing `gh` (it's already present on GitHub-hosted runners) or
   pre-baking it into self-hosted runner images.
 - **`tools/.venv` cache misses every run** — the venv cache key
-  hashes `tools/pyproject.toml` and `tools/uv.lock`. If either is
-  missing from the commit (or if your `tools/` layout is
-  non-standard), the key never stabilises. Commit `tools/uv.lock`
-  alongside `tools/pyproject.toml`. Local complement to the CI gate:
+  hashes `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml`
+  and `tools/.python-version`; the root `uv.lock` is not part of
+  it. Persistent misses mean one of those inputs changes between
+  runs, or the job fails before the cache post-step saves the
+  venv. A missing `tools/uv.lock` doesn't cause misses: it makes
+  the `--frozen` sync step fail, so commit it alongside
+  `tools/pyproject.toml`. Local complement to the CI gate:
   the `--check` recipe above works equally well as a
   [prek hook](references/prek-hook.md) in your `pre-commit` config.
 

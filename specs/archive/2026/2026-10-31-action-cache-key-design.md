@@ -32,17 +32,21 @@ run's "Cache tools venv" step logs a cache miss for an identical tools venv.
 
 ## Decision
 
-Key on the two files that define the tools venv:
+Key on the same `tools/` inputs toolr's own freshness check tracks (`uv.lock` plus `SYNC_INPUTS` in
+`crates/toolr-core/src/venv/sync.rs`):
 
 ```yaml
-key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock') }}
+key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock', 'tools/uv.toml', 'tools/.python-version') }}
 ```
 
-- Rewrite the step comment: the venv is invalidated by `tools/pyproject.toml` or `tools/uv.lock`, matching what
-  toolr's own freshness check reads, and the root lock is deliberately left out.
-- Fix the `SKILL.md` failure-mode bullet to name the two files.
-- The `cache-tools-venv` description is already right; leave it, so the generated `references/action.md` doesn't
-  change.
+- Rewrite the step comment: the key hashes the `tools/` inputs toolr's freshness check tracks, and the root lock is
+  deliberately left out.
+- Fix the `SKILL.md` failure-mode bullet to name those files, and correct its diagnosis: `hashFiles` skips absent
+  files, so a missing `tools/uv.lock` fails the `--frozen` sync rather than destabilising the key.
+- Update the `cache-tools-venv` description to list the same files and regenerate `references/action.md`.
+
+(The first cut hashed only `tools/pyproject.toml` and `tools/uv.lock`; review widened it to match the freshness
+check.)
 
 ### Rejected alternatives
 
@@ -60,10 +64,11 @@ key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|$
   again. No `cache-prefix` bump needed.
 - Assumes `fix/action-latest-repo` changed only the `resolve-version` step and the `version` input description. This
   change touches only the `venv-cache` step and `SKILL.md`; the two don't overlap.
-- Docs: `skills/toolr-ci-setup/SKILL.md` ("Common failure modes", the `tools/.venv` cache bullet). No generated
-  reference change.
+- Docs: `skills/toolr-ci-setup/SKILL.md` ("Common failure modes", the `tools/.venv` cache bullet) and the
+  regenerated `skills/toolr-ci-setup/references/action.md`.
 - `UNRELEASED.md`:
 
   > The Setup ToolR action no longer throws away its `tools/.venv` cache when the repository's root `uv.lock`
-  > changes. The cache key now hashes only `tools/pyproject.toml` and `tools/uv.lock`, the files the tools venv is
-  > built from. Expect one cache miss after upgrading the action.
+  > changes. The cache key now follows the same `tools/` inputs toolr's own freshness check tracks:
+  > `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml` and `tools/.python-version`. Expect one cache miss after
+  > upgrading the action.

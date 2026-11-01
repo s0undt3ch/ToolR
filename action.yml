@@ -50,8 +50,9 @@ inputs:
   cache-tools-venv:
     description: |
       When `true` (the default), cache the in-tree
-      `tools/.venv` keyed on `tools/pyproject.toml` and
-      `tools/uv.lock`. Set to `false` if you want toolr to
+      `tools/.venv` keyed on `tools/pyproject.toml`,
+      `tools/uv.lock`, `tools/uv.toml` and `tools/.python-version`.
+      Set to `false` if you want toolr to
       rebuild the venv on every run.
     default: "true"
 
@@ -412,12 +413,13 @@ runs:
       if: inputs.cache-tools-venv == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        # Independent cache from the toolr-binary cache: the venv is
-        # invalidated by `tools/pyproject.toml` or `tools/uv.lock` (the
-        # lock toolr's own freshness check reads), not by a toolr release
-        # or the repo's root `uv.lock`. The triple stays in the key so a
-        # runner OS / arch swap also misses.
-        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock') }}
+        # Independent cache from the toolr-binary cache: the key hashes
+        # the same `tools/` inputs toolr's own freshness check tracks
+        # (`pyproject.toml`, `uv.lock`, `uv.toml`, `.python-version`),
+        # not a toolr release or the repo's root `uv.lock`. hashFiles
+        # skips absent files. The triple stays in the key so a runner
+        # OS / arch swap also misses.
+        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock', 'tools/uv.toml', 'tools/.python-version') }}
         path: ${{ steps.venv-path.outputs.path }}
 
     - name: Sync tools venv

@@ -138,5 +138,6 @@ ask for the newest release of the repository running the workflow first, so a re
 its own got its own tag back and the install failed or picked the wrong toolr version.
 
 The Setup ToolR action no longer throws away its `tools/.venv` cache when the repository's root `uv.lock`
-changes. The cache key now hashes only `tools/pyproject.toml` and `tools/uv.lock`, the files the tools venv is
-built from. Expect one cache miss after upgrading the action.
+changes. The cache key now follows the same `tools/` inputs toolr's own freshness check tracks:
+`tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml` and `tools/.python-version`. Expect one cache miss after
+upgrading the action.

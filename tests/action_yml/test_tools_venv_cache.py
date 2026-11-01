@@ -31,11 +31,16 @@ def _venv_cache_key() -> str:
 
 
 def test_tools_venv_cache_key_hashes_only_tools_files() -> None:
-    # The root `uv.lock` doesn't describe the tools venv, so a change to it
-    # must not bust the cache.
+    # The same `tools/` inputs toolr's freshness check tracks; the root
+    # `uv.lock` doesn't describe the tools venv, so it must not bust the cache.
     match = _HASH_FILES.search(_venv_cache_key())
     assert match is not None
-    assert _QUOTED.findall(match.group(1)) == ["tools/pyproject.toml", "tools/uv.lock"]
+    assert _QUOTED.findall(match.group(1)) == [
+        "tools/pyproject.toml",
+        "tools/uv.lock",
+        "tools/uv.toml",
+        "tools/.python-version",
+    ]
 
 
 def test_tools_venv_cache_key_keeps_prefix_and_triple() -> None:
