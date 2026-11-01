@@ -142,18 +142,6 @@ class ToolsProject:
             check=False,
         )
 
-    def popen(self, *args: str) -> subprocess.Popen[str]:
-        """Start `toolr *args` as the leader of a new process group with no controlling terminal."""
-        return subprocess.Popen(  # noqa: S603
-            [str(self.toolr_bin), *args],
-            cwd=self.root,
-            env=self.env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            start_new_session=True,
-        )
-
 
 @pytest.fixture
 def make_tools_project(tmp_path: Path, toolr_bin: Path) -> Callable[..., ToolsProject]:
