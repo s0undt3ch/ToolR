@@ -1,10 +1,10 @@
 # Push the release commit and tag atomically
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-10 (medium, plausible).
 - **Plan:** [`2026-10-31-release-tree-binding-plan.md`](./2026-10-31-release-tree-binding-plan.md)
-- **Stacks on:** `fix/release-prek-failures` (F-24, `specs/2026-10-31-release-prek-failures-design.md`); merge that
-  first.
+- **Stacked on:** `fix/release-prek-failures` (F-24, [`2026-10-31-release-prek-failures-design.md`](./2026-10-31-release-prek-failures-design.md)),
+  now merged.
 
 ## Problem
 

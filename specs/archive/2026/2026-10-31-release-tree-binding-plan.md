@@ -12,7 +12,7 @@ against scratch git repos, reusing F-24's `tests/workflows/conftest.py` fixtures
 
 **Tech Stack:** GitHub Actions YAML, bash, git, pytest.
 
-**Spec:** [`specs/2026-10-31-release-tree-binding-design.md`](./2026-10-31-release-tree-binding-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-release-tree-binding-design.md`](./2026-10-31-release-tree-binding-design.md)
 
 ## Global Constraints
 
