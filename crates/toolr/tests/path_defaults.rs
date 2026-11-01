@@ -10,16 +10,15 @@ use std::time::Duration;
 
 use tempfile::TempDir;
 
+/// The in-tree venv keeps fixtures away from the real cache.
+const TOOLS_PYPROJECT: &str = "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n";
+
 fn project_with_default(default: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");
     fs::create_dir_all(&tools).unwrap();
     fs::create_dir_all(tmp.path().join("sub").join("dir")).unwrap();
-    fs::write(
-        tools.join("pyproject.toml"),
-        "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n",
-    )
-    .unwrap();
+    fs::write(tools.join("pyproject.toml"), TOOLS_PYPROJECT).unwrap();
     fs::write(
         tools.join("demo.py"),
         format!(
@@ -114,13 +113,12 @@ fn typed_missing_value_in_untrusted_repo_reports_the_typo_first() {
     assert!(!stderr.contains("trust"), "stderr:\n{stderr}");
 }
 
-/// A project whose commands run under a stand-in Python that prints the
-/// spec `toolr` hands it. The tools pyproject is removed once the manifest
-/// is built, so dispatch uses `TOOLR_PYTHON` instead of syncing a venv.
+/// A project whose in-tree venv Python is a stand-in that prints the spec
+/// `toolr` hands it, so the test sees the parsed values without a real
+/// interpreter.
 #[cfg(unix)]
 struct EchoProject {
     tmp: TempDir,
-    python: PathBuf,
 }
 
 #[cfg(unix)]
@@ -131,12 +129,7 @@ impl EchoProject {
         let tools = tmp.path().join("tools");
         fs::create_dir_all(&tools).unwrap();
         fs::create_dir_all(tmp.path().join("sub").join("dir")).unwrap();
-        fs::write(
-            tools.join("pyproject.toml"),
-            "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n",
-        )
-        .unwrap();
-        fs::write(tools.join("settings.toml"), "").unwrap();
+        fs::write(tools.join("pyproject.toml"), TOOLS_PYPROJECT).unwrap();
         fs::write(
             tools.join("demo.py"),
             r#"from typing import Annotated
@@ -147,19 +140,24 @@ from toolr.types import FilePath
 group = command_group("demo", "Demo")
 
 @group.command
-def hello(ctx: Context, *, cfg: FilePath = "tools/settings.toml") -> None:  # type: ignore[assignment]
+def hello(ctx: Context, *, cfg: FilePath = "tools/pyproject.toml") -> None:  # type: ignore[assignment]
     """Say hello."""
 
 @group.command
 def envy(
     ctx: Context,
     *,
-    cfg: Annotated[FilePath, arg(env="DEMO_CFG")] = "tools/settings.toml",  # type: ignore[assignment]
+    cfg: Annotated[FilePath, arg(env="DEMO_CFG")] = "tools/pyproject.toml",  # type: ignore[assignment]
 ) -> None:
     """Read the config from the environment."""
 "#,
         )
         .unwrap();
+        let bin = tools.join(".venv").join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let python = bin.join("python");
+        fs::write(&python, "#!/bin/sh\ncat \"$TOOLR_SPEC_FILE\"\n").unwrap();
+        fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
         let rebuild = common::toolr()
             .args(["project", "manifest", "rebuild"])
             .current_dir(tmp.path())
@@ -168,11 +166,7 @@ def envy(
             .output()
             .unwrap();
         assert!(rebuild.status.success(), "rebuild failed: {rebuild:?}");
-        fs::remove_file(tools.join("pyproject.toml")).unwrap();
-        let python = tmp.path().join("python");
-        fs::write(&python, "#!/bin/sh\ncat \"$TOOLR_SPEC_FILE\"\n").unwrap();
-        fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
-        Self { tmp, python }
+        Self { tmp }
     }
 
     fn root(&self) -> PathBuf {
@@ -183,7 +177,6 @@ def envy(
         let mut cmd = common::toolr();
         cmd.args(args)
             .current_dir(subdir(&self.tmp))
-            .env("TOOLR_PYTHON", &self.python)
             .env("TOOLR_NO_CACHE_HINT", "1")
             .env_remove("DEMO_CFG")
             .timeout(Duration::from_secs(60));
@@ -207,7 +200,10 @@ fn assert_cfg(output: &Output, expected: &Path) {
 fn valid_relative_default_from_subdirectory_passes_the_repo_root_path() {
     let project = EchoProject::new();
     let output = project.run(&["demo", "hello"], None);
-    assert_cfg(&output, &project.root().join("tools").join("settings.toml"));
+    assert_cfg(
+        &output,
+        &project.root().join("tools").join("pyproject.toml"),
+    );
 }
 
 #[cfg(unix)]
