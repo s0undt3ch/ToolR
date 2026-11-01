@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import secrets
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
@@ -15,6 +17,7 @@ README_NAME: Final[str] = "README.md"
 NOTE_NAME_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<date>\d{4}-\d{2}-\d{2})\.(?P<time>\d{2}-\d{2}-\d{2})\.(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)\.md$"
 )
+SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BREAKING_PREFIX: Final[str] = "**Breaking:**"
 
 group = command_group("release-notes", "Manage queued release notes", docstring=__doc__)
@@ -39,6 +42,26 @@ def _render(notes_dir: Path) -> str:
     return "\n\n".join(breaking + other)
 
 
+def _slug_from_branch(branch: str) -> str | None:
+    """Derive a note slug from a branch name, or ``None`` if nothing usable is left."""
+    if branch in {"HEAD", "main"}:
+        return None
+    name = re.sub(r"^[^/]+/", "", branch, count=1).lower()
+    return re.sub(r"[^a-z0-9]+", "-", name).strip("-") or None
+
+
+def _note_filename(now: datetime, slug: str) -> str:
+    return f"{now:%Y-%m-%d}.{now:%H-%M-%S}.{slug}.md"
+
+
+def _find_by_slug(notes_dir: Path, slug: str) -> Path | None:
+    for path in _note_paths(notes_dir):
+        match = NOTE_NAME_RE.match(path.name)
+        if match and match["slug"] == slug:
+            return path
+    return None
+
+
 def _github_env_block(name: str, value: str) -> str:
     """Format ``name=value`` as a ``$GITHUB_ENV`` heredoc block."""
     delimiter = f"{name}_{secrets.token_hex(16)}"
@@ -60,3 +83,87 @@ def render(ctx: Context, github_env: str | None = None) -> None:
             f.write(_github_env_block("TOOLR_RELEASE_NOTES", text))
         return
     ctx.print(text)
+
+
+@group.command
+def add(
+    ctx: Context, slug: str | None = None, text: str | None = None, append: bool = False
+) -> None:
+    """Create a release note and stage it.
+
+    Args:
+        slug: Note slug. Defaults to one derived from the current branch name.
+        text: Note content. Omit to create an empty file to edit.
+        append: Append `--text` to the existing note with this slug instead of refusing.
+    """
+    if append and text is None:
+        ctx.error("--append needs --text")
+        ctx.exit(1)
+    if slug is None:
+        ret = ctx.run(
+            "git",
+            "-C",
+            str(ctx.repo_root),
+            "branch",
+            "--show-current",
+            capture_output=True,
+            stream_output=False,
+        )
+        branch: str = ret.stdout.read().strip()  # type: ignore[assignment]
+        slug = _slug_from_branch(branch)
+        if slug is None:
+            ctx.error("Cannot derive a slug from the current branch; pass --slug")
+            ctx.exit(1)
+    if not SLUG_RE.match(slug):
+        ctx.error(f"Invalid slug {slug!r}: use lowercase letters, digits and single hyphens")
+        ctx.exit(1)
+    notes_dir = ctx.repo_root / NOTES_DIR
+    existing = _find_by_slug(notes_dir, slug)
+    if append:
+        if existing is None:
+            ctx.error(f"No note with slug {slug!r} to append to")
+            ctx.exit(1)
+        path = existing
+        previous = _read_note(path)
+        path.write_bytes(f"{previous}\n\n{text}\n".encode())
+    else:
+        if existing is not None:
+            ctx.error(f"A note with slug {slug!r} already exists: {existing.name}; use --append")
+            ctx.exit(1)
+        notes_dir.mkdir(exist_ok=True)
+        path = notes_dir / _note_filename(datetime.now(UTC), slug)
+        path.write_bytes(f"{text}\n".encode() if text is not None else b"")
+    rel = path.relative_to(ctx.repo_root)
+    ret = ctx.run(
+        "git",
+        "-C",
+        str(ctx.repo_root),
+        "add",
+        "--",
+        str(rel),
+        capture_output=True,
+        stream_output=False,
+    )
+    if ret.returncode:
+        ctx.error(f"git add failed with exit code {ret.returncode}")
+        ctx.exit(ret.returncode)
+    ctx.print(str(rel))
+
+
+@group.command
+def clear(ctx: Context, rendered: str | None = None) -> None:
+    """Delete every queued note, keeping the README.
+
+    Args:
+        rendered: Rendered changelog. Refuse to delete notes if it has no `### Notes` line.
+    """
+    paths = _note_paths(ctx.repo_root / NOTES_DIR)
+    if rendered and paths:
+        lines = Path(rendered).read_text(encoding="utf-8").splitlines()
+        if not any(line.strip() == "### Notes" for line in lines):
+            ctx.error(
+                f"{rendered} has no '### Notes' section; refusing to delete {len(paths)} queued note(s)"
+            )
+            ctx.exit(1)
+    for path in paths:
+        path.unlink()
