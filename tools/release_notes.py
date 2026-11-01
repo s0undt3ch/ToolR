@@ -35,14 +35,14 @@ group = command_group("release-notes", "Manage queued release notes", docstring=
 
 
 def _note_paths(notes_dir: Path) -> list[Path]:
-    """Return every entry in ``notes_dir`` except the README and editor leftovers, sorted by name."""
+    """Return the ``*.md`` files in ``notes_dir`` except the README, sorted by name."""
     if not notes_dir.is_dir():
         return []
     return sorted(
         (
             p
             for p in notes_dir.iterdir()
-            if p.name != README_NAME and not p.name.startswith(".") and not p.name.endswith("~")
+            if p.is_file() and p.suffix == ".md" and p.name != README_NAME
         ),
         key=lambda p: p.name,
     )
@@ -128,9 +128,6 @@ def _file_problems(repo_root: Path) -> list[str]:
         )
     for path in _note_paths(repo_root / NOTES_DIR):
         label = f"{NOTES_DIR}/{path.name}"
-        if path.is_dir():
-            problems.append(f"{label}: subdirectories are not allowed")
-            continue
         match = NOTE_NAME_RE.match(path.name)
         if match is None:
             problems.append(f"{label}: name must be <YYYY-MM-DD>.<HH-MM-SS>.<slug>.md")

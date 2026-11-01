@@ -37,7 +37,9 @@ def notes_dir(tmp_path: Path) -> Callable[[dict[str, str]], Path]:
         directory = tmp_path / "release-notes"
         directory.mkdir()
         for name, text in files.items():
-            (directory / name).write_bytes(text.encode("utf-8"))
+            path = directory / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(text.encode("utf-8"))
         return directory
 
     return _make
@@ -372,13 +374,6 @@ def test_impossible_date(
     assert name in problem
 
 
-def test_subdirectory_flagged(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
-    directory = notes_dir({})
-    (directory / "sub").mkdir()
-    (problem,) = _file_problems(tmp_path)
-    assert "sub" in problem
-
-
 @pytest.mark.parametrize("content", ["", "  \n"])
 def test_empty_note(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, content: str
@@ -487,15 +482,15 @@ def test_unclosed_fence_flagged(
         assert problems == []
 
 
-@pytest.mark.parametrize("name", [".DS_Store", ".x.md.swp", "x.md~"])
-def test_editor_files_ignored(
+@pytest.mark.parametrize("name", [".DS_Store", ".x.md.swp", "x.md~", "notes.txt", "sub/x.md"])
+def test_non_note_entries_ignored(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, name: str
 ) -> None:
     directory = notes_dir({GOOD: "Text", name: "junk"})
     assert _file_problems(tmp_path) == []
     assert _render(directory) == "Text"
     clear(make_context(tmp_path))
-    assert [p.name for p in directory.iterdir()] == [name]
+    assert [p.name for p in directory.iterdir()] == [Path(name).parts[0]]
 
 
 def test_invalid_utf8_flagged(tmp_path: Path) -> None:
