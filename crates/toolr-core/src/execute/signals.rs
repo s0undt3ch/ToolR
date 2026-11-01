@@ -5,7 +5,11 @@
 //! deliver SIGINT to the whole group, so the runner already has it; sending
 //! it again would raise a second `KeyboardInterrupt` inside the runner's
 //! cleanup. toolr catches SIGINT so Ctrl-C doesn't kill it, and reports the
-//! runner's exit code.
+//! runner's exit code. The runner stays in toolr's group because its own
+//! group would leave the terminal's foreground group, so reading the terminal
+//! raises SIGTTIN and `ctx.run(interactive=True)` breaks unless toolr also
+//! manages the foreground group with `tcsetpgrp`. See
+//! `specs/archive/2026/2026-10-31-sigint-forwarding-design.md`.
 //!
 //! Which SIGINTs get forwarded depends on what the kernel tells us about the
 //! sender (`siginfo_t::si_code`):
@@ -16,9 +20,9 @@
 //!   the command. A process-sent `killpg` therefore reaches the runner twice.
 //!   Unrecognised codes are forwarded too: only the terminal path is
 //!   positively identified.
-//! - macOS and other Unix: `si_code` is left at 0 for both a terminal Ctrl-C
-//!   and a `kill`, so they can't be told apart. SIGINT is never forwarded;
-//!   signal the process group or send SIGTERM instead.
+//! - macOS (measured) and other Unix (assumed the same): `si_code` is 0 for
+//!   both a terminal Ctrl-C and a `kill`, so they can't be told apart. SIGINT
+//!   is never forwarded; signal the process group or send SIGTERM instead.
 //!
 //! SIGTERM is always forwarded. The handler only sets atomic flags; a
 //! polling loop in [`wait_with_signals`] checks them between waits and
@@ -33,6 +37,11 @@ use std::process::{Child, ExitStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(unix)]
 use std::time::Duration;
+
+/// Polling `try_wait` rather than blocking in `wait` is what keeps toolr from
+/// signalling a reaped, possibly reused pid; the interval caps forwarding delay.
+#[cfg(unix)]
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Wait for `child` to exit, forwarding signals received by the current
 /// process to the child as described in the module docs.
@@ -85,7 +94,7 @@ mod unix {
             }
         }
 
-        /// The signals to forward since the last call, SIGINT first.
+        /// The signals to forward since the last call.
         pub(super) fn take(&self) -> impl Iterator<Item = c_int> {
             let sigint = self.sigint.swap(false, Ordering::SeqCst).then_some(SIGINT);
             let sigterm = self
@@ -143,11 +152,12 @@ mod unix {
                     libc::kill(child_pid, sig);
                 }
             }
-            std::thread::sleep(Duration::from_millis(50));
+            std::thread::sleep(POLL_INTERVAL);
         }
     }
 }
 
+// Unix-only so Windows builds don't drag in the otherwise-unused imports.
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
@@ -165,20 +175,15 @@ mod tests {
         info
     }
 
-    /// The `si_code` a `kill()` from another process carries.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    const KILL_CODE: c_int = libc::SI_USER;
-    /// Measured on macOS: `kill()` and a terminal Ctrl-C both report 0.
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    /// The `si_code` a `kill()` from another process carries: `SI_USER` on
+    /// Linux, and on macOS the 0 it reports for a terminal Ctrl-C as well.
     const KILL_CODE: c_int = 0;
 
     fn taken(pending: &Pending) -> Vec<c_int> {
         pending.take().collect()
     }
 
-    /// `true` exits immediately with status 0. Unix-only — the whole
-    /// test module is gated so Windows builds don't drag in the
-    /// otherwise-unused imports.
+    /// `true` exits immediately with status 0.
     #[test]
     fn wait_returns_for_quick_child() {
         let mut child = Command::new("true").spawn().expect("spawn true");
@@ -207,18 +212,19 @@ mod tests {
     fn record_follows_the_classification() {
         let pending = Pending::default();
         pending.record(&info(SIGINT, KILL_CODE));
-        let forwarded = cfg!(any(target_os = "linux", target_os = "android"));
-        assert_eq!(
-            taken(&pending),
-            if forwarded { vec![SIGINT] } else { vec![] }
-        );
+        let expected = if forward_sigint(KILL_CODE) {
+            vec![SIGINT]
+        } else {
+            vec![]
+        };
+        assert_eq!(taken(&pending), expected);
     }
 
     #[test]
     fn sigterm_is_always_recorded_and_survives_a_sigint() {
         let pending = Pending::default();
-        pending.record(&info(SIGTERM, 0));
-        pending.record(&info(SIGINT, 0));
+        pending.record(&info(SIGTERM, KILL_CODE));
+        pending.record(&info(SIGINT, KILL_CODE));
         assert!(taken(&pending).contains(&SIGTERM));
         assert_eq!(taken(&pending), Vec::<c_int>::new());
     }
@@ -231,15 +237,14 @@ mod tests {
     }
 
     #[test]
-    fn take_yields_sigint_before_sigterm() {
+    fn take_yields_every_pending_signal_once() {
         let pending = Pending::default();
-        pending
-            .sigint
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        pending
-            .sigterm
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        assert_eq!(taken(&pending), vec![SIGINT, SIGTERM]);
+        pending.sigint.store(true, Ordering::SeqCst);
+        pending.sigterm.store(true, Ordering::SeqCst);
+        let mut signals = taken(&pending);
+        signals.sort_unstable();
+        assert_eq!(signals, vec![SIGINT, SIGTERM]);
+        assert_eq!(taken(&pending), Vec::<c_int>::new());
     }
 
     /// 9999 is above `NSIG` everywhere, so `sigaction` rejects it with
@@ -250,24 +255,27 @@ mod tests {
         assert!(Handlers::install(&[SIGTERM, 9999], &pending).is_err());
     }
 
-    /// Bounded by `sleep 10`: if the signal isn't sent, the child exits 0 and
-    /// the assertion fails instead of hanging.
+    /// Bounded by `sleep 10`: if no signal is sent, the child exits 0 and the
+    /// caller's assertion fails instead of hanging.
+    fn sleeper_status(pending: &Pending) -> ExitStatus {
+        let mut child = Command::new("sleep")
+            .arg("10")
+            .spawn()
+            .expect("spawn sleep");
+        poll_child(&mut child, pending).expect("wait")
+    }
+
     #[test]
-    fn pending_signals_reach_the_child() {
-        for (sig, flag) in [(SIGTERM, true), (SIGINT, false)] {
-            let mut child = Command::new("sleep")
-                .arg("10")
-                .spawn()
-                .expect("spawn sleep");
-            let pending = Pending::default();
-            let slot = if flag {
-                &pending.sigterm
-            } else {
-                &pending.sigint
-            };
-            slot.store(true, std::sync::atomic::Ordering::SeqCst);
-            let status = poll_child(&mut child, &pending).expect("wait");
-            assert_eq!(status.signal(), Some(sig));
-        }
+    fn pending_sigterm_reaches_the_child() {
+        let pending = Pending::default();
+        pending.sigterm.store(true, Ordering::SeqCst);
+        assert_eq!(sleeper_status(&pending).signal(), Some(SIGTERM));
+    }
+
+    #[test]
+    fn pending_sigint_reaches_the_child() {
+        let pending = Pending::default();
+        pending.sigint.store(true, Ordering::SeqCst);
+        assert_eq!(sleeper_status(&pending).signal(), Some(SIGINT));
     }
 }
