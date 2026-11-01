@@ -20,6 +20,9 @@ pub fn hash_tools_dir(tools_dir: &Path) -> Result<String> {
 /// site-packages out of both the hash and the manifest (#544); a module
 /// under `.venv` would otherwise become `tools..venv.lib.<pkg>`. The root
 /// itself is never pruned, even if its basename starts with a dot.
+///
+/// `toolr.testing._discovery._import_package_modules` mirrors this walk in
+/// Python; change both together.
 pub(crate) fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
     let mut paths: Vec<_> = WalkDir::new(tools_dir)
         .follow_links(false)

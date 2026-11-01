@@ -49,8 +49,10 @@ def _import_tools_modules() -> list[Exception]:
 def _import_package_modules(package: ModuleType, errors: list[Exception], seen: set[Path]) -> None:
     """Import every module under ``package``, recursing into subdirectories.
 
-    Walks the files the way toolr's manifest build does: every ``.py`` file
-    and every subdirectory, with or without ``__init__.py``, except
+    Mirrors the manifest build's walk in
+    ``crates/toolr-core/src/hash.rs`` (``list_python_files`` and
+    ``is_pruned_dir``); change both together. Every ``.py`` file and every
+    subdirectory, with or without ``__init__.py``, is visited except
     dot-directories, ``__pycache__`` and symlinks. Names that aren't Python
     identifiers can't be imported and are skipped. A subdirectory is only
     descended into once its own import succeeded, and each directory is
@@ -70,7 +72,11 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
             if entry.is_symlink():
                 continue
             if entry.is_dir():
-                if entry.name == "__pycache__" or not entry.name.isidentifier():
+                if (
+                    entry.name.startswith(".")
+                    or entry.name == "__pycache__"
+                    or not entry.name.isidentifier()
+                ):
                     continue
                 is_package = True
                 stem = entry.name
@@ -117,10 +123,12 @@ def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     """Return ``saved`` with ``search_path`` first and no other ``tools`` provider.
 
     Drops the ``""`` (cwd) entry, ``search_path`` itself and any entry with a
-    top-level ``tools`` package or module. When the fixture's ``tools/`` is a
-    namespace package, a regular ``tools`` package or ``tools.py`` elsewhere
-    replaces it and another namespace ``tools/`` merges into it.
-    Site-packages directories always stay. Everything else (the stdlib,
+    top-level ``tools`` package or module, because such an entry (the host
+    repo root among them) would stand in for a fixture without ``tools/``,
+    and when the fixture's ``tools/`` is a namespace package, a regular
+    ``tools`` package or ``tools.py`` elsewhere replaces it and another
+    namespace ``tools/`` merges into it. Site-packages directories always
+    stay. Everything else (the stdlib,
     src-layout editable installs, ``PYTHONPATH``) stays importable; an
     editable-install root that itself holds ``tools/`` is dropped too.
     """
@@ -211,9 +219,7 @@ class CommandsTester:
         sys.modules.update(self.sys_modules)
         os.chdir(self.search_path)
         self.command_group_patcher.start()
-        # Put the search path first and hide every other `tools` provider
-        # (the host repo root among them): it could replace or merge into a
-        # namespace-package fixture `tools/`, or stand in for a missing one.
+        # See `_isolated_sys_path` for why other `tools` providers are hidden.
         sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
         return self
 

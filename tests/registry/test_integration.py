@@ -29,6 +29,7 @@ BAD_MODULE = (
     "    pass\n"
 )
 BROKEN_MODULE = "raise RuntimeError('boom')\n"
+ToolsRepo = Callable[[dict[str, str | None]], Path]
 STDLIB_USER_MODULE = (
     "import sqlite3, tomllib, zipfile, csv\n"
     "from toolr import command_group\n"
@@ -44,17 +45,20 @@ STDLIB_MODULES = ("sqlite3", "tomllib", "zipfile", "csv")
 
 
 @pytest.fixture
-def tools_repo(tmp_path: Path) -> Callable[[dict[str, str]], Path]:
+def tools_repo(tmp_path: Path) -> ToolsRepo:
     """Write a fixture repo under `tmp_path` and return its root.
 
-    `tools/__init__.py` is written empty unless the mapping sets it; every
-    other `{relative_path: source}` entry is written as given.
+    `tools/__init__.py` is written empty unless the mapping sets it, or left
+    out when it maps to `None` (a namespace `tools/`); every other
+    `{relative_path: source}` entry is written as given.
     """
 
-    def factory(files: dict[str, str]) -> Path:
+    def factory(files: dict[str, str | None]) -> Path:
         (tmp_path / "tools").mkdir()
         files = {"tools/__init__.py": "", **files}
         for relative, source in files.items():
+            if source is None:
+                continue
             target = tmp_path / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(source)
@@ -64,7 +68,7 @@ def tools_repo(tmp_path: Path) -> Callable[[dict[str, str]], Path]:
 
 
 def test_discover_raises_after_walking_every_module(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """A module that fails to import makes `discover()` raise, but only after
     the walk has imported every other module."""
@@ -80,7 +84,7 @@ def test_discover_raises_after_walking_every_module(
 
 
 def test_discover_raises_on_undocumented_command(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """An undocumented command fails discovery the way the manifest build does."""
     repo = tools_repo({"tools/bad.py": BAD_MODULE})
@@ -90,7 +94,7 @@ def test_discover_raises_on_undocumented_command(
 
 
 def test_discover_reports_every_failing_module(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """Every broken module is reported in one group, not just the first."""
     repo = tools_repo({"tools/bad.py": BAD_MODULE, "tools/broken.py": BROKEN_MODULE})
@@ -101,7 +105,7 @@ def test_discover_reports_every_failing_module(
 
 
 def test_discover_reports_a_failing_subpackage_and_keeps_walking(
-    tmp_path: Path, tools_repo: Callable[[dict[str, str]], Path]
+    tmp_path: Path, tools_repo: ToolsRepo
 ) -> None:
     """A subpackage whose `__init__` raises is reported like any module: its
     body runs once and the walk goes on to the modules after it."""
@@ -126,7 +130,7 @@ def test_discover_reports_a_failing_subpackage_and_keeps_walking(
 
 
 def test_discover_reports_an_undocumented_command_in_a_nested_group(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """An undocumented command in a group package's `__init__.py` is reported
     in the group, not raised bare."""
@@ -151,7 +155,7 @@ def test_discover_reports_an_undocumented_command_in_a_nested_group(
 
 
 def test_discover_imports_submodules_of_a_nested_package(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """Modules inside a `tools` subpackage are imported too."""
     repo = tools_repo(
@@ -176,7 +180,7 @@ def test_discover_imports_submodules_of_a_nested_package(
 
 
 def test_discover_imports_modules_in_a_namespace_subdirectory(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """A `tools/<group>/` directory without `__init__.py` is walked, as toolr does."""
     repo = tools_repo({"tools/precommit/cmd.py": CI_MODULE})
@@ -185,11 +189,12 @@ def test_discover_imports_modules_in_a_namespace_subdirectory(
         groups = tester.collected_command_groups()
         imported = "tools.precommit.cmd" in sys.modules
     assert imported
+    # CI_MODULE registers `command_group("ci")`, so its key is `tools.ci`.
     assert "tools.ci" in groups
 
 
 def test_discover_reports_a_failing_module_in_a_namespace_subdirectory(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """A broken module in a directory without `__init__.py` is reported."""
     repo = tools_repo({"tools/precommit/zz.py": BAD_MODULE})
@@ -201,7 +206,7 @@ def test_discover_reports_a_failing_module_in_a_namespace_subdirectory(
 
 
 def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
-    tmp_path: Path, tools_repo: Callable[[dict[str, str]], Path]
+    tmp_path: Path, tools_repo: ToolsRepo
 ) -> None:
     """Pruned and non-identifier directories, non-identifier and non-`.py`
     files, and symlinks are not imported."""
@@ -220,6 +225,7 @@ def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
     )
     (repo / "tools" / "linked_dir").symlink_to(outside, target_is_directory=True)
     (repo / "tools" / "linked.py").symlink_to(outside / "linked.py")
+    # Every skipped `.py` raises if imported, so a clean discover() proves none was.
     with CommandsTester(search_path=repo) as tester:
         tester.discover()
         groups = tester.collected_command_groups()
@@ -227,7 +233,7 @@ def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
 
 
 def test_discover_stops_on_a_package_path_that_loops_back(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """A subpackage `__path__` pointing back at a walked directory, or at a
     missing one, doesn't make the walk loop or fail."""
@@ -248,7 +254,7 @@ def test_discover_stops_on_a_package_path_that_loops_back(
 
 
 def test_discover_raises_when_tools_package_import_fails(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """A `ModuleNotFoundError` from inside `tools/__init__.py` is a failure,
     not the "no `tools` package" case."""
@@ -261,7 +267,7 @@ def test_discover_raises_when_tools_package_import_fails(
 
 
 def test_discover_raises_when_tools_package_raises(
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
 ) -> None:
     """Any other exception from `tools/__init__.py` is reported the same way."""
     repo = tools_repo({"tools/__init__.py": BROKEN_MODULE})
@@ -303,7 +309,7 @@ def host_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_discover_imports_stdlib_modules_not_yet_loaded(
-    tools_repo: Callable[[dict[str, str]], Path], monkeypatch: pytest.MonkeyPatch
+    tools_repo: ToolsRepo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A `tools/*.py` module can import stdlib modules nobody loaded yet."""
     for name in STDLIB_MODULES:
@@ -320,11 +326,11 @@ def test_discover_imports_stdlib_modules_not_yet_loaded(
     assert "ok" in group.get_commands()
 
 
-def test_discover_ignores_tools_dirs_elsewhere_on_sys_path(tmp_path: Path, host_repo: Path) -> None:
+def test_discover_ignores_tools_dirs_elsewhere_on_sys_path(
+    tools_repo: ToolsRepo, host_repo: Path
+) -> None:
     """The host's regular `tools` package doesn't replace a namespace `tools/` fixture."""
-    fixture = tmp_path / "fixture"
-    (fixture / "tools").mkdir(parents=True)
-    (fixture / "tools" / "ci.py").write_text(CI_MODULE)
+    fixture = tools_repo({"tools/__init__.py": None, "tools/ci.py": CI_MODULE})
     with CommandsTester(search_path=fixture) as tester:
         tester.discover()
         groups = tester.collected_command_groups()
@@ -346,7 +352,7 @@ def test_discover_without_tools_ignores_host_tools(tmp_path: Path, host_repo: Pa
 
 def test_discover_keeps_sys_path_entries_without_tools(
     tmp_path: Path,
-    tools_repo: Callable[[dict[str, str]], Path],
+    tools_repo: ToolsRepo,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`sys.path` entries that can't shadow `tools` (src-layout editable
