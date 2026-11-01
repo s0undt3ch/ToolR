@@ -6,7 +6,6 @@ against a scratch repository holding a release patch.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -15,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
+from tests.workflows.conftest import StepRunner
 from tests.workflows.conftest import action_step_script
 from tests.workflows.conftest import git
-from tests.workflows.conftest import git_env
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APPLY_RELEASE_PATCH_YML = REPO_ROOT / ".github" / "actions" / "apply-release-patch" / "action.yml"
@@ -60,28 +59,14 @@ def patch_repo(git_repo: Callable[..., Path]) -> PatchRepo:
 
 
 @pytest.fixture
-def run_apply_step(tmp_path: Path) -> Callable[[Path, str], subprocess.CompletedProcess[str]]:
+def run_apply_step(
+    bash_step: Callable[[str], StepRunner],
+) -> Callable[[Path, str], subprocess.CompletedProcess[str]]:
     """Return a callable that runs the apply step in `repo` with `GITHUB_SHA` set."""
-    bash = shutil.which("bash")
-    if bash is None:
-        pytest.skip("bash not available")
-    script = tmp_path / "apply-step.sh"
-    script.write_text(action_step_script(APPLY_RELEASE_PATCH_YML, "apply"))
+    step = bash_step(action_step_script(APPLY_RELEASE_PATCH_YML, "apply"))
 
     def run(repo: Path, github_sha: str) -> subprocess.CompletedProcess[str]:
-        env = git_env()
-        env["RELEASE_PATCH_NAME"] = PATCH_NAME
-        env["GITHUB_SHA"] = github_sha
-        # Mirrors the `shell: bash` invocation GitHub Actions uses.
-        return subprocess.run(  # noqa: S603  # bash + script path are test-controlled
-            [bash, "--noprofile", "--norc", "-eo", "pipefail", str(script)],
-            cwd=repo,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=60,
-        )
+        return step(repo, {"RELEASE_PATCH_NAME": PATCH_NAME, "GITHUB_SHA": github_sha})
 
     return run
 

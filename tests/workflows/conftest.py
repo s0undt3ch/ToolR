@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 from collections.abc import Callable
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,14 @@ def git(repo: Path, *args: str) -> str:
         text=True,
         check=True,
     ).stdout
+
+
+def configure_identity(repo: Path) -> None:
+    """Give `repo` a committer identity and turn off commit and tag signing."""
+    git(repo, "config", "user.name", "Release Bot")
+    git(repo, "config", "user.email", "release-bot@example.com")
+    git(repo, "config", "commit.gpgsign", "false")
+    git(repo, "config", "tag.gpgsign", "false")
 
 
 def workflow_step_script(path: Path, job: str, step_id: str) -> str:
@@ -62,9 +71,7 @@ def git_repo(tmp_path: Path) -> Callable[..., Path]:
         repo = tmp_path / name
         repo.mkdir()
         git(repo, "init", "-q", "-b", "main")
-        git(repo, "config", "user.name", "Release Bot")
-        git(repo, "config", "user.email", "release-bot@example.com")
-        git(repo, "config", "commit.gpgsign", "false")
+        configure_identity(repo)
         for relative, content in files.items():
             target = repo / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -72,5 +79,41 @@ def git_repo(tmp_path: Path) -> Callable[..., Path]:
         git(repo, "add", "--", *files)
         git(repo, "commit", "-q", "-m", "initial")
         return repo
+
+    return make
+
+
+StepRunner = Callable[[Path, Mapping[str, str]], subprocess.CompletedProcess[str]]
+
+
+@pytest.fixture
+def bash_step(tmp_path: Path) -> Callable[[str], StepRunner]:
+    """Return a factory that turns a step's `run:` body into a runner.
+
+    The runner takes the working directory and the step's environment, laid over
+    `git_env()`, and runs the body the way `shell: bash` does on a runner.
+    """
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash not available")
+    scripts = tmp_path / "steps"
+    scripts.mkdir()
+
+    def make(body: str) -> StepRunner:
+        script = scripts / f"step-{len(list(scripts.iterdir()))}.sh"
+        script.write_text(body)
+
+        def run(cwd: Path, env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(  # noqa: S603  # bash + script path are test-controlled
+                [bash, "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+                cwd=cwd,
+                env={**git_env(), **env},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
+        return run
 
     return make
