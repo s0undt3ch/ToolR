@@ -13,6 +13,7 @@ use tempfile::TempDir;
 
 use common::{TrustEnv, hostile_repo, write_executable};
 use toolr_core::cache::Meta;
+use toolr_core::manifest::{Manifest, SCHEMA_VERSION, write_manifest};
 
 const REFUSAL: &str = "refusing to run code from an untrusted repository";
 
@@ -350,4 +351,118 @@ fn a_venv_from_before_trust_does_not_trust_the_repo() {
         .success()
         .stdout("");
     assert!(!h.sentinel.exists());
+}
+
+/// A repository with a `demo hello` command and no venv, as in the F-27 repro.
+fn demo_repo() -> TempDir {
+    let tmp = TempDir::new().unwrap();
+    let tools = tmp.path().join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(
+        tools.join("pyproject.toml"),
+        "[project]\nname = \"demo-tools\"\nversion = \"0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        tools.join("demo.py"),
+        "\"\"\"Demo.\"\"\"\nfrom toolr import command_group\n\
+         group = command_group(\"demo\", \"Demo commands\")\n\n\
+         @group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
+    )
+    .unwrap();
+    tmp
+}
+
+fn manifest_path(repo: &TempDir) -> PathBuf {
+    repo.path().join("tools").join(".toolr-manifest.json")
+}
+
+#[test]
+fn root_help_in_untrusted_repo_does_not_write_manifest() {
+    let env = TrustEnv::new();
+    let repo = demo_repo();
+    env.toolr(repo.path())
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(contains("demo"));
+    assert!(
+        !manifest_path(&repo).exists(),
+        "`toolr --help` wrote the manifest into an untrusted repository"
+    );
+    env.toolr(repo.path()).assert().stdout(contains("demo"));
+    assert!(
+        !manifest_path(&repo).exists(),
+        "bare `toolr` wrote the manifest into an untrusted repository"
+    );
+}
+
+#[test]
+fn refused_dispatch_does_not_write_manifest() {
+    let env = TrustEnv::new();
+    let repo = demo_repo();
+    env.toolr(repo.path())
+        .args(["demo", "hello"])
+        .write_stdin("")
+        .assert()
+        .failure()
+        .stderr(contains(REFUSAL));
+    assert!(
+        !manifest_path(&repo).exists(),
+        "a refused dispatch wrote the manifest into an untrusted repository"
+    );
+}
+
+#[test]
+fn stale_manifest_in_untrusted_repo_is_not_rewritten() {
+    let env = TrustEnv::new();
+    let repo = demo_repo();
+    let path = manifest_path(&repo);
+    let stale = Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: "stale".into(),
+        third_party_hash: String::new(),
+        toolr_version: env!("CARGO_PKG_VERSION").into(),
+        groups: vec![],
+        commands: vec![],
+        plugin_warnings: vec![],
+    };
+    write_manifest(&path, &stale).unwrap();
+    let bytes = fs::read_to_string(&path).unwrap();
+    let mtime = fs::metadata(&path).unwrap().modified().unwrap();
+
+    env.toolr(repo.path())
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(contains("demo"))
+        .stderr(contains("unreadable").not());
+
+    assert_eq!(fs::read_to_string(&path).unwrap(), bytes);
+    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), mtime);
+}
+
+#[test]
+fn trusted_repo_help_still_writes_manifest() {
+    let env = TrustEnv::new();
+    let repo = demo_repo();
+    env.toolr(repo.path())
+        .args(["project", "trust"])
+        .assert()
+        .success();
+    env.toolr(repo.path()).arg("--help").assert().success();
+    let written = fs::read_to_string(manifest_path(&repo)).unwrap();
+    assert!(written.contains("\"demo\""));
+}
+
+#[test]
+fn trust_all_env_help_writes_manifest() {
+    let env = TrustEnv::new();
+    let repo = demo_repo();
+    env.toolr(repo.path())
+        .env("TOOLR_TRUST_ALL", "1")
+        .arg("--help")
+        .assert()
+        .success();
+    assert!(manifest_path(&repo).is_file());
 }

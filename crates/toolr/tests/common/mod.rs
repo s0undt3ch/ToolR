@@ -252,6 +252,8 @@ pub fn hostile_repo(sentinel: &Path, with_pyproject: bool) -> TempDir {
             .unwrap()
             .current_dir(tmp.path())
             .env("XDG_CACHE_HOME", cache.path())
+            // The seed must persist, and toolr only writes it for a trusted repo.
+            .env("TOOLR_TRUST_ALL", "1")
             .arg("--help")
             .assert()
             .success();
