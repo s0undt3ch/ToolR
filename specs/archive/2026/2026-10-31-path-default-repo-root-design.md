@@ -1,6 +1,6 @@
 # Resolve relative path defaults from the repo root
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-11 (medium-high).
 - **Plan:** [`2026-10-31-path-default-repo-root-plan.md`](./2026-10-31-path-default-repo-root-plan.md)
 
