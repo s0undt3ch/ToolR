@@ -63,6 +63,27 @@ def _import_tools_modules() -> list[Exception]:
     return errors
 
 
+def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
+    """Return ``saved`` with ``search_path`` first and no other ``tools`` provider.
+
+    Drops the ``""`` (cwd) entry, ``search_path`` itself and any entry with a
+    top-level ``tools`` package or module, which would shadow the fixture's
+    ``tools``, or merge into it when the fixture's is a namespace package.
+    Site-packages directories always stay. Everything else (the stdlib,
+    editable installs, ``PYTHONPATH``) stays importable.
+    """
+    kept = []
+    for entry in saved:
+        if entry in ("", str(search_path)):
+            continue
+        is_site_packages = "site-packages" in entry or "dist-packages" in entry
+        provides_tools = Path(entry, "tools").is_dir() or Path(entry, "tools.py").is_file()
+        if provides_tools and not is_site_packages:
+            continue
+        kept.append(entry)
+    return [str(search_path), *kept]
+
+
 @define(slots=True, frozen=True)
 class CommandsTester:
     """
@@ -138,14 +159,10 @@ class CommandsTester:
         sys.modules.update(self.sys_modules)
         os.chdir(self.search_path)
         self.command_group_patcher.start()
-        # Replace sys.path with the search path plus the site-packages
-        # entries from the saved sys_path; drop anything that points
-        # back at the host repo (which would shadow the fixture's
-        # ``tools/`` tree with the repo's own).
-        site_pkg_entries = [
-            p for p in self.sys_path if "site-packages" in p or "dist-packages" in p
-        ]
-        sys.path[:] = [str(self.search_path), *site_pkg_entries]
+        # Put the search path first and hide every other `tools` provider
+        # (the host repo root among them): it would shadow the fixture's
+        # `tools/`, or merge into it when that is a namespace package.
+        sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
         return self
 
     def __exit__(self, *args: object) -> None:

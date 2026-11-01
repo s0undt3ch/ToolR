@@ -10,7 +10,9 @@ import pytest
 
 from toolr import Context
 from toolr import command_group
+from toolr._decorators import CommandGroup
 from toolr.testing import CommandsTester
+from toolr.testing._discovery import _isolated_sys_path
 
 CI_MODULE = (
     "from toolr import command_group\n"
@@ -27,6 +29,18 @@ BAD_MODULE = (
     "    pass\n"
 )
 BROKEN_MODULE = "raise RuntimeError('boom')\n"
+STDLIB_USER_MODULE = (
+    "import sqlite3, tomllib, zipfile, csv\n"
+    "from toolr import command_group\n"
+    'g = command_group("std", "Std", "Std")\n'
+    "@g.command\n"
+    "def ok(ctx):\n"
+    '    """Use the stdlib."""\n'
+)
+HOST_ONLY_MODULE = (
+    'from toolr import command_group\ngroup = command_group("host", "Host", "Host repo tools")\n'
+)
+STDLIB_MODULES = ("sqlite3", "tomllib", "zipfile", "csv")
 
 
 @pytest.fixture
@@ -116,6 +130,103 @@ def test_discover_imports_a_single_file_tools_module(tmp_path: Path) -> None:
         tester.discover()
         groups = tester.collected_command_groups()
     assert "tools.single" in groups
+
+
+@pytest.fixture
+def host_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A host repo with its own regular `tools` package, put on `sys.path`."""
+    host = tmp_path / "host"
+    (host / "tools").mkdir(parents=True)
+    (host / "tools" / "__init__.py").write_text("")
+    (host / "tools" / "host_only.py").write_text(HOST_ONLY_MODULE)
+    monkeypatch.syspath_prepend(host)
+    return host
+
+
+def test_discover_imports_stdlib_modules_not_yet_loaded(
+    tools_repo: Callable[[dict[str, str]], Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `tools/*.py` module can import stdlib modules nobody loaded yet."""
+    for name in STDLIB_MODULES:
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    repo = tools_repo({"tools/stdlib_user.py": STDLIB_USER_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        # `__enter__` reinstalls the module snapshot taken at construction,
+        # so check here that the imports below really have to find the files.
+        assert not set(STDLIB_MODULES) & sys.modules.keys()
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.std"]
+    assert isinstance(group, CommandGroup)
+    assert "ok" in group.get_commands()
+
+
+def test_discover_ignores_tools_dirs_elsewhere_on_sys_path(tmp_path: Path, host_repo: Path) -> None:
+    """A namespace `tools/` fixture doesn't merge with the host's `tools` package."""
+    fixture = tmp_path / "fixture"
+    (fixture / "tools").mkdir(parents=True)
+    (fixture / "tools" / "ci.py").write_text(CI_MODULE)
+    with CommandsTester(search_path=fixture) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    assert "tools.ci" in groups
+    assert "tools.host" not in groups
+
+
+def test_discover_without_tools_ignores_host_tools(tmp_path: Path, host_repo: Path) -> None:
+    """A fixture with no `tools/` doesn't import the host's instead."""
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    with CommandsTester(search_path=fixture) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+        imported_host = "tools.host_only" in sys.modules
+    assert groups == {}
+    assert not imported_host
+
+
+def test_discover_keeps_sys_path_entries_without_tools(
+    tmp_path: Path,
+    tools_repo: Callable[[dict[str, str]], Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`sys.path` entries that can't shadow `tools` (editable installs,
+    `PYTHONPATH`) stay importable during discovery."""
+    libdir = tmp_path / "libdir"
+    libdir.mkdir()
+    (libdir / "fixture_helper.py").write_text("VALUE = 1\n")
+    monkeypatch.syspath_prepend(libdir)
+    repo = tools_repo({"tools/ci.py": "import fixture_helper\n" + CI_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    assert "tools.ci" in groups
+
+
+def test_isolated_sys_path_drops_tools_providers_and_cwd(tmp_path: Path) -> None:
+    """Entries that provide a `tools` module, the cwd entry and the search
+    path itself are dropped; the search path goes first."""
+    search_path = tmp_path / "search"
+    with_pkg = tmp_path / "with_pkg"
+    (with_pkg / "tools").mkdir(parents=True)
+    with_module = tmp_path / "with_module"
+    with_module.mkdir()
+    (with_module / "tools.py").write_text("")
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    saved = ["", str(with_pkg), str(search_path), str(with_module), str(plain)]
+    assert _isolated_sys_path(search_path, saved) == [str(search_path), str(plain)]
+
+
+def test_isolated_sys_path_keeps_site_packages_with_tools(tmp_path: Path) -> None:
+    """A site-packages directory is kept even when it holds a `tools` package."""
+    site_packages = tmp_path / "lib" / "site-packages"
+    (site_packages / "tools").mkdir(parents=True)
+    search_path = tmp_path / "search"
+    assert _isolated_sys_path(search_path, [str(site_packages)]) == [
+        str(search_path),
+        str(site_packages),
+    ]
 
 
 def test_commands_tester_restores_sys_modules(tmp_path: Path) -> None:
