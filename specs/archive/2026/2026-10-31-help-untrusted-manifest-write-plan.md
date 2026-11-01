@@ -13,7 +13,7 @@
 **Tech Stack:** Rust, `assert_cmd`, `tempfile`.
 
 **Spec:**
-[`specs/2026-10-31-help-untrusted-manifest-write-design.md`](./2026-10-31-help-untrusted-manifest-write-design.md)
+[`specs/archive/2026/2026-10-31-help-untrusted-manifest-write-design.md`](./2026-10-31-help-untrusted-manifest-write-design.md)
 
 ## Global Constraints
 

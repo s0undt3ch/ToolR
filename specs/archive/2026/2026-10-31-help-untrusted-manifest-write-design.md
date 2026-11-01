@@ -1,6 +1,6 @@
 # Don't write the manifest into an untrusted repository
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-27 (low-medium).
 - **Plan:** [`2026-10-31-help-untrusted-manifest-write-plan.md`](./2026-10-31-help-untrusted-manifest-write-plan.md)
 
