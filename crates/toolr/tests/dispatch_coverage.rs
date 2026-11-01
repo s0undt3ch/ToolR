@@ -33,9 +33,7 @@ use tempfile::TempDir;
 /// dispatch path bail without exercising the venv layer.
 fn fixture_with_manifest(json: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    std::fs::create_dir(&tools).unwrap();
-    std::fs::write(tools.join(".toolr-manifest.json"), json).unwrap();
+    common::write_fresh_manifest(tmp.path(), json);
     tmp
 }
 

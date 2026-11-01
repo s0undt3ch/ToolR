@@ -22,12 +22,6 @@ printing the old text; the binary's version-skew warning above it gives the righ
 Pressing Ctrl-D (or stdin closing) at the uv install prompt now declines the install. It used to
 count as consent and download uv. Bare Enter still installs.
 
-In a repo without `tools/pyproject.toml`, toolr now runs commands with `python3` (or `python`) from
-`PATH`, as documented. It used to fail every command with "Python interpreter not found at python3"
-unless `$TOOLR_PYTHON` held an absolute path. `$TOOLR_PYTHON` now also accepts a bare name such as
-`python3.12`, looked up on `PATH`. A `PATH` interpreter older than Python 3.11 is skipped, and
-the error names it if nothing newer is found.
-
 `toolr project venv sync -P`, `venv lock -P` and `venv remove` now ignore case and treat `-`, `_` and
 `.` as the same when checking that a package is declared, following PEP 503. A `tools/pyproject.toml`
 that declares `toolr_py` or `Toolr.Py` used to fail the "not declared" check for `toolr-py`.
@@ -141,3 +135,14 @@ The Setup ToolR action no longer throws away its `tools/.venv` cache when the re
 changes. The cache key now follows the same `tools/` inputs toolr's own freshness check tracks:
 `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml` and `tools/.python-version`. Expect one cache miss after
 upgrading the action.
+
+**Breaking:** a `tools/` directory is a toolr project only if it contains `pyproject.toml`. toolr
+finds the project by walking up to the nearest `tools/pyproject.toml`, and ignores any `tools/`
+without one. An unrelated `tools/` package below the repo root, such as `src/pkg/tools/`, used to
+hide every command (`unrecognized subcommand`); a bare `tools/` above a project (such as `C:\tools`)
+can no longer take it over. A repo whose `tools/` has no `pyproject.toml` is no longer supported:
+run `toolr project init` there to create one. Running one of its commands, or a `toolr project`
+command, now names the `tools/` and says `tools/pyproject.toml` is missing. Without a
+`tools/pyproject.toml` toolr has no tools venv, so the fallback that ran commands with
+`$TOOLR_PYTHON`, `python3` or `python` from `PATH` is gone, and toolr no longer reads
+`$TOOLR_PYTHON`. The `toolr.testing` pytest plugin finds the repo root the same way.

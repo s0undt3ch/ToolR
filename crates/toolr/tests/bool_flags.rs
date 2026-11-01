@@ -3,20 +3,14 @@
 mod common;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Output;
 
 use tempfile::TempDir;
 
 fn project_with(module_source: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    fs::create_dir_all(&tools).unwrap();
-    fs::write(
-        tools.join("pyproject.toml"),
-        "[project]\nname = \"tools\"\nversion = \"0.0.0\"\n",
-    )
-    .unwrap();
+    let tools = common::write_project(tmp.path());
     fs::write(tools.join("example.py"), module_source).unwrap();
     tmp
 }
@@ -95,23 +89,22 @@ def run(ctx: Context, *, verbose: Verbose = False) -> None:
     assert!(!stdout.contains("<VERBOSE>"), "stdout:\n{stdout}");
 }
 
-/// Stands in for the Python runner: prints the spec `toolr` hands it, so
-/// the test sees the parsed values without needing a real interpreter.
+/// Stands in for the Python runner as the in-tree tools venv's interpreter:
+/// prints the spec `toolr` hands it, so the test sees the parsed values
+/// without needing a real interpreter.
 #[cfg(unix)]
-fn spec_echo_python(dir: &Path) -> PathBuf {
+fn spec_echo_python(root: &Path) {
     use std::os::unix::fs::PermissionsExt;
-    let python = dir.join("python");
+    let bin = root.join("tools").join(".venv").join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let python = bin.join("python");
     fs::write(&python, "#!/bin/sh\ncat \"$TOOLR_SPEC_FILE\"\n").unwrap();
     fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
-    python
 }
 
-fn run_with_env(root: &Path, python: &Path, verbose_env: Option<&str>, args: &[&str]) -> Output {
+fn run_with_env(root: &Path, verbose_env: Option<&str>, args: &[&str]) -> Output {
     let mut cmd = common::toolr();
-    cmd.args(args)
-        .current_dir(root)
-        .env("TOOLR_PYTHON", python)
-        .env_remove("V");
+    cmd.args(args).current_dir(root).env_remove("V");
     if let Some(value) = verbose_env {
         cmd.env("V", value);
     }
@@ -135,12 +128,9 @@ def run(ctx: Context, *, verbose: Verbose = False) -> None:
     """Run."""
 "#,
     );
+    spec_echo_python(tmp.path());
     let rebuild = toolr(&tmp, &["project", "manifest", "rebuild"]);
     assert!(rebuild.status.success(), "rebuild failed: {rebuild:?}");
-    // Without a tools pyproject the dispatcher runs the built manifest
-    // under TOOLR_PYTHON instead of syncing a tools venv.
-    fs::remove_file(tmp.path().join("tools").join("pyproject.toml")).unwrap();
-    let python = spec_echo_python(tmp.path());
 
     let cases: &[(Option<&str>, &[&str], &str)] = &[
         (None, &[], r#""verbose":false"#),
@@ -155,7 +145,7 @@ def run(ctx: Context, *, verbose: Verbose = False) -> None:
             .chain(extra.iter())
             .copied()
             .collect();
-        let output = run_with_env(tmp.path(), &python, *env, &args);
+        let output = run_with_env(tmp.path(), *env, &args);
         let stdout = String::from_utf8_lossy(&output.stdout).replace([' ', '\n'], "");
         assert!(output.status.success(), "V={env:?} {extra:?}: {output:?}");
         assert!(
@@ -164,7 +154,7 @@ def run(ctx: Context, *, verbose: Verbose = False) -> None:
         );
     }
 
-    let output = run_with_env(tmp.path(), &python, Some("1"), &["example", "run"]);
+    let output = run_with_env(tmp.path(), Some("1"), &["example", "run"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
     assert!(

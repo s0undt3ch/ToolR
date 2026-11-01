@@ -2617,7 +2617,6 @@ dependencies = [
  "toml",
  "uuid",
  "walkdir",
- "which",
  "winapi",
  "zip",
 ]

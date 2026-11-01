@@ -57,9 +57,7 @@ const MANIFEST: &str = r#"{
 
 fn fixture() -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    std::fs::create_dir(&tools).unwrap();
-    std::fs::write(tools.join(".toolr-manifest.json"), MANIFEST).unwrap();
+    common::write_fresh_manifest(tmp.path(), MANIFEST);
     tmp
 }
 

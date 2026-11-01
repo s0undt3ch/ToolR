@@ -1,6 +1,6 @@
 //! The path types reject bad input at clap-parse time, before any Python
-//! is spawned. The fixture manifest has no `tools/pyproject.toml`, so the
-//! binary uses it as written without a freshness rebuild.
+//! is spawned. The fixture manifest is stamped fresh, so the binary uses it
+//! as written without a freshness rebuild.
 
 mod common;
 
@@ -10,8 +10,6 @@ use tempfile::TempDir;
 
 fn fixture(kind: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let tools = tmp.path().join("tools");
-    fs::create_dir(&tools).unwrap();
     let manifest = format!(
         r#"{{
     "schema_version": 2,
@@ -30,7 +28,7 @@ fn fixture(kind: &str) -> TempDir {
     }}]
 }}"#
     );
-    fs::write(tools.join(".toolr-manifest.json"), manifest).unwrap();
+    common::write_fresh_manifest(tmp.path(), &manifest);
     tmp
 }
 

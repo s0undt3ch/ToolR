@@ -12,7 +12,7 @@ use common::TrustEnv;
 
 fn repo() -> TempDir {
     let repo = TempDir::new().unwrap();
-    fs::create_dir(repo.path().join("tools")).unwrap();
+    common::write_project(repo.path());
     repo
 }
 

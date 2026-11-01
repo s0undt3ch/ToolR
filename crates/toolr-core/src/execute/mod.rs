@@ -6,7 +6,6 @@ pub mod spawn;
 pub mod spec;
 pub mod tempfile;
 
-pub use python::{PythonError, resolve_python};
 pub use signals::wait_with_signals;
 pub use spawn::spawn_runner;
 pub use spec::{

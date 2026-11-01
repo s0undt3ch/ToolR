@@ -530,10 +530,10 @@ fn venv_sync_unattended_quiet_exit(
     // Benign markers from error contexts emitted by `ensure_venv_ready`
     // and the `uv` install path. We match substrings the error chain
     // already produces — keep this list aligned with:
-    //   - discover_project_root NotFound        → "locating project root"
-    //   - resolve_venv_path missing pyproject   → "resolving the tools venv path"
+    //   - discover_project_root (no project)    → "locating project root"
+    //   - resolve_venv_path failure             → "resolving the tools venv path"
     //     (both run before the trust check, so an untrusted stray `tools/`
-    //     still exits quietly)
+    //     without a pyproject still exits quietly)
     //   - ensure_uv with never_prompt=true      → UvError::UserRefusedInstall
     //     whose Display is "user declined uv install; ..."
     // A trust refusal must never match: `--quiet` would turn it into exit 0.

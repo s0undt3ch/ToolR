@@ -7,12 +7,13 @@ scaffolding step required. Mirrors the append-only ``sys.path`` contract
 dispatch: appended, not prepended, so stdlib and site-packages still win.
 
 Repo root is discovered the same way ``toolr_core::discovery`` finds it for
-the CLI: the nearest ancestor of the pytest invocation directory that
-contains a ``tools/`` directory.
+the CLI: the nearest ancestor of the pytest invocation directory whose
+``tools/pyproject.toml`` is a file. A ``tools/`` without one isn't toolr's.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -23,10 +24,12 @@ _REPO_ROOT_KEY = pytest.StashKey[Path | None]()
 
 
 def _discover_repo_root(start: Path) -> Path | None:
-    """Walk up from `start` for the nearest ancestor containing `tools/`."""
+    """Walk up from `start` for the nearest ancestor with a `tools/pyproject.toml` file."""
     resolved = start.resolve()
     for candidate in (resolved, *resolved.parents):
-        if (candidate / "tools").is_dir():
+        # `os.path.isfile` returns False on OSError; `Path.is_file` raises
+        # PermissionError for an untraversable `tools/` before Python 3.14.
+        if os.path.isfile(candidate / "tools" / "pyproject.toml"):
             return candidate
     return None
 
@@ -44,5 +47,7 @@ def repo_root(pytestconfig: pytest.Config) -> Path:
     """The repo root discovered by this plugin (see `_discover_repo_root`)."""
     root = pytestconfig.stash.get(_REPO_ROOT_KEY, None)
     if root is None:
-        pytest.fail("toolr: no `tools/` directory found above the pytest run — not a toolr repo?")
+        pytest.fail(
+            "toolr: no `tools/pyproject.toml` found above the pytest run — not a toolr repo?"
+        )
     return root

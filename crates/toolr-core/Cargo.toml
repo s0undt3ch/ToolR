@@ -32,7 +32,6 @@ glob.workspace = true
 humansize.workspace = true
 log.workspace = true
 reqwest.workspace = true
-which.workspace = true
 flate2.workspace = true
 tar.workspace = true
 zip.workspace = true
