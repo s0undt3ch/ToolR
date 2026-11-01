@@ -249,7 +249,7 @@ def test_discover_imports_stdlib_modules_not_yet_loaded(
 
 
 def test_discover_ignores_tools_dirs_elsewhere_on_sys_path(tmp_path: Path, host_repo: Path) -> None:
-    """A namespace `tools/` fixture doesn't merge with the host's `tools` package."""
+    """The host's regular `tools` package doesn't replace a namespace `tools/` fixture."""
     fixture = tmp_path / "fixture"
     (fixture / "tools").mkdir(parents=True)
     (fixture / "tools" / "ci.py").write_text(CI_MODULE)
@@ -277,8 +277,8 @@ def test_discover_keeps_sys_path_entries_without_tools(
     tools_repo: Callable[[dict[str, str]], Path],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`sys.path` entries that can't shadow `tools` (editable installs,
-    `PYTHONPATH`) stay importable during discovery."""
+    """`sys.path` entries that can't shadow `tools` (src-layout editable
+    installs, `PYTHONPATH`) stay importable during discovery."""
     libdir = tmp_path / "libdir"
     libdir.mkdir()
     (libdir / "fixture_helper.py").write_text("VALUE = 1\n")

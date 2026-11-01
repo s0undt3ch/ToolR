@@ -61,8 +61,9 @@ Only `Exception` is caught, as today. `SystemExit` and `KeyboardInterrupt` at mo
 
 The original filter exists so the host repo's own `tools/` can't leak into the fixture. That leak needs a `sys.path`
 entry that provides a top-level `tools` package. With the fixture first, a regular fixture package wins anyway, but a
-fixture `tools/` without `__init__.py` is a namespace package and Python merges every `tools/` directory on `sys.path`
-into it. A fixture with no `tools/` at all would import the host's.
+fixture `tools/` without `__init__.py` is a namespace package: a regular `tools` package (or `tools.py`) anywhere on
+`sys.path` replaces it, and any other namespace `tools/` directory merges into it. A fixture with no `tools/` at all would
+import the host's.
 
 A new module-level helper `_isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]` returns
 `[str(search_path), *kept]`, where `kept` is `saved` minus:
@@ -73,7 +74,8 @@ A new module-level helper `_isolated_sys_path(search_path: Path, saved: list[str
   `site-packages` or `dist-packages`.
 
 Site-packages directories are always kept, as today. Everything else (stdlib, `lib-dynload`, the stdlib zip,
-editable-install paths, `PYTHONPATH` entries) now stays. The host repo root, pytest's rootdir insertion and the entry
+src-layout editable-install paths, `PYTHONPATH` entries) now stays. An editable-install root that itself contains
+`tools/` is dropped like any other `tools` provider. The host repo root, pytest's rootdir insertion and the entry
 `toolr._runner._append_repo_root` adds from the pytest plugin all contain `tools/`, so they are still dropped.
 
 `__enter__` calls `sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)`. `__exit__` is unchanged.
@@ -109,8 +111,8 @@ editable-install paths, `PYTHONPATH` entries) now stays. The host repo root, pyt
 - Docs: `docs/writing-commands/testing.md` "What it does" (the `sys.path` bullet and the `.discover()` paragraph). The
   claims in `_decorators.py::_require_docstring` and `docs/writing-commands/docstrings.md` become true; no edit. The
   historical changelog entry is not edited.
-- Not covered: a stray top-level `tools` package inside site-packages can still merge into a namespace fixture `tools/`,
-  as today.
+- Not covered: a stray top-level `tools` package inside site-packages still replaces a namespace fixture `tools/`, as
+  today.
 - `UNRELEASED.md`:
 
   > `toolr.testing.CommandsTester.discover()` now raises when a `tools/*.py` module fails to import, for example

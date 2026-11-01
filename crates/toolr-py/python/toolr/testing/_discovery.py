@@ -77,10 +77,12 @@ def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     """Return ``saved`` with ``search_path`` first and no other ``tools`` provider.
 
     Drops the ``""`` (cwd) entry, ``search_path`` itself and any entry with a
-    top-level ``tools`` package or module, which would shadow the fixture's
-    ``tools``, or merge into it when the fixture's is a namespace package.
+    top-level ``tools`` package or module. When the fixture's ``tools/`` is a
+    namespace package, a regular ``tools`` package or ``tools.py`` elsewhere
+    replaces it and another namespace ``tools/`` merges into it.
     Site-packages directories always stay. Everything else (the stdlib,
-    editable installs, ``PYTHONPATH``) stays importable.
+    src-layout editable installs, ``PYTHONPATH``) stays importable; an
+    editable-install root that itself holds ``tools/`` is dropped too.
     """
     kept = []
     for entry in saved:
@@ -170,8 +172,8 @@ class CommandsTester:
         os.chdir(self.search_path)
         self.command_group_patcher.start()
         # Put the search path first and hide every other `tools` provider
-        # (the host repo root among them): it would shadow the fixture's
-        # `tools/`, or merge into it when that is a namespace package.
+        # (the host repo root among them): it could replace or merge into a
+        # namespace-package fixture `tools/`, or stand in for a missing one.
         sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
         return self
 
