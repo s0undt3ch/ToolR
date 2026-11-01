@@ -412,22 +412,12 @@ runs:
       if: inputs.cache-tools-venv == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        # Independent cache from the toolr-binary cache: the venv
-        # is invalidated by dependency churn (`uv.lock` / its
-        # `tools/`-scoped sibling if it exists) or project metadata
-        # changes (`tools/pyproject.toml`), not by a toolr release.
-        # The triple stays in the key so a runner OS / arch swap
-        # also misses.
-        #
-        # The cache covers BOTH lock-file shapes that exist in the
-        # wild: a single-workspace `uv.lock` at the repo root (this
-        # is what the toolr repo itself uses — `tools/` is a uv
-        # workspace member of the root) and a standalone
-        # `tools/uv.lock` (which a consumer using toolr but no
-        # workspace would have). hashFiles' undefined-file behaviour
-        # is to skip the missing entry, so either layout produces a
-        # stable, deterministic key.
-        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock', 'uv.lock') }}
+        # Independent cache from the toolr-binary cache: the venv is
+        # invalidated by `tools/pyproject.toml` or `tools/uv.lock` (the
+        # lock toolr's own freshness check reads), not by a toolr release
+        # or the repo's root `uv.lock`. The triple stays in the key so a
+        # runner OS / arch swap also misses.
+        key: ${{ inputs.cache-prefix }}-tools-venv|${{ steps.archive.outputs.triple }}|${{ hashFiles('tools/pyproject.toml', 'tools/uv.lock') }}
         path: ${{ steps.venv-path.outputs.path }}
 
     - name: Sync tools venv
