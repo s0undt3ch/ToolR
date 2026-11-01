@@ -28,6 +28,12 @@ ACTION_YML = REPO_ROOT / "action.yml"
 
 _MISSING_RESOLVE_STEP = "no `resolve-version` step in action.yml"
 
+# In a consumer's workflow `GITHUB_REPOSITORY` is the consumer, which may
+# have releases of its own. Its tag clears the `0.20.0` floor, so a lookup
+# against it shows up as a wrong version, not a minimum-version error.
+CALLER_REPO = "consumer/repo"
+CALLER_TAG = "v9.9.9"
+
 
 def _resolve_step_script() -> str:
     """Pull the resolve-version step's `run:` body out of action.yml."""
@@ -39,30 +45,15 @@ def _resolve_step_script() -> str:
 
 
 @pytest.fixture
-def gh_calls_file(tmp_path: Path) -> Path:
-    """Where the stubbed `gh` records each call's arguments, one line per call."""
-    return tmp_path / "gh_calls"
-
-
-@pytest.fixture
-def gh_calls(gh_calls_file: Path) -> Callable[[], list[str]]:
-    """Return a reader for the argument lines the stubbed `gh` recorded."""
-
-    def read() -> list[str]:
-        return gh_calls_file.read_text().splitlines()
-
-    return read
-
-
-@pytest.fixture
-def resolve_runner(tmp_path: Path, gh_calls_file: Path) -> Callable[..., str]:
+def resolve_runner(tmp_path: Path) -> Callable[..., str]:
     """Return a callable that runs the resolve-version script.
 
     Wraps the script in a harness that stubs `gh release view`, wires
-    `GITHUB_OUTPUT` to a tempfile, sets `GITHUB_REPOSITORY` to a
-    consumer repository, and returns the `version=…` line as the
-    function's result. The stub answers per `--repo`: `latest_tag` for
-    `s0undt3ch/ToolR`, `caller_tag` for anything else.
+    `GITHUB_OUTPUT` to a tempfile, sets `GITHUB_REPOSITORY` to
+    `CALLER_REPO`, and returns the `version=…` line as the function's
+    result. The stub answers per `--repo`: `latest_tag` for
+    `s0undt3ch/ToolR`, `CALLER_TAG` for anything else. With `gh_fails`
+    it exports `GH_FAILS`, and the stub fails the way `gh` does.
     """
     script_body = _resolve_step_script()
 
@@ -70,16 +61,16 @@ def resolve_runner(tmp_path: Path, gh_calls_file: Path) -> Callable[..., str]:
         *,
         input_version: str = "",
         latest_tag: str = "v0.20.1",
-        caller_repo: str = "consumer/repo",
-        caller_tag: str = "v9.9.9",
         gh_fails: bool = False,
     ) -> str:
-        fail_branch = "    echo 'gh: release not found' >&2\n    return 1\n" if gh_fails else ""
         stub = f"""
 gh() {{
-  printf '%s\\n' "$*" >> "{gh_calls_file}"
   if [ "${{1:-}}" = "release" ] && [ "${{2:-}}" = "view" ]; then
-{fail_branch}    local repo=""
+    if [ -n "${{GH_FAILS:-}}" ]; then
+      echo 'gh: release not found' >&2
+      return 1
+    fi
+    local repo=""
     while [ "$#" -gt 0 ]; do
       if [ "$1" = "--repo" ]; then
         repo="${{2:-}}"
@@ -89,7 +80,7 @@ gh() {{
     if [ "$repo" = "s0undt3ch/ToolR" ]; then
       printf '{latest_tag}'
     else
-      printf '{caller_tag}'
+      printf '{CALLER_TAG}'
     fi
     return 0
   fi
@@ -103,8 +94,9 @@ export -f gh
             "set -euo pipefail\n"
             f'INPUT_VERSION="{input_version}"\n'
             f'GITHUB_OUTPUT="{github_output}"\n'
-            f'GITHUB_REPOSITORY="{caller_repo}"\n'
-            "export INPUT_VERSION GITHUB_OUTPUT GITHUB_REPOSITORY\n" + stub + script_body
+            f'GITHUB_REPOSITORY="{CALLER_REPO}"\n'
+            f'GH_FAILS="{"1" if gh_fails else ""}"\n'
+            "export INPUT_VERSION GITHUB_OUTPUT GITHUB_REPOSITORY GH_FAILS\n" + stub + script_body
         )
         script_path = tmp_path / "wrapped.sh"
         script_path.write_text(wrapped)
@@ -148,7 +140,9 @@ def _skip_if_no_bash() -> None:
         ("v0.20.1", "0.20.1"),
         # Explicit bare semver.
         ("0.20.1", "0.20.1"),
-        # The literal `latest` — resolves via stubbed `gh release view`.
+        # The literal `latest` — resolves via stubbed `gh release view`
+        # against s0undt3ch/ToolR, not `CALLER_REPO`, whose own newest
+        # tag (`CALLER_TAG`) would resolve to 9.9.9.
         ("latest", "0.20.1"),
         # Empty input — falls through to `latest`. Note: in practice
         # action.yml's `inputs.version.default` is non-empty post-bake-in,
@@ -200,24 +194,6 @@ def test_action_yml_inputs_version_default_is_set() -> None:
     assert all(p.isdigit() for p in parts), (
         f"action.yml inputs.version.default has non-numeric parts: {default!r}"
     )
-
-
-@pytest.mark.parametrize("input_version", ["latest", ""])
-def test_latest_ignores_caller_repository(
-    resolve_runner: Callable[..., str],
-    gh_calls: Callable[[], list[str]],
-    input_version: str,
-) -> None:
-    """`latest` resolves against s0undt3ch/ToolR, never the calling repository.
-
-    In a consumer's workflow `GITHUB_REPOSITORY` is the consumer. Its own
-    newest tag (`v9.9.9`, above the `0.20.0` floor) must not leak in.
-    """
-    assert resolve_runner(input_version=input_version) == "0.20.1"
-    calls = gh_calls()
-    assert calls
-    assert all("--repo s0undt3ch/ToolR" in call for call in calls), calls
-    assert not any("consumer/repo" in call for call in calls), calls
 
 
 def test_latest_gh_failure_fails(resolve_runner: Callable[..., str]) -> None:
