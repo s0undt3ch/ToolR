@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import threading
@@ -58,28 +59,22 @@ def test_input_bytes(stdin_cat_command):
 
 def test_input_larger_than_pipe_buffer_with_output_first():
     """A child that fills its stdout pipe before reading stdin must not deadlock (F-08)."""
-    script = "import sys; sys.stdout.write('x'*200000); sys.stdout.flush(); sys.stdin.buffer.read()"
-    results = []
-    # A regression hangs before `timeout_secs` is armed, so bound the call from outside.
-    worker = threading.Thread(
-        target=lambda: results.append(
-            run(
-                [sys.executable, "-c", script],
-                input=b"y" * 200000,
-                capture_output=True,
-                text=False,
-                timeout_secs=30,
-            )
-        ),
-        daemon=True,
+    child = "import sys; sys.stdout.write('x'*200000); sys.stdout.flush(); sys.stdin.buffer.read()"
+    # `run_command_impl` holds the GIL for the whole call, so a regression can only be bounded
+    # from another process: `timeout_secs` is armed after the stdin write.
+    driver = (
+        "import sys\n"
+        "from toolr.utils.command import run\n"
+        f"result = run([sys.executable, '-c', {child!r}], input=b'y' * 200000,\n"
+        "             capture_output=True, text=False, timeout_secs=30)\n"
+        "result.stdout.seek(0)\n"
+        "print(result.returncode, len(result.stdout.read()))\n"
     )
-    worker.start()
-    worker.join(60)
-    assert not worker.is_alive(), "ctx.run deadlocked feeding stdin"
-    (result,) = results
-    assert result.returncode == 0
-    result.stdout.seek(0)
-    assert len(result.stdout.read()) == 200000
+    proc = subprocess.run(  # noqa: S603  # interpreter + script are test-controlled
+        [sys.executable, "-c", driver], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.split() == ["0", "200000"]
 
 
 def test_text_mode(echo_command):
