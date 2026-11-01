@@ -203,14 +203,6 @@ pub fn dispatch(
         cwd: &cwd,
         repo_root: &repo_root,
     };
-    // Before anything of the repo's runs: the venv path may `uv sync`, and the
-    // host-Python path imports `tools/*.py` directly.
-    toolr_core::trust::require_trust(
-        &repo_root,
-        toolr_core::trust::TrustMode {
-            never_prompt: output_opts.verbosity == "quiet",
-        },
-    )?;
     // Dispatched leaves take a separate spec-shape: the runner sees
     // `dispatch: Some(...)` and routes to `invoke_dispatcher` instead
     // of calling `function` as a regular command. Pack the child first,
@@ -247,6 +239,15 @@ pub fn dispatch(
     } else {
         build_spec(cmd, cmd_matches, &bases, &output_opts)?
     };
+    // Before anything of the repo's runs: the venv path may `uv sync`, and the
+    // host-Python path imports `tools/*.py` directly. Building the spec above
+    // runs none of it, so a bad path value is reported before the trust prompt.
+    toolr_core::trust::require_trust(
+        &repo_root,
+        toolr_core::trust::TrustMode {
+            never_prompt: output_opts.verbosity == "quiet",
+        },
+    )?;
 
     let tempfile = write_spec_to_tempfile(&spec)?;
     // Prefer the resolved tools-venv python. Fall back to the
