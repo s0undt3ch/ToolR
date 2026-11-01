@@ -12,7 +12,7 @@ defaulted, reusing the same resolve-and-check code as `path_parser`.
 
 **Tech Stack:** Rust, clap 4, `assert_cmd`.
 
-**Spec:** [`specs/2026-10-31-path-default-repo-root-design.md`](./2026-10-31-path-default-repo-root-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-path-default-repo-root-design.md`](./2026-10-31-path-default-repo-root-design.md)
 
 ## Global Constraints
 
