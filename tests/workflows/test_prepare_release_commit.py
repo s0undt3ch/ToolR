@@ -120,11 +120,13 @@ def test_commit_step_fails_when_prek_keeps_failing(
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
 ) -> None:
-    bin_dir = stub_prek([PREK_FAILS, PREK_FAILS])
+    bin_dir = stub_prek([PREK_FAILS, f"echo 'strict pass failed' >&2; {PREK_FAILS}"])
 
     result = run_commit_step(release_repo, bin_dir)
 
     assert result.returncode != 0, result.stdout + result.stderr
+    assert "strict pass failed" in result.stderr
+    assert prek_calls(bin_dir) == 2
     assert commit_count(release_repo) == 1
 
 
