@@ -13,7 +13,7 @@ of the workflow YAML and run it under `bash` against a scratch git repo with a s
 
 **Tech Stack:** GitHub Actions YAML, bash, pytest, PyYAML.
 
-**Spec:** [`specs/2026-10-31-release-prek-failures-design.md`](./2026-10-31-release-prek-failures-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-release-prek-failures-design.md`](./2026-10-31-release-prek-failures-design.md)
 
 ## Global Constraints
 

@@ -1,6 +1,6 @@
 # Stop the release commit from swallowing prek failures
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-24 (low).
 - **Plan:** [`2026-10-31-release-prek-failures-plan.md`](./2026-10-31-release-prek-failures-plan.md)
 
@@ -76,3 +76,10 @@ Rejected alternatives:
 - `release.yml` is untouched. F-10 (`fix/release-tree-binding`) and F-25 (`ci/dogfood-pinned-version`) stack on this
   branch; this spec only changes the `Commit changes`, `Show Changes Diff` and `Tag the release` steps of
   `_prepare-release.yml`.
+
+## Implementation notes
+
+- Every past release commit also carried `skills/toolr-ci-setup/references/action.md`, which `build-skill-refs`
+  regenerates from the bumped `action.yml`. With the before/after check that fixer edit would fail every release, so a
+  `Regenerate skill references` step (`cargo xtask build-skill-refs`) now runs right after `Bump Version`, making the
+  reference one of the release's own changes. This adds a step outside the three listed in *Scope and compatibility*.
