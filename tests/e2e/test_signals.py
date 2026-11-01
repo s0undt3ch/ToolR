@@ -45,6 +45,17 @@ def cleanup(ctx: Context) -> None:
 
 READY_TIMEOUT = 30
 EXIT_TIMEOUT = 15
+# A forwarded SIGINT ends the command within one 50 ms poll plus its 0.5 s cleanup.
+FORWARDED_SIGINT_WINDOW = 2
+# Output the command flushed just before exiting can still be in the terminal after toolr is reaped.
+TERMINAL_DRAIN = 0.2
+
+
+def assert_interrupted_once(returncode: int | None, output: str, context: str) -> None:
+    """The command got exactly one `KeyboardInterrupt` and its `finally:` ran to the end."""
+    assert returncode == 130, context
+    assert output.count("interrupted") == 1, output
+    assert "cleaned" in output, context
 
 
 @pytest.fixture
@@ -53,14 +64,22 @@ def start_cleanup(
 ) -> Iterator[Callable[[], subprocess.Popen[str]]]:
     """Factory: start `toolr sig cleanup` with no terminal and return once the command prints `ready`.
 
-    toolr leads a new process group. Whatever is still running at teardown has
-    its process group killed.
+    toolr leads a new session, so its pid is also its process group id. Whatever
+    is still running at teardown has its process group killed.
     """
     procs: list[subprocess.Popen[str]] = []
 
     def _start() -> subprocess.Popen[str]:
         project = make_tools_project(sig=SIG_MODULE)
-        proc = project.popen("sig", "cleanup")
+        proc = subprocess.Popen(  # noqa: S603
+            [str(project.toolr_bin), "sig", "cleanup"],
+            cwd=project.root,
+            env=project.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
         procs.append(proc)
         assert proc.stdout is not None
         with selectors.DefaultSelector() as selector:
@@ -120,7 +139,7 @@ class PtyProcess:
             self._read(0.05)
             pid, status = os.waitpid(self.pid, os.WNOHANG)
             if pid:
-                self._read(0.2)
+                self._read(TERMINAL_DRAIN)
                 self.returncode = os.waitstatus_to_exitcode(status)
                 return self.returncode
         pytest.fail(f"toolr still running after {EXIT_TIMEOUT}s; output:\n{self.output}")
@@ -166,35 +185,36 @@ def test_ctrl_c_on_a_terminal_interrupts_once(
 ) -> None:
     proc = start_cleanup_on_a_terminal()
     os.write(proc.master, b"\x03")
-    assert proc.wait() == 130, proc.output
-    assert proc.output.count("interrupted") == 1, proc.output
-    assert "cleaned" in proc.output, proc.output
+    assert_interrupted_once(proc.wait(), proc.output, proc.output)
 
 
-@pytest.mark.skipif(
-    IS_LINUX, reason="Linux forwards a process-sent SIGINT, so a killpg one arrives twice"
+@pytest.mark.parametrize(
+    "send",
+    [
+        pytest.param(
+            os.killpg,
+            id="group",
+            marks=pytest.mark.skipif(
+                IS_LINUX,
+                reason="Linux forwards a process-sent SIGINT, so a killpg one arrives twice",
+            ),
+        ),
+        pytest.param(
+            os.kill,
+            id="pid-only",
+            marks=pytest.mark.skipif(
+                not IS_LINUX, reason="only Linux can tell a process-sent SIGINT from a terminal one"
+            ),
+        ),
+    ],
 )
-def test_group_sigint_lets_finally_finish(
-    start_cleanup: Callable[[], subprocess.Popen[str]],
+def test_sigint_from_a_process_interrupts_once(
+    start_cleanup: Callable[[], subprocess.Popen[str]], send: Callable[[int, int], None]
 ) -> None:
     proc = start_cleanup()
-    os.killpg(proc.pid, signal.SIGINT)
+    send(proc.pid, signal.SIGINT)
     stdout, stderr = proc.communicate(timeout=EXIT_TIMEOUT)
-    assert proc.returncode == 130, stderr
-    assert stdout.count("interrupted") == 1, stdout
-    assert "cleaned" in stdout, stderr
-
-
-@pytest.mark.skipif(
-    not IS_LINUX, reason="only Linux can tell a process-sent SIGINT from a terminal one"
-)
-def test_pid_only_sigint_is_forwarded(start_cleanup: Callable[[], subprocess.Popen[str]]) -> None:
-    proc = start_cleanup()
-    os.kill(proc.pid, signal.SIGINT)
-    stdout, stderr = proc.communicate(timeout=EXIT_TIMEOUT)
-    assert proc.returncode == 130, stderr
-    assert stdout.count("interrupted") == 1, stdout
-    assert "cleaned" in stdout, stderr
+    assert_interrupted_once(proc.returncode, stdout, stderr)
 
 
 @pytest.mark.skipif(IS_LINUX, reason="Linux forwards a process-sent SIGINT")
@@ -204,7 +224,7 @@ def test_pid_only_sigint_does_not_reach_the_command(
     proc = start_cleanup()
     os.kill(proc.pid, signal.SIGINT)
     with pytest.raises(subprocess.TimeoutExpired):
-        proc.wait(timeout=2)
+        proc.wait(timeout=FORWARDED_SIGINT_WINDOW)
     os.kill(proc.pid, signal.SIGTERM)
     stdout, stderr = proc.communicate(timeout=EXIT_TIMEOUT)
     assert proc.returncode == 143, stderr
