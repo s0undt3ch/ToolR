@@ -62,7 +62,7 @@ for a stacked PR.
 
 ### Where things live
 
-- Release notes queue: `UNRELEASED.md` (folded into `CHANGELOG.md` on release).
+- Release notes queue: `release-notes/` (one file per note; folded into `CHANGELOG.md` on release).
 - **Specs (live):** `specs/<YYYY-MM-DD>-<topic>-design.md` and `<…>-plan.md`.
   Override the brainstorming-skill default of `docs/superpowers/specs/` — this repo uses top-level
   `specs/`. See `specs/README.md`.
@@ -93,11 +93,11 @@ for a stacked PR.
   `specs/<YYYY-MM-DD>-<topic>-plan.md`. Never `docs/superpowers/specs/`.
 - **Deciding a `0.X.0` vs `0.x.Y` release.** `tools/version.py::bump` takes the target version as
   an explicit input — it doesn't compute one from commit history. Before a release, judge the bump
-  by reading `UNRELEASED.md`'s content and `git log <last-tag>..HEAD` (or the merged PRs since)
+  by reading the `release-notes/` content and `git log <last-tag>..HEAD` (or the merged PRs since)
   together: any `feat(...)` commit, or narrative text describing new/changed behavior rather than a
   pure bug fix, means minor (`0.X.0`); a release containing only `fix(...)`/`docs(...)`/`chore(...)`
   work is a patch (`0.x.Y`). Conventional Commit prefixes alone aren't sufficient — a PR can carry a
-  `feat` commit for internal refactoring with no user-visible new capability, and `UNRELEASED.md` is
+  `feat` commit for internal refactoring with no user-visible new capability, and `release-notes/` is
   what actually ships in the notes, so read both.
 
 ### Actions (how)
@@ -108,8 +108,11 @@ for a stacked PR.
     - `crates/toolr-py/python/toolr/_runner.py::SCHEMA_VERSION`
 
   Each carries a doc comment listing which changes require a bump. CI fails when they disagree.
-- **Queue release notes in `UNRELEASED.md`. Never hand-edit `CHANGELOG.md`** — `git-cliff`
-  regenerates it on release from Conventional Commits.
+- **Queue release notes with `toolr release-notes add`** for every user-visible change; CI fails
+  a PR with a `feat`/`fix` commit and no note. Note-only commits use `docs(release-notes): …`. Add
+  a `Release-Notes: skip` trailer when a `feat`/`fix` has nothing for users. Start breaking notes
+  with `**Breaking:**`. Never recreate `UNRELEASED.md`. **Never hand-edit `CHANGELOG.md`** —
+  `git-cliff` regenerates it on release from Conventional Commits.
 - **Regenerate doc snippets, don't hand-edit them.** `toolr pre-commit regen-doc-snippets`
   captures `toolr` output into `docs/**/*.txt` from `docs/.fixtures/sample-repo/`.
 - **Regenerate skill refs after public-surface changes.** `cargo xtask build-skill-refs --check`

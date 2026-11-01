@@ -114,7 +114,7 @@
       addLabels: ["dependencies:rust"],
       minimumReleaseAge: "7 days",
       prBodyNotes: [
-        "This raises the minimum Rust for sdist builds: add an `UNRELEASED.md` line saying so before merging.",
+        "This raises the minimum Rust for sdist builds: run `toolr release-notes add` saying so before merging.",
       ],
     },
     {
