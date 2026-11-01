@@ -59,6 +59,25 @@ Process group, polling loop and Windows path stay as they are.
   which reaps the child; a forward racing the reap could signal a reused pid. The polling loop only signals a child that
   `try_wait` has not yet reaped.
 
+## Revision: forward process-sent SIGINT on Linux
+
+Review found that SIGTERM-only forwarding drops a SIGINT sent to toolr's pid alone (`Popen.send_signal`,
+`timeout --foreground -s INT`, `docker run` without `-t`): the command ran to completion and toolr exited 0. The
+second rejected alternative above (filter on the signal's origin) was revisited per platform.
+
+- **Linux:** a terminal-generated SIGINT arrives with `si_code == SI_KERNEL` (`n_tty`'s `isig()` calls
+  `kill_pgrp(..., 1)`, the kernel's privileged send); `kill`, `killpg`, `tgkill` and `sigqueue` give `SI_USER`,
+  `SI_TKILL` or `SI_QUEUE`. toolr forwards every SIGINT except `SI_KERNEL`, so unrecognised codes are forwarded. A
+  process-sent `killpg` reaches the command twice again; that caveat is accepted.
+- **macOS:** measured on Darwin 25.6 with an `SA_SIGINFO` probe under a pseudo-terminal: a Ctrl-C and a `kill()` from
+  another process both report `si_code == 0` (not even Darwin's `SI_USER`, 65537), and `si_pid` is the process that
+  wrote `\x03` to the terminal or called `kill`. signal-hook's `siginfo.rs` documents the same. The two can't be told
+  apart, so macOS and other Unix keep SIGTERM-only forwarding.
+
+The handler is a raw `sa_sigaction` registered through `signal-hook-registry` that only sets atomics; the polling loop
+is unchanged. The end-to-end tests drive Ctrl-C through a real pseudo-terminal on every POSIX platform, and a pid-only
+SIGINT on Linux.
+
 ## Scope and compatibility
 
 - **Behaviour change:** `kill -INT <toolr pid>`, aimed at toolr alone, no longer reaches the runner. toolr keeps waiting
