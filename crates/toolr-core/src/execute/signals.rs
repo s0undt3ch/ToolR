@@ -53,6 +53,7 @@ mod unix {
     use super::*;
 
     use libc::{SIGINT, SIGTERM, c_int, siginfo_t};
+    use signal_hook_registry::{SigId, register_sigaction, unregister};
     use std::sync::Arc;
 
     /// Whether a SIGINT with this `si_code` came from another process rather
@@ -95,33 +96,35 @@ mod unix {
         }
     }
 
-    pub fn wait_with_signals(child: &mut Child) -> io::Result<ExitStatus> {
-        let pending = Arc::new(Pending::default());
-        let mut ids = Vec::with_capacity(2);
-        for sig in [SIGINT, SIGTERM] {
-            let pending = Arc::clone(&pending);
-            // SAFETY: the action only stores to atomics, which is
-            // async-signal-safe.
-            let id = unsafe {
-                signal_hook_registry::register_sigaction(sig, move |info| pending.record(info))
-            };
-            match id {
-                Ok(id) => ids.push(id),
-                Err(err) => {
-                    ids.into_iter().for_each(|id| {
-                        signal_hook_registry::unregister(id);
-                    });
-                    return Err(err);
-                }
+    /// Unregisters its handlers when dropped, including on an early return.
+    pub(super) struct Handlers(Vec<SigId>);
+
+    impl Handlers {
+        pub(super) fn install(signals: &[c_int], pending: &Arc<Pending>) -> io::Result<Self> {
+            let mut handlers = Self(Vec::with_capacity(signals.len()));
+            for &sig in signals {
+                let pending = Arc::clone(pending);
+                // SAFETY: the action only stores to atomics, which is
+                // async-signal-safe.
+                let id = unsafe { register_sigaction(sig, move |info| pending.record(info))? };
+                handlers.0.push(id);
+            }
+            Ok(handlers)
+        }
+    }
+
+    impl Drop for Handlers {
+        fn drop(&mut self) {
+            for id in self.0.drain(..) {
+                unregister(id);
             }
         }
+    }
 
-        let status = poll_child(child, &pending);
-
-        for id in ids {
-            signal_hook_registry::unregister(id);
-        }
-        status
+    pub fn wait_with_signals(child: &mut Child) -> io::Result<ExitStatus> {
+        let pending = Arc::new(Pending::default());
+        let _handlers = Handlers::install(&[SIGINT, SIGTERM], &pending)?;
+        poll_child(child, &pending)
     }
 
     /// Only signals a child that `try_wait` has not yet reaped, so the pid
@@ -148,7 +151,7 @@ mod unix {
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
-    use super::unix::{Pending, forward_sigint, poll_child};
+    use super::unix::{Handlers, Pending, forward_sigint, poll_child};
     use super::*;
     use libc::{SIGINT, SIGTERM, c_int, siginfo_t};
     use std::os::unix::process::ExitStatusExt;
@@ -237,6 +240,14 @@ mod tests {
             .sigterm
             .store(true, std::sync::atomic::Ordering::SeqCst);
         assert_eq!(taken(&pending), vec![SIGINT, SIGTERM]);
+    }
+
+    /// 9999 is above `NSIG` everywhere, so `sigaction` rejects it with
+    /// `EINVAL` after SIGTERM was registered, and the guard unwinds it.
+    #[test]
+    fn install_fails_for_an_invalid_signal() {
+        let pending = std::sync::Arc::new(Pending::default());
+        assert!(Handlers::install(&[SIGTERM, 9999], &pending).is_err());
     }
 
     /// Bounded by `sleep 10`: if the signal isn't sent, the child exits 0 and
