@@ -209,7 +209,7 @@ repos:
       # the CLI's async, HTTP, archive and parser stacks out of its build.
       - id: toolr-py-deps
         name: toolr-py links no CLI-only crates
-        entry: bash -c '! cargo tree -p toolr-py -e normal --prefix none | grep -E "^(tokio|reqwest|hyper|rustls|ruff_python_parser|ruff_python_ast|zip|tar) "'
+        entry: bash -c 'tree=$(cargo tree -p toolr-py -e normal --prefix none) || exit 1; ! grep -E "^(tokio|reqwest|hyper|rustls|ruff_python_parser|ruff_python_ast|zip|tar) " <<<"$tree"'
         language: system
         pass_filenames: false
         files: ^(Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
