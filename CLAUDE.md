@@ -108,14 +108,12 @@ for a stacked PR.
     - `crates/toolr-py/python/toolr/_runner.py::SCHEMA_VERSION`
 
   Each carries a doc comment listing which changes require a bump. CI fails when they disagree.
-- **Queue release notes with `toolr release-notes add --text "…"`** for every user-visible change
-  (`--append` adds to the branch's existing note; without `--text` it stages an empty file the hook
-  rejects). CI fails a PR whose `feat`, `fix`, `revert` or breaking (`!` or `BREAKING CHANGE:`)
-  commit has no note; pre-check with `toolr release-notes check --base <parent branch>`. One
-  `Release-Notes: skip` trailer on any commit exempts the whole PR. Note-only commits use
-  `docs(release-notes): …`. Start breaking notes with `**Breaking:**`. Never recreate
+- **Queue release notes with `toolr release-notes add --text "…"`** for every user-visible change;
+  `--append --text` adds to the branch's existing note. Note-only commits use `docs(release-notes): …`.
+  Start breaking notes with `**Breaking:**`. When no note is needed, add a `Release-Notes: skip`
+  trailer. Pre-check with `toolr release-notes check --base <parent branch>`. Never recreate
   `UNRELEASED.md`. **Never hand-edit `CHANGELOG.md`** — `git-cliff` regenerates it on release from
-  Conventional Commits.
+  Conventional Commits. Full gate rules: [`release-notes/README.md`](release-notes/README.md).
 - **Regenerate doc snippets, don't hand-edit them.** `toolr pre-commit regen-doc-snippets`
   captures `toolr` output into `docs/**/*.txt` from `docs/.fixtures/sample-repo/`.
 - **Regenerate skill refs after public-surface changes.** `cargo xtask build-skill-refs --check`
