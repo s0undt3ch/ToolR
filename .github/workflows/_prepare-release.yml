@@ -259,12 +259,30 @@ jobs:
           git diff --color
 
       - name: Commit changes
+        id: commit-release
         shell: bash
+        env:
+          # `pin-github-actions` resolves pins through `gh api`.
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
-          # Run prek against the changes
-          prek run --all-files --show-diff-on-failure || true
-          # Commit the changes
-          git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
+          set -euo pipefail
+          changed_paths() {
+            git status --porcelain --untracked-files=all | cut -c4- | LC_ALL=C sort
+          }
+          before=$(changed_paths)
+          # Fixing pass: let the auto-fixers tidy the release's own files.
+          prek run --all-files || true
+          after=$(changed_paths)
+          outside=$(LC_ALL=C comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))
+          if [ -n "$outside" ]; then
+            while IFS= read -r path; do
+              echo "::error file=${path}::prek changed ${path}, which the release didn't touch. Fix it on main in its own PR." >&2
+            done <<< "$outside"
+            exit 1
+          fi
+          # Strict pass: anything still failing is a real failure.
+          prek run --all-files --show-diff-on-failure
+          git commit -am "chore(release): Prepare for ${RELEASE_VERSION} release"
 
       - name: Tag the release
         shell: bash
