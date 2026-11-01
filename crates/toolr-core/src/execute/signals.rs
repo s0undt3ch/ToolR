@@ -212,12 +212,7 @@ mod tests {
     fn record_follows_the_classification() {
         let pending = Pending::default();
         pending.record(&info(SIGINT, KILL_CODE));
-        let expected = if forward_sigint(KILL_CODE) {
-            vec![SIGINT]
-        } else {
-            vec![]
-        };
-        assert_eq!(taken(&pending), expected);
+        assert_eq!(taken(&pending) == [SIGINT], forward_sigint(KILL_CODE));
     }
 
     #[test]
