@@ -18,6 +18,8 @@ pub mod path_search;
 pub mod project;
 #[cfg(test)]
 mod test_env;
+#[cfg(test)]
+mod test_fs;
 pub mod text;
 pub mod third_party;
 pub mod trust;

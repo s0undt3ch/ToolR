@@ -668,14 +668,8 @@ mod tests {
 
     #[cfg(unix)]
     fn stub_ldd(dir: &Path, stdout: &str, stderr: &str) {
-        use std::os::unix::fs::PermissionsExt;
-        let ldd = dir.join("ldd");
-        fs::write(
-            &ldd,
-            format!("#!/bin/sh\necho '{stdout}'\necho '{stderr}' >&2\n"),
-        )
-        .unwrap();
-        fs::set_permissions(&ldd, fs::Permissions::from_mode(0o755)).unwrap();
+        let body = format!("#!/bin/sh\necho '{stdout}'\necho '{stderr}' >&2\n");
+        crate::test_fs::write_executable(dir, "ldd", &body, 0o755);
     }
 
     #[cfg(unix)]
@@ -694,7 +688,7 @@ mod tests {
     fn ldd_reports_musl_ignores_an_ldd_reached_through_a_relative_entry() {
         let dir = tempfile::tempdir().unwrap();
         stub_ldd(dir.path(), "", "musl libc (x86_64)");
-        let rel = crate::path_search::relative_to_cwd(dir.path());
+        let rel = crate::test_fs::relative_to_cwd(dir.path());
         assert!(rel.is_relative() && rel.join("ldd").is_file(), "{rel:?}");
         assert!(!ldd_reports_musl_in(Some(rel.into())));
     }
