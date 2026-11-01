@@ -141,3 +141,8 @@ The Setup ToolR action no longer throws away its `tools/.venv` cache when the re
 changes. The cache key now follows the same `tools/` inputs toolr's own freshness check tracks:
 `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml` and `tools/.python-version`. Expect one cache miss after
 upgrading the action.
+
+Pressing Ctrl-C during a toolr command now interrupts it once. toolr used to forward the terminal's SIGINT to the
+command as well, so a second `KeyboardInterrupt` could cut a `finally:` or `except KeyboardInterrupt:` block short.
+toolr now forwards SIGTERM only, so `kill -INT` aimed at the `toolr` process alone no longer reaches the command; signal
+the process group or send SIGTERM instead.
