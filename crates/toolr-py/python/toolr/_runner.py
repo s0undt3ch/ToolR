@@ -685,7 +685,8 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         _print_missing_dep_hint(exc, sys.stderr)
         return 1
     except KeyboardInterrupt:
-        # SIGINT forwarded from the parent toolr process (see
+        # SIGINT from the terminal or the process group (toolr catches it
+        # but doesn't forward it; see
         # `crates/toolr-core/src/execute/signals.rs`) surfaces here as
         # `KeyboardInterrupt`, not a process-level signal death — so the
         # Rust side's "128 + signal" exit-code logic never sees it. Match
