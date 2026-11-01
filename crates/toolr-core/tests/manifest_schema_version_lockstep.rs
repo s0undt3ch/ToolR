@@ -1,5 +1,6 @@
 //! CI gate: `toolr.MANIFEST_SCHEMA_VERSION` in Python must equal the Rust manifest
 //! `SCHEMA_VERSION`, so the public Python constant can't drift from the reader it describes.
+#![cfg(feature = "full")]
 
 use std::fs;
 use std::path::PathBuf;
