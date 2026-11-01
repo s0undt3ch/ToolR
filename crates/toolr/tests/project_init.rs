@@ -187,6 +187,43 @@ fn init_with_only_a_too_old_python3_writes_the_supported_floor() {
     );
 }
 
+/// Runs `project init` in a repo that ships its own `python3`, reporting a
+/// minor above the floor and dropping a sentinel when run.
+#[cfg(unix)]
+fn init_with_repo_python3(path: &str) -> (String, bool) {
+    let tmp = TempDir::new().unwrap();
+    let sentinel = tmp.path().join("repo-python3-ran");
+    fs::create_dir(tmp.path().join("rel-bin")).unwrap();
+    let body = format!(
+        "#!/bin/sh\n/usr/bin/touch '{}'\necho 'Python 3.99.0'\n",
+        sentinel.display()
+    );
+    common::write_executable(&tmp.path().join("python3"), &body);
+    common::write_executable(&tmp.path().join("rel-bin").join("python3"), &body);
+    cargo_bin()
+        .current_dir(tmp.path())
+        .env("PATH", path)
+        .args(["project", "init", "--no-sync", "--quiet"])
+        .assert()
+        .success();
+    let pyproject = fs::read_to_string(tmp.path().join("tools/pyproject.toml")).unwrap();
+    (pyproject, sentinel.exists())
+}
+
+#[test]
+#[cfg(unix)]
+fn init_never_runs_a_repo_python3_through_relative_path_entries() {
+    let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
+    for path in [".", ":", "rel-bin"] {
+        let (pyproject, ran) = init_with_repo_python3(path);
+        assert!(!ran, "the repo's python3 ran with PATH={path:?}");
+        assert!(
+            pyproject.contains(&format!(r#"requires-python = ">=3.{floor}""#)),
+            "PATH={path:?}:\n{pyproject}"
+        );
+    }
+}
+
 #[test]
 fn init_in_tree_writes_correct_venv_location() {
     let tmp = TempDir::new().unwrap();
