@@ -1,8 +1,8 @@
 //! Env mutation for unit tests. The env is process-global and tests run in parallel,
 //! so one lock for the whole crate: a per-module lock only excludes its own module.
 //!
-//! Tests mutate `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `TOOLR_PYTHON`, `TOOLR_AUTO_INSTALL_UV`
-//! and `TOOLR_VENV_LOCATION`. A test whose code reads one of these takes [`EnvGuard::read`].
+//! Tests mutate `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `TOOLR_PYTHON`,
+//! `TOOLR_AUTO_INSTALL_UV`, `TOOLR_TRUST_ALL` and `TOOLR_VENV_LOCATION`. A test whose code reads one of these takes [`EnvGuard::read`].
 
 use std::ffi::{OsStr, OsString};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};

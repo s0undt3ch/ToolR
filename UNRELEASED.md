@@ -122,3 +122,8 @@ sits under `if TYPE_CHECKING:` (as ruff's TC001-TC003 rules arrange). One such a
 stop conversion for every argument of that command, so `count: int` arrived as the string `"3"`.
 When toolr can't resolve an annotation, it now names the argument in a warning instead of silently
 passing the raw string.
+
+`toolr --help`, bare `toolr` and a refused command no longer write `tools/.toolr-manifest.json` into a
+repository you haven't trusted. toolr builds the command list in memory there instead, so inspecting
+an unfamiliar checkout leaves it untouched. Trusted repositories, and runs with `TOOLR_TRUST_ALL=1`,
+still cache the manifest as before.

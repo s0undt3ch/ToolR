@@ -275,6 +275,12 @@ pub fn trust_all_env() -> bool {
     std::env::var_os("TOOLR_TRUST_ALL").is_some_and(|v| v == "1")
 }
 
+/// Whether `root` is trusted right now, for callers that only decide whether
+/// to leave files behind. Never prompts, writes or prints; any error is `false`.
+pub fn is_trusted_now(root: &Path) -> bool {
+    trust_all_env() || TrustStore::open_default().is_ok_and(|s| s.is_trusted(root).unwrap_or(false))
+}
+
 pub fn require_trust(root: &Path, mode: TrustMode) -> Result<()> {
     let root = fs::canonicalize(root)
         .with_context(|| format!("resolving repository root {}", root.display()))?;
@@ -563,5 +569,25 @@ mod tests {
             .path();
         let file_mode = fs::metadata(file).unwrap().permissions().mode() & 0o777;
         assert_eq!(file_mode, 0o600);
+    }
+
+    /// `TOOLR_TRUST_ALL` answers before the store is consulted, even one inside the
+    /// repository; otherwise an unusable store or unknown root is untrusted.
+    /// Nothing creates the store directory.
+    #[test]
+    fn is_trusted_now_reads_env_then_store_and_creates_nothing() {
+        let f = Fixture::new();
+        let mut env = crate::test_env::EnvGuard::write();
+        env.set("XDG_STATE_HOME", f.root());
+        env.set("TOOLR_TRUST_ALL", "1");
+        assert!(is_trusted_now(&f.root()));
+
+        env.remove("TOOLR_TRUST_ALL");
+        assert!(!is_trusted_now(&f.root()));
+        env.set("XDG_STATE_HOME", f.store_dir.path());
+        assert!(!is_trusted_now(&f.root()));
+
+        assert!(!f.root().join("toolr").exists());
+        assert!(!f.store_dir.path().join("toolr").exists());
     }
 }
