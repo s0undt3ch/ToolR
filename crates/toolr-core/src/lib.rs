@@ -14,6 +14,7 @@ pub mod hash;
 pub mod manifest;
 pub mod manifest_build;
 pub mod parser;
+pub mod path_search;
 pub mod project;
 #[cfg(test)]
 mod test_env;
