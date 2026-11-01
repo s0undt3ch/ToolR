@@ -1,6 +1,6 @@
 # Write `ctx.run` stdin from its own thread
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-08 (medium).
 - **Plan:** [`2026-10-31-ctx-run-input-deadlock-plan.md`](./2026-10-31-ctx-run-input-deadlock-plan.md)
 

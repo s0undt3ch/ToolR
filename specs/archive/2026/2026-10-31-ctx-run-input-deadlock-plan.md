@@ -11,7 +11,7 @@ joined after the child exits. `BrokenPipe` from that thread is ignored.
 
 **Tech Stack:** Rust (`std::process`, `std::thread`), pytest.
 
-**Spec:** [`specs/2026-10-31-ctx-run-input-deadlock-design.md`](./2026-10-31-ctx-run-input-deadlock-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-ctx-run-input-deadlock-design.md`](./2026-10-31-ctx-run-input-deadlock-design.md)
 
 ## Global Constraints
 
