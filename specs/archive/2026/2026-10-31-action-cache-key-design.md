@@ -1,9 +1,9 @@
 # Key the action's tools-venv cache on `tools/` only
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-39 (low).
 - **Plan:** [`2026-10-31-action-cache-key-plan.md`](./2026-10-31-action-cache-key-plan.md)
-- **Stacks on:** `fix/action-latest-repo` (F-22, `specs/2026-10-31-action-latest-repo-design.md`); merge that first.
+- **Stacks on:** `fix/action-latest-repo` (F-22, [`2026-10-31-action-latest-repo-design.md`](./2026-10-31-action-latest-repo-design.md)); merged in #624.
 
 ## Problem
 

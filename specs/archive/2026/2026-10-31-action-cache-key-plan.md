@@ -11,7 +11,7 @@ check pins the key's hash inputs.
 
 **Tech Stack:** composite GitHub Action, pytest + PyYAML.
 
-**Spec:** [`specs/2026-10-31-action-cache-key-design.md`](./2026-10-31-action-cache-key-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-action-cache-key-design.md`](./2026-10-31-action-cache-key-design.md)
 
 ## Global Constraints
 
