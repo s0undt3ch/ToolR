@@ -20,13 +20,16 @@ subprocess execution) you'll still want to drive the binary directly.
 
 `CommandsTester(search_path=tmp_path)` is a context manager that:
 
-1. Saves and replaces `sys.path` so `search_path` comes first and no other entry that provides a
-   `tools` package is visible. The standard library and `site-packages` stay.
+1. Saves and replaces `sys.path` so `search_path` comes first and drops every other entry that
+   provides a `tools` package, except `site-packages` directories. The standard library stays too.
+   A regular `tools` package installed in `site-packages` can therefore still replace a fixture
+   `tools/` that has no `__init__.py`.
 2. Patches `toolr._decorators._get_command_group_storage` with a fresh `dict` so the test gets an isolated registry.
 3. Restores everything on exit (`sys.path`, `sys.modules`, `cwd`).
 
-Calling `.discover()` inside the context imports every `tools/*.py` module, registering each
-`command_group` / `@command` call exactly as a real `import tools.*` would. After it returns,
+Calling `.discover()` inside the context imports every `.py` module under `tools/`, including
+subdirectories with no `__init__.py`, registering each `command_group` / `@command` call exactly as
+a real `import tools.*` would. After it returns,
 `.collected_command_groups()` gives you a `{full_name: CommandGroup}` dict you can assert against.
 
 If any module fails to import, `.discover()` still imports the rest, then raises one
