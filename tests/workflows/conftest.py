@@ -43,6 +43,15 @@ def workflow_step_script(path: Path, job: str, step_id: str) -> str:
     pytest.fail(f"no step with id `{step_id}` in job `{job}` of {path.name}")
 
 
+def action_step_script(path: Path, step_id: str) -> str:
+    """Return the `run:` body of step `step_id` in the composite action at `path`."""
+    data = yaml.safe_load(path.read_text())
+    for step in data["runs"]["steps"]:
+        if step.get("id") == step_id:
+            return str(step["run"])
+    pytest.fail(f"no step with id `{step_id}` in {path}")
+
+
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Callable[..., Path]:
     """Return a factory that creates a git repository with one commit holding `files`."""
