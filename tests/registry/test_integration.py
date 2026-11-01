@@ -175,6 +175,78 @@ def test_discover_imports_submodules_of_a_nested_package(
     assert {"tools.docker", "tools.docker.image"} <= groups.keys()
 
 
+def test_discover_imports_modules_in_a_namespace_subdirectory(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """A `tools/<group>/` directory without `__init__.py` is walked, as toolr does."""
+    repo = tools_repo({"tools/precommit/cmd.py": CI_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+        imported = "tools.precommit.cmd" in sys.modules
+    assert imported
+    assert "tools.ci" in groups
+
+
+def test_discover_reports_a_failing_module_in_a_namespace_subdirectory(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """A broken module in a directory without `__init__.py` is reported."""
+    repo = tools_repo({"tools/precommit/zz.py": BAD_MODULE})
+    with CommandsTester(search_path=repo) as tester, pytest.raises(ExceptionGroup) as excinfo:
+        tester.discover()
+    assert excinfo.group_contains(ValueError, match="add a docstring")
+    (error,) = excinfo.value.exceptions
+    assert "raised while importing `tools.precommit.zz`" in error.__notes__
+
+
+def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
+    tmp_path: Path, tools_repo: Callable[[dict[str, str]], Path]
+) -> None:
+    """Pruned and non-identifier directories, non-identifier and non-`.py`
+    files, and symlinks are not imported."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "linked.py").write_text(BROKEN_MODULE)
+    repo = tools_repo(
+        {
+            "tools/ci.py": CI_MODULE,
+            "tools/__pycache__/cached.py": BROKEN_MODULE,
+            "tools/.hidden/hidden.py": BROKEN_MODULE,
+            "tools/not-a-package/inner.py": BROKEN_MODULE,
+            "tools/not-a-module.py": BROKEN_MODULE,
+            "tools/notes.txt": "not python\n",
+        }
+    )
+    (repo / "tools" / "linked_dir").symlink_to(outside, target_is_directory=True)
+    (repo / "tools" / "linked.py").symlink_to(outside / "linked.py")
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    assert "tools.ci" in groups
+
+
+def test_discover_stops_on_a_package_path_that_loops_back(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """A subpackage `__path__` pointing back at a walked directory, or at a
+    missing one, doesn't make the walk loop or fail."""
+    repo = tools_repo(
+        {
+            "tools/ci.py": CI_MODULE,
+            "tools/loop/__init__.py": (
+                "import os\n"
+                "__path__.append(os.path.dirname(__path__[0]))\n"
+                "__path__.append(os.path.join(__path__[0], 'missing'))\n"
+            ),
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        rewalked = "tools.loop.ci" in sys.modules
+    assert not rewalked
+
+
 def test_discover_raises_when_tools_package_import_fails(
     tools_repo: Callable[[dict[str, str]], Path],
 ) -> None:

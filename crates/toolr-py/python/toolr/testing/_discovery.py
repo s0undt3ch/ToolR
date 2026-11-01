@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import pkgutil
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -43,34 +42,58 @@ def _import_tools_modules() -> list[Exception]:
         return [exc]
 
     errors: list[Exception] = []
-    _import_package_modules(tools_pkg, errors)
+    _import_package_modules(tools_pkg, errors, set())
     return errors
 
 
-def _import_package_modules(package: ModuleType, errors: list[Exception]) -> None:
-    """Import every module under ``package``, recursing into subpackages.
+def _import_package_modules(package: ModuleType, errors: list[Exception], seen: set[Path]) -> None:
+    """Import every module under ``package``, recursing into subdirectories.
 
-    ``pkgutil.walk_packages`` isn't used: it imports each subpackage itself,
-    so a subpackage that raises anything but ``ImportError`` would escape and
-    stop the walk, and its body would run a second time on our own import.
-    A subpackage is only descended into once it imported cleanly.
+    Walks the files the way toolr's manifest build does: every ``.py`` file
+    and every subdirectory, with or without ``__init__.py``, except
+    dot-directories, ``__pycache__`` and symlinks. Names that aren't Python
+    identifiers can't be imported and are skipped. A subdirectory is only
+    descended into once its own import succeeded, and each directory is
+    walked once, so a ``__path__`` pointing back at a parent can't loop.
     """
-    search_paths = getattr(package, "__path__", None)
-    if not search_paths:
-        return
-    for module_info in pkgutil.iter_modules(search_paths, prefix=f"{package.__name__}."):
-        try:
-            # `module_info.name` is enumerated by pkgutil from the local
-            # `tools` package path, not user input — safe to import.
-            module = importlib.import_module(
-                module_info.name
-            )  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
-        except Exception as exc:  # noqa: BLE001  # we want every error
-            exc.add_note(f"raised while importing `{module_info.name}`")
-            errors.append(exc)
+    for directory in getattr(package, "__path__", ()):
+        resolved = Path(directory).resolve()
+        if resolved in seen:
             continue
-        if module_info.ispkg:
-            _import_package_modules(module, errors)
+        seen.add(resolved)
+        try:
+            with os.scandir(directory) as it:
+                entries = sorted(it, key=lambda entry: entry.name)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            if entry.is_dir():
+                if entry.name == "__pycache__" or not entry.name.isidentifier():
+                    continue
+                is_package = True
+                stem = entry.name
+            elif entry.name.endswith(".py") and entry.name != "__init__.py":
+                stem = entry.name.removesuffix(".py")
+                if not stem.isidentifier():
+                    continue
+                is_package = False
+            else:
+                continue
+            name = f"{package.__name__}.{stem}"
+            try:
+                # `name` comes from the local `tools` directory listing, not
+                # user input — safe to import.
+                module = importlib.import_module(
+                    name
+                )  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
+            except Exception as exc:  # noqa: BLE001  # we want every error
+                exc.add_note(f"raised while importing `{name}`")
+                errors.append(exc)
+                continue
+            if is_package:
+                _import_package_modules(module, errors, seen)
 
 
 def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
