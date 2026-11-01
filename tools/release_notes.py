@@ -35,10 +35,17 @@ group = command_group("release-notes", "Manage queued release notes", docstring=
 
 
 def _note_paths(notes_dir: Path) -> list[Path]:
-    """Return every entry in ``notes_dir`` except the README, sorted by name."""
+    """Return every entry in ``notes_dir`` except the README and editor leftovers, sorted by name."""
     if not notes_dir.is_dir():
         return []
-    return sorted((p for p in notes_dir.iterdir() if p.name != README_NAME), key=lambda p: p.name)
+    return sorted(
+        (
+            p
+            for p in notes_dir.iterdir()
+            if p.name != README_NAME and not p.name.startswith(".") and not p.name.endswith("~")
+        ),
+        key=lambda p: p.name,
+    )
 
 
 def _read_note(path: Path) -> str:
@@ -82,6 +89,11 @@ def _github_env_block(name: str, value: str) -> str:
 
 
 def _has_heading(text: str) -> bool:
+    return _scan(text)[0]
+
+
+def _scan(text: str) -> tuple[bool, bool]:
+    """Return ``(has_heading, ends_in_open_fence)``."""
     fence: str | None = None
     prev_is_paragraph = False
     for line in text.splitlines():
@@ -91,7 +103,7 @@ def _has_heading(text: str) -> bool:
                 fence = opener["fence"]
                 prev_is_paragraph = False
             elif HEADING_RE.match(line) or (prev_is_paragraph and SETEXT_UNDERLINE_RE.match(line)):
-                return True
+                return True, False
             else:
                 prev_is_paragraph = bool(line.strip()) and not LIST_OR_QUOTE_RE.match(line)
         else:
@@ -104,7 +116,7 @@ def _has_heading(text: str) -> bool:
             ):
                 fence = None
                 prev_is_paragraph = False
-    return False
+    return False, fence is not None
 
 
 def _file_problems(repo_root: Path) -> list[str]:
@@ -135,8 +147,12 @@ def _file_problems(repo_root: Path) -> list[str]:
             continue
         if not text:
             problems.append(f"{label}: note is empty")
-        elif _has_heading(text):
-            problems.append(f"{label}: notes must not contain markdown headings")
+        else:
+            has_heading, open_fence = _scan(text)
+            if has_heading:
+                problems.append(f"{label}: notes must not contain markdown headings")
+            if open_fence:
+                problems.append(f"{label}: unclosed code fence")
     return problems
 
 

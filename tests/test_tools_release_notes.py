@@ -14,6 +14,7 @@ from tools.release_notes import NOTE_NAME_RE
 from tools.release_notes import Commit
 from tools.release_notes import _file_problems
 from tools.release_notes import _github_env_block
+from tools.release_notes import _has_heading
 from tools.release_notes import _has_skip_trailer
 from tools.release_notes import _is_breaking
 from tools.release_notes import _note_filename
@@ -459,11 +460,42 @@ def test_render_refuses_invalid_tree(
         ("```\ntext\n---\n```", False),
     ],
 )
-def test_fence_tracking(
-    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, content: str, flagged: bool
+def test_fence_tracking(content: str, flagged: bool) -> None:
+    assert _has_heading(content) is flagged
+
+
+@pytest.mark.parametrize(
+    ("content", "unclosed"),
+    [
+        ("```toml\nx = 1", True),
+        ("~~~\nx", True),
+        ("````\n```\nx\n```", True),
+        ("```toml\nx = 1\n```", False),
+        ("Text\n\n~~~\nx\n~~~\n", False),
+    ],
+)
+def test_unclosed_fence_flagged(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, content: str, unclosed: bool
 ) -> None:
     notes_dir({GOOD: content})
-    assert bool(_file_problems(tmp_path)) is flagged
+    problems = _file_problems(tmp_path)
+    if unclosed:
+        (problem,) = problems
+        assert GOOD in problem
+        assert "unclosed code fence" in problem
+    else:
+        assert problems == []
+
+
+@pytest.mark.parametrize("name", [".DS_Store", ".x.md.swp", "x.md~"])
+def test_editor_files_ignored(
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, name: str
+) -> None:
+    directory = notes_dir({GOOD: "Text", name: "junk"})
+    assert _file_problems(tmp_path) == []
+    assert _render(directory) == "Text"
+    clear(make_context(tmp_path))
+    assert [p.name for p in directory.iterdir()] == [name]
 
 
 def test_invalid_utf8_flagged(tmp_path: Path) -> None:
