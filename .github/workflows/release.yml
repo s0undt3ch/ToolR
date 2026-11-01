@@ -419,12 +419,43 @@ jobs:
         run: |
           git tag -m "chore(release): Release v${RELEASE_VERSION}" -a "v${RELEASE_VERSION}"
 
-      - name: Push tag
+      - name: Push the release commit and tag
+        id: push-release
         env:
           RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
         run: |
-          git push origin "v${RELEASE_VERSION}"
-          git push
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != refs/heads/* ]]; then
+            echo "::error::Releases must be dispatched on a branch (refs/heads/...), not ${GITHUB_REF}" >&2
+            exit 1
+          fi
+          # Atomic, so a branch that moved since dispatch can't leave a tag on an orphaned commit.
+          if git push --atomic origin "HEAD:refs/heads/${GITHUB_REF_NAME}" "refs/tags/v${RELEASE_VERSION}"; then
+            exit 0
+          fi
+          # A failed atomic push doesn't say why, so ask origin whether anything landed and whether a re-run is safe.
+          fail() {
+            echo "::error::Pushing v${RELEASE_VERSION} failed: $1" >&2
+            exit 1
+          }
+          tag="refs/tags/v${RELEASE_VERSION}"
+          tag_lines="$(git ls-remote origin "${tag}" "${tag}^{}")" \
+            || fail "origin could not be queried, so what was published is unknown. Check origin before retrying."
+          if [[ -n "${tag_lines}" ]]; then
+            # The peeled line names an annotated tag's commit; a lightweight tag has only the plain one.
+            tag_commit="$(awk -v ref="${tag}^{}" '$2 == ref { print $1 }' <<<"${tag_lines}")"
+            tag_commit="${tag_commit:-$(awk -v ref="${tag}" '$2 == ref { print $1 }' <<<"${tag_lines}")}"
+            if [[ "${tag_commit}" == "$(git rev-parse HEAD)" ]]; then
+              fail "origin already has v${RELEASE_VERSION} on this release commit, from an earlier attempt. Finish the publish-release steps after this one by hand: \"Attest final release artifacts\", \"Create GitHub release\" and \"Publish to PyPI (Trusted Publisher)\"."
+            fi
+            fail "origin has v${RELEASE_VERSION} on another commit (${tag_commit}), not this release commit. Stop and find out where that tag came from."
+          fi
+          branch_lines="$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}")" \
+            || fail "origin could not be queried, so what was published is unknown. Check origin before retrying."
+          if [[ "${branch_lines%%[[:space:]]*}" != "${GITHUB_SHA}" ]]; then
+            fail "origin's ${GITHUB_REF_NAME} moved since the run was dispatched, and nothing was published. Dispatch the release again from its new tip."
+          fi
+          fail "origin's ${GITHUB_REF_NAME} has not moved and nothing was published, so the cause is elsewhere (network, token, a server-side hook). Re-run this job once that is fixed."
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -467,7 +498,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
           RELEASE_NOTES: ${{ needs.prepare-release.outputs.release-notes-filename }}
-        # --verify-tag relies on the "Push tag" step above having run.
+        # --verify-tag relies on the `push-release` step above having run.
         run: |
           gh release create "v${RELEASE_VERSION}" \
             --repo "${GITHUB_REPOSITORY}" \

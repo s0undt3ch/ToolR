@@ -7,7 +7,6 @@ against a scratch repository, with a stub `prek` on `PATH`.
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -16,8 +15,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.workflows.conftest import StepRunner
 from tests.workflows.conftest import git
-from tests.workflows.conftest import git_env
 from tests.workflows.conftest import workflow_step_script
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -82,29 +81,15 @@ def release_repo(git_repo: Callable[..., Path]) -> Path:
 
 @pytest.fixture
 def run_commit_step(
-    tmp_path: Path,
+    bash_step: Callable[[str], StepRunner],
 ) -> Callable[[Path, Path], subprocess.CompletedProcess[str]]:
     """Return a callable that runs the commit step in `repo` with the stub `prek` in `bin_dir`."""
-    bash = shutil.which("bash")
-    if bash is None:
-        pytest.skip("bash not available")
-    script = tmp_path / "commit-step.sh"
-    script.write_text(
-        workflow_step_script(PREPARE_RELEASE_YML, "prepare-release", "commit-release")
-    )
+    step = bash_step(workflow_step_script(PREPARE_RELEASE_YML, "prepare-release", "commit-release"))
 
     def run(repo: Path, bin_dir: Path) -> subprocess.CompletedProcess[str]:
-        env = git_env()
-        env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
-        env["RELEASE_VERSION"] = "9.9.9"
-        # Mirrors the `shell: bash` invocation GitHub Actions uses.
-        return subprocess.run(  # noqa: S603  # bash + script path are test-controlled
-            [bash, "--noprofile", "--norc", "-eo", "pipefail", str(script)],
-            cwd=repo,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+        return step(
+            repo,
+            {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "RELEASE_VERSION": "9.9.9"},
         )
 
     return run
