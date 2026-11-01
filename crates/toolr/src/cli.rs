@@ -670,6 +670,24 @@ pub fn build_command(manifest: &Manifest) -> Command {
     root
 }
 
+/// The literal default clap gets for `arg`, if any. Only an `Optional`
+/// flag gets one. An empty default means "no observable default at the
+/// CLI", so Python's function default runs (e.g. `param: str | None =
+/// None`). `<expr>` is toolr-core's sentinel for a default it couldn't
+/// resolve to a literal (e.g. `Path("~/projects")`, `uuid.uuid4()`);
+/// applying it would ship the string `"<expr>"` itself, so Python's own
+/// default expression runs instead. A default with control or invisible
+/// characters is dropped rather than stripped: the stripped form could
+/// fall outside the filtered choices and make clap reject its own default.
+pub(crate) fn literal_cli_default(arg: &toolr_core::manifest::Argument) -> Option<&str> {
+    let def = arg.default.as_deref()?;
+    let usable = arg.kind == ArgumentKind::Optional
+        && !def.is_empty()
+        && def != "<expr>"
+        && !toolr_core::text::has_unsafe_name_chars(def);
+    usable.then_some(def)
+}
+
 pub(crate) fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command {
     // Run the docstring prose through the markdown→ANSI renderer
     // before handing it to clap. On a non-TTY (piped / captured help
@@ -707,27 +725,8 @@ pub(crate) fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command
             }
             ArgumentKind::Optional => {
                 a = a.long(long_flag).required(false);
-                if let Some(def) = &arg.default {
-                    // Empty default means "no observable default at the
-                    // CLI" — let Python's function default kick in
-                    // (e.g. `param: str | None = None`). `<expr>` is
-                    // toolr-core's sentinel for a default it couldn't
-                    // resolve to a literal (e.g. `Path("~/projects")`,
-                    // `uuid.uuid4()`) — applying it as a literal clap
-                    // default would ship the string `"<expr>"` itself
-                    // as the value, so treat it the same as "no CLI
-                    // default" and let Python's own default expression
-                    // run instead.
-                    // A default with control or invisible characters is
-                    // dropped rather than stripped: the stripped form could
-                    // fall outside the filtered choices and make clap reject
-                    // its own default.
-                    if !def.is_empty()
-                        && def != "<expr>"
-                        && !toolr_core::text::has_unsafe_name_chars(def)
-                    {
-                        a = a.default_value(def.clone());
-                    }
+                if let Some(def) = literal_cli_default(arg) {
+                    a = a.default_value(def.to_string());
                 }
             }
             ArgumentKind::Flag => {
@@ -805,9 +804,11 @@ pub(crate) fn build_user_command(cmd: &toolr_core::manifest::Command) -> Command
                 a = a.num_args(arity);
             }
             a = crate::value_parsers::apply_value_parser(a, ty);
-            // A relative default names a path under the repo root, so clap
-            // keeps it unchecked and `execute_build` resolves it after parsing.
-            if crate::value_parsers::defers_path_resolution(arg) {
+            // A relative default names a path under the repo root. The
+            // unchecked parser turns off clap's check for every value of this
+            // arg, typed and env-var ones too; `execute_build` resolves each
+            // after parsing, against the cwd or the repo root by its source.
+            if crate::value_parsers::deferred_path(arg).is_some() {
                 a = a.value_parser(clap::value_parser!(std::path::PathBuf));
             }
         } else if !arg.allowed_values.is_empty() {

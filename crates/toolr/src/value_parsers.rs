@@ -17,7 +17,7 @@ use email_address::EmailAddress;
 use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
-use toolr_core::manifest::{Argument, ArgumentKind};
+use toolr_core::manifest::Argument;
 use toolr_core::parser::SupportedType;
 
 /// Choices clap lists in `[possible values: ...]`. Values with control or
@@ -164,32 +164,39 @@ fn path_parser(form: PathForm, check: PathCheck) -> ValueParser {
     })
 }
 
-/// Resolve and check a path value of type `ty` (path-typed, possibly
-/// `Optional`-wrapped) against `base` rather than the process cwd. Errors
-/// name `raw` as given, in the same wording as the clap value parser.
-pub fn resolve_path(ty: &SupportedType, raw: &Path, base: &Path) -> Result<PathBuf, String> {
-    let (form, check) = path_rule(unwrap_optional(ty)).expect("resolve_path takes a path type");
-    resolve_with(form, check, raw, base)
+/// How a deferred path arg resolves: an `Optional` flag of a path type
+/// that resolves on disk (every one but bare `Path`, which Python resolves
+/// after the runner's chdir) with a relative literal clap default. Its
+/// default must resolve from the repo root after parsing, not by clap
+/// against the cwd.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeferredPath {
+    form: PathForm,
+    check: PathCheck,
 }
 
-/// True when `arg` gets a relative literal clap default on a path type
-/// that resolves on disk, so the default must be resolved from the repo
-/// root after parsing instead of by clap against the cwd. Bare `Path`
-/// is left alone: Python resolves it after the runner's chdir.
-pub fn defers_path_resolution(arg: &Argument) -> bool {
-    let resolves = arg
-        .resolved_type
-        .as_ref()
-        .and_then(|ty| path_rule(unwrap_optional(ty)))
-        .is_some_and(|(form, _)| form != PathForm::AsTyped);
-    resolves
-        && arg.kind == ArgumentKind::Optional
-        && arg.default.as_deref().is_some_and(|def| {
-            !def.is_empty()
-                && def != "<expr>"
-                && !toolr_core::text::has_unsafe_name_chars(def)
-                && !Path::new(def).is_absolute()
-        })
+impl DeferredPath {
+    /// Resolve and check `raw` against `base` rather than the process cwd.
+    /// Errors name `raw` as given, in the clap value parser's wording.
+    pub fn resolve(self, raw: &Path, base: &Path) -> Result<PathBuf, String> {
+        resolve_with(self.form, self.check, raw, base)
+    }
+}
+
+/// The [`DeferredPath`] for `arg`, or `None` when clap resolves it as usual.
+pub fn deferred_path(arg: &Argument) -> Option<DeferredPath> {
+    let default = crate::cli::literal_cli_default(arg)?;
+    if Path::new(default).is_absolute() {
+        return None;
+    }
+    let (form, check) = path_rule(unwrap_optional(arg.resolved_type.as_ref()?))?;
+    (form != PathForm::AsTyped).then_some(DeferredPath { form, check })
+}
+
+/// True for a path type whose value reaches Python as typed, unresolved
+/// (bare `Path`): the runner's chdir decides what a relative one means.
+pub fn passes_path_as_typed(ty: &SupportedType) -> bool {
+    path_rule(ty).is_some_and(|(form, _)| form == PathForm::AsTyped)
 }
 
 fn resolve_with(
@@ -395,6 +402,7 @@ mod tests {
 
     use std::fs;
     use tempfile::TempDir;
+    use toolr_core::manifest::ArgumentKind;
     use toolr_core::parser::types::SupportedTypeKind;
 
     fn parse(ty: &SupportedType, value: &str) -> Result<PathBuf, String> {
@@ -661,16 +669,16 @@ mod tests {
         );
     }
 
+    fn deferred(ty: SupportedType) -> DeferredPath {
+        deferred_path(&optional_arg(ty, Some("rel"))).unwrap()
+    }
+
     #[test]
-    fn resolve_path_uses_the_given_base() {
+    fn deferred_path_resolves_against_the_given_base() {
         let base = TempDir::new().unwrap();
         fs::create_dir(base.path().join("tools")).unwrap();
         fs::write(base.path().join("tools").join("a.toml"), "x").unwrap();
-        let got = resolve_path(
-            &SupportedType::FilePath,
-            Path::new("tools/a.toml"),
-            base.path(),
-        );
+        let got = deferred(SupportedType::FilePath).resolve(Path::new("tools/a.toml"), base.path());
         assert_eq!(
             got,
             Ok(dunce::canonicalize(base.path().join("tools").join("a.toml")).unwrap())
@@ -678,13 +686,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_path_errors_name_the_raw_value() {
+    fn deferred_path_errors_name_the_raw_value() {
         let base = TempDir::new().unwrap();
-        let got = resolve_path(
-            &SupportedType::Optional(Box::new(SupportedType::FilePath)),
-            Path::new("tools/missing.toml"),
-            base.path(),
-        );
+        let got = deferred(SupportedType::Optional(Box::new(SupportedType::FilePath)))
+            .resolve(Path::new("tools/missing.toml"), base.path());
         assert_eq!(
             got,
             Err("path does not exist: tools/missing.toml".to_string())
@@ -692,13 +697,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_path_absolute_form_joins_base() {
+    fn deferred_absolute_path_joins_base() {
         let base = TempDir::new().unwrap();
-        let got = resolve_path(
-            &SupportedType::AbsolutePath,
-            Path::new("build/out"),
-            base.path(),
-        );
+        let got =
+            deferred(SupportedType::AbsolutePath).resolve(Path::new("build/out"), base.path());
         assert_eq!(got, Ok(base.path().join("build/out")));
     }
 
@@ -717,7 +719,7 @@ mod tests {
     }
 
     #[test]
-    fn defers_path_resolution_cases() {
+    fn deferred_path_cases() {
         let opt = |ty| SupportedType::Optional(Box::new(ty));
         for (ty, default) in [
             (SupportedType::FilePath, "tools/pyproject.toml"),
@@ -725,7 +727,7 @@ mod tests {
             (SupportedType::NewPath, "out"),
         ] {
             let arg = optional_arg(ty.clone(), Some(default));
-            assert!(defers_path_resolution(&arg), "{ty:?} = {default:?}");
+            assert!(deferred_path(&arg).is_some(), "{ty:?} = {default:?}");
         }
         let absolute = std::env::temp_dir();
         for (ty, default) in [
@@ -738,14 +740,14 @@ mod tests {
             (SupportedType::FilePath, None),
         ] {
             let arg = optional_arg(ty.clone(), default);
-            assert!(!defers_path_resolution(&arg), "{ty:?} = {default:?}");
+            assert!(deferred_path(&arg).is_none(), "{ty:?} = {default:?}");
         }
         let mut positional = optional_arg(SupportedType::FilePath, Some("tools/pyproject.toml"));
         positional.kind = ArgumentKind::Positional;
-        assert!(!defers_path_resolution(&positional));
+        assert!(deferred_path(&positional).is_none());
         let mut untyped = optional_arg(SupportedType::FilePath, Some("tools/pyproject.toml"));
         untyped.resolved_type = None;
-        assert!(!defers_path_resolution(&untyped));
+        assert!(deferred_path(&untyped).is_none());
     }
 
     #[test]

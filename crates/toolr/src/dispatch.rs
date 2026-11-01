@@ -12,7 +12,7 @@ use toolr_core::complete::{
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{
-    resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
+    ExecutionSpec, resolve_python, spawn_runner, wait_with_signals, write_spec_to_tempfile,
 };
 use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
 use toolr_core::trust::shown;
@@ -79,34 +79,6 @@ fn help_mode_from_argv(argv: &[String]) -> HelpMode {
 ///
 /// We resolve the target command by walking the raw argv token-by-token
 /// through the clap Command tree, stopping at the deepest named subcommand.
-/// Turn a [`PathValueError`] into the one-line clap error clap itself
-/// prints for a bad value, spelling the arg as the command on `path` that
-/// owns it does (`--cfg <cfg>`). Other errors pass through.
-fn render_path_value_error(
-    err: anyhow::Error,
-    root: &mut clap::Command,
-    path: &[String],
-) -> anyhow::Error {
-    let Some(bad) = err.downcast_ref::<PathValueError>() else {
-        return err;
-    };
-    // An arg only renders as `--cfg <cfg>` once its command is built.
-    root.build();
-    let root = &*root;
-    let shown = path
-        .iter()
-        .scan(root, |cmd, name| {
-            *cmd = cmd.find_subcommand(name)?;
-            Some(*cmd)
-        })
-        .filter_map(|cmd| cmd.get_arguments().find(|a| a.get_id() == bad.arg.as_str()))
-        .last()
-        .map_or_else(|| bad.flag.clone(), ToString::to_string);
-    clap::Error::raw(clap::error::ErrorKind::ValueValidation, bad.message(&shown))
-        .with_cmd(root)
-        .into()
-}
-
 pub fn dispatch_help_from_argv(
     argv: &[String],
     _manifest: &Manifest,
@@ -133,6 +105,76 @@ pub fn dispatch_help_from_argv(
 
     help::print(cur_cmd, &path.join(" "), mode);
     Ok(())
+}
+
+/// Turn a [`PathValueError`] into the one-line clap error clap itself
+/// prints for a bad value, spelling the arg as the command on `path` that
+/// owns it does (`--cfg <cfg>`). Other errors pass through.
+fn render_path_value_error(
+    err: anyhow::Error,
+    root: &mut clap::Command,
+    path: &[String],
+) -> anyhow::Error {
+    let Some(bad) = err.downcast_ref::<PathValueError>() else {
+        return err;
+    };
+    // An arg only renders as `--cfg <cfg>` once its command is built.
+    root.build();
+    let root = &*root;
+    let shown = path
+        .iter()
+        .scan(root, |cmd, name| {
+            *cmd = cmd.find_subcommand(name)?;
+            Some(*cmd)
+        })
+        .filter_map(|cmd| cmd.get_arguments().find(|a| a.get_id() == bad.arg.as_str()))
+        .last()
+        .expect("the failing arg belongs to a command on the parsed path")
+        .to_string();
+    clap::Error::raw(clap::error::ErrorKind::ValueValidation, bad.message(&shown))
+        .with_cmd(root)
+        .into()
+}
+
+/// The spec for the matched `cmd`. Dispatched leaves take a separate
+/// spec-shape: the runner sees `dispatch: Some(...)` and routes to
+/// `invoke_dispatcher` instead of calling `function` as a regular command.
+/// The child is packed first, then a parent-shaped spec is built around the
+/// dispatcher entry, so `build_dispatch_spec` iterates the dispatcher's OWN
+/// arguments (the --cpu/--ram-style outer flags) from `parent_matches`, not
+/// the leaf's (which are packed in `packed`).
+fn build_execution_spec(
+    manifest: &Manifest,
+    cmd: &toolr_core::manifest::Command,
+    cmd_matches: &ArgMatches,
+    parent_matches: &ArgMatches,
+    bases: &PathBases,
+    output_opts: &OutputOptions,
+) -> anyhow::Result<ExecutionSpec> {
+    if cmd.dispatched_from.is_some() {
+        let packed = pack_child_args(cmd, cmd_matches, bases)?;
+        // The dispatcher's manifest entry shares `(module, function)`
+        // with each of its grafted children (the argparse pipeline
+        // copies those fields onto the children at graft time). Find
+        // the dispatcher's own entry by matching that pair and
+        // requiring `is_dispatcher = true` so we don't accidentally
+        // grab a sibling child.
+        let dispatcher = manifest
+            .commands
+            .iter()
+            .find(|p| p.is_dispatcher && p.module == cmd.module && p.function == cmd.function)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "dispatcher manifest entry for `{}` (module `{}`, function `{}`) not found",
+                    cmd.name,
+                    cmd.module,
+                    cmd.function,
+                )
+            })?;
+        build_dispatch_spec(dispatcher, parent_matches, packed, bases, output_opts)
+    } else {
+        build_spec(cmd, cmd_matches, bases, output_opts)
+    }
 }
 
 /// Resolve a parsed subcommand `path` (e.g. `["jenkins", "job", "migrate"]`)
@@ -231,44 +273,14 @@ pub fn dispatch(
         cwd: &cwd,
         repo_root: &repo_root,
     };
-    // Dispatched leaves take a separate spec-shape: the runner sees
-    // `dispatch: Some(...)` and routes to `invoke_dispatcher` instead
-    // of calling `function` as a regular command. Pack the child first,
-    // then build a parent-shaped spec around the dispatcher entry.
-    //
-    // The dispatcher's own manifest entry lives next to the leaf in the
-    // same group; its `name` matches the group's final segment (the
-    // "@group.command def <group_leaf>(...)" pattern produced by
-    // `graft_children`). We look it up so `build_dispatch_spec` can
-    // iterate the dispatcher's OWN arguments (the --cpu/--ram-style
-    // outer flags) and extract them from `parent_matches`, instead of
-    // iterating the leaf's arguments (which are packed in `packed`).
-    let spec = (|| -> anyhow::Result<_> {
-        Ok(if cmd.dispatched_from.is_some() {
-            let packed = pack_child_args(cmd, cmd_matches, &bases)?;
-            // The dispatcher's manifest entry shares `(module, function)`
-            // with each of its grafted children (the argparse pipeline
-            // copies those fields onto the children at graft time). Find
-            // the dispatcher's own entry by matching that pair and
-            // requiring `is_dispatcher = true` so we don't accidentally
-            // grab a sibling child.
-            let dispatcher = manifest
-                .commands
-                .iter()
-                .find(|p| p.is_dispatcher && p.module == cmd.module && p.function == cmd.function)
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "dispatcher manifest entry for `{}` (module `{}`, function `{}`) not found",
-                        cmd.name,
-                        cmd.module,
-                        cmd.function,
-                    )
-                })?;
-            build_dispatch_spec(dispatcher, parent_matches, packed, &bases, &output_opts)?
-        } else {
-            build_spec(cmd, cmd_matches, &bases, &output_opts)?
-        })
-    })()
+    let spec = build_execution_spec(
+        manifest,
+        cmd,
+        cmd_matches,
+        parent_matches,
+        &bases,
+        &output_opts,
+    )
     .map_err(|e| render_path_value_error(e, root, &path))?;
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
     // host-Python path imports `tools/*.py` directly. Building the spec above
