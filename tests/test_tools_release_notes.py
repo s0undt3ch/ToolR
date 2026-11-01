@@ -417,7 +417,7 @@ def test_render_refuses_invalid_tree(
         ("````\n```\n## Heading\n```\n````", False),
         ("```\n~~~\n# x\n```", False),
         ("```\n```sh\n# x\n```", False),
-        ("    ```\n# x", True),
+        ("Text\n    ```\n# x", True),
         ("```\ncode\n```\n# x", True),
         ("```\n# unclosed", False),
         ("~~~\n# x\n~~~\n## y", True),
