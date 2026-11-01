@@ -69,6 +69,8 @@ def release_repo(git_repo: Callable[..., Path]) -> Path:
             "Cargo.toml": 'version = "9.9.8"\n',
             "CHANGELOG.md": "# Changelog\n",
             "docs/other.md": "# Other\n",
+            "docs/a b.md": "# Spaced\n",
+            "docs/\u00fcn\u00efcode.md": "# Non-ASCII\n",
         }
     )
     (repo / "Cargo.toml").write_text('version = "9.9.9"\n')
@@ -126,6 +128,7 @@ def test_commit_step_fails_when_prek_keeps_failing(
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert "strict pass failed" in result.stderr
+    assert "+## 9.9.9" in result.stderr
     assert prek_calls(bin_dir) == 2
     assert commit_count(release_repo) == 1
 
@@ -150,35 +153,38 @@ def test_commit_step_commits_fixes_to_release_files(
     assert git(release_repo, "status", "--porcelain") == "?? release-notes.md\n"
 
 
+@pytest.mark.parametrize("path", ["docs/other.md", "docs/a b.md", "docs/\u00fcn\u00efcode.md"])
 def test_commit_step_rejects_fixes_outside_release_files(
     release_repo: Path,
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
+    path: str,
 ) -> None:
-    bin_dir = stub_prek([f"printf 'Fixed by a hook\\n' >> docs/other.md; {PREK_FAILS}", PREK_OK])
+    bin_dir = stub_prek([f"printf 'Fixed by a hook\\n' >> '{path}'; {PREK_FAILS}", PREK_OK])
 
     result = run_commit_step(release_repo, bin_dir)
 
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "docs/other.md" in result.stderr
+    assert f"::error file={path}::" in result.stderr
     assert "+Fixed by a hook" in result.stderr
+    assert "Untracked files prek created:" not in result.stderr
     assert commit_count(release_repo) == 1
     assert prek_calls(bin_dir) == 1
 
 
+@pytest.mark.parametrize("path", ["skills/new.md", "skills/new file.md"])
 def test_commit_step_rejects_new_untracked_files(
     release_repo: Path,
     stub_prek: Callable[[list[str]], Path],
     run_commit_step: Callable[[Path, Path], subprocess.CompletedProcess[str]],
+    path: str,
 ) -> None:
-    bin_dir = stub_prek(
-        [f"mkdir -p skills && printf 'new\\n' > skills/new.md; {PREK_FAILS}", PREK_OK]
-    )
+    bin_dir = stub_prek([f"mkdir -p skills && printf 'new\\n' > '{path}'; {PREK_FAILS}", PREK_OK])
 
     result = run_commit_step(release_repo, bin_dir)
 
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "Untracked files prek created:\n  skills/new.md" in result.stderr
+    assert f"Untracked files prek created:\n  {path}\n" in result.stderr
     assert commit_count(release_repo) == 1
     assert prek_calls(bin_dir) == 1
 

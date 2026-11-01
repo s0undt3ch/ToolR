@@ -276,36 +276,54 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
         run: |
           set -euo pipefail
-          changed_paths() {
-            git status --porcelain --untracked-files=all | cut -c4- | LC_ALL=C sort
+          # NUL-separated so names with spaces or non-ASCII characters stay verbatim.
+          # Plain `read -d ''` loops rather than mapfile, so the script also runs
+          # under bash 3.2 in the tests.
+          list_changed() {
+            git diff --name-only -z HEAD > "$1"
+            git ls-files --others --exclude-standard -z >> "$1"
           }
-          before=$(changed_paths)
+          scratch=$(mktemp -d)
+          list_changed "$scratch/before"
           # Fixing pass: let the auto-fixers tidy the release's own files.
           prek run --all-files || true
-          after=$(changed_paths)
-          outside=$(LC_ALL=C comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))
-          if [ -n "$outside" ]; then
-            tracked=()
-            untracked=()
-            while IFS= read -r path; do
-              echo "::error file=${path}::prek changed ${path}, which the release didn't touch. Fix it on main in its own PR." >&2
-              if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
-                tracked+=("$path")
-              else
-                untracked+=("$path")
+          list_changed "$scratch/after"
+          tracked=()
+          untracked=()
+          while IFS= read -r -d '' path; do
+            known=false
+            while IFS= read -r -d '' seen; do
+              if [ "$seen" = "$path" ]; then
+                known=true
+                break
               fi
-            done <<< "$outside"
-            if [ "${#tracked[@]}" -gt 0 ]; then
-              git --no-pager diff -- "${tracked[@]}" >&2
+            done < "$scratch/before"
+            if [ "$known" = true ]; then
+              continue
             fi
-            if [ "${#untracked[@]}" -gt 0 ]; then
-              echo "Untracked files prek created:" >&2
-              printf '  %s\n' "${untracked[@]}" >&2
+            echo "::error file=${path}::prek changed ${path}, which the release didn't touch. Fix it on main in its own PR." >&2
+            if GIT_LITERAL_PATHSPECS=1 git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+              tracked+=("$path")
+            else
+              untracked+=("$path")
             fi
+          done < "$scratch/after"
+          if [ "${#tracked[@]}" -gt 0 ]; then
+            GIT_LITERAL_PATHSPECS=1 git --no-pager diff -- "${tracked[@]}" >&2
+          fi
+          if [ "${#untracked[@]}" -gt 0 ]; then
+            echo "Untracked files prek created:" >&2
+            printf '  %s\n' "${untracked[@]}" >&2
+          fi
+          if [ "${#tracked[@]}" -gt 0 ] || [ "${#untracked[@]}" -gt 0 ]; then
             exit 1
           fi
           # Strict pass: anything still failing is a real failure.
-          prek run --all-files --show-diff-on-failure
+          if ! prek run --all-files --show-diff-on-failure; then
+            echo "::error::prek failed on the release changes; the uncommitted release diff follows." >&2
+            git --no-pager diff HEAD >&2
+            exit 1
+          fi
           git commit -am "chore(release): Prepare for ${RELEASE_VERSION} release"
 
       - name: Show Changes Diff
