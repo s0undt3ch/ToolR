@@ -132,3 +132,7 @@ still cache the manifest as before.
 its input. toolr now feeds stdin from a separate thread, so the timeouts apply while the command
 runs and reads it. A command that exits without reading all of its input no longer raises "Failed
 to write to stdin"; its exit code is returned as usual.
+
+The Setup ToolR action's `version: latest` now always resolves to the newest ToolR release. It used to
+ask for the newest release of the repository running the workflow first, so a repository with releases of
+its own got its own tag back and the install failed or picked the wrong toolr version.
