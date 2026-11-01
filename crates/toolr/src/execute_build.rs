@@ -942,6 +942,40 @@ mod tests {
         );
     }
 
+    /// `cli` swaps a deferred arg to an unchecked `PathBuf` parser and
+    /// `extract_scalar` reads it back as one; both ask
+    /// `defers_path_resolution`. Pins that pairing for every path type,
+    /// bare and `Optional`, typed and defaulted, so a divergence fails here
+    /// rather than as a clap type-mismatch panic at run time.
+    #[test]
+    fn every_path_type_parses_and_extracts_a_relative_default() {
+        use toolr_core::parser::types::SupportedTypeKind;
+        let layout = Layout::new();
+        let path_types = SupportedTypeKind::ALL
+            .iter()
+            .map(|kind| kind.representative())
+            .filter(SupportedType::is_path);
+        for inner in path_types {
+            for ty in [
+                inner.clone(),
+                SupportedType::Optional(Box::new(inner.clone())),
+            ] {
+                let cmd = deferred_cmd(ty.clone(), "missing/out");
+                assert_eq!(
+                    defers_path_resolution(&cmd.arguments[0]),
+                    inner != SupportedType::Path,
+                    "{ty:?}"
+                );
+                for argv in [&["test"][..], &["test", "--cfg", "missing/out"]] {
+                    // Parsing never checks the disk; extraction must not
+                    // panic on the stored type, whatever it decides.
+                    let matches = user_matches(&cmd, argv);
+                    let _ = build_spec(&cmd, &matches, &layout.bases(), &OutputOptions::default());
+                }
+            }
+        }
+    }
+
     #[test]
     fn absolute_path_default_joins_repo_root() {
         let layout = Layout::new();
