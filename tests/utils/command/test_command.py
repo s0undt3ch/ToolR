@@ -59,13 +59,24 @@ def test_input_bytes(stdin_cat_command):
 def test_input_larger_than_pipe_buffer_with_output_first():
     """A child that fills its stdout pipe before reading stdin must not deadlock (F-08)."""
     script = "import sys; sys.stdout.write('x'*200000); sys.stdout.flush(); sys.stdin.buffer.read()"
-    result = run(
-        [sys.executable, "-c", script],
-        input=b"y" * 200000,
-        capture_output=True,
-        text=False,
-        timeout_secs=30,
+    results = []
+    # A regression hangs before `timeout_secs` is armed, so bound the call from outside.
+    worker = threading.Thread(
+        target=lambda: results.append(
+            run(
+                [sys.executable, "-c", script],
+                input=b"y" * 200000,
+                capture_output=True,
+                text=False,
+                timeout_secs=30,
+            )
+        ),
+        daemon=True,
     )
+    worker.start()
+    worker.join(60)
+    assert not worker.is_alive(), "ctx.run deadlocked feeding stdin"
+    (result,) = results
     assert result.returncode == 0
     result.stdout.seek(0)
     assert len(result.stdout.read()) == 200000

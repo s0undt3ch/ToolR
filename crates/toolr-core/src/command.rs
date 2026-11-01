@@ -450,7 +450,7 @@ pub fn run_command_internal(
     });
 
     // Spawned after the readers. On timeout the kill closes the pipe and the
-    // thread ends on its own.
+    // thread ends on its own, unless a grandchild still holds stdin (F-21).
     let stdin_thread = stdin_payload.map(|(stdin, input)| spawn_stdin_writer(stdin, input));
 
     // Wait for command completion with timeout handling
