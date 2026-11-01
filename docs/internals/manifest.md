@@ -183,6 +183,10 @@ Toolr regenerates the manifest when:
   available to re-glob third-party fragments too.
 - The user explicitly runs `toolr project manifest rebuild`.
 
+Automatic rebuilds are written to disk only in a trusted repository (see
+[Repository trust](../concepts.md#repository-trust)). In an untrusted one the
+rebuilt manifest stays in memory and an existing file is left as found.
+
 ## Manual rebuild
 
 ```sh

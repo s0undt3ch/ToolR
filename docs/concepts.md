@@ -99,6 +99,10 @@ These never need trust, because nothing executes: `--help`, bare
 `toolr`, tab completion, `toolr project manifest rebuild` and
 `toolr self build-manifest`.
 
+toolr never writes `tools/.toolr-manifest.json` into an untrusted
+repository. There, `--help` and tab completion build the manifest in
+memory and leave the checkout untouched.
+
 For automation, set `TOOLR_TRUST_ALL=1`. The value must be exactly `1`.
 The `s0undt3ch/ToolR` GitHub Action sets it for you; see
 [Project configuration](project-config.md#venv-location). toolr doesn't infer it
