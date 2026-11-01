@@ -11,7 +11,7 @@ hooks keep the lean build compiling and its dependency list short.
 
 **Tech Stack:** Cargo features, prek.
 
-**Spec:** [`specs/2026-10-31-toolr-py-deps-design.md`](./2026-10-31-toolr-py-deps-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-toolr-py-deps-design.md`](./2026-10-31-toolr-py-deps-design.md)
 
 ## Global Constraints
 

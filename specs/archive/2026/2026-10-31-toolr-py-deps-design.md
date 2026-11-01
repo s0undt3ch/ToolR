@@ -1,6 +1,6 @@
 # Stop linking the CLI's dependency stack into `toolr-py`
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-15 (medium).
 - **Plan:** [`2026-10-31-toolr-py-deps-plan.md`](./2026-10-31-toolr-py-deps-plan.md)
 
