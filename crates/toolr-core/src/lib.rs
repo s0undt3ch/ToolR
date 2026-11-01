@@ -33,6 +33,8 @@ pub mod path_search;
 pub mod project;
 #[cfg(all(test, feature = "full"))]
 mod test_env;
+#[cfg(all(test, feature = "full"))]
+mod test_fs;
 #[cfg(feature = "full")]
 pub mod text;
 #[cfg(feature = "full")]

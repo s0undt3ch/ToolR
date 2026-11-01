@@ -210,18 +210,33 @@ fn init_with_repo_python3(path: &str) -> (String, bool) {
     (pyproject, sentinel.exists())
 }
 
+#[cfg(unix)]
+fn assert_repo_python3_never_ran(path: &str) {
+    let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
+    let (pyproject, ran) = init_with_repo_python3(path);
+    assert!(!ran, "the repo's python3 ran with PATH={path:?}");
+    assert!(
+        pyproject.contains(&format!(r#"requires-python = ">=3.{floor}""#)),
+        "PATH={path:?}:\n{pyproject}"
+    );
+}
+
 #[test]
 #[cfg(unix)]
-fn init_never_runs_a_repo_python3_through_relative_path_entries() {
-    let floor = toolr_core::execute::python::MIN_PYTHON_MINOR;
-    for path in [".", ":", "rel-bin"] {
-        let (pyproject, ran) = init_with_repo_python3(path);
-        assert!(!ran, "the repo's python3 ran with PATH={path:?}");
-        assert!(
-            pyproject.contains(&format!(r#"requires-python = ">=3.{floor}""#)),
-            "PATH={path:?}:\n{pyproject}"
-        );
-    }
+fn init_dot_path_entry_does_not_run_repo_python3() {
+    assert_repo_python3_never_ran(".");
+}
+
+#[test]
+#[cfg(unix)]
+fn init_empty_path_entry_does_not_run_repo_python3() {
+    assert_repo_python3_never_ran(":");
+}
+
+#[test]
+#[cfg(unix)]
+fn init_relative_path_entry_does_not_run_repo_python3() {
+    assert_repo_python3_never_ran("rel-bin");
 }
 
 #[test]
