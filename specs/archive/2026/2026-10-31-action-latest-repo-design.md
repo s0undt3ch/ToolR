@@ -1,6 +1,6 @@
 # Resolve the action's `version: latest` against ToolR, not the caller
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-22 (low).
 - **Plan:** [`2026-10-31-action-latest-repo-plan.md`](./2026-10-31-action-latest-repo-plan.md)
 

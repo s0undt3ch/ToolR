@@ -11,7 +11,7 @@ call. The offline bash harness in `tests/action_yml/` learns to set `GITHUB_REPO
 
 **Tech Stack:** composite GitHub Action (bash), pytest + PyYAML, `cargo xtask build-skill-refs`.
 
-**Spec:** [`specs/2026-10-31-action-latest-repo-design.md`](./2026-10-31-action-latest-repo-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-action-latest-repo-design.md`](./2026-10-31-action-latest-repo-design.md)
 
 ## Global Constraints
 
