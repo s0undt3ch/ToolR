@@ -22,6 +22,8 @@ NOTE_NAME_RE: Final[re.Pattern[str]] = re.compile(
 SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BREAKING_PREFIX: Final[str] = "**Breaking:**"
 HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}#{1,6}(\s|$)")
+SETEXT_UNDERLINE_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
+LIST_OR_QUOTE_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}([-*+]|\d+[.)])[ \t]|^ {0,3}>")
 FENCE_OPEN_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 SUBJECT_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?:"
@@ -81,13 +83,17 @@ def _github_env_block(name: str, value: str) -> str:
 
 def _has_heading(text: str) -> bool:
     fence: str | None = None
+    prev_is_paragraph = False
     for line in text.splitlines():
         if fence is None:
             opener = FENCE_OPEN_RE.match(line)
             if opener and not (opener["fence"][0] == "`" and "`" in opener["info"]):
                 fence = opener["fence"]
-            elif HEADING_RE.match(line):
+                prev_is_paragraph = False
+            elif HEADING_RE.match(line) or (prev_is_paragraph and SETEXT_UNDERLINE_RE.match(line)):
                 return True
+            else:
+                prev_is_paragraph = bool(line.strip()) and not LIST_OR_QUOTE_RE.match(line)
         else:
             stripped = line.strip()
             if (
@@ -97,6 +103,7 @@ def _has_heading(text: str) -> bool:
                 and len(stripped) >= len(fence)
             ):
                 fence = None
+                prev_is_paragraph = False
     return False
 
 

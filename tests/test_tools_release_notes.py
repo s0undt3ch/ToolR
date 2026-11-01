@@ -452,6 +452,11 @@ def test_render_refuses_invalid_tree(
         ("Text\n\n  ## x", True),
         ("Text\n\n   # x", True),
         ("Text\n\n    # x", False),
+        ("Intro paragraph\n---\nmore", True),
+        ("Title\n===", True),
+        ("Para\n\n---\n\nMore", False),
+        ("- item\n---", False),
+        ("```\ntext\n---\n```", False),
     ],
 )
 def test_fence_tracking(
