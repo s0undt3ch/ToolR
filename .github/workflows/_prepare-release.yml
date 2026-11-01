@@ -142,6 +142,14 @@ jobs:
         if: inputs.github-app-client-id == ''
         uses: ./.github/actions/configure-git
 
+      - name: Check skill references
+        id: check-skill-refs
+        # The regeneration after the bump would otherwise sweep any stale
+        # reference already on main into the release commit.
+        shell: bash
+        run: |
+          cargo xtask build-skill-refs --check
+
       - name: Bump Version
         id: bump-version
         shell: bash
@@ -153,6 +161,15 @@ jobs:
             new_version_arg=(--new-version="$RELEASE_VERSION")
           fi
           toolr version bump --write --check-existing-tag --include-action "${new_version_arg[@]}"
+
+      - name: Regenerate skill references
+        id: regen-skill-refs
+        # The toolr-ci-setup reference is generated from `action.yml`, which the
+        # bump just rewrote. The commit step rejects prek fixes outside the
+        # release's own changes, so the reference has to be one of them.
+        shell: bash
+        run: |
+          cargo xtask build-skill-refs
 
       - name: Load UNRELEASED.md into TOOLR_RELEASE_NOTES env var
         shell: bash
@@ -253,23 +270,76 @@ jobs:
             '-->' \
             > UNRELEASED.md
 
+      - name: Commit changes
+        id: commit-release
+        shell: bash
+        env:
+          # `pin-github-actions` resolves pins through `gh api`.
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+        # Inputs come from env vars only, no `${{ }}` in the body: tests run it directly.
+        run: |
+          set -euo pipefail
+          # NUL-separated so names with spaces or non-ASCII characters stay verbatim.
+          # Plain `read -d ''` loops rather than mapfile, so the script also runs
+          # under bash 3.2 in the tests.
+          list_changed() {
+            git diff --name-only -z HEAD > "$1"
+            git ls-files --others --exclude-standard -z >> "$1"
+          }
+          # Print, NUL-separated, the paths in list file $2 that aren't in list file $1.
+          newly_changed() {
+            local path seen known
+            while IFS= read -r -d '' path; do
+              known=false
+              while IFS= read -r -d '' seen; do
+                if [ "$seen" = "$path" ]; then
+                  known=true
+                  break
+                fi
+              done < "$1"
+              if [ "$known" = false ]; then
+                printf '%s\0' "$path"
+              fi
+            done < "$2"
+          }
+          scratch=$(mktemp -d)
+          list_changed "$scratch/before"
+          # Fixing pass: let the auto-fixers tidy the release's own files.
+          prek run --all-files || true
+          list_changed "$scratch/after"
+          newly_changed "$scratch/before" "$scratch/after" > "$scratch/outside"
+          tracked=()
+          untracked=()
+          while IFS= read -r -d '' path; do
+            echo "::error file=${path}::prek changed ${path}, which the release didn't touch. Fix it on main in its own PR." >&2
+            if GIT_LITERAL_PATHSPECS=1 git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+              tracked+=("$path")
+            else
+              untracked+=("$path")
+            fi
+          done < "$scratch/outside"
+          if [ "${#tracked[@]}" -gt 0 ]; then
+            GIT_LITERAL_PATHSPECS=1 git --no-pager diff -- "${tracked[@]}" >&2
+          fi
+          if [ "${#untracked[@]}" -gt 0 ]; then
+            echo "Untracked files prek created:" >&2
+            printf '  %s\n' "${untracked[@]}" >&2
+          fi
+          if [ "${#tracked[@]}" -gt 0 ] || [ "${#untracked[@]}" -gt 0 ]; then
+            exit 1
+          fi
+          # Strict pass: anything still failing is a real failure.
+          if ! prek run --all-files --show-diff-on-failure; then
+            echo "::error::prek failed on the release changes; the uncommitted release diff follows." >&2
+            git --no-pager diff HEAD >&2
+            exit 1
+          fi
+          git commit -am "chore(release): Prepare for ${RELEASE_VERSION} release"
+
       - name: Show Changes Diff
         shell: bash
         run: |
-          git diff --color
-
-      - name: Commit changes
-        shell: bash
-        run: |
-          # Run prek against the changes
-          prek run --all-files --show-diff-on-failure || true
-          # Commit the changes
-          git commit -am "chore(release): Prepare for ${{ env.RELEASE_VERSION }} release"
-
-      - name: Tag the release
-        shell: bash
-        run: |
-          git tag -a "${{ env.RELEASE_VERSION }}" -m "Release ${{ env.RELEASE_VERSION }}"
+          git show --color --stat --patch HEAD
 
       - name: Create Release Patch
         shell: bash
