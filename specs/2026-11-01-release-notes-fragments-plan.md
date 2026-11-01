@@ -336,7 +336,7 @@ GitHub Actions, git-cliff, prek.
 ### Task 8: Rebase open PRs (after the cutover merges)
 
 - [ ] For each of #626 `fix/tester-discover-errors`, #624 `fix/action-latest-repo`,
-  #622 `fix/ancestor-tools-discovery`: rebase onto `main` (`paddle-shared:rebase` skill), resolve the
+  #622 `fix/ancestor-tools-discovery`: rebase onto `main`, resolve the
   modify/delete conflict on `UNRELEASED.md` by dropping the file and recreating the branch's entry with
   `toolr release-notes add --slug <slug> --text …` (#622 is `fix(discovery)!`, so its note starts with
   `**Breaking:**`), commit `docs(release-notes): …`, and force-push after confirming with the
