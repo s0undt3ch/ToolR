@@ -14,6 +14,8 @@ from tools.release_notes import NOTE_NAME_RE
 from tools.release_notes import Commit
 from tools.release_notes import _file_problems
 from tools.release_notes import _github_env_block
+from tools.release_notes import _has_skip_trailer
+from tools.release_notes import _is_breaking
 from tools.release_notes import _note_filename
 from tools.release_notes import _render
 from tools.release_notes import _requires_note
@@ -93,7 +95,7 @@ def test_github_env_block_avoids_delimiter_in_value(monkeypatch: pytest.MonkeyPa
 
 
 def test_render_command_stdout_is_verbatim(
-    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path]
+    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     note = (
         "Fixed `Optional[bool]` handling; see [link](url) and ~/src/[wip]/ for details. "
@@ -102,20 +104,29 @@ def test_render_command_stdout_is_verbatim(
     )
     assert len(note.splitlines()[0]) > 120
     notes_dir({"2026-01-01.00-00-00.a.md": note})
-    ctx = make_context(repo_root=tmp_path)
-    render(ctx)
-    assert ctx.stdout == note + "\n"
+    render(make_context(repo_root=tmp_path))
+    assert capsys.readouterr().out == note + "\n"
 
 
-def test_render_command_stdout(tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path]) -> None:
+def test_render_command_stdout(
+    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], capsys: pytest.CaptureFixture[str]
+) -> None:
     notes_dir({"2026-01-01.00-00-00.a.md": "A"})
-    ctx = make_context(repo_root=tmp_path)
-    render(ctx)
-    assert ctx.stdout == "A\n"
+    render(make_context(repo_root=tmp_path))
+    assert capsys.readouterr().out == "A\n"
+
+
+def test_render_command_stdout_keeps_tabs(
+    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    note = "Makefile:\n\n```make\nall:\n\techo hi\n```"
+    notes_dir({"2026-01-01.00-00-00.a.md": note})
+    render(make_context(repo_root=tmp_path))
+    assert capsys.readouterr().out == note + "\n"
 
 
 def test_render_command_github_env(
-    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path]
+    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     notes_dir({"2026-01-01.00-00-00.a.md": "A"})
     env_file = tmp_path / "github_env"
@@ -126,6 +137,7 @@ def test_render_command_github_env(
     assert content.startswith("EXISTING=1\nTOOLR_RELEASE_NOTES<<TOOLR_RELEASE_NOTES_")
     assert content.endswith("\nA\n" + content.splitlines()[1].split("<<", 1)[1] + "\n")
     assert ctx.stdout == ""
+    assert capsys.readouterr().out == ""
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -412,7 +424,7 @@ def test_check_command_exit(notes_dir: Callable[[dict[str, str]], Path], tmp_pat
 
 
 def test_render_refuses_invalid_tree(
-    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     notes_dir({GOOD: ""})
     ctx = make_context(tmp_path)
@@ -421,6 +433,7 @@ def test_render_refuses_invalid_tree(
     assert exc.value.code != 0
     assert ctx.stdout == ""
     assert GOOD in ctx.stderr
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.parametrize(
@@ -436,6 +449,9 @@ def test_render_refuses_invalid_tree(
         ("``` a`b\n# x", True),
         ("#hashtag", False),
         ("#!/bin/sh", False),
+        ("Text\n\n  ## x", True),
+        ("Text\n\n   # x", True),
+        ("Text\n\n    # x", False),
     ],
 )
 def test_fence_tracking(
@@ -467,11 +483,42 @@ def test_invalid_utf8_flagged(tmp_path: Path) -> None:
         ("docs(release-notes): x", "", False),
         ("fix: x", "Changelog: skip", False),
         ('Revert "feat: x"', "", False),
+        ("Some change", "BREAKING CHANGE: y", False),
         ("Merge branch 'x'", "", False),
     ],
 )
 def test_requires_note(subject: str, body: str, required: bool) -> None:
     assert _requires_note(Commit("0" * 40, subject, body)) is required
+
+
+@pytest.mark.parametrize(
+    ("subject", "body", "breaking"),
+    [
+        ("feat!: x", "", True),
+        ("refactor: x", "BREAKING CHANGE: y", True),
+        ("feat: x", "", False),
+        ("Some change", "BREAKING CHANGE: y", False),
+        ("Some change!: x", "", False),
+    ],
+)
+def test_is_breaking(subject: str, body: str, breaking: bool) -> None:
+    assert _is_breaking(Commit("0" * 40, subject, body)) is breaking
+
+
+@pytest.mark.parametrize(
+    ("body", "skip"),
+    [
+        ("Release-Notes: skip", True),
+        ("release-notes: skip", True),
+        ("RELEASE-NOTES:\tSKIP", True),
+        ("x\n\nRelease-Notes: skip  \n", True),
+        ("Release-Notes:\n\nskip", False),
+        ("Release-Notes: skip\nnope", True),
+        ("Release-Notes: skipped", False),
+    ],
+)
+def test_has_skip_trailer(body: str, skip: bool) -> None:
+    assert _has_skip_trailer(body) is skip
 
 
 @pytest.fixture
@@ -555,6 +602,18 @@ def test_gate_breaking_needs_breaking_note(gate_repo: Callable[..., Path]) -> No
 def test_gate_revert_with_deleted_note_passes(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo(main_note="Added a.")
     _commit(repo, "revert: feat: a", {f"release-notes/{GOOD}": None})
+    _gate(repo)
+
+
+def test_gate_unconventional_breaking_footer_passes(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "Some change\n\nBREAKING CHANGE: y")
+    _gate(repo)
+
+
+def test_gate_lowercase_skip_trailer(gate_repo: Callable[..., Path]) -> None:
+    repo = gate_repo()
+    _commit(repo, "feat: a\n\nrelease-notes: skip")
     _gate(repo)
 
 

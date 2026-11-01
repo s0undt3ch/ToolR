@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import sys
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +21,7 @@ NOTE_NAME_RE: Final[re.Pattern[str]] = re.compile(
 )
 SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BREAKING_PREFIX: Final[str] = "**Breaking:**"
-HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^#{1,6}(\s|$)")
+HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}#{1,6}(\s|$)")
 FENCE_OPEN_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 SUBJECT_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?:"
@@ -156,7 +157,9 @@ class NoteChanges(NamedTuple):
 
 def _is_breaking(commit: Commit) -> bool:
     match = SUBJECT_RE.match(commit.subject)
-    return bool(match and match["bang"]) or bool(BREAKING_FOOTER_RE.search(commit.body))
+    if match is None:
+        return False
+    return bool(match["bang"]) or bool(BREAKING_FOOTER_RE.search(commit.body))
 
 
 def _requires_note(commit: Commit) -> bool:
@@ -174,7 +177,7 @@ def _requires_note(commit: Commit) -> bool:
 
 
 def _has_skip_trailer(body: str) -> bool:
-    return bool(re.search(r"^Release-Notes:\s*skip\s*$", body, re.MULTILINE))
+    return bool(re.search(r"^Release-Notes:[ \t]*skip[ \t]*$", body, re.MULTILINE | re.IGNORECASE))
 
 
 def _gate_failures(commits: list[Commit], notes: NoteChanges, breaking_note: bool) -> list[str]:
@@ -298,7 +301,9 @@ def render(ctx: Context, github_env: str | None = None) -> None:
         with Path(github_env).open("a", encoding="utf-8") as f:
             f.write(_github_env_block("TOOLR_RELEASE_NOTES", text))
         return
-    ctx.print(text, markup=False, highlight=False, emoji=False, soft_wrap=True)
+    # Rich would expand tabs, so write the bytes directly.
+    sys.stdout.write(f"{text}\n")
+    sys.stdout.flush()
 
 
 @group.command
