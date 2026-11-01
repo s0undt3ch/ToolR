@@ -1709,6 +1709,11 @@ exist, then spawns a Python subprocess to actually run them. See
 <code>*.py</code> file under it can register one or more command groups. The
 directory is a <a href="https://peps.python.org/pep-0420/">PEP 420 namespace package</a> — <strong>no
 <code>__init__.py</code> is needed</strong>. See <a href="../writing-commands/">Writing commands</a>.</p>
+<p>A <code>tools/</code> is a toolr project only if it contains a <code>pyproject.toml</code>
+(<code>toolr project init</code> creates one). toolr finds the project by walking up
+from the current directory to the nearest <code>tools/pyproject.toml</code>, so a
+<code>tools/</code> without one, such as a <code>src/pkg/tools/</code> package in your code or a
+scripts directory above your repo, is ignored.</p>
 <h2 id="toolspyprojecttoml"><code>tools/pyproject.toml</code><a class="headerlink" href="#toolspyprojecttoml" title="Permanent link">&para;</a></h2>
 <p>Declares the Python dependencies your commands need (the <code>toolr</code>
 package itself, plus anything your <code>tools/*.py</code> files import) and

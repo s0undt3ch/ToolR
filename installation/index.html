@@ -1871,16 +1871,10 @@ therefore points toolr at a new venv that doesn't exist yet. Run
 <p><code>UV_*</code> environment variables and a user-level <code>uv.toml</code> aren't
 tracked. After changing them, rebuild the
 venv with <code>toolr project venv sync --force</code>.</p>
-<p>Two cases don't go through uv:</p>
-<ul>
-<li>A repo with no <code>tools/pyproject.toml</code> has no tools venv. Toolr runs
-  commands with <code>$TOOLR_PYTHON</code> if set, else <code>python3</code>, else <code>python</code>
-  from <code>PATH</code>. <code>$TOOLR_PYTHON</code> takes an absolute path or a bare name,
-  which toolr looks up on <code>PATH</code>. A <code>PATH</code> interpreter older than
-  Python 3.11 is skipped. The interpreter must have <code>toolr-py</code> installed.</li>
-<li><code>toolr project init</code> runs the host <code>python3</code> once to pick the default
-  <code>requires-python</code> it writes.</li>
-</ul>
+<p>Commands always run in the tools venv; a repo needs
+<code>tools/pyproject.toml</code> to have one. The only host Python toolr runs is
+the <code>python3</code> that <code>toolr project init</code> asks once to pick the default
+<code>requires-python</code> it writes.</p>
 <h2 id="adding-toolr-py-manually">Adding <code>toolr-py</code> manually<a class="headerlink" href="#adding-toolr-py-manually" title="Permanent link">&para;</a></h2>
 <p><code>toolr project init</code> is the fast path — it declares <code>toolr-py</code> for
 you. If you'd rather wire it by hand (e.g. you're slotting toolr

@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev201-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev210-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev201 - 2026-11-01
+        0.35.2-dev210 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev201 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev210 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev201-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev210-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev201 - 2026-11-01
+        0.35.2-dev210 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev201 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev210 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev201-2026-11-01">0.35.2-dev201 - 2026-11-01<a class="headerlink" href="#0352-dev201-2026-11-01" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev210-2026-11-01">0.35.2-dev210 - 2026-11-01<a class="headerlink" href="#0352-dev210-2026-11-01" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7527,11 +7527,6 @@ error comes from the <code>toolr-py</code> in your tools venv, so a venv still o
 printing the old text; the binary's version-skew warning above it gives the right command.</p>
 <p>Pressing Ctrl-D (or stdin closing) at the uv install prompt now declines the install. It used to
 count as consent and download uv. Bare Enter still installs.</p>
-<p>In a repo without <code>tools/pyproject.toml</code>, toolr now runs commands with <code>python3</code> (or <code>python</code>) from
-<code>PATH</code>, as documented. It used to fail every command with "Python interpreter not found at python3"
-unless <code>$TOOLR_PYTHON</code> held an absolute path. <code>$TOOLR_PYTHON</code> now also accepts a bare name such as
-<code>python3.12</code>, looked up on <code>PATH</code>. A <code>PATH</code> interpreter older than Python 3.11 is skipped, and
-the error names it if nothing newer is found.</p>
 <p><code>toolr project venv sync -P</code>, <code>venv lock -P</code> and <code>venv remove</code> now ignore case and treat <code>-</code>, <code>_</code> and
 <code>.</code> as the same when checking that a package is declared, following PEP 503. A <code>tools/pyproject.toml</code>
 that declares <code>toolr_py</code> or <code>Toolr.Py</code> used to fail the "not declared" check for <code>toolr-py</code>.</p>
@@ -7624,6 +7619,20 @@ to write to stdin"; its exit code is returned as usual.</p>
 <p>The Setup ToolR action's <code>version: latest</code> now always resolves to the newest ToolR release. It used to
 ask for the newest release of the repository running the workflow first, so a repository with releases of
 its own got its own tag back and the install failed or picked the wrong toolr version.</p>
+<p>The Setup ToolR action no longer throws away its <code>tools/.venv</code> cache when the repository's root <code>uv.lock</code>
+changes. The cache key now follows the same <code>tools/</code> inputs toolr's own freshness check tracks:
+<code>tools/pyproject.toml</code>, <code>tools/uv.lock</code>, <code>tools/uv.toml</code> and <code>tools/.python-version</code>. Expect one cache miss after
+upgrading the action.</p>
+<p><strong>Breaking:</strong> a <code>tools/</code> directory is a toolr project only if it contains <code>pyproject.toml</code>. toolr
+finds the project by walking up to the nearest <code>tools/pyproject.toml</code>, and ignores any <code>tools/</code>
+without one. An unrelated <code>tools/</code> package below the repo root, such as <code>src/pkg/tools/</code>, used to
+hide every command (<code>unrecognized subcommand</code>); a bare <code>tools/</code> above a project (such as <code>C:\tools</code>)
+can no longer take it over. A repo whose <code>tools/</code> has no <code>pyproject.toml</code> is no longer supported:
+run <code>toolr project init</code> there to create one. Running one of its commands, or a <code>toolr project</code>
+command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</code> is missing. Without a
+<code>tools/pyproject.toml</code> toolr has no tools venv, so the fallback that ran commands with
+<code>$TOOLR_PYTHON</code>, <code>python3</code> or <code>python</code> from <code>PATH</code> is gone, and toolr no longer reads
+<code>$TOOLR_PYTHON</code>. The <code>toolr.testing</code> pytest plugin finds the repo root the same way.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7690,6 +7699,9 @@ its own got its own tag back and the install failed or picked the wrong toolr ve
 <li><em>(release)</em> Refuse a release patch applied off the dispatched commit (<a href="https://github.com/s0undt3ch/ToolR/commit/07033609c6c365ced52e62231c6df1663059d9f1"><code>0703360</code></a>)</li>
 <li><em>(release)</em> Tell a re-run its release is already published (<a href="https://github.com/s0undt3ch/ToolR/commit/955e2118faae0581e3328f5f9b1201abb9995bbd"><code>955e211</code></a>)</li>
 <li><em>(release)</em> Diagnose a failed release push from origin's state (<a href="https://github.com/s0undt3ch/ToolR/commit/3f568016519734e0e375fc0d1322cc74f7148bad"><code>3f56801</code></a>)</li>
+<li><em>(action)</em> Key the tools venv cache on tools/ files only (<a href="https://github.com/s0undt3ch/ToolR/commit/87d6f8e95f1420def6dc2fb3215f8670bcff34d9"><code>87d6f8e</code></a>)</li>
+<li><em>(action)</em> Key the tools venv cache on every tools/ freshness input (<a href="https://github.com/s0undt3ch/ToolR/commit/565a3fe5bfbdbec6f651e8fb0187e11332a8c915"><code>565a3fe</code></a>)</li>
+<li><em>(discovery)</em> [<strong>breaking</strong>] Require tools/pyproject.toml to find the project root (<a href="https://github.com/s0undt3ch/ToolR/commit/e560456e5bd162dd3cac84830bbafa9429c35548"><code>e560456</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7766,6 +7778,10 @@ its own got its own tag back and the install failed or picked the wrong toolr ve
 <li><em>(specs)</em> Archive action latest repo design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/1ab49bdee01388565fd9a19f24e5bbf62e0dbef6"><code>1ab49bd</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-10 release tree binding (<a href="https://github.com/s0undt3ch/ToolR/commit/63a16ef0ac982847a9a36a79a95d294ef66c6cbb"><code>63a16ef</code></a>)</li>
 <li><em>(specs)</em> Archive release tree binding design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/d11fa56927db84022a35f3ad49e8db79ba56f837"><code>d11fa56</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-39 action cache key (<a href="https://github.com/s0undt3ch/ToolR/commit/29c9d12b5a0e0ea910a697f1b8be37ed85b2f38c"><code>29c9d12</code></a>)</li>
+<li><em>(unreleased)</em> Note the action's tools venv cache key change (<a href="https://github.com/s0undt3ch/ToolR/commit/664a706acc03f326d7e8ff0c5ecef8c40cc2f6d4"><code>664a706</code></a>)</li>
+<li><em>(specs)</em> Archive action cache key design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b9af6176cd9ea01a33c48548a5f73ff5aaf739cc"><code>b9af617</code></a>)</li>
+<li><em>(specs)</em> Archive the ancestor tools discovery design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/c6b0d7445bcc53d5e7a9cca3a74cf8720f6aaa28"><code>c6b0d74</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
