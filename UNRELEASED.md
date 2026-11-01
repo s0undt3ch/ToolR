@@ -146,3 +146,11 @@ command, now names the `tools/` and says `tools/pyproject.toml` is missing. With
 `tools/pyproject.toml` toolr has no tools venv, so the fallback that ran commands with
 `$TOOLR_PYTHON`, `python3` or `python` from `PATH` is gone, and toolr no longer reads
 `$TOOLR_PYTHON`. The `toolr.testing` pytest plugin finds the repo root the same way.
+
+`toolr.testing.CommandsTester.discover()` now raises when a `tools/*.py` module fails to import, for
+example because a command has no docstring. It imports every module first, then raises one
+`ExceptionGroup` holding each module's error, so a discovery test fails the way `toolr` does. It
+used to hide those errors and pass, sometimes with a group that had no commands. Discovery also
+keeps the standard library on `sys.path` now: a `tools/*.py` that imports `sqlite3`, `tomllib` or
+another stdlib module not loaded yet used to vanish from `collected_command_groups()` without an
+error. A discovery test that passed only because of either problem now fails.

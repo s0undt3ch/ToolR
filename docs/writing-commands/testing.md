@@ -20,14 +20,26 @@ subprocess execution) you'll still want to drive the binary directly.
 
 `CommandsTester(search_path=tmp_path)` is a context manager that:
 
-1. Saves and replaces `sys.path` so only `search_path` and the host's `site-packages` are visible
-   — your fixture's `tools/` tree wins.
+1. Saves and replaces `sys.path` so `search_path` comes first and no other entry that provides a
+   `tools` package is visible. The standard library and `site-packages` stay.
 2. Patches `toolr._decorators._get_command_group_storage` with a fresh `dict` so the test gets an isolated registry.
 3. Restores everything on exit (`sys.path`, `sys.modules`, `cwd`).
 
 Calling `.discover()` inside the context imports every `tools/*.py` module, registering each
 `command_group` / `@command` call exactly as a real `import tools.*` would. After it returns,
 `.collected_command_groups()` gives you a `{full_name: CommandGroup}` dict you can assert against.
+
+If any module fails to import, `.discover()` still imports the rest, then raises one
+`ExceptionGroup` holding each module's error, so a discovery test fails the way `toolr` would.
+For example, a command without a docstring:
+
+```python
+with CommandsTester(search_path=tmp_path) as tester:
+    with pytest.raises(ExceptionGroup) as excinfo:
+        tester.discover()
+
+assert excinfo.group_contains(ValueError, match="add a docstring")
+```
 
 ## Usage
 
@@ -48,6 +60,7 @@ def test_my_tools_register_a_group(tmp_path: Path) -> None:
         "\n"
         "@ci.command\n"
         "def hello(ctx: Context, name: str = 'world') -> None:\n"
+        '    """Say hello."""\n'
         "    ctx.print(f'hi {name}')\n",
     )
 
