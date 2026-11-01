@@ -16,7 +16,8 @@ pub fn absolute_search_path(path: Option<OsString>) -> Option<OsString> {
     std::env::join_paths(kept).ok()
 }
 
-/// The first `name` (plus `.exe` on Windows) in an absolute `$PATH` directory.
+/// The first executable `name` (plus `.exe` on Windows) in an absolute `$PATH`
+/// directory.
 pub fn find_on_path(name: &str) -> Option<PathBuf> {
     find_on_path_in(name, std::env::var_os("PATH"))
 }
@@ -25,7 +26,18 @@ pub(crate) fn find_on_path_in(name: &str, path: Option<OsString>) -> Option<Path
     let basename = format!("{name}{}", std::env::consts::EXE_SUFFIX);
     std::env::split_paths(&absolute_search_path(path)?)
         .map(|entry| entry.join(&basename))
-        .find(|candidate| candidate.is_file())
+        .find(|candidate| is_executable_file(candidate))
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &std::path::Path) -> bool {
+    path.is_file()
 }
 
 #[cfg(test)]
@@ -86,6 +98,22 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn find_on_path_in_skips_a_file_that_is_not_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let plain = first.path().join("python3");
+        std::fs::write(&plain, b"").unwrap();
+        std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let exe = second.path().join("python3");
+        std::fs::write(&exe, b"").unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let path = joined(&[first.path(), second.path()]);
+        assert_eq!(find_on_path_in("python3", Some(path)), Some(exe));
+    }
+
+    #[test]
     fn find_on_path_in_skips_directories_without_the_file() {
         let empty = tempfile::tempdir().unwrap();
         let full = tempfile::tempdir().unwrap();
@@ -93,6 +121,11 @@ mod tests {
             .path()
             .join(format!("tool{}", std::env::consts::EXE_SUFFIX));
         std::fs::write(&exe, b"").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
         let path = joined(&[empty.path(), full.path()]);
         assert_eq!(find_on_path_in("tool", Some(path)), Some(exe));
     }
