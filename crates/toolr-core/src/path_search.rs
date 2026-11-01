@@ -17,7 +17,8 @@ pub fn absolute_search_path(path: Option<OsString>) -> Option<OsString> {
 }
 
 /// The first executable `name` (plus `.exe` on Windows) in an absolute `$PATH`
-/// directory.
+/// directory. An unset `PATH` finds nothing: libc's default search path isn't
+/// emulated.
 pub fn find_on_path(name: &str) -> Option<PathBuf> {
     find_on_path_in(name, std::env::var_os("PATH"))
 }
@@ -29,10 +30,16 @@ pub(crate) fn find_on_path_in(name: &str, path: Option<OsString>) -> Option<Path
         .find(|candidate| is_executable_file(candidate))
 }
 
+/// A regular file this process may execute, judged by `access(X_OK)` like
+/// `execvp`, not by mode bits a different owner would need.
 #[cfg(unix)]
 fn is_executable_file(path: &std::path::Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    use std::os::unix::ffi::OsStrExt;
+    path.is_file()
+        && std::ffi::CString::new(path.as_os_str().as_bytes()).is_ok_and(|c_path| {
+            // SAFETY: `c_path` is a valid NUL-terminated string for the call.
+            unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
+        })
 }
 
 #[cfg(not(unix))]
@@ -40,11 +47,36 @@ fn is_executable_file(path: &std::path::Path) -> bool {
     path.is_file()
 }
 
+/// `dir` as a path relative to the process cwd, so a test can point a
+/// relative `PATH` entry at it without changing the cwd.
+#[cfg(all(test, unix))]
+pub(crate) fn relative_to_cwd(dir: &std::path::Path) -> PathBuf {
+    use std::path::Component;
+    let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
+    let dir = dir.canonicalize().unwrap();
+    let ups = cwd
+        .components()
+        .filter(|c| matches!(c, Component::Normal(_)))
+        .count();
+    let mut rel: PathBuf = std::iter::repeat_n("..", ups).collect();
+    rel.extend(
+        dir.components()
+            .filter(|c| matches!(c, Component::Normal(_))),
+    );
+    rel
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
 
     use super::*;
+
+    #[cfg(unix)]
+    fn set_mode(path: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+    }
 
     fn abs(name: &str) -> PathBuf {
         std::env::temp_dir().join(name)
@@ -93,8 +125,37 @@ mod tests {
     }
 
     #[test]
-    fn find_on_path_in_returns_none_when_nothing_is_absolute() {
-        assert_eq!(find_on_path_in("uv", Some(":.:bin".into())), None);
+    #[cfg(unix)]
+    fn find_on_path_in_ignores_a_uv_reached_through_a_relative_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let uv = dir.path().join("uv");
+        std::fs::write(&uv, b"").unwrap();
+        set_mode(&uv, 0o755);
+        let rel = relative_to_cwd(dir.path());
+        assert!(rel.is_relative() && rel.join("uv").is_file(), "{rel:?}");
+        let path = joined(&[Path::new(""), &rel]);
+        assert_eq!(find_on_path_in("uv", Some(path)), None);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn find_on_path_in_skips_a_file_its_owner_cannot_run() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let owner_cannot_run = first.path().join("python3");
+        std::fs::write(&owner_cannot_run, b"").unwrap();
+        set_mode(&owner_cannot_run, 0o655);
+        let exe = second.path().join("python3");
+        std::fs::write(&exe, b"").unwrap();
+        set_mode(&exe, 0o755);
+        let path = joined(&[first.path(), second.path()]);
+        // root may run anything with an exec bit set, as execve allows.
+        let expected = if unsafe { libc::geteuid() } == 0 {
+            owner_cannot_run
+        } else {
+            exe
+        };
+        assert_eq!(find_on_path_in("python3", Some(path)), Some(expected));
     }
 
     #[test]
