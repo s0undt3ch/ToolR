@@ -20,6 +20,11 @@ CI builds two PyPI wheels at the same workspace version:
 
 A GitHub release archive of the standalone binary ships alongside.
 
+`toolr-py` builds `toolr-core` without its default `full` feature, so it links only the `command` and
+`docstrings` modules. A new `toolr-core` dependency must be `optional = true` and listed as `dep:<name>` in
+`full`. To use another `toolr-core` module from `toolr-py`, ungate it in `lib.rs` and make its dependencies
+non-optional, then add them to the allowlist in the `toolr-core-lean-deps` pre-commit hook.
+
 ## Dev setup
 
 You need [mise](https://mise.jdx.dev/). Everything else (Rust, Python, `uv`, `prek`) installs from the repo's `mise.toml`:

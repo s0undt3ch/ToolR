@@ -14,6 +14,8 @@ agent's default skills and memory when they conflict.
 Cargo workspace, four crates, one Python package:
 
 - `crates/toolr-core/` — pure-Rust lib (parser, manifest, freshness, completion engine). No `pyo3`.
+  New dependencies are `optional = true` and listed as `dep:<name>` in the `full` feature; toolr-py
+  builds without `full` and links only `command` and `docstrings` (see `CONTRIBUTING.md`).
 - `crates/toolr/` — the `toolr` binary (clap CLI, dispatch, subprocess control).
 - `crates/toolr-py/` — `pyo3` extension + Python source at `crates/toolr-py/python/toolr/`.
   Ships as the `toolr-py` wheel.
