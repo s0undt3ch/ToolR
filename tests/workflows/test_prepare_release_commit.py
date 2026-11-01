@@ -200,18 +200,21 @@ def test_commit_step_ignores_preexisting_untracked(
     assert prek_calls(bin_dir) == 2
 
 
-def test_skill_refs_regenerated_before_commit_step() -> None:
+def test_skill_refs_checked_before_bump_and_regenerated_after() -> None:
     """The bump rewrites `action.yml`, which a skill reference is generated from.
 
     The commit step fails on prek fixes to files the release didn't change, so the
     reference has to be regenerated before it, as part of the release's own changes.
+    Checking for drift before the bump keeps that regeneration from sweeping stale
+    references on main into the release commit.
     """
     steps = yaml.safe_load(PREPARE_RELEASE_YML.read_text())["jobs"]["prepare-release"]["steps"]
     ids = [step.get("id") for step in steps]
-    regen = [
-        index
-        for index, step in enumerate(steps)
-        if "cargo xtask build-skill-refs" in step.get("run", "")
+    runs = [step.get("run", "").strip() for step in steps]
+    check = [
+        index for index, run in enumerate(runs) if run == "cargo xtask build-skill-refs --check"
     ]
+    regen = [index for index, run in enumerate(runs) if run == "cargo xtask build-skill-refs"]
+    assert check, "no step runs `cargo xtask build-skill-refs --check`"
     assert regen, "no step runs `cargo xtask build-skill-refs`"
-    assert ids.index("bump-version") < regen[0] < ids.index("commit-release")
+    assert check[0] < ids.index("bump-version") < regen[0] < ids.index("commit-release")

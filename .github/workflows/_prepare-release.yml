@@ -142,6 +142,13 @@ jobs:
         if: inputs.github-app-client-id == ''
         uses: ./.github/actions/configure-git
 
+      - name: Check skill references
+        # The regeneration after the bump would otherwise sweep any stale
+        # reference already on main into the release commit.
+        shell: bash
+        run: |
+          cargo xtask build-skill-refs --check
+
       - name: Bump Version
         id: bump-version
         shell: bash
