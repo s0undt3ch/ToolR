@@ -125,10 +125,15 @@ Repo policies:
 
 ## Release notes
 
-User-visible changes queue a note in `release-notes/` with `toolr release-notes add`. CI fails a
-PR with a `feat`/`fix` commit and no note; add a `Release-Notes: skip` trailer to the commit when
-there is nothing for users. Start breaking changes with `**Breaking:**`. See
-`release-notes/README.md`.
+User-visible changes queue a note in `release-notes/` with `toolr release-notes add --text "…"`.
+Without `--text` you get an empty file to edit, which the pre-commit hook rejects until it has
+content. `--append` adds to the branch's existing note.
+
+CI fails a PR that has a `feat`, `fix` or `revert` commit, or any breaking commit (`!` or a
+`BREAKING CHANGE:` footer), and adds no note. A breaking change also needs a note that starts with
+`**Breaking:**`. When there is nothing for users, a `Release-Notes: skip` trailer on any one commit
+exempts the whole PR. Run the same check locally with
+`toolr release-notes check --base <parent branch>`. See `release-notes/README.md`.
 
 ## Pre-commit hooks
 
