@@ -4,7 +4,8 @@ Utilities for testing ToolR commands and command-group discovery.
 ``CommandsTester`` patches the registry storage in
 :mod:`toolr._decorators` and imports every module under the
 ``tools.*`` package so the command-group registry is populated, the
-same way authors register commands at module import time.
+same way authors register commands at module import time. A module
+that fails to import makes ``discover()`` raise an ``ExceptionGroup``.
 
 Usage: ``with CommandsTester(search_path=...) as t`` yields an
 isolated collector available via ``t.collected_command_groups()``.
@@ -26,25 +27,29 @@ from attrs import define
 from attrs import field
 
 
-def _import_tools_modules(warnings: list[str]) -> None:
+def _import_tools_modules() -> list[Exception]:
     """Import every module under the top-level ``tools`` package.
 
-    Failures importing a single module are converted to a warning string
-    and the walk continues — one bad file must not poison discovery.
+    A module that fails to import doesn't stop the walk; every failure is
+    returned, each with a note naming the module that raised it.
     """
     try:
         tools_pkg = importlib.import_module("tools")
-    except ModuleNotFoundError:
-        # No `tools/` package on sys.path; nothing to walk.
-        return
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover - defensive
-        warnings.append(f"failed to import top-level `tools` package: {exc!r}")
-        return
+    except ModuleNotFoundError as exc:
+        if exc.name == "tools":
+            # No `tools/` package on sys.path; nothing to walk.
+            return []
+        exc.add_note("raised while importing `tools`")
+        return [exc]
+    except Exception as exc:  # noqa: BLE001  # reported by the caller
+        exc.add_note("raised while importing `tools`")
+        return [exc]
 
     search_paths = getattr(tools_pkg, "__path__", None)
     if not search_paths:
-        return
+        return []
 
+    errors: list[Exception] = []
     for module_info in pkgutil.walk_packages(search_paths, prefix="tools."):
         try:
             # `module_info.name` is enumerated by pkgutil from the local
@@ -53,7 +58,9 @@ def _import_tools_modules(warnings: list[str]) -> None:
                 module_info.name
             )  # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
         except Exception as exc:  # noqa: BLE001  # we want every error
-            warnings.append(f"failed to import `{module_info.name}`: {type(exc).__name__}: {exc}")
+            exc.add_note(f"raised while importing `{module_info.name}`")
+            errors.append(exc)
+    return errors
 
 
 @define(slots=True, frozen=True)
@@ -109,9 +116,19 @@ class CommandsTester:
         Imports every module under the ``tools.*`` package so the
         command-group registry is populated, the same way authors
         register commands at module import time.
+
+        Raises:
+            ExceptionGroup: One or more ``tools`` modules failed to import,
+                for example because a command has no docstring. Every
+                module is imported first; the group holds each failure.
         """
-        warnings: list[str] = []
-        _import_tools_modules(warnings)
+        errors = _import_tools_modules()
+        if errors:
+            msg = (
+                f"CommandsTester.discover(): {len(errors)} module(s) under "
+                f"{self.search_path / 'tools'} failed to import"
+            )
+            raise ExceptionGroup(msg, errors)
 
     def __enter__(self) -> Self:
         """

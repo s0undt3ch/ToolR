@@ -3,39 +3,119 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
+
+import pytest
 
 from toolr import Context
 from toolr import command_group
 from toolr.testing import CommandsTester
 
+CI_MODULE = (
+    "from toolr import command_group\n"
+    'group = command_group("ci", "CI utils", "CI utilities")\n'
+    "@group.command\n"
+    "def hello(ctx):\n"
+    '    """Say hi."""\n'
+)
+BAD_MODULE = (
+    "from toolr import command_group\n"
+    'g = command_group("bad", "Bad", "Bad")\n'
+    "@g.command\n"
+    "def nodoc(ctx):\n"
+    "    pass\n"
+)
+BROKEN_MODULE = "raise RuntimeError('boom')\n"
 
-def test_discover_walks_a_real_tools_package(tmp_path: Path) -> None:
-    """`CommandsTester.discover()` imports every module under a real
-    `tools/` package, exercising the `pkgutil` walk in
-    `_import_tools_modules`. The shared `commands_tester` fixture runs
-    `discover()` on an empty dir, which only hits the
-    `ModuleNotFoundError` early-return — never the walk loop."""
-    tools = tmp_path / "tools"
-    tools.mkdir()
-    (tools / "__init__.py").write_text("")
-    (tools / "ci.py").write_text(
-        "from toolr import command_group\n"
-        'group = command_group("ci", "CI utils", "CI utilities")\n'
-        "@group.command\n"
-        "def hello(ctx):\n"
-        '    """Say hi."""\n'
-    )
-    # A second module that fails to import, so the walk exercises both the
-    # success path (ci) and the per-module `except` (which records a warning
-    # and continues — one bad file must not poison discovery).
-    (tools / "broken.py").write_text("raise RuntimeError('boom')\n")
+
+@pytest.fixture
+def tools_repo(tmp_path: Path) -> Callable[[dict[str, str]], Path]:
+    """Write a fixture repo under `tmp_path` and return its root.
+
+    `tools/__init__.py` is written empty unless the mapping sets it; every
+    other `{relative_path: source}` entry is written as given.
+    """
+
+    def factory(files: dict[str, str]) -> Path:
+        (tmp_path / "tools").mkdir()
+        files = {"tools/__init__.py": "", **files}
+        for relative, source in files.items():
+            target = tmp_path / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(source)
+        return tmp_path
+
+    return factory
+
+
+def test_discover_raises_after_walking_every_module(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """A module that fails to import makes `discover()` raise, but only after
+    the walk has imported every other module."""
+    repo = tools_repo({"tools/ci.py": CI_MODULE, "tools/broken.py": BROKEN_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        with pytest.raises(ExceptionGroup) as excinfo:
+            tester.discover()
+        walked = "tools.ci" in sys.modules
+    assert walked, "discover() should have imported tools.ci before raising"
+    assert excinfo.group_contains(RuntimeError, match="boom")
+    (error,) = excinfo.value.exceptions
+    assert "raised while importing `tools.broken`" in error.__notes__
+
+
+def test_discover_raises_on_undocumented_command(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """An undocumented command fails discovery the way the manifest build does."""
+    repo = tools_repo({"tools/bad.py": BAD_MODULE})
+    with CommandsTester(search_path=repo) as tester, pytest.raises(ExceptionGroup) as excinfo:
+        tester.discover()
+    assert excinfo.group_contains(ValueError, match="add a docstring")
+
+
+def test_discover_reports_every_failing_module(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """Every broken module is reported in one group, not just the first."""
+    repo = tools_repo({"tools/bad.py": BAD_MODULE, "tools/broken.py": BROKEN_MODULE})
+    with CommandsTester(search_path=repo) as tester, pytest.raises(ExceptionGroup) as excinfo:
+        tester.discover()
+    assert len(excinfo.value.exceptions) == 2
+    assert "2 module(s)" in str(excinfo.value)
+
+
+def test_discover_raises_when_tools_package_import_fails(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """A `ModuleNotFoundError` from inside `tools/__init__.py` is a failure,
+    not the "no `tools` package" case."""
+    repo = tools_repo({"tools/__init__.py": "import toolr_missing_dependency_xyz\n"})
+    with CommandsTester(search_path=repo) as tester, pytest.raises(ExceptionGroup) as excinfo:
+        tester.discover()
+    assert excinfo.group_contains(ModuleNotFoundError)
+    (error,) = excinfo.value.exceptions
+    assert "raised while importing `tools`" in error.__notes__
+
+
+def test_discover_without_tools_package_is_a_no_op(tmp_path: Path) -> None:
+    """A search path without `tools/` discovers nothing and doesn't raise."""
     with CommandsTester(search_path=tmp_path) as tester:
         tester.discover()
-        # The walk imported every `tools.*` module — proving the loop ran
-        # (not just the `ModuleNotFoundError` early-return path).
-        walked = "tools.ci" in sys.modules
-    assert walked, "discover() should have imported tools.ci via the pkgutil walk"
+        assert tester.collected_command_groups() == {}
+
+
+def test_discover_imports_a_single_file_tools_module(tmp_path: Path) -> None:
+    """A `tools.py` module (no package to walk) is imported and its group collected."""
+    (tmp_path / "tools.py").write_text(
+        "from toolr import command_group\n"
+        'group = command_group("single", "Single", "Single file")\n'
+    )
+    with CommandsTester(search_path=tmp_path) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    assert "tools.single" in groups
 
 
 def test_commands_tester_restores_sys_modules(tmp_path: Path) -> None:

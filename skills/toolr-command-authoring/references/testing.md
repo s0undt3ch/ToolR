@@ -70,6 +70,11 @@ Imports every module under the ``tools.*`` package so the
 command-group registry is populated, the same way authors
 register commands at module import time.
 
+Raises:
+    ExceptionGroup: One or more ``tools`` modules failed to import,
+        for example because a command has no docstring. Every
+        module is imported first; the group holds each failure.
+
 ```
 
 ### `ContextForTesting`
