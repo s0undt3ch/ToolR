@@ -20,10 +20,17 @@ use toolr_core::manifest::{Manifest, ManifestError, SCHEMA_VERSION, load_manifes
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
-        Err(e) => {
-            eprintln!("toolr: {e:#}");
-            ExitCode::from(2)
-        }
+        // A clap error raised after parsing prints the way clap prints it.
+        Err(e) => match e.downcast_ref::<clap::Error>() {
+            Some(clap_err) => {
+                let _ = clap_err.print();
+                ExitCode::from(clap_err.exit_code() as u8)
+            }
+            None => {
+                eprintln!("toolr: {e:#}");
+                ExitCode::from(2)
+            }
+        },
     }
 }
 

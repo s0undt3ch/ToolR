@@ -73,15 +73,19 @@ fn missing_relative_default_errors_naming_repo_root() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
     assert!(
-        stderr.contains("default 'tools/missing.toml'"),
+        stderr.starts_with(
+            "error: default 'tools/missing.toml' for '--cfg <cfg>' (resolved from the repo root "
+        ),
         "stderr:\n{stderr}"
     );
-    assert!(
-        stderr.contains("resolved from the repo root"),
-        "stderr:\n{stderr}"
-    );
+    assert_one_clap_line(&stderr);
 }
 
+/// Rendered by clap, as a bad value on any other path arg is: one
+/// `error:` line, no `toolr:` prefix.
+fn assert_one_clap_line(stderr: &str) {
+    assert_eq!(stderr.lines().count(), 1, "stderr:\n{stderr}");
+}
 #[test]
 fn typed_missing_value_from_subdirectory_fails_before_running() {
     let tmp = project_with_default("tools/pyproject.toml");
@@ -89,9 +93,12 @@ fn typed_missing_value_from_subdirectory_fails_before_running() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
     assert!(
-        stderr.contains("path does not exist: nope.toml"),
+        stderr.starts_with(
+            "error: invalid value 'nope.toml' for '--cfg <cfg>': path does not exist: nope.toml"
+        ),
         "stderr:\n{stderr}"
     );
+    assert_one_clap_line(&stderr);
 }
 
 #[test]
@@ -204,6 +211,23 @@ fn valid_relative_default_from_subdirectory_passes_the_repo_root_path() {
         &output,
         &project.root().join("tools").join("pyproject.toml"),
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn bad_env_value_renders_like_clap_naming_the_variable() {
+    let project = EchoProject::new();
+    let output = project.run(&["demo", "envy"], Some(("DEMO_CFG", "nope.toml")));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
+    assert!(
+        stderr.starts_with(
+            "error: invalid value 'nope.toml' for '--cfg <cfg>' (from DEMO_CFG): \
+             path does not exist: nope.toml"
+        ),
+        "stderr:\n{stderr}"
+    );
+    assert_one_clap_line(&stderr);
 }
 
 #[cfg(unix)]

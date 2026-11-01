@@ -451,9 +451,54 @@ fn extract_scalar(
     })
 }
 
+/// Where a deferred path value that failed its check came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PathValueOrigin {
+    Typed,
+    Env(String),
+    Default { repo_root: PathBuf },
+}
+
+/// A deferred path value that failed its check. `dispatch` renders it as a
+/// clap error against the command that owns `arg`; `Display` is the
+/// fallback with the plain long-flag spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PathValueError {
+    /// The clap arg id (the manifest argument name).
+    pub arg: String,
+    pub flag: String,
+    pub value: String,
+    pub origin: PathValueOrigin,
+    pub reason: String,
+}
+
+impl PathValueError {
+    /// The message with `shown` as the arg's spelling (clap's `--cfg <cfg>`).
+    pub(crate) fn message(&self, shown: &str) -> String {
+        let Self { value, reason, .. } = self;
+        match &self.origin {
+            PathValueOrigin::Typed => format!("invalid value '{value}' for '{shown}': {reason}"),
+            PathValueOrigin::Env(var) => {
+                format!("invalid value '{value}' for '{shown}' (from {var}): {reason}")
+            }
+            PathValueOrigin::Default { repo_root } => format!(
+                "default '{value}' for '{shown}' (resolved from the repo root {}): {reason}",
+                repo_root.display()
+            ),
+        }
+    }
+}
+
+impl std::fmt::Display for PathValueError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message(&self.flag))
+    }
+}
+
+impl std::error::Error for PathValueError {}
+
 /// Resolve a deferred path arg's raw value: from the repo root when it is
-/// the default, from the cwd when typed or read from its env var. Errors
-/// read like clap's.
+/// the default, from the cwd when typed or read from its env var.
 fn resolve_deferred(
     arg: &Argument,
     matches: &ArgMatches,
@@ -464,27 +509,25 @@ fn resolve_deferred(
         .resolved_type
         .as_ref()
         .expect("a deferred path arg has a resolved type");
-    let flag = arg_long_flag_spelling(arg).unwrap_or_default();
-    let source = matches.value_source(arg.name.as_str());
-    let is_default = source == Some(ValueSource::DefaultValue);
-    let base = if is_default {
-        bases.repo_root
-    } else {
-        bases.cwd
-    };
-    let path = resolve_path(ty, raw, base).map_err(|e| {
-        let raw = raw.display();
-        match source {
-            Some(ValueSource::DefaultValue) => anyhow::anyhow!(
-                "default '{raw}' for '{flag}' (resolved from the repo root {}): {e}",
-                bases.repo_root.display(),
-            ),
-            Some(ValueSource::EnvVariable) => {
-                let var = arg.metadata.env.as_deref().unwrap_or_default();
-                anyhow::anyhow!("invalid value '{raw}' for '{flag}' (from {var}): {e}")
-            }
-            _ => anyhow::anyhow!("invalid value '{raw}' for '{flag}': {e}"),
+    let origin = match matches.value_source(arg.name.as_str()) {
+        Some(ValueSource::DefaultValue) => PathValueOrigin::Default {
+            repo_root: bases.repo_root.to_path_buf(),
+        },
+        Some(ValueSource::EnvVariable) => {
+            PathValueOrigin::Env(arg.metadata.env.clone().unwrap_or_default())
         }
+        _ => PathValueOrigin::Typed,
+    };
+    let base = match origin {
+        PathValueOrigin::Default { .. } => bases.repo_root,
+        _ => bases.cwd,
+    };
+    let path = resolve_path(ty, raw, base).map_err(|reason| PathValueError {
+        arg: arg.name.clone(),
+        flag: arg_long_flag_spelling(arg).unwrap_or_default(),
+        value: raw.display().to_string(),
+        origin,
+        reason,
     })?;
     Ok(Value::String(path.to_string_lossy().into_owned()))
 }
