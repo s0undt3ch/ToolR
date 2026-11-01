@@ -689,10 +689,19 @@ mod tests {
         assert!(!ldd_reports_musl_in(Some(gnu.path().into())));
     }
 
+    #[cfg(unix)]
     #[test]
-    fn ldd_reports_musl_is_false_without_an_absolute_ldd() {
+    fn ldd_reports_musl_ignores_an_ldd_reached_through_a_relative_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        stub_ldd(dir.path(), "", "musl libc (x86_64)");
+        let rel = crate::path_search::relative_to_cwd(dir.path());
+        assert!(rel.is_relative() && rel.join("ldd").is_file(), "{rel:?}");
+        assert!(!ldd_reports_musl_in(Some(rel.into())));
+    }
+
+    #[test]
+    fn ldd_reports_musl_is_false_with_path_unset() {
         assert!(!ldd_reports_musl_in(None));
-        assert!(!ldd_reports_musl_in(Some(".:bin".into())));
     }
 
     #[test]
