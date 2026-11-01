@@ -260,7 +260,7 @@ pub fn run_command_internal(
     })?;
 
     // Written from its own thread once the readers run: a child that fills its
-    // stdout pipe before reading stdin would otherwise deadlock us (F-08).
+    // stdout pipe before reading stdin would otherwise deadlock us.
     let stdin_payload = child.stdin.take().zip(config.input.take());
 
     // Take stdout and stderr pipes — `None` in interactive mode, where
@@ -450,7 +450,7 @@ pub fn run_command_internal(
     });
 
     // Spawned after the readers. On timeout the kill closes the pipe and the
-    // thread ends on its own, unless a grandchild still holds stdin (F-21).
+    // thread ends on its own, unless a grandchild still holds stdin (a known gap).
     let stdin_thread = stdin_payload.map(|(stdin, input)| spawn_stdin_writer(stdin, input));
 
     // Wait for command completion with timeout handling
@@ -510,6 +510,7 @@ pub fn run_command_internal(
         let _ = t.join();
     }
 
+    // Returned only now, so a write error doesn't leave the readers unjoined.
     stdin_result.map_err(Box::new)?;
 
     // Get exit code and return it, regardless of value

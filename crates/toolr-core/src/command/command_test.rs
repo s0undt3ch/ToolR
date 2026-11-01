@@ -461,7 +461,7 @@ mod test_suite {
         Ok(())
     }
 
-    mod tokio_tests {
+    mod subprocess_tests {
         use super::*;
         use std::sync::mpsc;
         use tokio::runtime::Runtime;
@@ -751,9 +751,17 @@ mod test_suite {
             Ok(())
         }
 
-        /// Script that fills its stdout pipe before it reads stdin (F-08).
-        const OUTPUT_FIRST_SCRIPT: &str =
-            "import sys; sys.stdout.write('x'*200000); sys.stdout.flush(); sys.stdin.buffer.read()";
+        /// Must exceed the OS pipe buffer (~64 KiB), or the test passes against the deadlock.
+        const PAST_PIPE_BUFFER: usize = 200_000;
+
+        /// Child that fills its stdout pipe before it reads stdin. Shared with
+        /// `test_input_larger_than_pipe_buffer_with_output_first` in
+        /// `tests/utils/command/test_command.py`.
+        fn output_first_script() -> String {
+            format!(
+                "import sys; sys.stdout.write('x'*{PAST_PIPE_BUFFER}); sys.stdout.flush(); sys.stdin.buffer.read()"
+            )
+        }
 
         #[test]
         fn input_larger_than_pipe_with_output_first_does_not_deadlock() -> Result<()> {
@@ -767,8 +775,8 @@ mod test_suite {
             let stderr_fd = get_file_descriptor(stderr_file.as_file());
 
             let config = CommandConfig {
-                args: vec![python, "-c".to_string(), OUTPUT_FIRST_SCRIPT.to_string()],
-                input: Some(vec![b'y'; 200000]),
+                args: vec![python, "-c".to_string(), output_first_script()],
+                input: Some(vec![b'y'; PAST_PIPE_BUFFER]),
                 stdout_fd: wrap_fd(stdout_fd),
                 stderr_fd: wrap_fd(stderr_fd),
                 timeout_secs: Some(30.0),
@@ -781,7 +789,7 @@ mod test_suite {
             stdout_file.seek(SeekFrom::Start(0))?;
             let mut captured = Vec::new();
             stdout_file.read_to_end(&mut captured)?;
-            assert_eq!(captured.len(), 200000);
+            assert_eq!(captured.len(), PAST_PIPE_BUFFER);
 
             Ok(())
         }
@@ -795,7 +803,7 @@ mod test_suite {
                     "-c".to_string(),
                     "import sys; sys.stdin.buffer.read(1)".to_string(),
                 ],
-                input: Some(vec![b'y'; 200000]),
+                input: Some(vec![b'y'; PAST_PIPE_BUFFER]),
                 ..Default::default()
             };
 
@@ -814,7 +822,7 @@ mod test_suite {
                     "-c".to_string(),
                     "import time; time.sleep(10)".to_string(),
                 ],
-                input: Some(vec![b'y'; 200000]),
+                input: Some(vec![b'y'; PAST_PIPE_BUFFER]),
                 timeout_secs: Some(0.5),
                 ..Default::default()
             };
