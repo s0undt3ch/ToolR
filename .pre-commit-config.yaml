@@ -100,6 +100,13 @@ repos:
             tools/precommit/(workflows|_common)\.py$
           )$
 
+      - id: release-notes
+        name: Validate queued release notes
+        entry: toolr release-notes check
+        language: system
+        pass_filenames: false
+        files: ^(release-notes/|UNRELEASED\.md$)
+
       - id: regen-doc-snippets
         name: Verify doc snippets are in sync
         entry: toolr pre-commit regen-doc-snippets --check
