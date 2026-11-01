@@ -144,5 +144,8 @@ upgrading the action.
 
 Pressing Ctrl-C during a toolr command now interrupts it once. toolr used to forward the terminal's SIGINT to the
 command as well, so a second `KeyboardInterrupt` could cut a `finally:` or `except KeyboardInterrupt:` block short.
-toolr now forwards SIGTERM only, so `kill -INT` aimed at the `toolr` process alone no longer reaches the command; signal
-the process group or send SIGTERM instead.
+toolr now forwards SIGTERM, and forwards SIGINT only when it can tell another process sent it. On Linux, a SIGINT sent
+to the `toolr` process alone (`kill -INT`, `Popen.send_signal`) still reaches the command, while one sent to the whole
+process group with `killpg` reaches it twice. On macOS, where a Ctrl-C and a `kill` look the same, toolr never forwards
+SIGINT, so `kill -INT` aimed at the `toolr` process alone no longer reaches the command; signal the process group or
+send SIGTERM instead.
