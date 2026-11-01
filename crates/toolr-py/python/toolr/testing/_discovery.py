@@ -35,13 +35,10 @@ def _import_tools_modules() -> list[Exception]:
     """
     try:
         tools_pkg = importlib.import_module("tools")
-    except ModuleNotFoundError as exc:
-        if exc.name == "tools":
+    except Exception as exc:  # noqa: BLE001  # reported by the caller
+        if isinstance(exc, ModuleNotFoundError) and exc.name == "tools":
             # No `tools/` package on sys.path; nothing to walk.
             return []
-        exc.add_note("raised while importing `tools`")
-        return [exc]
-    except Exception as exc:  # noqa: BLE001  # reported by the caller
         exc.add_note("raised while importing `tools`")
         return [exc]
 

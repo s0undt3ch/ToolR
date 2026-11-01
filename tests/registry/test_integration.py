@@ -113,6 +113,18 @@ def test_discover_raises_when_tools_package_import_fails(
     assert "raised while importing `tools`" in error.__notes__
 
 
+def test_discover_raises_when_tools_package_raises(
+    tools_repo: Callable[[dict[str, str]], Path],
+) -> None:
+    """Any other exception from `tools/__init__.py` is reported the same way."""
+    repo = tools_repo({"tools/__init__.py": BROKEN_MODULE})
+    with CommandsTester(search_path=repo) as tester, pytest.raises(ExceptionGroup) as excinfo:
+        tester.discover()
+    assert excinfo.group_contains(RuntimeError, match="boom")
+    (error,) = excinfo.value.exceptions
+    assert "raised while importing `tools`" in error.__notes__
+
+
 def test_discover_without_tools_package_is_a_no_op(tmp_path: Path) -> None:
     """A search path without `tools/` discovers nothing and doesn't raise."""
     with CommandsTester(search_path=tmp_path) as tester:
