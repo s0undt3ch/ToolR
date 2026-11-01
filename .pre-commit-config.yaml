@@ -197,13 +197,13 @@ repos:
         pass_filenames: false
 
       # toolr-py builds toolr-core without its `full` feature, but feature
-      # unification means no workspace build ever does, so check it here.
+      # unification means no workspace build ever does, so check both here.
       - id: cargo-check-toolr-core-lean
-        name: clippy (toolr-core without default features)
-        entry: cargo clippy -p toolr-core --no-default-features --all-targets -- -D warnings
+        name: clippy (toolr-core without default features, and toolr-py)
+        entry: bash -c 'cargo clippy -p toolr-core --no-default-features --all-targets -- -D warnings && cargo clippy -p toolr-py --all-targets -- -D warnings'
         language: system
         pass_filenames: false
-        files: ^(crates/toolr-core/.*\.rs|Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
+        files: ^(crates/toolr-(core|py)/.*\.rs|Cargo\.toml|Cargo\.lock|crates/[^/]+/Cargo\.toml)$
 
       # The extension needs only toolr-core's `command` and `docstrings`; keep
       # the CLI's async, HTTP, archive and parser stacks out of its build.
