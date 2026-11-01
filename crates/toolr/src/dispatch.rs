@@ -19,7 +19,7 @@ use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
 
 use crate::execute_build::{
-    OutputOptions, PathBases, build_dispatch_spec, build_spec, pack_child_args,
+    OutputOptions, PathBases, PathValueError, build_dispatch_spec, build_spec, pack_child_args,
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -79,6 +79,34 @@ fn help_mode_from_argv(argv: &[String]) -> HelpMode {
 ///
 /// We resolve the target command by walking the raw argv token-by-token
 /// through the clap Command tree, stopping at the deepest named subcommand.
+/// Turn a [`PathValueError`] into the one-line clap error clap itself
+/// prints for a bad value, spelling the arg as the command on `path` that
+/// owns it does (`--cfg <cfg>`). Other errors pass through.
+fn render_path_value_error(
+    err: anyhow::Error,
+    root: &mut clap::Command,
+    path: &[String],
+) -> anyhow::Error {
+    let Some(bad) = err.downcast_ref::<PathValueError>() else {
+        return err;
+    };
+    // An arg only renders as `--cfg <cfg>` once its command is built.
+    root.build();
+    let root = &*root;
+    let shown = path
+        .iter()
+        .scan(root, |cmd, name| {
+            *cmd = cmd.find_subcommand(name)?;
+            Some(*cmd)
+        })
+        .filter_map(|cmd| cmd.get_arguments().find(|a| a.get_id() == bad.arg.as_str()))
+        .last()
+        .map_or_else(|| bad.flag.clone(), ToString::to_string);
+    clap::Error::raw(clap::error::ErrorKind::ValueValidation, bad.message(&shown))
+        .with_cmd(root)
+        .into()
+}
+
 pub fn dispatch_help_from_argv(
     argv: &[String],
     _manifest: &Manifest,
@@ -215,30 +243,33 @@ pub fn dispatch(
     // iterate the dispatcher's OWN arguments (the --cpu/--ram-style
     // outer flags) and extract them from `parent_matches`, instead of
     // iterating the leaf's arguments (which are packed in `packed`).
-    let spec = if cmd.dispatched_from.is_some() {
-        let packed = pack_child_args(cmd, cmd_matches, &bases)?;
-        // The dispatcher's manifest entry shares `(module, function)`
-        // with each of its grafted children (the argparse pipeline
-        // copies those fields onto the children at graft time). Find
-        // the dispatcher's own entry by matching that pair and
-        // requiring `is_dispatcher = true` so we don't accidentally
-        // grab a sibling child.
-        let dispatcher = manifest
-            .commands
-            .iter()
-            .find(|p| p.is_dispatcher && p.module == cmd.module && p.function == cmd.function)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "dispatcher manifest entry for `{}` (module `{}`, function `{}`) not found",
-                    cmd.name,
-                    cmd.module,
-                    cmd.function,
-                )
-            })?;
-        build_dispatch_spec(dispatcher, parent_matches, packed, &bases, &output_opts)?
-    } else {
-        build_spec(cmd, cmd_matches, &bases, &output_opts)?
-    };
+    let spec = (|| -> anyhow::Result<_> {
+        Ok(if cmd.dispatched_from.is_some() {
+            let packed = pack_child_args(cmd, cmd_matches, &bases)?;
+            // The dispatcher's manifest entry shares `(module, function)`
+            // with each of its grafted children (the argparse pipeline
+            // copies those fields onto the children at graft time). Find
+            // the dispatcher's own entry by matching that pair and
+            // requiring `is_dispatcher = true` so we don't accidentally
+            // grab a sibling child.
+            let dispatcher = manifest
+                .commands
+                .iter()
+                .find(|p| p.is_dispatcher && p.module == cmd.module && p.function == cmd.function)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "dispatcher manifest entry for `{}` (module `{}`, function `{}`) not found",
+                        cmd.name,
+                        cmd.module,
+                        cmd.function,
+                    )
+                })?;
+            build_dispatch_spec(dispatcher, parent_matches, packed, &bases, &output_opts)?
+        } else {
+            build_spec(cmd, cmd_matches, &bases, &output_opts)?
+        })
+    })()
+    .map_err(|e| render_path_value_error(e, root, &path))?;
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
     // host-Python path imports `tools/*.py` directly. Building the spec above
     // runs none of it, so a bad path value is reported before the trust prompt.
