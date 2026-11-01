@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev187-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev193-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev187 - 2026-11-01
+        0.35.2-dev193 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev187 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev193 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev187-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev193-2026-11-01" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev187 - 2026-11-01
+        0.35.2-dev193 - 2026-11-01
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev187 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev193 - 2026-11-01">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev187-2026-11-01">0.35.2-dev187 - 2026-11-01<a class="headerlink" href="#0352-dev187-2026-11-01" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev193-2026-11-01">0.35.2-dev193 - 2026-11-01<a class="headerlink" href="#0352-dev193-2026-11-01" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7621,6 +7621,9 @@ still cache the manifest as before.</p>
 its input. toolr now feeds stdin from a separate thread, so the timeouts apply while the command
 runs and reads it. A command that exits without reading all of its input no longer raises "Failed
 to write to stdin"; its exit code is returned as usual.</p>
+<p>The Setup ToolR action's <code>version: latest</code> now always resolves to the newest ToolR release. It used to
+ask for the newest release of the repository running the workflow first, so a repository with releases of
+its own got its own tag back and the install failed or picked the wrong toolr version.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7682,6 +7685,7 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(release)</em> Show what prek changed outside the release before failing (<a href="https://github.com/s0undt3ch/ToolR/commit/4268e68c492c96600fa771d60f2e26b86d808391"><code>4268e68</code></a>)</li>
 <li><em>(release)</em> Fail release prep on skill reference drift already on main (<a href="https://github.com/s0undt3ch/ToolR/commit/6852da9b04671551524f4efa58c6e4bba79f35e2"><code>6852da9</code></a>)</li>
 <li><em>(release)</em> Handle quoted paths and show the diff when prek fails (<a href="https://github.com/s0undt3ch/ToolR/commit/0d958d3ef0e0a595611a7c60071483db6d7a6a98"><code>0d958d3</code></a>)</li>
+<li><em>(action)</em> Resolve version latest against s0undt3ch/ToolR only (<a href="https://github.com/s0undt3ch/ToolR/commit/c5d4ecfebd9ce96d2297882ff86fe729790f1c22"><code>c5d4ecf</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7752,6 +7756,9 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(specs)</em> Spec and plan F-24 release prek failures (<a href="https://github.com/s0undt3ch/ToolR/commit/d1994c6c854a80aa7ac2feb44b1876a30e67a8d7"><code>d1994c6</code></a>)</li>
 <li><em>(specs)</em> Archive release prek failures design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/77573adcff21de5ecbf98ff6e21791757664e5b1"><code>77573ad</code></a>)</li>
 <li><em>(specs)</em> Note the pre-bump skill reference check in the release prek design (<a href="https://github.com/s0undt3ch/ToolR/commit/e71a3935064482dcc77052c7a5f756aa9dfc539a"><code>e71a393</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-22 action latest repo (<a href="https://github.com/s0undt3ch/ToolR/commit/2c70ad823dee316996727fae4165acdfe49fc195"><code>2c70ad8</code></a>)</li>
+<li><em>(unreleased)</em> Note the action's latest-version lookup fix (<a href="https://github.com/s0undt3ch/ToolR/commit/fcee1a03033eac68de7b7d67c86241d486ed03c9"><code>fcee1a0</code></a>)</li>
+<li><em>(specs)</em> Archive action latest repo design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/1ab49bdee01388565fd9a19f24e5bbf62e0dbef6"><code>1ab49bd</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7785,6 +7792,7 @@ to write to stdin"; its exit code is returned as usual.</p>
 <li><em>(command)</em> Bound the stdin deadlock regression test from outside (<a href="https://github.com/s0undt3ch/ToolR/commit/2e227314d12ddd593a66fec6e0cb12aacce924dd"><code>2e22731</code></a>)</li>
 <li><em>(command)</em> Make the stdin deadlock tests fail instead of hang (<a href="https://github.com/s0undt3ch/ToolR/commit/e0cd89584b1fe7515231af7fe93dfe9701939c84"><code>e0cd895</code></a>)</li>
 <li><em>(release)</em> Prove the strict prek pass is what fails the commit step (<a href="https://github.com/s0undt3ch/ToolR/commit/75d0f8ff9d4ddcc491810c66a14df9b3aeb5c452"><code>75d0f8f</code></a>)</li>
+<li><em>(action)</em> Simplify the resolve-version harness (<a href="https://github.com/s0undt3ch/ToolR/commit/5cd23f3679a18e3c4dd533432f16eefb1d7a9f79"><code>5cd23f3</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
