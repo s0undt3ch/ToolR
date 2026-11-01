@@ -28,6 +28,8 @@ pub mod manifest_build;
 #[cfg(feature = "full")]
 pub mod parser;
 #[cfg(feature = "full")]
+pub mod path_search;
+#[cfg(feature = "full")]
 pub mod project;
 #[cfg(all(test, feature = "full"))]
 mod test_env;
