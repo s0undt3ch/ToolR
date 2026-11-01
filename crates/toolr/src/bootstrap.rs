@@ -1,7 +1,10 @@
 //! Pre-clap bootstrap: detect missing `tools/.toolr-manifest.json`
 //! and run a full rebuild before clap parses the user's command.
-//! Rebuilds are written to disk only in a trusted repository; an
-//! untrusted one gets an in-memory manifest and is left untouched.
+//!
+//! Both steps take `persist` from [`persist_manifest`]: rebuilds are
+//! written to disk only in a trusted repository (or with
+//! `TOOLR_TRUST_ALL=1`). An untrusted one gets an in-memory manifest and
+//! any existing file is left exactly as found.
 //!
 //! See `specs/archive/2026/2026-05-19-fill-the-gaps-design.md` (gap 1) for the
 //! decision logic.
@@ -28,9 +31,8 @@ use toolr_core::venv::resolve_venv_path;
 /// third-party commands are picked up by an execution-free glob of an
 /// already-existing venv's `site-packages/*/toolr-manifest.json`.
 ///
-/// Only a trusted repository (or `TOOLR_TRUST_ALL=1`) gets the file;
-/// in an untrusted one this does nothing and [`ensure_manifest_fresh`]
-/// builds the manifest in memory instead.
+/// Does nothing unless `persist`; [`ensure_manifest_fresh`] then builds
+/// the manifest in memory.
 ///
 /// Errors propagate so `main.rs` can print them and exit non-zero — we
 /// intentionally do NOT fall through to an empty manifest, since that's
@@ -38,6 +40,7 @@ use toolr_core::venv::resolve_venv_path;
 pub(crate) fn ensure_manifest_present_or_bootstrap(
     cwd: &Path,
     argv: &[String],
+    persist: bool,
 ) -> anyhow::Result<()> {
     let Ok(root) = discover_project_root(cwd) else {
         return Ok(());
@@ -52,7 +55,7 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
     if should_skip_auto_rebuild(argv) {
         return Ok(());
     }
-    if !toolr_core::trust::is_trusted_now(&root) {
+    if !persist {
         return Ok(());
     }
 
@@ -88,8 +91,7 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
 /// We still skip the built-ins that manage their own state
 /// (`__complete`, `project`, `self`, `init`) and `--version` (prints
 /// binary metadata only). `--help` and bare `toolr` take the static
-/// build so help renders the user's command tree; it is persisted only
-/// in a trusted repository.
+/// build so help renders the user's command tree.
 pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
     const BUILTINS: &[&str] = &["__complete", "project", "self", "init"];
     const VERSION_FLAGS: &[&str] = &["--version", "-V"];
@@ -117,10 +119,6 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
 /// in-process (pure Rust, no Python), persist the result, and fall
 /// back to the cached manifest with a warning when a rebuild errors.
 ///
-/// The result is persisted only in a trusted repository (or with
-/// `TOOLR_TRUST_ALL=1`). In an untrusted one the rebuild stays in
-/// memory and a stale or corrupt file is left exactly as found.
-///
 /// Returns the manifest this step validated or rebuilt, so the caller
 /// dispatches against it instead of re-reading a file another toolr
 /// process may be rewriting (#542). `Ok(None)` means the step didn't
@@ -130,16 +128,7 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
 pub(crate) fn ensure_manifest_fresh(
     cwd: &Path,
     argv: &[String],
-) -> anyhow::Result<Option<Manifest>> {
-    fresh_manifest(cwd, argv, toolr_core::trust::is_trusted_now)
-}
-
-/// [`ensure_manifest_fresh`] with the persist decision injected, so tests
-/// don't consult the real trust store.
-fn fresh_manifest(
-    cwd: &Path,
-    argv: &[String],
-    persist: impl FnOnce(&Path) -> bool,
+    persist: bool,
 ) -> anyhow::Result<Option<Manifest>> {
     let Ok(root) = discover_project_root(cwd) else {
         return Ok(None);
@@ -151,14 +140,13 @@ fn fresh_manifest(
     if should_skip_auto_rebuild(argv) {
         return Ok(None);
     }
-    let persist = persist(&root);
 
     let manifest_path = tools.join(".toolr-manifest.json");
     let venv_dir: Option<std::path::PathBuf> = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
 
-    // `check` runs twice when stale (before and under the rebuild lock):
-    // warn about an unreadable manifest once, and keep a fresh one so the
-    // caller dispatches against it.
+    // When persisting, `check` runs twice if stale (before and under the
+    // rebuild lock): warn about an unreadable manifest once, and keep a
+    // fresh one so the caller dispatches against it.
     let mut warned = false;
     let mut fresh_cache = None;
     let check = || -> anyhow::Result<Option<(FreshnessVerdict, Option<Manifest>)>> {
@@ -182,6 +170,8 @@ fn fresh_manifest(
         }
         Ok(Some((verdict, cached)))
     };
+    // `persist` gates both the write in `rebuild` and the lock below; the
+    // in-memory path needs neither.
     let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| match try_rebuild(
         verdict,
         &tools,
@@ -203,7 +193,6 @@ fn fresh_manifest(
     let outcome = if persist {
         rebuild_if_stale(&manifest_path, check, rebuild)?
     } else {
-        // No write, so no lock: the rebuild only lives in this process.
         let mut check = check;
         match check()? {
             Some(stale) => Some(rebuild(stale)?),
@@ -211,6 +200,14 @@ fn fresh_manifest(
         }
     };
     Ok(outcome.unwrap_or(fresh_cache))
+}
+
+/// Whether the bootstrap steps should write the manifest for this run:
+/// only in a trusted repository, and only when they would build at all
+/// (so `--version` and tab completion never read the trust store).
+pub(crate) fn persist_manifest(cwd: &Path, argv: &[String]) -> bool {
+    !should_skip_auto_rebuild(argv)
+        && discover_project_root(cwd).is_ok_and(|root| toolr_core::trust::is_trusted_now(&root))
 }
 
 fn try_rebuild(
@@ -314,7 +311,10 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{carry_forward_cached_entries, fresh_manifest, should_skip_auto_rebuild};
+    use super::{
+        carry_forward_cached_entries, ensure_manifest_fresh, ensure_manifest_present_or_bootstrap,
+        should_skip_auto_rebuild,
+    };
     use toolr_core::freshness::FreshnessVerdict;
     use toolr_core::manifest::{
         Group, Manifest, Origin, PluginWarning, PluginWarningKind, SCHEMA_VERSION,
@@ -474,7 +474,7 @@ mod tests {
     fn ensure_manifest_fresh_rebuilds_a_missing_manifest() {
         let tmp = tools_repo();
 
-        let fresh = fresh_manifest(tmp.path(), &[], |_| true).unwrap();
+        let fresh = ensure_manifest_fresh(tmp.path(), &[], true).unwrap();
 
         assert!(fresh.is_some());
         assert!(tmp.path().join("tools/.toolr-manifest.json").is_file());
@@ -485,9 +485,22 @@ mod tests {
     fn ensure_manifest_fresh_does_not_persist_when_untrusted() {
         let tmp = tools_repo();
 
-        let fresh = fresh_manifest(tmp.path(), &[], |_| false).unwrap();
+        let fresh = ensure_manifest_fresh(tmp.path(), &[], false).unwrap();
 
         assert!(fresh.is_some());
         assert!(!tmp.path().join("tools/.toolr-manifest.json").exists());
+    }
+
+    /// The bootstrap step builds a missing manifest only when persisting.
+    #[test]
+    fn bootstrap_writes_a_missing_manifest_only_when_persisting() {
+        let tmp = tools_repo();
+        let manifest = tmp.path().join("tools/.toolr-manifest.json");
+
+        ensure_manifest_present_or_bootstrap(tmp.path(), &[], false).unwrap();
+        assert!(!manifest.exists());
+
+        ensure_manifest_present_or_bootstrap(tmp.path(), &[], true).unwrap();
+        assert!(manifest.is_file());
     }
 }

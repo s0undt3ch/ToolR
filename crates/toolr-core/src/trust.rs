@@ -278,23 +278,7 @@ pub fn trust_all_env() -> bool {
 /// Whether `root` is trusted right now, for callers that only decide whether
 /// to leave files behind. Never prompts, writes or prints; any error is `false`.
 pub fn is_trusted_now(root: &Path) -> bool {
-    let all_env = trust_all_env();
-    let store = if all_env {
-        None
-    } else {
-        TrustStore::open_default().ok()
-    };
-    is_trusted_with(root, store.as_ref(), all_env)
-}
-
-fn is_trusted_with(root: &Path, store: Option<&TrustStore>, all_env: bool) -> bool {
-    if all_env {
-        return true;
-    }
-    let (Some(store), Ok(root)) = (store, fs::canonicalize(root)) else {
-        return false;
-    };
-    store.is_trusted(&root).unwrap_or(false)
+    trust_all_env() || TrustStore::open_default().is_ok_and(|s| s.is_trusted(root).unwrap_or(false))
 }
 
 pub fn require_trust(root: &Path, mode: TrustMode) -> Result<()> {
@@ -587,45 +571,23 @@ mod tests {
         assert_eq!(file_mode, 0o600);
     }
 
+    /// `TOOLR_TRUST_ALL` answers before the store is consulted, even one inside the
+    /// repository; otherwise an unusable store or unknown root is untrusted.
+    /// Nothing creates the store directory.
     #[test]
-    fn is_trusted_now_true_for_recorded_root() {
+    fn is_trusted_now_reads_env_then_store_and_creates_nothing() {
         let f = Fixture::new();
-        let store = f.store();
-        store.trust(&f.root()).unwrap();
-        assert!(is_trusted_with(f.repo.path(), Some(&store), false));
-    }
+        let mut env = crate::test_env::EnvGuard::write();
+        env.set("XDG_STATE_HOME", f.root());
+        env.set("TOOLR_TRUST_ALL", "1");
+        assert!(is_trusted_now(&f.root()));
 
-    #[test]
-    fn is_trusted_now_false_for_unknown_root() {
-        let f = Fixture::new();
-        let store = f.store();
-        assert!(!is_trusted_with(f.repo.path(), Some(&store), false));
-        assert!(!store.dir().exists());
-    }
+        env.remove("TOOLR_TRUST_ALL");
+        assert!(!is_trusted_now(&f.root()));
+        env.set("XDG_STATE_HOME", f.store_dir.path());
+        assert!(!is_trusted_now(&f.root()));
 
-    #[test]
-    fn is_trusted_now_is_false_when_store_unusable() {
-        let f = Fixture::new();
-        assert!(!is_trusted_with(f.repo.path(), None, false));
-        let inside = TrustStore::at(f.root().join("state"));
-        assert!(!is_trusted_with(f.repo.path(), Some(&inside), false));
-        assert!(!f.root().join("state").exists());
-    }
-
-    #[test]
-    fn is_trusted_now_honours_trust_all() {
-        let f = Fixture::new();
-        let store = f.store();
-        assert!(is_trusted_with(f.repo.path(), Some(&store), true));
-        assert!(is_trusted_with(f.repo.path(), None, true));
-        assert!(!store.dir().exists());
-    }
-
-    #[test]
-    fn is_trusted_now_is_false_for_missing_root() {
-        let f = Fixture::new();
-        let store = f.store();
-        let missing = f.root().join("gone");
-        assert!(!is_trusted_with(&missing, Some(&store), false));
+        assert!(!f.root().join("toolr").exists());
+        assert!(!f.store_dir.path().join("toolr").exists());
     }
 }

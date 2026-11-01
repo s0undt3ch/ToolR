@@ -353,7 +353,7 @@ fn a_venv_from_before_trust_does_not_trust_the_repo() {
     assert!(!h.sentinel.exists());
 }
 
-/// A repository with a `demo hello` command and no venv, as in the F-27 repro.
+/// A repository with a `demo hello` command and no venv, as in the reported repro.
 fn demo_repo() -> TempDir {
     let tmp = TempDir::new().unwrap();
     let tools = tmp.path().join("tools");

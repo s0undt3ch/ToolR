@@ -33,8 +33,9 @@ fn run() -> anyhow::Result<ExitCode> {
     // Emit the passive cache hint before clap touches argv, so `--version`
     // and `--help` (which would otherwise exit inside clap) still see it.
     maybe_emit_cache_hint_from_argv();
-    bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv)?;
-    let mut manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv)? {
+    let persist = bootstrap::persist_manifest(&cwd, &argv);
+    bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
+    let mut manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv, persist)? {
         Some(m) => m,
         None => load_or_empty(&cwd, &argv)?,
     };
