@@ -74,9 +74,9 @@ renders the notes from `TOOLR_RELEASE_NOTES` under `### Notes`, and still owns `
 
 ### Command: `tools/release_notes.py`, group `release-notes`
 
-**`toolr release-notes add [SLUG] [--text TEXT] [--append]`**
+**`toolr release-notes add [--slug SLUG] [--text TEXT] [--append]`**
 
-- Without `SLUG`, derive one from the current branch. Strip a leading `<prefix>/` (`feat/`, `fix/`,
+- Without `--slug`, derive one from the current branch. Strip a leading `<prefix>/` (`feat/`, `fix/`,
   `docs/`, and so on), then normalise to the slug pattern. Fail with a clear message if nothing
   usable remains, for example on a detached HEAD.
 - Write `release-notes/<now>.<slug>.md`, run `git add` on it, and print its path.
@@ -98,7 +98,7 @@ Without `--base`, check the files only. This is the pre-commit mode.
 
 With `--base REF`, run the file checks, then the gate. This is the CI mode.
 
-- Commits in scope: non-merge commits in `REF...HEAD`.
+- Commits in scope: non-merge commits in `REF..HEAD` (two dots: on HEAD, not on `REF`).
 - A note is required when any in-scope commit's subject is `feat` or `fix` (any scope, with or
   without `!`), or carries `!` on any type.
 - Exempt: commits whose scope is `deps`, unless they carry `!`. A breaking commit always needs a
@@ -139,12 +139,13 @@ With `--base REF`, run the file checks, then the gate. This is the CI mode.
 
 ### CI gate: `.github/workflows/ci.yml`
 
-- A new job runs `toolr release-notes check --base "origin/${{ github.base_ref }}"` on
-  `pull_request` events only.
-- It needs `fetch-depth: 0`. A shallow clone makes the range empty, and the gate would pass silently.
+- A new step in the existing `pre-commit` job runs `toolr release-notes check --base
+  "origin/${{ github.base_ref }}"`, guarded by `if: github.event_name == 'pull_request'`. That job
+  already sets up the toolr binary and tools venv, and needs no `pipeline-gate` change.
+- The job's checkout needs `fetch-depth: 0`. A shallow clone makes the range empty, and the gate
+  would pass silently. `check --base` also fails outright if `REF` doesn't resolve.
 - `github.base_ref` is the PR's base branch, which is the parent branch for a git-spice stack. A
   child PR is therefore only judged on its own commits.
-- Add the job to the `pipeline-gate` needs.
 
 ### Pre-commit hook: `.pre-commit-config.yaml`
 
