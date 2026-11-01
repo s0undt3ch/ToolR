@@ -83,3 +83,5 @@ Rejected alternatives:
   regenerates from the bumped `action.yml`. With the before/after check that fixer edit would fail every release, so a
   `Regenerate skill references` step (`cargo xtask build-skill-refs`) now runs right after `Bump Version`, making the
   reference one of the release's own changes. This adds a step outside the three listed in *Scope and compatibility*.
+- A `Check skill references` step (`cargo xtask build-skill-refs --check`) runs before `Bump Version`, so drift already
+  on `main` fails release prep instead of being swept into the release commit by the regeneration.
