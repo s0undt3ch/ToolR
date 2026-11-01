@@ -18,7 +18,9 @@ use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
 use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
 
-use crate::execute_build::{OutputOptions, build_dispatch_spec, build_spec, pack_child_args};
+use crate::execute_build::{
+    OutputOptions, PathBases, build_dispatch_spec, build_spec, pack_child_args,
+};
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Help interception
@@ -197,6 +199,10 @@ pub fn dispatch(
     let cwd = std::env::current_dir()?;
     let repo_root = discover_project_root(&cwd)?;
     let output_opts = output_options_from_matches(matches);
+    let bases = PathBases {
+        cwd: &cwd,
+        repo_root: &repo_root,
+    };
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
     // host-Python path imports `tools/*.py` directly.
     toolr_core::trust::require_trust(
@@ -218,7 +224,7 @@ pub fn dispatch(
     // outer flags) and extract them from `parent_matches`, instead of
     // iterating the leaf's arguments (which are packed in `packed`).
     let spec = if cmd.dispatched_from.is_some() {
-        let packed = pack_child_args(cmd, cmd_matches);
+        let packed = pack_child_args(cmd, cmd_matches, &bases)?;
         // The dispatcher's manifest entry shares `(module, function)`
         // with each of its grafted children (the argparse pipeline
         // copies those fields onto the children at graft time). Find
@@ -237,9 +243,9 @@ pub fn dispatch(
                     cmd.function,
                 )
             })?;
-        build_dispatch_spec(dispatcher, parent_matches, packed, &repo_root, &output_opts)?
+        build_dispatch_spec(dispatcher, parent_matches, packed, &bases, &output_opts)?
     } else {
-        build_spec(cmd, cmd_matches, &repo_root, &output_opts)
+        build_spec(cmd, cmd_matches, &bases, &output_opts)?
     };
 
     let tempfile = write_spec_to_tempfile(&spec)?;
