@@ -4,6 +4,8 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::path_search::find_on_path_in;
+
 use super::{MIN_UV_VERSION, UvBinary, UvError, UvSource, managed_uv_path};
 
 /// Try to find a usable `uv` on `$PATH`. Returns `Ok(None)` if uv is not
@@ -88,17 +90,14 @@ pub fn parse_uv_version(output: &str) -> Option<(u32, u32, u32)> {
     None
 }
 
-/// Naive PATH scan that returns the first `uv` (or `uv.exe` on Windows)
-/// found.
+/// The first `uv` (or `uv.exe` on Windows) in an absolute `PATH` directory.
+/// Empty and relative entries are skipped.
 pub fn which_uv() -> Result<Option<PathBuf>, UvError> {
     Ok(which_uv_in(std::env::var_os("PATH")))
 }
 
 fn which_uv_in(path: Option<OsString>) -> Option<PathBuf> {
-    let basename = if cfg!(windows) { "uv.exe" } else { "uv" };
-    std::env::split_paths(&path?)
-        .map(|entry| entry.join(basename))
-        .find(|candidate| candidate.is_file())
+    find_on_path_in("uv", path)
 }
 
 #[cfg(test)]

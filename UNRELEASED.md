@@ -146,3 +146,8 @@ command, now names the `tools/` and says `tools/pyproject.toml` is missing. With
 `tools/pyproject.toml` toolr has no tools venv, so the fallback that ran commands with
 `$TOOLR_PYTHON`, `python3` or `python` from `PATH` is gone, and toolr no longer reads
 `$TOOLR_PYTHON`. The `toolr.testing` pytest plugin finds the repo root the same way.
+
+Toolr no longer runs a `uv` or `python3` found through an empty or relative `PATH` entry such as `.`
+or a trailing `:`. Those entries point at the current directory, which is usually the repository
+toolr is running in, so a file in the repo could run in place of the real tool. Toolr now skips them.
+If you relied on one, put the absolute directory on `PATH` instead.

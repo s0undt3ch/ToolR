@@ -261,16 +261,18 @@ fn prompt_overwrite_file(dest: &Path, cwd: &Path) -> Result<bool> {
     Ok(answer.trim().eq_ignore_ascii_case("y"))
 }
 
-/// Default `requires-python` value for new projects.
+/// Default `requires-python` value for new projects, from the `python3` in an
+/// absolute `PATH` directory (never one in the repo through a relative entry).
 fn detect_requires_python() -> String {
-    requires_python_from("python3")
+    requires_python_from(toolr_core::path_search::find_on_path("python3").as_deref())
 }
 
 /// `>=3.N` for `python`'s minor, never below the oldest Python toolr runs on.
-fn requires_python_from(python: &str) -> String {
+fn requires_python_from(python: Option<&Path>) -> String {
     use toolr_core::execute::python::{MIN_PYTHON_MINOR, python3_minor};
-    let minor =
-        python3_minor(Path::new(python)).map_or(MIN_PYTHON_MINOR, |m| m.max(MIN_PYTHON_MINOR));
+    let minor = python
+        .and_then(python3_minor)
+        .map_or(MIN_PYTHON_MINOR, |m| m.max(MIN_PYTHON_MINOR));
     format!(">=3.{minor}")
 }
 
@@ -1118,7 +1120,7 @@ dev = ["pytest", "ruff"]
 
     #[test]
     fn requires_python_falls_back_to_the_supported_floor() {
-        let s = requires_python_from("definitely-not-a-real-python-toolr-test");
+        let s = requires_python_from(Some(Path::new("definitely-not-a-real-python-toolr-test")));
         assert_eq!(
             s,
             format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
@@ -1131,7 +1133,7 @@ dev = ["pytest", "ruff"]
         let bin = tempfile::TempDir::new().unwrap();
         let python = stub_python(bin.path(), "3.9.18");
         assert_eq!(
-            requires_python_from(python.to_str().unwrap()),
+            requires_python_from(Some(&python)),
             format!(">=3.{}", toolr_core::execute::python::MIN_PYTHON_MINOR)
         );
     }
@@ -1141,7 +1143,7 @@ dev = ["pytest", "ruff"]
     fn requires_python_keeps_a_newer_interpreter_version() {
         let bin = tempfile::TempDir::new().unwrap();
         let python = stub_python(bin.path(), "3.99.0");
-        assert_eq!(requires_python_from(python.to_str().unwrap()), ">=3.99");
+        assert_eq!(requires_python_from(Some(&python)), ">=3.99");
     }
 
     /// A `python` that reports `Python {version}` for whatever it is asked to run.

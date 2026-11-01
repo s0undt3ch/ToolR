@@ -5,6 +5,7 @@ use std::io::{BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use super::{UvBinary, UvError, UvSource, managed_uv_path, probe};
+use crate::path_search::find_on_path_in;
 
 /// What the discovery + consent flow tells the caller to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,7 +233,15 @@ fn detect_linux_libc_from(
 /// `musl`. glibc's ldd writes to stdout, musl's ldd writes to stderr
 /// (and exits non-zero), so we concatenate both before searching.
 fn ldd_reports_musl() -> bool {
-    let Ok(output) = std::process::Command::new("ldd").arg("--version").output() else {
+    ldd_reports_musl_in(std::env::var_os("PATH"))
+}
+
+/// Only an `ldd` in an absolute `PATH` directory runs; none means not musl.
+fn ldd_reports_musl_in(path: Option<std::ffi::OsString>) -> bool {
+    let Some(ldd) = find_on_path_in("ldd", path) else {
+        return false;
+    };
+    let Ok(output) = std::process::Command::new(ldd).arg("--version").output() else {
         return false;
     };
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -655,6 +664,38 @@ mod tests {
     fn detect_linux_libc_empty_env_override_falls_through() {
         let libc = detect_linux_libc_from(Some(""), || true, || false);
         assert_eq!(libc, LinuxLibc::Musl);
+    }
+
+    #[cfg(unix)]
+    fn stub_ldd(dir: &Path, stdout: &str, stderr: &str) {
+        let body = format!("#!/bin/sh\necho '{stdout}'\necho '{stderr}' >&2\n");
+        crate::test_fs::write_executable(dir, "ldd", &body, 0o755);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ldd_reports_musl_reads_both_streams() {
+        let musl = tempfile::tempdir().unwrap();
+        stub_ldd(musl.path(), "", "musl libc (x86_64)");
+        assert!(ldd_reports_musl_in(Some(musl.path().into())));
+        let gnu = tempfile::tempdir().unwrap();
+        stub_ldd(gnu.path(), "ldd (GNU libc) 2.39", "");
+        assert!(!ldd_reports_musl_in(Some(gnu.path().into())));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ldd_reports_musl_ignores_an_ldd_reached_through_a_relative_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        stub_ldd(dir.path(), "", "musl libc (x86_64)");
+        let rel = crate::test_fs::relative_to_cwd(dir.path());
+        assert!(rel.is_relative() && rel.join("ldd").is_file(), "{rel:?}");
+        assert!(!ldd_reports_musl_in(Some(rel.into())));
+    }
+
+    #[test]
+    fn ldd_reports_musl_is_false_with_path_unset() {
+        assert!(!ldd_reports_musl_in(None));
     }
 
     #[test]
