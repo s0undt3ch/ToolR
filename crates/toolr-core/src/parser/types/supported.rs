@@ -14,7 +14,8 @@ pub enum SupportedType {
     Bool,
     /// `pathlib.Path`: string passes through unchanged.
     Path,
-    /// `toolr.types.AbsolutePath`: absolutised against cwd, no fs check.
+    /// `toolr.types.AbsolutePath`: absolutised against cwd (a default against
+    /// the repo root), no fs check.
     AbsolutePath,
     /// `toolr.types.NewPath`: absolutised; must not exist, parent dir must.
     NewPath,
@@ -160,7 +161,7 @@ impl SupportedType {
             },
             SupportedType::AbsolutePath => TypeDoc {
                 annotation: "toolr.types.AbsolutePath",
-                validated_by: "clap (absolutise vs cwd)",
+                validated_by: "clap (absolutise vs cwd; defaults vs repo root)",
                 wire_format: "absolute string",
                 python_receives: "`pathlib.Path`",
                 note: "",

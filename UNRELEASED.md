@@ -141,3 +141,9 @@ The Setup ToolR action no longer throws away its `tools/.venv` cache when the re
 changes. The cache key now follows the same `tools/` inputs toolr's own freshness check tracks:
 `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml` and `tools/.python-version`. Expect one cache miss after
 upgrading the action.
+
+A relative default on a path-typed argument, such as `cfg: FilePath = "tools/pyproject.toml"`, now resolves from
+the repo root, the same place the command runs. It used to be checked against the directory you ran `toolr`
+from, so from a subdirectory both the command and its `--help` failed with "path does not exist". An
+`AbsolutePath` or `NewPath` default, or `DirectoryPath = "."`, now also names a path under the repo root wherever
+you run from. A path you type on the command line still resolves from your current directory.
