@@ -154,6 +154,14 @@ jobs:
           fi
           toolr version bump --write --check-existing-tag --include-action "${new_version_arg[@]}"
 
+      - name: Regenerate skill references
+        # The toolr-ci-setup reference is generated from `action.yml`, which the
+        # bump just rewrote. The commit step rejects prek fixes outside the
+        # release's own changes, so the reference has to be one of them.
+        shell: bash
+        run: |
+          cargo xtask build-skill-refs
+
       - name: Load UNRELEASED.md into TOOLR_RELEASE_NOTES env var
         shell: bash
         run: |

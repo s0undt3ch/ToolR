@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tests.workflows.conftest import git
 from tests.workflows.conftest import git_env
@@ -194,3 +195,20 @@ def test_commit_step_ignores_preexisting_untracked(
     assert sorted(committed) == ["CHANGELOG.md", "Cargo.toml"]
     assert git(release_repo, "status", "--porcelain") == "?? release-notes.md\n"
     assert prek_calls(bin_dir) == 2
+
+
+def test_skill_refs_regenerated_before_commit_step() -> None:
+    """The bump rewrites `action.yml`, which a skill reference is generated from.
+
+    The commit step fails on prek fixes to files the release didn't change, so the
+    reference has to be regenerated before it, as part of the release's own changes.
+    """
+    steps = yaml.safe_load(PREPARE_RELEASE_YML.read_text())["jobs"]["prepare-release"]["steps"]
+    ids = [step.get("id") for step in steps]
+    regen = [
+        index
+        for index, step in enumerate(steps)
+        if "cargo xtask build-skill-refs" in step.get("run", "")
+    ]
+    assert regen, "no step runs `cargo xtask build-skill-refs`"
+    assert ids.index("bump-version") < regen[0] < ids.index("commit-release")
