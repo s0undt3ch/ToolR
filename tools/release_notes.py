@@ -8,19 +8,26 @@ import sys
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Final
 from typing import NamedTuple
 
 from toolr import Context
 from toolr import command_group
 
+if TYPE_CHECKING:
+    from toolr.utils.command import CommandResult
+
 NOTES_DIR: Final[str] = "release-notes"
 README_NAME: Final[str] = "README.md"
+_SLUG: Final[str] = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 NOTE_NAME_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?P<date>\d{4}-\d{2}-\d{2})\.(?P<time>\d{2}-\d{2}-\d{2})\.(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)\.md$"
+    rf"^(?P<date>\d{{4}}-\d{{2}}-\d{{2}})\.(?P<time>\d{{2}}-\d{{2}}-\d{{2}})\.(?P<slug>{_SLUG})\.md$"
 )
-SLUG_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SLUG_RE: Final[re.Pattern[str]] = re.compile(rf"^{_SLUG}$")
 BREAKING_PREFIX: Final[str] = "**Breaking:**"
+# Must match the heading cliff.toml's body template puts the notes under.
+NOTES_HEADING: Final[str] = "### Notes"
 HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}#{1,6}(\s|$)")
 SETEXT_UNDERLINE_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
 LIST_OR_QUOTE_RE: Final[re.Pattern[str]] = re.compile(r"^ {0,3}([-*+]|\d+[.)])[ \t]|^ {0,3}>")
@@ -29,6 +36,10 @@ SUBJECT_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?:"
 )
 BREAKING_FOOTER_RE: Final[re.Pattern[str]] = re.compile(r"^BREAKING[ -]CHANGE:", re.MULTILINE)
+# The gate's own git trailer: a whole line, any case.
+SKIP_TRAILER_RE: Final[re.Pattern[str]] = re.compile(
+    r"^Release-Notes:[ \t]*skip[ \t]*$", re.MULTILINE | re.IGNORECASE
+)
 NOTE_TYPES: Final[frozenset[str]] = frozenset({"feat", "fix", "revert"})
 
 group = command_group("release-notes", "Manage queued release notes", docstring=__doc__)
@@ -62,7 +73,7 @@ def _render(notes_dir: Path) -> str:
 
 def _slug_from_branch(branch: str) -> str | None:
     """Derive a note slug from a branch name, or ``None`` if nothing usable is left."""
-    if branch in {"HEAD", "main"}:
+    if branch == "main":
         return None
     name = re.sub(r"^[^/]+/", "", branch, count=1).lower()
     return re.sub(r"[^a-z0-9]+", "-", name).strip("-") or None
@@ -83,31 +94,33 @@ def _find_by_slug(notes_dir: Path, slug: str) -> Path | None:
 def _github_env_block(name: str, value: str) -> str:
     """Format ``name=value`` as a ``$GITHUB_ENV`` heredoc block."""
     delimiter = f"{name}_{secrets.token_hex(16)}"
-    while delimiter in value:
-        delimiter = f"{name}_{secrets.token_hex(16)}"
     return f"{name}<<{delimiter}\n{value}\n{delimiter}\n"
 
 
-def _has_heading(text: str) -> bool:
-    return _scan(text)[0]
+class MarkdownScan(NamedTuple):
+    """What ``_scan_markdown`` found in a note."""
+
+    has_heading: bool
+    open_fence: bool
 
 
-def _scan(text: str) -> tuple[bool, bool]:
-    """Return ``(has_heading, ends_in_open_fence)``."""
+def _scan_markdown(text: str) -> MarkdownScan:
     fence: str | None = None
     prev_is_paragraph = False
     for line in text.splitlines():
         if fence is None:
             opener = FENCE_OPEN_RE.match(line)
+            # CommonMark: a backtick fence's info string can't contain a backtick.
             if opener and not (opener["fence"][0] == "`" and "`" in opener["info"]):
                 fence = opener["fence"]
                 prev_is_paragraph = False
             elif HEADING_RE.match(line) or (prev_is_paragraph and SETEXT_UNDERLINE_RE.match(line)):
-                return True, False
+                return MarkdownScan(has_heading=True, open_fence=False)
             else:
                 prev_is_paragraph = bool(line.strip()) and not LIST_OR_QUOTE_RE.match(line)
         else:
             stripped = line.strip()
+            # `< 4` mirrors the ` {0,3}` indent the opener regexes allow.
             if (
                 len(line) - len(line.lstrip(" ")) < 4
                 and stripped
@@ -116,7 +129,7 @@ def _scan(text: str) -> tuple[bool, bool]:
             ):
                 fence = None
                 prev_is_paragraph = False
-    return False, fence is not None
+    return MarkdownScan(has_heading=False, open_fence=fence is not None)
 
 
 def _file_problems(repo_root: Path) -> list[str]:
@@ -145,10 +158,10 @@ def _file_problems(repo_root: Path) -> list[str]:
         if not text:
             problems.append(f"{label}: note is empty")
         else:
-            has_heading, open_fence = _scan(text)
-            if has_heading:
+            scan = _scan_markdown(text)
+            if scan.has_heading:
                 problems.append(f"{label}: notes must not contain markdown headings")
-            if open_fence:
+            if scan.open_fence:
                 problems.append(f"{label}: unclosed code fence")
     return problems
 
@@ -183,7 +196,7 @@ def _is_breaking(commit: Commit) -> bool:
 
 
 def _requires_note(commit: Commit) -> bool:
-    """Whether git-cliff would show ``commit``, so it needs a release note."""
+    """The gate's policy: feat/fix/revert, minus deps-scoped bumps and ``Changelog: skip``, plus anything breaking."""
     match = SUBJECT_RE.match(commit.subject)
     if match is None:
         return False
@@ -191,13 +204,14 @@ def _requires_note(commit: Commit) -> bool:
         return True
     if (match["scope"] or "").startswith("deps"):
         return False
-    if re.search("Changelog: skip", commit.body):
+    # Mirrors cliff.toml's `Changelog: skip` body rule.
+    if "Changelog: skip" in commit.body:
         return False
     return match["type"] in NOTE_TYPES
 
 
 def _has_skip_trailer(body: str) -> bool:
-    return bool(re.search(r"^Release-Notes:[ \t]*skip[ \t]*$", body, re.MULTILINE | re.IGNORECASE))
+    return bool(SKIP_TRAILER_RE.search(body))
 
 
 def _gate_failures(commits: list[Commit], notes: NoteChanges, breaking_note: bool) -> list[str]:
@@ -223,15 +237,12 @@ def _gate_failures(commits: list[Commit], notes: NoteChanges, breaking_note: boo
     return failures
 
 
+def _git(ctx: Context, *args: str) -> CommandResult[str] | CommandResult[bytes]:
+    return ctx.run("git", "-C", str(ctx.repo_root), *args, capture_output=True, stream_output=False)
+
+
 def _git_output(ctx: Context, *args: str) -> str:
-    ret = ctx.run(
-        "git",
-        "-C",
-        str(ctx.repo_root),
-        *args,
-        capture_output=True,
-        stream_output=False,
-    )
+    ret = _git(ctx, *args)
     if ret.returncode:
         ctx.error(f"git {args[0]} failed with exit code {ret.returncode}")
         ctx.exit(ret.returncode)
@@ -274,18 +285,7 @@ def _is_breaking_note(path: Path) -> bool:
 
 
 def _gate_problems(ctx: Context, base: str) -> list[str]:
-    ret = ctx.run(
-        "git",
-        "-C",
-        str(ctx.repo_root),
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        f"{base}^{{commit}}",
-        capture_output=True,
-        stream_output=False,
-    )
-    if ret.returncode:
+    if _git(ctx, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").returncode:
         return [f"--base {base!r} does not resolve to a commit"]
     commits = _commits_in_range(ctx, base)
     if not commits:
@@ -326,6 +326,14 @@ def render(ctx: Context, github_env: str | None = None) -> None:
     sys.stdout.flush()
 
 
+def _slug_from_current_branch(ctx: Context) -> str:
+    slug = _slug_from_branch(_git_output(ctx, "branch", "--show-current").strip())
+    if slug is None:
+        ctx.error("Cannot derive a slug from the current branch; pass --slug")
+        ctx.exit(1)
+    return slug
+
+
 @group.command
 def add(
     ctx: Context, slug: str | None = None, text: str | None = None, append: bool = False
@@ -341,20 +349,7 @@ def add(
         ctx.error("--append needs --text")
         ctx.exit(1)
     if slug is None:
-        ret = ctx.run(
-            "git",
-            "-C",
-            str(ctx.repo_root),
-            "branch",
-            "--show-current",
-            capture_output=True,
-            stream_output=False,
-        )
-        branch: str = ret.stdout.read().strip()  # type: ignore[assignment]
-        slug = _slug_from_branch(branch)
-        if slug is None:
-            ctx.error("Cannot derive a slug from the current branch; pass --slug")
-            ctx.exit(1)
+        slug = _slug_from_current_branch(ctx)
     if not SLUG_RE.match(slug):
         ctx.error(f"Invalid slug {slug!r}: use lowercase letters, digits and single hyphens")
         ctx.exit(1)
@@ -375,16 +370,7 @@ def add(
         path = notes_dir / _note_filename(datetime.now(UTC), slug)
         path.write_bytes(f"{text}\n".encode() if text is not None else b"")
     rel = path.relative_to(ctx.repo_root)
-    ret = ctx.run(
-        "git",
-        "-C",
-        str(ctx.repo_root),
-        "add",
-        "--",
-        str(rel),
-        capture_output=True,
-        stream_output=False,
-    )
+    ret = _git(ctx, "add", "--", str(rel))
     if ret.returncode:
         ctx.error(f"git add failed with exit code {ret.returncode}")
         ctx.exit(ret.returncode)
@@ -401,9 +387,9 @@ def clear(ctx: Context, rendered: str | None = None) -> None:
     paths = _note_paths(ctx.repo_root / NOTES_DIR)
     if rendered and paths:
         lines = Path(rendered).read_text(encoding="utf-8").splitlines()
-        if not any(line.strip() == "### Notes" for line in lines):
+        if not any(line.strip() == NOTES_HEADING for line in lines):
             ctx.error(
-                f"{rendered} has no '### Notes' section; refusing to delete {len(paths)} queued note(s)"
+                f"{rendered} has no '{NOTES_HEADING}' section; refusing to delete {len(paths)} queued note(s)"
             )
             ctx.exit(1)
     for path in paths:

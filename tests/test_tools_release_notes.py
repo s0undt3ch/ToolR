@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
-import secrets
 import subprocess
 from collections.abc import Callable
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from tools.release_notes import NOTE_NAME_RE
 from tools.release_notes import Commit
 from tools.release_notes import _file_problems
 from tools.release_notes import _github_env_block
-from tools.release_notes import _has_heading
 from tools.release_notes import _has_skip_trailer
 from tools.release_notes import _is_breaking
 from tools.release_notes import _note_filename
 from tools.release_notes import _render
 from tools.release_notes import _requires_note
+from tools.release_notes import _scan_markdown
 from tools.release_notes import _slug_from_branch
 from tools.release_notes import add
 from tools.release_notes import check
@@ -27,6 +27,14 @@ from tools.release_notes import clear
 from tools.release_notes import render
 
 from toolr.testing import make_context
+
+VALID_NOTE_NAME = "2026-11-01.14-03-27.foo.md"
+FEATURE_NOTE_PATH = "release-notes/2026-11-01.15-00-00.bar.md"
+LONG_NOTE = (
+    "Fixed `Optional[bool]` handling; see [link](url) and ~/src/[wip]/ for details. "
+    + "word " * 30
+    + "end :smile:"
+)
 
 
 @pytest.fixture
@@ -45,16 +53,14 @@ def notes_dir(tmp_path: Path) -> Callable[[dict[str, str]], Path]:
     return _make
 
 
-def test_render_empty_dir(notes_dir: Callable[[dict[str, str]], Path]) -> None:
-    assert _render(notes_dir({})) == ""
-
-
-def test_render_only_readme(notes_dir: Callable[[dict[str, str]], Path]) -> None:
-    assert _render(notes_dir({"README.md": "how to"})) == ""
-
-
-def test_render_missing_dir(tmp_path: Path) -> None:
-    assert _render(tmp_path / "release-notes") == ""
+@pytest.mark.parametrize(
+    "files", [{}, {"README.md": "how to"}, None], ids=["empty-dir", "only-readme", "missing-dir"]
+)
+def test_render_empty(
+    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], files: dict[str, str] | None
+) -> None:
+    directory = notes_dir(files) if files is not None else tmp_path / "release-notes"
+    assert _render(directory) == ""
 
 
 def test_render_excludes_readme(notes_dir: Callable[[dict[str, str]], Path]) -> None:
@@ -88,41 +94,17 @@ def test_github_env_block_format() -> None:
     assert block == f"TOOLR_RELEASE_NOTES<<{delimiter}\nvalue\n{delimiter}\n"
 
 
-def test_github_env_block_avoids_delimiter_in_value(monkeypatch: pytest.MonkeyPatch) -> None:
-    tokens = iter(["X", "Y"])
-    monkeypatch.setattr(secrets, "token_hex", lambda _n: next(tokens))
-    block = _github_env_block("TOOLR_RELEASE_NOTES", "TOOLR_RELEASE_NOTES_X")
-    assert block == (
-        "TOOLR_RELEASE_NOTES<<TOOLR_RELEASE_NOTES_Y\nTOOLR_RELEASE_NOTES_X\nTOOLR_RELEASE_NOTES_Y\n"
-    )
-
-
-def test_render_command_stdout_is_verbatim(
-    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], capsys: pytest.CaptureFixture[str]
-) -> None:
-    note = (
-        "Fixed `Optional[bool]` handling; see [link](url) and ~/src/[wip]/ for details. "
-        + "word " * 30
-        + "end :smile:"
-    )
-    assert len(note.splitlines()[0]) > 120
-    notes_dir({"2026-01-01.00-00-00.a.md": note})
-    render(make_context(repo_root=tmp_path))
-    assert capsys.readouterr().out == note + "\n"
-
-
+@pytest.mark.parametrize(
+    "note",
+    ["A", LONG_NOTE, "Makefile:\n\n```make\nall:\n\techo hi\n```"],
+    ids=["plain", "verbatim-long-line", "keeps-tabs"],
+)
 def test_render_command_stdout(
-    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    notes_dir: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+    note: str,
 ) -> None:
-    notes_dir({"2026-01-01.00-00-00.a.md": "A"})
-    render(make_context(repo_root=tmp_path))
-    assert capsys.readouterr().out == "A\n"
-
-
-def test_render_command_stdout_keeps_tabs(
-    tmp_path: Path, notes_dir: Callable[[dict[str, str]], Path], capsys: pytest.CaptureFixture[str]
-) -> None:
-    note = "Makefile:\n\n```make\nall:\n\techo hi\n```"
     notes_dir({"2026-01-01.00-00-00.a.md": note})
     render(make_context(repo_root=tmp_path))
     assert capsys.readouterr().out == note + "\n"
@@ -194,7 +176,7 @@ def test_slug_from_branch(branch: str, slug: str) -> None:
     assert _slug_from_branch(branch) == slug
 
 
-@pytest.mark.parametrize("branch", ["HEAD", "main", "fix/", "fix/___"])
+@pytest.mark.parametrize("branch", ["main", "fix/", "fix/___"])
 def test_slug_from_branch_rejects_unusable(branch: str) -> None:
     assert _slug_from_branch(branch) is None
 
@@ -244,12 +226,30 @@ def test_add_detached_head_fails(git_repo: Callable[..., Path]) -> None:
     assert not (repo / "release-notes").exists()
 
 
-def test_add_on_main_without_slug_fails(git_repo: Callable[..., Path]) -> None:
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"text": "x"},
+        {"slug": "foo", "append": True},
+        {"slug": "foo", "text": "B", "append": True},
+        {"slug": "Bad Slug", "text": "x"},
+    ],
+    ids=["on-main-without-slug", "append-without-text", "append-without-note", "invalid-slug"],
+)
+def test_add_fails(git_repo: Callable[..., Path], kwargs: dict[str, Any]) -> None:
     repo = git_repo()
     with pytest.raises(SystemExit) as exc:
-        add(make_context(repo), text="x")
+        add(make_context(repo), **kwargs)
     assert exc.value.code != 0
     assert not (repo / "release-notes").exists()
+
+
+def test_add_outside_git_repo_reports_git_failure(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        add(ctx, text="x")
+    assert exc.value.code != 0
+    assert "git branch failed" in ctx.stderr
 
 
 def test_add_duplicate_slug_refused(git_repo: Callable[..., Path]) -> None:
@@ -275,30 +275,6 @@ def test_add_append(git_repo: Callable[..., Path]) -> None:
     assert [p.name for p in _notes(repo)] == [existing.name]
     assert existing.read_text() == "A\n\nB\n"
     assert _staged(repo) == [f"release-notes/{existing.name}"]
-
-
-def test_add_append_without_text_fails(git_repo: Callable[..., Path]) -> None:
-    repo = git_repo()
-    with pytest.raises(SystemExit) as exc:
-        add(make_context(repo), slug="foo", append=True)
-    assert exc.value.code != 0
-    assert not (repo / "release-notes").exists()
-
-
-def test_add_append_without_existing_note_fails(git_repo: Callable[..., Path]) -> None:
-    repo = git_repo()
-    with pytest.raises(SystemExit) as exc:
-        add(make_context(repo), slug="foo", text="B", append=True)
-    assert exc.value.code != 0
-    assert not (repo / "release-notes").exists()
-
-
-def test_add_rejects_invalid_slug(git_repo: Callable[..., Path]) -> None:
-    repo = git_repo()
-    with pytest.raises(SystemExit) as exc:
-        add(make_context(repo), slug="Bad Slug", text="x")
-    assert exc.value.code != 0
-    assert not (repo / "release-notes").exists()
 
 
 def test_clear_keeps_readme(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
@@ -344,13 +320,10 @@ def test_clear_rendered_guard_no_notes(
     clear(make_context(tmp_path), rendered=str(rendered))
 
 
-GOOD = "2026-11-01.14-03-27.foo.md"
-
-
 def test_valid_tree_no_problems(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path
 ) -> None:
-    notes_dir({"README.md": "how", GOOD: "Text\n\n```sh\n# comment\n```\n"})
+    notes_dir({"README.md": "how", VALID_NOTE_NAME: "Text\n\n```sh\n# comment\n```\n"})
     assert _file_problems(tmp_path) == []
 
 
@@ -358,15 +331,17 @@ def test_missing_dir_no_problems(tmp_path: Path) -> None:
     assert _file_problems(tmp_path) == []
 
 
-@pytest.mark.parametrize("name", ["foo.md", "2026-11-01-foo.md", "2026-11-01.14-03-27.Foo.md"])
-def test_bad_name(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, name: str) -> None:
-    notes_dir({name: "Text"})
-    (problem,) = _file_problems(tmp_path)
-    assert name in problem
-
-
-@pytest.mark.parametrize("name", ["2026-02-30.10-00-00.x.md", "2026-01-01.25-00-00.x.md"])
-def test_impossible_date(
+@pytest.mark.parametrize(
+    "name",
+    [
+        "foo.md",
+        "2026-11-01-foo.md",
+        "2026-11-01.14-03-27.Foo.md",
+        "2026-02-30.10-00-00.x.md",
+        "2026-01-01.25-00-00.x.md",
+    ],
+)
+def test_bad_name_or_date(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, name: str
 ) -> None:
     notes_dir({name: "Text"})
@@ -378,16 +353,16 @@ def test_impossible_date(
 def test_empty_note(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, content: str
 ) -> None:
-    notes_dir({GOOD: content})
+    notes_dir({VALID_NOTE_NAME: content})
     (problem,) = _file_problems(tmp_path)
-    assert GOOD in problem
+    assert VALID_NOTE_NAME in problem
     assert "empty" in problem
 
 
 def test_heading_flagged(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
-    notes_dir({GOOD: "Text\n\n## Heading"})
+    notes_dir({VALID_NOTE_NAME: "Text\n\n## Heading"})
     (problem,) = _file_problems(tmp_path)
-    assert GOOD in problem
+    assert VALID_NOTE_NAME in problem
     assert "heading" in problem
 
 
@@ -395,7 +370,7 @@ def test_heading_flagged(notes_dir: Callable[[dict[str, str]], Path], tmp_path: 
 def test_heading_inside_fence_ok(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, fence: str
 ) -> None:
-    notes_dir({GOOD: f"{fence}sh\n# comment\n{fence}"})
+    notes_dir({VALID_NOTE_NAME: f"{fence}sh\n# comment\n{fence}"})
     assert _file_problems(tmp_path) == []
 
 
@@ -407,7 +382,7 @@ def test_unreleased_md_flagged(tmp_path: Path) -> None:
 
 
 def test_check_command_exit(notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path) -> None:
-    directory = notes_dir({GOOD: "Text"})
+    directory = notes_dir({VALID_NOTE_NAME: "Text"})
     check(make_context(tmp_path))
     (directory / "foo.md").write_text("x")
     (directory / "2026-11-01.14-03-28.bar.md").write_text("")
@@ -422,71 +397,62 @@ def test_check_command_exit(notes_dir: Callable[[dict[str, str]], Path], tmp_pat
 def test_render_refuses_invalid_tree(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    notes_dir({GOOD: ""})
+    notes_dir({VALID_NOTE_NAME: ""})
     ctx = make_context(tmp_path)
     with pytest.raises(SystemExit) as exc:
         render(ctx)
     assert exc.value.code != 0
     assert ctx.stdout == ""
-    assert GOOD in ctx.stderr
+    assert VALID_NOTE_NAME in ctx.stderr
     assert capsys.readouterr().out == ""
 
 
 @pytest.mark.parametrize(
-    ("content", "flagged"),
+    ("content", "has_heading", "open_fence"),
     [
-        ("````\n```\n## Heading\n```\n````", False),
-        ("```\n~~~\n# x\n```", False),
-        ("```\n```sh\n# x\n```", False),
-        ("Text\n    ```\n# x", True),
-        ("```\ncode\n```\n# x", True),
-        ("```\n# unclosed", False),
-        ("~~~\n# x\n~~~\n## y", True),
-        ("``` a`b\n# x", True),
-        ("#hashtag", False),
-        ("#!/bin/sh", False),
-        ("Text\n\n  ## x", True),
-        ("Text\n\n   # x", True),
-        ("Text\n\n    # x", False),
-        ("Intro paragraph\n---\nmore", True),
-        ("Title\n===", True),
-        ("Para\n\n---\n\nMore", False),
-        ("- item\n---", False),
-        ("```\ntext\n---\n```", False),
+        ("````\n```\n## Heading\n```\n````", False, False),
+        ("```\n~~~\n# x\n```", False, False),
+        ("```\n```sh\n# x\n```", False, False),
+        ("Text\n    ```\n# x", True, False),
+        ("```\ncode\n```\n# x", True, False),
+        ("```\n# unclosed", False, True),
+        ("~~~\n# x\n~~~\n## y", True, False),
+        ("``` a`b\n# x", True, False),
+        ("#hashtag", False, False),
+        ("#!/bin/sh", False, False),
+        ("Text\n\n  ## x", True, False),
+        ("Text\n\n   # x", True, False),
+        ("Text\n\n    # x", False, False),
+        ("Intro paragraph\n---\nmore", True, False),
+        ("Title\n===", True, False),
+        ("Para\n\n---\n\nMore", False, False),
+        ("- item\n---", False, False),
+        ("```\ntext\n---\n```", False, False),
+        ("```toml\nx = 1", False, True),
+        ("~~~\nx", False, True),
+        ("````\n```\nx\n```", False, True),
+        ("```toml\nx = 1\n```", False, False),
+        ("Text\n\n~~~\nx\n~~~\n", False, False),
     ],
 )
-def test_fence_tracking(content: str, flagged: bool) -> None:
-    assert _has_heading(content) is flagged
+def test_scan_markdown(content: str, has_heading: bool, open_fence: bool) -> None:
+    assert _scan_markdown(content) == (has_heading, open_fence)
 
 
-@pytest.mark.parametrize(
-    ("content", "unclosed"),
-    [
-        ("```toml\nx = 1", True),
-        ("~~~\nx", True),
-        ("````\n```\nx\n```", True),
-        ("```toml\nx = 1\n```", False),
-        ("Text\n\n~~~\nx\n~~~\n", False),
-    ],
-)
 def test_unclosed_fence_flagged(
-    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, content: str, unclosed: bool
+    notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path
 ) -> None:
-    notes_dir({GOOD: content})
-    problems = _file_problems(tmp_path)
-    if unclosed:
-        (problem,) = problems
-        assert GOOD in problem
-        assert "unclosed code fence" in problem
-    else:
-        assert problems == []
+    notes_dir({VALID_NOTE_NAME: "```toml\nx = 1"})
+    (problem,) = _file_problems(tmp_path)
+    assert VALID_NOTE_NAME in problem
+    assert "unclosed code fence" in problem
 
 
 @pytest.mark.parametrize("name", [".DS_Store", ".x.md.swp", "x.md~", "notes.txt", "sub/x.md"])
 def test_non_note_entries_ignored(
     notes_dir: Callable[[dict[str, str]], Path], tmp_path: Path, name: str
 ) -> None:
-    directory = notes_dir({GOOD: "Text", name: "junk"})
+    directory = notes_dir({VALID_NOTE_NAME: "Text", name: "junk"})
     assert _file_problems(tmp_path) == []
     assert _render(directory) == "Text"
     clear(make_context(tmp_path))
@@ -496,7 +462,7 @@ def test_non_note_entries_ignored(
 def test_invalid_utf8_flagged(tmp_path: Path) -> None:
     directory = tmp_path / "release-notes"
     directory.mkdir()
-    (directory / GOOD).write_bytes(b"\xff\xfe")
+    (directory / VALID_NOTE_NAME).write_bytes(b"\xff\xfe")
     (problem,) = _file_problems(tmp_path)
     assert "not valid UTF-8" in problem
 
@@ -560,7 +526,9 @@ def gate_repo(git_repo: Callable[..., Path]) -> Callable[..., Path]:
     def _make(main_note: str | None = None) -> Path:
         repo = git_repo()
         if main_note is not None:
-            _commit(repo, "docs(release-notes): seed", {f"release-notes/{GOOD}": main_note})
+            _commit(
+                repo, "docs(release-notes): seed", {f"release-notes/{VALID_NOTE_NAME}": main_note}
+            )
         _git(repo, "checkout", "-b", "feature")
         return repo
 
@@ -579,19 +547,12 @@ def _commit(repo: Path, message: str, files: dict[str, str | None] | None = None
     _git(repo, "commit", "--allow-empty", "-q", "-m", message)
 
 
-def _gate(repo: Path, base: str = "main") -> None:
-    check(make_context(repo), base=base)
-
-
 def _gate_fails(repo: Path, base: str = "main") -> str:
     ctx = make_context(repo)
     with pytest.raises(SystemExit) as exc:
         check(ctx, base=base)
     assert exc.value.code != 0
     return ctx.stderr
-
-
-NOTE = "release-notes/2026-11-01.15-00-00.bar.md"
 
 
 def test_gate_feat_without_note_fails(gate_repo: Callable[..., Path]) -> None:
@@ -605,14 +566,14 @@ def test_gate_feat_without_note_fails(gate_repo: Callable[..., Path]) -> None:
 
 def test_gate_feat_with_note_passes(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo()
-    _commit(repo, "feat: a", {NOTE: "Added a."})
-    _gate(repo)
+    _commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."})
+    check(make_context(repo), base="main")
 
 
 def test_gate_appended_existing_note_passes(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo(main_note="Old.")
-    _commit(repo, "fix: a", {f"release-notes/{GOOD}": "Old.\n\nNew."})
-    _gate(repo)
+    _commit(repo, "fix: a", {f"release-notes/{VALID_NOTE_NAME}": "Old.\n\nNew."})
+    check(make_context(repo), base="main")
 
 
 def test_gate_readme_only_change_fails(gate_repo: Callable[..., Path]) -> None:
@@ -623,36 +584,38 @@ def test_gate_readme_only_change_fails(gate_repo: Callable[..., Path]) -> None:
 
 def test_gate_breaking_needs_breaking_note(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo()
-    _commit(repo, "feat!: drop x", {NOTE: "Dropped x."})
+    _commit(repo, "feat!: drop x", {FEATURE_NOTE_PATH: "Dropped x."})
     stderr = _gate_fails(repo)
     assert "feat!: drop x" in stderr
     assert "**Breaking:**" in stderr
-    _commit(repo, "docs(release-notes): mark breaking", {NOTE: "**Breaking:** Dropped x."})
-    _gate(repo)
+    _commit(
+        repo, "docs(release-notes): mark breaking", {FEATURE_NOTE_PATH: "**Breaking:** Dropped x."}
+    )
+    check(make_context(repo), base="main")
 
 
 def test_gate_revert_with_deleted_note_passes(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo(main_note="Added a.")
-    _commit(repo, "revert: feat: a", {f"release-notes/{GOOD}": None})
-    _gate(repo)
+    _commit(repo, "revert: feat: a", {f"release-notes/{VALID_NOTE_NAME}": None})
+    check(make_context(repo), base="main")
 
 
 def test_gate_unconventional_breaking_footer_passes(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo()
     _commit(repo, "Some change\n\nBREAKING CHANGE: y")
-    _gate(repo)
+    check(make_context(repo), base="main")
 
 
 def test_gate_lowercase_skip_trailer(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo()
     _commit(repo, "feat: a\n\nrelease-notes: skip")
-    _gate(repo)
+    check(make_context(repo), base="main")
 
 
 def test_gate_chore_only_passes(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo()
     _commit(repo, "chore: tidy")
-    _gate(repo)
+    check(make_context(repo), base="main")
 
 
 def test_gate_empty_range_fails(gate_repo: Callable[..., Path]) -> None:
@@ -664,7 +627,7 @@ def test_gate_trailer_in_any_commit(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo()
     _commit(repo, "feat: a")
     _commit(repo, "chore: b\n\nRelease-Notes: skip")
-    _gate(repo)
+    check(make_context(repo), base="main")
 
 
 def test_gate_ignores_base_side_commits(gate_repo: Callable[..., Path]) -> None:
@@ -673,19 +636,19 @@ def test_gate_ignores_base_side_commits(gate_repo: Callable[..., Path]) -> None:
     _git(repo, "checkout", "-q", "main")
     _commit(repo, "feat: on main")
     _git(repo, "checkout", "-q", "feature")
-    _gate(repo)
+    check(make_context(repo), base="main")
 
 
 @pytest.mark.parametrize("with_note", [True, False])
 def test_gate_on_pr_merge_commit(gate_repo: Callable[..., Path], with_note: bool) -> None:
     repo = gate_repo()
-    _commit(repo, "feat: a", {NOTE: "Added a."} if with_note else None)
+    _commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."} if with_note else None)
     _git(repo, "checkout", "-q", "main")
     _commit(repo, "chore: unrelated", {"other.txt": "x"})
     base = _git(repo, "rev-parse", "HEAD").strip()
     _git(repo, "merge", "--no-ff", "-q", "-m", "Merge feature into main", "feature")
     if with_note:
-        _gate(repo, base=base)
+        check(make_context(repo), base=base)
     else:
         assert "feat: a" in _gate_fails(repo, base=base)
 
@@ -704,7 +667,7 @@ def test_gate_runs_file_checks_too(gate_repo: Callable[..., Path]) -> None:
 
 def test_gate_git_failure_fails(gate_repo: Callable[..., Path]) -> None:
     repo = gate_repo()
-    _commit(repo, "feat: a", {NOTE: "Added a."})
+    _commit(repo, "feat: a", {FEATURE_NOTE_PATH: "Added a."})
     _git(repo, "checkout", "-q", "--orphan", "unrelated")
     _commit(repo, "chore: unrelated root")
     _git(repo, "checkout", "-q", "feature")
