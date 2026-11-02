@@ -52,7 +52,8 @@ def _reject_symlinked_modules(tools_dir: Path) -> None:
 
     Mirrors ``list_python_files`` in ``crates/toolr-core/src/hash.rs``;
     change both together. Dot-directories and ``__pycache__`` are pruned and
-    symlinked directories are not followed, so neither is checked.
+    symlinked directories, ``.py``-named or not, are not followed, so none of
+    them is checked.
 
     Raises:
         ToolrError: With the same text ``toolr`` prints for the tree.
@@ -70,7 +71,12 @@ def _reject_symlinked_modules(tools_dir: Path) -> None:
             if entry.is_dir(follow_symlinks=False):
                 if not (entry.name.startswith(".") or entry.name == "__pycache__"):
                     pending.append(Path(entry.path))
-            elif entry.is_symlink() and os.path.splitext(entry.name)[1] == ".py":
+            elif (
+                entry.is_symlink()
+                and os.path.splitext(entry.name)[1] == ".py"
+                # A `.py`-named link to a directory is a directory link.
+                and not entry.is_dir()
+            ):
                 links.append(Path(entry.path))
     if not links:
         return

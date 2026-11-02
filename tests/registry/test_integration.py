@@ -228,14 +228,19 @@ def test_discover_reports_a_failing_module_in_a_namespace_subdirectory(
     assert "raised while importing `tools.precommit.zz`" in error.__notes__
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
 def test_discover_rejects_a_symlinked_module(tmp_path: Path, tools_repo: ToolsRepo) -> None:
     """F-17 repro: `tools/linked.py -> ../shared/linked.py` fails discovery
-    with the manifest build's message, before any module is imported."""
+    with the manifest build's message, before any module is imported.
+
+    Runs on Windows too when the runner may create file symlinks.
+    """
     (tmp_path / "shared").mkdir()
     (tmp_path / "shared" / "linked.py").write_text(LINKED_MODULE)
     repo = tools_repo({"tools/demo.py": DEMO_MODULE})
-    (repo / "tools" / "linked.py").symlink_to("../shared/linked.py")
+    try:
+        (repo / "tools" / "linked.py").symlink_to(Path("..", "shared", "linked.py"))
+    except OSError as exc:  # Windows without the symlink privilege
+        pytest.skip(f"cannot create file symlinks: {exc}")
     with CommandsTester(search_path=repo) as tester:
         with pytest.raises(ToolrError) as excinfo:
             tester.discover()
@@ -277,8 +282,8 @@ def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
     tmp_path: Path, tools_repo: ToolsRepo
 ) -> None:
     """Pruned and non-identifier directories, non-identifier and non-`.py`
-    files, and symlinked directories are not imported, and `.py` links under
-    pruned directories are not rejected."""
+    files, and symlinked directories (even one named `*.py`) are not imported,
+    and `.py` links under pruned directories are not rejected."""
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "linked.py").write_text(BROKEN_MODULE)
@@ -294,6 +299,7 @@ def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
     )
     (repo / "tools" / "linked_dir").symlink_to(outside, target_is_directory=True)
     (repo / "tools" / ".venv").symlink_to(outside, target_is_directory=True)
+    (repo / "tools" / "pkg.py").symlink_to(outside, target_is_directory=True)
     (repo / "tools" / "__pycache__" / "linked.py").symlink_to(outside / "linked.py")
     (repo / "tools" / ".hidden" / "linked.py").symlink_to(outside / "linked.py")
     # Every skipped `.py` raises if imported, so a clean discover() proves none was.

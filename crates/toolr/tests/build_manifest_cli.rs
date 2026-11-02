@@ -305,3 +305,34 @@ fn symlinked_module_in_package_is_rejected() {
     );
     assert!(!pkg.join("toolr-manifest.json").exists());
 }
+
+/// `--source-dir .` names the package directory, not `.`.
+#[cfg(unix)]
+#[test]
+fn symlinked_module_in_relative_source_dir_names_the_package() {
+    let tmp = TempDir::new().unwrap();
+    let pkg = minimal_plugin(tmp.path(), "mypkg");
+    write(tmp.path(), "shared/linked.py", "");
+    std::os::unix::fs::symlink("../shared/linked.py", pkg.join("linked.py")).unwrap();
+
+    let output = common::toolr()
+        .current_dir(&pkg)
+        .args([
+            "self",
+            "build-manifest",
+            "--source-dir",
+            ".",
+            "--package",
+            "mypkg",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "symlinked modules are not supported (1):\n  - mypkg/linked.py\nPut the file itself under mypkg/."
+        ),
+        "{stderr}"
+    );
+}

@@ -44,7 +44,11 @@ pub(crate) fn list_python_files(tools_dir: &Path) -> Result<Vec<PathBuf>, Symlin
             continue;
         }
         if e.path_is_symlink() {
-            links.push(e.into_path());
+            // A `.py`-named link to a directory is a directory link: not
+            // followed, not rejected. Only links pay for this stat.
+            if !std::fs::metadata(e.path()).is_ok_and(|m| m.is_dir()) {
+                links.push(e.into_path());
+            }
         } else if e.file_type().is_file() {
             paths.push(e.into_path());
         }
@@ -74,21 +78,35 @@ pub struct SymlinkedModules {
 impl SymlinkedModules {
     fn new(tools_dir: &Path, mut links: Vec<PathBuf>) -> Self {
         links.sort();
-        let base = tools_dir.parent().unwrap_or(tools_dir);
-        let display = |p: &Path| {
-            let rel = p.strip_prefix(base).unwrap_or(p);
-            let joined = rel
-                .components()
-                .map(|c| c.as_os_str().to_string_lossy())
-                .collect::<Vec<_>>()
-                .join("/");
-            escape_control_chars(&joined)
-        };
+        let root = root_name(tools_dir);
+        let paths = links
+            .iter()
+            .map(|p| {
+                let rel = p.strip_prefix(tools_dir).unwrap_or(p);
+                let parts: Vec<_> = std::iter::once(root.clone())
+                    .chain(
+                        rel.components()
+                            .map(|c| c.as_os_str().to_string_lossy().into()),
+                    )
+                    .collect();
+                escape_control_chars(&parts.join("/"))
+            })
+            .collect();
         Self {
-            root: display(tools_dir),
-            paths: links.iter().map(|p| display(p)).collect(),
+            root: escape_control_chars(&root),
+            paths,
         }
     }
+}
+
+/// The walked directory's own name, even when it was given as `.` or `..`
+/// (`toolr self build-manifest --source-dir .`).
+fn root_name(dir: &Path) -> String {
+    let named = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
+    named(dir)
+        .or_else(|| std::path::absolute(dir).ok().as_deref().and_then(named))
+        .or_else(|| dir.canonicalize().ok().as_deref().and_then(named))
+        .unwrap_or_else(|| dir.display().to_string())
 }
 
 fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
@@ -254,23 +272,42 @@ mod tests {
         }
     }
 
+    fn file_link(target: &Path, link: &Path) {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(target, link).unwrap();
+    }
+
     /// F-17 repro tree: `tools/linked.py -> ../shared/linked.py` next to a
     /// regular `tools/demo.py`, plus a nested and a dangling link. Every link
     /// is reported at once, sorted, relative to the project root.
-    #[cfg(unix)]
     #[test]
     fn symlinked_modules_are_rejected_all_at_once() {
-        use std::os::unix::fs::symlink;
         let tmp = setup(&[
             ("tools/demo.py", "x"),
             ("shared/linked.py", "y"),
             ("shared/other.py", "z"),
         ]);
         let tools = tmp.path().join("tools");
-        symlink("../shared/linked.py", tools.join("linked.py")).unwrap();
+        // Windows runners cover this when they may create file symlinks.
+        #[cfg(windows)]
+        if std::os::windows::fs::symlink_file("demo.py", tools.join("probe")).is_err() {
+            eprintln!("skipping: no permission to create file symlinks");
+            return;
+        }
+        let up = Path::new("..");
+        file_link(
+            &up.join("shared").join("linked.py"),
+            &tools.join("linked.py"),
+        );
         std::fs::create_dir(tools.join("sub")).unwrap();
-        symlink("../../shared/other.py", tools.join("sub/other.py")).unwrap();
-        symlink("../shared/missing.py", tools.join("gone.py")).unwrap();
+        let shared_other = up.join("..").join("shared").join("other.py");
+        file_link(&shared_other, &tools.join("sub").join("other.py"));
+        file_link(
+            &up.join("shared").join("missing.py"),
+            &tools.join("gone.py"),
+        );
 
         let err = list_python_files(&tools).unwrap_err();
         assert_eq!(
@@ -283,6 +320,26 @@ mod tests {
                 .starts_with("symlinked modules are not supported (3):"),
             "{err}"
         );
+    }
+
+    /// A walk rooted at `.` or `..` still names the directory, not `.`.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_modules_name_a_relative_root() {
+        let tmp = setup(&[("my_plugin/sub/x.py", "x")]);
+        let links = vec![PathBuf::from("./linked.py"), PathBuf::from("./sub/l.py")];
+        let err = SymlinkedModules::new(Path::new("."), links);
+        let cwd = std::env::current_dir().unwrap();
+        let name = cwd.file_name().unwrap().to_string_lossy().into_owned();
+        assert_eq!(
+            err.paths,
+            [format!("{name}/linked.py"), format!("{name}/sub/l.py")]
+        );
+        assert_eq!(err.root, name);
+
+        let sub = tmp.path().join("my_plugin/sub");
+        assert_eq!(root_name(&sub.join("..")), "my_plugin");
+        assert_eq!(root_name(Path::new("/")), "/");
     }
 
     /// Directory links are still not followed, and links under pruned
@@ -300,7 +357,7 @@ mod tests {
         let tools = tmp.path().join("tools");
         symlink("../venv", tools.join(".venv")).unwrap();
         symlink("../shared/lib", tools.join("lib")).unwrap();
-        symlink("../shared/lib", tools.join("pkg.py.d")).unwrap();
+        symlink("../shared/lib", tools.join("pkg.py")).unwrap();
         symlink("../shared/linked.py", tools.join("notes.txt")).unwrap();
         for pruned in ["__pycache__", ".cache"] {
             std::fs::create_dir(tools.join(pruned)).unwrap();
