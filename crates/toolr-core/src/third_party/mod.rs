@@ -5,12 +5,12 @@
 //! `toolr_schema_version` load rule, and merges the resulting fragments into
 //! the project's static manifest.
 
-pub mod glob;
+pub mod find;
 pub mod merge;
 pub mod model;
 pub mod parse;
 
-pub use glob::glob_manifests;
+pub use find::find_manifests;
 pub use merge::merge_into_manifest;
 pub use model::ManifestFragment;
 pub use parse::{ParsedFragment, ThirdPartyError, parse_fragment};
@@ -36,7 +36,7 @@ pub fn discover_and_merge(
     tools_venv: &Path,
     mut base: Manifest,
 ) -> Result<Manifest, ThirdPartyError> {
-    let paths = glob_manifests(tools_venv)?;
+    let paths = find_manifests(tools_venv)?;
     let mut fragments = Vec::with_capacity(paths.len());
     for path in paths {
         match parse_fragment(&path)? {

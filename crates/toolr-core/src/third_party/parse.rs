@@ -35,6 +35,15 @@ pub enum ThirdPartyError {
     MissingVersion { path: PathBuf },
 }
 
+impl From<crate::venv::SitePackagesError> for ThirdPartyError {
+    fn from(e: crate::venv::SitePackagesError) -> Self {
+        Self::Io {
+            path: e.path,
+            source: e.source,
+        }
+    }
+}
+
 /// The outcome of reading one fragment that is at least a well-formed, versioned fragment.
 #[derive(Debug)]
 pub enum ParsedFragment {

@@ -1,4 +1,4 @@
-//! Manifest build helpers: static third-party glob-merge + hashing.
+//! Manifest build helpers: static third-party merge + hashing.
 //! (Historically also hosted a Python introspection layer, now removed —
 //! toolr never executes repository code to build the manifest.)
 

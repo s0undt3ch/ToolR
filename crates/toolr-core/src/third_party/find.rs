@@ -21,13 +21,9 @@ use crate::venv::site_packages_dirs;
 /// Errors when a directory on the way to a fragment exists but can't be
 /// read, so an unreadable venv never looks like one with no plugins;
 /// individual path parsing happens later in `parse_fragment`.
-pub fn glob_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError> {
+pub fn find_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError> {
     let mut out = Vec::new();
-    let dirs = site_packages_dirs(tools_venv).map_err(|e| ThirdPartyError::Io {
-        path: e.path,
-        source: e.source,
-    })?;
-    for site_packages in dirs {
+    for site_packages in site_packages_dirs(tools_venv)? {
         let entries = fs::read_dir(&site_packages).map_err(|source| ThirdPartyError::Io {
             path: site_packages.clone(),
             source,
@@ -35,6 +31,7 @@ pub fn glob_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError
         out.extend(
             entries
                 .filter_map(Result::ok)
+                // Exact name, as uv and `venv` install it.
                 .map(|entry| entry.path().join("toolr-manifest.json"))
                 .filter(|path| path.is_file()),
         );

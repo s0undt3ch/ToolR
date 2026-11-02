@@ -440,8 +440,8 @@ pub enum Origin {
     Static,
     /// Entry merged from a third-party package's `toolr-manifest.json`
     /// shipped under `<tools-venv>/lib/python*/site-packages/<pkg>/`
-    /// (`<tools-venv>/Lib/site-packages/<pkg>/` on Windows).
-    /// Regenerated on every glob-merge.
+    /// or `<tools-venv>/Lib/site-packages/<pkg>/`, both looked in on every
+    /// platform. Regenerated on every third-party merge.
     ThirdParty,
 }
 // endregion: SkillRefOrigin

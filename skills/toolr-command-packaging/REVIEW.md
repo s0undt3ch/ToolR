@@ -70,8 +70,8 @@ still need updates if:
 - A build backend's "include data file in wheel" behaviour
   changes. Update the body and verify
   `examples/plugin-package/pyproject.toml` still works.
-- The plugin discovery glob changes (`crates/toolr-core/src/
-  third_party/glob.rs`). The reference rebuilds, but if the new
+- The plugin discovery lookup changes (`crates/toolr-core/src/
+  third_party/find.rs`). The reference rebuilds, but if the new
   layout is meaningfully different the body should mention it too.
 
 Otherwise the narrative is independent of the schema — that's the

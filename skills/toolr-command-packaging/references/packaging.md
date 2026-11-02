@@ -9,7 +9,7 @@ A fragment whose version is out of range, or one with a command that fails valid
 ## Discovery
 
 Toolr discovers your plugin by looking in every installed wheel's package root for a file named `toolr-manifest.json`.
-The lookup is in the toolr repository's crates/toolr-core/src/third_party/glob.rs:
+The lookup is in the toolr repository's crates/toolr-core/src/third_party/find.rs:
 
 ```text
 Find `<site-packages>/*/toolr-manifest.json` in the tools venv.
@@ -73,8 +73,8 @@ pub enum Origin {
     Static,
     /// Entry merged from a third-party package's `toolr-manifest.json`
     /// shipped under `<tools-venv>/lib/python*/site-packages/<pkg>/`
-    /// (`<tools-venv>/Lib/site-packages/<pkg>/` on Windows).
-    /// Regenerated on every glob-merge.
+    /// or `<tools-venv>/Lib/site-packages/<pkg>/`, both looked in on every
+    /// platform. Regenerated on every third-party merge.
     ThirdParty,
 }
 ```
