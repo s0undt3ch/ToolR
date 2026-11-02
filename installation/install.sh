@@ -106,13 +106,11 @@ sha256_of() {
   fi
   # No pipefail in POSIX sh: a hasher that fails still leaves the pipeline at status 0.
   case "$digest" in
-    ''|*[!0-9a-f]*) digest="" ;;
+    ''|*[!0-9a-f]*) ;;
+    *) if [ "${#digest}" -eq 64 ]; then printf '%s\n' "$digest"; return 0; fi ;;
   esac
-  if [ "${#digest}" -ne 64 ]; then
-    printf 'install.sh: could not compute the SHA-256 of %s; rerun with %s to skip\n' "$1" "$2" >&2
-    return 1
-  fi
-  printf '%s\n' "$digest"
+  printf 'install.sh: could not compute the SHA-256 of %s; rerun with %s to skip\n' "$1" "$2" >&2
+  return 1
 }
 
 verify_sha256() {
