@@ -1,6 +1,6 @@
 # Support pre-release versions in `tools/version.py` and the release workflow
 
-- **Status:** design agreed (decided 2026-11-02), not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-26 (low).
 - **Plan:** [`2026-10-31-version-py-tags-plan.md`](./2026-10-31-version-py-tags-plan.md)
 

@@ -13,7 +13,7 @@ the GitHub release.
 
 **Tech Stack:** Python 3.11+, `packaging`, pytest, real git repositories in `tmp_path`, bash for the workflow step.
 
-**Spec:** [`specs/2026-10-31-version-py-tags-design.md`](./2026-10-31-version-py-tags-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-version-py-tags-design.md`](./2026-10-31-version-py-tags-design.md)
 
 ## Global Constraints
 
