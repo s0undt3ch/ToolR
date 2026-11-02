@@ -982,23 +982,41 @@ def test_run_falls_back_to_generic_hint_when_importerror_has_no_name(
     assert "toolr project venv sync" in err
 
 
-def _drop_tools_modules() -> None:
-    for name in [m for m in sys.modules if m == "tools" or m.startswith("tools.")]:
-        del sys.modules[name]
+# The F-28 report: a helper module two files from the command fails a third-party import.
+_TRANSITIVE_IMPORT_FILES = {
+    "demo.py": """
+        from tools._helpers import load
+
+
+        def hello(ctx) -> None:
+            load()
+        """,
+    "_helpers.py": """
+        import toolr_f28_missing_dep
+
+
+        def load() -> None:
+            toolr_f28_missing_dep.go()
+        """,
+}
 
 
 @pytest.fixture
-def make_tools_package(tmp_path: Path) -> Iterator[Callable[[dict[str, str]], Path]]:
+def make_tools_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Callable[[dict[str, str]], Path]]:
     """Factory: write a ``tools`` package under ``tmp_path``; return it as ``repo_root``.
 
-    Teardown restores ``sys.path`` (``run()`` appends ``repo_root``) and drops
-    every ``tools``/``tools.*`` module so later tests import their own.
+    Unlike conftest's ``make_tools_module`` it doesn't import anything: ``run()`` must do the
+    (failing) import. The tmp package wins over the repo's own ``tools/`` only because that one
+    is a namespace package, which a regular package later on ``sys.path`` takes precedence over.
     """
-    saved_path = sys.path[:]
-    _drop_tools_modules()
+    monkeypatch.setattr(sys, "path", sys.path[:])
+    for name in [m for m in sys.modules if _is_repo_tools_module(m)]:
+        monkeypatch.delitem(sys.modules, name)
+    package = tmp_path / "tools"
 
     def _make(files: dict[str, str]) -> Path:
-        package = tmp_path / "tools"
         package.mkdir()
         (package / "__init__.py").write_text("")
         for name, source in files.items():
@@ -1006,75 +1024,26 @@ def make_tools_package(tmp_path: Path) -> Iterator[Callable[[dict[str, str]], Pa
         return tmp_path
 
     yield _make
-    sys.path[:] = saved_path
-    _drop_tools_modules()
+    for name, module in list(sys.modules.items()):
+        if str(getattr(module, "__file__", None) or "").startswith(str(package)):
+            del sys.modules[name]
 
 
 def test_run_prints_traceback_for_transitive_import_failure(
     make_tools_package: Callable[[dict[str, str]], Path],
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A third-party import failing in a helper module two files away names that file and line."""
-    repo = make_tools_package(
-        {
-            "demo.py": """
-                from tools._helpers import load
-
-
-                def hello(ctx) -> None:
-                    load()
-                """,
-            "_helpers.py": """
-                import toolr_f28_missing_dep
-
-
-                def load() -> None:
-                    toolr_f28_missing_dep.go()
-                """,
-        }
-    )
+    """The failing helper's file and line show, with no importlib frames above the user's."""
+    repo = make_tools_package(_TRANSITIVE_IMPORT_FILES)
     assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
     err = capsys.readouterr().err
     assert "Traceback (most recent call last)" in err
     assert '_helpers.py", line 1' in err
+    assert "<frozen importlib._bootstrap" not in err
     assert "ModuleNotFoundError: No module named 'toolr_f28_missing_dep'" in err
     assert err.index("Traceback") < err.index("toolr runner: failed to import tools.demo")
     assert "`toolr_f28_missing_dep`" in err
     assert "toolr project venv sync" in err
-
-
-def test_run_import_traceback_omits_importlib_frames(
-    make_tools_package: Callable[[dict[str, str]], Path],
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Only the `_import_target` frame sits above the user's frames, not importlib's machinery."""
-    repo = make_tools_package(
-        {
-            "demo.py": """
-                from tools._helpers import load
-
-
-                def hello(ctx) -> None:
-                    load()
-                """,
-            "_helpers.py": """
-                import toolr_f28_missing_dep
-
-
-                def load() -> None:
-                    toolr_f28_missing_dep.go()
-                """,
-        }
-    )
-    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
-    err = capsys.readouterr().err
-    assert "<frozen importlib._bootstrap" not in err
-    assert str(Path("importlib", "__init__.py")) not in err
-    frames = [line for line in err.splitlines() if line.lstrip().startswith('File "')]
-    assert len(frames) == 3, err
-    assert frames[0].endswith("in _import_target")
-    assert 'demo.py", line 1' in frames[1]
-    assert '_helpers.py", line 1' in frames[2]
 
 
 def test_import_target_falls_back_when_import_hook_skips_registration(
