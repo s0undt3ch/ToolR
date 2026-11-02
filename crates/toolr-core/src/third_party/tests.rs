@@ -166,21 +166,22 @@ fn glob_skips_package_dir_without_manifest() {
 #[test]
 fn glob_reports_unreadable_site_packages() {
     use std::os::unix::fs::PermissionsExt;
-    // SAFETY: geteuid has no preconditions.
-    if unsafe { libc::geteuid() } == 0 {
-        return;
-    }
     let tmp = setup_fake_venv(&[("a_pkg", "{}")]);
     let site = tmp
         .path()
         .join("lib")
         .join("python3.13")
         .join("site-packages");
-    std::fs::set_permissions(&site, std::fs::Permissions::from_mode(0o000)).unwrap();
-    let result = glob_manifests(tmp.path());
-    std::fs::set_permissions(&site, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // SAFETY: geteuid has no preconditions. Root ignores chmod 000.
+    let result = (unsafe { libc::geteuid() } != 0).then(|| {
+        std::fs::set_permissions(&site, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let result = glob_manifests(tmp.path());
+        std::fs::set_permissions(&site, std::fs::Permissions::from_mode(0o755)).unwrap();
+        result
+    });
     match result {
-        Err(ThirdPartyError::Io { path, .. }) => assert_eq!(path, site),
+        Some(Err(ThirdPartyError::Io { path, .. })) => assert_eq!(path, site),
+        None => {}
         other => panic!("expected an I/O error, got {other:?}"),
     }
 }
@@ -190,17 +191,18 @@ fn glob_reports_unreadable_site_packages() {
 #[test]
 fn glob_reports_unreadable_lib() {
     use std::os::unix::fs::PermissionsExt;
-    // SAFETY: geteuid has no preconditions.
-    if unsafe { libc::geteuid() } == 0 {
-        return;
-    }
     let tmp = setup_fake_venv(&[("a_pkg", "{}")]);
     let lib = tmp.path().join("lib");
-    std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o000)).unwrap();
-    let result = glob_manifests(tmp.path());
-    std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // SAFETY: geteuid has no preconditions. Root ignores chmod 000.
+    let result = (unsafe { libc::geteuid() } != 0).then(|| {
+        std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let result = glob_manifests(tmp.path());
+        std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o755)).unwrap();
+        result
+    });
     match result {
-        Err(ThirdPartyError::Io { path, .. }) => assert!(path.starts_with(&lib), "{path:?}"),
+        Some(Err(ThirdPartyError::Io { path, .. })) => assert!(path.starts_with(&lib), "{path:?}"),
+        None => {}
         other => panic!("expected an I/O error, got {other:?}"),
     }
 }

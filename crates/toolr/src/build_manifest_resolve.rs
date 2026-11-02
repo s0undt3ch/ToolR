@@ -168,17 +168,22 @@ mod tests {
     #[test]
     fn find_in_venv_reports_unreadable_lib() {
         use std::os::unix::fs::PermissionsExt;
-        // SAFETY: geteuid has no preconditions.
-        if unsafe { libc::geteuid() } == 0 {
-            return;
-        }
         let tmp = TempDir::new().unwrap();
         std::fs::create_dir_all(tmp.path().join("lib/python3.13/site-packages/pkg")).unwrap();
         let lib = tmp.path().join("lib");
-        std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o000)).unwrap();
-        let result = find_in_venv(tmp.path(), "pkg");
-        std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("I/O error reading"), "{err}");
+        // SAFETY: geteuid has no preconditions. Root ignores chmod 000.
+        let result = (unsafe { libc::geteuid() } != 0).then(|| {
+            std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o000)).unwrap();
+            let result = find_in_venv(tmp.path(), "pkg");
+            std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o755)).unwrap();
+            result
+        });
+        // `None` as root.
+        assert!(
+            result.as_ref().is_none_or(|r| r
+                .as_ref()
+                .is_err_and(|err| err.to_string().contains("I/O error reading"))),
+            "{result:?}"
+        );
     }
 }

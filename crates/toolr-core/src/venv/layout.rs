@@ -200,59 +200,66 @@ mod tests {
         assert_eq!(site_packages_dirs(&venv).unwrap(), [sp]);
     }
 
-    /// chmod 000 does nothing to root, so these can't fail for it.
+    /// Run `f` with `dir` at `mode`. `None` as root, which chmod 000 doesn't stop.
     #[cfg(unix)]
-    fn is_root() -> bool {
-        // SAFETY: geteuid has no preconditions.
-        unsafe { libc::geteuid() == 0 }
-    }
-
-    #[cfg(unix)]
-    fn with_mode<T>(dir: &Path, mode: u32, f: impl FnOnce() -> T) -> T {
+    fn with_mode<T>(dir: &Path, mode: u32, f: impl FnOnce() -> T) -> Option<T> {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(dir, fs::Permissions::from_mode(mode)).unwrap();
-        let out = f();
-        fs::set_permissions(dir, fs::Permissions::from_mode(0o755)).unwrap();
-        out
+        // SAFETY: geteuid has no preconditions.
+        let is_root = unsafe { libc::geteuid() == 0 };
+        (!is_root).then(|| {
+            fs::set_permissions(dir, fs::Permissions::from_mode(mode)).unwrap();
+            let out = f();
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o755)).unwrap();
+            out
+        })
     }
 
     #[cfg(unix)]
     #[test]
     fn site_packages_dirs_reports_unreadable_lib() {
-        if is_root() {
-            return;
-        }
         let tmp = TempDir::new().unwrap();
         mkdirs(tmp.path(), "lib/python3.13/site-packages");
         let lib = tmp.path().join("lib");
-        let err = with_mode(&lib, 0o000, || site_packages_dirs(tmp.path())).unwrap_err();
-        assert!(err.path.starts_with(&lib), "{}", err.path.display());
+        let result = with_mode(&lib, 0o000, || site_packages_dirs(tmp.path()));
+        // `None` as root.
+        assert!(
+            result
+                .as_ref()
+                .is_none_or(|r| r.as_ref().is_err_and(|err| err.path.starts_with(&lib))),
+            "{result:?}"
+        );
     }
 
     #[cfg(unix)]
     #[test]
     fn site_packages_dirs_reports_unreadable_venv() {
-        if is_root() {
-            return;
-        }
         let tmp = TempDir::new().unwrap();
         let venv = tmp.path().join("venv");
         mkdirs(&venv, "lib/python3.13/site-packages");
-        let err = with_mode(&venv, 0o000, || site_packages_dirs(&venv)).unwrap_err();
-        assert_eq!(err.path, venv);
+        let result = with_mode(&venv, 0o000, || site_packages_dirs(&venv));
+        // `None` as root.
+        assert!(
+            result
+                .as_ref()
+                .is_none_or(|r| r.as_ref().is_err_and(|err| err.path == venv)),
+            "{result:?}"
+        );
     }
 
     #[cfg(unix)]
     #[test]
     fn site_packages_dirs_reports_unsearchable_python_dir() {
-        if is_root() {
-            return;
-        }
         let tmp = TempDir::new().unwrap();
         let sp = mkdirs(tmp.path(), "lib/python3.13/site-packages");
         let py = tmp.path().join("lib/python3.13");
-        let err = with_mode(&py, 0o000, || site_packages_dirs(tmp.path())).unwrap_err();
-        assert_eq!(err.path, sp);
+        let result = with_mode(&py, 0o000, || site_packages_dirs(tmp.path()));
+        // `None` as root.
+        assert!(
+            result
+                .as_ref()
+                .is_none_or(|r| r.as_ref().is_err_and(|err| err.path == sp)),
+            "{result:?}"
+        );
     }
 
     #[test]
