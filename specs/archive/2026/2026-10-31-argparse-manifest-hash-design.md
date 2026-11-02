@@ -1,6 +1,6 @@
 # Put argparse sources and their config in the static hash
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-16 (medium, PLAUSIBLE in the review; reproduced below).
 - **Plan:** [`2026-10-31-argparse-manifest-hash-plan.md`](./2026-10-31-argparse-manifest-hash-plan.md)
 - **Base:** `main` after #642 (F-17, symlinked `*.py` under `tools/` rejected) and #647. Updated 2026-11-02 against that
@@ -31,8 +31,8 @@ dispatcher, the `[tool.toolr.argparse.django]` block, `apps/billing/management/c
 
 ## Decision
 
-`static_hash` covers every input of the static build: the `tools/**/*.py` files, `tools/pyproject.toml`, and every
-file the argparse `scan_paths` match.
+`static_hash` covers every input of the static build: the `tools/**/*.py` files, the `[tool.toolr.argparse.*]` blocks
+of `tools/pyproject.toml`, and every file the argparse `scan_paths` match.
 
 ### Inputs
 
@@ -41,7 +41,7 @@ String, path: PathBuf }`. `key` is the path relative to the project root (`tools
 with `/`:
 
 - `tools/<rel>` for each path from `list_python_files(tools_dir)`.
-- `tools/pyproject.toml`, if it is a file.
+- `tools/pyproject.toml`, if it is a file. Only its argparse blocks are hashed; see *Hash*.
 - For each `[tool.toolr.argparse.*]` block, each path from `argparse::scan::expand_scan_paths(root, &block.scan_paths)`.
   An absolute `scan_paths` match outside the project root keeps its full path as the key.
 
@@ -71,6 +71,14 @@ such a file changes.
 `key || 0x00 || len(contents) as u64 LE || contents`, the scheme it uses now. A file that vanishes between listing and
 reading is skipped (`NotFound`), as now. Other read errors propagate.
 
+The build reads nothing from `tools/pyproject.toml` but its `[tool.toolr.argparse.*]` blocks (`run_for_project`;
+discovery only checks the file exists, and the venv settings feed `third_party_hash`). So that input is hashed as
+`key || 0x02 || len || <blocks>`: the blocks as `argparse::parse_blocks` returns them, in name order, serialised with
+`serde_json`. A dependency bump or `uv add` leaves the hash alone. A file whose blocks don't parse (not UTF-8, invalid
+TOML anywhere in it, or a block of the wrong shape) is hashed whole with the `0x00` tag, so fixing it changes the hash.
+A pyproject that a `scan_paths` glob also matches is hashed whole too, since the scanner reads all of it. (Added after
+review.)
+
 Callers that switch: `build_static_manifest_inner` (`parser/build.rs`, through `static_inputs_from`),
 `freshness::compare`, and the test helpers that forge a fresh manifest (`crates/toolr/tests/cli_smoke.rs`,
 `crates/toolr/tests/freshness_dispatch.rs`, `crates/toolr/tests/common/mod.rs::write_fresh_manifest`,
@@ -82,14 +90,27 @@ Callers that switch: `build_static_manifest_inner` (`parser/build.rs`, through `
 into an error on every invocation from the hash. So in `static_inputs`:
 
 - No `tools/pyproject.toml` contributes nothing, as in `run_for_project`.
-- An unreadable or unparsable `pyproject.toml`, or a bad glob in one block, contributes no scanned files. The
-  pyproject's bytes are still an input, so fixing the typo changes the hash and triggers a rebuild.
+- An unreadable or unparsable `pyproject.toml`, or a bad glob in one block, contributes no scanned files. An
+  unparsable pyproject is hashed whole, so fixing the typo changes the hash and triggers a rebuild.
 - The build then reports the config error as it does today, through `run_for_project`.
+- Read errors: only a `tools/**/*.py` module that can't be read fails the hash, naming the file. A scanned file or
+  `tools/pyproject.toml` that can't be read is hashed as `key || 0x01 || <error kind>`. The scanner already turns an
+  unreadable scanned file into a placeholder with a warning, and the build reports an unreadable pyproject, so neither
+  may fail every command; fixing the permission still changes the hash. (Added after review.)
+
+### TAB on a failed rebuild
+
+`--help` and dispatch fall back to the cached manifest with a warning when the rebuild fails (`warn_and_keep_cache`).
+TAB rebuilt in memory with `?`, and `run_complete` turned the error into an empty manifest, so a half-edited pyproject
+or a typo'd glob emptied TAB of every user command. `resolve_manifest_at_tab` now serves the cached manifest
+(`from_cache: true`) when the rebuild fails, and prints nothing. Symlinked modules still fail it (F-17), and with no
+cache the error still reaches `run_complete`. (Added after review.)
 
 ### Rejected alternatives
 
-- **Hash only the `[tool.toolr.argparse]` table, not the whole pyproject.** This needs a canonical re-serialisation of
-  TOML. A dependency edit that rebuilds the manifest costs a static parse, which takes milliseconds.
+- **Hash the whole pyproject.** First chosen, to avoid a canonical serialisation. Review showed that every unrelated
+  edit then made the manifest stale, and an invalid edit anywhere in the file emptied TAB. Serialising the parsed
+  blocks needs only a `Serialize` derive.
 - **Keep `hash_tools_dir` and add a second hash field to the manifest.** That would be a schema change, plus a second
   axis in `compare`, for inputs that `StaticDrift` already handles.
 - **Re-run the scanner during `compare`.** The scanner parses each file. Hashing bytes is cheaper and enough.
@@ -108,6 +129,8 @@ into an error on every invocation from the hash. So in `static_inputs`:
 - Release note, queued with `toolr release-notes add` (not breaking: the one forced rebuild already happens on every
   toolr upgrade):
 
-  > Editing a file scanned by an external command source (`[tool.toolr.argparse.*]`), or the `tools/pyproject.toml`
-  > that configures it, now refreshes the manifest on the next run. toolr used to keep showing the old commands and
-  > arguments until `toolr project manifest rebuild`.
+  > Editing the `[tool.toolr.argparse.*]` blocks in `tools/pyproject.toml`, or any file that an external command
+  > source scans, now refreshes the manifest on the next run. toolr used to keep showing the old commands and
+  > arguments until `toolr project manifest rebuild`. Other `tools/pyproject.toml` edits, such as a new dependency,
+  > don't trigger a rebuild, and tab completion keeps offering the cached commands while that file or a `scan_paths`
+  > glob is broken.

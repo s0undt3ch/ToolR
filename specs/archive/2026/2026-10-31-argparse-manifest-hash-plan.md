@@ -10,7 +10,7 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
 
 **Tech Stack:** Rust, `blake3`, `glob`, `toml`, `assert_cmd`.
 
-**Spec:** [`specs/2026-10-31-argparse-manifest-hash-design.md`](./2026-10-31-argparse-manifest-hash-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-argparse-manifest-hash-design.md`](./2026-10-31-argparse-manifest-hash-design.md)
 
 ## Global Constraints
 
@@ -19,7 +19,8 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
 - Keep the build's single walk of `tools/`: the build passes its `py_files` to `static_inputs_from`.
 - Input keys are project-root-relative with `/` separators; sorted; deduplicated.
 - Per-input hash bytes: `key || 0x00 || len(contents) as u64 LE || contents`.
-- A config or glob error never fails the hash. It drops that block's scanned files; the pyproject bytes stay an input.
+- A config or glob error never fails the hash. It drops that block's scanned files; the pyproject stays an input,
+  hashed whole when its blocks don't parse and as its parsed blocks otherwise (added after review).
 - No schema change.
 - Conventional Commits; no `Co-Authored-By`. Stage by path; never `git add -A`. `rustfmt <file>` on touched files only.
 
