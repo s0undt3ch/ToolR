@@ -288,6 +288,8 @@ pub enum BuildError {
     UnsupportedTypes(Vec<TypeResolutionError>),
     #[error("commands without a docstring ({count}):\n{details}", count = .0.len(), details = format_missing_docstrings(.0))]
     MissingDocstrings(Vec<MissingDocstring>),
+    /// `toolr.testing._unknown_groups._format_unknown_groups` mirrors this
+    /// message in Python; change both together.
     #[error("unknown group references ({count}):\n{details}", count = .0.len(), details = format_unknown_groups(.0))]
     UnknownGroupRefs(Vec<UnknownGroupRef>),
     #[error("invalid positional arity ({count}):\n{details}", count = .0.len(), details = format_positional_arity_errors(.0))]
@@ -500,6 +502,8 @@ pub struct UnknownGroupRef {
     pub suggestion: Option<String>,
 }
 
+/// `toolr.testing._unknown_groups._format_unknown_groups` mirrors this in
+/// Python; change both together.
 fn format_unknown_groups(errors: &[UnknownGroupRef]) -> String {
     use crate::text::escape_control_chars;
     let mut s = String::new();
@@ -536,6 +540,9 @@ fn format_unknown_groups(errors: &[UnknownGroupRef]) -> String {
 /// Return the closest registered group path to `target` by simple
 /// edit-distance scoring, when it's within a small threshold. None if
 /// nothing useful is close.
+///
+/// `toolr.testing._unknown_groups._nearest_group` mirrors this in Python;
+/// change both together.
 fn nearest_group(target: &str, registered: &HashSet<String>) -> Option<String> {
     let max = (target.len() / 3).max(2);
     let mut best: Option<(usize, &String)> = None;
@@ -552,6 +559,9 @@ fn nearest_group(target: &str, registered: &HashSet<String>) -> Option<String> {
 }
 
 /// Plain Levenshtein distance (insert / delete / substitute).
+///
+/// `toolr.testing._unknown_groups._edit_distance` mirrors this in Python;
+/// change both together.
 pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();

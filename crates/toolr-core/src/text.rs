@@ -15,6 +15,8 @@
 //! makes one name look like another. Prose keeps them, since RTL text needs
 //! LRM/RLM and emoji and Indic scripts need ZWJ.
 
+/// `toolr.testing._unknown_groups._is_control` mirrors this in Python; change
+/// both together.
 fn is_control(c: char) -> bool {
     matches!(c, '\u{0}'..='\u{1f}' | '\u{7f}' | '\u{80}'..='\u{9f}')
 }
@@ -22,6 +24,9 @@ fn is_control(c: char) -> bool {
 /// Zero-width and bidi format characters: ALM, ZWSP/ZWNJ/ZWJ, LRM/RLM, the
 /// bidi embeddings, overrides and isolates, word joiner, invisible operators
 /// and BOM.
+///
+/// `toolr.testing._unknown_groups._is_invisible_format` mirrors this in
+/// Python; change both together.
 fn is_invisible_format(c: char) -> bool {
     matches!(
         c,
@@ -82,6 +87,9 @@ pub fn strip_control_chars_per_line(s: &str) -> String {
 
 /// Render control and invisible format characters as `\u{..}` and leave
 /// everything else alone.
+///
+/// `toolr.testing._unknown_groups._escape_control_chars` mirrors this in
+/// Python; change both together.
 pub fn escape_control_chars(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
