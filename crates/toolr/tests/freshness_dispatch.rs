@@ -647,3 +647,44 @@ fn unreadable_scanned_file_does_not_break_help_or_completion() {
     let stdout = String::from_utf8_lossy(&complete.stdout);
     assert!(stdout.contains("migrate"), "{stdout}");
 }
+
+/// `toolr __complete <root> <args...> ""`, which must succeed silently.
+fn complete_stdout(root: &std::path::Path, args: &[&str]) -> String {
+    let output = common::toolr()
+        .args(["__complete", &root.to_string_lossy()])
+        .args(args)
+        .arg("")
+        .current_dir(root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "toolr __complete failed: {output:?}"
+    );
+    assert!(output.stderr.is_empty(), "{output:?}");
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// F-16 review: a pyproject mid-edit or a typo'd `scan_paths` glob fails
+/// the rebuild. TAB keeps serving the cached commands, silently.
+#[test]
+fn completion_serves_the_cache_when_the_pyproject_is_broken() {
+    let tmp = TempDir::new().unwrap();
+    write_django_project(tmp.path());
+    help_stdout(tmp.path(), &["django"]);
+    let pyproject = tmp.path().join("tools/pyproject.toml");
+    let valid = fs::read_to_string(&pyproject).unwrap();
+    let invalid_toml = valid.replace("[project]\n", "[project]\ndependencies = [\"django\"\n");
+    let bad_glob = valid.replace(
+        r#"scan_paths = ["apps/*/management/commands/*.py"]"#,
+        r#"scan_paths = ["apps/[/x.py"]"#,
+    );
+    for broken in [invalid_toml, bad_glob] {
+        assert_ne!(broken, valid);
+        fs::write(&pyproject, &broken).unwrap();
+        let groups = complete_stdout(tmp.path(), &[]);
+        assert!(groups.contains("django"), "{broken}\n{groups}");
+        let commands = complete_stdout(tmp.path(), &["django"]);
+        assert!(commands.contains("migrate"), "{broken}\n{commands}");
+    }
+}
