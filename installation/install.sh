@@ -91,17 +91,28 @@ fetch() {
   fi
 }
 
-# Print the lowercase hex SHA-256 of a file; fail when no tool can compute it.
+# Print the lowercase hex SHA-256 of file $1. On failure, explain on stderr
+# (naming the escape hatch $2) and return 1; the caller exits.
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum < "$1" | awk '{print $1}'
+    digest=$(sha256sum < "$1" | awk '{print $1}')
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 < "$1" | awk '{print $1}'
+    digest=$(shasum -a 256 < "$1" | awk '{print $1}')
   elif command -v openssl >/dev/null 2>&1; then
-    openssl dgst -sha256 < "$1" | sed 's/^.*= *//'
+    digest=$(openssl dgst -sha256 < "$1" | sed 's/^.*= *//')
   else
+    printf 'install.sh: no sha256 tool available (install coreutils); rerun with %s to skip\n' "$2" >&2
     return 1
   fi
+  # No pipefail in POSIX sh: a hasher that fails still leaves the pipeline at status 0.
+  case "$digest" in
+    ''|*[!0-9a-f]*) digest="" ;;
+  esac
+  if [ "${#digest}" -ne 64 ]; then
+    printf 'install.sh: could not compute the SHA-256 of %s; rerun with %s to skip\n' "$1" "$2" >&2
+    return 1
+  fi
+  printf '%s\n' "$digest"
 }
 
 verify_sha256() {
@@ -110,7 +121,7 @@ verify_sha256() {
     info "skipping checksum verification (--no-verify)"
     return 0
   fi
-  actual=$(sha256_of "$file") || err "no sha256 tool available (install coreutils); rerun with --no-verify to skip"
+  actual=$(sha256_of "$file" --no-verify) || exit 1
   [ "$actual" = "$expected" ] || err "checksum mismatch: expected $expected got $actual"
 }
 
@@ -163,8 +174,7 @@ verify_attestation() {
   SIGNER_WORKFLOW="https://github.com/${REPO}/.github/workflows/_build-binary-archive.yml@refs/heads/main"
   RELEASE_WORKFLOW="https://github.com/${REPO}/.github/workflows/release.yml@refs/heads/main"
   ARCHIVE_NAME="${file##*/}"
-  ARCHIVE_SHA256=$(sha256_of "$file") \
-    || err "no sha256 tool available (install coreutils); rerun with --verify-attestation=skip to skip"
+  ARCHIVE_SHA256=$(sha256_of "$file" --verify-attestation=skip) || exit 1
   export ARCHIVE_NAME ARCHIVE_SHA256 RELEASE_WORKFLOW
   info "verifying SLSA build provenance via 'gh attestation verify'"
   if ! count=$(gh attestation verify "$file" \

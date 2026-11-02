@@ -83,7 +83,8 @@ def verify_runner(tmp_path: Path) -> RunVerify:
     non-zero `gh_rc` makes the stub fail the way `gh attestation verify`
     does when nothing verifies. `gh_version` is what `gh --version`
     reports; `gh=False` leaves `gh` off `PATH`. `hashers` are the SHA-256
-    tools on `PATH`. Every other `gh` argument
+    tools on `PATH`: a name links the host's tool, a `(name, script)` pair
+    installs a stub. Every other `gh` argument
     list is appended to `tmp_path / "gh_calls"`.
     """
     sh = shutil.which("sh")
@@ -113,14 +114,19 @@ def verify_runner(tmp_path: Path) -> RunVerify:
         gh: bool = True,
         mode: str = "require",
         repo: str = "s0undt3ch/ToolR",
-        hashers: tuple[str, ...] = ("sha256sum", "shasum"),
+        hashers: tuple[str | tuple[str, str], ...] = ("sha256sum", "shasum"),
     ) -> subprocess.CompletedProcess[str]:
         shutil.rmtree(tools, ignore_errors=True)
         tools.mkdir()
-        for name in ("sed", "head", "cat", "awk", *hashers):
-            found = shutil.which(name)
+        for tool in ("sed", "head", "cat", "awk", *hashers):
+            if isinstance(tool, tuple):
+                name, body = tool
+                (tools / name).write_text(f"#!{sh}\n{body}\n")
+                (tools / name).chmod(0o755)
+                continue
+            found = shutil.which(tool)
             if found is not None:
-                (tools / name).symlink_to(found)
+                (tools / tool).symlink_to(found)
         payload_file.write_text(
             json.dumps(
                 [
@@ -371,6 +377,27 @@ def test_no_sha256_tool_fails_closed(verify_runner: RunVerify, tmp_path: Path) -
     result = verify_runner(build_configs=[RELEASE_BUILD], hashers=())
     assert result.returncode != 0
     assert "no sha256 tool available" in result.stderr
+    assert not (tmp_path / "gh_calls").exists()
+
+
+@pytest.mark.parametrize(
+    "hasher",
+    [
+        pytest.param(("sha256sum", "echo 'sha256sum: read error' >&2; exit 1"), id="fails"),
+        pytest.param(("sha256sum", "echo 'not-a-digest  -'"), id="garbage"),
+        pytest.param(("sha256sum", f"echo '{ARCHIVE_SHA256.upper()}  -'"), id="uppercase"),
+        pytest.param(("sha256sum", f"echo '{ARCHIVE_SHA256[:-1]}  -'"), id="short"),
+        pytest.param(("openssl", "echo 'unexpected output'"), id="openssl-garbage"),
+    ],
+)
+def test_unusable_digest_fails_closed(
+    verify_runner: RunVerify, tmp_path: Path, hasher: tuple[str, str]
+) -> None:
+    """No pipefail in sh, so a broken hasher must not pass an empty or bogus digest on."""
+    result = verify_runner(build_configs=[RELEASE_BUILD], hashers=(hasher,))
+    assert result.returncode != 0
+    assert "install.sh: could not compute the SHA-256 of " in result.stderr
+    assert SKIP_HINT in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
