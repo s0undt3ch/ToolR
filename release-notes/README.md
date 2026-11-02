@@ -52,6 +52,19 @@ Exemptions:
 A PR that only adds or edits notes should use a `docs(release-notes): ...` commit, which git-cliff leaves out
 of the changelog.
 
+## Pre-releases
+
+To cut a pre-release, run the `Release` workflow (`release.yml`) with a version such as `1.0.0-rc.1`
+(`X.Y.Z-rc.N`). It is tagged `v1.0.0-rc.1` and published as a GitHub pre-release, so `latest` lookups skip it,
+and the wheels carry the PEP 440 form `1.0.0rc1`. Its release body shows every note and change queued since
+the last final release, but it gets no `CHANGELOG.md` section and leaves the notes queued. The next final
+release rolls up everything since the previous final release, pre-releases included.
+
+The policy lives in four files: `tools/version.py` (version parsing and the `release-prerelease` output),
+`.github/workflows/_prepare-release.yml` (skips the CHANGELOG and notes-clearing steps for a pre-release),
+`.github/workflows/release.yml` (`--prerelease` instead of `--latest`) and `cliff.toml` (`tag_pattern` only
+matches final release tags).
+
 ## After a parent PR merges
 
 In a stack, restack and push the child branch. Do not re-run the old CI run: it checked the branch against

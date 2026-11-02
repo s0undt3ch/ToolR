@@ -71,7 +71,8 @@ trim = true
 [git]
 # Only final releases are changelog sections. Pre-release tags (`v1.0.0-rc.1`)
 # and the floating `vX`/`vX.Y` tags don't match, so `--unreleased` runs from
-# the last final release and a final release rolls up its pre-releases.
+# the last final release and a final release rolls up its pre-releases. See
+# "Pre-releases" in release-notes/README.md.
 tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
 # Parse commits according to the conventional commits specification.
 # See https://www.conventionalcommits.org
