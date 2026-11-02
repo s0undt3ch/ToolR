@@ -5,11 +5,8 @@
 
 mod common;
 
-use std::fs::File;
-use std::io::Write;
-use std::os::fd::FromRawFd;
 use std::path::Path;
-use std::process::{Output, Stdio};
+use std::process::Output;
 
 use common::VenvFixture;
 use tempfile::TempDir;
@@ -29,40 +26,16 @@ fn run_with_tty_stdin(cwd: &Path, args: &[&str]) -> Output {
 /// [`run_with_tty_stdin`] plus extra environment, such as a private trust store.
 fn run_with_tty_stdin_env(cwd: &Path, args: &[&str], env: &[(&str, &Path)]) -> Output {
     let empty = TempDir::new().unwrap();
-    let (mut master, mut slave) = (0, 0);
-    // SAFETY: openpty writes two fds into the out-params; the null pointers
-    // ask for no name, termios or winsize.
-    let rc = unsafe {
-        libc::openpty(
-            &mut master,
-            &mut slave,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-        )
-    };
-    assert_eq!(rc, 0, "openpty failed");
-    // SAFETY: both fds are fresh from openpty and owned only here.
-    let (mut master, slave) = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
-    // A prompt that does fire reads "n" and declines. A bare Enter would mean
-    // "install" and download uv.
-    master.write_all(b"n\n").unwrap();
-
-    let child = common::toolr_std()
-        .args(args)
+    let mut cmd = common::toolr_std();
+    cmd.args(args)
         .current_dir(cwd)
         .env("PATH", empty.path())
         .env("XDG_DATA_HOME", empty.path())
         .env_remove("TOOLR_AUTO_INSTALL_UV")
-        .envs(env.iter().copied())
-        .stdin(Stdio::from(slave))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let out = child.wait_with_output().unwrap();
-    drop(master);
-    out
+        .envs(env.iter().copied());
+    // A prompt that does fire reads "n" and declines. A bare Enter would mean
+    // "install" and download uv.
+    common::run_on_pty(cmd, "n\n")
 }
 
 fn assert_refused_without_prompt(out: &Output) {

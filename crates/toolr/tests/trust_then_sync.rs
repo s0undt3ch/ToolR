@@ -5,11 +5,9 @@
 
 mod common;
 
-use std::fs::{self, File};
-use std::io::Write;
-use std::os::fd::FromRawFd;
+use std::fs;
 use std::path::PathBuf;
-use std::process::{Output, Stdio};
+use std::process::Output;
 
 use common::{TrustEnv, VenvFixture};
 
@@ -126,23 +124,6 @@ impl Clone {
     }
 
     fn run_with_tty_env(&self, args: &[&str], answers: &str, env: &[(&str, &str)]) -> Output {
-        let (mut master, mut slave) = (0, 0);
-        // SAFETY: openpty writes two fds into the out-params; the null pointers
-        // ask for no name, termios or winsize.
-        let rc = unsafe {
-            libc::openpty(
-                &mut master,
-                &mut slave,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            )
-        };
-        assert_eq!(rc, 0, "openpty failed");
-        // SAFETY: both fds are fresh from openpty and owned only here.
-        let (mut master, slave) = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
-        master.write_all(answers.as_bytes()).unwrap();
-
         let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
         cmd.args(args)
             .current_dir(&self.fx.root)
@@ -154,46 +135,8 @@ impl Clone {
             .env("XDG_CACHE_HOME", self.env.cache.path())
             .env("XDG_DATA_HOME", self.env.data.path())
             .env("TOOLR_NO_CACHE_HINT", "1")
-            .stdin(Stdio::from(slave))
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
             .envs(env.iter().copied());
-        let out = wait_or_kill(cmd.spawn().unwrap());
-        drop(master);
-        out
-    }
-}
-
-/// An unexpected prompt would wait on the pty forever, so give up after a
-/// deadline and fail with whatever toolr printed.
-fn wait_or_kill(mut child: std::process::Child) -> Output {
-    use std::io::Read;
-    fn drain(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = pipe.read_to_end(&mut buf);
-            buf
-        })
-    }
-    let stdout = drain(child.stdout.take().unwrap());
-    let stderr = drain(child.stderr.take().unwrap());
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        if std::time::Instant::now() > deadline {
-            child.kill().unwrap();
-            child.wait().unwrap();
-            let err = String::from_utf8_lossy(&stderr.join().unwrap()).into_owned();
-            panic!("toolr still running after 20s, waiting on a prompt?\n{err}");
-        }
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    };
-    Output {
-        status,
-        stdout: stdout.join().unwrap(),
-        stderr: stderr.join().unwrap(),
+        common::run_on_pty(cmd, answers)
     }
 }
 

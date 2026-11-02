@@ -329,3 +329,72 @@ pub fn write_fresh_manifest(root: &Path, manifest_json: &str) {
     )
     .unwrap();
 }
+
+/// Run `cmd` with a pseudo-terminal as stdin, pre-loaded with `answers`, so
+/// toolr's prompts fire and read them. Fails instead of hanging when a prompt
+/// waits for more input than `answers` holds.
+#[cfg(unix)]
+pub fn run_on_pty(mut cmd: std::process::Command, answers: &str) -> std::process::Output {
+    use std::fs::File;
+    use std::io::Write;
+    use std::os::fd::FromRawFd;
+    use std::process::Stdio;
+
+    let (mut master, mut slave) = (0, 0);
+    // SAFETY: openpty writes two fds into the out-params; the null pointers
+    // ask for no name, termios or winsize.
+    let rc = unsafe {
+        libc::openpty(
+            &mut master,
+            &mut slave,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(rc, 0, "openpty failed");
+    // SAFETY: both fds are fresh from openpty and owned only here.
+    let (mut master, slave) = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
+    master.write_all(answers.as_bytes()).unwrap();
+    cmd.stdin(Stdio::from(slave))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let out = wait_or_kill(cmd.spawn().unwrap());
+    drop(master);
+    out
+}
+
+/// An unexpected prompt would wait on the pty forever, so give up after a
+/// deadline and fail with whatever toolr printed.
+#[cfg(unix)]
+fn wait_or_kill(mut child: std::process::Child) -> std::process::Output {
+    use std::io::Read;
+    use std::time::{Duration, Instant};
+    fn drain(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            buf
+        })
+    }
+    let stdout = drain(child.stdout.take().unwrap());
+    let stderr = drain(child.stderr.take().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() > deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            let err = String::from_utf8_lossy(&stderr.join().unwrap()).into_owned();
+            panic!("toolr still running after 20s, waiting on a prompt?\n{err}");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    std::process::Output {
+        status,
+        stdout: stdout.join().unwrap(),
+        stderr: stderr.join().unwrap(),
+    }
+}
