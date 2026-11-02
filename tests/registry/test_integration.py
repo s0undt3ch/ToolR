@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import sysconfig
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,7 +16,10 @@ from toolr import command_group
 from toolr._decorators import CommandGroup
 from toolr._exc import ToolrError
 from toolr.testing import CommandsTester
+from toolr.testing import _discovery
 from toolr.testing._discovery import _isolated_sys_path
+from toolr.testing._discovery import _normalise
+from toolr.testing._discovery import _site_dirs
 
 CI_MODULE = (
     "from toolr import command_group\n"
@@ -505,15 +509,58 @@ def test_isolated_sys_path_matches_the_tools_name_exactly(tmp_path: Path) -> Non
     ]
 
 
-def test_isolated_sys_path_keeps_site_packages_with_tools(tmp_path: Path) -> None:
-    """A site-packages directory is kept even when it holds a `tools` package."""
-    site_packages = tmp_path / "lib" / "site-packages"
-    (site_packages / "tools").mkdir(parents=True)
+def test_isolated_sys_path_keeps_site_dirs_with_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An interpreter site directory is kept even when it holds a `tools`
+    package; its name plays no part."""
+    site_dir = tmp_path / "interpreter-libs"
+    (site_dir / "tools").mkdir(parents=True)
+    monkeypatch.setattr(_discovery, "_site_dirs", lambda: frozenset({_normalise(str(site_dir))}))
     search_path = tmp_path / "search"
-    assert _isolated_sys_path(search_path, [str(site_packages)]) == [
+    assert _isolated_sys_path(search_path, [str(site_dir)]) == [
         str(search_path),
-        str(site_packages),
+        str(site_dir),
     ]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["windows-site-packages", "my-site-packages-tool", "dist-packages-fork", "site-packages"],
+)
+def test_isolated_sys_path_drops_tools_providers_named_like_site_packages(
+    tmp_path: Path, name: str
+) -> None:
+    """A `tools` provider whose path only mentions `site-packages` or
+    `dist-packages` is dropped like any other."""
+    repo = tmp_path / name
+    (repo / "tools").mkdir(parents=True)
+    search_path = tmp_path / "search"
+    assert _isolated_sys_path(search_path, [str(repo)]) == [str(search_path)]
+
+
+def test_site_dirs_lists_the_interpreter_site_packages() -> None:
+    """The real interpreter's purelib directory counts as a site directory."""
+    purelib = sysconfig.get_paths()["purelib"]
+    assert _normalise(purelib) in _site_dirs()
+
+
+def test_discover_ignores_tools_under_a_dir_named_like_site_packages(
+    tmp_path: Path,
+    tools_repo: ToolsRepo,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A repo checked out under `.worktrees/windows-site-packages` doesn't
+    merge its namespace `tools/` into the fixture's."""
+    decoy = tmp_path / "host" / ".worktrees" / "windows-site-packages"
+    (decoy / "tools").mkdir(parents=True)
+    (decoy / "tools" / "host_only.py").write_text(BROKEN_MODULE)
+    monkeypatch.syspath_prepend(decoy)
+    repo = tools_repo({"tools/__init__.py": None, "tools/ci.py": CI_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    assert list(groups) == ["tools.ci"]
 
 
 def test_commands_tester_restores_sys_modules(tmp_path: Path) -> None:

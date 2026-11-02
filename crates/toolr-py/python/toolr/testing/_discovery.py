@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import importlib
 import os
+import site
 import sys
+import sysconfig
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
@@ -180,6 +182,29 @@ def _provides_tools(entry: str) -> bool:
         return False
 
 
+def _normalise(path: str) -> str:
+    """Return ``path`` resolved and case-folded the way the OS compares paths."""
+    return os.path.normcase(os.path.realpath(path))
+
+
+def _site_dirs() -> frozenset[str]:
+    """Return the running interpreter's own site directories, normalised.
+
+    Asks the interpreter rather than matching names, so a repo checked out
+    under a directory such as ``windows-site-packages`` isn't mistaken for one.
+    """
+    paths = sysconfig.get_paths()
+    return frozenset(
+        _normalise(path)
+        for path in (
+            *site.getsitepackages(),
+            site.getusersitepackages(),
+            paths["purelib"],
+            paths["platlib"],
+        )
+    )
+
+
 def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     """Return ``saved`` with ``search_path`` first and no other ``tools`` provider.
 
@@ -188,18 +213,19 @@ def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     repo root among them) would stand in for a fixture without ``tools/``,
     and when the fixture's ``tools/`` is a namespace package, a regular
     ``tools`` package or ``tools.py`` elsewhere replaces it and another
-    namespace ``tools/`` merges into it. Site-packages directories always
-    stay. Everything else (the stdlib,
-    src-layout editable installs, ``PYTHONPATH``) stays importable; an
-    editable-install root that itself holds ``tools/`` is dropped too.
+    namespace ``tools/`` merges into it. The interpreter's own site
+    directories (see ``_site_dirs``) always stay, whatever they hold; a
+    directory that only has ``site-packages`` in its name gets no such
+    exemption. Everything else (the stdlib, src-layout editable installs,
+    ``PYTHONPATH``) stays importable; an editable-install root that itself
+    holds ``tools/`` is dropped too.
     """
+    site_dirs = _site_dirs()
     kept = []
     for entry in saved:
         if entry in ("", str(search_path)):
             continue
-        is_site_packages = "site-packages" in entry or "dist-packages" in entry
-        provides_tools = _provides_tools(entry)
-        if provides_tools and not is_site_packages:
+        if _provides_tools(entry) and _normalise(entry) not in site_dirs:
             continue
         kept.append(entry)
     return [str(search_path), *kept]
