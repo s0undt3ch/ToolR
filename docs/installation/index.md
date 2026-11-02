@@ -285,12 +285,10 @@ It prints `1` for a release archive. A non-zero exit means `gh` found no
 valid attestation from ToolR's archive-building workflow on `main`. `0`
 means the archive has one, but not from a release build of that exact
 file: a CI build, or another release's archive renamed. `gh attestation
-verify --repo s0undt3ch/ToolR` alone accepts both. `0` also means
-`ARCHIVE_SHA256` is empty, for example because the hashing tool is
-missing; check it with `echo $ARCHIVE_SHA256`. On macOS, use the
-`shasum -a 256` line instead of `sha256sum`. The command is for a
-POSIX shell; on Windows, use Git Bash or WSL, or let `install.ps1` do
-the check.
+verify --repo s0undt3ch/ToolR` alone accepts both. `0` also appears when
+`ARCHIVE_SHA256` is empty; check it with `echo $ARCHIVE_SHA256`. The
+command is for a POSIX shell; on Windows, use Git Bash or WSL, or let
+`install.ps1` do the check.
 
 ## Verifying the install
 
