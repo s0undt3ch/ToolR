@@ -20,16 +20,22 @@ subprocess execution) you'll still want to drive the binary directly.
 
 `CommandsTester(search_path=tmp_path)` is a context manager that:
 
-1. Saves and replaces `sys.path` so `search_path` comes first and drops every other entry that
-   provides a `tools` package, except `site-packages` directories. The standard library stays too.
-   A regular `tools` package installed in `site-packages` can therefore still replace a fixture
-   `tools/` that has no `__init__.py`.
+1. Puts `search_path` first on `sys.path` and makes the top-level `tools` package resolve from
+   `search_path` only. Every other `sys.path` entry stays importable, so the standard library and
+   anything installed still import, but no other `tools` (the host repo's own, or a stray one some
+   installed package ships) can replace the fixture's `tools/` or merge into it.
+   With no `tools` in `search_path`, `importlib.util.find_spec("tools")` raises
+   `ModuleNotFoundError` instead of returning `None`, since that is what stops the lookup reaching
+   another `tools`. pytest's assertion rewriting doesn't apply to the top-level
+   `tools/__init__.py` under the tester; `tools.*` submodules are unaffected.
 2. Patches `toolr._decorators._get_command_group_storage` with a fresh `dict` so the test gets an isolated registry.
-3. Restores everything on exit (`sys.path`, `sys.modules`, `cwd`).
+3. Restores everything on exit (`sys.path`, `sys.meta_path`, `sys.modules`, `cwd`).
 
 Calling `.discover()` inside the context imports every `.py` module under `tools/`, including
 subdirectories with no `__init__.py`, registering each `command_group` / `@command` call exactly as
-a real `import tools.*` would. After it returns,
+a real `import tools.*` would. It only walks directories under `search_path / "tools"`, so a
+fixture `tools/__init__.py` that calls `pkgutil.extend_path` doesn't pull in another `tools/`.
+After it returns,
 `.collected_command_groups()` gives you a `{full_name: CommandGroup}` dict you can assert against.
 
 If any module fails to import, `.discover()` still imports the rest, then raises one

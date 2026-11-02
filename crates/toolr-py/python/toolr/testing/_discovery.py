@@ -18,9 +18,12 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from importlib.machinery import ModuleSpec
+from importlib.machinery import PathFinder
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Self
 from unittest.mock import _patch
 from unittest.mock import patch
@@ -90,11 +93,14 @@ def _reject_symlinked_modules(tools_dir: Path) -> None:
     raise ToolrError(msg)
 
 
-def _import_tools_modules() -> list[Exception]:
+def _import_tools_modules(root: Path) -> list[Exception]:
     """Import every module under the top-level ``tools`` package.
 
-    A module that fails to import doesn't stop the walk; every failure is
-    returned, each with a note naming the module that raised it.
+    Only directories under ``root`` (the fixture's ``tools/``) are walked, so
+    a ``__path__`` that ``pkgutil.extend_path`` filled from ``sys.path`` can't
+    pull in another ``tools/``. A module that fails to import doesn't stop
+    the walk; every failure is returned, each with a note naming the module
+    that raised it.
     """
     try:
         tools_pkg = importlib.import_module("tools")
@@ -106,11 +112,13 @@ def _import_tools_modules() -> list[Exception]:
         return [exc]
 
     errors: list[Exception] = []
-    _import_package_modules(tools_pkg, errors, set())
+    _import_package_modules(tools_pkg, errors, set(), root.resolve())
     return errors
 
 
-def _import_package_modules(package: ModuleType, errors: list[Exception], seen: set[Path]) -> None:
+def _import_package_modules(
+    package: ModuleType, errors: list[Exception], seen: set[Path], root: Path
+) -> None:
     """Import every module under ``package``, recursing into subdirectories.
 
     Mirrors the manifest build's walk in
@@ -122,10 +130,11 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
     identifiers can't be imported and are skipped. A subdirectory is only
     descended into once its own import succeeded, and each directory is
     walked once, so a ``__path__`` pointing back at a parent can't loop.
+    Directories outside ``root`` are skipped.
     """
     for directory in getattr(package, "__path__", ()):
         resolved = Path(directory).resolve()
-        if resolved in seen:
+        if resolved in seen or not resolved.is_relative_to(root):
             continue
         seen.add(resolved)
         try:
@@ -160,49 +169,74 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
                 errors.append(exc)
                 continue
             if is_package:
-                _import_package_modules(module, errors, seen)
+                _import_package_modules(module, errors, seen, root)
 
 
-def _provides_tools(entry: str) -> bool:
-    """Whether ``entry`` holds a ``tools/`` directory or ``tools.py``.
+def _fixture_only_namespace_path(spec: ModuleSpec, locations: list[str]) -> None:
+    """Make a namespace ``spec``'s ``__path__`` recompute from ``locations`` only.
 
-    Matches the exact name, so ``Tools/`` doesn't count on a case-insensitive
-    filesystem (the import system wouldn't use it either).
+    A namespace ``__path__`` recomputes itself from all of ``sys.path`` whenever
+    ``sys.path`` or the import caches change. Keep importlib's own type
+    (``importlib.resources`` rejects any other) but give it a path finder that
+    only looks in ``locations`` and hands back a plain list, which can't
+    recompute itself.
     """
-    try:
-        with os.scandir(entry) as it:
-            return any(
-                (child.name == "tools" and child.is_dir())
-                or (child.name == "tools.py" and child.is_file())
-                for child in it
-            )
-    except OSError:
-        return False
+    # Private importlib API: `importlib._bootstrap_external._NamespacePath`
+    # (also `NamespacePath` in 3.15) takes `(name, path, path_finder)` on CPython
+    # 3.11-3.15; `test_namespace_tools_path_stays_in_the_fixture_when_sys_path_changes`
+    # and `test_namespace_tools_supports_importlib_resources` guard it.
+
+    def path_finder(fullname: str, _parent_path: object) -> ModuleSpec | None:
+        found = PathFinder.find_spec(fullname, locations)
+        if found is not None and found.loader is None:
+            found.submodule_search_locations = list(found.submodule_search_locations or ())
+        return found
+
+    namespace_path: Any = spec.submodule_search_locations
+    spec.submodule_search_locations = type(namespace_path)(
+        spec.name, list(namespace_path), path_finder
+    )
 
 
-def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
-    """Return ``saved`` with ``search_path`` first and no other ``tools`` provider.
+class _FixtureToolsFinder:
+    """Resolve the top-level ``tools`` package from the fixture only.
 
-    Drops the ``""`` (cwd) entry, ``search_path`` itself and any entry with a
-    top-level ``tools`` package or module, because such an entry (the host
-    repo root among them) would stand in for a fixture without ``tools/``,
-    and when the fixture's ``tools/`` is a namespace package, a regular
-    ``tools`` package or ``tools.py`` elsewhere replaces it and another
-    namespace ``tools/`` merges into it. Site-packages directories always
-    stay. Everything else (the stdlib,
-    src-layout editable installs, ``PYTHONPATH``) stays importable; an
-    editable-install root that itself holds ``tools/`` is dropped too.
+    Sits first on ``sys.meta_path`` while a :class:`CommandsTester` is active,
+    so a ``tools`` package or module anywhere else on ``sys.path`` (the host
+    repo root, a site directory with a stray ``tools``) can't replace the
+    fixture's, or merge into it when the fixture's is a namespace package.
+    Every ``sys.path`` entry stays, so the rest of what lives there stays
+    importable. Submodules need no help: they resolve through
+    ``tools.__path__``, which only names the fixture. When the fixture has
+    no ``tools``, ``find_spec`` raises ``ModuleNotFoundError`` instead of
+    returning ``None``, because raising is what stops later finders.
     """
-    kept = []
-    for entry in saved:
-        if entry in ("", str(search_path)):
-            continue
-        is_site_packages = "site-packages" in entry or "dist-packages" in entry
-        provides_tools = _provides_tools(entry)
-        if provides_tools and not is_site_packages:
-            continue
-        kept.append(entry)
-    return [str(search_path), *kept]
+
+    def __init__(self, search_path: Path) -> None:
+        self._locations = [str(search_path)]
+
+    def find_spec(
+        self, fullname: str, _path: object = None, target: ModuleType | None = None
+    ) -> ModuleSpec | None:
+        if fullname != "tools":
+            return None
+        spec = PathFinder.find_spec(fullname, self._locations, target)
+        if spec is None:
+            msg = f"No module named {fullname!r}"
+            raise ModuleNotFoundError(msg, name=fullname)
+        if spec.loader is None:
+            _fixture_only_namespace_path(spec, self._locations)
+        return spec
+
+
+def _tester_sys_path(search_path: Path, saved: list[str]) -> list[str]:
+    """Return ``saved`` with ``search_path`` first and without the ``""`` (cwd) entry.
+
+    The cwd is ``search_path`` while the tester is active, so ``""`` would
+    only repeat it. Which ``tools`` gets imported is up to
+    :class:`_FixtureToolsFinder`, not ``sys.path``.
+    """
+    return [str(search_path), *(entry for entry in saved if entry not in ("", str(search_path)))]
 
 
 @define(slots=True, frozen=True)
@@ -228,6 +262,11 @@ class CommandsTester:
     pending_command_collector: list[PendingCommand] = field(init=False, repr=False, factory=list)
     pending_command_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
+    tools_finder: _FixtureToolsFinder = field(init=False, repr=False)
+
+    @tools_finder.default
+    def _default_tools_finder(self) -> _FixtureToolsFinder:
+        return _FixtureToolsFinder(self.search_path)
 
     @sys_path.default
     def _default_sys_path(self) -> list[str]:
@@ -296,7 +335,7 @@ class CommandsTester:
                 module is imported first; the group holds each failure.
         """
         _reject_symlinked_modules(self.search_path / "tools")
-        errors = _import_tools_modules()
+        errors = _import_tools_modules(self.search_path / "tools")
         if errors:
             msg = (
                 f"CommandsTester.discover(): {len(errors)} module(s) under "
@@ -313,15 +352,16 @@ class CommandsTester:
         os.chdir(self.search_path)
         self.pending_command_patcher.start()
         self.command_group_patcher.start()
-        # See `_isolated_sys_path` for why other `tools` providers are hidden.
-        sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
+        sys.path[:] = _tester_sys_path(self.search_path, self.sys_path)
+        # Only the fixture may provide `tools`; see `_FixtureToolsFinder`.
+        sys.meta_path.insert(0, self.tools_finder)
         return self
 
     def __exit__(self, *args: object) -> None:
         """
         Exit the context manager.
         """
-        os.chdir(self.cwd)
+        sys.meta_path.remove(self.tools_finder)
         self.command_group_patcher.stop()
         self.command_group_collector.clear()
         self.pending_command_patcher.stop()
@@ -337,3 +377,5 @@ class CommandsTester:
         # carrying a stale copy forward would pollute later tests.
         sys.modules.clear()
         sys.modules.update(self.sys_modules)
+        # Last, so the steps above still run if the old cwd is gone.
+        os.chdir(self.cwd)
