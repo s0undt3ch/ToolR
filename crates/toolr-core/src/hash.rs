@@ -1362,6 +1362,25 @@ parent = "django"
         assert_eq!(records.scan_paths, [vec!["nowhere/*.py".to_string()]]);
     }
 
+    /// A pyproject edit outside the argparse blocks rereads the pyproject
+    /// once and leaves the manifest fresh.
+    #[test]
+    fn pyproject_edit_outside_argparse_is_read_and_fresh() {
+        let project = django_project();
+        age(&project);
+        let manifest = written_manifest(&project);
+        let pyproject = std::fs::read_to_string(project.path().join("tools/pyproject.toml"))
+            .unwrap()
+            .replace(
+                "name = \"tools\"\n",
+                "name = \"tools\"\ndependencies = [\"django\"]\n",
+            );
+        write(&project, "tools/pyproject.toml", &pyproject);
+        let (verdict, reads) = compare_reads(&project, &manifest);
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
+        assert_eq!(reads, reads_of(&project, &["tools/pyproject.toml"]));
+    }
+
     /// The racy rule: a record whose mtime is not strictly older than the
     /// snapshot's bound is reread even though nothing changed.
     #[test]
