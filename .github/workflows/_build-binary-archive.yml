@@ -166,6 +166,8 @@ jobs:
       # to users. `gh attestation verify` (and any client speaking the
       # sigstore bundle format) can cryptographically prove the archive
       # was produced by this workflow against this exact commit.
+      # action.yml's verify-attestation step pins this file's path and
+      # `refs/heads/main` as the signer; renaming it breaks the action.
       - name: Attest archive provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:

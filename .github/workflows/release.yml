@@ -1,3 +1,7 @@
+# action.yml's verify-attestation step pins this file's path and
+# `refs/heads/main` as the attestation's buildConfigURI, and the
+# `_build-binary-archive.yml` it calls as the signer. Renaming either file
+# or releasing from another ref breaks the Setup ToolR action.
 name: Release
 run-name: "Release (branch: ${{ github.ref_name }}; version: ${{ inputs.release-version }})"
 
@@ -594,7 +598,9 @@ jobs:
             done
           done
           # Hard-coded, not derived from github.workflow_ref: this catches a
-          # signer change that mise users would have to re-approve.
+          # signer change that mise users would have to re-approve. Same
+          # identity as RELEASE_WORKFLOW in action.yml's verify-attestation
+          # step (checked by tests/action_yml/test_verify_attestation.py).
           packslip verify packslip.sigstore.json \
             --identity https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main \
             --issuer https://token.actions.githubusercontent.com \
