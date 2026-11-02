@@ -7,7 +7,7 @@ message listing every offender. TAB completion stays silent. Design:
 
 ## Tasks
 
-- [ ] **Failing tests first.**
+- [x] **Failing tests first.**
     - `hash.rs`: nested links (`tools/linked.py`, `tools/sub/other.py`) and a
       dangling one are all reported, sorted; a symlinked `tools/.venv`, a
       symlinked non-`.py` directory and a `.py` link inside a pruned directory
@@ -24,14 +24,14 @@ message listing every offender. TAB completion stays silent. Design:
       with the same text, before importing anything.
     - `tests/e2e/`: the binary's stderr and the `discover()` message carry the
       same body.
-- [ ] **Implement.** `list_python_files` returns
+- [x] **Implement.** `list_python_files` returns
   `Result<Vec<PathBuf>, SymlinkedModules>`; `hash_tools_dir` propagates it;
   `BuildError` gets a transparent `SymlinkedModules` variant. Python: a
   pre-import walk in `toolr.testing._discovery` mirroring `list_python_files`.
   Commit as `fix(parser)!: reject symlinked modules under tools/`.
-- [ ] **Docs.** `docs/concepts.md`, `docs/internals/manifest.md`,
+- [x] **Docs.** `docs/concepts.md`, `docs/internals/manifest.md`,
   `docs/writing-commands/testing.md`.
-- [ ] **Release note** starting `**Breaking:**`.
-- [ ] **Verify.** cargo tests, pytest, clippy, prek, mkdocs `--strict`, patch
+- [x] **Release note** starting `**Breaking:**`.
+- [x] **Verify.** cargo tests, pytest, clippy, prek, mkdocs `--strict`, patch
   coverage against `origin/main`.
-- [ ] **Archive** both spec files under `specs/archive/2026/`.
+- [x] **Archive** both spec files under `specs/archive/2026/`.

@@ -1,6 +1,6 @@
 # Reject symlinked modules under `tools/` (F-17)
 
-**Status:** Approved (2026-11-02)
+**Status:** Implemented (2026-11-02)
 
 ## Problem
 
