@@ -18,22 +18,39 @@ pub struct SitePackagesError {
 /// Existing `site-packages` directories in `venv_dir`, sorted: `lib/python*/site-packages` and
 /// `Lib/site-packages`, on every platform.
 ///
-/// Lists directories rather than globbing, so nothing in `venv_dir` is read as a pattern. A
-/// missing venv or `lib` gives an empty list; one that exists but can't be read is an error, so
-/// an unreadable venv never looks like a venv with nothing installed.
+/// Probes those names rather than globbing, so nothing in `venv_dir` is read as a pattern, and
+/// never lists the venv root itself. A missing venv or `lib` gives an empty list. An unreadable
+/// `lib`, `Lib/site-packages`, or `site-packages` of the Python named by `pyvenv.cfg` is an error,
+/// so an unreadable venv never looks like one with nothing installed. Another `python*`
+/// directory that can't be read, such as one left by an older Python, is skipped.
 pub fn site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, SitePackagesError> {
+    let own = pyvenv_cfg_version(venv_dir);
     let mut out = Vec::new();
-    for lib in entries(venv_dir)? {
-        if !name_is(&lib, |n| n.eq_ignore_ascii_case("lib")) || !lib.is_dir() {
-            continue;
-        }
-        push_if_dir(&mut out, lib.join("site-packages"))?;
+
+    let lib = venv_dir.join("lib");
+    if is_dir(&lib)? {
         for child in entries(&lib)? {
-            if name_is(&child, |n| n.starts_with("python")) && child.is_dir() {
-                push_if_dir(&mut out, child.join("site-packages"))?;
+            if !name_is(&child, |n| n.starts_with("python")) || !child.is_dir() {
+                continue;
+            }
+            match push_if_dir(&mut out, child.join("site-packages")) {
+                Err(e) if own.is_none() || dir_version(&e.path) != own => {}
+                result => {
+                    result?;
+                }
             }
         }
     }
+
+    // The Windows layout, and the same without a `pythonX.Y` level. On a case-insensitive file
+    // system both names are one directory, kept once under the first spelling.
+    let upper = venv_dir.join("Lib").join("site-packages");
+    let lower = venv_dir.join("lib").join("site-packages");
+    let had_upper = push_if_dir(&mut out, upper.clone())?;
+    if !(had_upper && is_dir(&lower)? && same_dir(&upper, &lower)) {
+        push_if_dir(&mut out, lower)?;
+    }
+
     out.sort();
     out.dedup();
     Ok(out)
@@ -47,15 +64,20 @@ pub fn preferred_site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, Sit
     let own = pyvenv_cfg_version(venv_dir);
     let mut dirs = site_packages_dirs(venv_dir)?;
     dirs.sort_by_key(|sp| {
-        let version = sp
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str())
-            .and_then(|n| n.strip_prefix("python"))
-            .and_then(parse_major_minor);
+        let version = dir_version(sp);
         std::cmp::Reverse((own.is_some() && version == own, version))
     });
     Ok(dirs)
+}
+
+/// The `major.minor` in a `.../pythonX.Y/site-packages` path.
+fn dir_version(site_packages: &Path) -> Option<(u32, u32)> {
+    site_packages
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .and_then(|n| n.strip_prefix("python"))
+        .and_then(parse_major_minor)
 }
 
 /// `major.minor` of the venv's interpreter from `pyvenv.cfg` (`version_info`, as uv writes it,
@@ -78,11 +100,29 @@ fn parse_major_minor(version: &str) -> Option<(u32, u32)> {
     Some((major, minor))
 }
 
-/// Paths of the entries in `dir`; none when it doesn't exist.
+/// Paths of the entries in `dir`, which exists.
 fn entries(dir: &Path) -> Result<Vec<PathBuf>, SitePackagesError> {
-    match fs::read_dir(dir) {
-        Ok(read) => Ok(read.filter_map(Result::ok).map(|e| e.path()).collect()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
+    fs::read_dir(dir)
+        .map(|read| read.filter_map(Result::ok).map(|e| e.path()).collect())
+        .map_err(|source| SitePackagesError {
+            path: dir.to_path_buf(),
+            source,
+        })
+}
+
+/// Whether `dir` is a directory; an error other than "not found" means a parent can't be
+/// searched, which must not read as "nothing installed".
+fn is_dir(dir: &Path) -> Result<bool, SitePackagesError> {
+    match fs::metadata(dir) {
+        Ok(meta) => Ok(meta.is_dir()),
+        Err(e)
+            if matches!(
+                e.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+            ) =>
+        {
+            Ok(false)
+        }
         Err(source) => Err(SitePackagesError {
             path: dir.to_path_buf(),
             source,
@@ -90,19 +130,27 @@ fn entries(dir: &Path) -> Result<Vec<PathBuf>, SitePackagesError> {
     }
 }
 
-/// Push `dir` when it is a directory; an error other than "not found" means a parent can't be
-/// searched, which must not read as "nothing installed".
-fn push_if_dir(out: &mut Vec<PathBuf>, dir: PathBuf) -> Result<(), SitePackagesError> {
-    match fs::metadata(&dir) {
-        Ok(meta) => {
-            if meta.is_dir() {
-                out.push(dir);
-            }
-            Ok(())
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(source) => Err(SitePackagesError { path: dir, source }),
+/// Push `dir` when it is a directory, and say whether it was.
+fn push_if_dir(out: &mut Vec<PathBuf>, dir: PathBuf) -> Result<bool, SitePackagesError> {
+    let found = is_dir(&dir)?;
+    if found {
+        out.push(dir);
     }
+    Ok(found)
+}
+
+/// Whether two existing paths are one directory.
+#[cfg(unix)]
+fn same_dir(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let id = |p: &Path| fs::metadata(p).ok().map(|m| (m.dev(), m.ino()));
+    id(a) == id(b)
+}
+
+/// Whether two existing paths are one directory: Windows file systems ignore case.
+#[cfg(not(unix))]
+fn same_dir(_: &Path, _: &Path) -> bool {
+    true
 }
 
 fn name_is(path: &Path, pred: impl Fn(&str) -> bool) -> bool {
@@ -161,11 +209,17 @@ mod tests {
         assert_eq!(site_packages_dirs(tmp.path()).unwrap(), [py312, py313]);
     }
 
+    /// An upper-case `LIB`, as some Windows tools write it, is the `Lib` a case-insensitive file
+    /// system finds; once, though `lib` names it too.
+    #[cfg(any(windows, target_os = "macos"))]
     #[test]
     fn site_packages_dirs_matches_lib_ignoring_case() {
         let tmp = TempDir::new().unwrap();
-        let sp = mkdirs(tmp.path(), "LIB/site-packages");
-        assert_eq!(site_packages_dirs(tmp.path()).unwrap(), [sp]);
+        mkdirs(tmp.path(), "LIB/site-packages");
+        assert_eq!(
+            site_packages_dirs(tmp.path()).unwrap(),
+            [tmp.path().join("Lib").join("site-packages")]
+        );
     }
 
     #[test]
@@ -241,7 +295,52 @@ mod tests {
         assert!(
             result
                 .as_ref()
-                .is_none_or(|r| r.as_ref().is_err_and(|err| err.path == venv)),
+                .is_none_or(|r| r.as_ref().is_err_and(|err| err.path.starts_with(&venv))),
+            "{result:?}"
+        );
+    }
+
+    /// A venv root that can be searched but not listed is fine: nothing lists it.
+    #[cfg(unix)]
+    #[test]
+    fn site_packages_dirs_needs_no_listing_of_the_venv_root() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path().join("venv");
+        let sp = mkdirs(&venv, "lib/python3.13/site-packages");
+        let result = with_mode(&venv, 0o311, || site_packages_dirs(&venv));
+        assert!(
+            result
+                .as_ref()
+                .is_none_or(|r| r.as_ref().is_ok_and(|dirs| *dirs == [sp.clone()])),
+            "{result:?}"
+        );
+    }
+
+    /// Unreadable leftovers from another Python don't hide the venv's own `site-packages`,
+    /// with or without `pyvenv.cfg`.
+    #[cfg(unix)]
+    #[test]
+    fn site_packages_dirs_skips_unreadable_stale_python_dirs() {
+        let tmp = TempDir::new().unwrap();
+        let sp = mkdirs(tmp.path(), "lib/python3.15/site-packages");
+        let stale = mkdirs(tmp.path(), "lib/python3.12/site-packages");
+        let old = mkdirs(tmp.path(), "lib/python3.15-old/site-packages");
+        let cfg = tmp.path().join("pyvenv.cfg");
+        fs::write(&cfg, "version_info = 3.15.0\n").unwrap();
+        let stale_parent = stale.parent().unwrap();
+        let result = with_mode(stale_parent, 0o000, || {
+            with_mode(old.parent().unwrap(), 0o000, || {
+                let with_cfg = site_packages_dirs(tmp.path());
+                fs::remove_file(&cfg).unwrap();
+                (with_cfg, site_packages_dirs(tmp.path()))
+            })
+        })
+        .flatten();
+        assert!(
+            result.as_ref().is_none_or(|(with_cfg, without_cfg)| {
+                with_cfg.as_ref().is_ok_and(|d| *d == [sp.clone()])
+                    && without_cfg.as_ref().is_ok_and(|d| *d == [sp.clone()])
+            }),
             "{result:?}"
         );
     }
@@ -251,6 +350,7 @@ mod tests {
     fn site_packages_dirs_reports_unsearchable_python_dir() {
         let tmp = TempDir::new().unwrap();
         let sp = mkdirs(tmp.path(), "lib/python3.13/site-packages");
+        fs::write(tmp.path().join("pyvenv.cfg"), "version_info = 3.13.2\n").unwrap();
         let py = tmp.path().join("lib/python3.13");
         let result = with_mode(&py, 0o000, || site_packages_dirs(tmp.path()));
         // `None` as root.
@@ -295,14 +395,14 @@ mod tests {
     }
 
     /// Without `pyvenv.cfg`, the highest version wins, not the lexicographic first
-    /// (`python3.13` < `python3.9`), and the unversioned layout comes last.
+    /// (`python3.13` < `python3.9`), and the unversioned ones come last.
     #[test]
     fn preferred_site_packages_dirs_falls_back_to_highest_version() {
         let tmp = TempDir::new().unwrap();
         let py39 = mkdirs(tmp.path(), "lib/python3.9/site-packages");
         let py313 = mkdirs(tmp.path(), "lib/python3.13/site-packages");
         let py314t = mkdirs(tmp.path(), "lib/python3.14t/site-packages");
-        let plain = mkdirs(tmp.path(), "lib/site-packages");
+        let plain = mkdirs(tmp.path(), "Lib/site-packages");
         let odd = mkdirs(tmp.path(), "lib/python-x/site-packages");
         fs::write(
             tmp.path().join("pyvenv.cfg"),
@@ -311,7 +411,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             preferred_site_packages_dirs(tmp.path()).unwrap(),
-            [py314t, py313, py39, odd, plain]
+            [py314t, py313, py39, plain, odd]
         );
     }
 }
