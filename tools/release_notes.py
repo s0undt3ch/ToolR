@@ -374,7 +374,7 @@ def add(
     if ret.returncode:
         ctx.error(f"git add failed with exit code {ret.returncode}")
         ctx.exit(ret.returncode)
-    ctx.print(str(rel), markup=False, highlight=False, emoji=False, soft_wrap=True)
+    ctx.print(rel.as_posix(), markup=False, highlight=False, emoji=False, soft_wrap=True)
 
 
 @group.command
