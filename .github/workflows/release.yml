@@ -493,19 +493,28 @@ jobs:
           subject-path: dist/*
 
       - name: Create GitHub release
+        id: create-release
         shell: bash
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_VERSION: ${{ needs.prepare-release.outputs.release-version }}
           RELEASE_NOTES: ${{ needs.prepare-release.outputs.release-notes-filename }}
+          RELEASE_PRERELEASE: ${{ needs.prepare-release.outputs.release-prerelease }}
         # --verify-tag relies on the `push-release` step above having run.
+        # A pre-release is never "latest": the action's and install scripts'
+        # `latest` lookups go through GitHub's latest-release endpoint, which
+        # skips releases flagged as pre-releases.
         run: |
+          release_flag=--latest
+          if [ "${RELEASE_PRERELEASE}" = "true" ]; then
+            release_flag=--prerelease
+          fi
           gh release create "v${RELEASE_VERSION}" \
             --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
             --title "${RELEASE_VERSION}" \
             --notes-file "${RELEASE_NOTES}" \
-            --latest \
+            "${release_flag}" \
             dist/* release-assets/*
 
       - name: Publish to PyPI (Trusted Publisher)

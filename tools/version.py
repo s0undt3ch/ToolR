@@ -10,6 +10,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
+from packaging.version import InvalidVersion
+from packaging.version import Version
+
 from toolr import Context
 from toolr import command_group
 
@@ -18,6 +21,14 @@ from toolr import command_group
 # them, which breaks module import (and pytest collection) on Windows.
 _NOW: Final[datetime] = datetime.now(UTC)
 TODAY_VERSION: Final[str] = f"{_NOW.year % 100}.{_NOW.month}.0"
+
+# `git describe --match` glob for release tags. It also matches pre-release
+# tags such as `v1.0.0-rc1`; the matched tag is parsed with `packaging`.
+RELEASE_TAG_GLOB: Final[str] = "v[0-9]*.[0-9]*.[0-9]*"
+
+# SemVer spellings for PEP 440's pre-release letters. ASCII order
+# (alpha < beta < rc) matches PEP 440's (a < b < rc).
+_CARGO_PRE_RELEASE: Final[dict[str, str]] = {"a": "alpha", "b": "beta", "rc": "rc"}
 
 CARGO_TOML_PATH: Final[Path] = Path("Cargo.toml")
 ACTION_YML_PATH: Final[Path] = Path("action.yml")
@@ -95,55 +106,111 @@ def _set_action_yml_default_version(
     ctx.info(f"Set {action_yml_path} `version` input default to '{new_version}'")
 
 
-def _bump_patch(base: str) -> str:
-    """Return ``base`` with its patch component incremented by one.
+def _parse_version(raw: str) -> Version:
+    """Parse ``raw`` (one leading ``v`` allowed) as a PEP 440 version."""
+    msg = f"{raw!r} is not a valid version"
+    stripped = raw.removeprefix("v")
+    # `packaging` takes a leading `v` itself, so check there was only one.
+    if not stripped[:1].isdigit():
+        raise ValueError(msg)
+    try:
+        return Version(stripped)
+    except InvalidVersion as exc:
+        raise ValueError(msg) from exc
 
-    Semver-wise, a pre-release of ``X.Y.Z`` (e.g. ``X.Y.Z-devN``) is *less
-    than* ``X.Y.Z``. ``cargo set-version`` (cargo-edit) refuses to write a
-    "smaller" version, so a dev version derived from the latest tag must
-    target the next patch release. This matches the ``setuptools-scm`` /
-    ``hatch-vcs`` convention of "pre-release of the NEXT patch release".
+
+def _parse_release_version(raw: str) -> Version:
+    """Parse a version to release: ``X.Y.Z`` with an optional pre-release.
+
+    Rejects what Cargo's ``X.Y.Z[-pre]`` can't hold or isn't a release: an
+    epoch, a post-release (PEP 440 reads ``1.0.0-1`` as one), a dev release,
+    a local segment, or a release segment that isn't three numbers.
     """
-    major, minor, patch = base.split(".")
-    return f"{major}.{minor}.{int(patch) + 1}"
+    version = _parse_version(raw)
+    if (
+        len(version.release) != 3
+        or version.epoch
+        or version.is_postrelease
+        or version.is_devrelease
+        or version.local is not None
+    ):
+        msg = f"{raw!r} is not a release version (expected X.Y.Z or X.Y.Z with a pre-release, e.g. 1.0.0-rc.1)"
+        raise ValueError(msg)
+    return version
+
+
+def _cargo_version(version: Version) -> str:
+    """Render ``version`` in the SemVer form ``Cargo.toml`` needs.
+
+    ``1.0.0rc2.dev3`` renders as ``1.0.0-rc.2.dev3``. maturin normalises the
+    Cargo version back to PEP 440 when it builds the wheels, so the result
+    must parse back to ``version``.
+    """
+    rendered = ".".join(str(part) for part in version.release)
+    identifiers: list[str] = []
+    if version.pre is not None:
+        letter, number = version.pre
+        identifiers += [_CARGO_PRE_RELEASE[letter], str(number)]
+    if version.dev is not None:
+        identifiers.append(f"dev{version.dev}")
+    if identifiers:
+        rendered += "-" + ".".join(identifiers)
+    if version.local is not None:
+        rendered += f"+{version.local}"
+    return rendered
+
+
+def _next_dev_version(tag: Version, count: int, sha: str | None = None) -> Version:
+    """Return the dev version ``count`` commits after release ``tag``.
+
+    After a final release ``X.Y.Z`` the dev version is ``X.Y.(Z+1).devN``;
+    after a pre-release ``X.Y.Z{a,b,rc}K`` it is ``X.Y.Z{a,b,rc}(K+1).devN``.
+    Either way it sorts above the tag and below the next release, and above
+    the released version in ``Cargo.toml``, which ``cargo set-version``
+    refuses to lower.
+    """
+    if tag.pre is not None:
+        letter, number = tag.pre
+        base = f"{tag.base_version}{letter}{number + 1}"
+    else:
+        major, minor, patch = tag.release
+        base = f"{major}.{minor}.{patch + 1}"
+    local = f"+g{sha}" if sha else ""
+    return Version(f"{base}.dev{count}{local}")
+
+
+def _git_output(ctx: Context, *args: str) -> tuple[int, str]:
+    ret = ctx.run("git", *args, capture_output=True, stream_output=False)
+    stdout: str = ret.stdout.read().strip()  # type: ignore[assignment]
+    return ret.returncode, stdout
 
 
 def _compute_dev_version(ctx: Context) -> str:
-    """Compute a dev-version string from ``git describe``.
+    """Compute the dev version from the latest release tag, in Cargo form.
 
-    Output is the hyphenated form ``X.Y.(Z+1)-devN`` (a semver pre-release
-    identifier and also valid PEP 440 input). The patch component is
-    bumped relative to the latest tag so the result is strictly greater
-    than that tag — see :func:`_bump_patch` for why. For pull-request
-    builds we append the commit SHA as semver build-metadata so
-    concurrent PRs don't collide on TestPyPI.
+    The tag, the commit count since it and the SHA come from separate git
+    commands, and the tag is parsed with ``packaging``; see
+    :func:`_next_dev_version` for the rule. Pull-request builds append the
+    commit SHA as ``+g<sha>`` so concurrent PRs don't collide on TestPyPI.
     """
-    ret = ctx.run(
-        "git",
-        "describe",
-        "--tags",
-        "--long",
-        "--match",
-        "v[0-9]*.[0-9]*.[0-9]*",
-        capture_output=True,
-        stream_output=False,
+    returncode, tag = _git_output(
+        ctx, "describe", "--tags", "--abbrev=0", "--match", RELEASE_TAG_GLOB
     )
-    describe: str = ret.stdout.read().rstrip()  # type: ignore[assignment]
-    if not describe:
-        # No matching tag in history — use the fallback base. ``TODAY_VERSION``
-        # already ends in ``.0`` so the patch-bump yields ``.1``.
-        ret = ctx.run(
-            "git", "rev-list", "--count", "HEAD", capture_output=True, stream_output=False
-        )
-        count: str = ret.stdout.read().rstrip() or "0"  # type: ignore[assignment]
-        return f"{_bump_patch(TODAY_VERSION)}-dev{count}"
-    # Format: vX.Y.Z-N-gSHA  →  base=X.Y.Z, count=N, sha=gSHA
-    base, count, sha = describe.split("-")
-    base = base.lstrip("v")
-    version_str = f"{_bump_patch(base)}-dev{count}"
+    if returncode != 0 or not tag:
+        # No matching tag in history — use the fallback base, counting every commit.
+        _, count = _git_output(ctx, "rev-list", "--count", "HEAD")
+        version = _next_dev_version(Version(TODAY_VERSION), int(count or "0"))
+        return _cargo_version(version)
+    try:
+        tag_version = _parse_release_version(tag)
+    except ValueError as exc:
+        ctx.error(f"Cannot derive a dev version from tag {tag!r}: {exc}")
+        ctx.exit(1)
+    _, count = _git_output(ctx, "rev-list", "--count", f"{tag}..HEAD")
+    sha = None
     if os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request":
-        version_str += f"+{sha}"
-    return version_str
+        _, sha = _git_output(ctx, "rev-parse", "--short", "HEAD")
+    return _cargo_version(_next_dev_version(tag_version, int(count), sha))
 
 
 @group.command
@@ -163,15 +230,26 @@ def bump(
     """Bump the workspace version.
 
     Args:
-        new_version: Explicit version to bump to. If omitted, a dev version is
-            derived from ``git describe`` (``X.Y.Z-devN``).
+        new_version: Explicit version to bump to: ``X.Y.Z``, optionally with a
+            pre-release (``1.0.0-rc.1``, ``1.0.0rc1``). A leading ``v`` is
+            accepted and stripped. Written in its Cargo form. If omitted, a dev
+            version is derived from the latest release tag.
         check_existing_tag: Refuse to write if a tag ``v<version>`` already
             exists (release safety net).
         include_action: Also update the action.yml `version` input default.
         write: Actually apply the bump via ``cargo set-version --workspace``;
             otherwise this is a dry-run that only prints the resolved version.
     """
-    version = new_version or _compute_dev_version(ctx)
+    if new_version:
+        try:
+            parsed = _parse_release_version(new_version)
+        except ValueError as exc:
+            ctx.error(str(exc))
+            ctx.exit(1)
+        version = _cargo_version(parsed)
+    else:
+        version = _compute_dev_version(ctx)
+        parsed = Version(version)
 
     if check_existing_tag:
         ret = ctx.run("git", "tag", "-l", f"v{version}", capture_output=True, stream_output=False)
@@ -186,6 +264,7 @@ def bump(
         with open(github_output, "a") as f:
             f.write(f"release-version={version}\n")
             f.write(f"release-patch-name=toolr-{version}.patch\n")
+            f.write(f"release-prerelease={str(parsed.is_prerelease).lower()}\n")
 
     github_env = os.environ.get("GITHUB_ENV")
     if github_env:

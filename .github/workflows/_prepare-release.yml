@@ -36,6 +36,9 @@ on:
       release-patch-name:
         description: 'Name of the release patch'
         value: ${{ jobs.prepare-release.outputs.release-patch-name }}
+      release-prerelease:
+        description: 'Whether the release version is a pre-release ("true" or "false")'
+        value: ${{ jobs.prepare-release.outputs.release-prerelease }}
       release-notes-filename:
         description: 'Name of the release notes file'
         value: ${{ jobs.prepare-release.outputs.release-notes-filename }}
@@ -62,6 +65,7 @@ jobs:
     outputs:
       release-version: ${{ steps.bump-version.outputs.release-version }}
       release-patch-name: ${{ steps.bump-version.outputs.release-patch-name }}
+      release-prerelease: ${{ steps.bump-version.outputs.release-prerelease }}
       release-notes-filename: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
       binary-release-tarball-name: ${{ steps.create-source-tarball.outputs.binary-release-tarball-name }}
       py-release-tarball-name: ${{ steps.create-source-tarball.outputs.py-release-tarball-name }}

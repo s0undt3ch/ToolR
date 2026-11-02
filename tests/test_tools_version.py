@@ -4,30 +4,43 @@ After delegating Cargo.toml writes to ``cargo set-version`` (cargo-edit), the
 remaining Python surface is:
 
 * ``_read_workspace_version`` — a stdlib ``tomllib`` reader.
-* ``_compute_dev_version`` — derives an ``X.Y.Z-devN[+SHA]`` string from
-  ``git describe``.
+* ``_parse_version`` / ``_parse_release_version`` / ``_cargo_version`` — parse a
+  version with ``packaging`` and render the SemVer form Cargo needs.
+* ``_compute_dev_version`` — derives a dev version from the latest tag, tested
+  against real git repositories.
+* ``bump`` — validates ``--new-version`` before writing the GitHub Actions files.
+* ``_set_action_yml_default_version`` — the action.yml bake-in.
 
-We test the reader against a factory-built ``Cargo.toml`` and the dev-version
-helper by stubbing the ``Context.run`` calls. ``_set_workspace_version`` is
-intentionally not tested directly — it shells out to ``cargo set-version`` and
-adds no logic worth covering in isolation.
+``_set_workspace_version`` is intentionally not tested directly — it shells out
+to ``cargo set-version`` and adds no logic worth covering in isolation.
 """
 
 from __future__ import annotations
 
-import io
+import os
+import re
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 from unittest import mock
 
 import pytest
+from packaging.version import Version
 from tools.version import TODAY_VERSION
-from tools.version import _bump_patch
+from tools.version import _cargo_version
 from tools.version import _compute_dev_version
+from tools.version import _parse_release_version
 from tools.version import _read_workspace_version
 from tools.version import _set_action_yml_default_version
+from tools.version import bump
+
+from toolr.testing import ContextForTesting
+from toolr.testing import make_context
+
+from tests.workflows.conftest import configure_identity
+from tests.workflows.conftest import git
+
+GITHUB_FILES = ("GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_STEP_SUMMARY")
 
 
 @pytest.fixture
@@ -91,78 +104,251 @@ def test_read_workspace_version_malformed_toml(
     assert "workspace.package" not in str(excinfo.value)
 
 
-class _FakeRun:
-    """Stub for ``ctx.run`` — yields canned stdout for each successive call.
+# --------------------------------------------------------------------
+# Parsing and rendering
+# --------------------------------------------------------------------
 
-    Each entry in ``outputs`` is the bytes (or str, after encoding) of stdout
-    the next ``ctx.run(...)`` should return. ``.stdout.read()`` is called once
-    per result by ``_compute_dev_version``.
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("0.36.0", "0.36.0"),
+        ("v0.36.0", "0.36.0"),
+        ("1.0.0-rc1", "1.0.0rc1"),
+        ("1.0.0rc1", "1.0.0rc1"),
+        ("v1.0.0-rc.1", "1.0.0rc1"),
+        ("1.0.0-alpha.2", "1.0.0a2"),
+        ("1.0.0-beta.3", "1.0.0b3"),
+    ],
+)
+def test_parse_release_version_accepts(raw: str, expected: str) -> None:
+    assert str(_parse_release_version(raw)) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "0.36",
+        "0.36.0.1",
+        "vv0.36.0",
+        "latest",
+        "",
+        "1.0.0-1",  # PEP 440 reads this as a post-release
+        "1.0.0.post1",
+        "1.0.0.dev1",
+        "1!1.0.0",
+        "1.0.0+local",
+    ],
+)
+def test_parse_release_version_rejects(raw: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(repr(raw))):
+        _parse_release_version(raw)
+
+
+@pytest.mark.parametrize(
+    ("pep440", "cargo"),
+    [
+        ("0.36.0", "0.36.0"),
+        ("1.0.0rc1", "1.0.0-rc.1"),
+        ("1.0.0a2", "1.0.0-alpha.2"),
+        ("1.0.0b2", "1.0.0-beta.2"),
+        ("1.0.1.dev3", "1.0.1-dev3"),
+        ("1.0.0rc2.dev3", "1.0.0-rc.2.dev3"),
+        ("1.0.1.dev3+gabc1234", "1.0.1-dev3+gabc1234"),
+    ],
+)
+def test_cargo_version_maps_back_to_pep440(pep440: str, cargo: str) -> None:
+    """The Cargo form normalises back to the PEP 440 version, as maturin does for the wheels."""
+    rendered = _cargo_version(Version(pep440))
+    assert rendered == cargo
+    assert str(Version(rendered)) == pep440
+
+
+# --------------------------------------------------------------------
+# `_compute_dev_version` and `bump`, against real git repositories
+# --------------------------------------------------------------------
+
+
+@pytest.fixture
+def release_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Callable[..., ContextForTesting]:
+    """Factory: a git repo with an optional tag and ``commits`` commits after it.
+
+    Changes into the repo (``ctx.run`` runs git in the current directory) and
+    returns a real ``Context`` for it. Every GitHub Actions variable this module
+    reads is cleared; tests opt back in.
     """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in ("GITHUB_EVENT_NAME", *GITHUB_FILES):
+        monkeypatch.delenv(name, raising=False)
 
-    def __init__(self, outputs: list[str]) -> None:
-        self._outputs = list(outputs)
-        self.calls: list[tuple[Any, ...]] = []
+    def make(*tags: str, commits: int = 0) -> ContextForTesting:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        git(repo, "init", "-q", "-b", "main")
+        configure_identity(repo)
+        git(repo, "commit", "-q", "--allow-empty", "-m", "initial")
+        for tag in tags:
+            git(repo, "tag", "-a", "-m", f"Release {tag}", tag)
+        for index in range(commits):
+            git(repo, "commit", "-q", "--allow-empty", "-m", f"change {index}")
+        monkeypatch.chdir(repo)
+        return make_context(repo)
 
-    def __call__(self, *args: Any, **_kwargs: Any) -> Any:
-        self.calls.append(args)
-        if not self._outputs:
-            msg = f"Unexpected extra ctx.run call: {args}"
-            raise AssertionError(msg)
-        out = self._outputs.pop(0)
-        return mock.Mock(stdout=io.StringIO(out), stderr=io.StringIO(""), returncode=0)
-
-
-def _ctx_with_run(run: _FakeRun) -> Any:
-    """A minimal Context-shaped object exposing only ``.run``."""
-    return mock.Mock(run=run)
-
-
-def test_bump_patch() -> None:
-    """`_bump_patch` increments the patch component only."""
-    assert _bump_patch("0.11.1") == "0.11.2"
-    assert _bump_patch("0.20.0") == "0.20.1"
-    assert _bump_patch("1.2.9") == "1.2.10"
+    return make
 
 
-def test_compute_dev_version_from_git_describe(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`git describe` returns ``v0.20.0-42-gabc1234`` → ``0.20.1-dev42``.
+@pytest.fixture
+def github_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """Point the GitHub Actions output, env and step-summary files into ``tmp_path``."""
+    paths = {name: tmp_path / name.lower() for name in GITHUB_FILES}
+    for name, path in paths.items():
+        monkeypatch.setenv(name, str(path))
+    return paths
 
-    The patch is bumped relative to the tag base so the result is semver-greater
-    than the tag (cargo set-version refuses to "downgrade", and a pre-release of
-    the SAME version is semver-wise a downgrade).
-    """
-    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
-    run = _FakeRun(["v0.20.0-42-gabc1234\n"])
-    ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == "0.20.1-dev42"
+
+def _short_sha(ctx: ContextForTesting) -> str:
+    return git(ctx.repo_root, "rev-parse", "--short", "HEAD").strip()
+
+
+def test_compute_dev_version_after_final_tag(
+    release_repo: Callable[..., ContextForTesting],
+) -> None:
+    """After ``v0.20.0``, the dev version targets the next patch release."""
+    ctx = release_repo("v0.20.0", commits=2)
+    assert _compute_dev_version(ctx) == "0.20.1-dev2"
 
 
 def test_compute_dev_version_pull_request_appends_sha(
-    monkeypatch: pytest.MonkeyPatch,
+    release_repo: Callable[..., ContextForTesting], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pull-request builds append ``+gSHA`` as semver build metadata."""
+    """Pull-request builds append ``+g<sha>`` so concurrent PRs don't collide."""
+    ctx = release_repo("v0.11.0", commits=7)
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-    run = _FakeRun(["v0.11.0-7-gdeadbee\n"])
-    ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == "0.11.1-dev7+gdeadbee"
+    assert _compute_dev_version(ctx) == f"0.11.1-dev7+g{_short_sha(ctx)}"
 
 
-def test_compute_dev_version_no_tags_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Empty `git describe` falls back to ``bump(TODAY_VERSION)-dev<count>``."""
-    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
-    run = _FakeRun(["\n", "13\n"])
-    ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == f"{_bump_patch(TODAY_VERSION)}-dev13"
-
-
-def test_compute_dev_version_no_tags_and_no_commits(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("tag", "expected"),
+    [
+        # The shape from the F-26 report: `git describe` gave `v1.0.0-rc1-3-g<sha>`.
+        ("v1.0.0-rc1", "1.0.0-rc.2.dev3"),
+        ("v1.0.0-rc.1", "1.0.0-rc.2.dev3"),
+        ("v1.0.0-beta.1", "1.0.0-beta.2.dev3"),
+    ],
+)
+def test_compute_dev_version_after_prerelease_tag(
+    release_repo: Callable[..., ContextForTesting], tag: str, expected: str
 ) -> None:
-    """If both `git describe` and `rev-list --count` return empty, count is 0."""
-    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
-    run = _FakeRun(["\n", "\n"])
-    ctx = _ctx_with_run(run)
-    assert _compute_dev_version(ctx) == f"{_bump_patch(TODAY_VERSION)}-dev0"
+    """After a pre-release, the dev version targets the next pre-release of the same kind."""
+    ctx = release_repo(tag, commits=3)
+    dev = _compute_dev_version(ctx)
+    assert dev == expected
+    assert Version(tag) < Version(dev) < Version(tag.removeprefix("v").split("-")[0])
+
+
+def test_compute_dev_version_prerelease_tag_pull_request(
+    release_repo: Callable[..., ContextForTesting], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ctx = release_repo("v1.0.0-rc1", commits=5)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    assert _compute_dev_version(ctx) == f"1.0.0-rc.2.dev5+g{_short_sha(ctx)}"
+
+
+def test_compute_dev_version_on_the_tag(release_repo: Callable[..., ContextForTesting]) -> None:
+    """Zero commits since the tag still yields a dev version above it."""
+    ctx = release_repo("v0.20.0")
+    assert _compute_dev_version(ctx) == "0.20.1-dev0"
+
+
+def test_compute_dev_version_no_tags_fallback(
+    release_repo: Callable[..., ContextForTesting],
+) -> None:
+    """Without a matching tag, fall back to ``TODAY_VERSION`` and the total commit count."""
+    ctx = release_repo("not-a-release", commits=2)
+    major, minor, _ = TODAY_VERSION.split(".")
+    assert _compute_dev_version(ctx) == f"{major}.{minor}.1-dev3"
+
+
+@pytest.mark.parametrize("tag", ["v1.2.3-foo", "v1.2.3.4"])
+def test_compute_dev_version_unparsable_tag(
+    release_repo: Callable[..., ContextForTesting], tag: str
+) -> None:
+    """A tag matching the glob that isn't a release version is an error naming the tag."""
+    ctx = release_repo(tag, commits=1)
+    with pytest.raises(SystemExit) as excinfo:
+        _compute_dev_version(ctx)
+    assert excinfo.value.code == 1
+    assert tag in ctx.stderr
+
+
+def test_bump_strips_leading_v(
+    release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
+) -> None:
+    """``--new-version v0.36.0`` releases ``0.36.0``; the tag check looks for ``v0.36.0``."""
+    ctx = release_repo("v0.35.0", commits=1)
+    bump(ctx, new_version="v0.36.0", check_existing_tag=True)
+    output = github_files["GITHUB_OUTPUT"].read_text()
+    assert "release-version=0.36.0\n" in output
+    assert "release-patch-name=toolr-0.36.0.patch\n" in output
+    assert "release-prerelease=false\n" in output
+    assert github_files["GITHUB_ENV"].read_text() == "RELEASE_VERSION=0.36.0\n"
+    assert ctx.stdout.rstrip().endswith("0.36.0")
+
+
+def test_bump_leading_v_finds_existing_tag(
+    release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
+) -> None:
+    """With the ``v`` stripped, an existing ``v0.36.0`` tag is found (not ``vv0.36.0``)."""
+    ctx = release_repo("v0.36.0", commits=1)
+    with pytest.raises(SystemExit) as excinfo:
+        bump(ctx, new_version="v0.36.0", check_existing_tag=True)
+    assert excinfo.value.code == 1
+    assert "v0.36.0 already exists" in ctx.stderr
+    assert not any(path.exists() for path in github_files.values())
+
+
+def test_bump_prerelease_version(
+    release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
+) -> None:
+    """A PEP 440 pre-release is released in its Cargo form and flagged as a pre-release."""
+    ctx = release_repo("v0.36.0", commits=1)
+    bump(ctx, new_version="1.0.0rc1", check_existing_tag=True)
+    output = github_files["GITHUB_OUTPUT"].read_text()
+    assert "release-version=1.0.0-rc.1\n" in output
+    assert "release-patch-name=toolr-1.0.0-rc.1.patch\n" in output
+    assert "release-prerelease=true\n" in output
+    assert github_files["GITHUB_ENV"].read_text() == "RELEASE_VERSION=1.0.0-rc.1\n"
+    assert "`1.0.0-rc.1`" in github_files["GITHUB_STEP_SUMMARY"].read_text()
+
+
+@pytest.mark.parametrize("new_version", ["0.36", "latest", "1.0.0-1"])
+def test_bump_rejects_malformed_version_before_writing(
+    release_repo: Callable[..., ContextForTesting],
+    github_files: dict[str, Path],
+    new_version: str,
+) -> None:
+    """A malformed ``--new-version`` fails before any GitHub Actions file is written."""
+    ctx = release_repo("v0.35.0", commits=1)
+    with pytest.raises(SystemExit) as excinfo:
+        bump(ctx, new_version=new_version, check_existing_tag=True, include_action=True, write=True)
+    assert excinfo.value.code == 1
+    assert repr(new_version) in ctx.stderr
+    assert "Running" not in ctx.stdout
+    assert not any(path.exists() for path in github_files.values())
+
+
+def test_bump_dev_version_after_prerelease_tag(
+    release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
+) -> None:
+    """Without ``--new-version``, a repo tagged ``v1.0.0-rc1`` gets the next rc's dev version."""
+    ctx = release_repo("v1.0.0-rc1", commits=3)
+    bump(ctx)
+    output = github_files["GITHUB_OUTPUT"].read_text()
+    assert "release-version=1.0.0-rc.2.dev3\n" in output
+    assert "release-prerelease=true\n" in output
 
 
 # --------------------------------------------------------------------
