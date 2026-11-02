@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from packaging.version import InvalidVersion
+from packaging.version import Version
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -30,6 +32,52 @@ def _version_from_wheel(wheel: Path) -> str:
         msg = f"could not parse version from wheel filename: {wheel.name!r}"
         raise ValueError(msg)
     return match.group("version")
+
+
+def _binary_version_matches(version_output: str, wheel_version: str) -> bool:
+    """Whether `toolr --version` output names the same version as the wheel.
+
+    The binary prints its Cargo (SemVer) version, `toolr 1.0.0-rc.2.dev3`; the
+    wheel filename carries the PEP 440 form maturin derived from it,
+    `1.0.0rc2.dev3`. Compare them as parsed versions, not strings.
+    """
+    name, _, raw = version_output.strip().partition(" ")
+    if name != "toolr":
+        return False
+    try:
+        return Version(raw) == Version(wheel_version)
+    except InvalidVersion:
+        return False
+
+
+@pytest.mark.parametrize(
+    ("version_output", "wheel_version"),
+    [
+        ("toolr 0.36.0\n", "0.36.0"),
+        ("toolr 0.36.1-dev262\n", "0.36.1.dev262"),
+        ("toolr 0.36.1-dev262+gabc1234\n", "0.36.1.dev262+gabc1234"),
+        ("toolr 1.0.0-rc.1\n", "1.0.0rc1"),
+        ("toolr 1.0.0-rc.2.dev3\n", "1.0.0rc2.dev3"),
+        ("toolr 1.0.0-alpha.1\n", "1.0.0a1"),
+        ("toolr 1.0.0-beta.2\n", "1.0.0b2"),
+    ],
+)
+def test_binary_version_matches(version_output: str, wheel_version: str) -> None:
+    assert _binary_version_matches(version_output, wheel_version)
+
+
+@pytest.mark.parametrize(
+    ("version_output", "wheel_version"),
+    [
+        ("toolr 1.0.0-rc.1\n", "1.0.0rc2"),
+        ("toolr 1.0.0-rc.2.dev3\n", "1.0.0rc2"),
+        ("toolr 0.36.1-dev262\n", "0.36.1.dev263"),
+        ("toolr not-a-version\n", "0.36.0"),
+        ("other 0.36.0\n", "0.36.0"),
+    ],
+)
+def test_binary_version_mismatch(version_output: str, wheel_version: str) -> None:
+    assert not _binary_version_matches(version_output, wheel_version)
 
 
 @pytest.mark.distribution
@@ -72,14 +120,10 @@ def test_install_both_wheels_and_run_subcommand(
         text=True,
         check=True,
     )
-    # `toolr --version` prints `toolr X.Y.Z[-dev...]`. cargo accepts both
-    # `0.11.2-dev262` (semver) and `0.11.2.dev262` (PEP 440); the wheel
-    # filename uses the PEP 440 dot-form, the binary may emit either,
-    # so compare on the normalized PEP 440 form.
     binary_version = _version_from_wheel(toolr_wheel)
-    assert (
-        binary_version.replace(".dev", "-dev") in result.stdout or binary_version in result.stdout
-    ), f"unexpected --version output: {result.stdout!r} (expected to contain {binary_version!r})"
+    assert _binary_version_matches(result.stdout, binary_version), (
+        f"unexpected --version output: {result.stdout!r} (expected version {binary_version!r})"
+    )
 
     result = subprocess.run(  # noqa: S603
         [
