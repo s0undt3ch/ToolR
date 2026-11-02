@@ -699,17 +699,93 @@ def test_standalone_command_dotted_group(tools_repo: ToolsRepo) -> None:
     assert "snippet-checker" in group.get_commands()
 
 
+def _unknown_group_error(repo: Path) -> str:
+    """Discover `repo` and return the message `collected_command_groups()` raises."""
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        with pytest.raises(ValueError, match="unknown group references") as excinfo:
+            tester.collected_command_groups()
+    return str(excinfo.value)
+
+
 def test_collected_command_groups_rejects_unknown_group(tools_repo: ToolsRepo) -> None:
     """A `group=` naming no declared group fails the read, as the manifest build does."""
     repo = tools_repo({"tools/cmds.py": TYPO_GROUP_MODULE})
-    with CommandsTester(search_path=repo) as tester:
-        tester.discover()
-        with pytest.raises(ValueError, match=r"unknown group references \(1\):") as excinfo:
-            tester.collected_command_groups()
-    assert (
+    assert _unknown_group_error(repo) == (
+        "unknown group references (1):\n"
         "  - tools.cmds::check: references group `ci.typo` which has no "
         "`command_group(...)` declaration."
-    ) in str(excinfo.value)
+    )
+
+
+def test_unknown_group_error_names_commands_in_source_order(tools_repo: ToolsRepo) -> None:
+    """Lines name the CLI command, hyphenated or explicit, in the order they're declared."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                '@command(group="zebra-tools")\n'
+                "def run_check(ctx):\n"
+                '    """Check things."""\n'
+                '@command(name="alpha-lint", group="alpha-tools")\n'
+                "def lint(ctx):\n"
+                '    """Lint things."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (2):\n"
+        "  - tools.cmds::run-check: references group `zebra-tools` which has no "
+        "`command_group(...)` declaration.\n"
+        "  - tools.cmds::alpha-lint: references group `alpha-tools` which has no "
+        "`command_group(...)` declaration."
+    )
+
+
+@pytest.mark.parametrize(
+    ("declared", "referenced"),
+    [("ci", "cj"), ("my_ci", "my-ci")],
+)
+def test_unknown_group_error_suggests_a_near_miss(
+    tools_repo: ToolsRepo, declared: str, referenced: str
+) -> None:
+    """A declared group within the manifest build's edit distance is suggested."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                f'command_group("{declared}", "G", "G")\n'
+                f'@command(group="{referenced}")\n'
+                "def check(ctx):\n"
+                '    """Check things."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (1):\n"
+        f"  - tools.cmds::check: references group `{referenced}` which has no "
+        f"`command_group(...)` declaration. Did you mean `{declared}`?"
+    )
+
+
+def test_unknown_group_error_for_an_empty_group(tools_repo: ToolsRepo) -> None:
+    """`group=""` gets the manifest build's missing-kwarg message."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                '@command(group="")\n'
+                "def check(ctx):\n"
+                '    """Check things."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (1):\n"
+        "  - tools.cmds::check: `@command` is missing a `group=...` kwarg."
+    )
 
 
 def test_pending_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -> None:

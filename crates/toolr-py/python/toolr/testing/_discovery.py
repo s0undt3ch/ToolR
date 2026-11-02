@@ -146,6 +146,47 @@ def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     return [str(search_path), *kept]
 
 
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein distance, as ``edit_distance`` in the manifest build."""
+    previous = list(range(len(b) + 1))
+    for i, char_a in enumerate(a, start=1):
+        current = [i]
+        for j, char_b in enumerate(b, start=1):
+            cost = 0 if char_a == char_b else 1
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost))
+        previous = current
+    return previous[-1]
+
+
+def _nearest_group(target: str, registered: list[str]) -> str | None:
+    """The closest declared group to ``target``, as ``nearest_group`` in the manifest build.
+
+    The threshold uses the UTF-8 length, as Rust's ``str::len`` does.
+    ``registered`` is sorted, so among equally close groups the first
+    one wins; the manifest build picks one of them in hash order.
+    """
+    limit = max(len(target.encode()) // 3, 2)
+    best: tuple[int, str] | None = None
+    for candidate in registered:
+        distance = _edit_distance(target, candidate)
+        if distance <= limit and (best is None or distance < best[0]):
+            best = (distance, candidate)
+    return None if best is None else best[1]
+
+
+def _unknown_group_line(group: str, location: str, registered: list[str]) -> str:
+    """One line of the unknown-group error, worded as ``format_unknown_groups`` in Rust."""
+    if not group:
+        return f"  - {location}: `@command` is missing a `group=...` kwarg."
+    line = (
+        f"  - {location}: references group `{group}` which has no `command_group(...)` declaration."
+    )
+    suggestion = _nearest_group(group, registered)
+    if suggestion is not None:
+        line += f" Did you mean `{suggestion}`?"
+    return line
+
+
 @define(slots=True, frozen=True)
 class CommandsTester:
     """
@@ -162,8 +203,8 @@ class CommandsTester:
     sys_modules: dict[str, ModuleType] = field(init=False, repr=False)
     command_group_collector: dict[str, object] = field(init=False, repr=False, factory=dict)
     command_group_patcher: _patch = field(init=False, repr=False)
-    pending_command_collector: dict[str, list[tuple[str | None, Callable[..., Any]]]] = field(
-        init=False, repr=False, factory=dict
+    pending_command_collector: list[tuple[str, str, Callable[..., Any]]] = field(
+        init=False, repr=False, factory=list
     )
     pending_command_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
@@ -208,13 +249,13 @@ class CommandsTester:
                 the manifest build.
         """
         if self.pending_command_collector:
-            lines = sorted(
-                f"  - {func.__module__}::{func.__qualname__}: "
-                f"references group `{full_name.removeprefix('tools.')}` which has no "
-                "`command_group(...)` declaration."
-                for full_name, entries in self.pending_command_collector.items()
-                for _, func in entries
+            registered = sorted(
+                name.removeprefix("tools.") for name in self.command_group_collector
             )
+            lines = [
+                _unknown_group_line(group, f"{func.__module__}::{name}", registered)
+                for group, name, func in self.pending_command_collector
+            ]
             err_msg = "\n".join([f"unknown group references ({len(lines)}):", *lines])
             raise ValueError(err_msg)
         return {**self.command_group_collector}

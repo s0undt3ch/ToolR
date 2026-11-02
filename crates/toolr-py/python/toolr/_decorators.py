@@ -214,21 +214,22 @@ def _get_command_group_storage() -> dict[str, CommandGroup]:
     return collector
 
 
-def _get_pending_command_storage() -> dict[str, list[tuple[str | None, Callable[..., Any]]]]:
+def _get_pending_command_storage() -> list[tuple[str, str, Callable[..., Any]]]:
     """Get the standalone commands whose group isn't declared yet.
 
-    Keyed by the group's full name. ``command_group()`` drains its own key
-    when it creates the group, so the import order of ``tools/`` modules
-    doesn't matter. Same singleton pattern as
+    Each entry is ``(group, command name, function)``, with ``group`` as
+    written in ``group=``, in declaration order. ``command_group()`` takes
+    its own entries when it creates the group, so the import order of
+    ``tools/`` modules doesn't matter. Same singleton pattern as
     :func:`_get_command_group_storage`.
 
     Returns:
-        A list of ``(name, func)`` pairs per group full name
+        The pending ``(group, name, func)`` entries
     """
     try:
         pending = _get_pending_command_storage.__pending_commands__  # type: ignore[attr-defined]
     except AttributeError:
-        pending_commands: dict[str, list[tuple[str | None, Callable[..., Any]]]] = {}
+        pending_commands: list[tuple[str, str, Callable[..., Any]]] = []
         pending = _get_pending_command_storage.__pending_commands__ = pending_commands  # type: ignore[attr-defined]
     return pending
 
@@ -306,16 +307,19 @@ def command(
     # Parameterised form: @command(...) — returns a decorator. The static
     # parser reads the `group=` / `name` strings; the registry records them
     # for `CommandsTester`.
+    explicit_name = name
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         _require_docstring(func)
-        if group is not None:
-            full_name = f"tools.{group}"
-            existing = _get_command_group_storage().get(full_name)
-            if existing is not None:
-                existing.command(name)(func)
-            else:
-                # The group's module may be imported later; `command_group()` attaches it then.
-                _get_pending_command_storage().setdefault(full_name, []).append((name, func))
+        if group is None:
+            return func
+        cli_name = explicit_name if explicit_name is not None else func.__name__.replace("_", "-")
+        existing = _get_command_group_storage().get(f"tools.{group}")
+        if existing is not None:
+            existing.command(cli_name)(func)
+        else:
+            # The group's module may be imported later; `command_group()` attaches it then.
+            _get_pending_command_storage().append((group, cli_name, func))
         return func
 
     return decorator
@@ -417,7 +421,10 @@ def command_group(
         parent=parent,
         long_description=long_description,
     )
-    for command_name, func in _get_pending_command_storage().pop(group.full_name, []):
+    pending = _get_pending_command_storage()
+    waiting = [entry for entry in pending if f"tools.{entry[0]}" == group.full_name]
+    pending[:] = [entry for entry in pending if f"tools.{entry[0]}" != group.full_name]
+    for _, command_name, func in waiting:
         group.command(command_name)(func)
     return group
 
