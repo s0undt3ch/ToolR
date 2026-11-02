@@ -8,6 +8,7 @@ release tags as changelog sections.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tomllib
@@ -24,6 +25,7 @@ from tests.workflows.conftest import git_env
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
 CLIFF_TOML = REPO_ROOT / "cliff.toml"
+MISE_TOML = REPO_ROOT / "mise.toml"
 FINAL_ONLY = "steps.bump-version.outputs.release-prerelease != 'true'"
 
 
@@ -60,6 +62,15 @@ def test_release_prerelease_is_exported() -> None:
     assert "release-prerelease" in workflow_outputs
 
 
+def test_git_cliff_action_uses_the_mise_pin() -> None:
+    """The release renders with the git-cliff version the tests below run."""
+    pin = tomllib.loads(MISE_TOML.read_text())["tools"]["git-cliff"]
+    cliff_steps = [step for step in _steps() if "git-cliff-action" in step.get("uses", "")]
+    assert len(cliff_steps) == 2
+    for step in cliff_steps:
+        assert step["with"]["version"] == f"v{pin}"
+
+
 def test_cliff_tag_pattern_matches_final_releases_only() -> None:
     pattern = tomllib.loads(CLIFF_TOML.read_text())["git"]["tag_pattern"]
     assert pattern == r"^v[0-9]+\.[0-9]+\.[0-9]+$"
@@ -92,6 +103,9 @@ def rc_history(tmp_path: Path) -> Path:
 def _git_cliff(repo: Path, *args: str) -> str:
     git_cliff = shutil.which("git-cliff")
     if git_cliff is None:
+        # mise.toml pins git-cliff, so CI always has it; only a local run may not.
+        if os.environ.get("CI"):
+            pytest.fail("git-cliff is not on PATH; it is pinned in mise.toml")
         pytest.skip("git-cliff not available")
     return subprocess.run(  # noqa: S603  # git-cliff binary + args are test-controlled
         [git_cliff, "--offline", "--config", str(CLIFF_TOML), *args],

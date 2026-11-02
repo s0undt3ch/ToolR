@@ -177,6 +177,8 @@ jobs:
         id: git-cliff
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
+          # Same as the `git-cliff` pin in mise.toml, which the tests run.
+          version: v2.14.2
           config: cliff.toml
           args: --unreleased --strip all
         env:
@@ -215,6 +217,8 @@ jobs:
         if: steps.bump-version.outputs.release-prerelease != 'true'
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
+          # Same as the `git-cliff` pin in mise.toml, which the tests run.
+          version: v2.14.2
           config: cliff.toml
           args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
         env:
