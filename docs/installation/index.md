@@ -244,10 +244,15 @@ The check accepts an archive only when all of these hold:
 - That run was started by the release workflow, `release.yml`, on
   `main`. CI calls the same archive-building workflow, so this is what
   tells a release from a CI build of some branch.
-- The attestation names the archive by its exact file name, so a signed
-  archive of another version or platform can't be renamed into place.
+- One subject of the attestation carries both the archive's exact file
+  name and its SHA-256, so a signed archive of another version or
+  platform can't be renamed into place.
 
 The Setup ToolR GitHub Action applies the same rules.
+
+`TOOLR_REPO` (`install.sh`) and `-Repo` (`install.ps1`) move the whole
+trust anchor to another repository: the downloads, and the workflows the
+attestation must come from. Only set them for a fork you trust.
 
 To install without supply-chain verification (accepting the risk — e.g.
 on a host where you can't install `gh`):
@@ -263,6 +268,7 @@ downloaded it to:
 ```sh
 export ARCHIVE_NAME=toolr-1.2.3-aarch64-apple-darwin.tar.gz
 export RELEASE_WORKFLOW=https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main
+export ARCHIVE_SHA256=$(shasum -a 256 < "$ARCHIVE_NAME" | cut -d' ' -f1)
 gh attestation verify "$ARCHIVE_NAME" \
   --repo s0undt3ch/ToolR \
   --cert-identity https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main \
@@ -270,7 +276,7 @@ gh attestation verify "$ARCHIVE_NAME" \
   --format json \
   --jq '[.[].verificationResult
          | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW
-                  and any(.statement.subject[]; .name == env.ARCHIVE_NAME))]
+                  and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))]
         | length'
 ```
 

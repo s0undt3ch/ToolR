@@ -71,23 +71,30 @@ gh >= 2.56 is required to verify attestations (found: $ghVersion)
 "@
   }
   # Same rules as action.yml's verify-attestation step: ci.yml shares the signer, so only
-  # buildConfigURI tells a release from a CI build; the subject binds this version and triple.
+  # buildConfigURI tells a release from a CI build; one subject must carry this name and digest.
   # The filter stays on one line with no quotes for Windows PowerShell's native argument passing.
   $signerWorkflow = "https://github.com/$Repo/.github/workflows/_build-binary-archive.yml@refs/heads/main"
   $releaseWorkflow = "https://github.com/$Repo/.github/workflows/release.yml@refs/heads/main"
   $archiveName = Split-Path -Leaf $Path
-  $jqFilter = '[.[].verificationResult | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW and any(.statement.subject[]; .name == env.ARCHIVE_NAME))] | length'
-  $savedEnv = @{ RELEASE_WORKFLOW = $env:RELEASE_WORKFLOW; ARCHIVE_NAME = $env:ARCHIVE_NAME }
+  $jqFilter = '[.[].verificationResult | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))] | length'
+  $archiveSha256 = (Get-FileHash -Algorithm SHA256 $Path).Hash.ToLower()
+  $savedEnv = @{
+    RELEASE_WORKFLOW = $env:RELEASE_WORKFLOW
+    ARCHIVE_NAME = $env:ARCHIVE_NAME
+    ARCHIVE_SHA256 = $env:ARCHIVE_SHA256
+  }
   Write-Host "verifying SLSA build provenance via 'gh attestation verify'"
   try {
     $env:RELEASE_WORKFLOW = $releaseWorkflow
     $env:ARCHIVE_NAME = $archiveName
+    $env:ARCHIVE_SHA256 = $archiveSha256
     $count = & gh attestation verify $Path --repo $Repo --cert-identity $signerWorkflow `
       --deny-self-hosted-runners --format json --jq $jqFilter
     $ghExit = $LASTEXITCODE
   } finally {
     $env:RELEASE_WORKFLOW = $savedEnv.RELEASE_WORKFLOW
     $env:ARCHIVE_NAME = $savedEnv.ARCHIVE_NAME
+    $env:ARCHIVE_SHA256 = $savedEnv.ARCHIVE_SHA256
   }
   if ($ghExit -ne 0) {
     throw "attestation verification failed for $Path"
@@ -95,7 +102,7 @@ gh >= 2.56 is required to verify attestations (found: $ghVersion)
   $parsed = 0
   if (-not ([int]::TryParse((($count | Out-String).Trim()), [ref]$parsed)) -or $parsed -lt 1) {
     throw @"
-$archiveName has a valid $Repo attestation but was not built by the ToolR release workflow on main
+$archiveName has a valid $Repo attestation, but none from the $Repo release workflow on main for this exact archive
   install a published release; -VerifyAttestation skip turns off this check entirely.
 "@
   }

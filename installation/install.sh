@@ -91,19 +91,26 @@ fetch() {
   fi
 }
 
+# Print the lowercase hex SHA-256 of a file; fail when no tool can compute it.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum < "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 < "$1" | awk '{print $1}'
+  elif command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 < "$1" | sed 's/^.*= *//'
+  else
+    return 1
+  fi
+}
+
 verify_sha256() {
   file="$1"; expected="$2"
   if [ "$NO_VERIFY" -eq 1 ]; then
     info "skipping checksum verification (--no-verify)"
     return 0
   fi
-  if command -v sha256sum >/dev/null 2>&1; then
-    actual=$(sha256sum "$file" | awk '{print $1}')
-  elif command -v shasum >/dev/null 2>&1; then
-    actual=$(shasum -a 256 "$file" | awk '{print $1}')
-  else
-    err "no sha256 tool available (install coreutils); rerun with --no-verify to skip"
-  fi
+  actual=$(sha256_of "$file") || err "no sha256 tool available (install coreutils); rerun with --no-verify to skip"
   [ "$actual" = "$expected" ] || err "checksum mismatch: expected $expected got $actual"
 }
 
@@ -152,11 +159,13 @@ verify_attestation() {
     exit 1
   fi
   # Same rules as action.yml's verify-attestation step: ci.yml shares the signer, so only
-  # buildConfigURI tells a release from a CI build; the subject binds this version and triple.
+  # buildConfigURI tells a release from a CI build; one subject must carry this name and digest.
   SIGNER_WORKFLOW="https://github.com/${REPO}/.github/workflows/_build-binary-archive.yml@refs/heads/main"
   RELEASE_WORKFLOW="https://github.com/${REPO}/.github/workflows/release.yml@refs/heads/main"
   ARCHIVE_NAME="${file##*/}"
-  export ARCHIVE_NAME RELEASE_WORKFLOW
+  ARCHIVE_SHA256=$(sha256_of "$file") \
+    || err "no sha256 tool available (install coreutils); rerun with --verify-attestation=skip to skip"
+  export ARCHIVE_NAME ARCHIVE_SHA256 RELEASE_WORKFLOW
   info "verifying SLSA build provenance via 'gh attestation verify'"
   if ! count=$(gh attestation verify "$file" \
     --repo "$REPO" \
@@ -165,13 +174,13 @@ verify_attestation() {
     --format json \
     --jq '[.[].verificationResult
            | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW
-                    and any(.statement.subject[]; .name == env.ARCHIVE_NAME))]
+                    and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))]
           | length'); then
     err "attestation verification failed for $file"
   fi
   if ! [ "$count" -ge 1 ] 2>/dev/null; then
     printf '%s\n' \
-      "install.sh: ${ARCHIVE_NAME} has a valid ${REPO} attestation but was not built by the ToolR release workflow on main" \
+      "install.sh: ${ARCHIVE_NAME} has a valid ${REPO} attestation, but none from the ${REPO} release workflow on main for this exact archive" \
       "  install a published release; --verify-attestation=skip turns off this check entirely." \
       >&2
     exit 1

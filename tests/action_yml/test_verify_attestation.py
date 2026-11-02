@@ -15,6 +15,7 @@ identities) are exported first, as the runner would.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
 import shutil
@@ -34,6 +35,15 @@ RELEASE_BUILD = f"{WORKFLOWS}/release.yml@refs/heads/main"
 CI_BUILD = f"{WORKFLOWS}/ci.yml@refs/heads/main"
 MAIN_SIGNER = f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/main"
 ARCHIVE_NAME = "toolr-0.35.1-x86_64-unknown-linux-musl.tar.gz"
+# The fixtures write an empty archive.
+ARCHIVE_SHA256 = hashlib.sha256(b"").hexdigest()
+
+
+def _subject(name: str = ARCHIVE_NAME, sha256: str = ARCHIVE_SHA256) -> dict[str, Any]:
+    """An in-toto statement subject."""
+    return {"name": name, "digest": {"sha256": sha256}}
+
+
 REJECTED = "not built by the ToolR release workflow on main"
 
 
@@ -64,9 +74,9 @@ def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[s
 
     `build_configs` is the `buildConfigURI` of each attestation the
     stubbed `gh` finds. Each is signed by `signer`, which must equal the
-    step's `--cert-identity` as in real `gh`, and names `subject`
-    (default: the archive under test) as its statement subject.
-    `stdout` replaces the filtered output. A
+    step's `--cert-identity` as in real `gh`, and carries the statement
+    `subjects` (default: one naming the archive under test, with its
+    digest). `stdout` replaces the filtered output. A
     non-zero `gh_rc` makes the stub fail the way `gh attestation verify`
     does when no attestation verifies. `gh_version` is what
     `gh --version` reports. Every other `gh` argument list is appended to
@@ -83,7 +93,7 @@ def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[s
         *,
         build_configs: list[str],
         signer: str = MAIN_SIGNER,
-        subject: str = ARCHIVE_NAME,
+        subjects: list[dict[str, Any]] | None = None,
         stdout: str | None = None,
         gh_rc: int = 0,
         gh_version: str = "2.103.2",
@@ -98,7 +108,9 @@ def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[s
                                 "buildConfigURI": uri,
                             }
                         },
-                        "statement": {"subject": [{"name": subject}]},
+                        "statement": {
+                            "subject": subjects if subjects is not None else [_subject()]
+                        },
                     }
                 }
                 for uri in build_configs
@@ -284,7 +296,7 @@ def test_rejects_attestation_for_another_archive(
     subject: str,
 ) -> None:
     """An older or other-triple release archive renamed into place is rejected."""
-    result = verify_runner(build_configs=[RELEASE_BUILD], subject=subject)
+    result = verify_runner(build_configs=[RELEASE_BUILD], subjects=[_subject(subject)])
     assert result.returncode != 0
     assert REJECTED in result.stderr
 
@@ -325,3 +337,27 @@ def test_pinned_workflows_match_the_release_pipeline() -> None:
         f"--identity {pins['RELEASE_WORKFLOW']} "
         in (REPO_ROOT / paths["RELEASE_WORKFLOW"]).read_text()
     )
+
+
+def test_rejects_subject_with_another_digest(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    """The name matches but the digest is another file's."""
+    result = verify_runner(build_configs=[RELEASE_BUILD], subjects=[_subject(sha256="0" * 64)])
+    assert result.returncode != 0
+    assert REJECTED in result.stderr
+
+
+def test_rejects_name_and_digest_on_different_subjects(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    """One subject must carry both: a name from one and a digest from another doesn't count."""
+    result = verify_runner(
+        build_configs=[RELEASE_BUILD],
+        subjects=[
+            _subject(sha256="0" * 64),
+            _subject("toolr-0.34.0-x86_64-unknown-linux-musl.tar.gz"),
+        ],
+    )
+    assert result.returncode != 0
+    assert REJECTED in result.stderr

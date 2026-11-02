@@ -13,6 +13,7 @@ which file) testable offline.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shlex
@@ -21,6 +22,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -32,7 +34,16 @@ RELEASE_BUILD = f"{WORKFLOWS}/release.yml@refs/heads/main"
 CI_BUILD = f"{WORKFLOWS}/ci.yml@refs/heads/main"
 MAIN_SIGNER = f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/main"
 ARCHIVE_NAME = "toolr-0.35.1-x86_64-unknown-linux-musl.tar.gz"
-REJECTED = "not built by the ToolR release workflow on main"
+# The fixtures write an empty archive.
+ARCHIVE_SHA256 = hashlib.sha256(b"").hexdigest()
+
+
+def _subject(name: str = ARCHIVE_NAME, sha256: str = ARCHIVE_SHA256) -> dict[str, Any]:
+    """An in-toto statement subject."""
+    return {"name": name, "digest": {"sha256": sha256}}
+
+
+REJECTED = "none from the s0undt3ch/ToolR release workflow on main for this exact archive"
 SKIP_HINT = "--verify-attestation=skip"
 GH_FLOOR = "install.sh: gh >= 2.56 is required to verify attestations"
 
@@ -48,13 +59,16 @@ RunVerify = Callable[..., subprocess.CompletedProcess[str]]
 
 
 def _verify_function_source() -> str:
-    """`err`, `info`, `warn` and `verify_attestation()` from install.sh."""
+    """`err`, `info`, `warn`, `sha256_of()` and `verify_attestation()` from install.sh."""
     text = INSTALL_SH.read_text()
     helpers = re.findall(r"^(?:err|info|warn)\(\) \{.*\}$", text, flags=re.MULTILINE)
     assert len(helpers) == 3, helpers
-    body = re.search(r"^verify_attestation\(\) \{\n.*?^\}$", text, flags=re.MULTILINE | re.DOTALL)
-    assert body is not None, "no verify_attestation() in install.sh"
-    return "\n".join([*helpers, body.group(0)])
+    functions = []
+    for name in ("sha256_of", "verify_attestation"):
+        body = re.search(rf"^{name}\(\) \{{\n.*?^\}}$", text, flags=re.MULTILINE | re.DOTALL)
+        assert body is not None, f"no {name}() in install.sh"
+        functions.append(body.group(0))
+    return "\n".join([*helpers, *functions])
 
 
 @pytest.fixture
@@ -63,11 +77,13 @@ def verify_runner(tmp_path: Path) -> RunVerify:
 
     `build_configs` is the `buildConfigURI` of each attestation the stub
     `gh` finds. Each is signed by `signer`, which must equal the
-    installer's `--cert-identity` as in real `gh`, and names `subject` as
-    its statement subject. `stdout` replaces the filtered output. A
+    installer's `--cert-identity` as in real `gh`, and carries the
+    statement `subjects` (default: one naming the archive under test, with
+    its digest). `stdout` replaces the filtered output. A
     non-zero `gh_rc` makes the stub fail the way `gh attestation verify`
     does when nothing verifies. `gh_version` is what `gh --version`
-    reports; `gh=False` leaves `gh` off `PATH`. Every other `gh` argument
+    reports; `gh=False` leaves `gh` off `PATH`. `hashers` are the SHA-256
+    tools on `PATH`. Every other `gh` argument
     list is appended to `tmp_path / "gh_calls"`.
     """
     sh = shutil.which("sh")
@@ -77,11 +93,6 @@ def verify_runner(tmp_path: Path) -> RunVerify:
     # Only the tools the function and the stub need, so a real `gh` on
     # the host's PATH can't leak in.
     tools = tmp_path / "tools"
-    tools.mkdir()
-    for name in ("sed", "head", "cat"):
-        found = shutil.which(name)
-        assert found is not None, name
-        (tools / name).symlink_to(found)
     stub_bin = tmp_path / "stub-bin"
     stub_bin.mkdir()
     calls = tmp_path / "gh_calls"
@@ -95,14 +106,21 @@ def verify_runner(tmp_path: Path) -> RunVerify:
         *,
         build_configs: list[str] | None = None,
         signer: str = MAIN_SIGNER,
-        subject: str = ARCHIVE_NAME,
+        subjects: list[dict[str, Any]] | None = None,
         stdout: str | None = None,
         gh_rc: int = 0,
         gh_version: str = "2.103.2",
         gh: bool = True,
         mode: str = "require",
         repo: str = "s0undt3ch/ToolR",
+        hashers: tuple[str, ...] = ("sha256sum", "shasum"),
     ) -> subprocess.CompletedProcess[str]:
+        shutil.rmtree(tools, ignore_errors=True)
+        tools.mkdir()
+        for name in ("sed", "head", "cat", "awk", *hashers):
+            found = shutil.which(name)
+            if found is not None:
+                (tools / name).symlink_to(found)
         payload_file.write_text(
             json.dumps(
                 [
@@ -114,7 +132,9 @@ def verify_runner(tmp_path: Path) -> RunVerify:
                                     "buildConfigURI": uri,
                                 }
                             },
-                            "statement": {"subject": [{"name": subject}]},
+                            "statement": {
+                                "subject": subjects if subjects is not None else [_subject()]
+                            },
                         }
                     }
                     for uri in (build_configs or [])
@@ -281,7 +301,7 @@ def test_accepts_gh_2_56_and_later(verify_runner: RunVerify, gh_version: str) ->
 )
 def test_rejects_attestation_for_another_archive(verify_runner: RunVerify, subject: str) -> None:
     """An older or other-triple release archive renamed into place is rejected."""
-    result = verify_runner(build_configs=[RELEASE_BUILD], subject=subject)
+    result = verify_runner(build_configs=[RELEASE_BUILD], subjects=[_subject(subject)])
     assert result.returncode != 0
     assert REJECTED in result.stderr
 
@@ -332,3 +352,43 @@ def test_repo_override_drives_the_identities(verify_runner: RunVerify, tmp_path:
     assert "--repo someone/ToolR " in call
     # The fork's archives don't pass as ToolR releases, or vice versa.
     assert verify_runner(build_configs=[RELEASE_BUILD], repo="someone/ToolR").returncode != 0
+    result = verify_runner(
+        build_configs=[RELEASE_BUILD],
+        signer=f"{fork}/_build-binary-archive.yml@refs/heads/main",
+        repo="someone/ToolR",
+    )
+    assert result.returncode != 0
+    assert "none from the someone/ToolR release workflow on main" in result.stderr
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="openssl is required")
+def test_digest_falls_back_to_openssl(verify_runner: RunVerify) -> None:
+    result = verify_runner(build_configs=[RELEASE_BUILD], hashers=("openssl",))
+    assert result.returncode == 0, result.stderr
+
+
+def test_no_sha256_tool_fails_closed(verify_runner: RunVerify, tmp_path: Path) -> None:
+    result = verify_runner(build_configs=[RELEASE_BUILD], hashers=())
+    assert result.returncode != 0
+    assert "no sha256 tool available" in result.stderr
+    assert not (tmp_path / "gh_calls").exists()
+
+
+def test_rejects_subject_with_another_digest(verify_runner: RunVerify) -> None:
+    """The name matches but the digest is another file's."""
+    result = verify_runner(build_configs=[RELEASE_BUILD], subjects=[_subject(sha256="0" * 64)])
+    assert result.returncode != 0
+    assert REJECTED in result.stderr
+
+
+def test_rejects_name_and_digest_on_different_subjects(verify_runner: RunVerify) -> None:
+    """One subject must carry both: a name from one and a digest from another doesn't count."""
+    result = verify_runner(
+        build_configs=[RELEASE_BUILD],
+        subjects=[
+            _subject(sha256="0" * 64),
+            _subject("toolr-0.34.0-x86_64-unknown-linux-musl.tar.gz"),
+        ],
+    )
+    assert result.returncode != 0
+    assert REJECTED in result.stderr

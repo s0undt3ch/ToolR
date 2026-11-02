@@ -309,10 +309,16 @@ runs:
         # matches by prefix, so it would also accept `@refs/heads/main-evil`.
         # `ci.yml` calls the same signer, so only `buildConfigURI` tells a
         # release from a CI build, and `release.yml` on another ref may lack
-        # the release environment gate. The subject name binds the
-        # attestation to this exact version and triple.
+        # the release environment gate. One subject must carry this
+        # archive's name and digest, binding this exact version and triple.
         ARCHIVE_NAME="${ARCHIVE_PATH##*/}"
-        export ARCHIVE_NAME RELEASE_WORKFLOW
+        if command -v sha256sum >/dev/null 2>&1; then
+          ARCHIVE_SHA256=$(sha256sum < "$ARCHIVE_PATH")
+        else
+          ARCHIVE_SHA256=$(shasum -a 256 < "$ARCHIVE_PATH")
+        fi
+        ARCHIVE_SHA256=${ARCHIVE_SHA256%% *}
+        export ARCHIVE_NAME ARCHIVE_SHA256 RELEASE_WORKFLOW
         count=$(gh attestation verify "$ARCHIVE_PATH" \
           --repo s0undt3ch/ToolR \
           --cert-identity "$SIGNER_WORKFLOW" \
@@ -320,7 +326,7 @@ runs:
           --format json \
           --jq '[.[].verificationResult
                  | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW
-                          and any(.statement.subject[]; .name == env.ARCHIVE_NAME))]
+                          and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))]
                 | length')
         if ! [ "$count" -ge 1 ] 2>/dev/null; then
           echo "setup-toolr: ${ARCHIVE_NAME} has a valid ToolR attestation but was not built by the ToolR release workflow on main" >&2
