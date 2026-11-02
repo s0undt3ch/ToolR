@@ -25,6 +25,10 @@ on:
         required: true
         type: string
         description: 'Version of mise to install. Pass the caller workflow''s MISE_VERSION env var.'
+      toolr-version:
+        required: true
+        type: string
+        description: 'toolr binary version to dogfood. Pass the caller workflow''s TOOLR_VERSION env var.'
     secrets:
       github-app-private-key:
         required: false
@@ -117,7 +121,7 @@ jobs:
         id: setup-toolr
         uses: ./
         with:
-          version: latest
+          version: ${{ inputs.toolr-version }}
           cache-prefix: ${{ inputs.cache-seed }}|setup-toolr|prepare-release
 
       - name: Setup Prek

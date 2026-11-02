@@ -43,11 +43,12 @@ jobs:
       binary-archive-triples: ${{ steps.generate-build-matrix.outputs.binary-archive-triples }}
       pythons-binary: ${{ steps.generate-build-matrix.outputs.pythons-binary }}
       pythons-py: ${{ steps.generate-build-matrix.outputs.pythons-py }}
-      # Mirrors env.CACHE_SEED / env.MISE_VERSION. Reusable workflows can't
-      # read `env` from a caller's `with:` block, so they read these
-      # outputs instead.
+      # Mirrors env.CACHE_SEED / env.MISE_VERSION / env.TOOLR_VERSION.
+      # Reusable workflows can't read `env` from a caller's `with:` block,
+      # so they read these outputs instead.
       cache-seed: ${{ steps.cache-seed.outputs.cache-seed }}
       mise-version: ${{ steps.mise-version.outputs.mise-version }}
+      toolr-version: ${{ steps.toolr-version.outputs.toolr-version }}
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
@@ -77,6 +78,10 @@ jobs:
         id: mise-version
         run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Expose toolr version
+        id: toolr-version
+        run: echo "toolr-version=$TOOLR_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Set up mise
         uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
@@ -94,7 +99,7 @@ jobs:
         id: setup-toolr
         uses: ./
         with:
-          version: latest
+          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|prepare-release
 
       - name: Generate Build Matrix
@@ -117,6 +122,7 @@ jobs:
       environment: release
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      toolr-version: ${{ needs.prepare-ci.outputs.toolr-version }}
     secrets:
       github-app-private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 

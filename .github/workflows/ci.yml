@@ -46,11 +46,13 @@ jobs:
       test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
       test-pythons-narrow: ${{ steps.generate-build-matrix.outputs.test-pythons-narrow }}
       run-full-bench: ${{ steps.generate-build-matrix.outputs.run-full-bench }}
-      # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
-      # reusable workflows can read them via `needs.prepare-ci.outputs.*`
+      # Mirrors env.CACHE_SEED / env.MISE_VERSION / env.TOOLR_VERSION.
+      # Exposed as outputs so reusable workflows can read them via
+      # `needs.prepare-ci.outputs.*`
       # (the `env` context is not allowed in workflow-call `with:` blocks).
       cache-seed: ${{ steps.cache-seed.outputs.cache-seed }}
       mise-version: ${{ steps.mise-version.outputs.mise-version }}
+      toolr-version: ${{ steps.toolr-version.outputs.toolr-version }}
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
@@ -78,6 +80,10 @@ jobs:
         id: mise-version
         run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Expose toolr version
+        id: toolr-version
+        run: echo "toolr-version=$TOOLR_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Set up mise
         uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
@@ -94,7 +100,7 @@ jobs:
         id: setup-toolr
         uses: ./
         with:
-          version: latest
+          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|prepare-ci
 
       - name: Generate Build Matrix
@@ -151,7 +157,7 @@ jobs:
         id: setup-toolr
         uses: ./
         with:
-          version: latest
+          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|pre-commit
 
       - name: Run Prek
@@ -178,6 +184,7 @@ jobs:
     with:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
+      toolr-version: ${{ needs.prepare-ci.outputs.toolr-version }}
     permissions:
       contents: read
       id-token: write
@@ -251,7 +258,7 @@ jobs:
         id: setup-toolr
         uses: ./
         with:
-          version: latest
+          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|packslip-check
 
       - name: Install the packslip CLI
@@ -673,14 +680,14 @@ jobs:
       - name: Setup ToolR
         # Dispatches `toolr pre-commit regen-doc-snippets`. The
         # released binary from this action only drives the command —
-        # keeping the dispatcher's runner-schema contract aligned with
-        # the released toolr-py in the tools venv — while the freshly
+        # TOOLR_VERSION pins it to the toolr-py in the tools venv, so
+        # the runner-schema contract holds — while the freshly
         # built binary under test is what the captures actually run,
         # via TOOLR_REGEN_BINARY below.
         id: setup-toolr
         uses: ./
         with:
-          version: latest
+          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|docs
 
       - name: Verify doc snippets are in sync
