@@ -56,7 +56,7 @@ jobs:
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -74,7 +74,7 @@ jobs:
       # Linux builds run in the manylinux container, where maturin installs current stable.
       - name: Set up mise (installs the Rust toolchain locked in mise.toml)
         if: runner.os != 'Linux'
-        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
           version: ${{ inputs.mise-version }}
           install_args: rust
@@ -119,7 +119,7 @@ jobs:
             ${{ inputs.cache-seed }}|cibw|${{ inputs.wheel-kind }}|${{ runner.os }}|${{ runner.arch }}|${{ matrix.platform.name }}|
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@b9e566a2b284570af229f6c2a33673410d0389a3 # v4.3.4
+        uses: pypa/cibuildwheel@f9b966cfadf4109556cadc5bb39ddb72d0ce664e # v4.3.5
         env:
           CIBW_ARCHS_LINUX: all
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform.name }}
