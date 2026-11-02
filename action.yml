@@ -287,7 +287,9 @@ runs:
         # Releases are built only by `release.yml` dispatched on `main`, which
         # calls this reusable workflow to build and attest each archive.
         # Moving releases off `main` (tags, a maintenance branch) means
-        # widening both pins and the `refs/tags` rejection test together.
+        # widening every copy of these pins together: this step, install.sh,
+        # install.ps1, both installation docs pages and the mise pin.
+        # tests/installation/test_attestation_pins.py lists and checks them.
         SIGNER_WORKFLOW: https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main
         RELEASE_WORKFLOW: https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main
       run: |
