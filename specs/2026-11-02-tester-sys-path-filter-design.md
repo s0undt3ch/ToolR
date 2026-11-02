@@ -1,4 +1,4 @@
-# Keep only the interpreter's own site directories in `CommandsTester`'s `sys.path`
+# Resolve `tools` from the fixture only in `CommandsTester`
 
 - **Status:** proposed
 - **Origin:** audit follow-up FU-10.
@@ -37,50 +37,54 @@ an extra entry. In the deny-list the same false positive defeats the isolation.
 
 ## Decision
 
-An entry is exempt from the `tools`-provider rule only if it is one of the running interpreter's own site
-directories, matched as a whole normalised path:
+Stop pruning `sys.path` to decide which `tools` gets imported. Instead, while a `CommandsTester` is active, a
+`sys.meta_path` finder (`_FixtureToolsFinder`) sits first and resolves the top-level name `tools` from `search_path`
+only:
 
-- `site.getsitepackages()`: the global site directories for `sys.prefix` and `sys.exec_prefix`. In a venv
-  created with `include-system-site-packages = true` this also lists the base interpreter's directories, Debian's
-  `dist-packages` among them, since Debian patches `site.getsitepackages()`. On Windows it includes the prefix itself.
-- `site.getusersitepackages()`: the user site directory.
-- `sysconfig.get_paths()["purelib"]` and `["platlib"]`: where the installer puts packages, which covers distro layouts
-  where `site` and `sysconfig` disagree.
+- `find_spec("tools")` calls `importlib.machinery.PathFinder.find_spec("tools", [search_path])`. If the fixture has no
+  `tools`, it raises `ModuleNotFoundError(name="tools")`, so no later finder can find another one. `discover()` already
+  treats that as "nothing to walk".
+- Every other name, `tools.*` included, returns `None` and goes through the normal finders. Submodules resolve through
+  `tools.__path__`, which only names the fixture.
+- A namespace fixture's `__path__` is a `_NamespacePath`, which recomputes itself from all of `sys.path` whenever
+  `sys.path` changes or the import caches are invalidated (`monkeypatch.syspath_prepend` does both). The finder
+  rebuilds it with importlib's own type but a path finder that only looks in `search_path`, so a recompute can't merge
+  another `tools/` in. The type stays importlib's because `importlib.resources` rejects any other `__path__` for a
+  namespace package.
+- `__enter__` inserts the finder at `sys.meta_path[0]`; `__exit__` removes that instance, so nested testers unwind in
+  order.
 
-Both sides are compared after `os.path.normcase(os.path.realpath(...))`, so a symlinked prefix, a trailing separator
-or a case difference on Windows doesn't matter.
-
-The query lives in a small helper with no branches, `_site_dirs() -> frozenset[str]`, which `_isolated_sys_path` calls
-once per call. Tests replace the helper with `monkeypatch` to declare a `tmp_path` directory a site directory.
-
-Everything else about `_isolated_sys_path` stays as it is: `""` and `search_path` are dropped, `search_path` goes
-first, entries without a `tools` provider (the stdlib, `lib-dynload`, the stdlib zip, `.pth` additions, src-layout
-editable installs, `PYTHONPATH`) are kept in order.
+`_isolated_sys_path` keeps every entry: it drops only `""` (the cwd is `search_path` while the tester is active) and
+`search_path`, which it puts first. The stdlib, site-packages, overlays, `.pth` additions, editable installs and
+`PYTHONPATH` all stay importable. Name checks on `site-packages` are gone altogether.
 
 ## Rejected alternatives
 
-- **Match a path component** (`"site-packages" in Path(entry).parts`, or the last component only). This fixes the
-  two reported shapes, but a repo under a parent directory literally named `site-packages` (or a repo with that name)
-  still keeps its root. It is the same name-based guess that caused this bug.
+- **Exempt only the running interpreter's site directories** (`site.getsitepackages()`, the user site,
+  `sysconfig` `purelib`/`platlib`, compared as whole paths). This was the first fix on this branch. Adversarial review
+  showed it drops a site directory the interpreter doesn't own, such as a `uv run --with` overlay
+  (`~/.cache/uv/archive-v0/<hash>/.../site-packages`), a `.pth`- or `PYTHONPATH`-chained environment, or tox/nox
+  layering, whenever that directory ships a stray top-level `tools`. Every package installed beside it goes too, and a
+  fixture module importing one of them fails with `ModuleNotFoundError`. Pruning whole entries is the wrong
+  granularity: only one name needs isolating.
+- **Match a path component** (`"site-packages" in Path(entry).parts`). Still a name guess: a repo under a directory
+  named `site-packages` keeps its root, and it has the same overlay problem for any directory not named that way.
 - **Exempt anything under `sys.prefix` / `sys.base_prefix`.** On a system interpreter `sys.prefix` is `/usr`, so a
-  checkout at `/usr/src/app` would be exempt and the bug would survive. An in-tree venv at `tools/.venv` would also
-  put `sys.prefix` under the repo, though not above the root.
-- **Drop the exemption entirely.** A third-party distribution that installs a top-level `tools` package would then
-  take the whole site-packages directory off `sys.path`, and every import in the user's `tools/*.py` would fail.
-- **Keep the substring test and also check for a `.git` marker or `pyproject.toml`.** Another heuristic; it doesn't
-  cover a fixture-like directory with no marker, and it adds filesystem probes for every entry.
+  checkout at `/usr/src/app` would be exempt.
+- **Also keep entries holding `*.dist-info`** (install targets). Fixes the overlay case, but stays a heuristic over
+  whole entries, and an editable-install root with metadata beside a `tools/` would be kept.
+- **Drop the exemption entirely.** A stray `tools` in site-packages would take the whole environment off `sys.path`.
 
 ## Scope and compatibility
 
 - Affects only `toolr.testing.CommandsTester` (and through it `toolr.testing`'s pytest plugin). No runner, manifest
   or Rust change; no schema bump.
-- Behaviour changes only for an entry that provides `tools` and whose path contains `site-packages` or
-  `dist-packages` without being an interpreter site directory. Such an entry is now dropped, as any other `tools`
-  provider is.
-- A site directory of another interpreter, added through `PYTHONPATH` or a `.pth` file (for example `uv run --with`'s
-  overlay environment), is no longer exempt. If it holds a top-level `tools` package, it is dropped; a stray `tools`
-  provider being hidden is what the isolation is for.
-- Not covered, as before: a regular `tools` package installed in the interpreter's site-packages still replaces a
-  fixture `tools/` that has no `__init__.py`.
-- User-visible for `toolr.testing` users: one release note. `docs/writing-commands/testing.md` changes "except
-  `site-packages` directories" to name the interpreter's site directories.
+- `sys.path` inside the tester is now the saved path with `search_path` first and `""` removed; entries that provide
+  `tools` are no longer removed. Code that relied on the host repo root being off `sys.path` for other top-level
+  modules now sees them, after the fixture's.
+- Closes the case F-09 left open: a regular `tools` package installed in site-packages no longer replaces a fixture
+  `tools/` that has no `__init__.py`.
+- The finder bypasses later meta-path hooks for the top-level `tools` module only, pytest's assertion rewriter among
+  them. `tools.*` submodules still go through every hook.
+- User-visible for `toolr.testing` users: one release note. `docs/writing-commands/testing.md` describes the finder
+  instead of the `sys.path` filtering.
