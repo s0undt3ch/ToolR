@@ -30,6 +30,7 @@ mod test_suite {
     #[cfg(windows)]
     use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 
+    use crate::command::tree::terminate;
     use crate::{CommandConfig, run_command_internal};
 
     // Helper function to get file descriptor/handle from File in a cross-platform way
@@ -884,38 +885,28 @@ mod test_suite {
             text.lines().next()?.trim().parse().ok()
         }
 
-        /// Kills a test's grandchild when the test ends, pass or fail, so a red
-        /// run doesn't leave sleepers behind.
+        /// Kills a test's leftover processes when the test ends, pass or fail.
         struct KillOnDrop(Vec<u32>);
 
         impl Drop for KillOnDrop {
             fn drop(&mut self) {
-                self.0.iter().for_each(|&pid| kill(pid));
+                self.0.iter().for_each(|&pid| terminate(pid));
             }
         }
 
-        fn kill(pid: u32) {
-            {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as libc::pid_t, libc::SIGKILL);
-                }
-                #[cfg(windows)]
-                unsafe {
-                    use winapi::um::handleapi::CloseHandle;
-                    use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
-                    use winapi::um::winnt::PROCESS_TERMINATE;
-                    let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
-                    if !handle.is_null() {
-                        TerminateProcess(handle, 1);
-                        CloseHandle(handle);
-                    }
-                }
+        /// Kills whatever matches `pattern` when the test ends, for processes whose
+        /// pid the test never learns.
+        #[cfg(unix)]
+        struct KillMatching(&'static str);
+
+        #[cfg(unix)]
+        impl Drop for KillMatching {
+            fn drop(&mut self) {
+                pids_matching(self.0).into_iter().for_each(terminate);
             }
         }
 
-        /// Pids whose full command line matches `pattern`; for processes a test can't learn the
-        /// pid of any other way.
+        /// Pids whose full command line matches `pattern`.
         #[cfg(unix)]
         fn pids_matching(pattern: &str) -> Vec<u32> {
             let output = Command::new("pgrep").args(["-f", pattern]).output();
@@ -955,7 +946,7 @@ mod test_suite {
             )
         }
 
-        /// Captures stdout so the test can read the grandchild's pid.
+        /// Captures stdout so the test can read what the command prints.
         fn capturing_config(args: Vec<String>) -> (CommandConfig, NamedTempFile, NamedTempFile) {
             let stdout_file = NamedTempFile::new().expect("stdout temp file");
             let stderr_file = NamedTempFile::new().expect("stderr temp file");
@@ -966,6 +957,11 @@ mod test_suite {
                 ..Default::default()
             };
             (config, stdout_file, stderr_file)
+        }
+
+        #[cfg(unix)]
+        fn sh(script: &str) -> Vec<String> {
+            vec!["sh".into(), "-c".into(), script.into()]
         }
 
         fn assert_timeout_error(
@@ -993,19 +989,19 @@ mod test_suite {
             Ok(())
         }
 
-        /// The reported shape: `; true` stops `sh` exec-ing `sleep`, so `sleep` is a
-        /// grandchild, and it must not outlive the timeout.
+        /// `; true` stops `sh` exec-ing `sleep`, so `sleep` is a grandchild, and it
+        /// must not outlive the timeout.
         #[cfg(unix)]
         #[test]
-        fn reported_shape_sh_sleep_timeout_kills_sleep() -> Result<()> {
+        fn timeout_kills_the_shells_child() -> Result<()> {
+            let _cleanup = KillMatching("^sleep 999$");
             let config = CommandConfig {
-                args: vec!["sh".into(), "-c".into(), "sleep 999; true".into()],
+                args: sh("sleep 999; true"),
                 timeout_secs: Some(3.0),
                 ..Default::default()
             };
             let run = thread::spawn(move || bounded_run_command(config, TREE_BOUND));
             let sleeper = wait_for_pids("^sleep 999$", DEATH_WAIT);
-            let _guard = KillOnDrop(sleeper.clone());
             assert_timeout_error(run.join().expect("run thread")?, "timed out after");
             assert!(!sleeper.is_empty(), "never saw `sleep 999` start");
             for pid in sleeper {
@@ -1026,36 +1022,14 @@ mod test_suite {
                 capturing_config(vec![python, "-c".into(), grandchild_script(60, false)]);
             config.no_output_timeout_secs = Some(5.0);
 
-            let result = bounded_run_command(config, TREE_BOUND)?;
+            let result = bounded_run_command(config, TREE_BOUND);
             let pid = read_pid(&mut stdout_file);
-            let _guard = KillOnDrop(pid.into_iter().collect());
-            assert_timeout_error(result, "no output for");
+            let _cleanup = KillOnDrop(pid.into_iter().collect());
+            assert_timeout_error(result?, "no output for");
             let pid = pid.ok_or_else(|| anyhow!("the child never printed the grandchild pid"))?;
             assert!(
                 wait_until_dead(pid, DEATH_WAIT),
                 "grandchild {pid} survived the timeout"
-            );
-            Ok(())
-        }
-
-        #[cfg(unix)]
-        #[test]
-        fn timeout_kills_grandchild_sh() -> Result<()> {
-            let (mut config, mut stdout_file, _stderr) = capturing_config(vec![
-                "sh".into(),
-                "-c".into(),
-                "sleep 60 & echo $!; wait".into(),
-            ]);
-            config.timeout_secs = Some(2.0);
-
-            let result = bounded_run_command(config, TREE_BOUND)?;
-            let pid = read_pid(&mut stdout_file);
-            let _guard = KillOnDrop(pid.into_iter().collect());
-            assert_timeout_error(result, "timed out after");
-            let pid = pid.ok_or_else(|| anyhow!("sh never printed the sleep pid"))?;
-            assert!(
-                wait_until_dead(pid, DEATH_WAIT),
-                "sleep {pid} survived the timeout"
             );
             Ok(())
         }
@@ -1073,10 +1047,10 @@ mod test_suite {
             config.timeout_secs = Some(3.0);
 
             let start = Instant::now();
-            let result = bounded_run_command(config, TREE_BOUND)?;
+            let result = bounded_run_command(config, TREE_BOUND);
             let elapsed = start.elapsed();
-            let _guard = KillOnDrop(read_pid(&mut stdout_file).into_iter().collect());
-            assert_timeout_error(result, "timed out after");
+            let _cleanup = KillOnDrop(read_pid(&mut stdout_file).into_iter().collect());
+            assert_timeout_error(result?, "timed out after");
             assert!(
                 elapsed < Duration::from_secs(20),
                 "the call waited {elapsed:?} for the background holder"
@@ -1084,21 +1058,26 @@ mod test_suite {
             Ok(())
         }
 
-        /// The spec's repro: `sh` exits 0 at once, `sleep` holds the pipes. Unique
-        /// durations let the guard find the `sleep` afterwards.
+        /// `sh` exits 0 at once and the backgrounded `sleep` holds the pipes until
+        /// one of the timeouts runs out. Each caller uses its own `sleep` duration so
+        /// the cleanup finds only its own leftover.
         #[cfg(unix)]
-        #[test]
-        fn timeout_holds_when_background_child_keeps_pipe_open_sh() -> Result<()> {
+        fn background_holder_times_out(
+            sleeper: &'static str,
+            timeouts: (Option<f64>, Option<f64>),
+            expected: &str,
+        ) -> Result<()> {
+            let _cleanup = KillMatching(sleeper);
             let config = CommandConfig {
-                args: vec!["sh".into(), "-c".into(), "sleep 301 &".into()],
-                timeout_secs: Some(1.0),
+                args: sh(&format!("{} &", sleeper.trim_matches(['^', '$']))),
+                timeout_secs: timeouts.0,
+                no_output_timeout_secs: timeouts.1,
                 ..Default::default()
             };
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND)?;
             let elapsed = start.elapsed();
-            let _guard = KillOnDrop(pids_matching("^sleep 301$"));
-            assert_timeout_error(result, "timed out after");
+            assert_timeout_error(result, expected);
             assert!(
                 elapsed < Duration::from_secs(20),
                 "the call waited {elapsed:?} for the background holder"
@@ -1106,25 +1085,16 @@ mod test_suite {
             Ok(())
         }
 
-        /// Same holder shape under `no_output_timeout_secs`.
         #[cfg(unix)]
         #[test]
-        fn no_output_timeout_holds_when_background_child_keeps_pipe_open() -> Result<()> {
-            let config = CommandConfig {
-                args: vec!["sh".into(), "-c".into(), "sleep 302 &".into()],
-                no_output_timeout_secs: Some(1.0),
-                ..Default::default()
-            };
-            let start = Instant::now();
-            let result = bounded_run_command(config, TREE_BOUND)?;
-            let elapsed = start.elapsed();
-            let _guard = KillOnDrop(pids_matching("^sleep 302$"));
-            assert_timeout_error(result, "no output for");
-            assert!(
-                elapsed < Duration::from_secs(20),
-                "the call waited {elapsed:?} for the background holder"
-            );
-            Ok(())
+        fn timeout_holds_when_a_background_sleep_keeps_pipe_open() -> Result<()> {
+            background_holder_times_out("^sleep 301$", (Some(1.0), None), "timed out after")
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn no_output_timeout_holds_when_a_background_sleep_keeps_pipe_open() -> Result<()> {
+            background_holder_times_out("^sleep 302$", (None, Some(1.0)), "no output for")
         }
 
         /// A writer that left the tree before the timeout escapes the walk. The call
@@ -1134,19 +1104,17 @@ mod test_suite {
         #[test]
         fn timeout_returns_when_an_escaped_process_holds_the_pipe() -> Result<()> {
             // The subshell exits at once, so the writer is reparented before the timeout.
-            let (mut config, mut stdout_file, _stderr) = capturing_config(vec![
-                "sh".into(),
-                "-c".into(),
-                "(sh -c 'echo $$; while echo tick; do sleep 0.1; done' &); sleep 60".into(),
-            ]);
+            let (mut config, mut stdout_file, _stderr) = capturing_config(sh(
+                "(sh -c 'echo $$; while echo tick; do sleep 0.1; done' &); sleep 60",
+            ));
             config.timeout_secs = Some(2.0);
 
             let start = Instant::now();
-            let result = bounded_run_command(config, TREE_BOUND)?;
+            let result = bounded_run_command(config, TREE_BOUND);
             let elapsed = start.elapsed();
             let writer = read_pid(&mut stdout_file);
-            let _guard = KillOnDrop(writer.into_iter().collect());
-            assert_timeout_error(result, "timed out after");
+            let _cleanup = KillOnDrop(writer.into_iter().collect());
+            assert_timeout_error(result?, "timed out after");
             assert!(
                 elapsed < Duration::from_secs(20),
                 "the call waited {elapsed:?} for the escaped process"
@@ -1204,7 +1172,7 @@ mod test_suite {
             const PAYLOAD: usize = 8000;
             let (sink, drainer) = full_pipe(Duration::from_secs(3), PAYLOAD)?;
             let config = CommandConfig {
-                args: vec!["sh".into(), "-c".into(), format!("printf '%0{PAYLOAD}d' 0")],
+                args: sh(&format!("printf '%0{PAYLOAD}d' 0")),
                 sys_stdout_fd: Some(sink),
                 timeout_secs: timeouts.0,
                 no_output_timeout_secs: timeouts.1,
@@ -1230,15 +1198,14 @@ mod test_suite {
             slow_sink_is_not_a_timeout((None, Some(1.0)))
         }
 
-        /// Without a timeout, a background writer is still waited for, as before.
+        /// A background writer that finishes well inside the limits (or with none set)
+        /// is waited for, and its output delivered.
         #[cfg(unix)]
-        #[test]
-        fn no_timeout_still_waits_for_background_writer() -> Result<()> {
-            let (config, mut stdout_file, _stderr) = capturing_config(vec![
-                "sh".into(),
-                "-c".into(),
-                "(sleep 1; echo late) &".into(),
-            ]);
+        fn background_writer_is_waited_for(timeouts: (Option<f64>, Option<f64>)) -> Result<()> {
+            let (mut config, mut stdout_file, _stderr) =
+                capturing_config(sh("(sleep 1; echo late) &"));
+            config.timeout_secs = timeouts.0;
+            config.no_output_timeout_secs = timeouts.1;
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND)?;
             assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
@@ -1250,24 +1217,16 @@ mod test_suite {
             Ok(())
         }
 
-        /// A timeout set but not reached doesn't cut a late background writer short.
         #[cfg(unix)]
         #[test]
-        fn unexpired_timeout_waits_for_background_writer() -> Result<()> {
-            let (mut config, mut stdout_file, _stderr) = capturing_config(vec![
-                "sh".into(),
-                "-c".into(),
-                "(sleep 1; echo late) &".into(),
-            ]);
-            config.timeout_secs = Some(60.0);
-            config.no_output_timeout_secs = Some(60.0);
-            let result = bounded_run_command(config, TREE_BOUND)?;
-            assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
-            stdout_file.seek(SeekFrom::Start(0))?;
-            let mut captured = String::new();
-            stdout_file.read_to_string(&mut captured)?;
-            assert_eq!(captured.trim(), "late");
-            Ok(())
+        fn background_writer_is_waited_for_without_timeouts() -> Result<()> {
+            background_writer_is_waited_for((None, None))
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn background_writer_is_waited_for_within_timeouts() -> Result<()> {
+            background_writer_is_waited_for((Some(60.0), Some(60.0)))
         }
     }
 
