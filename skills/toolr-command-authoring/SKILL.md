@@ -324,10 +324,9 @@ functions themselves. Full signatures and docstrings live in
 - **`make_context`** — builds a real, usable `ContextForTesting` (a `Context`
   subclass) so you can call a decorated function directly and assert on what
   it did with `ctx.run`/`ctx.info`/`ctx.exit`, without going through the CLI
-  at all. The returned context adds `stdout` (what `ctx.print` and
-  `ctx.prompt` wrote) and `stderr` (`ctx.info`/`ctx.warn`/`ctx.error`/
-  `ctx.debug`, the `ctx.exit` message and `ctx.run`'s `Running '…'` line)
-  properties, and a `.replace(**changes)` method for building a modified copy mid-test
+  at all. The returned context adds `stdout`/`stderr` properties (`ctx.info`
+  and the other log lines go to `stderr`, not `stdout`; the per-method split
+  is in [`references/testing.md`](references/testing.md)), and a `.replace(**changes)` method for building a modified copy mid-test
   (e.g. `ctx.replace(_run_impl=other_mock)`). Besides `run=` (below), it takes
   `chdir=` (override for `ctx.chdir`'s underlying `os.chdir`) and
   `prompt_input=` (canned answer(s) for `ctx.prompt` — a `str` raises
@@ -347,9 +346,8 @@ functions themselves. Full signatures and docstrings live in
   or a list of pre-built results).
 - **`make_command_result`** — factory for genuine `CommandResult` objects,
   to configure a `RunMock` with.
-- **`ConsoleVerbosity`** — the type `make_context(verbosity=...)` takes.
-  The default, `NORMAL`, drops `ctx.debug` output; pass `VERBOSE` to capture
-  it. `QUIET` also drops `ctx.info` and `ctx.run`'s `Running '…'` line.
+- **`ConsoleVerbosity`** — the type `make_context(verbosity=...)` takes. The
+  default, `NORMAL`, drops `ctx.debug`; pass `VERBOSE` to assert on it.
 - **`DEFAULT_TEST_CONSOLE_WIDTH`** — the `width=` `make_context` gives its
   captured consoles by default (1000 columns). Deliberately absurd: a
   realistic width wraps any longish line, forcing every assertion on

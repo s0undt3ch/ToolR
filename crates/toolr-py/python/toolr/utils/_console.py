@@ -10,7 +10,13 @@ from rich.theme import Theme
 
 
 class ConsoleVerbosity(IntEnum):
-    """Console verbosity levels."""
+    """Console verbosity levels, which decide which `ctx` log lines are written.
+
+    - `QUIET` — drops `ctx.info` (including the `Running '…'` line `ctx.run` logs) and
+      `ctx.debug`. `ctx.print`, `ctx.warn`, `ctx.error` and the `ctx.exit` message still show.
+    - `NORMAL` — the default: drops only `ctx.debug`.
+    - `VERBOSE` — drops nothing.
+    """
 
     QUIET = 0
     NORMAL = 1

@@ -206,19 +206,14 @@ Feed a "no" answer the same way to test the abort path of a confirm-style comman
 `make_context` returns a `ContextForTesting` — a `Context` subclass — so `ctx.repo_root` is
 set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
 CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
-`run=`/`chdir=`/`prompt_input=` to `make_context` (see below). `ctx.stdout` captures `ctx.print`
-and everything `ctx.prompt` renders: the question with any choices and default
-(`Pick [1/2] (2): `), and on invalid input the validation message and the question again.
-`ctx.stderr` captures `ctx.info`/`ctx.warn`/`ctx.error`/`ctx.debug`, the `ctx.exit` message
-whatever the status, and the `Running '…'` line `ctx.run` logs through `ctx.info` before each
-command. A subprocess's own streamed output isn't captured in either; pass `capture_output=True`
-and read the returned `CommandResult`.
-
-Verbosity decides which log lines reach `ctx.stderr`. `make_context` defaults to
-`ConsoleVerbosity.NORMAL`, which drops `ctx.debug`. Pass
-`make_context(..., verbosity=ConsoleVerbosity.VERBOSE)` to capture it. At
-`ConsoleVerbosity.QUIET`, `ctx.info` and the `Running '…'` line are dropped as well. Import the
-enum with `from toolr.testing import ConsoleVerbosity`.
+`run=`/`chdir=`/`prompt_input=` to `make_context` (see below). `ctx.stdout` captures what
+`ctx.print` and `ctx.prompt` write; `ctx.stderr` captures the log lines (`ctx.info`, `ctx.warn`,
+`ctx.error`, `ctx.debug`, including the `Running '…'` line `ctx.run` logs) and the `ctx.exit`
+message. Verbosity gates `ctx.debug` and `ctx.info`: `make_context` defaults to
+`ConsoleVerbosity.NORMAL`, which drops `ctx.debug`, so pass
+`make_context(..., verbosity=ConsoleVerbosity.VERBOSE)` (`from toolr.testing import
+ConsoleVerbosity`) to capture it. The [`ContextForTesting` reference](../reference/testing.md)
+lists exactly what each stream holds at each verbosity.
 
 ### Mocking `ctx.run`
 
@@ -255,7 +250,9 @@ the `ContextForTesting` it returns — a `Context` subclass, not a wrapper.
 `toolr.testing.RunMock` and `toolr.testing.make_command_result` are likewise part of toolr-py's
 public API and tested in toolr's own suite. `RunMock`'s `Mock`-style assertion surface and
 `make_command_result`'s signature are stable across the pre-1.0 series; any change is called out
-in the changelog.
+in the changelog. So is `toolr.testing.ConsoleVerbosity`, the type of `make_context`'s
+`verbosity` parameter: its `QUIET`/`NORMAL`/`VERBOSE` members are stable across the pre-1.0
+series.
 
 Internal attributes (`sys_path`, `sys_modules`, `command_group_patcher`, `cwd`) are implementation
 detail and may change without notice.

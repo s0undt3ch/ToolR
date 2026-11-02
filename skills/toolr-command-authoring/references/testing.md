@@ -97,7 +97,13 @@ class ConsoleVerbosity
 ```
 
 ```text
-Console verbosity levels.
+Console verbosity levels, which decide which `ctx` log lines are written.
+
+- `QUIET` — drops `ctx.info` (including the `Running '…'` line `ctx.run` logs) and
+  `ctx.debug`. `ctx.print`, `ctx.warn`, `ctx.error` and the `ctx.exit` message still show.
+- `NORMAL` — the default: drops only `ctx.debug`.
+- `VERBOSE` — drops nothing.
+
 ```
 
 ### `ContextForTesting`
@@ -125,10 +131,11 @@ def stdout(self) -> str:
 ```
 
 ```text
-Everything written through `print` so far, plus everything `prompt` renders.
+Everything written to the captured stdout so far.
 
-`prompt` writes its question with any choices and default (`Pick [1/2] (2): `), and on
-invalid input rich's validation message and the question again.
+- `print` — always.
+- `prompt` — always: the question with any choices and default (`Pick [1/2] (2): `)
+  and, on invalid input, rich's validation message followed by the question again.
 
 ```
 
@@ -140,14 +147,17 @@ def stderr(self) -> str:
 ```
 
 ```text
-Everything written through `info`, `warn`, `error` and `debug` so far.
+Everything written to the captured stderr so far.
 
-`debug` appears only at `ConsoleVerbosity.VERBOSE`; `info` is dropped at
-`ConsoleVerbosity.QUIET`. `make_context` defaults to `ConsoleVerbosity.NORMAL`. Also holds
-the message passed to `exit`, whatever the status, and the `Running '…'` line `run` logs
-through `info` before each command, so that line is absent at quiet too. The subprocess's
-own streamed output goes to the real process streams, not here; pass
-`capture_output=True` and read the returned `CommandResult` instead.
+- `warn`, `error`, and the message passed to `exit` (any status) — always.
+- `info`, and the `Running '…'` line `run` logs through `info` before each command —
+  not at `ConsoleVerbosity.QUIET`.
+- `debug` — only at `ConsoleVerbosity.VERBOSE`.
+
+`make_context` defaults to `ConsoleVerbosity.NORMAL`. The output of a command `run`
+spawns is captured in neither: pass `capture_output=True` to get it in the returned
+`CommandResult`, plus `stream_output=False` to stop it also printing to the real
+process streams.
 
 ```
 

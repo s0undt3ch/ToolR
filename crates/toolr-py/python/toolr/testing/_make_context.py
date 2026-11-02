@@ -53,23 +53,27 @@ class ContextForTesting(Context, frozen=True):
 
     @property
     def stdout(self) -> str:
-        """Everything written through `print` so far, plus everything `prompt` renders.
+        """Everything written to the captured stdout so far.
 
-        `prompt` writes its question with any choices and default (`Pick [1/2] (2): `), and on
-        invalid input rich's validation message and the question again.
+        - `print` — always.
+        - `prompt` — always: the question with any choices and default (`Pick [1/2] (2): `)
+          and, on invalid input, rich's validation message followed by the question again.
         """
         return self._console_stdout.file.getvalue()  # type: ignore[attr-defined]
 
     @property
     def stderr(self) -> str:
-        """Everything written through `info`, `warn`, `error` and `debug` so far.
+        """Everything written to the captured stderr so far.
 
-        `debug` appears only at `ConsoleVerbosity.VERBOSE`; `info` is dropped at
-        `ConsoleVerbosity.QUIET`. `make_context` defaults to `ConsoleVerbosity.NORMAL`. Also holds
-        the message passed to `exit`, whatever the status, and the `Running '…'` line `run` logs
-        through `info` before each command, so that line is absent at quiet too. The subprocess's
-        own streamed output goes to the real process streams, not here; pass
-        `capture_output=True` and read the returned `CommandResult` instead.
+        - `warn`, `error`, and the message passed to `exit` (any status) — always.
+        - `info`, and the `Running '…'` line `run` logs through `info` before each command —
+          not at `ConsoleVerbosity.QUIET`.
+        - `debug` — only at `ConsoleVerbosity.VERBOSE`.
+
+        `make_context` defaults to `ConsoleVerbosity.NORMAL`. The output of a command `run`
+        spawns is captured in neither: pass `capture_output=True` to get it in the returned
+        `CommandResult`, plus `stream_output=False` to stop it also printing to the real
+        process streams.
         """
         return self._console_stderr.file.getvalue()  # type: ignore[attr-defined]
 
