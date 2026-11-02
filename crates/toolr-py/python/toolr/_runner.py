@@ -334,7 +334,10 @@ def _import_target(spec: RunnerSpec) -> Any:
         # `spec.module` comes from the toolr-controlled manifest/spec (written by
         # the toolr binary), not untrusted external input. SEC-05 tracks
         # defense-in-depth confinement of the import target.
-        module = importlib.import_module(spec.module)  # nosemgrep
+        # `__import__`, not `importlib.import_module`: the C import path drops
+        # importlib's frames from the traceback printed on failure.
+        __import__(spec.module)  # nosemgrep
+        module = sys.modules[spec.module]
     except ImportError as exc:
         msg = f"failed to import {spec.module}: {exc}"
         raise SpecError(msg) from exc

@@ -1042,6 +1042,40 @@ def test_run_prints_traceback_for_transitive_import_failure(
     assert "toolr project venv sync" in err
 
 
+def test_run_import_traceback_omits_importlib_frames(
+    make_tools_package: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Only the `_import_target` frame sits above the user's frames, not importlib's machinery."""
+    repo = make_tools_package(
+        {
+            "demo.py": """
+                from tools._helpers import load
+
+
+                def hello(ctx) -> None:
+                    load()
+                """,
+            "_helpers.py": """
+                import toolr_f28_missing_dep
+
+
+                def load() -> None:
+                    toolr_f28_missing_dep.go()
+                """,
+        }
+    )
+    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
+    err = capsys.readouterr().err
+    assert "<frozen importlib._bootstrap" not in err
+    assert str(Path("importlib", "__init__.py")) not in err
+    frames = [line for line in err.splitlines() if line.lstrip().startswith('File "')]
+    assert len(frames) == 3, err
+    assert frames[0].endswith("in _import_target")
+    assert 'demo.py", line 1' in frames[1]
+    assert '_helpers.py", line 1' in frames[2]
+
+
 def test_run_omits_sync_hint_for_missing_tools_submodule(
     make_tools_package: Callable[[dict[str, str]], Path],
     capsys: pytest.CaptureFixture[str],
