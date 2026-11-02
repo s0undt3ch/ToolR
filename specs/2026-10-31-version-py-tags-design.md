@@ -50,12 +50,11 @@ maintainer's answer is yes, and that pre-releases are supported end to end, not 
 `packaging` is already installed in the tools venv (a dependency of `toolr-py`). It becomes an explicit dependency in
 `tools/pyproject.toml`, and `tools/uv.lock` is relocked.
 
-- `_parse_version(raw: str) -> Version` strips one leading `v` (`removeprefix`, not `lstrip`) and parses the rest with
-  `packaging.version.Version`. `InvalidVersion` becomes a `ValueError` naming the input.
-- `_parse_release_version(raw: str) -> Version` calls `_parse_version`, then rejects anything Cargo's `X.Y.Z[-pre]`
-  shape can't hold or that isn't a release: an epoch, a post-release (PEP 440 reads `1.0.0-1` as one), a dev release,
-  a local segment, and a release segment that isn't exactly three numbers (`0.36`, `0.36.0.1`). Pre-releases
-  (`a`, `b`, `rc`) are accepted.
+- `_parse_release_version(raw: str) -> Version` strips one leading `v` (`removeprefix`, not `lstrip`) and parses the
+  rest with `packaging.version.Version`; `InvalidVersion` becomes a `ValueError` naming the input. It then rejects
+  anything Cargo's `X.Y.Z[-pre]` shape can't hold or that isn't a release: an epoch, a post-release (PEP 440 reads
+  `1.0.0-1` as one), a dev release, a local segment, and a release segment that isn't exactly three numbers (`0.36`,
+  `0.36.0.1`). Pre-releases (`a`, `b`, `rc`) are accepted.
 
 `bump` validates an explicit `--new-version` first, before the tag check and before any write to `GITHUB_OUTPUT`,
 `GITHUB_ENV` or `GITHUB_STEP_SUMMARY`. A `ValueError` is reported with `ctx.error` and `ctx.exit(1)`, not a
@@ -153,9 +152,15 @@ The skip parser for release commits was `^chore\(release\): prepare for`, but th
 into its own section; with rc tags out of the pattern, each rc's release commit would land in the final release's
 section and in later rc bodies. The parser is now case-insensitive (`(?i)`).
 
-git-cliff is pinned (2.14.2) in `mise.toml`, so CI's test jobs have it, and `_prepare-release.yml` passes the same
-version to `orhun/git-cliff-action`. A test keeps the pins in step, and the git-cliff tests fail instead of skipping
-when `CI` is set and git-cliff is missing.
+git-cliff is pinned (2.14.2) in `mise.toml`, so CI's test jobs have it, and `_prepare-release.yml` runs that
+mise-installed git-cliff directly instead of `orhun/git-cliff-action`, which installed its own copy and would have
+needed a second pin that Renovate doesn't bump. The run steps pass the `GITHUB_TOKEN` and `GITHUB_REPO` the action
+provided for the template's contributor lookup. The git-cliff tests fail instead of skipping when `CI` is set and
+git-cliff is missing.
+
+`_compute_dev_version` returns a PEP 440 `Version`, and `bump` renders the Cargo form once. The pre-release policy is
+documented for contributors in "Pre-releases" in `release-notes/README.md`, which names the four files that implement
+it.
 
 On this repository's history the pattern changes nothing: `--unreleased --tag 0.36.0` renders the same with it as with
 the previous config limited to `v*` tags. The pattern also leaves out the floating `vX`/`vX.Y` tags and the old
