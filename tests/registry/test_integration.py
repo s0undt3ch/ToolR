@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.resources
 import os
+import shutil
 import sys
-import sysconfig
 from collections.abc import Callable
 from pathlib import Path
 
@@ -16,10 +18,7 @@ from toolr import command_group
 from toolr._decorators import CommandGroup
 from toolr._exc import ToolrError
 from toolr.testing import CommandsTester
-from toolr.testing import _discovery
 from toolr.testing._discovery import _isolated_sys_path
-from toolr.testing._discovery import _normalise
-from toolr.testing._discovery import _site_dirs
 
 CI_MODULE = (
     "from toolr import command_group\n"
@@ -480,83 +479,103 @@ def test_discover_keeps_sys_path_entries_without_tools(
     assert "tools.ci" in groups
 
 
-def test_isolated_sys_path_drops_tools_providers_and_cwd(tmp_path: Path) -> None:
-    """Entries that provide a `tools` module, the cwd entry and the search
-    path itself are dropped; the search path goes first."""
+def test_isolated_sys_path_drops_only_cwd_and_search_path(tmp_path: Path) -> None:
+    """Only the cwd entry and the search path itself are dropped, even entries
+    that provide `tools`; the search path goes first."""
     search_path = tmp_path / "search"
     with_pkg = tmp_path / "with_pkg"
     (with_pkg / "tools").mkdir(parents=True)
-    with_module = tmp_path / "with_module"
-    with_module.mkdir()
-    (with_module / "tools.py").write_text("")
     plain = tmp_path / "plain"
     plain.mkdir()
-    saved = ["", str(with_pkg), str(search_path), str(with_module), str(plain)]
-    assert _isolated_sys_path(search_path, saved) == [str(search_path), str(plain)]
-
-
-def test_isolated_sys_path_matches_the_tools_name_exactly(tmp_path: Path) -> None:
-    """A `Tools/` directory doesn't count as a `tools` provider, even on a
-    case-insensitive filesystem, and a missing entry is kept as is."""
-    capitalised = tmp_path / "capitalised"
-    (capitalised / "Tools").mkdir(parents=True)
-    missing = tmp_path / "missing"
-    search_path = tmp_path / "search"
-    assert _isolated_sys_path(search_path, [str(capitalised), str(missing)]) == [
-        str(search_path),
-        str(capitalised),
-        str(missing),
-    ]
-
-
-def test_isolated_sys_path_keeps_site_dirs_with_tools(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """An interpreter site directory is kept even when it holds a `tools`
-    package; its name plays no part."""
-    site_dir = tmp_path / "interpreter-libs"
-    (site_dir / "tools").mkdir(parents=True)
-    monkeypatch.setattr(_discovery, "_site_dirs", lambda: frozenset({_normalise(str(site_dir))}))
-    search_path = tmp_path / "search"
-    assert _isolated_sys_path(search_path, [str(site_dir)]) == [
-        str(search_path),
-        str(site_dir),
-    ]
+    saved = ["", str(with_pkg), str(search_path), str(plain)]
+    assert _isolated_sys_path(search_path, saved) == [str(search_path), str(with_pkg), str(plain)]
 
 
 @pytest.mark.parametrize(
     "name",
     ["windows-site-packages", "my-site-packages-tool", "dist-packages-fork", "site-packages"],
 )
-def test_isolated_sys_path_drops_tools_providers_named_like_site_packages(
-    tmp_path: Path, name: str
-) -> None:
-    """A `tools` provider whose path only mentions `site-packages` or
-    `dist-packages` is dropped like any other."""
-    repo = tmp_path / name
-    (repo / "tools").mkdir(parents=True)
-    search_path = tmp_path / "search"
-    assert _isolated_sys_path(search_path, [str(repo)]) == [str(search_path)]
-
-
-def test_site_dirs_lists_the_interpreter_site_packages() -> None:
-    """The real interpreter's purelib directory counts as a site directory."""
-    purelib = sysconfig.get_paths()["purelib"]
-    assert _normalise(purelib) in _site_dirs()
-
-
 def test_discover_ignores_tools_under_a_dir_named_like_site_packages(
     tmp_path: Path,
     tools_repo: ToolsRepo,
     monkeypatch: pytest.MonkeyPatch,
+    name: str,
 ) -> None:
-    """A repo checked out under `.worktrees/windows-site-packages` doesn't
-    merge its namespace `tools/` into the fixture's."""
-    decoy = tmp_path / "host" / ".worktrees" / "windows-site-packages"
+    """A repo checked out under `.worktrees/windows-site-packages` (or any
+    name mentioning `site-packages`) doesn't merge its namespace `tools/`
+    into the fixture's."""
+    decoy = tmp_path / "host" / ".worktrees" / name
     (decoy / "tools").mkdir(parents=True)
     (decoy / "tools" / "host_only.py").write_text(BROKEN_MODULE)
     monkeypatch.syspath_prepend(decoy)
     repo = tools_repo({"tools/__init__.py": None, "tools/ci.py": CI_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    assert list(groups) == ["tools.ci"]
+
+
+def test_namespace_tools_path_stays_in_the_fixture_when_sys_path_changes(
+    tmp_path: Path, tools_repo: ToolsRepo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A namespace `tools.__path__` recomputed after `sys.path` changes still
+    names only the fixture's `tools/`, and keeps it if that disappears."""
+    other = tmp_path / "other"
+    (other / "tools").mkdir(parents=True)
+    repo = tools_repo({"tools/__init__.py": None, "tools/ci.py": CI_MODULE})
+    with CommandsTester(search_path=repo):
+        tools = importlib.import_module("tools")
+        # Both prepends invalidate the import caches, forcing a recompute.
+        monkeypatch.syspath_prepend(other)
+        assert list(tools.__path__) == [str(repo / "tools")]
+        shutil.rmtree(repo / "tools")
+        monkeypatch.syspath_prepend(tmp_path)
+        assert list(tools.__path__) == [str(repo / "tools")]
+
+
+def test_namespace_tools_supports_importlib_resources(tools_repo: ToolsRepo) -> None:
+    """`importlib.resources` still reads from a namespace `tools/` fixture."""
+    repo = tools_repo({"tools/__init__.py": None, "tools/data.txt": "hello"})
+    with CommandsTester(search_path=repo):
+        text = importlib.resources.files("tools").joinpath("data.txt").read_text()
+    assert text == "hello"
+
+
+def test_commands_tester_removes_its_finder_on_exit(tools_repo: ToolsRepo) -> None:
+    """Nested testers each remove their own finder and leave `sys.meta_path`
+    as they found it."""
+    before = sys.meta_path[:]
+    outer_repo = tools_repo({"tools/ci.py": CI_MODULE})
+    inner_repo = outer_repo / "inner"
+    (inner_repo / "tools").mkdir(parents=True)
+    with CommandsTester(search_path=outer_repo) as outer:
+        with CommandsTester(search_path=inner_repo):
+            pass
+        outer.discover()
+        groups = outer.collected_command_groups()
+    assert sys.meta_path == before
+    assert list(groups) == ["tools.ci"]
+
+
+@pytest.mark.parametrize("fixture_init", ["", None], ids=["regular", "namespace"])
+def test_discover_keeps_an_overlay_site_dir_holding_a_stray_tools(
+    tmp_path: Path,
+    tools_repo: ToolsRepo,
+    monkeypatch: pytest.MonkeyPatch,
+    fixture_init: str | None,
+) -> None:
+    """A site directory the running interpreter doesn't own (a `uv run --with`
+    overlay) stays importable even when it ships a stray top-level `tools`,
+    and that `tools` never stands in for the fixture's."""
+    overlay = tmp_path / "uv-cache" / "archive-v0" / "abc123" / "lib" / "site-packages"
+    (overlay / "tools").mkdir(parents=True)
+    (overlay / "tools" / "__init__.py").write_text(BROKEN_MODULE)
+    (overlay / "overlaydep").mkdir()
+    (overlay / "overlaydep" / "__init__.py").write_text("VALUE = 1\n")
+    monkeypatch.syspath_prepend(overlay)
+    repo = tools_repo(
+        {"tools/__init__.py": fixture_init, "tools/ci.py": "import overlaydep\n" + CI_MODULE}
+    )
     with CommandsTester(search_path=repo) as tester:
         tester.discover()
         groups = tester.collected_command_groups()

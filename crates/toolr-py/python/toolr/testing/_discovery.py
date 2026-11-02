@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import importlib
 import os
-import site
 import sys
-import sysconfig
+from importlib.machinery import ModuleSpec
+from importlib.machinery import PathFinder
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Self
 from unittest.mock import _patch
 from unittest.mock import patch
@@ -165,70 +166,59 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
                 _import_package_modules(module, errors, seen)
 
 
-def _provides_tools(entry: str) -> bool:
-    """Whether ``entry`` holds a ``tools/`` directory or ``tools.py``.
+class _FixtureToolsFinder:
+    """Resolve the top-level ``tools`` package from the fixture only.
 
-    Matches the exact name, so ``Tools/`` doesn't count on a case-insensitive
-    filesystem (the import system wouldn't use it either).
+    Sits first on ``sys.meta_path`` while a :class:`CommandsTester` is active,
+    so a ``tools`` package or module anywhere else on ``sys.path`` (the host
+    repo root, a site directory with a stray ``tools``) can't replace the
+    fixture's, or merge into it when the fixture's is a namespace package.
+    Every ``sys.path`` entry stays, so the rest of what lives there stays
+    importable. Submodules need no help: they resolve through
+    ``tools.__path__``, which only names the fixture.
     """
-    try:
-        with os.scandir(entry) as it:
-            return any(
-                (child.name == "tools" and child.is_dir())
-                or (child.name == "tools.py" and child.is_file())
-                for child in it
+
+    def __init__(self, search_path: Path) -> None:
+        self._locations = [str(search_path)]
+
+    def find_spec(
+        self, fullname: str, _path: object = None, target: ModuleType | None = None
+    ) -> ModuleSpec | None:
+        if fullname != "tools":
+            return None
+        spec = PathFinder.find_spec(fullname, self._locations, target)
+        if spec is None:
+            # Stop the remaining finders from finding another `tools`.
+            msg = f"No module named {fullname!r}"
+            raise ModuleNotFoundError(msg, name=fullname)
+        if spec.loader is None:
+            # A namespace `__path__` recomputes itself from all of `sys.path`
+            # whenever `sys.path` or the import caches change. Keep importlib's
+            # own type (`importlib.resources` requires it) but recompute from
+            # the fixture only.
+            namespace_path: Any = spec.submodule_search_locations
+            spec.submodule_search_locations = type(namespace_path)(
+                fullname, list(namespace_path), self._namespace_spec
             )
-    except OSError:
-        return False
+        return spec
 
-
-def _normalise(path: str) -> str:
-    """Return ``path`` resolved and case-folded the way the OS compares paths."""
-    return os.path.normcase(os.path.realpath(path))
-
-
-def _site_dirs() -> frozenset[str]:
-    """Return the running interpreter's own site directories, normalised.
-
-    Asks the interpreter rather than matching names, so a repo checked out
-    under a directory such as ``windows-site-packages`` isn't mistaken for one.
-    """
-    paths = sysconfig.get_paths()
-    return frozenset(
-        _normalise(path)
-        for path in (
-            *site.getsitepackages(),
-            site.getusersitepackages(),
-            paths["purelib"],
-            paths["platlib"],
-        )
-    )
+    def _namespace_spec(self, fullname: str, _parent_path: object) -> ModuleSpec | None:
+        spec = PathFinder.find_spec(fullname, self._locations)
+        if spec is not None and spec.loader is None:
+            # A plain list, so the recomputed path can't recompute itself
+            # from all of `sys.path` either.
+            spec.submodule_search_locations = list(spec.submodule_search_locations or ())
+        return spec
 
 
 def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
-    """Return ``saved`` with ``search_path`` first and no other ``tools`` provider.
+    """Return ``saved`` with ``search_path`` first and without the ``""`` (cwd) entry.
 
-    Drops the ``""`` (cwd) entry, ``search_path`` itself and any entry with a
-    top-level ``tools`` package or module, because such an entry (the host
-    repo root among them) would stand in for a fixture without ``tools/``,
-    and when the fixture's ``tools/`` is a namespace package, a regular
-    ``tools`` package or ``tools.py`` elsewhere replaces it and another
-    namespace ``tools/`` merges into it. The interpreter's own site
-    directories (see ``_site_dirs``) always stay, whatever they hold; a
-    directory that only has ``site-packages`` in its name gets no such
-    exemption. Everything else (the stdlib, src-layout editable installs,
-    ``PYTHONPATH``) stays importable; an editable-install root that itself
-    holds ``tools/`` is dropped too.
+    The cwd is ``search_path`` while the tester is active, so ``""`` would
+    only repeat it. Which ``tools`` gets imported is up to
+    :class:`_FixtureToolsFinder`, not ``sys.path``.
     """
-    site_dirs = _site_dirs()
-    kept = []
-    for entry in saved:
-        if entry in ("", str(search_path)):
-            continue
-        if _provides_tools(entry) and _normalise(entry) not in site_dirs:
-            continue
-        kept.append(entry)
-    return [str(search_path), *kept]
+    return [str(search_path), *(entry for entry in saved if entry not in ("", str(search_path)))]
 
 
 @define(slots=True, frozen=True)
@@ -254,6 +244,11 @@ class CommandsTester:
     pending_command_collector: list[PendingCommand] = field(init=False, repr=False, factory=list)
     pending_command_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
+    tools_finder: _FixtureToolsFinder = field(init=False, repr=False)
+
+    @tools_finder.default
+    def _default_tools_finder(self) -> _FixtureToolsFinder:
+        return _FixtureToolsFinder(self.search_path)
 
     @sys_path.default
     def _default_sys_path(self) -> list[str]:
@@ -339,8 +334,9 @@ class CommandsTester:
         os.chdir(self.search_path)
         self.pending_command_patcher.start()
         self.command_group_patcher.start()
-        # See `_isolated_sys_path` for why other `tools` providers are hidden.
         sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
+        # Only the fixture may provide `tools`; see `_FixtureToolsFinder`.
+        sys.meta_path.insert(0, self.tools_finder)
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -348,6 +344,7 @@ class CommandsTester:
         Exit the context manager.
         """
         os.chdir(self.cwd)
+        sys.meta_path.remove(self.tools_finder)
         self.command_group_patcher.stop()
         self.command_group_collector.clear()
         self.pending_command_patcher.stop()
