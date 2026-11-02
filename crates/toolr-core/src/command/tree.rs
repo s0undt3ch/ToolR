@@ -3,14 +3,24 @@
 
 use std::process::Child;
 
-/// Descendants of `root` in a `(pid, ppid)` snapshot, nearest first.
-fn descendants(root: u32, table: &[(u32, u32)]) -> Vec<u32> {
-    let mut found = Vec::new();
+/// Descendants of `root` in a `(pid, ppid)` snapshot, as `(pid, parent)`. `adopts(parent, pid)`
+/// vets each edge; a refused process is left out with everything below it.
+fn descendants(
+    root: u32,
+    table: &[(u32, u32)],
+    adopts: impl Fn(u32, u32) -> bool,
+) -> Vec<(u32, u32)> {
+    let mut found: Vec<(u32, u32)> = Vec::new();
     let mut frontier = vec![root];
     while let Some(parent) = frontier.pop() {
         for &(pid, ppid) in table {
-            if ppid == parent && pid != parent && pid != root && !found.contains(&pid) {
-                found.push(pid);
+            if ppid == parent
+                && pid != parent
+                && pid != root
+                && !found.iter().any(|&(seen, _)| seen == pid)
+                && adopts(parent, pid)
+            {
+                found.push((pid, parent));
                 frontier.push(pid);
             }
         }
@@ -31,44 +41,67 @@ fn parse_stat_ppid(stat: &str) -> Option<u32> {
 }
 
 #[cfg(target_os = "linux")]
-fn process_table() -> Vec<(u32, u32)> {
-    let Ok(entries) = std::fs::read_dir("/proc") else {
-        return Vec::new();
-    };
-    entries
-        .flatten()
-        .filter_map(|entry| {
-            let pid = entry.file_name().to_str()?.parse().ok()?;
-            let stat = std::fs::read_to_string(entry.path().join("stat")).ok()?;
-            Some((pid, parse_stat_ppid(&stat)?))
-        })
-        .collect()
+fn parent_of(pid: u32) -> Option<u32> {
+    parse_stat_ppid(&std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?)
+}
+
+#[cfg(target_os = "linux")]
+fn all_pids() -> Vec<u32> {
+    std::fs::read_dir("/proc").map_or_else(
+        |_| Vec::new(),
+        |entries| {
+            entries
+                .flatten()
+                .filter_map(|entry| entry.file_name().to_str()?.parse().ok())
+                .collect()
+        },
+    )
 }
 
 #[cfg(target_os = "macos")]
-fn process_table() -> Vec<(u32, u32)> {
-    use std::mem::size_of;
+fn parent_of(pid: u32) -> Option<u32> {
+    let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
+    let info_ptr = (&raw mut info).cast();
+    let got = unsafe {
+        libc::proc_pidinfo(
+            pid as libc::c_int,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            info_ptr,
+            size,
+        )
+    };
+    (got == size).then_some(info.pbi_ppid)
+}
 
+#[cfg(target_os = "macos")]
+fn all_pids() -> Vec<u32> {
     // With no buffer, the call returns the pid count; leave room for processes started since.
     let count = unsafe { libc::proc_listallpids(std::ptr::null_mut(), 0) }.max(0) as usize + 64;
     let mut pids = vec![0 as libc::pid_t; count];
-    let bytes = (pids.len() * size_of::<libc::pid_t>()) as libc::c_int;
+    let bytes = std::mem::size_of_val(pids.as_slice()) as libc::c_int;
     let listed = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), bytes) };
     pids.truncate(listed.max(0) as usize);
-    pids.into_iter()
-        .filter_map(|pid| {
-            let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
-            let size = size_of::<libc::proc_bsdinfo>() as libc::c_int;
-            let info_ptr = (&raw mut info).cast();
-            let got = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, info_ptr, size) };
-            (got == size).then_some((pid as u32, info.pbi_ppid))
-        })
-        .collect()
+    pids.into_iter().map(|pid| pid as u32).collect()
 }
 
 #[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
-fn process_table() -> Vec<(u32, u32)> {
+fn parent_of(_pid: u32) -> Option<u32> {
+    None
+}
+
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
+fn all_pids() -> Vec<u32> {
     Vec::new()
+}
+
+#[cfg(unix)]
+fn process_table() -> Vec<(u32, u32)> {
+    all_pids()
+        .into_iter()
+        .filter_map(|pid| Some((pid, parent_of(pid)?)))
+        .collect()
 }
 
 #[cfg(unix)]
@@ -86,11 +119,14 @@ pub(crate) fn kill_tree(child: &mut Child) {
     let mut tree: Vec<u32> = Vec::new();
     // Re-walk until a pass finds nothing new: a process may fork before it's stopped.
     for _ in 0..5 {
-        let new: Vec<u32> = descendants(root, &process_table())
+        // The ppid is read again right before the stop, so a pid reused since the snapshot is
+        // left alone.
+        let new: Vec<u32> = descendants(root, &process_table(), |_, _| true)
             .into_iter()
-            .filter(|pid| !tree.contains(pid))
+            .filter(|&(pid, parent)| !tree.contains(&pid) && parent_of(pid) == Some(parent))
+            .map(|(pid, _)| pid)
+            .inspect(|&pid| signal(pid, libc::SIGSTOP))
             .collect();
-        new.iter().for_each(|&pid| signal(pid, libc::SIGSTOP));
         if new.is_empty() {
             break;
         }
@@ -128,43 +164,52 @@ fn process_table() -> Vec<(u32, u32)> {
 }
 
 #[cfg(windows)]
-fn creation_time(handle: winapi::um::winnt::HANDLE) -> Option<u64> {
+fn creation_time(pid: u32) -> Option<u64> {
     use winapi::shared::minwindef::FILETIME;
-    use winapi::um::processthreadsapi::GetProcessTimes;
+    use winapi::um::handleapi::CloseHandle;
+    use winapi::um::processthreadsapi::{GetProcessTimes, OpenProcess};
+    use winapi::um::winnt::PROCESS_QUERY_LIMITED_INFORMATION;
 
     let mut times: [FILETIME; 4] = unsafe { std::mem::zeroed() };
     let [created, exited, kernel, user] = &mut times;
-    let ok = unsafe { GetProcessTimes(handle, created, exited, kernel, user) };
+    let ok = unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return None;
+        }
+        let ok = GetProcessTimes(handle, created, exited, kernel, user);
+        CloseHandle(handle);
+        ok
+    };
     (ok != 0).then(|| (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
+}
+
+/// Windows keeps a dead parent's pid as the ppid, and a tree member may have reused that pid: a
+/// real child can't be older than its parent.
+#[cfg(any(windows, test))]
+fn not_older_than_parent(created: impl Fn(u32) -> Option<u64>) -> impl Fn(u32, u32) -> bool {
+    move |parent, pid| matches!((created(parent), created(pid)), (Some(p), Some(c)) if c >= p)
 }
 
 /// No `SIGSTOP` on Windows, so a process started mid-walk can escape; fine for a timeout path.
 #[cfg(windows)]
 pub(crate) fn kill_tree(child: &mut Child) {
-    use std::os::windows::io::AsRawHandle;
     use winapi::um::handleapi::CloseHandle;
     use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
-    use winapi::um::winnt::{PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE};
+    use winapi::um::winnt::PROCESS_TERMINATE;
 
-    let born = creation_time(child.as_raw_handle().cast());
-    for pid in descendants(child.id(), &process_table()) {
+    let edges = descendants(
+        child.id(),
+        &process_table(),
+        not_older_than_parent(creation_time),
+    );
+    for (pid, _) in edges {
         unsafe {
-            let handle = OpenProcess(
-                PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
-                0,
-                pid,
-            );
-            if handle.is_null() {
-                continue;
-            }
-            // Windows keeps a dead parent's pid as the ppid, and the child may have reused that
-            // pid: only a process started after the child can be its descendant.
-            if let (Some(born), Some(started)) = (born, creation_time(handle))
-                && started >= born
-            {
+            let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+            if !handle.is_null() {
                 TerminateProcess(handle, 1);
+                CloseHandle(handle);
             }
-            CloseHandle(handle);
         }
     }
     let _ = child.kill();
@@ -175,25 +220,47 @@ pub(crate) fn kill_tree(child: &mut Child) {
 mod tests {
     use super::*;
 
+    use std::collections::HashMap;
+
+    fn pids(mut edges: Vec<(u32, u32)>) -> Vec<u32> {
+        edges.sort_unstable();
+        edges.into_iter().map(|(pid, _)| pid).collect()
+    }
+
     #[test]
     fn descendants_finds_nested_children() {
         let table = [(10, 1), (11, 10), (12, 11), (13, 1)];
-        let mut found = descendants(10, &table);
-        found.sort_unstable();
-        assert_eq!(found, vec![11, 12]);
+        let found = descendants(10, &table, |_, _| true);
+        assert_eq!(pids(found.clone()), vec![11, 12]);
+        assert!(found.contains(&(12, 11)), "{found:?}");
     }
 
     #[test]
     fn descendants_ignores_unrelated() {
-        assert!(descendants(13, &[(10, 1), (11, 10), (13, 1)]).is_empty());
+        assert!(descendants(13, &[(10, 1), (11, 10), (13, 1)], |_, _| true).is_empty());
     }
 
     #[test]
     fn descendants_survives_cycles() {
         // pid 0 is its own parent on macOS; a stale snapshot can also hold a loop.
-        let mut found = descendants(5, &[(0, 0), (6, 5), (7, 6), (6, 7), (5, 7)]);
-        found.sort_unstable();
-        assert_eq!(found, vec![6, 7]);
+        let found = descendants(5, &[(0, 0), (6, 5), (7, 6), (6, 7), (5, 7)], |_, _| true);
+        assert_eq!(pids(found), vec![6, 7]);
+    }
+
+    #[test]
+    fn stale_ppid_pointing_at_a_reused_pid_is_refused() {
+        // 12 names 11 as its parent but predates it: its real parent died and 11 reused the pid.
+        // 13 is 12's own child, so it goes too; 14 is a genuine grandchild.
+        let created = HashMap::from([(10, 100), (11, 150), (12, 50), (13, 60), (14, 160)]);
+        let table = [(11, 10), (12, 11), (13, 12), (14, 11)];
+        let adopts = not_older_than_parent(|pid| created.get(&pid).copied());
+        assert_eq!(pids(descendants(10, &table, adopts)), vec![11, 14]);
+    }
+
+    #[test]
+    fn unknown_creation_time_is_refused() {
+        let adopts = not_older_than_parent(|pid| (pid == 10).then_some(100));
+        assert!(descendants(10, &[(11, 10)], adopts).is_empty());
     }
 
     #[test]
