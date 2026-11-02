@@ -30,9 +30,9 @@ pub fn extract_groups(
     let mut out: Vec<GroupBinding> = Vec::new();
     for stmt in &module.body {
         // Two recognised shapes:
-        //   1. `var = command_group(...)` — legacy binding style.
+        //   1. `var = command_group(...)` — group-binding style.
         //   2. `command_group("path", ...)` — bare expression-statement,
-        //      the modern string-path style. No binding var to capture
+        //      the string-path style. No binding var to capture
         //      (the leaf name becomes a synthetic var so `@var.command`
         //      keeps working when a user mixes styles).
         let (var_name, call) = match stmt {
@@ -78,8 +78,8 @@ pub fn extract_groups(
             continue;
         };
         // For bare-form (no explicit var), use the leaf name as the
-        // synthetic var so legacy `@<leaf>.command` decorators still
-        // resolve when authors mix the new and old styles. Skip when
+        // synthetic var so `@<leaf>.command` decorators still
+        // resolve when authors mix the two styles. Skip when
         // there's a real binding name.
         if var_name.is_none() {
             binding.var = binding.group.name.clone();
