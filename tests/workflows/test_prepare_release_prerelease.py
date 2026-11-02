@@ -67,7 +67,10 @@ def test_cliff_tag_pattern_matches_final_releases_only() -> None:
 
 @pytest.fixture
 def rc_history(tmp_path: Path) -> Path:
-    """A repository with `v0.35.1`, then `v1.0.0-rc.1`, then one more fix."""
+    """A repository with `v0.35.1`, then `v1.0.0-rc.1`, then one more fix.
+
+    Each tag sits on a release commit worded as `_prepare-release.yml` words it.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
     git(repo, "init", "-q", "-b", "main")
@@ -77,8 +80,10 @@ def rc_history(tmp_path: Path) -> Path:
         git(repo, "commit", "-q", "--allow-empty", "-m", message)
 
     commit("feat: base feature")
+    commit("chore(release): Prepare for 0.35.1 release")
     git(repo, "tag", "-a", "-m", "v0.35.1", "v0.35.1")
     commit("feat: before the rc")
+    commit("chore(release): Prepare for 1.0.0-rc.1 release")
     git(repo, "tag", "-a", "-m", "v1.0.0-rc.1", "v1.0.0-rc.1")
     commit("fix: after the rc")
     return repo
@@ -89,7 +94,7 @@ def _git_cliff(repo: Path, *args: str) -> str:
     if git_cliff is None:
         pytest.skip("git-cliff not available")
     return subprocess.run(  # noqa: S603  # git-cliff binary + args are test-controlled
-        [git_cliff, "--config", str(CLIFF_TOML), *args],
+        [git_cliff, "--offline", "--config", str(CLIFF_TOML), *args],
         cwd=repo,
         env=git_env(),
         capture_output=True,
@@ -106,6 +111,15 @@ def test_final_release_rolls_up_prerelease(rc_history: Path) -> None:
     assert "After the rc" in section
     assert "Base feature" not in section
     assert "rc.1" not in section
+    assert "Prepare for" not in section
+
+
+def test_prerelease_body_skips_release_commits(rc_history: Path) -> None:
+    """The next rc's GitHub release body lists the rolled-up changes, not the rc's release commit."""
+    body = _git_cliff(rc_history, "--unreleased", "--strip", "all")
+    assert "Before the rc" in body
+    assert "After the rc" in body
+    assert "Prepare for" not in body
 
 
 def test_tagged_history_has_no_prerelease_section(rc_history: Path) -> None:
