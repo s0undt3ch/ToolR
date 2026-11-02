@@ -58,6 +58,17 @@
       datasourceTemplate: "github-releases",
     },
     {
+      // CI's dogfood binary must match the toolr-py in tools/uv.lock; the
+      // "toolr release" group below bumps all three pins in one PR.
+      customType: "regex",
+      description: "Track the toolr binary every in-repo `uses: ./` call installs",
+      managerFilePatterns: ["/^\\.github/env$/"],
+      matchStrings: ["TOOLR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "s0undt3ch/ToolR",
+      datasourceTemplate: "github-releases",
+      extractVersionTemplate: "^v?(?<version>.*)$",
+    },
+    {
       // Same dep as the `rust` pin in mise.toml (the mise manager's datasource and
       // package), so the "Rust toolchain" group below moves both in one PR.
       customType: "regex",
@@ -191,12 +202,14 @@
     {
       // Same groupName as above keeps this in the same PR as the toolr-py
       // lock bump — split into its own rule only because this manager set
-      // (mise / github-actions) differs from the pep621 rule above.
+      // (mise / github-actions / the `.github/env` TOOLR_VERSION regex)
+      // differs from the pep621 rule above.
       description: "Track our own toolr release in mise / GH Actions ASAP",
       groupName: "toolr release",
-      matchManagers: ["mise", "github-actions"],
+      matchManagers: ["mise", "github-actions", "custom.regex"],
       matchFileNames: [
         "mise.toml",
+        ".github/env",
         ".github/workflows/**",
         ".github/actions/**",
         "action.yml",
