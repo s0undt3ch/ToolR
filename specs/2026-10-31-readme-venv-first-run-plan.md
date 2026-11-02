@@ -1,59 +1,78 @@
-# README Venv First Run Implementation Plan
+# Trust Then Sync Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The README no longer claims toolr creates the tools venv on first invocation, and it tells users of a cloned
-repo to run `toolr project venv sync` (F-32).
+**Goal:** `toolr project trust` trusts the repository and then syncs its tools venv, and a command run that shows the
+trust prompt syncs a missing venv once the user agrees, so a fresh clone needs one step (F-32).
 
-**Architecture:** Two edits to `README.md`, both below line 24 so the `docs/index.md` include is unaffected.
+**Architecture:** `toolr_core::trust::decide` reports whether this run's prompt granted trust. A new
+`toolr_core::project::sync_after_trust` checks freshness, asks the sync prompt (or answers it from
+`TOOLR_AUTO_INSTALL_UV`, `--quiet` and the terminal check) and runs `ensure_venv_ready` with uv install consent
+pre-granted. `project_trust` and dispatch call it.
 
-**Tech Stack:** Markdown, mkdocs.
+**Tech Stack:** Rust (clap, anyhow), assert_cmd integration tests with a pty on stdin (`libc::openpty`, as in
+`crates/toolr/tests/quiet_uv_consent.rs`) and the stub uv from `tests/common`.
 
 **Spec:** [`specs/2026-10-31-readme-venv-first-run-design.md`](./2026-10-31-readme-venv-first-run-design.md)
 
 ## Global Constraints
 
-- Doc-only: verification is `prek run --all-files` and `uv run mkdocs build --strict`. No `mise run test`.
-- No regression test: the finding is a wrong sentence, and no test reads README prose.
-- Don't name the files that make the venv stale (F-04 changes that list on `fix/venv-sync-pyproject`).
-- Don't insert or remove lines at or above README line 24 (`docs/index.md` uses `{!README.md!lines=5-24}`).
-- British English. Conventional Commits; no `Co-Authored-By`. Stage by path; never `git add -A`.
+- No real network: interactive tests use `VenvFixture`'s stub uv on `PATH`; non-interactive tests must never reach a
+  real `uv sync`.
+- Trust tests isolate state with `TrustEnv`-style env (no `TOOLR_TRUST_ALL`, private XDG dirs).
+- pty tests are `#![cfg(unix)]` in their own file; `trust_commands.rs` runs on every platform.
+- `project trust` stdout stays the trusted root only.
+- British English. Conventional Commits; no `Co-Authored-By`. Stage by path; never `git add -A`. Format touched files
+  only.
 
 ## Review Focus
 
-1. **The new wording matches dispatch.** Dispatch syncs a stale or broken venv but never creates a missing one
-   (`resync_if_needed`, `Freshness::Missing` → early return).
-2. **`docs/index.md` renders the same home page** before and after (`lines=5-24` unchanged).
+1. Dispatch syncs only after a trust prompt answered `y` in this run, and only a `Missing` venv.
+2. At most two prompts: an accepted sync prompt pre-grants uv install consent.
+3. `--quiet`, no terminal and the two env vars answer prompts as in the spec's table.
 
 ---
 
-### Task 1: Fix the README, verify, archive
+### Task 1: Trust outcome
 
-**Files:**
+- [ ] `TrustOutcome { AlreadyTrusted, Prompted }`; `decide` and `require_trust` return it. Unit tests: env and record
+  give `AlreadyTrusted`, a `y` gives `Prompted`.
 
-- Modify: `README.md` ("Why ToolR" list, "No system-Python dependency" bullet; "Scaffold your repo" section)
-- [ ] **Step 1: Edit the bullet.** Replace "Toolr resolves a per-repo Python venv via `uv` on first invocation." with a
-  sentence to this effect, wrapped at 100 columns like its neighbours:
+### Task 2: Sync prompt and trust-then-sync step (`toolr_core::project`)
 
-    ```markdown
-    - **No system-Python dependency.** `toolr project init` (or `toolr project venv sync` in an existing checkout)
-      builds a per-repo Python venv with `uv`, and toolr re-syncs it when it goes out of date. The host OS doesn't
-      need Python at all to install toolr — it's a single static binary.
-    ```
+- [ ] `confirm_sync(input, out) -> bool` with the spec's text; `[y/N]`, EOF declines. Unit tests with `Cursor`.
+- [ ] `EnsureOpts::trust_checked` skips the inner `require_trust`.
+- [ ] `sync_after_trust(repo_root, quiet, prompt_io) -> SyncAfterTrust { NotNeeded, Synced(ResolvedVenv), Declined }`;
+  `SYNC_LATER_HINT`. Answer order: fresh → `NotNeeded`; `TOOLR_AUTO_INSTALL_UV=1` → yes; quiet or no prompt IO →
+  `Declined`; else prompt. A yes syncs with `ConsentMode { yes_flag: true, .. }`.
 
-  Keep the "See [How toolr finds uv and Python]…" line after it.
-- [ ] **Step 2: Add the clone case.** After the "Scaffold your repo" code block, before "The full install matrix…",
-  add:
+### Task 3: `toolr project trust`
 
-    ```markdown
-    In a clone of a repo that already has `tools/`, run `toolr project venv sync` once instead of `toolr project init`.
-    ```
+- [ ] Integration tests first (`crates/toolr/tests/trust_then_sync.rs`, pty): `y` syncs (stub uv ran, stdout is the
+  root); `n` keeps trust, prints the hint, exit 0, uv not run; `--no-sync` asks nothing; `-q` and no terminal decline
+  silently or with the hint; `TOOLR_AUTO_INSTALL_UV=1` without a terminal syncs; fresh venv asks nothing.
+- [ ] `--no-sync` and `-q/--quiet` in `cli.rs`; `project_trust` calls `sync_after_trust`.
 
-- [ ] **Step 3: Verify.** `sed -n 5,24p README.md` is identical before and after (`git diff -U0 README.md` shows no
-      hunk starting at or above line 24). `prek run --all-files` → green. `uv run mkdocs build --strict` → green.
-- [ ] **Step 4: Commit.** `docs(readme): say which command creates the tools venv`
-- [ ] **Step 5: Archive.**
-      `git mv specs/2026-10-31-readme-venv-first-run-design.md specs/2026-10-31-readme-venv-first-run-plan.md specs/archive/2026/`;
-      fix the plan's `Spec:` link and set the design's status to implemented. Commit
-      `docs(specs): archive README venv first run design and plan`.
+### Task 4: Dispatch
+
+- [ ] Integration tests first: trust `y` + sync `y` on a missing venv → uv synced, command ran; sync `n` → exit 1 with
+  the hint, command not run, trust recorded; fresh venv → one prompt only; `TOOLR_TRUST_ALL=1` + missing venv → the
+  existing missing-interpreter error, no sync.
+- [ ] In `dispatch.rs`, after `require_trust`: on `Prompted` and `Missing`, call `sync_after_trust`; otherwise
+  `resync_if_needed` as before.
+
+### Task 5: Docs, release note, snippets
+
+- [ ] README bullet and "Scaffold your repo" (below line 24), `docs/concepts.md`, `docs/cli.md`, `docs/quickstart.md`,
+  `docs/installation/mise.md`, `skills/toolr-command-authoring/SKILL.md`.
+- [ ] `toolr pre-commit regen-doc-snippets`; `cargo xtask build-skill-refs`.
+- [ ] `toolr release-notes add --slug trust-then-sync --text "…"`, committed as `docs(release-notes): …`;
+  `toolr release-notes check --base origin/main`.
+
+### Task 6: Verify and archive
+
+- [ ] `cargo test -p toolr-core -p toolr`, `uv run pytest`, `cargo clippy --all-targets --all-features -- -D warnings`,
+  `prek run --all-files`, `uv run --group docs mkdocs build --strict`, patch coverage ≥ 99% against `origin/main`.
+- [ ] `git mv` design and plan to `specs/archive/2026/`, set the design's status to implemented, fix the plan's
+  `Spec:` link. Commit `docs(specs): archive trust-then-sync design and plan`.
