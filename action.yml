@@ -275,6 +275,7 @@ runs:
         echo "ARCHIVE_PATH=${work}/${ARCHIVE}" >> "$GITHUB_ENV"
 
     - name: Verify SLSA build provenance
+      id: verify-attestation
       # No cache-hit guard: attestation is verified on every run against
       # GitHub's attestation store, so a poisoned cached archive is
       # rejected before it reaches PATH (SEC-09). Only fork PRs / an
@@ -283,6 +284,12 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
+        # Releases are built only by `release.yml` dispatched on `main`, which
+        # calls this reusable workflow to build and attest each archive.
+        # Moving releases off `main` (tags, a maintenance branch) means
+        # widening both pins and the `refs/tags` rejection test together.
+        SIGNER_WORKFLOW: https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main
+        RELEASE_WORKFLOW: https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main
       run: |
         set -euo pipefail
         if ! command -v gh >/dev/null 2>&1; then
@@ -290,7 +297,36 @@ runs:
           echo "setup-toolr: install gh or pass 'skip-attestation: true' to bypass" >&2
           exit 1
         fi
-        gh attestation verify "$ARCHIVE_PATH" --repo s0undt3ch/ToolR
+        # gh before 2.56 can't load GitHub's current Sigstore trusted root.
+        gh_version=$(gh --version | sed -n 's/^gh version \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)
+        gh_major=${gh_version%%.*}
+        gh_minor=${gh_version#*.}
+        if [ -z "$gh_version" ] || [ "$gh_major" -lt 2 ] || { [ "$gh_major" -eq 2 ] && [ "$gh_minor" -lt 56 ]; }; then
+          echo "setup-toolr: gh >= 2.56 is required to verify attestations (found ${gh_version:-unknown})" >&2
+          exit 1
+        fi
+        # `--cert-identity` matches the signer exactly; `--signer-workflow`
+        # matches by prefix, so it would also accept `@refs/heads/main-evil`.
+        # `ci.yml` calls the same signer, so only `buildConfigURI` tells a
+        # release from a CI build, and `release.yml` on another ref may lack
+        # the release environment gate. The subject name binds the
+        # attestation to this exact version and triple.
+        ARCHIVE_NAME="${ARCHIVE_PATH##*/}"
+        export ARCHIVE_NAME RELEASE_WORKFLOW
+        count=$(gh attestation verify "$ARCHIVE_PATH" \
+          --repo s0undt3ch/ToolR \
+          --cert-identity "$SIGNER_WORKFLOW" \
+          --deny-self-hosted-runners \
+          --format json \
+          --jq '[.[].verificationResult
+                 | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW
+                          and any(.statement.subject[]; .name == env.ARCHIVE_NAME))]
+                | length')
+        if ! [ "$count" -ge 1 ] 2>/dev/null; then
+          echo "setup-toolr: ${ARCHIVE_NAME} has a valid ToolR attestation but was not built by the ToolR release workflow on main" >&2
+          echo "setup-toolr: install a published release; 'skip-attestation: true' turns off this check entirely" >&2
+          exit 1
+        fi
 
     - name: Force in-tree tools venv and trust the checkout
       shell: bash

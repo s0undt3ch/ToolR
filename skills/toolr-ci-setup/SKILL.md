@@ -265,6 +265,18 @@ prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
   understand you are turning off the supply-chain gate. Prefer
   installing `gh` (it's already present on GitHub-hosted runners) or
   pre-baking it into self-hosted runner images.
+- **`gh >= 2.56 is required to verify attestations`** — older `gh`
+  can't verify current ToolR attestations: before 2.56 it can't load
+  GitHub's Sigstore trusted root. Upgrade `gh` on the runner;
+  GitHub-hosted runners already ship a newer one.
+- **`… was not built by the ToolR release workflow on main`** — the
+  archive has a valid attestation from the ToolR repository, but not
+  one from `release.yml` running on `main` for this exact archive
+  name, which is how every release is built. CI builds, workflows run
+  from any other branch or pull request, and a release archive of
+  another version or platform renamed into place are rejected.
+  Install a published release version; don't reach for
+  `skip-attestation` to get around it.
 - **`tools/.venv` cache misses every run** — the venv cache key
   hashes `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml`
   and `tools/.python-version`; the root `uv.lock` is not part of
