@@ -23,11 +23,14 @@ from the current directory to the nearest `tools/pyproject.toml`, so a
 `tools/` without one, such as a `src/pkg/tools/` package in your code or a
 scripts directory above your repo, is ignored.
 
-Command modules must live under `tools/` itself. A `*.py` under `tools/`
-that is a symlink, including a dangling one, is an error: toolr lists every
-such link and refuses to build the command list until each is replaced by
-the file itself. Symlinked directories under `tools/`, even ones named
-`*.py`, are ignored, not followed.
+Command modules must be regular files under `tools/`. A `*.py` under
+`tools/` that is a symlink, including a dangling one, is an error, so toolr
+never picks up code from outside `tools/` by surprise: toolr lists every such
+link and refuses to build the command list until each is replaced by the
+file itself. Symlinked directories under `tools/`, even ones named `*.py`,
+are ignored, not followed. To share command code between projects, put it in
+a Python package and depend on it from `tools/pyproject.toml`, published or
+as a path dependency.
 
 On Windows with `core.symlinks=false`, git checks a link out as a plain
 file holding the target path, which then fails to parse instead of

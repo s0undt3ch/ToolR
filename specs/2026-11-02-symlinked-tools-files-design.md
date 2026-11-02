@@ -27,12 +27,24 @@ tools/linked.py -> ../shared/linked.py
 
 `toolr --help` lists `demo` and silently omits `linked`.
 
+Following the link instead would be worse: toolr would read, hash and (on
+dispatch, or in `CommandsTester.discover()`) import code from wherever the
+link points, possibly outside the repository, without anyone having asked
+for it.
+
 ## Decision
 
-toolr supports one top-level `tools/` directory. It was never built for
-command modules scattered around a monorepo and shared through symlinks, and
-until someone asks for that it stays unsupported. Unsupported has to be loud,
-not silent.
+toolr never reads or imports code from wherever a link points: no
+surprises. A project's commands are the regular files under its `tools/`
+directory. The supported way to share command code across projects or within
+a monorepo is Python's own: put it in a package and depend on it from
+`tools/pyproject.toml` (a path dependency works), or ship it as a toolr
+plugin. Installed plugins are read only through their `toolr-manifest.json`
+fragment, so toolr never walks from a user's repository into site-packages.
+The same rule applies to plugin authors: `toolr self build-manifest` rejects
+symlinked modules in a package by design.
+
+Rejecting a link has to be loud. Silently dropping it hides commands.
 
 - A `*.py` symlink anywhere the walk would list modules, dangling or not, is
   an error. Every offending path is reported at once, relative to the parent
@@ -43,19 +55,26 @@ not silent.
   symlinked modules are not supported (2):
     - tools/linked.py
     - tools/sub/other.py
-  Put the file itself under tools/.
+  Put the file itself under tools/, or share it as a Python package.
   ```
 
   For a plugin fragment the walked directory is the package, so the paths
-  and the hint name the package directory instead of `tools`.
+  and the hint name the package directory instead of `tools`, even when it
+  is given as `--source-dir .`.
 - The error comes from `list_python_files` itself, so every caller reports it:
   `toolr --help`, dispatch (both the freshness hash and the rebuild),
-  `toolr self build-manifest` and plugin fragment builds.
+  `toolr self build-manifest` and plugin fragment builds. Unlike other build
+  errors, dispatch doesn't fall back to a cached manifest for it (a cache
+  from an older toolr, or an untrusted repository's in-memory rebuild), since
+  the cache would hide the links again. The walk executes nothing, so
+  untrusted repositories get the error too.
 - TAB completion stays silent. `run_complete` already falls back to an empty
   manifest when `resolve_manifest_at_tab` fails, so the shell is offered only
   the built-in `self` / `project` subtree, exit status 0, nothing on stderr.
-- Symlinked directories keep their current behaviour: not followed, no error.
-  The walk already prunes dot-directories and `__pycache__`, so an in-tree
+- Symlinked directories keep their current behaviour: not followed, no error,
+  including a directory link named `*.py` (only links pay for the stat that
+  tells them apart; a dangling link still counts as a module). The walk
+  already prunes dot-directories and `__pycache__`, so an in-tree
   `tools/.venv` that is itself a symlink, or a `*.py` link inside a pruned
   directory, never reaches the check.
 - `CommandsTester.discover()` walks `tools/` the same way before importing
@@ -68,11 +87,13 @@ The check costs nothing on the common path: `DirEntry::path_is_symlink()` and
 
 ## Rejected alternatives
 
-- **Follow symlinks.** Implemented once (kept outside `main`), it needed rules
-  for aliases of listed modules, links that resolve to the same file through
-  different names, links under non-importable directories, dangling and
-  looping links, and case-only aliases, mirrored in Rust and Python. That is a
-  feature for monorepos sharing command modules, which toolr doesn't support.
+- **Follow symlinks.** toolr would read and import code from outside
+  `tools/`, possibly outside the repository, by surprise. Implemented once
+  (kept outside `main`), it also needed rules for aliases of listed modules,
+  links that resolve to the same file through different names, links under
+  non-importable directories, dangling and looping links, and case-only
+  aliases, mirrored in Rust and Python, to support a sharing mechanism Python
+  packaging already provides.
 - **Keep ignoring them silently.** The current behaviour: commands vanish and
   nobody is told why.
 
