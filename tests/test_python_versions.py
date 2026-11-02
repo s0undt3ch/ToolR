@@ -39,7 +39,10 @@ def supported_minors(requires_python: str) -> list[int]:
 
 @pytest.fixture(scope="module")
 def pyprojects() -> dict[str, dict[str, Any]]:
-    return {key: tomllib.loads((REPO_ROOT / path).read_text()) for key, path in TOML_FILES.items()}
+    return {
+        key: tomllib.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
+        for key, path in TOML_FILES.items()
+    }
 
 
 @pytest.fixture(scope="module")
@@ -146,7 +149,7 @@ def _floor_settings(
         ),
     ]
     for workflow in CP_TAG_WORKFLOWS:
-        tags = re.findall(r"cp-tag=(cp\d+)", (REPO_ROOT / workflow).read_text())
+        tags = re.findall(r"cp-tag=(cp\d+)", (REPO_ROOT / workflow).read_text(encoding="utf-8"))
         settings.append(
             (
                 f"cp-tag:{workflow}",
