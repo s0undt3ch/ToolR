@@ -18,7 +18,6 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -58,13 +57,10 @@ def write_gh_stub(
     verifies. `gh_version` is what `gh --version` reports. Every other
     argument list is appended to `calls`.
 
-    The stub needs no `PATH`: it runs under the host's `sh` and calls
-    `jq` by absolute path.
+    The stub runs `bash` and `jq` from `PATH`. Paths go into it in POSIX
+    form, with LF line endings, so Git Bash on Windows can read it: a
+    native `C:\\...` path in a shebang or a CR before a newline breaks it.
     """
-    sh = shutil.which("sh")
-    jq = shutil.which("jq")
-    assert sh is not None
-    assert jq is not None
     bin_dir.mkdir(parents=True, exist_ok=True)
     payload = bin_dir / "gh-payload.json"
     payload.write_text(
@@ -86,18 +82,18 @@ def write_gh_stub(
         )
     )
     if stdout is None:
-        emit = f'exec {shlex.quote(jq)} -c "$jq_expr" < {shlex.quote(str(payload))}'
+        emit = f'exec jq -c "$jq_expr" < {shlex.quote(payload.as_posix())}'
     else:
         emit = f"printf '%s\\n' {shlex.quote(stdout)}"
     stub = bin_dir / "gh"
     stub.write_text(
-        f"""#!{sh}
+        f"""#!/usr/bin/env bash
 if [ "$1" = "--version" ]; then
   printf 'gh version %s (2026-01-01)\\nhttps://github.com/cli/cli/releases/tag/v%s\\n' \\
     {shlex.quote(gh_version)} {shlex.quote(gh_version)}
   exit 0
 fi
-printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
+printf '%s\\n' "$*" >> {shlex.quote(calls.as_posix())}
 if [ {gh_rc} -ne 0 ]; then
   echo 'gh: no matching attestations' >&2
   exit {gh_rc}
@@ -115,7 +111,8 @@ if [ "$identity" != {shlex.quote(signer)} ]; then
   exit 1
 fi
 {emit}
-"""
+""",
+        newline="\n",
     )
     stub.chmod(0o755)
     return stub

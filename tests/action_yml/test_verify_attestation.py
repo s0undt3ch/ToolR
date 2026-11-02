@@ -74,8 +74,9 @@ def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[s
     script_path.write_text(
         "#!/bin/bash\n"
         "set -euo pipefail\n"
-        f"ARCHIVE_PATH={shlex.quote(str(archive))}\n"
-        "export ARCHIVE_PATH\n" + exports + step["run"]
+        f"ARCHIVE_PATH={shlex.quote(archive.as_posix())}\n"
+        "export ARCHIVE_PATH\n" + exports + step["run"],
+        newline="\n",
     )
 
     def run(**stub: Any) -> subprocess.CompletedProcess[str]:

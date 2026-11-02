@@ -39,8 +39,8 @@ GH_FLOOR = "install.sh: gh >= 2.56 is required to verify attestations"
 pytestmark = [
     pytest.mark.skipif(sys.platform == "win32", reason="install.sh is POSIX-only"),
     pytest.mark.skipif(
-        shutil.which("sh") is None or shutil.which("jq") is None,
-        reason="sh and jq are required",
+        any(shutil.which(tool) is None for tool in ("sh", "bash", "jq")),
+        reason="sh, bash and jq are required",
     ),
 ]
 
@@ -91,7 +91,8 @@ def verify_runner(tmp_path: Path) -> RunVerify:
     ) -> subprocess.CompletedProcess[str]:
         shutil.rmtree(tools, ignore_errors=True)
         tools.mkdir()
-        for tool in ("sed", "head", "awk", *hashers):
+        # bash and jq run the gh stub.
+        for tool in ("sed", "head", "awk", "bash", "jq", *hashers):
             if isinstance(tool, tuple):
                 name, body = tool
                 (tools / name).write_text(f"#!{sh}\n{body}\n")
@@ -109,11 +110,11 @@ def verify_runner(tmp_path: Path) -> RunVerify:
             f"REPO={shlex.quote(repo)}\n"
             f"VERIFY_ATTESTATION={shlex.quote(mode)}\n"
             f"{script}\n"
-            f"verify_attestation {shlex.quote(str(archive))}\n"
+            f"verify_attestation {shlex.quote(archive.as_posix())}\n"
             "echo VERIFIED >&2\n"
         )
         script_path = tmp_path / "wrapped.sh"
-        script_path.write_text(wrapped)
+        script_path.write_text(wrapped, newline="\n")
         return subprocess.run(  # noqa: S603  # sh + script path are test-controlled
             [sh, str(script_path)],
             capture_output=True,
