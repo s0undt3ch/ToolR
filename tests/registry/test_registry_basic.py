@@ -240,3 +240,14 @@ def test_standalone_command_attaches_to_existing_group(commands_tester):
 
     command_groups = commands_tester.collected_command_groups()
     assert command_groups["tools.ci"].get_commands()["lint"] is lint
+
+
+def test_standalone_command_without_group_is_not_recorded(commands_tester):
+    """`@command("name")` with no `group=` has no group to attach to and records nothing."""
+
+    @command("orphan")
+    def orphan(ctx: Context):
+        """Belong nowhere."""
+
+    assert orphan.__name__ == "orphan"
+    assert commands_tester.collected_command_groups() == {}
