@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev364-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev374-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev364 - 2026-11-02
+        0.35.2-dev374 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev364 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev374 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev364-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev374-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev364 - 2026-11-02
+        0.35.2-dev374 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev364 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev374 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev364-2026-11-02">0.35.2-dev364 - 2026-11-02<a class="headerlink" href="#0352-dev364-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev374-2026-11-02">0.35.2-dev374 - 2026-11-02<a class="headerlink" href="#0352-dev374-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7659,6 +7659,7 @@ SIGINT, so <code>kill -INT</code> aimed at the <code>toolr</code> process alone 
 send SIGTERM instead.</p>
 <p><code>toolr.testing.CommandsTester</code> now records commands declared with the standalone <code>@command(group="…")</code> decorator, whether the group is declared in the same file or another one. They used to be missing from <code>collected_command_groups()</code>, although <code>toolr</code> ran them. A <code>group=</code> that names no declared group now makes <code>collected_command_groups()</code> raise a <code>ValueError</code> with the same message the manifest build gives.</p>
 <p>A standalone <code>@command</code> with no <code>group=</code> now makes <code>collected_command_groups()</code> raise too, as the manifest build fails on it.</p>
+<p>When a command module fails to import, whether it's one of your <code>tools/*.py</code> files or comes from a plugin, toolr now prints the traceback, so an import that fails in a helper module names that file and line. The "run <code>toolr project venv sync</code>" hint no longer appears when the missing module is part of your own <code>tools</code> package (a typo or a circular import), since syncing the venv can't fix those.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7757,6 +7758,9 @@ send SIGTERM instead.</p>
 <li><em>(testing)</em> Report symlinked modules discovery can't resolve (<a href="https://github.com/s0undt3ch/ToolR/commit/e68b673d50cd599f242070a201a4fe9c60cddbde"><code>e68b673</code></a>)</li>
 <li><em>(dispatch)</em> Print symlinked-module errors the same on every path (<a href="https://github.com/s0undt3ch/ToolR/commit/138a3706a79a86cdd9ebd21a92b139e086c75e76"><code>138a370</code></a>)</li>
 <li><em>(cli)</em> Skip root option values when finding the subcommand (<a href="https://github.com/s0undt3ch/ToolR/commit/8375cdfd89513215aba5495c18cd127a08773bd8"><code>8375cdf</code></a>)</li>
+<li><em>(runner)</em> Show the traceback when a command module fails to import (<a href="https://github.com/s0undt3ch/ToolR/commit/9fa2ca48d24ec5685340d2e06e0f28ce7c549ecc"><code>9fa2ca4</code></a>)</li>
+<li><em>(runner)</em> Keep importlib frames out of command import tracebacks (<a href="https://github.com/s0undt3ch/ToolR/commit/59a1de69dc5688cd38c4ff15c8b3f366ef467100"><code>59a1de6</code></a>)</li>
+<li><em>(runner)</em> Fall back to import_module when an import hook skips sys.modules (<a href="https://github.com/s0undt3ch/ToolR/commit/1df3e071db266672f0948d9cce2ad877f933c54b"><code>1df3e07</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7792,6 +7796,7 @@ send SIGTERM instead.</p>
 <li><em>(parser)</em> Walk tools/ once and give symlinked modules one error shape (<a href="https://github.com/s0undt3ch/ToolR/commit/33c1f267f9938d57c351329c3e961968791cc4a9"><code>33c1f26</code></a>)</li>
 <li><em>(testing)</em> Share the pruned-directory check between discovery walks (<a href="https://github.com/s0undt3ch/ToolR/commit/723106ceb12f5f203438f10a7bf9fb967134095e"><code>723106c</code></a>)</li>
 <li><em>(testing)</em> Reuse the shared control-character escaping (<a href="https://github.com/s0undt3ch/ToolR/commit/22fc4c210236582428ce19803f3499e28fff385a"><code>22fc4c2</code></a>)</li>
+<li><em>(runner)</em> Rename the repo tools check and tighten its comments (<a href="https://github.com/s0undt3ch/ToolR/commit/be121d7f14accffd631fb86a9bc255d18e4f46f5"><code>be121d7</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7888,6 +7893,8 @@ send SIGTERM instead.</p>
 <li>Note how Windows checkouts without symlinks fail (<a href="https://github.com/s0undt3ch/ToolR/commit/fbf61faff4e925e1a0ea6121b12553ea083a761a"><code>fbf61fa</code></a>)</li>
 <li>Explain symlinked-module rejection as a no-surprises rule (<a href="https://github.com/s0undt3ch/ToolR/commit/958ae4ef305a05843a884cec0dd29e86a52afbb7"><code>958ae4e</code></a>)</li>
 <li><em>(specs)</em> Archive symlinked tools files design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/17eccf431d1678ad6467664dee6ee64e97fd9c31"><code>17eccf4</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-28 runner import traceback (<a href="https://github.com/s0undt3ch/ToolR/commit/1eea85854b96b2d9c592d869a30f30d506eab022"><code>1eea858</code></a>)</li>
+<li><em>(specs)</em> Archive runner import traceback design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e45f45cffc11b99867b4b8020350798ee410b31b"><code>e45f45c</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7941,6 +7948,7 @@ send SIGTERM instead.</p>
 <li><em>(registry)</em> Make the pending-store leak test able to fail (<a href="https://github.com/s0undt3ch/ToolR/commit/739d9b7e6e97f0fb5f6b39823f0cbb91b8ed919d"><code>739d9b7</code></a>)</li>
 <li><em>(parser)</em> Cover symlinked modules whose target can't be stat'd (<a href="https://github.com/s0undt3ch/ToolR/commit/ef1cb7d6d861ad3e295f7db950dfbe638bb1615f"><code>ef1cb7d</code></a>)</li>
 <li><em>(cli)</em> Share the symlinked-module CLI assertions (<a href="https://github.com/s0undt3ch/ToolR/commit/51a8bab6fec207a8133f128f778e8d51502dba29"><code>51a8bab</code></a>)</li>
+<li><em>(runner)</em> Share the import-failure fixture files and scope module eviction (<a href="https://github.com/s0undt3ch/ToolR/commit/36bb21581a92cb08acd02c1d54ef9c482ddc7f6b"><code>36bb215</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
