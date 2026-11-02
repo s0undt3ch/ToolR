@@ -76,11 +76,18 @@ pub struct InputRecords {
     /// mtime is strictly older. `0` reuses nothing.
     #[serde(default)]
     pub snapshot_at_ns: u64,
+    /// The device `snapshot_at_ns` was read on (Unix `st_dev`; `0`
+    /// elsewhere). Only records on this device are reused.
+    #[serde(default)]
+    pub snapshot_dev: u64,
 }
 
 impl InputRecords {
     pub fn is_empty(&self) -> bool {
-        self.files.is_empty() && self.scan_paths.is_empty() && self.snapshot_at_ns == 0
+        self.files.is_empty()
+            && self.scan_paths.is_empty()
+            && self.snapshot_at_ns == 0
+            && self.snapshot_dev == 0
     }
 }
 
@@ -98,6 +105,9 @@ pub struct FileStat {
     /// Unix only; `0` elsewhere.
     #[serde(default)]
     pub ino: u64,
+    /// The device the file lives on. Unix only; `0` elsewhere.
+    #[serde(default)]
+    pub dev: u64,
     /// Lowercase hex blake3 of the contents; empty when `unreadable`.
     #[serde(default)]
     pub blake3: String,

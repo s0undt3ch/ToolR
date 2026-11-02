@@ -85,17 +85,23 @@ pub(crate) fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
 /// Stat every static input and hash the ones `previous` can't vouch for.
 ///
 /// A record from `previous` is reused, without reading the file, when its
-/// key, size, mtime, ctime and inode all match the live file and its mtime
-/// is strictly older than `previous.snapshot_at_ns`, the filesystem's clock
-/// just before that snapshot's first stat (see [`fs_clock_ns`]). A file
-/// saved in the same timestamp tick as its stat could have changed again
-/// without changing its stat, so it is always reread (git's racy-index
-/// rule). A `snapshot_at_ns` of `0` reuses nothing. The stat is taken
-/// before the read: a file that changes in between keeps its old stat in
-/// the record, so the next check rereads it.
+/// key, size, mtime, ctime, inode and device all match the live file and
+/// its mtime is strictly older than `previous.snapshot_at_ns`, the clock
+/// of `tools/`'s filesystem just before that snapshot's first stat (see
+/// [`SnapshotClock`]). A file saved in the same timestamp tick as its stat
+/// could have changed again without changing its stat, so it is always
+/// reread (git's racy-index rule). A `snapshot_at_ns` of `0` reuses
+/// nothing. The stat is taken before the read: a file that changes in
+/// between keeps its old stat in the record, so the next check rereads it.
 ///
-/// The returned records carry `snapshot_at_ns == 0`: only a caller that
-/// persists them takes the bound, before building.
+/// The bound is only comparable with mtimes from the same filesystem, so
+/// only inputs under the project root on `tools/`'s device
+/// (`previous.snapshot_dev`) are reused; any other input is always reread.
+/// Off Unix there is no device number, so only the project-root rule
+/// applies.
+///
+/// The returned records carry no bound: only a caller that persists them
+/// takes one, before building.
 ///
 /// `tools/pyproject.toml` is read at most once, for both its digest and
 /// its `scan_paths`; when its record is reused, so are the `scan_paths`.
@@ -121,21 +127,41 @@ pub fn snapshot_static_inputs(
     snapshot_from(tools_dir, &list_python_files(tools_dir)?, previous)
 }
 
-/// The filesystem's clock now, in ns since the Unix epoch: the mtime of a
-/// file created (and removed) in `dir`. `0`, which makes the records it
-/// bounds unreusable, when that fails.
-///
-/// Taken from the filesystem rather than the system clock so an NFS
-/// server's skew can't make a record look older than it is. Writes to
-/// `dir`, so only callers that are about to write the manifest there may
-/// call it.
-pub fn fs_clock_ns(dir: &Path) -> u64 {
-    tempfile::Builder::new()
-        .prefix(".toolr-clock.")
-        .suffix(".tmp")
-        .tempfile_in(dir)
-        .and_then(|f| f.as_file().metadata())
-        .map_or(0, |m| nanos(m.modified()))
+/// The bound a persisting build stamps on its records: the clock and
+/// device of `tools/`'s filesystem, read before the build's first stat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnapshotClock {
+    /// ns since the Unix epoch; `0`, which reuses nothing, when unknown.
+    pub at_ns: u64,
+    /// The filesystem's device number; `0` off Unix.
+    pub dev: u64,
+}
+
+impl SnapshotClock {
+    /// Read from the mtime and device of a file created (and removed) in
+    /// `dir`.
+    ///
+    /// Taken from the filesystem rather than the system clock, so an NFS
+    /// server's skew can't make a record on that filesystem look older than
+    /// it is. Writes to `dir`, so only callers that are about to write the
+    /// manifest there may call it.
+    pub fn now(dir: &Path) -> Self {
+        tempfile::Builder::new()
+            .prefix(".toolr-clock.")
+            .suffix(".tmp")
+            .tempfile_in(dir)
+            .and_then(|f| f.as_file().metadata())
+            .map_or(Self { at_ns: 0, dev: 0 }, |m| Self {
+                at_ns: nanos(m.modified()),
+                dev: device(&m),
+            })
+    }
+
+    /// Bound `records` by this clock.
+    pub fn stamp(self, records: &mut InputRecords) {
+        records.snapshot_at_ns = self.at_ns;
+        records.snapshot_dev = self.dev;
+    }
 }
 
 /// [`snapshot_static_inputs`] with `tools/**/*.py` already listed, so the
@@ -145,11 +171,13 @@ pub(crate) fn snapshot_from(
     py_files: &[PathBuf],
     previous: Option<&InputRecords>,
 ) -> Result<InputRecords> {
+    let project_root = project_root(tools_dir);
     let reuse = Reuse {
         files: previous.map_or(&[], |p| p.files.as_slice()),
         snapshot_at_ns: previous.map_or(0, |p| p.snapshot_at_ns),
+        snapshot_dev: previous.map_or(0, |p| p.snapshot_dev),
+        project_root,
     };
-    let project_root = project_root(tools_dir);
     let pyproject = crate::argparse::pyproject_path(project_root);
     let mut pyproject_record = None;
     let mut scan_paths = Vec::new();
@@ -193,6 +221,7 @@ pub(crate) fn snapshot_from(
         files,
         scan_paths,
         snapshot_at_ns: 0,
+        snapshot_dev: 0,
     })
 }
 
@@ -273,19 +302,29 @@ struct Reuse<'a> {
     files: &'a [FileStat],
     /// The previous snapshot's bound in ns; `0` reuses nothing.
     snapshot_at_ns: u64,
+    /// The device the bound was read on.
+    snapshot_dev: u64,
+    project_root: &'a Path,
 }
 
 impl Reuse<'_> {
-    fn get(&self, key: &str, live: &FileStat) -> Option<&FileStat> {
+    fn get(&self, input: &StaticInput, live: &FileStat) -> Option<&FileStat> {
+        // The bound came from `tools/`'s clock; an mtime from another
+        // filesystem can't be compared with it.
+        let same_clock = live.dev == self.snapshot_dev && input.path.starts_with(self.project_root);
+        if !same_clock {
+            return None;
+        }
         let i = self
             .files
-            .binary_search_by(|f| f.key.as_str().cmp(key))
+            .binary_search_by(|f| f.key.as_str().cmp(&input.key))
             .ok()?;
         let old = &self.files[i];
         let same = old.size == live.size
             && old.mtime_ns == live.mtime_ns
             && old.ctime_ns == live.ctime_ns
-            && old.ino == live.ino;
+            && old.ino == live.ino
+            && old.dev == live.dev;
         (same
             && old.unreadable.is_none()
             && old.mtime_ns != 0
@@ -313,6 +352,7 @@ fn record(
             mtime_ns: 0,
             ctime_ns: 0,
             ino: 0,
+            dev: 0,
             blake3: String::new(),
             unreadable: Some(kind.to_string()),
         })),
@@ -322,7 +362,7 @@ fn record(
         Err(e) => return failed(e),
     };
     let mut live = stat_record(&input.key, &meta);
-    if let Some(old) = reuse.get(&input.key, &live) {
+    if let Some(old) = reuse.get(input, &live) {
         return Ok(Some(old.clone()));
     }
     let bytes = match read_input(&input.path) {
@@ -371,8 +411,22 @@ fn stat_record(key: &str, meta: &std::fs::Metadata) -> FileStat {
         mtime_ns: nanos(meta.modified()),
         ctime_ns,
         ino,
+        dev: device(meta),
         blake3: String::new(),
         unreadable: None,
+    }
+}
+
+/// The device `meta`'s file lives on; `0` off Unix.
+fn device(meta: &std::fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::MetadataExt::dev(meta)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        0
     }
 }
 
@@ -582,6 +636,8 @@ mod tests {
         let reuse = Reuse {
             files: &[],
             snapshot_at_ns: 0,
+            snapshot_dev: 0,
+            project_root: Path::new("/"),
         };
         let mut files = Vec::new();
         for input in inputs {
@@ -1208,9 +1264,9 @@ parent = "django"
     /// filesystem clock read first, then the snapshot.
     fn written_manifest(project: &TempDir) -> crate::manifest::Manifest {
         let tools = project.path().join("tools");
-        let snapshot_at_ns = fs_clock_ns(&tools);
+        let clock = SnapshotClock::now(&tools);
         let mut input_records = snapshot_static_inputs(&tools, None).unwrap();
-        input_records.snapshot_at_ns = snapshot_at_ns;
+        clock.stamp(&mut input_records);
         manifest_of(project, input_records)
     }
 
@@ -1272,10 +1328,16 @@ parent = "django"
         let project = tools_tree(&[("a.py", "x")]);
         let tools = project.path().join("tools");
         let before = nanos(Ok(SystemTime::now() - std::time::Duration::from_secs(5)));
-        assert!(fs_clock_ns(&tools) > before);
+        let clock = SnapshotClock::now(&tools);
+        assert!(clock.at_ns > before);
+        let a = std::fs::metadata(tools.join("a.py")).unwrap();
+        assert_eq!(clock.dev, device(&a));
         let left: Vec<_> = std::fs::read_dir(&tools).unwrap().flatten().collect();
         assert_eq!(left.len(), 1, "{left:?}");
-        assert_eq!(fs_clock_ns(&project.path().join("missing")), 0);
+        assert_eq!(
+            SnapshotClock::now(&project.path().join("missing")),
+            SnapshotClock { at_ns: 0, dev: 0 }
+        );
     }
 
     /// Records without a bound (older manifests, or one written by a path
@@ -1389,6 +1451,7 @@ parent = "django"
         age(&project);
         let tools = project.path().join("tools");
         let mut previous = snapshot_static_inputs(&tools, None).unwrap();
+        previous.snapshot_dev = SnapshotClock::now(&tools).dev;
         // `age` gave every file the same mtime.
         let mtime = mtime_ns(&project.path().join(MIGRATE));
         let mut reads_with = |bound| {
@@ -1415,10 +1478,52 @@ parent = "django"
         let mut input_records = snapshot_static_inputs(&tools, None).unwrap();
         // The coarse tick both the file and the snapshot's bound fell in.
         input_records.snapshot_at_ns = mtime_ns(&migrate);
+        input_records.snapshot_dev = SnapshotClock::now(&tools).dev;
         let manifest = manifest_of(&project, input_records);
         assert!(mtime_ns(&tools.join(".toolr-manifest.json")) > mtime_ns(&migrate));
         let (_, reads) = compare_reads(&project, &manifest);
         assert_eq!(reads, reads_of(&project, &ALL_INPUTS));
+    }
+
+    /// Review of #656: the bound is `tools/`'s clock, so an input on another
+    /// device, whose mtimes come from another clock, is always reread.
+    #[test]
+    fn record_on_another_device_is_reread() {
+        let project = django_project();
+        age(&project);
+        let mut manifest = written_manifest(&project);
+        let (_, reads) = compare_reads(&project, &manifest);
+        assert!(reads.is_empty(), "{reads:?}");
+        manifest.input_records.snapshot_dev = manifest.input_records.snapshot_dev.wrapping_add(1);
+        let (verdict, reads) = compare_reads(&project, &manifest);
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
+        assert_eq!(reads, reads_of(&project, &ALL_INPUTS));
+    }
+
+    /// An input outside the project root is always reread, even on the same
+    /// device: off Unix the device number is `0` everywhere, so this rule is
+    /// all that keeps another filesystem's mtimes away from the bound.
+    #[cfg(unix)]
+    #[test]
+    fn scanned_file_outside_the_project_root_is_reread() {
+        let elsewhere = setup(&[("cmd.py", MIGRATE_PY)]);
+        let cmd = elsewhere.path().join("cmd.py");
+        let project = setup(&[
+            (
+                "tools/pyproject.toml",
+                &format!(
+                    "[tool.toolr.argparse.ext]\nscan_paths = ['{}']\n",
+                    cmd.display()
+                ),
+            ),
+            ("tools/a.py", "x"),
+        ]);
+        age(&project);
+        age(&elsewhere);
+        let manifest = written_manifest(&project);
+        let (verdict, reads) = compare_reads(&project, &manifest);
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
+        assert_eq!(reads, [(cmd, 1)].into_iter().collect());
     }
 
     /// Same size, mtime restored, manifest written well after: ctime still

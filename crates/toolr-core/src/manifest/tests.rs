@@ -77,6 +77,7 @@ fn empty_input_records_not_serialised() {
         mtime_ns: 2,
         ctime_ns: 3,
         ino: 4,
+        dev: 5,
         blake3: "ab".into(),
         unreadable: None,
     });

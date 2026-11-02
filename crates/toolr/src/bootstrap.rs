@@ -14,7 +14,7 @@ use std::path::Path;
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::freshness::{FreshnessVerdict, compare};
-use toolr_core::hash::{fs_clock_ns, is_symlinked_modules};
+use toolr_core::hash::{SnapshotClock, is_symlinked_modules};
 use toolr_core::manifest::{
     Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
 };
@@ -65,14 +65,14 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         // First-party is always available (pure AST). Add third-party only when
         // a venv already exists — globbing site-packages JSON executes nothing.
         let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
-        let snapshot_at_ns = fs_clock_ns(&tools);
+        let clock = SnapshotClock::now(&tools);
         let mut manifest = match venv_dir.as_deref() {
             Some(v) if v.join("pyvenv.cfg").is_file() => {
                 build_static_manifest_with_venv(&tools, v).map_err(BuildError::into_anyhow)?
             }
             _ => build_static_manifest(&tools)?,
         };
-        manifest.input_records.snapshot_at_ns = snapshot_at_ns;
+        clock.stamp(&mut manifest.input_records);
         write_manifest(&manifest_path, &manifest)
             .with_context(|| format!("writing {}", manifest_path.display()))
     })?;
@@ -209,11 +209,11 @@ pub(crate) fn ensure_manifest_fresh(
     let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| {
         // Taken before the build stats anything, and only when writing:
         // it creates a file in `tools/`.
-        let snapshot_at_ns = persist.then(|| fs_clock_ns(&tools));
+        let clock = persist.then(|| SnapshotClock::now(&tools));
         match try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref()) {
             Ok(mut fresh) => {
-                if let Some(ns) = snapshot_at_ns {
-                    fresh.input_records.snapshot_at_ns = ns;
+                if let Some(clock) = clock {
+                    clock.stamp(&mut fresh.input_records);
                     write_manifest(&manifest_path, &fresh)
                         .with_context(|| format!("writing {}", manifest_path.display()))?;
                 }
