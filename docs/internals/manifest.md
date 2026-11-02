@@ -28,7 +28,7 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   "toolr_version": "<CARGO_PKG_VERSION>",
   "groups": [...],
   "commands": [...],
-  "input_records": {"files": [...], "scan_paths": [...]}
+  "input_records": {"files": [...], "scan_paths": [...], "snapshot_at_ns": <ns>}
 }
 ```
 
@@ -42,8 +42,9 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   file an external command source scans. Drives static-layer rebuilds.
 - **`input_records`** — what `static_hash` was computed from: one
   record per input (`key`, `size`, `mtime_ns`, `ctime_ns`, `ino`,
-  `blake3`, and `unreadable` for an input that couldn't be read), plus
-  each argparse block's `scan_paths`. The freshness check uses them to
+  `blake3`, and `unreadable` for an input that couldn't be read),
+  each argparse block's `scan_paths`, and `snapshot_at_ns`, the bound
+  the stat gate compares mtimes against. The freshness check uses them to
   skip rereading unchanged files. Absent on older manifests, which then
   reread everything once.
 - **`third_party_hash`** — blake3 over the sorted set of
@@ -244,16 +245,23 @@ Both hashes use blake3, written as lowercase hex.
 - The stat gate: the freshness check stats every input and reuses the
   digest in `input_records` without reading the file when its size,
   mtime, ctime and inode (the last two on Unix) all match and its mtime
-  is strictly older than the manifest file's own mtime. A file saved in
-  the same timestamp tick as the manifest is always reread, as git does
-  for its index, since it could have changed without changing its stat.
+  is strictly older than `input_records.snapshot_at_ns`. That bound is
+  the filesystem's clock, read from a temporary file in `tools/` just
+  before the build's first stat, so NFS clock skew doesn't affect it. A
+  file saved in the same timestamp tick as the build's stat is always
+  reread, as git does for its index, since it could have changed again
+  without changing its stat. Only runs that write the manifest take the
+  bound; a manifest without one reuses nothing.
   `tools/pyproject.toml` is read at most once per check, and its
   `scan_paths` are reused with its digest; the globs are expanded on
   every check, so a new or removed scanned file is noticed. A record
   for an unreadable input is never reused. On an unchanged tree the
   check reads no input at all. A fresh manifest is never rewritten, so
   a file whose stat changed without its contents (after `touch`) is
-  reread on each check until the next rebuild.
+  reread on each check until the next rebuild. Off Unix, ctime and
+  inode aren't available, so a same-size edit whose mtime is restored
+  to an older value (`cp -p`, unpacking an archive) goes unnoticed
+  until that file changes again.
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`
   or `Lib/site-packages/*/` (the Windows layout, looked in on every
