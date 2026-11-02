@@ -12,7 +12,22 @@ racy rule).
 
 **Tech Stack:** Rust, `blake3`, `serde`, `tempfile`, `assert_cmd`.
 
-**Spec:** [`specs/2026-10-31-tab-manifest-freshness-design.md`](./2026-10-31-tab-manifest-freshness-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-tab-manifest-freshness-design.md`](./2026-10-31-tab-manifest-freshness-design.md)
+
+> **As implemented.** This plan predates F-16's final shape; the spec was updated before implementation and is
+> authoritative. Differences:
+>
+> - The field is `input_records`: `files` plus the parsed `scan_paths`, so `tools/pyproject.toml` is read at most
+>   once (twice when a `scan_paths` glob also matches it) and not at all when unchanged.
+> - `FileStat` became `InputRecord`. Records also carry `ctime_ns`, `ino` and `dev`, and their `content` is
+>   `Content::Digest | Content::Unreadable`; an unreadable record is never reused.
+> - The racy bound is `InputRecords::snapshot_at_ns`, the filesystem clock taken before the snapshot, not the manifest
+>   file's mtime, and `compare` keeps its signature. `InputRecords::snapshot_dev` limits reuse to inputs under the
+>   project root on `tools/`'s device. Every persisting path builds through `hash::build_to_persist`.
+> - `main.rs` skips its own manifest load for `__complete`.
+> - Release notes go in `release-notes/`, not `UNRELEASED.md`.
+> - The tests live in `hash.rs` (read-count tests via `take_reads`), `complete/tests.rs`, `manifest/tests.rs`,
+>   `parser/build.rs` and `crates/toolr/tests/freshness_dispatch.rs`.
 
 ## Global Constraints
 
