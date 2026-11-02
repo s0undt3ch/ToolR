@@ -61,7 +61,7 @@
       // CI's dogfood binary must match the toolr-py in tools/uv.lock; the
       // "toolr release" group below bumps all three pins in one PR.
       customType: "regex",
-      description: "Track the toolr binary every in-repo `uses: ./` call installs",
+      description: "Track the toolr binary .github/actions/setup-toolr installs",
       managerFilePatterns: ["/^\\.github/env$/"],
       matchStrings: ["TOOLR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       depNameTemplate: "s0undt3ch/ToolR",
