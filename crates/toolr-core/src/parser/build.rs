@@ -29,6 +29,8 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
     match build_static_manifest_inner(tools_dir) {
         Ok(m) => Ok(m),
         Err(BuildError::Build(e)) => Err(e),
+        // Kept typed so dispatch can tell it apart from other build errors.
+        Err(BuildError::SymlinkedModules(e)) => Err(e.into()),
         Err(other) => Err(anyhow::anyhow!("{other}")),
     }
 }

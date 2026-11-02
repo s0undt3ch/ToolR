@@ -526,3 +526,65 @@ fn symlinked_tools_module_is_rejected() {
         );
     }
 }
+
+#[cfg(unix)]
+const SYMLINK_ERROR: &str = "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/.";
+
+/// The first run after upgrading toolr sees a cache stamped by the old
+/// version, so the rebuild finds the link before any hash does. It must
+/// fail with the full list, not warn and dispatch from the stale cache.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_is_rejected_over_a_stale_version_cache() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    let tools = root.join("tools");
+    std::fs::rename(tools.join("linked.py"), root.join("linked.py.off")).unwrap();
+    common::toolr()
+        .current_dir(&root)
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .arg("--help")
+        .assert()
+        .success();
+    let manifest_path = tools.join(".toolr-manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    manifest["toolr_version"] = "0.0.1".into();
+    std::fs::write(&manifest_path, manifest.to_string()).unwrap();
+    std::fs::rename(root.join("linked.py.off"), tools.join("linked.py")).unwrap();
+
+    for args in [&["--help"][..], &["demo", "hello"][..]] {
+        let output = common::toolr()
+            .current_dir(&root)
+            .env("TOOLR_NO_CACHE_HINT", "1")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(SYMLINK_ERROR), "{args:?}: {stderr}");
+        assert!(!stderr.contains("falling back"), "{args:?}: {stderr}");
+    }
+}
+
+/// An untrusted repository never writes a cache, so every run rebuilds in
+/// memory; the error must surface there too rather than leaving `demo`
+/// as an unrecognised subcommand. Walking `tools/` executes nothing.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_is_rejected_in_an_untrusted_repo() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    let env = common::TrustEnv::new();
+    for args in [&["--help"][..], &["demo", "hello"][..]] {
+        let output = env.toolr(&root).args(args).output().unwrap();
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(SYMLINK_ERROR), "{args:?}: {stderr}");
+        assert!(
+            !stderr.contains("unrecognized subcommand"),
+            "{args:?}: {stderr}"
+        );
+    }
+    assert!(!root.join("tools/.toolr-manifest.json").exists());
+}
