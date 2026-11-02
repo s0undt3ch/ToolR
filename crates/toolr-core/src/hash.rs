@@ -322,6 +322,33 @@ mod tests {
         );
     }
 
+    /// Links whose target can't be stat'd (a loop, a target inside an
+    /// unreadable directory) are reported, not skipped or fatal to the walk.
+    #[cfg(unix)]
+    #[test]
+    fn unresolvable_symlinked_modules_are_rejected() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+        let tmp = setup(&[("tools/demo.py", "x"), ("locked/x.py", "y")]);
+        let tools = tmp.path().join("tools");
+        let locked = tmp.path().join("locked");
+        std::fs::create_dir(locked.join("d")).unwrap();
+        symlink("loop.py", tools.join("loop.py")).unwrap();
+        symlink("../locked/x.py", tools.join("inlocked.py")).unwrap();
+        symlink("../locked/d", tools.join("dirlink.py")).unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o0)).unwrap();
+        let root_can_read = std::fs::read_dir(&locked).is_ok();
+        let result = list_python_files(&tools);
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let err = result.unwrap_err();
+        // Root stats through mode 000, so there `dirlink.py` is a directory link.
+        let expected: Vec<_> = ["tools/dirlink.py", "tools/inlocked.py", "tools/loop.py"]
+            .into_iter()
+            .filter(|p| !(root_can_read && *p == "tools/dirlink.py"))
+            .collect();
+        assert_eq!(err.paths, expected);
+    }
+
     /// A walk rooted at `.` or `..` still names the directory, not `.`.
     #[cfg(unix)]
     #[test]
