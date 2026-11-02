@@ -36,9 +36,9 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   `path_constraints`. A cache with any other schema version is rebuilt
   on the next run.
 - **`static_hash`** — blake3 over the sorted `(path, contents)` of
-  every input of the static build: each `tools/**/*.py` file,
-  `tools/pyproject.toml`, and every file an external command source
-  (`[tool.toolr.argparse.*]`) scans. Drives static-layer rebuilds.
+  every input of the static build: each `tools/**/*.py` file, the
+  `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`, and every
+  file an external command source scans. Drives static-layer rebuilds.
 - **`third_party_hash`** — blake3 over the sorted set of
   `toolr-manifest.json` files found under
   `<tools-venv>/lib/python*/site-packages/*/`
@@ -163,8 +163,9 @@ without a working venv. Captures:
   files via a symbol table).
 
 The static layer is rebuilt when toolr detects `static_hash` drift
-against the on-disk files (a `tools/*.py` module, `tools/pyproject.toml`,
-or a file an [external command source](../writing-commands/external-sources.md)
+against the on-disk files (a `tools/*.py` module, the
+`[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`, or a file an
+[external command source](../writing-commands/external-sources.md)
 scans), or when the cached `toolr_version` doesn't match the running
 binary — an upgrade forces a static rebuild even if none of those files
 changed.
@@ -219,10 +220,15 @@ Both hashes use blake3, written as lowercase hex.
   Each file is keyed by its path relative to the project root, with `/`
   separators (a scanned file outside the project keeps its full path),
   sorted by key, and hashed as
-  `key || 0x00 || len(contents) as u64 LE || contents`. A
-  `tools/pyproject.toml` that doesn't parse, or a block with an invalid
-  glob, adds no scanned files instead of failing the check; the build
-  reports the error. A `tools/**/*.py` module that can't be read fails
+  `key || 0x00 || len(contents) as u64 LE || contents`. The build reads
+  only the `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`,
+  so the hash takes those blocks as parsed, serialised in name order,
+  under a `0x02` tag instead of `0x00`: a dependency bump or `uv add`
+  doesn't trigger a rebuild. A `tools/pyproject.toml` whose blocks don't
+  parse is hashed whole, so fixing it does; it also adds no scanned
+  files, and neither does a block with an invalid glob. The check
+  doesn't fail on either; the build reports the error, and tab
+  completion keeps serving the cached manifest until it's fixed. A `tools/**/*.py` module that can't be read fails
   the check, naming the file. Any other input that can't be read is
   hashed as `key || 0x01 || <error kind>`, so an unreadable scanned file
   doesn't break every command, and fixing it still triggers a rebuild.
