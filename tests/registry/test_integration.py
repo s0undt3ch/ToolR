@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from toolr import Context
+from toolr import _decorators
 from toolr import command_group
 from toolr._decorators import CommandGroup
 from toolr.testing import CommandsTester
@@ -791,10 +792,20 @@ def test_unknown_group_error_for_an_empty_group(tools_repo: ToolsRepo) -> None:
 def test_pending_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -> None:
     """A pending command from one `CommandsTester` doesn't reach the next."""
     repo = tools_repo({"tools/cmds.py": TYPO_GROUP_MODULE})
-    with CommandsTester(search_path=repo) as tester:
-        tester.discover()
+    with CommandsTester(search_path=repo) as first:
+        first.discover()
+        assert [entry[:2] for entry in first.pending_command_collector] == [("ci.typo", "check")]
+    assert first.pending_command_collector == []
+    # Through the module, as `command()` calls it, so a patch left running shows.
+    assert _decorators._get_pending_command_storage() is not first.pending_command_collector
     other = repo / "other"
-    other.mkdir()
-    with CommandsTester(search_path=other) as tester:
-        tester.discover()
-        assert tester.collected_command_groups() == {}
+    (other / "tools").mkdir(parents=True)
+    (other / "tools" / "__init__.py").write_text(
+        'from toolr import command_group\ncommand_group("ci", "CI", "CI")\n'
+        'command_group("ci.typo", "Typo", "Typo")\n'
+    )
+    with CommandsTester(search_path=other) as second:
+        second.discover()
+        group = second.collected_command_groups()["tools.ci.typo"]
+        assert isinstance(group, CommandGroup)
+        assert group.get_commands() == {}
