@@ -12,7 +12,7 @@ consistency test.
 
 **Tech Stack:** GitHub Actions YAML, Renovate config (JSON5), pytest, PyYAML, `tomllib`.
 
-**Spec:** [`specs/2026-10-31-dogfood-pinned-version-design.md`](./2026-10-31-dogfood-pinned-version-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-dogfood-pinned-version-design.md`](./2026-10-31-dogfood-pinned-version-design.md)
 
 ## Global Constraints
 
