@@ -482,7 +482,7 @@ pub fn build_command(manifest: &Manifest) -> Command {
                             .long("quiet")
                             .short('q')
                             .action(ArgAction::SetTrue)
-                            .help("Never prompt to sync, and pass --quiet to uv (no effect with --no-sync)"),
+                            .help("Print only the trusted root and never prompt; sync only with TOOLR_AUTO_INSTALL_UV=1"),
                     ),
             )
             .subcommand(

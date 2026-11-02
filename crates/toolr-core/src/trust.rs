@@ -27,13 +27,38 @@ pub struct TrustMode {
     pub never_prompt: bool,
 }
 
-/// How [`decide`] found the repository trusted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TrustOutcome {
-    /// A record or `TOOLR_TRUST_ALL=1` already allowed it.
-    AlreadyTrusted,
-    /// The user answered `y` at this run's prompt.
-    Prompted,
+/// Proof that this run found a repository trusted, or just recorded trust in
+/// it. Only this module makes one, so holding it is the only way to skip a
+/// later trust check for the same root.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trusted {
+    root: PathBuf,
+    prompted: bool,
+}
+
+impl Trusted {
+    /// The canonical repository root the proof covers.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Whether the user granted trust at this run's prompt.
+    pub fn prompted(&self) -> bool {
+        self.prompted
+    }
+
+    /// True when this proof covers `root`.
+    pub fn covers(&self, root: &Path) -> bool {
+        self.root == canonical(root)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_tests(root: &Path) -> Self {
+        Self {
+            root: canonical(root),
+            prompted: false,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -122,6 +147,11 @@ impl TrustStore {
     }
 
     pub fn trust(&self, root: &Path) -> Result<TrustRecord> {
+        self.grant(root).map(|(record, _)| record)
+    }
+
+    /// [`Self::trust`], plus the proof that `root` is now trusted.
+    pub fn grant(&self, root: &Path) -> Result<(TrustRecord, Trusted)> {
         let root = canonical(root);
         self.guard(&root)?;
         let record = TrustRecord {
@@ -145,7 +175,13 @@ impl TrustStore {
         }
         let tmp = tmp.into_temp_path();
         fs::rename(&tmp, self.record_path(&root)).context("writing trust record")?;
-        Ok(record)
+        Ok((
+            record,
+            Trusted {
+                root,
+                prompted: false,
+            },
+        ))
     }
 
     /// Returns whether a record existed.
@@ -255,14 +291,18 @@ pub fn decide(
     all_env: bool,
     mode: TrustMode,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
-) -> Result<TrustOutcome, TrustError> {
-    if all_env {
-        return Ok(TrustOutcome::AlreadyTrusted);
-    }
+) -> Result<Trusted, TrustError> {
     let root = canonical(root);
+    let trusted = |prompted| Trusted {
+        root: root.clone(),
+        prompted,
+    };
+    if all_env {
+        return Ok(trusted(false));
+    }
     store.guard(&root)?;
     match store.is_trusted(&root) {
-        Ok(true) => return Ok(TrustOutcome::AlreadyTrusted),
+        Ok(true) => return Ok(trusted(false)),
         Ok(false) => {}
         Err(e) => eprintln!("toolr: warning: could not read the trust store: {e:#}"),
     }
@@ -274,7 +314,7 @@ pub fn decide(
         if let Err(e) = store.trust(&root) {
             let _ = writeln!(out, "warning: could not record trust: {e:#}");
         }
-        return Ok(TrustOutcome::Prompted);
+        return Ok(trusted(true));
     }
     Err(TrustError::Untrusted(root))
 }
@@ -290,7 +330,7 @@ pub fn is_trusted_now(root: &Path) -> bool {
     trust_all_env() || TrustStore::open_default().is_ok_and(|s| s.is_trusted(root).unwrap_or(false))
 }
 
-pub fn require_trust(root: &Path, mode: TrustMode) -> Result<TrustOutcome> {
+pub fn require_trust(root: &Path, mode: TrustMode) -> Result<Trusted> {
     let root = fs::canonicalize(root)
         .with_context(|| format!("resolving repository root {}", root.display()))?;
     let store = TrustStore::open_default()?;
@@ -335,7 +375,7 @@ mod tests {
             &self,
             input: Option<&str>,
             mode: TrustMode,
-        ) -> (Result<TrustOutcome, TrustError>, String) {
+        ) -> (Result<Trusted, TrustError>, String) {
             let store = self.store();
             let mut err = Vec::new();
             let result = match input {
@@ -381,7 +421,8 @@ mod tests {
         let f = Fixture::new();
         let store = f.store();
         let outcome = decide(&f.root(), &store, true, PROMPT, None).unwrap();
-        assert_eq!(outcome, TrustOutcome::AlreadyTrusted);
+        assert!(!outcome.prompted());
+        assert!(outcome.covers(&f.root()));
         assert!(!store.is_trusted(&f.root()).unwrap());
         assert!(store.list().unwrap().is_empty());
     }
@@ -391,7 +432,7 @@ mod tests {
         let f = Fixture::new();
         f.store().trust(&f.root()).unwrap();
         let (r, _) = f.decide(None, PROMPT);
-        assert_eq!(r.unwrap(), TrustOutcome::AlreadyTrusted);
+        assert!(!r.unwrap().prompted());
     }
 
     #[test]
@@ -408,10 +449,23 @@ mod tests {
     fn prompt_yes_records_trust() {
         let f = Fixture::new();
         let (r, err) = f.decide(Some("y\n"), PROMPT);
-        assert_eq!(r.unwrap(), TrustOutcome::Prompted);
+        let proof = r.unwrap();
+        assert!(proof.prompted());
+        assert_eq!(proof.root(), f.root());
         assert!(f.store().is_trusted(&f.root()).unwrap());
         assert!(err.contains("Trust it? [y/N]"));
         assert!(err.contains(&f.root().display().to_string()));
+    }
+
+    #[test]
+    fn grant_proves_only_the_root_it_recorded() {
+        let f = Fixture::new();
+        let other = TempDir::new().unwrap();
+        let (record, proof) = f.store().grant(&f.root()).unwrap();
+        assert_eq!(record.repo_path, f.root());
+        assert!(!proof.prompted());
+        assert!(proof.covers(f.repo.path()));
+        assert!(!proof.covers(other.path()));
     }
 
     #[test]

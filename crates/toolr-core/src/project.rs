@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use crate::cache::meta::Meta;
 use crate::discovery::discover_project_root;
 use crate::manifest_build::rebuild_manifest_full;
-use crate::trust::{TrustMode, require_trust};
+use crate::trust::{TrustMode, Trusted, require_trust};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
     ResolvedVenv, UpgradeMode, VenvLocation, cache_slot_dir, check_freshness, resolve_venv_path,
@@ -29,8 +29,9 @@ pub struct EnsureOpts {
     pub upgrade: UpgradeMode,
     /// How to ask for repository trust when the repo isn't trusted yet.
     pub trust: TrustMode,
-    /// The caller has already established trust in this run, so don't check again.
-    pub trust_checked: bool,
+    /// Proof that this run already established trust, so the check isn't repeated
+    /// for the root it covers.
+    pub trusted: Option<Trusted>,
 }
 
 impl EnsureOpts {
@@ -50,8 +51,8 @@ impl EnsureOpts {
         self.trust = mode;
         self
     }
-    pub fn with_trust_checked(mut self, v: bool) -> Self {
-        self.trust_checked = v;
+    pub fn with_trusted(mut self, proof: Trusted) -> Self {
+        self.trusted = Some(proof);
         self
     }
 }
@@ -68,7 +69,7 @@ pub fn ensure_venv_ready(
     let resolved = resolve_venv_path(&repo_root).context("resolving the tools venv path")?;
     // After the static pyproject read, so a broken one stays a benign
     // `--quiet` exit; before anything repo-controlled runs.
-    if !opts.trust_checked {
+    if !opts.trusted.as_ref().is_some_and(|t| t.covers(&repo_root)) {
         require_trust(&repo_root, opts.trust)?;
     }
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
@@ -137,21 +138,53 @@ pub fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool {
 /// prompt follows the uv install prompt it replaces: `TOOLR_AUTO_INSTALL_UV=1`
 /// answers it, and `never_prompt` or no `prompt_io` (no terminal) declines it.
 pub fn sync_after_trust(
-    repo_root: &Path,
+    trusted: &Trusted,
     quiet: bool,
     never_prompt: bool,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
 ) -> Result<SyncAfterTrust> {
+    let consent = choose_sync(trusted, never_prompt, prompt_io)?;
+    finish_sync(trusted, quiet, consent)
+}
+
+/// [`sync_after_trust`] prompting on the terminal, when stdin is one.
+pub fn sync_after_trust_on_tty(
+    trusted: &Trusted,
+    quiet: bool,
+    never_prompt: bool,
+) -> Result<SyncAfterTrust> {
+    // The stdin lock isn't reentrant, and finding uv may lock stdin again.
+    let consent = {
+        let stdin = std::io::stdin();
+        let mut input = stdin.lock();
+        let mut stderr = std::io::stderr();
+        let prompt_io = stdin.is_terminal().then_some((
+            &mut input as &mut dyn BufRead,
+            &mut stderr as &mut dyn Write,
+        ));
+        choose_sync(trusted, never_prompt, prompt_io)?
+    };
+    finish_sync(trusted, quiet, consent)
+}
+
+/// The answer to the sync prompt: `Err(outcome)` to stop with, or the uv
+/// install consent the sync runs with.
+fn choose_sync(
+    trusted: &Trusted,
+    never_prompt: bool,
+    prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
+) -> Result<std::result::Result<ConsentMode, SyncAfterTrust>> {
+    let repo_root = trusted.root();
     let env = ConsentMode::from_env(never_prompt);
     let can_answer = env.auto_install_env || (!never_prompt && prompt_io.is_some());
     let resolved = match resolve_venv_path(repo_root) {
         Ok(resolved) => resolved,
         // Nothing would be synced, so leave a config error for `venv sync` to report.
-        Err(_) if !can_answer => return Ok(SyncAfterTrust::Declined),
+        Err(_) if !can_answer => return Ok(Err(SyncAfterTrust::Declined)),
         Err(e) => return Err(e).context("resolving the tools venv path"),
     };
     if check_freshness(&resolved, &repo_root.join("tools")) == crate::venv::Freshness::Fresh {
-        return Ok(SyncAfterTrust::NotNeeded);
+        return Ok(Err(SyncAfterTrust::NotNeeded));
     }
     let agreed = env.auto_install_env
         || match prompt_io {
@@ -159,33 +192,28 @@ pub fn sync_after_trust(
             _ => false,
         };
     if !agreed {
-        return Ok(SyncAfterTrust::Declined);
+        return Ok(Err(SyncAfterTrust::Declined));
     }
-    let consent = ConsentMode {
+    Ok(Ok(ConsentMode {
         yes_flag: true,
         ..env
+    }))
+}
+
+fn finish_sync(
+    trusted: &Trusted,
+    quiet: bool,
+    consent: std::result::Result<ConsentMode, SyncAfterTrust>,
+) -> Result<SyncAfterTrust> {
+    let consent = match consent {
+        Ok(consent) => consent,
+        Err(outcome) => return Ok(outcome),
     };
     let opts = EnsureOpts::default()
         .with_quiet(quiet)
-        .with_trust_checked(true);
-    let (resolved, _uv) = ensure_venv_ready(repo_root, consent, opts)?;
+        .with_trusted(trusted.clone());
+    let (resolved, _uv) = ensure_venv_ready(trusted.root(), consent, opts)?;
     Ok(SyncAfterTrust::Synced(resolved))
-}
-
-/// [`sync_after_trust`] prompting on the terminal, when stdin is one.
-pub fn sync_after_trust_on_tty(
-    repo_root: &Path,
-    quiet: bool,
-    never_prompt: bool,
-) -> Result<SyncAfterTrust> {
-    let stdin = std::io::stdin();
-    let mut input = stdin.lock();
-    let mut stderr = std::io::stderr();
-    let prompt_io = stdin.is_terminal().then_some((
-        &mut input as &mut dyn BufRead,
-        &mut stderr as &mut dyn Write,
-    ));
-    sync_after_trust(repo_root, quiet, never_prompt, prompt_io)
 }
 
 /// Resolve the out-of-repo cache directory that holds this repo's
@@ -468,12 +496,13 @@ mod tests {
         input: Option<&str>,
     ) -> (SyncAfterTrust, String) {
         let mut out = Vec::new();
+        let trusted = Trusted::for_tests(repo);
         let result = match input {
             Some(text) => {
                 let mut cursor = std::io::Cursor::new(text.as_bytes().to_vec());
-                sync_after_trust(repo, false, never_prompt, Some((&mut cursor, &mut out)))
+                sync_after_trust(&trusted, false, never_prompt, Some((&mut cursor, &mut out)))
             }
-            None => sync_after_trust(repo, false, never_prompt, None),
+            None => sync_after_trust(&trusted, false, never_prompt, None),
         };
         (result.unwrap(), String::from_utf8(out).unwrap())
     }
@@ -507,10 +536,30 @@ mod tests {
         assert!(matches!(r, SyncAfterTrust::Declined));
         let mut out = Vec::new();
         let mut input = std::io::Cursor::new(b"y\n".to_vec());
+        let trusted = Trusted::for_tests(repo.path());
         let err =
-            sync_after_trust(repo.path(), false, false, Some((&mut input, &mut out))).unwrap_err();
+            sync_after_trust(&trusted, false, false, Some((&mut input, &mut out))).unwrap_err();
         assert!(
             format!("{err:#}").contains("resolving the tools venv path"),
+            "{err:#}"
+        );
+    }
+
+    #[test]
+    fn a_proof_for_another_root_does_not_skip_the_trust_check() {
+        let mut env = EnvGuard::write();
+        env.remove("TOOLR_TRUST_ALL");
+        env.remove("TOOLR_VENV_LOCATION");
+        let state = TempDir::new().unwrap();
+        env.set("XDG_STATE_HOME", state.path());
+        let repo = unsynced_repo();
+        let other = TempDir::new().unwrap();
+        let opts = EnsureOpts::default()
+            .with_trusted(Trusted::for_tests(other.path()))
+            .with_trust(TrustMode { never_prompt: true });
+        let err = ensure_venv_ready(repo.path(), ConsentMode::default(), opts).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("untrusted repository"),
             "{err:#}"
         );
     }

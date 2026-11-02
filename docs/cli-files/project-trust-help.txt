@@ -9,6 +9,6 @@ Options:
       --no-sync
           Only record the trust; don't offer to sync the tools venv
   -q, --quiet
-          Never prompt to sync, and pass --quiet to uv (no effect with --no-sync)
+          Print only the trusted root and never prompt; sync only with TOOLR_AUTO_INSTALL_UV=1
   -h, --help
           Print help

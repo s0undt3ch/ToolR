@@ -17,6 +17,8 @@ const TRUST_PROMPT: &str = "Trust it? [y/N]";
 const SYNC_PROMPT: &str = "Sync it now? [y/N]";
 const UV_PROMPT: &str = "didn't find it on PATH";
 const HINT: &str = "run `toolr project venv sync` when you're ready";
+const UV_INSTALL_FAILED: &str = "HTTP error during uv install";
+const UNREACHABLE_PROXY: &str = "http://127.0.0.1:9";
 const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
 
 /// A repository with a never-synced tools venv (no sync stamp), a stub uv on
@@ -70,6 +72,46 @@ impl Clone {
             .env_remove("TOOLR_AUTO_INSTALL_UV")
             .env_remove("TOOLR_VENV_LOCATION");
         cmd
+    }
+
+    /// Bump `tools/uv.lock` past the sync stamp, as a `git pull` would.
+    fn make_stale(&self) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(self.fx.tools_dir.join("uv.lock"), "version = 1\n# bumped\n").unwrap();
+    }
+
+    /// Leave `bin/python` dangling as `mise prune` does; the stub uv's `sync`
+    /// restores it, as real uv rebuilds such a venv.
+    fn make_broken(&self) {
+        let python = self.fx.venv_dir.join("bin").join("python");
+        let saved = self.fx.root.join("python-before-prune");
+        fs::rename(&python, &saved).unwrap();
+        std::os::unix::fs::symlink(self.fx.root.join("pruned").join("python3.13"), &python)
+            .unwrap();
+        self.fx.write_uv_stub(&format!(
+            "/bin/rm -f {python} && /bin/cp {saved} {python}",
+            python = python.display(),
+            saved = saved.display(),
+        ));
+    }
+
+    /// Run on a pty with no uv anywhere, and any uv download refused at once
+    /// by a proxy on a closed local port.
+    fn run_without_uv(&self, args: &[&str], answers: &str) -> Output {
+        let empty = tempfile::TempDir::new().unwrap();
+        let empty = empty.path().to_str().unwrap().to_owned();
+        self.run_with_tty_env(
+            args,
+            answers,
+            &[
+                ("PATH", &empty),
+                ("HTTPS_PROXY", UNREACHABLE_PROXY),
+                ("https_proxy", UNREACHABLE_PROXY),
+                ("ALL_PROXY", UNREACHABLE_PROXY),
+                ("NO_PROXY", ""),
+                ("no_proxy", ""),
+            ],
+        )
     }
 
     fn is_trusted(&self) -> bool {
@@ -181,21 +223,18 @@ fn trust_no_sync_asks_nothing() {
 
 #[test]
 fn trust_quiet_on_a_terminal_declines_silently() {
-    let c = Clone::new();
     for args in [
         &["project", "trust", "--quiet"][..],
         &["-q", "project", "trust"][..],
     ] {
+        let c = Clone::new();
         let out = c.run_with_tty(args, "y\n");
-        let err = stderr(&out);
-        assert!(out.status.success(), "{args:?}: {err}");
-        assert!(!err.contains(SYNC_PROMPT), "{args:?}: {err}");
+        assert!(out.status.success(), "{args:?}: {}", stderr(&out));
+        assert_eq!(stderr(&out), "", "{args:?}");
+        assert_eq!(stdout(&out), format!("{}\n", c.root()), "{args:?}");
         assert!(!c.fx.uv_ran_sync(), "{args:?}");
         assert!(c.is_trusted());
     }
-    // `--quiet` silences the hint; the root `-q` only stops the prompt.
-    let out = c.run_with_tty(&["project", "trust", "--quiet"], "");
-    assert_eq!(stderr(&out), "");
 }
 
 #[test]
@@ -244,6 +283,22 @@ fn trust_reports_a_failed_sync() {
     assert!(c.is_trusted(), "a failed sync keeps the trust");
 }
 
+#[test]
+fn trust_then_yes_installs_uv_without_its_own_prompt() {
+    let c = Clone::new();
+    // A third line would answer a uv prompt, so its absence is checked, not hung on.
+    let out = c.run_without_uv(&["project", "trust"], "y\nn\n");
+    let err = stderr(&out);
+    assert!(err.contains(SYNC_PROMPT), "{err}");
+    assert!(!err.contains(UV_PROMPT), "asked about uv again:\n{err}");
+    assert!(
+        err.contains(UV_INSTALL_FAILED),
+        "no uv install was attempted:\n{err}"
+    );
+    assert!(!out.status.success());
+    assert!(c.is_trusted());
+}
+
 // --- dispatch --------------------------------------------------------------
 
 #[test]
@@ -264,7 +319,7 @@ fn dispatch_sync_declined_stops_with_hint() {
     let c = Clone::new();
     let out = c.run_with_tty(&["hello", "world"], "y\nn\n");
     let err = stderr(&out);
-    assert!(!out.status.success(), "{err}");
+    assert_eq!(out.status.code(), Some(2), "{err}");
     assert!(err.contains(HINT), "{err}");
     assert!(!c.fx.uv_ran_sync());
     assert!(!c.sentinel.exists(), "the command must not run");
@@ -325,4 +380,70 @@ fn dispatch_without_a_terminal_syncs_nothing() {
     c.toolr().args(["hello", "world"]).assert().failure();
     assert!(!c.fx.uv_ran_sync());
     assert!(!c.sentinel.exists());
+}
+
+#[test]
+fn dispatch_trust_and_sync_install_uv_without_a_third_prompt() {
+    let c = Clone::new();
+    let out = c.run_without_uv(&["hello", "world"], "y\ny\nn\n");
+    let err = stderr(&out);
+    assert!(err.contains(TRUST_PROMPT), "{err}");
+    assert!(err.contains(SYNC_PROMPT), "{err}");
+    assert!(!err.contains(UV_PROMPT), "asked about uv again:\n{err}");
+    assert!(
+        err.contains(UV_INSTALL_FAILED),
+        "no uv install was attempted:\n{err}"
+    );
+    assert!(!out.status.success());
+    assert!(!c.sentinel.exists());
+}
+
+#[test]
+fn dispatch_stale_venv_after_trust_gets_the_sync_prompt() {
+    let c = Clone::fresh();
+    c.make_stale();
+    let out = c.run_with_tty(&["hello", "world"], "y\ny\n");
+    let err = stderr(&out);
+    assert!(out.status.success(), "{err}");
+    assert!(err.contains(SYNC_PROMPT), "{err}");
+    assert!(c.fx.uv_ran_sync());
+    assert!(c.sentinel.exists());
+}
+
+#[test]
+fn dispatch_broken_venv_after_trust_gets_the_sync_prompt() {
+    let c = Clone::fresh();
+    c.make_broken();
+    let out = c.run_with_tty(&["hello", "world"], "y\ny\n");
+    let err = stderr(&out);
+    assert!(out.status.success(), "{err}");
+    assert!(err.contains(SYNC_PROMPT), "{err}");
+    assert!(c.fx.uv_ran_sync());
+    assert!(c.sentinel.exists());
+}
+
+#[test]
+fn dispatch_stale_venv_declined_after_trust_stops() {
+    let c = Clone::fresh();
+    c.make_stale();
+    let out = c.run_with_tty(&["hello", "world"], "y\nn\n");
+    assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+    assert!(stderr(&out).contains(HINT));
+    assert!(!c.fx.uv_ran_sync());
+    assert!(!c.sentinel.exists());
+}
+
+#[test]
+fn already_trusted_stale_venv_resyncs_without_the_sync_prompt() {
+    let c = Clone::fresh();
+    c.toolr()
+        .args(["project", "trust", "--no-sync"])
+        .assert()
+        .success();
+    c.make_stale();
+    let out = c.run_with_tty(&["hello", "world"], "");
+    let err = stderr(&out);
+    assert!(out.status.success(), "{err}");
+    assert!(!err.contains(SYNC_PROMPT), "{err}");
+    assert!(c.fx.uv_ran_sync());
 }

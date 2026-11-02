@@ -49,22 +49,22 @@ fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
 }
 
 /// Trust first, then sync: stdout stays the trusted root alone, and a declined
-/// sync keeps the trust and exits 0.
+/// sync keeps the trust and exits 0. The root `-q` means the same as `--quiet`.
 fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
-    let quiet = matches.get_flag("quiet");
+    let quiet = matches.get_flag("quiet") || root_quiet;
     let root = root_from_path_arg(matches)?;
     let store = TrustStore::open_default()?;
-    let record = store.trust(&root)?;
+    let (record, trusted) = store.grant(&root)?;
     println!("{}", shown(&record.repo_path));
     if matches.get_flag("no-sync") {
         return Ok(ExitCode::SUCCESS);
     }
     use toolr_core::project::{SYNC_LATER_HINT, SyncAfterTrust, sync_after_trust_on_tty};
-    let outcome = sync_after_trust_on_tty(&root, quiet, quiet || root_quiet)
+    let outcome = sync_after_trust_on_tty(&trusted, quiet, quiet)
         .context("the repository is trusted, but syncing its tools venv failed")?;
     match outcome {
         SyncAfterTrust::Synced(resolved) if !quiet => {
-            eprintln!("toolr: synced venv at {}", resolved.venv_dir.display());
+            eprintln!("toolr: synced venv at {}", shown(&resolved.venv_dir));
         }
         SyncAfterTrust::Declined if !quiet => eprintln!("toolr: {SYNC_LATER_HINT}"),
         _ => {}
