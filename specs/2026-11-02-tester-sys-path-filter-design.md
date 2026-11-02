@@ -53,15 +53,19 @@ only:
   namespace package.
 - `__enter__` inserts the finder at `sys.meta_path[0]`; `__exit__` removes that instance, so nested testers unwind in
   order.
+- The private importlib dependency (rebuilding a `_NamespacePath` with a custom path finder) lives in one helper,
+  `_fixture_only_namespace_path`, with a comment naming the CPython versions checked (3.11 to 3.15) and the tests that
+  guard it.
 - `pkgutil.extend_path` scans `sys.path` directly and ignores `sys.meta_path`, so a fixture `tools/__init__.py` that
   calls it still gets the host's `tools/` on its `__path__`. `discover()` therefore walks only directories that resolve
   under `search_path / "tools"`.
 - `__exit__` removes the finder first and restores the cwd last, so a deleted original cwd can't leave the finder
   installed for the rest of the process.
 
-`_isolated_sys_path` keeps every entry: it drops only `""` (the cwd is `search_path` while the tester is active) and
-`search_path`, which it puts first. The stdlib, site-packages, overlays, `.pth` additions, editable installs and
-`PYTHONPATH` all stay importable. Name checks on `site-packages` are gone altogether.
+`_isolated_sys_path`, renamed `_tester_sys_path` since it no longer isolates anything, keeps every entry: it drops
+only `""` (the cwd is `search_path` while the tester is active) and `search_path`, which it puts first. The stdlib,
+site-packages, overlays, `.pth` additions, editable installs and `PYTHONPATH` all stay importable. Name checks on
+`site-packages` are gone altogether.
 
 ## Rejected alternatives
 

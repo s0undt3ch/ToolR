@@ -45,6 +45,16 @@ All tests live in `tests/registry/test_integration.py`, which already has the `t
       raises `FileNotFoundError` but the finder is gone and `sys.path` restored. Restore the cwd last.
 - [ ] `test_find_spec_for_tools_raises_without_a_fixture_tools` pins the documented `ModuleNotFoundError`.
 
+## Task 2c: review round 3 (maintainability, no behaviour change)
+
+- [ ] Rename `_isolated_sys_path` to `_tester_sys_path`, and move the `_NamespacePath` rebuild and its path finder into
+      `_fixture_only_namespace_path`.
+- [ ] Add a `restore_import_state` fixture for tests that enter a tester by hand or prepend to `sys.path` inside one.
+- [ ] Drop `test_discover_keeps_sys_path_entries_without_tools` (the overlay test covers it) and keep only the
+      reported `windows-site-packages` name.
+- [ ] Docs: move the walk-scope sentence to the `.discover()` paragraph and note that assertion rewriting skips the
+      top-level `tools/__init__.py`.
+
 ## Task 3: docs and release note
 
 - [ ] `docs/writing-commands/testing.md`: describe the finder instead of the `sys.path` filtering.
