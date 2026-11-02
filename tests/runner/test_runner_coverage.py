@@ -12,6 +12,7 @@ swallows-and-formats-stderr behaviour for unhandled exit codes.
 
 from __future__ import annotations
 
+import builtins
 import contextvars
 import datetime as dt
 import enum
@@ -1074,6 +1075,31 @@ def test_run_import_traceback_omits_importlib_frames(
     assert frames[0].endswith("in _import_target")
     assert 'demo.py", line 1' in frames[1]
     assert '_helpers.py", line 1' in frames[2]
+
+
+def test_import_target_falls_back_when_import_hook_skips_registration(
+    importable_module: Callable[[str, str], str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A replaced ``builtins.__import__`` that doesn't fill ``sys.modules`` still resolves the target."""
+    module = importable_module(
+        "f28_unregistered_mod",
+        """
+        def hello(ctx) -> None:
+            pass
+        """,
+    )
+    real_import = builtins.__import__
+
+    def skipping_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == module:
+            return ModuleType(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", skipping_import)
+    target = _import_target(_runner_spec(module=module, function="hello"))
+    assert target.__module__ == module
+    assert module in sys.modules
+    del sys.modules[module]
 
 
 def test_run_omits_sync_hint_for_missing_tools_submodule(
