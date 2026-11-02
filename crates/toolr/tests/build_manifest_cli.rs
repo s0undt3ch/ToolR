@@ -299,7 +299,7 @@ fn symlinked_module_in_package_is_rejected() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "symlinked modules are not supported (1):\n  - mypkg/linked.py\nPut the file itself under mypkg/."
+            "symlinked modules are not supported (1):\n  - mypkg/linked.py\nPut the file itself under mypkg/, or share it as a Python package."
         ),
         "{stderr}"
     );
@@ -331,7 +331,7 @@ fn symlinked_module_in_relative_source_dir_names_the_package() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains(
-            "symlinked modules are not supported (1):\n  - mypkg/linked.py\nPut the file itself under mypkg/."
+            "symlinked modules are not supported (1):\n  - mypkg/linked.py\nPut the file itself under mypkg/, or share it as a Python package."
         ),
         "{stderr}"
     );

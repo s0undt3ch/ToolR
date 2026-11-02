@@ -64,7 +64,7 @@ pub(crate) fn list_python_files(tools_dir: &Path) -> Result<Vec<PathBuf>, Symlin
 /// living under `tools/` itself, not modules shared into it by links.
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "symlinked modules are not supported ({count}):\n{details}\nPut the file itself under {root}/.",
+    "symlinked modules are not supported ({count}):\n{details}\nPut the file itself under {root}/, or share it as a Python package.",
     count = .paths.len(),
     details = .paths.iter().map(|p| format!("  - {p}")).collect::<Vec<_>>().join("\n"),
 )]
@@ -312,7 +312,7 @@ mod tests {
         let err = list_python_files(&tools).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "symlinked modules are not supported (3):\n  - tools/gone.py\n  - tools/linked.py\n  - tools/sub/other.py\nPut the file itself under tools/."
+            "symlinked modules are not supported (3):\n  - tools/gone.py\n  - tools/linked.py\n  - tools/sub/other.py\nPut the file itself under tools/, or share it as a Python package."
         );
         let err = hash_tools_dir(&tools).unwrap_err();
         assert!(

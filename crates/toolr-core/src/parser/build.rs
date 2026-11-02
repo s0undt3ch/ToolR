@@ -854,7 +854,7 @@ def hello(ctx):
         assert!(matches!(err, BuildError::SymlinkedModules(_)), "{err:?}");
         assert_eq!(
             err.to_string(),
-            "symlinked modules are not supported (1):\n  - my_plugin/linked.py\nPut the file itself under my_plugin/."
+            "symlinked modules are not supported (1):\n  - my_plugin/linked.py\nPut the file itself under my_plugin/, or share it as a Python package."
         );
     }
 

@@ -248,7 +248,7 @@ def test_discover_rejects_a_symlinked_module(tmp_path: Path, tools_repo: ToolsRe
     assert str(excinfo.value) == (
         "symlinked modules are not supported (1):\n"
         "  - tools/linked.py\n"
-        "Put the file itself under tools/."
+        "Put the file itself under tools/, or share it as a Python package."
     )
     assert imported == set()
 
@@ -274,7 +274,7 @@ def test_discover_reports_every_symlinked_module(tmp_path: Path, tools_repo: Too
         "  - tools/gone.py\n"
         "  - tools/my-dir/l.py\n"
         "  - tools/sub/other.py\n"
-        "Put the file itself under tools/."
+        "Put the file itself under tools/, or share it as a Python package."
     )
 
 

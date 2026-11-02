@@ -54,5 +54,5 @@ def test_binary_and_discovery_report_the_same_links(
         "symlinked modules are not supported (2):\n"
         "  - tools/linked.py\n"
         "  - tools/sub/other.py\n"
-        "Put the file itself under tools/."
+        "Put the file itself under tools/, or share it as a Python package."
     )

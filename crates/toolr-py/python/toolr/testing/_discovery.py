@@ -86,7 +86,7 @@ def _reject_symlinked_modules(tools_dir: Path) -> None:
     root = _escape_control_chars(tools_dir.name)
     msg = (
         f"symlinked modules are not supported ({len(paths)}):\n{details}\n"
-        f"Put the file itself under {root}/."
+        f"Put the file itself under {root}/, or share it as a Python package."
     )
     raise ToolrError(msg)
 

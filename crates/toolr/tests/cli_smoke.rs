@@ -520,7 +520,7 @@ fn symlinked_tools_module_is_rejected() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             stderr.contains(
-                "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/."
+                "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/, or share it as a Python package."
             ),
             "{args:?}: {stderr}"
         );
@@ -528,7 +528,7 @@ fn symlinked_tools_module_is_rejected() {
 }
 
 #[cfg(unix)]
-const SYMLINK_ERROR: &str = "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/.";
+const SYMLINK_ERROR: &str = "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/, or share it as a Python package.";
 
 /// The first run after upgrading toolr sees a cache stamped by the old
 /// version, so the rebuild finds the link before any hash does. It must
