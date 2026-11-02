@@ -60,10 +60,44 @@ cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH.
     Write-Warning "skipping attestation verification ('gh' CLI not installed) -- the archive is NOT supply-chain verified"
     return
   }
+  # gh before 2.56 can't load GitHub's current Sigstore trusted root, so
+  # an old gh fails in `auto` too rather than skipping silently.
+  $ghVersion = (& gh --version | Select-Object -First 1) -as [string]
+  if (-not ($ghVersion -match '^gh version (\d+)\.(\d+)') -or
+      [int]$matches[1] -lt 2 -or ([int]$matches[1] -eq 2 -and [int]$matches[2] -lt 56)) {
+    throw @"
+gh >= 2.56 is required to verify attestations (found: $ghVersion)
+  upgrade 'gh', or re-run with -VerifyAttestation skip to install WITHOUT supply-chain verification.
+"@
+  }
+  # Same rules as action.yml's verify-attestation step: ci.yml shares the signer, so only
+  # buildConfigURI tells a release from a CI build; the subject binds this version and triple.
+  # The filter stays on one line with no quotes for Windows PowerShell's native argument passing.
+  $signerWorkflow = "https://github.com/$Repo/.github/workflows/_build-binary-archive.yml@refs/heads/main"
+  $releaseWorkflow = "https://github.com/$Repo/.github/workflows/release.yml@refs/heads/main"
+  $archiveName = Split-Path -Leaf $Path
+  $jqFilter = '[.[].verificationResult | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW and any(.statement.subject[]; .name == env.ARCHIVE_NAME))] | length'
+  $savedEnv = @{ RELEASE_WORKFLOW = $env:RELEASE_WORKFLOW; ARCHIVE_NAME = $env:ARCHIVE_NAME }
   Write-Host "verifying SLSA build provenance via 'gh attestation verify'"
-  & gh attestation verify $Path --repo $Repo
-  if ($LASTEXITCODE -ne 0) {
+  try {
+    $env:RELEASE_WORKFLOW = $releaseWorkflow
+    $env:ARCHIVE_NAME = $archiveName
+    $count = & gh attestation verify $Path --repo $Repo --cert-identity $signerWorkflow `
+      --deny-self-hosted-runners --format json --jq $jqFilter
+    $ghExit = $LASTEXITCODE
+  } finally {
+    $env:RELEASE_WORKFLOW = $savedEnv.RELEASE_WORKFLOW
+    $env:ARCHIVE_NAME = $savedEnv.ARCHIVE_NAME
+  }
+  if ($ghExit -ne 0) {
     throw "attestation verification failed for $Path"
+  }
+  $parsed = 0
+  if (-not ([int]::TryParse((($count | Out-String).Trim()), [ref]$parsed)) -or $parsed -lt 1) {
+    throw @"
+$archiveName has a valid $Repo attestation but was not built by the ToolR release workflow on main
+  install a published release; -VerifyAttestation skip turns off this check entirely.
+"@
   }
 }
 
