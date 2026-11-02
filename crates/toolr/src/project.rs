@@ -53,8 +53,7 @@ fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
 fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
     let quiet = matches.get_flag("quiet") || root_quiet;
     let root = root_from_path_arg(matches)?;
-    let store = TrustStore::open_default()?;
-    let (record, trusted) = store.grant(&root)?;
+    let (record, trusted) = toolr_core::trust::grant_trust(&root)?;
     println!("{}", shown(&record.repo_path));
     if matches.get_flag("no-sync") {
         return Ok(ExitCode::SUCCESS);

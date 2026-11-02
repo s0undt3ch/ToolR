@@ -150,8 +150,9 @@ impl TrustStore {
         self.grant(root).map(|(record, _)| record)
     }
 
-    /// [`Self::trust`], plus the proof that `root` is now trusted.
-    pub fn grant(&self, root: &Path) -> Result<(TrustRecord, Trusted)> {
+    /// [`Self::trust`], plus the proof that `root` is now trusted. Private, so
+    /// proofs only come from the default store (see [`grant_trust`]).
+    fn grant(&self, root: &Path) -> Result<(TrustRecord, Trusted)> {
         let root = canonical(root);
         self.guard(&root)?;
         let record = TrustRecord {
@@ -285,7 +286,9 @@ fn confirm(input: &mut dyn BufRead, out: &mut dyn Write, root: &Path) -> bool {
 }
 
 /// The decision flow: env override, existing record, prompt, refuse.
-pub fn decide(
+/// Private, so the env override and the store behind a proof are always the
+/// real ones (see [`require_trust`]).
+fn decide(
     root: &Path,
     store: &TrustStore,
     all_env: bool,
@@ -328,6 +331,11 @@ pub fn trust_all_env() -> bool {
 /// to leave files behind. Never prompts, writes or prints; any error is `false`.
 pub fn is_trusted_now(root: &Path) -> bool {
     trust_all_env() || TrustStore::open_default().is_ok_and(|s| s.is_trusted(root).unwrap_or(false))
+}
+
+/// Record trust in `root` in the default store, and prove it.
+pub fn grant_trust(root: &Path) -> Result<(TrustRecord, Trusted)> {
+    TrustStore::open_default()?.grant(root)
 }
 
 pub fn require_trust(root: &Path, mode: TrustMode) -> Result<Trusted> {
