@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::{self, ErrorKind, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -18,9 +19,10 @@ use std::os::windows::io::{BorrowedHandle, RawHandle};
 
 mod tree;
 
-/// How long the I/O threads get to finish once the tree is killed; only an escaped process holds
-/// them past EOF.
-const KILL_GRACE: Duration = Duration::from_secs(2);
+/// How long the I/O threads get to finish once the tree is killed. Only an escaped process holds
+/// them past EOF, and a detached reader lets go of the pipe at its next read, so this only buys
+/// time to flush what the dead tree already wrote.
+const KILL_GRACE: Duration = Duration::from_millis(500);
 
 // Custom error types
 #[derive(Debug)]
@@ -230,25 +232,61 @@ fn own_sink(sink: Option<&Sink>) -> io::Result<Option<File>> {
     sink.map(|sink| owned(sink).map(File::from)).transpose()
 }
 
-/// Copy `pipe` into each sink until EOF, stamping `last_output` on every read. A failed write
-/// stops the copy, as before.
+/// State the reader threads share with the call.
+struct ReaderState {
+    /// When a reader last read or delivered output.
+    last_output: Mutex<Instant>,
+    /// Readers busy writing to a sink: a slow sink isn't the child running late.
+    writing: AtomicUsize,
+    /// Set when the call gives up on the readers; each stops at its next read.
+    detached: AtomicBool,
+}
+
+impl ReaderState {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            last_output: Mutex::new(Instant::now()),
+            writing: AtomicUsize::new(0),
+            detached: AtomicBool::new(false),
+        })
+    }
+
+    fn stamp(&self) {
+        *self.last_output.lock().unwrap() = Instant::now();
+    }
+
+    fn quiet_for(&self) -> Duration {
+        self.last_output.lock().unwrap().elapsed()
+    }
+
+    fn idle(&self) -> bool {
+        self.writing.load(Ordering::SeqCst) == 0
+    }
+}
+
+/// Copy `pipe` into each sink until EOF, stamping the output clock after each read and write. A
+/// failed write stops the copy, as before. A detached reader stops at its next read and drops the
+/// pipe, so a writer that escaped the kill gets EPIPE rather than feeding it forever.
 fn spawn_reader<R: Read + Send + 'static>(
     mut pipe: R,
     sinks: [Option<File>; 2],
-    last_output: Arc<Mutex<Instant>>,
+    state: Arc<ReaderState>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
         let mut sinks: Vec<File> = sinks.into_iter().flatten().collect();
         let mut buffer = [0; 8192];
         while let Ok(n @ 1..) = pipe.read(&mut buffer) {
-            if let Ok(mut last) = last_output.lock() {
-                *last = Instant::now();
-            }
-            let chunk = &buffer[..n];
-            if sinks
-                .iter_mut()
-                .any(|sink| sink.write_all(chunk).and_then(|()| sink.flush()).is_err())
-            {
+            state.writing.fetch_add(1, Ordering::SeqCst);
+            state.stamp();
+            let failed = state.detached.load(Ordering::SeqCst)
+                || sinks.iter_mut().any(|sink| {
+                    sink.write_all(&buffer[..n])
+                        .and_then(|()| sink.flush())
+                        .is_err()
+                });
+            state.stamp();
+            state.writing.fetch_sub(1, Ordering::SeqCst);
+            if failed {
                 break;
             }
         }
@@ -261,11 +299,12 @@ struct Timeouts {
 }
 
 impl Timeouts {
-    /// The error for whichever limit has run out, if any.
+    /// The error for whichever limit has run out, if any. Silence only counts while no reader is
+    /// stuck on a slow sink.
     fn expired(
         &self,
         start: Instant,
-        last_output: &Mutex<Instant>,
+        readers: &ReaderState,
     ) -> Option<Box<dyn Error + Send + Sync>> {
         if let Some(timeout) = self.total
             && start.elapsed() > Duration::from_secs_f64(timeout)
@@ -275,7 +314,8 @@ impl Timeouts {
             ))));
         }
         if let Some(timeout) = self.no_output
-            && last_output.lock().unwrap().elapsed() > Duration::from_secs_f64(timeout)
+            && readers.idle()
+            && readers.quiet_for() > Duration::from_secs_f64(timeout)
         {
             return Some(Box::new(CommandNoOutputTimeoutError::new(format!(
                 "Command timed out due to no output for {timeout:.2} seconds"
@@ -376,18 +416,17 @@ pub fn run_command_internal(
     // stdout pipe before reading stdin would otherwise deadlock us.
     let stdin_payload = child.stdin.take().zip(config.input.take());
 
-    // Track last output time for no_output_timeout_secs
-    let last_output = Arc::new(Mutex::new(Instant::now()));
+    let readers = ReaderState::new();
 
     // `None` in interactive mode, where stdio was inherited above rather than piped.
     let stdout_thread = child
         .stdout
         .take()
-        .map(|pipe| spawn_reader(pipe, stdout_sinks, Arc::clone(&last_output)));
+        .map(|pipe| spawn_reader(pipe, stdout_sinks, Arc::clone(&readers)));
     let stderr_thread = child
         .stderr
         .take()
-        .map(|pipe| spawn_reader(pipe, stderr_sinks, Arc::clone(&last_output)));
+        .map(|pipe| spawn_reader(pipe, stderr_sinks, Arc::clone(&readers)));
 
     // Spawned after the readers. On timeout the kill closes the pipe and the
     // thread ends on its own, or is detached after `KILL_GRACE`.
@@ -409,12 +448,13 @@ pub fn run_command_internal(
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => {
-                if let Some(err) = timeouts.expired(start_time, &last_output) {
+                if let Some(err) = timeouts.expired(start_time, &readers) {
                     tree::kill_tree(&mut child);
                     let killed_at = Instant::now();
                     drain_threads(&all_finished, || {
                         (killed_at.elapsed() > KILL_GRACE).then_some(())
                     });
+                    readers.detached.store(true, Ordering::SeqCst);
                     return Err(err);
                 }
                 thread::sleep(Duration::from_millis(10));
@@ -429,7 +469,15 @@ pub fn run_command_internal(
 
     // The child has exited, but something it started may still hold the pipes: the
     // timeouts cover the whole call, so they keep running until the threads finish.
-    if let Some(err) = drain_threads(&all_finished, || timeouts.expired(start_time, &last_output)) {
+    // A reader blocked on a slow sink is still delivering the child's output, not waiting on it.
+    let waiting_on_holder = || {
+        readers
+            .idle()
+            .then(|| timeouts.expired(start_time, &readers))
+            .flatten()
+    };
+    if let Some(err) = drain_threads(&all_finished, waiting_on_holder) {
+        readers.detached.store(true, Ordering::SeqCst);
         return Err(err);
     }
 

@@ -314,6 +314,29 @@ def test_timeout_holds_when_background_process_keeps_pipe_open(kill_leftovers):
     assert time.time() - start < 20
 
 
+def _running(pattern: str) -> bool:
+    proc = subprocess.run(["pgrep", "-f", pattern], check=False, capture_output=True)  # noqa: S603, S607
+    return proc.returncode == 0
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")
+def test_timeout_releases_the_pipe_of_an_escaped_writer(kill_leftovers):
+    # The subshell exits at once, so the writer escapes the kill. Once `run` gives up on
+    # the reader, the reader must drop the pipe and the writer's next `echo` fail.
+    marker = "while echo tick-645"
+    kill_leftovers(marker)
+    with pytest.raises(CommandTimeoutError):
+        run(
+            ["sh", "-c", f"(sh -c '{marker}; do sleep 0.1; done' &); sleep 61"],
+            timeout_secs=1,
+            capture_output=True,
+        )
+    deadline = time.time() + 10
+    while _running(marker) and time.time() < deadline:
+        time.sleep(0.1)
+    assert not _running(marker)
+
+
 @pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")
 def test_timeout_never_writes_into_a_reused_fd():
     # After the timeout, `run` closes its capture files; the background `echo` must not

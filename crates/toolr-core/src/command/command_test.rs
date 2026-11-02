@@ -1127,34 +1127,107 @@ mod test_suite {
             Ok(())
         }
 
-        /// A process that left the tree before the timeout escapes the walk and
-        /// keeps the pipes open: the call still returns once the grace runs out.
+        /// A writer that left the tree before the timeout escapes the walk. The call
+        /// returns once the grace runs out, and the detached reader then lets go of the
+        /// pipe, so the writer gets EPIPE instead of feeding a closed capture file forever.
         #[cfg(unix)]
         #[test]
         fn timeout_returns_when_an_escaped_process_holds_the_pipe() -> Result<()> {
-            // The subshell exits at once, so `sleep 30` is reparented before the timeout.
+            // The subshell exits at once, so the writer is reparented before the timeout.
             let (mut config, mut stdout_file, _stderr) = capturing_config(vec![
                 "sh".into(),
                 "-c".into(),
-                "(sleep 30 & echo $!); sleep 60".into(),
+                "(sh -c 'echo $$; while echo tick; do sleep 0.1; done' &); sleep 60".into(),
             ]);
             config.timeout_secs = Some(2.0);
 
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND)?;
             let elapsed = start.elapsed();
-            let _guard = KillOnDrop(read_pid(&mut stdout_file).into_iter().collect());
+            let writer = read_pid(&mut stdout_file);
+            let _guard = KillOnDrop(writer.into_iter().collect());
             assert_timeout_error(result, "timed out after");
             assert!(
                 elapsed < Duration::from_secs(20),
                 "the call waited {elapsed:?} for the escaped process"
             );
-            // Timeout plus `KILL_GRACE`: the drain waited out the grace, then detached.
+            // The drain waited out the grace, then detached.
+            let floor = Duration::from_secs(2) + crate::command::KILL_GRACE;
+            assert!(elapsed >= floor, "returned after {elapsed:?}");
+            let writer = writer.ok_or_else(|| anyhow!("the writer never printed its pid"))?;
             assert!(
-                elapsed >= Duration::from_secs(4),
-                "returned after {elapsed:?}"
+                wait_until_dead(writer, DEATH_WAIT),
+                "writer {writer} still running: the detached reader kept the pipe open"
+            );
+            let size = stdout_file.as_file().metadata()?.len();
+            thread::sleep(Duration::from_millis(500));
+            assert_eq!(
+                stdout_file.as_file().metadata()?.len(),
+                size,
+                "capture still growing"
             );
             Ok(())
+        }
+
+        /// A pipe whose buffer is already full, so the next write to it blocks until
+        /// the returned drainer reads `expected` bytes after `delay`.
+        #[cfg(unix)]
+        fn full_pipe(
+            delay: Duration,
+            expected: usize,
+        ) -> Result<(i32, thread::JoinHandle<Vec<u8>>)> {
+            let (read_fd, write_fd) = create_pipe()?;
+            let mut filler = 0;
+            unsafe {
+                let flags = libc::fcntl(write_fd, libc::F_GETFL);
+                libc::fcntl(write_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                while libc::write(write_fd, [b'f'; 1024].as_ptr().cast(), 1024) > 0 {
+                    filler += 1024;
+                }
+                libc::fcntl(write_fd, libc::F_SETFL, flags);
+            }
+            let drainer = thread::spawn(move || {
+                thread::sleep(delay);
+                let mut reader =
+                    unsafe { <File as std::os::unix::io::FromRawFd>::from_raw_fd(read_fd) };
+                let mut data = vec![0; filler + expected];
+                let _ = reader.read_exact(&mut data);
+                data.split_off(filler)
+            });
+            Ok((write_fd, drainer))
+        }
+
+        /// The child finishes in time, but the sink it streams to is slow: that is not a
+        /// timeout, and every byte must arrive.
+        #[cfg(unix)]
+        fn slow_sink_is_not_a_timeout(timeouts: (Option<f64>, Option<f64>)) -> Result<()> {
+            const PAYLOAD: usize = 8000;
+            let (sink, drainer) = full_pipe(Duration::from_secs(3), PAYLOAD)?;
+            let config = CommandConfig {
+                args: vec!["sh".into(), "-c".into(), format!("printf '%0{PAYLOAD}d' 0")],
+                sys_stdout_fd: Some(sink),
+                timeout_secs: timeouts.0,
+                no_output_timeout_secs: timeouts.1,
+                ..Default::default()
+            };
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            unsafe { libc::close(sink) };
+            assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+            let delivered = drainer.join().expect("drainer");
+            assert_eq!(delivered, vec![b'0'; PAYLOAD]);
+            Ok(())
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn slow_sink_is_not_a_timeout_secs_timeout() -> Result<()> {
+            slow_sink_is_not_a_timeout((Some(1.0), None))
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn slow_sink_is_not_a_no_output_timeout() -> Result<()> {
+            slow_sink_is_not_a_timeout((None, Some(1.0)))
         }
 
         /// Without a timeout, a background writer is still waited for, as before.
