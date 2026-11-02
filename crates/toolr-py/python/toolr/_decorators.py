@@ -220,18 +220,17 @@ def _get_pending_command_storage() -> list[tuple[str, str, Callable[..., Any]]]:
     Each entry is ``(group, command name, function)``, with ``group`` as
     written in ``group=``, in declaration order. ``command_group()`` takes
     its own entries when it creates the group, so the import order of
-    ``tools/`` modules doesn't matter. Same singleton pattern as
-    :func:`_get_command_group_storage`.
+    ``tools/`` modules doesn't matter.
+
+    Only ``CommandsTester`` keeps entries: it patches this function to
+    return its own list. Nothing else reads them, so by default each call
+    returns a new list and the entry is dropped, instead of sitting in
+    process-wide state for a later ``command_group()`` to pick up.
 
     Returns:
         The pending ``(group, name, func)`` entries
     """
-    try:
-        pending = _get_pending_command_storage.__pending_commands__  # type: ignore[attr-defined]
-    except AttributeError:
-        pending_commands: list[tuple[str, str, Callable[..., Any]]] = []
-        pending = _get_pending_command_storage.__pending_commands__ = pending_commands  # type: ignore[attr-defined]
-    return pending
+    return []
 
 
 @overload

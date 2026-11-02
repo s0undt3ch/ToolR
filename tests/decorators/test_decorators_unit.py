@@ -28,6 +28,7 @@ import pytest
 
 from toolr._decorators import CommandGroup
 from toolr._decorators import _get_command_group_storage
+from toolr._decorators import _get_pending_command_storage
 from toolr._decorators import command
 from toolr._decorators import command_group
 from toolr._exc import ToolrDeprecationWarning
@@ -228,6 +229,17 @@ def test_command_parameterised_form_with_name_keyword():
         """Do it."""
 
     assert decorator(f) is f
+
+
+def test_command_outside_commands_tester_keeps_no_pending_entry():
+    # Only `CommandsTester` keeps commands whose group isn't declared yet.
+    # Outside it, a later `command_group()` must not pick them up.
+    @command(group="later")
+    def f(ctx) -> None:
+        """Do it."""
+
+    assert _get_pending_command_storage() == []
+    assert command_group("later", description="Later").get_commands() == {}
 
 
 def test_command_rejects_positional_and_name_keyword():
