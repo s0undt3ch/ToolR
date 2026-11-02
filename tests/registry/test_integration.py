@@ -798,6 +798,31 @@ def test_unknown_group_error_follows_file_order(tools_repo: ToolsRepo) -> None:
     )
 
 
+def test_unknown_group_error_escapes_invisible_characters(tools_repo: ToolsRepo) -> None:
+    """A tab or a zero-width space in `group=` is shown as `\\u{..}`, as the manifest build does."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                '@command(group="ci\\tx")\n'
+                "def tabbed(ctx):\n"
+                '    """Tab."""\n'
+                '@command(group="c\\u200bi")\n'
+                "def zero_width(ctx):\n"
+                '    """Zero width."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (2):\n"
+        "  - tools.cmds::tabbed: references group `ci\\u{9}x` which has no "
+        "`command_group(...)` declaration. Did you mean `ci`?\n"
+        "  - tools.cmds::zero-width: references group `c\\u{200b}i` which has no "
+        "`command_group(...)` declaration. Did you mean `ci`?"
+    )
+
+
 def test_unknown_group_error_for_an_empty_group(tools_repo: ToolsRepo) -> None:
     """`group=""` gets the manifest build's missing-kwarg message."""
     repo = tools_repo(

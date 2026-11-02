@@ -45,6 +45,16 @@ def named(ctx):
 @command
 def bare_orphan(ctx):
     """No group, bare form."""
+
+
+@command(group="ci\\tx")
+def tabbed(ctx):
+    """Tab in the group."""
+
+
+@command(group="c\\u200bi")
+def zero_width(ctx):
+    """Zero-width space in the group."""
 '''
 # Imports `z_cmds` first, so import order and file order disagree.
 FIRST_MODULE = '''
