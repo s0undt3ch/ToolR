@@ -1,5 +1,7 @@
 //! Kill a timed-out child and everything it started, found by ppid while the child is unreaped.
 //! No process group: that would cost the child Ctrl-C and stop it on terminal reads.
+//! Both platforms guard against pid reuse. Unix re-reads each ppid just before stopping the
+//! process; Windows can't stop processes, so it vets each edge by creation time instead.
 
 use std::process::Child;
 
@@ -104,10 +106,36 @@ fn process_table() -> Vec<(u32, u32)> {
         .collect()
 }
 
+/// Stopped processes can't fork, so each pass only finds what forked while the previous one ran.
+/// Five covers any realistic fork chain; a process that slips past them is left running.
+#[cfg(unix)]
+const MAX_PASSES: usize = 5;
+
 #[cfg(unix)]
 fn signal(pid: u32, sig: libc::c_int) {
     unsafe {
         libc::kill(pid as libc::pid_t, sig);
+    }
+}
+
+/// Kill `pid` outright; errors (already gone, no access) are ignored.
+#[cfg(unix)]
+pub(crate) fn terminate(pid: u32) {
+    signal(pid, libc::SIGKILL);
+}
+
+#[cfg(windows)]
+pub(crate) fn terminate(pid: u32) {
+    use winapi::um::handleapi::CloseHandle;
+    use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
+    use winapi::um::winnt::PROCESS_TERMINATE;
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if !handle.is_null() {
+            TerminateProcess(handle, 1);
+            CloseHandle(handle);
+        }
     }
 }
 
@@ -117,10 +145,7 @@ pub(crate) fn kill_tree(child: &mut Child) {
     let root = child.id();
     signal(root, libc::SIGSTOP);
     let mut tree: Vec<u32> = Vec::new();
-    // Re-walk until a pass finds nothing new: a process may fork before it's stopped.
-    for _ in 0..5 {
-        // The ppid is read again right before the stop, so a pid reused since the snapshot is
-        // left alone.
+    for _ in 0..MAX_PASSES {
         let new: Vec<u32> = descendants(root, &process_table(), |_, _| true)
             .into_iter()
             .filter(|&(pid, parent)| !tree.contains(&pid) && parent_of(pid) == Some(parent))
@@ -132,7 +157,7 @@ pub(crate) fn kill_tree(child: &mut Child) {
         }
         tree.extend(new);
     }
-    tree.iter().for_each(|&pid| signal(pid, libc::SIGKILL));
+    tree.into_iter().for_each(terminate);
     let _ = child.kill();
     let _ = child.wait();
 }
@@ -194,24 +219,12 @@ fn not_older_than_parent(created: impl Fn(u32) -> Option<u64>) -> impl Fn(u32, u
 /// No `SIGSTOP` on Windows, so a process started mid-walk can escape; fine for a timeout path.
 #[cfg(windows)]
 pub(crate) fn kill_tree(child: &mut Child) {
-    use winapi::um::handleapi::CloseHandle;
-    use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
-    use winapi::um::winnt::PROCESS_TERMINATE;
-
     let edges = descendants(
         child.id(),
         &process_table(),
         not_older_than_parent(creation_time),
     );
-    for (pid, _) in edges {
-        unsafe {
-            let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
-            if !handle.is_null() {
-                TerminateProcess(handle, 1);
-                CloseHandle(handle);
-            }
-        }
-    }
+    edges.into_iter().for_each(|(pid, _)| terminate(pid));
     let _ = child.kill();
     let _ = child.wait();
 }

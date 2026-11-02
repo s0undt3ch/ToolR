@@ -66,7 +66,7 @@ zip = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
 # `command` walks and kills the child's process tree with it.
-winapi = { version = "0.3", features = ["handleapi", "processthreadsapi", "tlhelp32", "winnt", "minwinbase"] }
+winapi = { version = "0.3", features = ["handleapi", "processthreadsapi", "tlhelp32", "winnt"] }
 
 [dev-dependencies]
 tokio.workspace = true
@@ -75,4 +75,5 @@ anyhow.workspace = true
 assert_cmd.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies]
-winapi = { version = "0.3", features = ["handleapi", "namedpipeapi", "processthreadsapi", "winnt", "fileapi", "minwinbase"] }
+# Test-only features, on top of the normal dependency's.
+winapi = { version = "0.3", features = ["namedpipeapi", "fileapi", "minwinbase"] }

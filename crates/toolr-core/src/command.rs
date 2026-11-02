@@ -24,6 +24,9 @@ mod tree;
 /// time to flush what the dead tree already wrote.
 const KILL_GRACE: Duration = Duration::from_millis(500);
 
+/// How long the wait loops sleep between checks.
+const POLL: Duration = Duration::from_millis(10);
+
 // Custom error types
 #[derive(Debug)]
 pub struct CommandExecutionError {
@@ -264,8 +267,17 @@ impl ReaderState {
     }
 }
 
+/// Detaches the readers however the call returns; on success they've already finished.
+struct DetachOnDrop(Arc<ReaderState>);
+
+impl Drop for DetachOnDrop {
+    fn drop(&mut self) {
+        self.0.detached.store(true, Ordering::SeqCst);
+    }
+}
+
 /// Copy `pipe` into each sink until EOF, stamping the output clock after each read and write. A
-/// failed write stops the copy, as before. A detached reader stops at its next read and drops the
+/// failed write stops the copy. A detached reader stops at its next read and drops the
 /// pipe, so a writer that escaped the kill gets EPIPE rather than feeding it forever.
 fn spawn_reader<R: Read + Send + 'static>(
     mut pipe: R,
@@ -293,20 +305,31 @@ fn spawn_reader<R: Read + Send + 'static>(
     })
 }
 
+/// The two limits, enforced in three phases of `run_command_internal`:
+///
+/// - **Running:** `total` counts from the spawn whatever the readers are doing; `no_output` only
+///   while no reader is writing to a sink.
+/// - **After exit**, while the readers drain: both count only while no reader is writing, so a
+///   slow sink isn't mistaken for a background process holding the pipe.
+/// - **After a kill:** the readers get a fixed `KILL_GRACE`, then are detached.
+///
+/// `expired` applies the first two; the third is the grace loop after `tree::kill_tree`.
 struct Timeouts {
     total: Option<f64>,
     no_output: Option<f64>,
 }
 
 impl Timeouts {
-    /// The error for whichever limit has run out, if any. Silence only counts while no reader is
-    /// stuck on a slow sink.
+    /// The error for whichever limit has run out, if any.
     fn expired(
         &self,
         start: Instant,
         readers: &ReaderState,
+        child_running: bool,
     ) -> Option<Box<dyn Error + Send + Sync>> {
+        let idle = readers.idle();
         if let Some(timeout) = self.total
+            && (child_running || idle)
             && start.elapsed() > Duration::from_secs_f64(timeout)
         {
             return Some(Box::new(CommandTimeoutExceededError::new(format!(
@@ -314,7 +337,7 @@ impl Timeouts {
             ))));
         }
         if let Some(timeout) = self.no_output
-            && readers.idle()
+            && idle
             && readers.quiet_for() > Duration::from_secs_f64(timeout)
         {
             return Some(Box::new(CommandNoOutputTimeoutError::new(format!(
@@ -323,21 +346,6 @@ impl Timeouts {
         }
         None
     }
-}
-
-/// Poll until `finished` holds or `give_up` returns a reason, which is passed back. Threads still
-/// running are then detached by dropping their handles.
-fn drain_threads<E>(
-    finished: &dyn Fn() -> bool,
-    mut give_up: impl FnMut() -> Option<E>,
-) -> Option<E> {
-    while !finished() {
-        if let Some(reason) = give_up() {
-            return Some(reason);
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-    None
 }
 
 fn join_stdin_writer(handle: JoinHandle<io::Result<()>>) -> Result<(), CommandExecutionError> {
@@ -417,6 +425,7 @@ pub fn run_command_internal(
     let stdin_payload = child.stdin.take().zip(config.input.take());
 
     let readers = ReaderState::new();
+    let _detach = DetachOnDrop(Arc::clone(&readers));
 
     // `None` in interactive mode, where stdio was inherited above rather than piped.
     let stdout_thread = child
@@ -448,16 +457,15 @@ pub fn run_command_internal(
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => {
-                if let Some(err) = timeouts.expired(start_time, &readers) {
+                if let Some(err) = timeouts.expired(start_time, &readers, true) {
                     tree::kill_tree(&mut child);
-                    let killed_at = Instant::now();
-                    drain_threads(&all_finished, || {
-                        (killed_at.elapsed() > KILL_GRACE).then_some(())
-                    });
-                    readers.detached.store(true, Ordering::SeqCst);
+                    let grace_ends = Instant::now() + KILL_GRACE;
+                    while !all_finished() && Instant::now() < grace_ends {
+                        thread::sleep(POLL);
+                    }
                     return Err(err);
                 }
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(POLL);
             }
             Err(e) => {
                 return Err(Box::new(CommandExecutionError::new(format!(
@@ -469,16 +477,11 @@ pub fn run_command_internal(
 
     // The child has exited, but something it started may still hold the pipes: the
     // timeouts cover the whole call, so they keep running until the threads finish.
-    // A reader blocked on a slow sink is still delivering the child's output, not waiting on it.
-    let waiting_on_holder = || {
-        readers
-            .idle()
-            .then(|| timeouts.expired(start_time, &readers))
-            .flatten()
-    };
-    if let Some(err) = drain_threads(&all_finished, waiting_on_holder) {
-        readers.detached.store(true, Ordering::SeqCst);
-        return Err(err);
+    while !all_finished() {
+        if let Some(err) = timeouts.expired(start_time, &readers, false) {
+            return Err(err);
+        }
+        thread::sleep(POLL);
     }
 
     let stdin_result = stdin_thread.map_or(Ok(()), join_stdin_writer);
