@@ -293,13 +293,12 @@ pub fn dispatch(
     let tempfile = write_spec_to_tempfile(&spec)?;
     let resolved = resolve_venv_path(&repo_root)?;
     let quiet = output_opts.verbosity == "quiet";
+    let verbose = output_opts.verbosity == "verbose";
     let resolved = resync_if_needed(&repo_root, resolved, quiet)?;
     let python = resolved.python.clone();
 
-    // Touch last_used_at on every invocation, backfilling `meta.json` for
-    // cache entries that predate the sidecar so `toolr self cache list`
-    // still sees them. Share `meta_cache_dir` with sync: an in-tree venv's
-    // parent is `tools/`, and a sidecar there would land in the repo.
+    // Touch last_used_at, backfilling `meta.json` for entries that predate it,
+    // in the slot sync writes so `toolr self cache list` sees this repo.
     let touched = toolr_core::project::meta_cache_dir(&repo_root, &resolved).and_then(|dir| {
         toolr_core::cache::touch_or_backfill(
             &dir,
@@ -310,10 +309,10 @@ pub fn dispatch(
         .map_err(anyhow::Error::from)
     });
     if let Err(e) = touched {
-        // An in-tree venv works without its sidecar, and in-tree is common
-        // where the cache home is read-only (CI, sandboxes): debug-only there.
-        let in_tree = resolved.repo_key.is_empty();
-        if (in_tree && output_opts.verbosity == "verbose") || (!in_tree && !quiet) {
+        // `finalize_sync` fails on this write; dispatch only warns, as the command runs without it.
+        // In-tree venvs, often under a read-only cache home (CI), warn only with --debug.
+        let in_tree = resolved.is_in_tree();
+        if (in_tree && verbose) || (!in_tree && !quiet) {
             eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
         }
     }

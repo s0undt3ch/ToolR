@@ -10,8 +10,8 @@ use crate::manifest_build::rebuild_manifest_full;
 use crate::trust::{TrustMode, require_trust};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
-    ResolvedVenv, UpgradeMode, compute_repo_key, resolve_venv_path, sync::sync_if_needed,
-    validate::validate_venv,
+    ResolvedVenv, UpgradeMode, VenvLocation, cache_slot_dir, resolve_venv_path,
+    sync::sync_if_needed, validate::validate_venv,
 };
 
 /// Options for [`ensure_venv_ready`]. Constructed via `Default::default()`
@@ -87,11 +87,9 @@ pub fn ensure_venv_ready(
 /// (`<cache>/<key>/meta.json`, the venv being `<cache>/<key>/venv`). For
 /// in-tree venvs (`tools/.venv`) the venv stays in the repo but the
 /// sidecar must live somewhere the repo cannot write, so it goes to
-/// `$XDG_CACHE_HOME/toolr/<repo-key>-in-tree/`. The suffix keeps it out of
-/// the cache venv's slot: a repo that moved to in-tree would otherwise keep
-/// refreshing the abandoned `<repo-key>/venv/`, and prune would never reclaim it.
+/// `$XDG_CACHE_HOME/toolr/<repo-key>-in-tree/` (see [`cache_slot_dir`]).
 pub fn meta_cache_dir(repo_root: &Path, resolved: &ResolvedVenv) -> Result<PathBuf> {
-    if !resolved.repo_key.is_empty() {
+    if !resolved.is_in_tree() {
         // Cache-located venv: sidecar sits beside the venv.
         return resolved
             .venv_dir
@@ -99,16 +97,14 @@ pub fn meta_cache_dir(repo_root: &Path, resolved: &ResolvedVenv) -> Result<PathB
             .map(Path::to_path_buf)
             .ok_or_else(|| anyhow::anyhow!("cache venv dir has no parent"));
     }
-    // In-tree venv: compute an out-of-repo cache slot.
-    let key = compute_repo_key(repo_root, &resolved.python_version)?;
     let base = toolr_cache_dir()
         .ok_or_else(|| anyhow::anyhow!("could not resolve toolr cache directory"))?;
-    Ok(base.join(in_tree_slot_name(&key)))
-}
-
-/// Cache-slot directory name for an in-tree venv's sidecar.
-fn in_tree_slot_name(repo_key: &str) -> String {
-    format!("{repo_key}-in-tree")
+    cache_slot_dir(
+        &base,
+        repo_root,
+        &resolved.python_version,
+        VenvLocation::InTree,
+    )
 }
 
 /// Final step of a successful sync: write the out-of-repo `meta.json`
@@ -194,9 +190,8 @@ mod tests {
 
     #[test]
     fn meta_cache_dir_for_in_tree_venv_uses_an_out_of_repo_cache_slot() {
-        // In-tree venv (`repo_key` empty): the sidecar must live outside the
-        // repo, under `$XDG_CACHE_HOME/toolr/<repo-key>` — exercises the
-        // `compute_repo_key` + cache-dir branch.
+        // In-tree venv (`repo_key` empty): the sidecar lives outside the repo,
+        // in the `-in-tree` cache slot rather than the cache venv's slot.
         let (_env, xdg) = EnvGuard::temp_cache_home();
 
         let repo = TempDir::new().unwrap();
@@ -207,20 +202,15 @@ mod tests {
             python_version: "3.13".to_string(),
             config: ToolrConfig::default(),
         };
-        let dir = meta_cache_dir(repo.path(), &resolved);
-        let dir = dir.unwrap();
-        assert!(
-            dir.starts_with(xdg.path().join("toolr")),
-            "in-tree meta must live under the toolr cache dir, got {dir:?}"
-        );
-        // Never the slot a cache-located venv of the same repo would use.
-        let cache_key = compute_repo_key(repo.path(), "3.13").unwrap();
-        assert_ne!(dir, xdg.path().join("toolr").join(&cache_key));
         assert_eq!(
-            dir,
-            xdg.path()
-                .join("toolr")
-                .join(format!("{cache_key}-in-tree"))
+            meta_cache_dir(repo.path(), &resolved).unwrap(),
+            cache_slot_dir(
+                &xdg.path().join("toolr"),
+                repo.path(),
+                "3.13",
+                VenvLocation::InTree
+            )
+            .unwrap()
         );
     }
 
