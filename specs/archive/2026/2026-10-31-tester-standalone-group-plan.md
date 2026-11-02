@@ -13,7 +13,7 @@ the pending registry and reports leftovers.
 
 **Tech Stack:** Python 3.11+, msgspec, attrs, pytest.
 
-**Spec:** [`specs/2026-10-31-tester-standalone-group-design.md`](./2026-10-31-tester-standalone-group-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-tester-standalone-group-design.md`](./2026-10-31-tester-standalone-group-design.md)
 
 ## Global Constraints
 

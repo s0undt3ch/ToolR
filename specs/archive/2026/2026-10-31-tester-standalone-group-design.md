@@ -1,6 +1,6 @@
 # Record standalone `@command(group=...)` commands in the runtime registry
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-19 (medium).
 - **Plan:** [`2026-10-31-tester-standalone-group-plan.md`](./2026-10-31-tester-standalone-group-plan.md)
 
@@ -70,6 +70,23 @@ single source of truth.
 Outside `CommandsTester`, nothing reads either registry. The real runner calls the imported function directly, so
 runtime dispatch doesn't change. A pending entry whose group's module is never imported in a real run stays in a small
 process-local dict.
+
+### As implemented (review changes)
+
+- The pending store is a list of `(group, command name, func)` entries in declaration order, not a dict keyed by
+  group, so the error lists commands in the manifest build's order. `command_group()` takes the entries for its own
+  group out of the list.
+- Outside `CommandsTester` the store keeps nothing: `_get_pending_command_storage()` returns a new list on every
+  call, so a command with an undeclared group can't be attached to a group created later in the process.
+- The error matches `format_unknown_groups` exactly: it names the CLI command name, not the qualname, adds the
+  nearest-group "Did you mean" suggestion with the same threshold, and reports `group=""` as a missing kwarg.
+  `tests/e2e/test_unknown_group_parity.py` compares it with the real binary.
+- A standalone `@command` with no `group=` (bare or `@command("x")`) is parked under `""`, so it raises the
+  missing-kwarg line too, replacing the "Not covered" item below. Lines sort by source file path under `tools/`, as
+  `list_python_files` does, and control or invisible characters are escaped as `escape_control_chars` does.
+- Forms the static parser doesn't recognise (`@toolr.command`, an aliased import, a nested `def`, a non-literal
+  `group=`) still pass under `CommandsTester`. Python can't detect them, so `command()`'s docstring and the testing
+  guide state the supported shape instead.
 
 ### Rejected alternatives
 
