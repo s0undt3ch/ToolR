@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev418-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev437-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev418 - 2026-11-02
+        0.35.2-dev437 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev418 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev437 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev418-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev437-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev418 - 2026-11-02
+        0.35.2-dev437 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev418 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev437 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev418-2026-11-02">0.35.2-dev418 - 2026-11-02<a class="headerlink" href="#0352-dev418-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev437-2026-11-02">0.35.2-dev437 - 2026-11-02<a class="headerlink" href="#0352-dev437-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7664,6 +7664,12 @@ send SIGTERM instead.</p>
 <p>Running a command in a repo with an in-tree venv (<code>venv-location = "in-tree"</code>) no longer leaves an untracked <code>tools/meta.json</code>. toolr now keeps that file in its cache directory, in an entry of its own (<code>&lt;repo-key&gt;-in-tree</code>) that <code>toolr project venv sync</code> writes too, so <code>toolr self cache list</code> shows the repo. If the repo used a cache venv before switching to in-tree, that old venv no longer looks recently used, and <code>toolr self cache prune</code> reclaims it once it goes stale. You can delete any <code>tools/meta.json</code> an earlier toolr left behind.</p>
 <p>The Setup ToolR action now only accepts a toolr archive whose attestation was produced by ToolR's release workflow on <code>main</code> for that exact archive name. It used to accept an archive attested by any workflow in the ToolR repository, including CI builds of unreleased branches, and a signed archive of another version or platform renamed into place. Every published release still installs as before. Verifying an archive now needs gh 2.56 or later on the runner.</p>
 <p><code>toolr.testing.CommandsTester</code> now resolves the top-level <code>tools</code> package from the fixture's <code>search_path</code> only, and no longer removes other entries from <code>sys.path</code>. Before, any entry whose path contained <code>site-packages</code> or <code>dist-packages</code> was kept even when it provided <code>tools</code>, so a repo checked out under a directory such as <code>windows-site-packages</code> could have its own <code>tools/</code> imported instead of the fixture's. Everything else on <code>sys.path</code> stays importable, including site directories that ship a stray top-level <code>tools</code> package, and such a package can no longer replace a fixture <code>tools/</code> that has no <code>__init__.py</code>.</p>
+<p>ToolR can now release pre-release versions such as <code>1.0.0-rc.1</code>. They are published as GitHub
+pre-releases, so the Setup ToolR action's <code>version: latest</code> and the install scripts keep resolving to
+the newest final release. A pre-release's notes show everything since the last final release, and the
+final release's notes and CHANGELOG entry cover all of it, pre-releases included. The release tooling
+also no longer breaks once a pre-release tag exists, and it checks an explicit release version (a
+leading <code>v</code> is accepted) before writing anything.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7775,6 +7781,9 @@ send SIGTERM instead.</p>
 <li><em>(testing)</em> Only exempt the interpreter's site directories in CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/70d612e0cb2f3bfd64976cbe7cdaed3e317769e0"><code>70d612e</code></a>)</li>
 <li><em>(testing)</em> Resolve the fixture's tools without pruning sys.path (<a href="https://github.com/s0undt3ch/ToolR/commit/d52d97c98af1665a60fbf04871af5f4202a88c58"><code>d52d97c</code></a>)</li>
 <li><em>(testing)</em> Walk only the fixture's tools and always drop the finder (<a href="https://github.com/s0undt3ch/ToolR/commit/c072b0877862bd0b31be9f239373acb1ac60a9ed"><code>c072b08</code></a>)</li>
+<li><em>(release)</em> Support pre-release versions in version bump (<a href="https://github.com/s0undt3ch/ToolR/commit/6101a0677da254810767bcf6fcf85f9b07da82b3"><code>6101a06</code></a>)</li>
+<li><em>(release)</em> Roll pre-releases up into the final release (<a href="https://github.com/s0undt3ch/ToolR/commit/cc37004feed6e6b760921dc0b638bdd8bd89894a"><code>cc37004</code></a>)</li>
+<li><em>(release)</em> Skip release commits in git-cliff whatever their case (<a href="https://github.com/s0undt3ch/ToolR/commit/c9935eb826645099a617ce6325517c18bbb57a0e"><code>c9935eb</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7814,6 +7823,7 @@ send SIGTERM instead.</p>
 <li><em>(venv)</em> Share one cache slot rule between resolve and meta_cache_dir (<a href="https://github.com/s0undt3ch/ToolR/commit/7d2716cf8a5a7d8ef96c7e9c3eefadc934769dbb"><code>7d2716c</code></a>)</li>
 <li><em>(action)</em> Name the pinned attestation identities once (<a href="https://github.com/s0undt3ch/ToolR/commit/b0c618493016b891343da632ae098731d736f935"><code>b0c6184</code></a>)</li>
 <li><em>(testing)</em> Gather the private namespace-path dependency in one helper (<a href="https://github.com/s0undt3ch/ToolR/commit/d2b2356a2ca29f080d38b99b55fe49d8343e1451"><code>d2b2356</code></a>)</li>
+<li><em>(release)</em> Render the Cargo version once in version bump (<a href="https://github.com/s0undt3ch/ToolR/commit/f98b77803d6d4fa64cd0e33af5b032b62da2de53"><code>f98b778</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7927,6 +7937,12 @@ send SIGTERM instead.</p>
 <li><em>(testing)</em> Place the discover walk scope with discover and note assertion rewriting (<a href="https://github.com/s0undt3ch/ToolR/commit/3f0e2ae3b8d3d738fe8d68f36e4405aa65ca4be7"><code>3f0e2ae</code></a>)</li>
 <li><em>(specs)</em> Record the FU-10 maintainability pass (<a href="https://github.com/s0undt3ch/ToolR/commit/9d7ac3f9ca41fb107c5d375db7b782e7c7f3d9e9"><code>9d7ac3f</code></a>)</li>
 <li><em>(specs)</em> Archive tester sys.path filter design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/45682ac924681a0f01b545cc3e6df3ddb21382d4"><code>45682ac</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-26 version py tags (<a href="https://github.com/s0undt3ch/ToolR/commit/cbb3883d6bb42b6e860770244bbbe997af99995a"><code>cbb3883</code></a>)</li>
+<li><em>(specs)</em> Update F-26 version py tags spec to the pre-release decision (<a href="https://github.com/s0undt3ch/ToolR/commit/3dacc2d666b1f585b4fb62a06bccc26c1e322ba9"><code>3dacc2d</code></a>)</li>
+<li><em>(specs)</em> Record the F-26 pre-release rollup decision and review follow-ups (<a href="https://github.com/s0undt3ch/ToolR/commit/d48834da28cb694ca48560a20ba3d1d3e09c7378"><code>d48834d</code></a>)</li>
+<li><em>(specs)</em> Record the F-26 round-2 release fixes (<a href="https://github.com/s0undt3ch/ToolR/commit/0acfb2f62794e48a1a0dcfd496e1586001be0130"><code>0acfb2f</code></a>)</li>
+<li><em>(specs)</em> Record the F-26 round-3 maintainability changes (<a href="https://github.com/s0undt3ch/ToolR/commit/ec1dbd933dbd0c40e35311be7043965ccd93bc3b"><code>ec1dbd9</code></a>)</li>
+<li><em>(specs)</em> Archive version py tags design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b3707035aa50c5af64731285cdebeaf12c2a4d12"><code>b370703</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7985,6 +8001,9 @@ send SIGTERM instead.</p>
 <li><em>(testing)</em> Pin the ContextForTesting stream split across verbosity levels (<a href="https://github.com/s0undt3ch/ToolR/commit/3337b620626081fb43b59cb9aa51e13be09ac283"><code>3337b62</code></a>)</li>
 <li><em>(testing)</em> Drive the stream-split test with RunMock (<a href="https://github.com/s0undt3ch/ToolR/commit/28bed8bbd43bff0ed0b2c24de10ae0046c9b04f7"><code>28bed8b</code></a>)</li>
 <li><em>(registry)</em> Contain tester leaks and trim the sys.path filter tests (<a href="https://github.com/s0undt3ch/ToolR/commit/b10bde14f4f6fd889c0e8e7775b5840c4ca7a092"><code>b10bde1</code></a>)</li>
+<li><em>(distribution)</em> Compare the binary and wheel versions as parsed versions (<a href="https://github.com/s0undt3ch/ToolR/commit/c4c8f13e0d0466b1a30065c6f971ea41ff5d5b4e"><code>c4c8f13</code></a>)</li>
+<li>Share the git repository helpers between test modules (<a href="https://github.com/s0undt3ch/ToolR/commit/be055547217b88f9763753fc9077dbb178bb8c4f"><code>be05554</code></a>)</li>
+<li><em>(release)</em> Cover the version bump write path (<a href="https://github.com/s0undt3ch/ToolR/commit/1bf8a50b9bcbe94fa9ffda122c18654c3916f528"><code>1bf8a50</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8022,6 +8041,8 @@ send SIGTERM instead.</p>
 <li><em>(prek)</em> Check toolr-py itself without toolr-core's full feature (<a href="https://github.com/s0undt3ch/ToolR/commit/10ac0e4b1e00f935df418658295cc545882d5170"><code>10ac0e4</code></a>)</li>
 <li><em>(prek)</em> Allowlist toolr-core's lean dependencies (<a href="https://github.com/s0undt3ch/ToolR/commit/f526d8e9c8444e021f01b96854863b16ad0f04f4"><code>f526d8e</code></a>)</li>
 <li><em>(release)</em> Point the release workflows at the action's attestation pins (<a href="https://github.com/s0undt3ch/ToolR/commit/88de4639a01bec1dc20cd092cc3bfa241cef536c"><code>88de463</code></a>)</li>
+<li><em>(release)</em> Pin git-cliff in mise and the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/631b60c1cdf62305c7a258a76178fbdf41b1a375"><code>631b60c</code></a>)</li>
+<li><em>(release)</em> Run the mise-installed git-cliff in the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/e485bef25c25c2c97973c0102811773e5bfea6ab"><code>e485bef</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>
