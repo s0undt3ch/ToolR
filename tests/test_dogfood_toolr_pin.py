@@ -3,50 +3,126 @@
 The binary emits a runner spec that the ``toolr-py`` in the tools venv must accept. ``TOOLR_VERSION`` in
 ``.github/env`` pins the binary every in-repo ``uses: ./`` call installs; Renovate's "toolr release" group
 bumps it with the other two pins.
+
+The action installs ``latest`` when ``version`` is empty, so checking the expression text isn't enough: the
+pin has to reach the step. A step that reads ``env.TOOLR_VERSION`` needs ``.github/env`` loaded earlier in its
+job, and every call needs an earlier guard step that fails on an empty ``TOOLR_VERSION``.
 """
 
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
 import tomllib
 from pathlib import Path
 from typing import Any
+from typing import NamedTuple
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
-PREPARE_RELEASE = "_prepare-release.yml"
+GITHUB_DIR = REPO_ROOT / ".github"
 ENV_PIN = "${{ env.TOOLR_VERSION }}"
 INPUT_PIN = "${{ inputs.toolr-version }}"
 CALLER_PIN = "${{ needs.prepare-ci.outputs.toolr-version }}"
+EXPOSE_OUTPUT = "${{ steps.toolr-version.outputs.toolr-version }}"
+LOADS_GITHUB_ENV = re.compile(r"\.github/env\b.*>>\s*\"?\$GITHUB_ENV")
+GUARD = 'test -n "$TOOLR_VERSION"'
 
 
-def _load_workflow(name: str) -> dict[Any, Any]:
-    return yaml.safe_load((WORKFLOWS_DIR / name).read_text(encoding="utf-8"))
+class StepList(NamedTuple):
+    """The steps of one workflow job or composite action, and the file's declared inputs."""
+
+    where: str
+    steps: list[dict[str, Any]]
+    inputs: dict[str, Any]
+
+
+def _load(path: Path) -> dict[Any, Any]:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _workflow_paths() -> list[Path]:
+    return sorted((GITHUB_DIR / "workflows").glob("*.y*ml"))
+
+
+def _workflow_call_inputs(data: dict[Any, Any]) -> dict[str, Any]:
+    # PyYAML reads the bare `on` key as the boolean True.
+    triggers = data.get(True) or {}
+    if not isinstance(triggers, dict):
+        return {}
+    return (triggers.get("workflow_call") or {}).get("inputs") or {}
+
+
+def _step_lists() -> list[StepList]:
+    step_lists: list[StepList] = []
+    for path in _workflow_paths():
+        data = _load(path)
+        inputs = _workflow_call_inputs(data)
+        step_lists.extend(
+            StepList(f"{path.name}:{job_id}", job.get("steps") or [], inputs)
+            for job_id, job in (data.get("jobs") or {}).items()
+        )
+    for path in sorted((GITHUB_DIR / "actions").glob("*/action.y*ml")):
+        data = _load(path)
+        step_lists.append(
+            StepList(
+                str(path.relative_to(GITHUB_DIR)),
+                (data.get("runs") or {}).get("steps") or [],
+                data.get("inputs") or {},
+            )
+        )
+    return step_lists
+
+
+def _loads_github_env(step: dict[str, Any]) -> bool:
+    return bool(LOADS_GITHUB_ENV.search(step.get("run") or ""))
+
+
+def _is_guard(step: dict[str, Any], expected_env: str | None) -> bool:
+    return (
+        GUARD in (step.get("run") or "")
+        and (step.get("env") or {}).get("TOOLR_VERSION") == expected_env
+    )
+
+
+def _call_offences(step_list: StepList) -> list[str]:
+    offences = []
+    for index, step in enumerate(step_list.steps):
+        if step.get("uses") != "./":
+            continue
+        earlier = step_list.steps[:index]
+        version = (step.get("with") or {}).get("version")
+        if version == ENV_PIN:
+            if not any(_loads_github_env(prior) for prior in earlier):
+                offences.append(
+                    f"{step_list.where}: reads {ENV_PIN} without loading .github/env first"
+                )
+            guard_env = None
+        elif version == INPUT_PIN:
+            if (step_list.inputs.get("toolr-version") or {}).get("required") is not True:
+                offences.append(
+                    f"{step_list.where}: reads {INPUT_PIN} without a required toolr-version input"
+                )
+            guard_env = INPUT_PIN
+        else:
+            offences.append(f"{step_list.where}: passes version {version!r}")
+            continue
+        if not any(_is_guard(prior, guard_env) for prior in earlier):
+            offences.append(f"{step_list.where}: no earlier `{GUARD}` guard step")
+    return offences
 
 
 def _github_env_pin() -> str:
-    for line in (REPO_ROOT / ".github" / "env").read_text(encoding="utf-8").splitlines():
+    for line in (GITHUB_DIR / "env").read_text(encoding="utf-8").splitlines():
         if line.startswith("TOOLR_VERSION="):
             value = line.removeprefix("TOOLR_VERSION=").strip()
-            # The action falls back to `latest` on an empty version.
             assert value, "TOOLR_VERSION in .github/env is empty"
             return value
     msg = "TOOLR_VERSION is missing from .github/env"
     raise AssertionError(msg)
-
-
-def _in_repo_action_calls() -> list[tuple[str, str, dict[str, Any]]]:
-    calls: list[tuple[str, str, dict[str, Any]]] = []
-    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        for job_id, job in (data.get("jobs") or {}).items():
-            calls.extend(
-                (path.name, job_id, step)
-                for step in job.get("steps") or []
-                if step.get("uses") == "./"
-            )
-    return calls
 
 
 def test_toolr_pin_matches_mise_and_lock() -> None:
@@ -62,29 +138,76 @@ def test_toolr_pin_matches_mise_and_lock() -> None:
     assert len(set(pins.values())) == 1, pins
 
 
-def test_in_repo_action_calls_use_the_pin() -> None:
-    calls = _in_repo_action_calls()
-    assert calls, "found no `uses: ./` steps under .github/workflows"
-    offenders = [
-        f"{workflow}:{job_id} passes version {step.get('with', {}).get('version')!r}"
-        for workflow, job_id, step in calls
-        if step.get("with", {}).get("version")
-        != (INPUT_PIN if workflow == PREPARE_RELEASE else ENV_PIN)
+def test_in_repo_action_calls_get_the_pin() -> None:
+    step_lists = _step_lists()
+    assert any(step.get("uses") == "./" for step_list in step_lists for step in step_list.steps), (
+        "found no `uses: ./` steps under .github"
+    )
+    offences = [offence for step_list in step_lists for offence in _call_offences(step_list)]
+    assert not offences, "\n".join(offences)
+
+
+def test_reusable_workflow_callers_pass_the_loaded_pin() -> None:
+    workflows = {path.name: _load(path) for path in _workflow_paths()}
+    reusable = [
+        name for name, data in workflows.items() if "toolr-version" in _workflow_call_inputs(data)
     ]
-    assert not offenders, "\n".join(offenders)
-
-
-def test_prepare_release_requires_toolr_version() -> None:
-    # PyYAML reads the bare `on` key as the boolean True.
-    inputs = _load_workflow(PREPARE_RELEASE)[True]["workflow_call"]["inputs"]
-    assert inputs["toolr-version"]["required"] is True
-    for caller in ("ci.yml", "release.yml"):
-        jobs = _load_workflow(caller)["jobs"]
+    assert reusable, "no reusable workflow takes a toolr-version input"
+    offences = []
+    for name in reusable:
         callers = [
-            job
-            for job in jobs.values()
-            if job.get("uses") == f"./.github/workflows/{PREPARE_RELEASE}"
+            (caller, job_id, job)
+            for caller, data in workflows.items()
+            for job_id, job in (data.get("jobs") or {}).items()
+            if job.get("uses") == f"./.github/workflows/{name}"
         ]
-        assert callers, f"{caller} doesn't call {PREPARE_RELEASE}"
-        for job in callers:
-            assert job["with"].get("toolr-version") == CALLER_PIN, caller
+        if not callers:
+            offences.append(f"nothing calls {name}")
+        for caller, job_id, job in callers:
+            where = f"{caller}:{job_id}"
+            if (job.get("with") or {}).get("toolr-version") != CALLER_PIN:
+                offences.append(f"{where}: doesn't pass toolr-version: {CALLER_PIN}")
+            if "prepare-ci" not in (job.get("needs") or []):
+                offences.append(f"{where}: doesn't need prepare-ci")
+            prepare_ci = workflows[caller]["jobs"].get("prepare-ci") or {}
+            if (prepare_ci.get("outputs") or {}).get("toolr-version") != EXPOSE_OUTPUT:
+                offences.append(f"{caller}:prepare-ci: toolr-version output isn't {EXPOSE_OUTPUT}")
+            steps = prepare_ci.get("steps") or []
+            expose = [i for i, step in enumerate(steps) if step.get("id") == "toolr-version"]
+            if not expose or "toolr-version=$TOOLR_VERSION" not in (
+                steps[expose[0]].get("run") or ""
+            ):
+                offences.append(
+                    f"{caller}:prepare-ci: no `toolr-version` step exposing $TOOLR_VERSION"
+                )
+            elif not any(_loads_github_env(step) for step in steps[: expose[0]]):
+                offences.append(
+                    f"{caller}:prepare-ci: exposes toolr-version before loading .github/env"
+                )
+    assert not offences, "\n".join(offences)
+
+
+def _guard_scripts() -> list[str]:
+    return sorted(
+        {
+            step["run"]
+            for step_list in _step_lists()
+            for step in step_list.steps
+            if GUARD in (step.get("run") or "")
+        }
+    )
+
+
+@pytest.mark.parametrize("script", _guard_scripts())
+@pytest.mark.parametrize(("value", "passes"), [("", False), ("0.35.1", True)])
+def test_guard_fails_on_an_empty_pin(script: str, value: str, passes: bool) -> None:
+    bash = shutil.which("bash")
+    assert bash is not None, "bash is not available"
+    result = subprocess.run(  # noqa: S603  # bash + script come from this repo's workflows
+        [bash, "-e", "-c", script],
+        env={"PATH": "/usr/bin:/bin", "TOOLR_VERSION": value},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) is passes, result

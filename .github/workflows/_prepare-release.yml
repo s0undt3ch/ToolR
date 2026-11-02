@@ -113,6 +113,12 @@ jobs:
           cache: true
           cache_key_prefix: ${{ inputs.cache-seed }}|mise|${{ inputs.mise-version }}|prepare-release|${{ runner.os }}|${{ runner.arch }}
 
+      - name: Require the toolr pin
+        # The action installs `latest` when `version` is empty.
+        env:
+          TOOLR_VERSION: ${{ inputs.toolr-version }}
+        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
+
       - name: Setup ToolR
         # In-repo composite action: downloads the toolr binary from a
         # GitHub release, verifies the SLSA build provenance, and

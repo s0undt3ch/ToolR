@@ -91,6 +91,10 @@ jobs:
           cache: true
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|prepare-ci|${{ runner.os }}|${{ runner.arch }}
 
+      - name: Require the toolr pin
+        # The action installs `latest` when `version` is empty.
+        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
+
       - name: Setup ToolR
         # In-repo composite action: downloads the toolr binary from a
         # GitHub release, verifies the SLSA build provenance, and
@@ -149,6 +153,10 @@ jobs:
         with:
           cache-seed: ${{ env.CACHE_SEED }}|ci
           mise-version: ${{ env.MISE_VERSION }}
+
+      - name: Require the toolr pin
+        # The action installs `latest` when `version` is empty.
+        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
 
       - name: Setup ToolR
         # The prek hooks backed by `toolr pre-commit <command>`
@@ -253,6 +261,10 @@ jobs:
           install: false
           cache: true
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|packslip-check|${{ runner.os }}|${{ runner.arch }}
+
+      - name: Require the toolr pin
+        # The action installs `latest` when `version` is empty.
+        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
 
       - name: Setup ToolR
         id: setup-toolr
@@ -676,6 +688,10 @@ jobs:
           tar -xzf "$archive" -C "$dest" --strip-components=1
           chmod +x "$dest/toolr"
           echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
+
+      - name: Require the toolr pin
+        # The action installs `latest` when `version` is empty.
+        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
 
       - name: Setup ToolR
         # Dispatches `toolr pre-commit regen-doc-snippets`. The
