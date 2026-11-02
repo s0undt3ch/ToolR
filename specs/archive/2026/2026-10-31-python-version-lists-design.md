@@ -1,6 +1,6 @@
 # Tie the hand-kept Python version lists to `requires-python`
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-38 (low).
 - **Plan:** [`2026-10-31-python-version-lists-plan.md`](./2026-10-31-python-version-lists-plan.md)
 
@@ -63,4 +63,4 @@ Rejected alternatives:
 
 - No schema change, no behaviour change. All lists agree today, so the test passes on arrival.
 - Docs: none.
-- `UNRELEASED.md`: none. Internal guard only.
+- Release notes: none. Internal guard only.

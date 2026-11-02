@@ -10,14 +10,14 @@ full-range lists and the floor-only settings against them.
 
 **Tech Stack:** pytest, `tomllib`, `packaging.specifiers`.
 
-**Spec:** [`specs/2026-10-31-python-version-lists-design.md`](./2026-10-31-python-version-lists-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-python-version-lists-design.md`](./2026-10-31-python-version-lists-design.md)
 
 ## Global Constraints
 
 - Source of truth: `crates/toolr-py/pyproject.toml` `project.requires-python`.
 - `MIN_PYTHON_MINOR` stays covered by `crates/toolr-core/tests/python_floor_lockstep.rs` only.
 - Imports top-of-file; factory or module-scoped fixtures, no bare helpers for file setup.
-- No schema change, no `UNRELEASED.md` entry.
+- No schema change, no release note.
 - Conventional Commits; no `Co-Authored-By`. Stage by path; never `git add -A`.
 
 ## Review Focus
