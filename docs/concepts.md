@@ -103,10 +103,11 @@ the dependencies in `tools/pyproject.toml`.
 
 A `y` syncs the venv, installing uv first if needed without asking
 again, and the command you ran carries on. Anything else keeps the
-trust and leaves the venv alone; run `toolr project venv sync` when
-you're ready. This prompt replaces the uv install prompt, so it follows
-the same rules. With `--quiet` or no terminal toolr doesn't ask and
-doesn't sync. `TOOLR_AUTO_INSTALL_UV=1` answers `y` without asking,
+trust and leaves the venv alone: `toolr project trust` still exits 0,
+and a command run stops with an error. Run `toolr project venv sync`
+when you're ready. This prompt replaces the uv install prompt, so it follows
+the same rules. With `--quiet` (or the root `toolr -q`) or no terminal
+toolr doesn't ask and doesn't sync. `TOOLR_AUTO_INSTALL_UV=1` answers `y` without asking,
 including with `--quiet` or no terminal, so the sync runs.
 `toolr project trust --no-sync` only records the trust. If a sync you
 agreed to fails, the trust is kept and toolr exits non-zero.
