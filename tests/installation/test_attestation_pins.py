@@ -97,6 +97,9 @@ def test_install_ps1_matches_the_action(action_pins: dict[str, str]) -> None:
     assert "$" not in jq_filter
     assert "$env:RELEASE_WORKFLOW = $releaseWorkflow" in text
     assert "$env:ARCHIVE_NAME = $archiveName" in text
+    assert "$env:ARCHIVE_SHA256 = $archiveSha256" in text
+    # Get-FileHash prints uppercase hex; gh's subject digests are lowercase.
+    assert "$archiveSha256 = (Get-FileHash -Algorithm SHA256 $Path).Hash.ToLower()" in text
     assert "--cert-identity $signerWorkflow" in text
     assert "--deny-self-hosted-runners" in text
     assert "--signer-workflow" not in text
