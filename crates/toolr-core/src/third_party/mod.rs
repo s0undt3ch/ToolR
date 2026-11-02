@@ -1,7 +1,7 @@
 //! Third-party static manifest fragment discovery, parsing, and merging.
 //!
 //! Packages ship a `toolr-manifest.json` at the root of their installed
-//! Python package directory. This module globs for those files, applies the
+//! Python package directory. This module finds those files, applies the
 //! `toolr_schema_version` load rule, and merges the resulting fragments into
 //! the project's static manifest.
 
@@ -22,7 +22,7 @@ use std::path::Path;
 
 use crate::manifest::Manifest;
 
-/// Glob for fragments under `tools_venv`, parse each, and merge them
+/// Find the fragments under `tools_venv`, parse each, and merge them
 /// into `base`. Returns the augmented manifest, with every skipped plugin,
 /// then every shadowed plugin command, then every plugin-to-plugin conflict
 /// recorded in `plugin_warnings`.
