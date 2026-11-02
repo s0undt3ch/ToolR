@@ -45,6 +45,7 @@ fn manifest_for(tmp: &Path) -> Manifest {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -55,7 +56,7 @@ fn returns_fresh_when_both_axes_match() {
     make_venv(tmp.path(), &[("foo", "{}")]);
     let cached = manifest_for(tmp.path());
     let venv = tmp.path().join("venv");
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), Some(&venv)).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::Fresh));
 }
 
@@ -68,7 +69,7 @@ fn returns_static_drift_when_py_file_changed_without_a_venv() {
     make_venv(tmp.path(), &[("foo", "{}")]);
     let cached = manifest_for(tmp.path());
     fs::write(tmp.path().join("tools").join("a.py"), "x = 2\n").unwrap();
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
 }
 
@@ -81,12 +82,12 @@ fn static_drift_with_venv_escalates_to_third_party_drift() {
     fs::write(tmp.path().join("tools").join("a.py"), "x = 2\n").unwrap();
     let tools = tmp.path().join("tools");
     let venv = tmp.path().join("venv");
-    let with_venv = compare(Some(&cached), &tools, Some(&venv)).unwrap();
+    let with_venv = compare(Some(&cached), None, &tools, Some(&venv)).unwrap();
     assert!(
         matches!(with_venv, FreshnessVerdict::ThirdPartyDrift),
         "got {with_venv:?}"
     );
-    let without_venv = compare(Some(&cached), &tools, None).unwrap();
+    let without_venv = compare(Some(&cached), None, &tools, None).unwrap();
     assert!(
         matches!(without_venv, FreshnessVerdict::StaticDrift),
         "got {without_venv:?}"
@@ -109,7 +110,7 @@ fn returns_third_party_drift_when_plugin_manifest_added() {
     fs::create_dir(&pkg).unwrap();
     fs::write(pkg.join("toolr-manifest.json"), "{}").unwrap();
     let venv = tmp.path().join("venv");
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), Some(&venv)).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::ThirdPartyDrift));
 }
 
@@ -129,7 +130,7 @@ fn collapses_both_axes_to_third_party_drift() {
         .join("foo");
     fs::write(pkg.join("toolr-manifest.json"), r#"{"v":2}"#).unwrap();
     let venv = tmp.path().join("venv");
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), Some(&venv)).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::ThirdPartyDrift));
 }
 
@@ -147,7 +148,7 @@ fn unrelated_dist_info_returns_fresh() {
         .join("site-packages");
     fs::create_dir(site.join("unrelated-1.0.0.dist-info")).unwrap();
     let venv = tmp.path().join("venv");
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), Some(&venv)).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::Fresh));
 }
 
@@ -157,7 +158,7 @@ fn no_cache_forces_rebuild_via_third_party_drift() {
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     make_venv(tmp.path(), &[]);
     let venv = tmp.path().join("venv");
-    let verdict = compare(None, &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(None, None, &tmp.path().join("tools"), Some(&venv)).unwrap();
     // No cache means we have nothing to compare to; force the strongest
     // rebuild so the caller produces a fresh manifest including third-party.
     assert!(matches!(verdict, FreshnessVerdict::ThirdPartyDrift));
@@ -177,8 +178,9 @@ fn missing_venv_skips_third_party_axis() {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     };
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::Fresh));
 }
 
@@ -192,7 +194,7 @@ fn toolr_version_mismatch_with_venv_forces_third_party_drift_even_when_both_axes
     let mut cached = manifest_for(tmp.path());
     cached.toolr_version = "0.0.0-old".to_string();
     let venv = tmp.path().join("venv");
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), Some(&venv)).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::ThirdPartyDrift));
 }
 
@@ -211,8 +213,9 @@ fn toolr_version_mismatch_without_venv_only_forces_static_drift() {
         groups: vec![],
         commands: vec![],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     };
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
 }
 
@@ -225,7 +228,7 @@ fn empty_toolr_version_from_a_pre_field_manifest_is_treated_as_a_mismatch() {
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     let mut cached = manifest_for(tmp.path());
     cached.toolr_version = String::new();
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
 }
 
@@ -237,7 +240,7 @@ fn older_schema_version_forces_a_rebuild_even_when_hashes_and_version_match() {
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     let mut cached = manifest_for(tmp.path());
     cached.schema_version = crate::manifest::SCHEMA_VERSION - 1;
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), None).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), None).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::StaticDrift));
 }
 
@@ -249,7 +252,7 @@ fn older_schema_version_with_venv_forces_third_party_drift() {
     let mut cached = manifest_for(tmp.path());
     cached.schema_version = crate::manifest::SCHEMA_VERSION - 1;
     let venv = tmp.path().join("venv");
-    let verdict = compare(Some(&cached), &tmp.path().join("tools"), Some(&venv)).unwrap();
+    let verdict = compare(Some(&cached), None, &tmp.path().join("tools"), Some(&venv)).unwrap();
     assert!(matches!(verdict, FreshnessVerdict::ThirdPartyDrift));
 }
 
@@ -272,7 +275,7 @@ fn hash_errors_name_the_tools_dir_except_symlinked_modules() {
     let unreadable = tools.join("a.py");
     fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o0)).unwrap();
     let root_can_read = fs::read(&unreadable).is_ok();
-    let result = compare(Some(&cached), &tools, None);
+    let result = compare(Some(&cached), None, &tools, None);
     fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).unwrap();
     assert!(result.is_err() || root_can_read);
     if let Err(e) = result {
@@ -280,7 +283,7 @@ fn hash_errors_name_the_tools_dir_except_symlinked_modules() {
     }
 
     std::os::unix::fs::symlink("a.py", tools.join("b.py")).unwrap();
-    let e = compare(Some(&cached), &tools, None).unwrap_err();
+    let e = compare(Some(&cached), None, &tools, None).unwrap_err();
     assert!(
         format!("{e:#}").starts_with("symlinked modules are not supported (1):"),
         "{e:#}"
@@ -317,7 +320,7 @@ fn returns_static_drift_when_scanned_file_changed_without_a_venv() {
     let cached = crate::parser::build_static_manifest(&tools).unwrap();
     assert!(cached.commands.iter().any(|c| c.name == "migrate"));
     assert_eq!(
-        compare(Some(&cached), &tools, None).unwrap(),
+        compare(Some(&cached), None, &tools, None).unwrap(),
         FreshnessVerdict::Fresh
     );
 
@@ -327,7 +330,7 @@ fn returns_static_drift_when_scanned_file_changed_without_a_venv() {
     )
     .unwrap();
     assert_eq!(
-        compare(Some(&cached), &tools, None).unwrap(),
+        compare(Some(&cached), None, &tools, None).unwrap(),
         FreshnessVerdict::StaticDrift
     );
 }

@@ -412,6 +412,7 @@ fn stale_manifest_in_untrusted_repo_is_not_rewritten() {
         groups: vec![],
         commands: vec![],
         plugin_warnings: vec![],
+        input_records: Default::default(),
     };
     write_manifest(&path, &stale).unwrap();
     let bytes = fs::read_to_string(&path).unwrap();

@@ -32,6 +32,14 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
         .with_context(|| format!("walking up from {} to find tools/", cwd.display()))?;
     let tools_dir = project_root.join("tools");
     let manifest_path = tools_dir.join(".toolr-manifest.json");
+    // Any load error, a corrupt file included, is "no cache": rebuild in
+    // memory and say nothing. Every completion script sends stderr to
+    // /dev/null, so the next non-TAB run warns and repairs the file instead.
+    // Stat before loading: a manifest replaced in between then looks
+    // older than it is, which only costs rereads.
+    let written_at = std::fs::metadata(&manifest_path)
+        .and_then(|m| m.modified())
+        .ok();
     let cached = load_manifest(&manifest_path).ok();
 
     // Tab completion never globs the venv — too costly on the hot path.
@@ -40,19 +48,20 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     // Static drift or a toolr-version mismatch still triggers a re-parse.
     // Real third-party changes will be picked up on the next dispatch
     // invocation, which does pass the venv path.
-    let verdict = crate::freshness::compare(cached.as_ref(), &tools_dir, None)?;
+    let verdict = crate::freshness::compare(cached.as_ref(), written_at, &tools_dir, None)?;
 
-    if matches!(verdict, crate::freshness::FreshnessVerdict::Fresh) {
-        // compare() returns Fresh only when cached is Some.
-        let mut cached = cached.expect("Fresh verdict requires a cached manifest");
-        // Dispatch drops the same entries in `main.rs`; clap and TAB must agree.
-        cached.drop_unsafe_names();
-        return Ok(ResolvedManifest {
-            manifest: cached,
-            from_cache: true,
-            project_root,
-        });
-    }
+    let cached = match (verdict, cached) {
+        (crate::freshness::FreshnessVerdict::Fresh, Some(mut cached)) => {
+            // Dispatch drops the same entries in `main.rs`; clap and TAB must agree.
+            cached.drop_unsafe_names();
+            return Ok(ResolvedManifest {
+                manifest: cached,
+                from_cache: true,
+                project_root,
+            });
+        }
+        (_, cached) => cached,
+    };
 
     // Rebuilt in memory only and never written, so no rebuild lock.
     // StaticDrift (or ThirdPartyDrift, which tab completion treats the

@@ -26,6 +26,7 @@ fn sample_manifest() -> Manifest {
             is_dispatcher: false,
         }],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -49,6 +50,44 @@ fn missing_optional_fields_default_to_empty() {
     let m: Manifest = serde_json::from_str(json).expect("deserialize minimal");
     assert_eq!(m.schema_version, 1);
     assert!(m.third_party_hash.is_empty());
+}
+
+#[test]
+fn manifest_without_input_records_loads() {
+    let json = r#"{
+        "schema_version": 2,
+        "static_hash": "h",
+        "groups": [],
+        "commands": []
+    }"#;
+    let m: Manifest = serde_json::from_str(json).expect("deserialize");
+    assert!(m.input_records.is_empty());
+}
+
+#[test]
+fn empty_input_records_not_serialised() {
+    let json = serde_json::to_value(sample_manifest()).unwrap();
+    assert!(json.get("input_records").is_none(), "{json}");
+
+    let mut m = sample_manifest();
+    m.input_records.scan_paths = vec![vec!["apps/*.py".into()]];
+    m.input_records.files.push(FileStat {
+        key: "tools/a.py".into(),
+        size: 1,
+        mtime_ns: 2,
+        ctime_ns: 3,
+        ino: 4,
+        blake3: "ab".into(),
+        unreadable: None,
+    });
+    let json = serde_json::to_value(&m).unwrap();
+    assert_eq!(json["input_records"]["scan_paths"][0][0], "apps/*.py");
+    assert!(
+        json["input_records"]["files"][0]
+            .get("unreadable")
+            .is_none()
+    );
+    assert_eq!(serde_json::from_value::<Manifest>(json).unwrap(), m);
 }
 
 #[test]

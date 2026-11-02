@@ -1,11 +1,13 @@
 //! Stable hashing over the inputs of the static manifest build.
 
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use blake3::Hasher;
 use walkdir::WalkDir;
 
+use crate::manifest::{FileStat, InputRecords};
 use crate::text::escape_control_chars;
 
 /// One file that feeds `static_hash`.
@@ -18,7 +20,7 @@ pub(crate) struct StaticInput {
     pub kind: InputKind,
 }
 
-/// How [`hash_paths`] treats a [`StaticInput`].
+/// How [`snapshot_static_inputs`] treats a [`StaticInput`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InputKind {
     /// A `tools/**/*.py` module. Only a module's read errors fail the hash.
@@ -43,55 +45,194 @@ impl InputKind {
     }
 }
 
+/// Tag after an input's key: its contents' digest follows.
+const TAG_CONTENTS: &[u8] = b"\x00";
+/// Tag after an input's key: it couldn't be read; the error kind follows.
+const TAG_READ_ERROR: &[u8] = b"\x01";
+/// Prefix of the pyproject's digest input: its serialised argparse blocks
+/// follow.
+const TAG_ARGPARSE_BLOCKS: &[u8] = b"\x02";
+
 /// The manifest's `static_hash`: every input of the static build, hashed in
 /// key order so the result is reproducible across runs and machines.
 ///
 /// Fails unwrapped with [`SymlinkedModules`] like [`list_python_files`].
 pub fn compute_static_hash(tools_dir: &Path) -> Result<String> {
-    hash_paths(&static_inputs(tools_dir)?)
+    Ok(static_hash_of(
+        &snapshot_static_inputs(tools_dir, None, None)?.files,
+    ))
 }
 
 /// Every input of the static build: `tools/**/*.py`, `tools/pyproject.toml`
 /// (for its `[tool.toolr.argparse.*]` blocks) and the files those blocks
 /// scan. Sorted by key, without duplicate keys.
+#[cfg(test)]
 pub(crate) fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
-    Ok(static_inputs_from(
-        tools_dir,
-        &list_python_files(tools_dir)?,
-    ))
+    let py_files = list_python_files(tools_dir)?;
+    let project_root = project_root(tools_dir);
+    let pyproject = crate::argparse::pyproject_path(project_root);
+    let (scan_paths, pyproject) = if pyproject.is_file() {
+        let scan_paths = read_input(&pyproject)
+            .map(|bytes| parse_scan_paths(&bytes))
+            .unwrap_or_default();
+        (scan_paths, Some(pyproject.as_path()))
+    } else {
+        (Vec::new(), None)
+    };
+    Ok(inputs_for(project_root, &py_files, &scan_paths, pyproject))
 }
 
-/// [`static_inputs`] with `tools/**/*.py` already listed, so the build walks
-/// `tools/` once for both the parser and the hash.
+/// Stat every static input and hash the ones `previous` can't vouch for.
 ///
-/// The argparse config never fails the hash, or a typo in it would fail
-/// `--help`, dispatch and TAB through the freshness check. A pyproject
-/// that doesn't parse, or a block with a bad glob, adds no scanned files;
-/// the pyproject itself is still an input, so fixing it rebuilds, and the
-/// build reports the error.
-pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<StaticInput> {
-    // Same root as `argparse::run_for_project`.
-    let project_root = tools_dir.parent().unwrap_or(tools_dir);
+/// A record from `previous` is reused, without reading the file, when its
+/// key, size, mtime, ctime and inode all match the live file and its mtime
+/// is strictly older than `written_at`, the mtime of the manifest that
+/// holds it. A file saved in the same timestamp tick as the manifest could
+/// have changed without changing its stat, so it is always reread (git's
+/// racy-index rule). `written_at == None` reuses nothing. The stat is taken
+/// before the read: a file that changes in between keeps its old stat in
+/// the record, so the next check rereads it.
+///
+/// `tools/pyproject.toml` is read at most once, for both its digest and
+/// its `scan_paths`; when its record is reused, so are the `scan_paths`.
+/// The globs are expanded on every call, so a scanned file that appears or
+/// vanishes changes the result.
+///
+/// The argparse config never fails the snapshot, or a typo in it would
+/// fail `--help`, dispatch and TAB through the freshness check. A
+/// pyproject that doesn't parse, or a block with a bad glob, adds no
+/// scanned files; the pyproject itself is still an input, so fixing it
+/// rebuilds, and the build reports the error.
+///
+/// A module that can't be read fails the snapshot, naming the file. Any
+/// other input that can't be read gets a record carrying the error kind
+/// instead: the scanner turns such a file into a placeholder with a
+/// warning, and the pyproject's read error is the build's to report, so
+/// neither may fail `--help`, dispatch and TAB. Such a record is never
+/// reused, since fixing the permission changes neither size nor mtime.
+pub fn snapshot_static_inputs(
+    tools_dir: &Path,
+    previous: Option<&InputRecords>,
+    written_at: Option<SystemTime>,
+) -> Result<InputRecords> {
+    snapshot_from(
+        tools_dir,
+        &list_python_files(tools_dir)?,
+        previous,
+        written_at,
+    )
+}
+
+/// [`snapshot_static_inputs`] with `tools/**/*.py` already listed, so the
+/// build walks `tools/` once for both the parser and the hash.
+pub(crate) fn snapshot_from(
+    tools_dir: &Path,
+    py_files: &[PathBuf],
+    previous: Option<&InputRecords>,
+    written_at: Option<SystemTime>,
+) -> Result<InputRecords> {
+    let reuse = Reuse {
+        files: previous.map_or(&[], |p| p.files.as_slice()),
+        written_at: written_at.map_or(0, |t| nanos(Ok(t))),
+    };
+    let project_root = project_root(tools_dir);
+    let pyproject = crate::argparse::pyproject_path(project_root);
+    let mut pyproject_record = None;
+    let mut scan_paths = Vec::new();
+    if pyproject.is_file() {
+        let input = StaticInput {
+            key: input_key(project_root, &pyproject),
+            path: pyproject.clone(),
+            kind: InputKind::Pyproject,
+        };
+        let mut parsed = None;
+        let record = record(&input, &reuse, |bytes| {
+            parsed = Some(parse_scan_paths(bytes))
+        })?;
+        scan_paths = match parsed {
+            Some(parsed) => parsed,
+            // Not read, yet readable: reused along with its scan paths.
+            None if record.as_ref().is_some_and(|r| r.unreadable.is_none()) => {
+                previous.map(|p| p.scan_paths.clone()).unwrap_or_default()
+            }
+            None => Vec::new(),
+        };
+        pyproject_record = record.map(|r| (input.key, r));
+    }
+    let inputs = inputs_for(
+        project_root,
+        py_files,
+        &scan_paths,
+        pyproject_record.as_ref().map(|_| pyproject.as_path()),
+    );
+    let mut files = Vec::with_capacity(inputs.len());
+    for input in &inputs {
+        let record = match &mut pyproject_record {
+            Some((key, _)) if input.kind == InputKind::Pyproject && *key == input.key => {
+                pyproject_record.take().map(|(_, r)| r)
+            }
+            _ => record(input, &reuse, |_| {})?,
+        };
+        files.extend(record);
+    }
+    Ok(InputRecords { files, scan_paths })
+}
+
+/// `static_hash` from the records of [`snapshot_static_inputs`], in their
+/// order: each is fed as `len(key) as u64 LE || key || 0x00 || hex digest`,
+/// or `len(key) as u64 LE || key || 0x01 || <error kind>` when unreadable.
+pub fn static_hash_of(files: &[FileStat]) -> String {
+    let mut hasher = Hasher::new();
+    for file in files {
+        hasher.update(&(file.key.len() as u64).to_le_bytes());
+        hasher.update(file.key.as_bytes());
+        match &file.unreadable {
+            None => {
+                hasher.update(TAG_CONTENTS);
+                hasher.update(file.blake3.as_bytes());
+            }
+            Some(kind) => {
+                hasher.update(TAG_READ_ERROR);
+                hasher.update(kind.as_bytes());
+            }
+        }
+    }
+    hasher.finalize().to_hex().to_string()
+}
+
+/// Same root as `argparse::run_for_project`.
+fn project_root(tools_dir: &Path) -> &Path {
+    tools_dir.parent().unwrap_or(tools_dir)
+}
+
+/// Each argparse block's `scan_paths`; nothing when the pyproject doesn't
+/// parse.
+fn parse_scan_paths(bytes: &[u8]) -> Vec<Vec<String>> {
+    std::str::from_utf8(bytes)
+        .ok()
+        .and_then(|text| crate::argparse::parse_blocks(text).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|block| block.scan_paths)
+        .collect()
+}
+
+fn inputs_for(
+    project_root: &Path,
+    py_files: &[PathBuf],
+    scan_paths: &[Vec<String>],
+    pyproject: Option<&Path>,
+) -> Vec<StaticInput> {
     let mut paths: Vec<(PathBuf, InputKind)> = py_files
         .iter()
         .map(|p| (p.clone(), InputKind::Module))
         .collect();
-    let pyproject = crate::argparse::pyproject_path(project_root);
-    if pyproject.is_file() {
-        let blocks = read_input(&pyproject)
-            .ok()
-            .and_then(|bytes| String::from_utf8(bytes).ok())
-            .and_then(|text| crate::argparse::parse_blocks(&text).ok())
-            .unwrap_or_default();
-        for block in blocks {
-            if let Ok(scanned) =
-                crate::argparse::scan::expand_scan_paths(project_root, &block.scan_paths)
-            {
-                paths.extend(scanned.into_iter().map(|p| (p, InputKind::Scanned)));
-            }
+    for block in scan_paths {
+        if let Ok(scanned) = crate::argparse::scan::expand_scan_paths(project_root, block) {
+            paths.extend(scanned.into_iter().map(|p| (p, InputKind::Scanned)));
         }
-        paths.push((pyproject, InputKind::Pyproject));
     }
+    paths.extend(pyproject.map(|p| (p.to_path_buf(), InputKind::Pyproject)));
     let mut inputs: Vec<StaticInput> = paths
         .into_iter()
         .map(|(path, kind)| StaticInput {
@@ -107,6 +248,118 @@ pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<
     });
     inputs.dedup_by(|a, b| a.key == b.key);
     inputs
+}
+
+/// The previous records [`record`] may reuse.
+struct Reuse<'a> {
+    files: &'a [FileStat],
+    /// The manifest's mtime in ns; `0` reuses nothing.
+    written_at: u64,
+}
+
+impl Reuse<'_> {
+    fn get(&self, key: &str, live: &FileStat) -> Option<&FileStat> {
+        let i = self
+            .files
+            .binary_search_by(|f| f.key.as_str().cmp(key))
+            .ok()?;
+        let old = &self.files[i];
+        let same = old.size == live.size
+            && old.mtime_ns == live.mtime_ns
+            && old.ctime_ns == live.ctime_ns
+            && old.ino == live.ino;
+        (same && old.unreadable.is_none() && old.mtime_ns != 0 && old.mtime_ns < self.written_at)
+            .then_some(old)
+    }
+}
+
+/// `input`'s record: reused from `reuse` when its stat allows, else read and
+/// hashed, calling `on_read` with the bytes. `None` when the file is gone.
+fn record(
+    input: &StaticInput,
+    reuse: &Reuse,
+    on_read: impl FnOnce(&[u8]),
+) -> Result<Option<FileStat>> {
+    let failed = |e: std::io::Error| match e.kind() {
+        // Deleted since it was listed: hash the tree as it now is.
+        std::io::ErrorKind::NotFound => Ok(None),
+        _ if input.kind == InputKind::Module => {
+            Err(anyhow::Error::new(e).context(format!("reading {}", input.path.display())))
+        }
+        kind => Ok(Some(FileStat {
+            key: input.key.clone(),
+            size: 0,
+            mtime_ns: 0,
+            ctime_ns: 0,
+            ino: 0,
+            blake3: String::new(),
+            unreadable: Some(kind.to_string()),
+        })),
+    };
+    let meta = match std::fs::metadata(&input.path) {
+        Ok(meta) => meta,
+        Err(e) => return failed(e),
+    };
+    let mut live = stat_record(&input.key, &meta);
+    if let Some(old) = reuse.get(&input.key, &live) {
+        return Ok(Some(old.clone()));
+    }
+    let bytes = match read_input(&input.path) {
+        Ok(bytes) => bytes,
+        Err(e) => return failed(e),
+    };
+    on_read(&bytes);
+    live.blake3 = digest(input, &bytes);
+    Ok(Some(live))
+}
+
+/// A record's `blake3`: of the contents, or for the pyproject, of
+/// [`TAG_ARGPARSE_BLOCKS`] followed by its argparse blocks, so edits outside
+/// `[tool.toolr.argparse.*]` (a dependency bump, `uv add`) leave it alone;
+/// see [`canonical_argparse_blocks`]. A pyproject the build can't read its blocks
+/// from keeps the raw-bytes digest, so fixing it still changes the hash.
+fn digest(input: &StaticInput, bytes: &[u8]) -> String {
+    let mut hasher = Hasher::new();
+    let blocks = match input.kind {
+        InputKind::Pyproject => canonical_argparse_blocks(bytes),
+        InputKind::Module | InputKind::Scanned => None,
+    };
+    match blocks {
+        Some(blocks) => hasher.update(TAG_ARGPARSE_BLOCKS).update(&blocks),
+        None => hasher.update(bytes),
+    };
+    hasher.finalize().to_hex().to_string()
+}
+
+/// A record of `meta` with no digest yet.
+fn stat_record(key: &str, meta: &std::fs::Metadata) -> FileStat {
+    #[cfg(unix)]
+    let (ctime_ns, ino) = {
+        use std::os::unix::fs::MetadataExt;
+        let ctime = u64::try_from(meta.ctime()).map_or(0, |secs| {
+            secs.saturating_mul(1_000_000_000)
+                .saturating_add(u64::try_from(meta.ctime_nsec()).unwrap_or(0))
+        });
+        (ctime, meta.ino())
+    };
+    #[cfg(not(unix))]
+    let (ctime_ns, ino) = (0, 0);
+    FileStat {
+        key: key.to_owned(),
+        size: meta.len(),
+        mtime_ns: nanos(meta.modified()),
+        ctime_ns,
+        ino,
+        blake3: String::new(),
+        unreadable: None,
+    }
+}
+
+/// Nanoseconds since the Unix epoch; `0` when unknown or before 1970.
+fn nanos(time: std::io::Result<SystemTime>) -> u64 {
+    time.ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX))
 }
 
 fn input_key(project_root: &Path, path: &Path) -> String {
@@ -245,62 +498,6 @@ fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
         .is_some_and(|n| n.starts_with('.') || n == "__pycache__")
 }
 
-/// Tag after an input's key: its contents follow.
-const TAG_CONTENTS: &[u8] = b"\x00";
-/// Tag after an input's key: it couldn't be read; the error kind follows.
-const TAG_READ_ERROR: &[u8] = b"\x01";
-/// Tag after the pyproject's key: its serialised argparse blocks follow.
-const TAG_ARGPARSE_BLOCKS: &[u8] = b"\x02";
-
-/// Hash each input as `key || 0x00 || len(contents) as u64 LE || contents`
-/// ([`TAG_CONTENTS`]).
-///
-/// The pyproject is hashed as `key || 0x02 || len || <argparse blocks>`
-/// ([`TAG_ARGPARSE_BLOCKS`]) instead, so edits outside
-/// `[tool.toolr.argparse.*]` (a dependency bump, `uv add`) leave the hash
-/// alone; see [`canonical_argparse_blocks`]. A pyproject
-/// the build can't read its blocks from keeps the raw-bytes form, so
-/// fixing it still changes the hash.
-///
-/// A module that can't be read fails the hash, naming the file. Any other
-/// input that can't be read is hashed as `key || 0x01 || <error kind>`
-/// ([`TAG_READ_ERROR`]) instead: the scanner turns such a file into a placeholder with a
-/// warning, and the pyproject's read error is the build's to report, so
-/// neither may fail `--help`, dispatch and TAB through the freshness
-/// check. Fixing the permission still changes the hash.
-pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
-    let mut hasher = Hasher::new();
-    for StaticInput { key, path, kind } in inputs {
-        let bytes = match read_input(path) {
-            Ok(bytes) => bytes,
-            // Deleted since the walk listed it: hash the tree as it now is.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) if *kind != InputKind::Module => {
-                hasher.update(key.as_bytes());
-                hasher.update(TAG_READ_ERROR);
-                hasher.update(e.kind().to_string().as_bytes());
-                continue;
-            }
-            Err(e) => {
-                return Err(anyhow::Error::new(e).context(format!("reading {}", path.display())));
-            }
-        };
-        hasher.update(key.as_bytes());
-        let blocks = match kind {
-            InputKind::Pyproject => canonical_argparse_blocks(&bytes),
-            InputKind::Module | InputKind::Scanned => None,
-        };
-        let (tag, bytes) = match blocks {
-            Some(blocks) => (TAG_ARGPARSE_BLOCKS, blocks),
-            None => (TAG_CONTENTS, bytes),
-        };
-        hasher.update(tag);
-        hasher.update(&(bytes.len() as u64).to_le_bytes());
-        hasher.update(&bytes);
-    }
-    Ok(hasher.finalize().to_hex().to_string())
-}
-
 /// The pyproject's `[tool.toolr.argparse.*]` blocks as the build parses
 /// them, serialised in name order: the only part of the file the build
 /// reads. `None` when they don't parse, so the caller hashes the raw bytes.
@@ -312,6 +509,8 @@ fn canonical_argparse_blocks(bytes: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn read_input(path: &Path) -> std::io::Result<Vec<u8>> {
+    #[cfg(test)]
+    tests::count_read(path);
     // `path` is listed by `static_inputs` from the project's own config, not untrusted input.
     std::fs::read(path) // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
 }
@@ -319,6 +518,20 @@ fn read_input(path: &Path) -> std::io::Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        static READS: std::cell::RefCell<std::collections::HashMap<PathBuf, usize>> =
+            Default::default();
+    }
+
+    pub(super) fn count_read(path: &Path) {
+        READS.with(|r| *r.borrow_mut().entry(path.to_path_buf()).or_default() += 1);
+    }
+
+    /// Reads by this thread's static-hash code since the last call.
+    pub(crate) fn take_reads() -> std::collections::HashMap<PathBuf, usize> {
+        READS.with(|r| std::mem::take(&mut *r.borrow_mut()))
+    }
     use tempfile::TempDir;
 
     fn setup(files: &[(&str, &str)]) -> TempDir {
@@ -341,6 +554,19 @@ mod tests {
             .collect();
         let refs: Vec<_> = files.iter().map(|(n, c)| (n.as_str(), *c)).collect();
         setup(&refs)
+    }
+
+    /// Hash `inputs` as listed, reusing nothing.
+    fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
+        let reuse = Reuse {
+            files: &[],
+            written_at: 0,
+        };
+        let mut files = Vec::new();
+        for input in inputs {
+            files.extend(record(input, &reuse, |_| {})?);
+        }
+        Ok(static_hash_of(&files))
     }
 
     fn tools_hash(project: &TempDir) -> String {
@@ -932,6 +1158,266 @@ parent = "django"
             let prefix = format!("reading {}: ", dispatcher.display());
             assert!(err.starts_with(&prefix), "{err}");
         }
+    }
+
+    const AGED: std::time::Duration = std::time::Duration::from_secs(60);
+
+    /// Set the mtime of `path` to `time`.
+    fn set_mtime(path: &Path, time: SystemTime) {
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(time)
+            .unwrap();
+    }
+
+    /// Backdate every file under `project` by [`AGED`], so a manifest
+    /// written now is newer than all of them.
+    fn age(project: &TempDir) {
+        let then = SystemTime::now() - AGED;
+        for entry in WalkDir::new(project.path()).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                set_mtime(entry.path(), then);
+            }
+        }
+    }
+
+    /// The manifest a build would write for `project`, and its mtime once
+    /// written to disk.
+    fn written_manifest(project: &TempDir) -> (crate::manifest::Manifest, SystemTime) {
+        let tools = project.path().join("tools");
+        let input_records = snapshot_static_inputs(&tools, None, None).unwrap();
+        let manifest = crate::manifest::Manifest {
+            schema_version: crate::manifest::SCHEMA_VERSION,
+            static_hash: static_hash_of(&input_records.files),
+            third_party_hash: String::new(),
+            toolr_version: env!("CARGO_PKG_VERSION").to_string(),
+            groups: vec![],
+            commands: vec![],
+            plugin_warnings: Vec::new(),
+            input_records,
+        };
+        let path = tools.join(".toolr-manifest.json");
+        crate::manifest::write_manifest(&path, &manifest).unwrap();
+        let written_at = std::fs::metadata(&path).unwrap().modified().unwrap();
+        (manifest, written_at)
+    }
+
+    fn compare_reads(
+        project: &TempDir,
+        manifest: &crate::manifest::Manifest,
+        written_at: Option<SystemTime>,
+    ) -> (
+        crate::freshness::FreshnessVerdict,
+        std::collections::HashMap<PathBuf, usize>,
+    ) {
+        let tools = project.path().join("tools");
+        take_reads();
+        let verdict = crate::freshness::compare(Some(manifest), written_at, &tools, None).unwrap();
+        (verdict, take_reads())
+    }
+
+    fn reads_of(project: &TempDir, rels: &[&str]) -> std::collections::HashMap<PathBuf, usize> {
+        rels.iter().map(|r| (project.path().join(r), 1)).collect()
+    }
+
+    const MIGRATE: &str = "apps/billing/management/commands/migrate.py";
+    const ALL_INPUTS: [&str; 3] = [MIGRATE, "tools/dispatcher.py", "tools/pyproject.toml"];
+
+    /// #656: an unchanged tree costs stats, not reads.
+    #[test]
+    fn fresh_compare_reads_nothing() {
+        let project = django_project();
+        age(&project);
+        let (manifest, written_at) = written_manifest(&project);
+        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
+        assert!(reads.is_empty(), "{reads:?}");
+    }
+
+    /// A manifest without records (older, or no mtime) reads every input
+    /// once, the pyproject included, and is still fresh.
+    #[test]
+    fn compare_without_records_reads_each_input_once() {
+        let project = django_project();
+        age(&project);
+        let (mut manifest, written_at) = written_manifest(&project);
+        let (verdict, reads) = compare_reads(&project, &manifest, None);
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
+        assert_eq!(reads, reads_of(&project, &ALL_INPUTS));
+
+        manifest.input_records = Default::default();
+        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
+        assert_eq!(reads, reads_of(&project, &ALL_INPUTS));
+    }
+
+    /// Editing one scanned file rereads only that file; the rebuild's
+    /// snapshot (no reuse, as in `build_static_manifest`) then reads each
+    /// input once.
+    #[test]
+    fn edited_scanned_file_is_the_only_read() {
+        let project = django_project();
+        age(&project);
+        let (manifest, written_at) = written_manifest(&project);
+        write(
+            &project,
+            MIGRATE,
+            &format!("{MIGRATE_PY}    parser.add_argument('--database')\n"),
+        );
+        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
+        assert_eq!(reads, reads_of(&project, &[MIGRATE]));
+
+        snapshot_static_inputs(&project.path().join("tools"), None, None).unwrap();
+        assert_eq!(take_reads(), reads_of(&project, &ALL_INPUTS));
+    }
+
+    /// A new file matching a `scan_paths` glob is read and invalidates.
+    #[test]
+    fn new_scanned_file_invalidates() {
+        let project = django_project();
+        age(&project);
+        let (manifest, written_at) = written_manifest(&project);
+        let added = "apps/billing/management/commands/sync.py";
+        write(&project, added, MIGRATE_PY);
+        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
+        assert_eq!(reads, reads_of(&project, &[added]));
+    }
+
+    /// A removed scanned file invalidates without reading anything.
+    #[test]
+    fn removed_scanned_file_invalidates() {
+        let project = django_project();
+        age(&project);
+        let (manifest, written_at) = written_manifest(&project);
+        std::fs::remove_file(project.path().join(MIGRATE)).unwrap();
+        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
+        assert!(reads.is_empty(), "{reads:?}");
+    }
+
+    /// An edited pyproject is read once, and its new globs apply.
+    #[test]
+    fn edited_pyproject_is_read_once_and_rescanned() {
+        let project = django_project();
+        age(&project);
+        let (manifest, written_at) = written_manifest(&project);
+        let pyproject = std::fs::read_to_string(project.path().join("tools/pyproject.toml"))
+            .unwrap()
+            .replace("apps/*/management/commands/*.py", "nowhere/*.py");
+        write(&project, "tools/pyproject.toml", &pyproject);
+        let tools = project.path().join("tools");
+        take_reads();
+        let records =
+            snapshot_static_inputs(&tools, Some(&manifest.input_records), Some(written_at))
+                .unwrap();
+        assert_eq!(take_reads(), reads_of(&project, &["tools/pyproject.toml"]));
+        let keys: Vec<_> = records.files.iter().map(|f| f.key.as_str()).collect();
+        assert_eq!(keys, ["tools/dispatcher.py", "tools/pyproject.toml"]);
+        assert_eq!(records.scan_paths, [vec!["nowhere/*.py".to_string()]]);
+    }
+
+    /// The racy rule: a record whose mtime is not strictly older than the
+    /// manifest is reread even though nothing changed.
+    #[test]
+    fn racy_record_is_reread() {
+        let project = django_project();
+        let then = SystemTime::now() - AGED;
+        age(&project);
+        let tools = project.path().join("tools");
+        let previous = snapshot_static_inputs(&tools, None, None).unwrap();
+        let reads_with = |written_at| {
+            take_reads();
+            let records = snapshot_static_inputs(&tools, Some(&previous), Some(written_at));
+            assert_eq!(records.unwrap(), previous);
+            take_reads()
+        };
+        // `age` set every mtime to `then`, give or take its rounding.
+        let mtime = std::fs::metadata(project.path().join(MIGRATE))
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert!(mtime.duration_since(then).unwrap_or_default() < std::time::Duration::from_secs(1));
+        assert_eq!(reads_with(mtime), reads_of(&project, &ALL_INPUTS));
+        let after = mtime + std::time::Duration::from_nanos(1);
+        assert!(reads_with(after).is_empty());
+    }
+
+    /// No `written_at` reuses nothing.
+    #[test]
+    fn none_written_at_reuses_nothing() {
+        let project = django_project();
+        age(&project);
+        let tools = project.path().join("tools");
+        let previous = snapshot_static_inputs(&tools, None, None).unwrap();
+        take_reads();
+        snapshot_static_inputs(&tools, Some(&previous), None).unwrap();
+        assert_eq!(take_reads(), reads_of(&project, &ALL_INPUTS));
+    }
+
+    /// Same size, mtime restored, manifest written well after: ctime still
+    /// moved, so the edit is caught.
+    #[cfg(unix)]
+    #[test]
+    fn same_size_edit_with_restored_mtime_is_detected() {
+        let project = django_project();
+        age(&project);
+        let (manifest, written_at) = written_manifest(&project);
+        let path = project.path().join(MIGRATE);
+        let mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
+        write(&project, MIGRATE, &MIGRATE_PY.replace("--check", "--force"));
+        set_mtime(&path, mtime);
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), mtime);
+        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
+        assert_eq!(reads, reads_of(&project, &[MIGRATE]));
+    }
+
+    /// Fixing an unreadable scanned file changes neither size nor mtime, so
+    /// its record is never reused.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_record_is_never_reused() {
+        let project = django_project();
+        age(&project);
+        let path = project.path().join(MIGRATE);
+        let Some((manifest, written_at)) = with_unreadable(&path, || written_manifest(&project))
+        else {
+            return;
+        };
+        let record = &manifest.input_records.files[0];
+        assert_eq!(record.key, MIGRATE);
+        assert!(record.unreadable.is_some(), "{record:?}");
+        assert_eq!(record.mtime_ns, 0);
+        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
+        assert_eq!(reads, reads_of(&project, &[MIGRATE]));
+    }
+
+    /// Records that are not ours (unsorted, unknown keys) are only ever
+    /// missed, never misapplied.
+    #[test]
+    fn foreign_records_are_not_reused() {
+        let project = django_project();
+        age(&project);
+        let (mut manifest, written_at) = written_manifest(&project);
+        manifest.input_records.files.reverse();
+        manifest.input_records.files[0].key = "tools/other.py".into();
+        let (_, reads) = compare_reads(&project, &manifest, Some(written_at));
+        assert!(reads.contains_key(&project.path().join("tools/pyproject.toml")));
+    }
+
+    #[test]
+    fn nanos_is_zero_before_the_epoch_or_on_error() {
+        assert_eq!(nanos(Ok(UNIX_EPOCH - std::time::Duration::from_secs(1))), 0);
+        assert_eq!(nanos(Err(std::io::ErrorKind::Unsupported.into())), 0);
+        assert_eq!(
+            nanos(Ok(UNIX_EPOCH + std::time::Duration::from_nanos(5))),
+            5
+        );
     }
 
     #[test]

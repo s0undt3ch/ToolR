@@ -33,7 +33,8 @@ pub struct Manifest {
     pub schema_version: u32,
     /// Hash over the static build's inputs (`tools/**/*.py`, the argparse
     /// blocks in `tools/pyproject.toml` and the files they scan) —
-    /// used for fast freshness checks.
+    /// used for fast freshness checks. Derived from `input_records`; see
+    /// `hash::static_hash_of`.
     pub static_hash: String,
     /// Will hash the sorted list of `site-packages/*/toolr-manifest.json`
     /// files (path + content) discovered in the tools venv. Equals
@@ -53,8 +54,52 @@ pub struct Manifest {
     /// Plugins skipped, shadowed or in conflict at the last third-party merge, warned about on every run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugin_warnings: Vec<PluginWarning>,
+    /// What `static_hash` was computed from, so the freshness check rereads
+    /// only the inputs whose stat changed. Empty on older manifests.
+    #[serde(default, skip_serializing_if = "InputRecords::is_empty")]
+    pub input_records: InputRecords,
 }
 // endregion: SkillRefManifest
+
+/// The static build's inputs as last hashed; see `hash::snapshot_static_inputs`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputRecords {
+    /// One record per static input, sorted by key.
+    #[serde(default)]
+    pub files: Vec<FileStat>,
+    /// Each `[tool.toolr.argparse.*]` block's `scan_paths`, as parsed from
+    /// the `tools/pyproject.toml` its record describes.
+    #[serde(default)]
+    pub scan_paths: Vec<Vec<String>>,
+}
+
+impl InputRecords {
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty() && self.scan_paths.is_empty()
+    }
+}
+
+/// One static input's stat and content digest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileStat {
+    /// `hash::StaticInput::key`.
+    pub key: String,
+    pub size: u64,
+    /// Nanoseconds since the Unix epoch; `0` means the record is never reused.
+    pub mtime_ns: u64,
+    /// Unix only; `0` elsewhere.
+    #[serde(default)]
+    pub ctime_ns: u64,
+    /// Unix only; `0` elsewhere.
+    #[serde(default)]
+    pub ino: u64,
+    /// Lowercase hex blake3 of the contents; empty when `unreadable`.
+    #[serde(default)]
+    pub blake3: String,
+    /// The read error's kind, for a non-module input that couldn't be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unreadable: Option<String>,
+}
 
 /// One plugin problem recorded at merge time so every later run can warn about it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

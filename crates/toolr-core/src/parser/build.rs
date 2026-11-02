@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::hash::{SymlinkedModules, hash_paths, list_python_files, static_inputs_from};
+use crate::hash::{SymlinkedModules, list_python_files, snapshot_from, static_hash_of};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
 use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
@@ -42,16 +42,19 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let py_files = list_python_files(tools_dir)?;
     let (all_groups, all_commands) = build_commands_inner(tools_dir, &py_files, "tools", false)?;
 
-    let static_hash =
-        hash_paths(&static_inputs_from(tools_dir, &py_files)).map_err(BuildError::Build)?;
+    // Hashed before the parse, never after: an edit during the build must
+    // leave a hash that no longer matches, not one matching the new bytes.
+    let input_records =
+        snapshot_from(tools_dir, &py_files, None, None).map_err(BuildError::Build)?;
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
-        static_hash,
+        static_hash: static_hash_of(&input_records.files),
         third_party_hash: String::new(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: all_groups,
         commands: all_commands,
         plugin_warnings: Vec::new(),
+        input_records,
     };
 
     // Run the user's argparse scanner ([tool.toolr.argparse.*] in
@@ -683,6 +686,32 @@ mod tests {
             dispatched_from: None,
             is_dispatcher: false,
         }
+    }
+
+    /// The build records what it hashed, so the next check can reuse it.
+    #[test]
+    fn built_manifest_carries_input_records() {
+        let tmp = TempDir::new().unwrap();
+        let tools = tmp.path().join("tools");
+        std::fs::create_dir_all(tools.join("sub")).unwrap();
+        std::fs::write(
+            tools.join("pyproject.toml"),
+            "[project]\nname = \"tools\"\n",
+        )
+        .unwrap();
+        std::fs::write(tools.join("sub/a.py"), "x = 1\n").unwrap();
+        let manifest = build_static_manifest(&tools).unwrap();
+        let keys: Vec<_> = manifest
+            .input_records
+            .files
+            .iter()
+            .map(|f| f.key.as_str())
+            .collect();
+        assert_eq!(keys, ["tools/pyproject.toml", "tools/sub/a.py"]);
+        assert_eq!(
+            manifest.static_hash,
+            crate::hash::compute_static_hash(&tools).unwrap()
+        );
     }
 
     #[test]

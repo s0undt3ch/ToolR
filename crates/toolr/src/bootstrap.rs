@@ -119,6 +119,11 @@ pub(crate) fn names_user_command(argv: &[String]) -> bool {
     first_positional(argv).is_some_and(|name| !BUILTINS.contains(&name))
 }
 
+/// Whether `argv` is a shell's TAB request (`toolr __complete …`).
+pub(crate) fn is_tab_completion(argv: &[String]) -> bool {
+    first_positional(argv) == Some("__complete")
+}
+
 /// Root options whose value is the next argument, with their aliases.
 /// `root_value_options_match_the_cli` fails when `cli::build_command` adds
 /// one this list lacks. A short value option (`-t 5`, `-t5`) would also
@@ -177,6 +182,11 @@ pub(crate) fn ensure_manifest_fresh(
     let mut warned = false;
     let mut fresh_cache = None;
     let check = || -> anyhow::Result<Option<(FreshnessVerdict, Option<Manifest>)>> {
+        // Stat before loading: a manifest replaced in between then looks
+        // older than it is, which only costs rereads.
+        let written_at = std::fs::metadata(&manifest_path)
+            .and_then(|m| m.modified())
+            .ok();
         let cached = match load_manifest(&manifest_path) {
             Ok(m) => Some(m),
             Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -190,7 +200,7 @@ pub(crate) fn ensure_manifest_fresh(
                 None
             }
         };
-        let verdict = compare(cached.as_ref(), &tools, venv_dir.as_deref())?;
+        let verdict = compare(cached.as_ref(), written_at, &tools, venv_dir.as_deref())?;
         if matches!(verdict, FreshnessVerdict::Fresh) {
             fresh_cache = cached;
             return Ok(None);
@@ -345,7 +355,7 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 mod tests {
     use super::{
         carry_forward_cached_entries, ensure_manifest_fresh, ensure_manifest_present_or_bootstrap,
-        should_skip_auto_rebuild,
+        is_tab_completion, should_skip_auto_rebuild,
     };
     use toolr_core::freshness::FreshnessVerdict;
     use toolr_core::manifest::{
@@ -371,6 +381,7 @@ mod tests {
             groups,
             commands: vec![],
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         }
     }
 
@@ -412,6 +423,7 @@ mod tests {
             groups: Vec::new(),
             commands: Vec::new(),
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         });
         let mut from_cli: Vec<String> = command
             .get_arguments()
@@ -526,6 +538,8 @@ mod tests {
             "/tmp",
             "..."
         ])));
+        assert!(is_tab_completion(&args(&["__complete", "/tmp", "..."])));
+        assert!(!is_tab_completion(&args(&["project", "__complete"])));
     }
 
     #[test]

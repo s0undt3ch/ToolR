@@ -1,10 +1,11 @@
 //! Single-source-of-truth freshness comparison.
 
 use std::path::Path;
+use std::time::SystemTime;
 
 use anyhow::Result;
 
-use crate::hash::{compute_static_hash, context_unless_symlinked};
+use crate::hash::{context_unless_symlinked, snapshot_static_inputs, static_hash_of};
 use crate::manifest::Manifest;
 use crate::manifest_build::compute_third_party_hash;
 
@@ -48,12 +49,17 @@ pub enum FreshnessVerdict {
 /// local change can shadow or unshadow a plugin command, which only a
 /// re-merge can reflect. So `StaticDrift` means local drift with no venv.
 ///
+/// `cached_written_at` is the cached manifest file's mtime. Inputs whose
+/// stat matches their record in `cached` and that are older than it are not
+/// reread; see [`snapshot_static_inputs`]. `None` rereads every input.
+///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
 /// third-party entries and plugin warnings. On `ThirdPartyDrift`, call
 /// `build_static_manifest_with_venv`; third-party entries come from the
 /// fresh glob.
 pub fn compare(
     cached: Option<&Manifest>,
+    cached_written_at: Option<SystemTime>,
     tools_dir: &Path,
     venv_dir: Option<&Path>,
 ) -> Result<FreshnessVerdict> {
@@ -75,8 +81,10 @@ pub fn compare(
         return Ok(verdict);
     }
 
-    let live_static = compute_static_hash(tools_dir)
-        .map_err(|e| context_unless_symlinked(e, format!("hashing {}", tools_dir.display())))?;
+    let live_static =
+        snapshot_static_inputs(tools_dir, Some(&cached.input_records), cached_written_at)
+            .map(|records| static_hash_of(&records.files))
+            .map_err(|e| context_unless_symlinked(e, format!("hashing {}", tools_dir.display())))?;
 
     // Third-party axis is only checked when the caller actually has a
     // venv. When `venv_dir` is `None`, the caller has explicitly opted

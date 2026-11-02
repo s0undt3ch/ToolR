@@ -728,6 +728,7 @@ fn empty_manifest_for_completion() -> Manifest {
         groups: Vec::new(),
         commands: Vec::new(),
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -830,6 +831,7 @@ mod tests {
             groups: Vec::new(),
             commands: Vec::new(),
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         }
     }
 
@@ -938,6 +940,7 @@ mod path_lookup_tests {
             groups: vec![],
             commands,
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         }
     }
 

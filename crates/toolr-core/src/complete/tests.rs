@@ -101,6 +101,7 @@ fn fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -301,6 +302,7 @@ fn nested_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -483,6 +485,7 @@ fn dispatcher_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -726,6 +729,7 @@ fn flags_only_child_fixture() -> Manifest {
             },
         ],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -825,6 +829,26 @@ fn returns_cached_manifest_when_hash_matches() {
     let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
     assert!(resolved.from_cache);
     assert_eq!(resolved.manifest, built);
+}
+
+/// #656: a corrupt manifest at TAB is rebuilt in memory, without a panic
+/// path, and left as it is for the next non-TAB run to report and repair.
+#[test]
+fn corrupt_manifest_at_tab_rebuilds_in_memory() {
+    let tmp = make_tree(&[(
+        "ci.py",
+        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+    )]);
+    let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
+    std::fs::write(&manifest_path, "{\"schema_ver").unwrap();
+
+    let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
+    assert!(!resolved.from_cache);
+    assert!(resolved.manifest.groups.iter().any(|g| g.name == "ci"));
+    assert_eq!(
+        std::fs::read_to_string(&manifest_path).unwrap(),
+        "{\"schema_ver"
+    );
 }
 
 #[test]
@@ -1283,6 +1307,7 @@ fn manifest_with_leaf_args(arguments: Vec<Argument>) -> Manifest {
             is_dispatcher: false,
         }],
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 

@@ -44,6 +44,9 @@ fn run() -> anyhow::Result<ExitCode> {
     bootstrap::ensure_manifest_present_or_bootstrap(&cwd, &argv, persist)?;
     let mut manifest = match bootstrap::ensure_manifest_fresh(&cwd, &argv, persist)? {
         Some(m) => m,
+        // `__complete` resolves the manifest itself; loading it here too
+        // would parse it twice per TAB and warn about a corrupt one.
+        None if bootstrap::is_tab_completion(&argv) => empty_manifest(),
         None => load_or_empty(&cwd, &argv)?,
     };
     // Covers fragments and a hand-edited committed manifest alike. Tab
@@ -199,6 +202,7 @@ fn empty_manifest() -> Manifest {
         groups: Vec::new(),
         commands: Vec::new(),
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
