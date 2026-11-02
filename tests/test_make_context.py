@@ -11,6 +11,7 @@ from toolr._context import Context
 from toolr.testing import make_command_result
 from toolr.testing import make_context
 from toolr.utils import command
+from toolr.utils._console import ConsoleVerbosity
 
 # `RunMock` and `Mock` are imported locally inside the `run=`/`chdir=` tests below rather than
 # here, so the `--8<--` doc snippets they carry are self-contained when included in
@@ -34,25 +35,70 @@ def test_make_context_captures_stderr(tmp_path: Path) -> None:
     assert "something broke" in ctx.stderr
 
 
-def test_make_context_stream_split(tmp_path: Path) -> None:
-    def fake_run(
-        *args: object, **kwargs: object
-    ) -> command.CommandResult[str] | command.CommandResult[bytes]:
-        return make_command_result()
+def _fake_run(
+    *args: object, **kwargs: object
+) -> command.CommandResult[str] | command.CommandResult[bytes]:
+    return make_command_result()
 
-    ctx = make_context(tmp_path, prompt_input="bob\n", run=fake_run)
+
+@pytest.mark.parametrize(
+    ("verbosity", "debug_shown", "info_shown"),
+    [
+        (ConsoleVerbosity.QUIET, False, False),
+        (ConsoleVerbosity.NORMAL, False, True),
+        (ConsoleVerbosity.VERBOSE, True, True),
+    ],
+)
+def test_make_context_stream_split(
+    tmp_path: Path, verbosity: ConsoleVerbosity, debug_shown: bool, info_shown: bool
+) -> None:
+    ctx = make_context(tmp_path, prompt_input="bob\n", run=_fake_run, verbosity=verbosity)
     ctx.print("to-stdout")
+    ctx.debug("debug-line")
     ctx.info("info-line")
     ctx.warn("warn-line")
+    ctx.error("error-line")
     ctx.prompt("Name?")
     ctx.run("echo", "sub")
     with pytest.raises(SystemExit):
         ctx.exit(1, "exit-message")
     assert "to-stdout" in ctx.stdout
-    assert "Name?" in ctx.stdout
-    for text in ("info-line", "warn-line", "Running 'echo sub'", "exit-message"):
+    assert "Name?: " in ctx.stdout
+    assert "Name?" not in ctx.stderr
+    for text in ("warn-line", "error-line", "exit-message"):
         assert text in ctx.stderr
+    assert ("debug-line" in ctx.stderr) is debug_shown
+    assert ("info-line" in ctx.stderr) is info_shown
+    assert ("Running 'echo sub'" in ctx.stderr) is info_shown
+    for text in (
+        "debug-line",
+        "info-line",
+        "warn-line",
+        "error-line",
+        "Running 'echo sub'",
+        "exit-message",
+    ):
         assert text not in ctx.stdout
+
+
+def test_make_context_exit_ok_message_goes_to_stderr(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        ctx.exit(0, "all done")
+    assert exc_info.value.code == 0
+    assert "all done" in ctx.stderr
+    assert "all done" not in ctx.stdout
+
+
+def test_make_context_prompt_renders_choices_and_reasks_to_stdout(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path, prompt_input="x\n3\n2\n")
+    assert ctx.prompt("Pick", int, choices=["1", "2"], default=2) == 2
+    assert ctx.stdout == (
+        "Pick [1/2] (2): Please enter a valid integer number\n"
+        "Pick [1/2] (2): Please select one of the available options\n"
+        "Pick [1/2] (2): "
+    )
+    assert ctx.stderr == ""
 
 
 def test_make_context_exit_raises_system_exit(tmp_path: Path) -> None:
