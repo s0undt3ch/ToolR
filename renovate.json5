@@ -65,7 +65,9 @@
       managerFilePatterns: ["/^\\.github/env$/"],
       matchStrings: ["TOOLR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       depNameTemplate: "s0undt3ch/ToolR",
-      datasourceTemplate: "github-releases",
+      // Tags, not releases: the same datasource as the aqua pin in mise.toml,
+      // so the group can't bump one before the GitHub release exists.
+      datasourceTemplate: "github-tags",
       extractVersionTemplate: "^v?(?<version>.*)$",
     },
     {
