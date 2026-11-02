@@ -31,9 +31,13 @@ def _steps_by_file() -> dict[str, list[dict[str, Any]]]:
     steps: dict[str, list[dict[str, Any]]] = {}
     for path in sorted((GITHUB_DIR / "workflows").glob("*.y*ml")):
         for job in (_load(path).get("jobs") or {}).values():
-            steps.setdefault(str(path.relative_to(REPO_ROOT)), []).extend(job.get("steps") or [])
+            steps.setdefault(path.relative_to(REPO_ROOT).as_posix(), []).extend(
+                job.get("steps") or []
+            )
     for path in sorted((GITHUB_DIR / "actions").glob("*/action.y*ml")):
-        steps[str(path.relative_to(REPO_ROOT))] = (_load(path).get("runs") or {}).get("steps") or []
+        steps[path.relative_to(REPO_ROOT).as_posix()] = (_load(path).get("runs") or {}).get(
+            "steps"
+        ) or []
     return steps
 
 
