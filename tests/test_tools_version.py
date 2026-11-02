@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -382,6 +383,29 @@ def test_bump_finds_existing_tag_in_any_spelling(
     assert excinfo.value.code == 1
     assert f"Tag {existing} already exists for version 1.0.0-rc.1" in ctx.stderr
     assert not any(path.exists() for path in github_files.values())
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the `cargo` stub is a POSIX shell script")
+def test_bump_write_sets_cargo_and_action_versions(
+    release_repo: Callable[..., ContextForTesting],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--write --include-action`` hands the Cargo form to ``cargo set-version`` and ``action.yml``."""
+    ctx = release_repo("v0.36.0", commits=1)
+    (ctx.repo_root / "action.yml").write_text(textwrap.dedent(ACTION_YML_BASE), encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    cargo_args = tmp_path / "cargo-args"
+    cargo = bin_dir / "cargo"
+    cargo.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "{cargo_args}"\n')
+    cargo.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+    bump(ctx, new_version="1.0.0rc1", include_action=True, write=True)
+
+    assert cargo_args.read_text().splitlines() == ["set-version", "--workspace", "1.0.0-rc.1"]
+    assert 'default: "1.0.0-rc.1"' in (ctx.repo_root / "action.yml").read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------
