@@ -35,11 +35,6 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     // Any load error, a corrupt file included, is "no cache": rebuild in
     // memory and say nothing. Every completion script sends stderr to
     // /dev/null, so the next non-TAB run warns and repairs the file instead.
-    // Stat before loading: a manifest replaced in between then looks
-    // older than it is, which only costs rereads.
-    let written_at = std::fs::metadata(&manifest_path)
-        .and_then(|m| m.modified())
-        .ok();
     let cached = load_manifest(&manifest_path).ok();
 
     // Tab completion never globs the venv — too costly on the hot path.
@@ -48,7 +43,7 @@ pub fn resolve_manifest_at_tab(cwd: &Path) -> Result<ResolvedManifest> {
     // Static drift or a toolr-version mismatch still triggers a re-parse.
     // Real third-party changes will be picked up on the next dispatch
     // invocation, which does pass the venv path.
-    let verdict = crate::freshness::compare(cached.as_ref(), written_at, &tools_dir, None)?;
+    let verdict = crate::freshness::compare(cached.as_ref(), &tools_dir, None)?;
 
     let cached = match (verdict, cached) {
         (crate::freshness::FreshnessVerdict::Fresh, Some(mut cached)) => {

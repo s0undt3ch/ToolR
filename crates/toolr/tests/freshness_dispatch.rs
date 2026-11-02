@@ -313,7 +313,10 @@ fn corrupt_manifest_is_reported_once_by_the_next_non_tab_run() {
         );
     };
     help(true);
-    assert!(toolr_core::manifest::load_manifest(&manifest_path).is_ok());
+    let repaired = toolr_core::manifest::load_manifest(&manifest_path).unwrap();
+    // Written with the filesystem clock taken before the build, so the next
+    // check can reuse its records.
+    assert_ne!(repaired.input_records.snapshot_at_ns, 0);
     help(false);
 }
 

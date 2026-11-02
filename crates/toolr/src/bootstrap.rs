@@ -14,7 +14,7 @@ use std::path::Path;
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::freshness::{FreshnessVerdict, compare};
-use toolr_core::hash::is_symlinked_modules;
+use toolr_core::hash::{fs_clock_ns, is_symlinked_modules};
 use toolr_core::manifest::{
     Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
 };
@@ -65,12 +65,14 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         // First-party is always available (pure AST). Add third-party only when
         // a venv already exists — globbing site-packages JSON executes nothing.
         let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
-        let manifest = match venv_dir.as_deref() {
+        let snapshot_at_ns = fs_clock_ns(&tools);
+        let mut manifest = match venv_dir.as_deref() {
             Some(v) if v.join("pyvenv.cfg").is_file() => {
                 build_static_manifest_with_venv(&tools, v).map_err(BuildError::into_anyhow)?
             }
             _ => build_static_manifest(&tools)?,
         };
+        manifest.input_records.snapshot_at_ns = snapshot_at_ns;
         write_manifest(&manifest_path, &manifest)
             .with_context(|| format!("writing {}", manifest_path.display()))
     })?;
@@ -182,11 +184,6 @@ pub(crate) fn ensure_manifest_fresh(
     let mut warned = false;
     let mut fresh_cache = None;
     let check = || -> anyhow::Result<Option<(FreshnessVerdict, Option<Manifest>)>> {
-        // Stat before loading: a manifest replaced in between then looks
-        // older than it is, which only costs rereads.
-        let written_at = std::fs::metadata(&manifest_path)
-            .and_then(|m| m.modified())
-            .ok();
         let cached = match load_manifest(&manifest_path) {
             Ok(m) => Some(m),
             Err(ManifestError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -200,7 +197,7 @@ pub(crate) fn ensure_manifest_fresh(
                 None
             }
         };
-        let verdict = compare(cached.as_ref(), written_at, &tools, venv_dir.as_deref())?;
+        let verdict = compare(cached.as_ref(), &tools, venv_dir.as_deref())?;
         if matches!(verdict, FreshnessVerdict::Fresh) {
             fresh_cache = cached;
             return Ok(None);
@@ -209,25 +206,26 @@ pub(crate) fn ensure_manifest_fresh(
     };
     // `persist` gates both the write in `rebuild` and the lock below; the
     // in-memory path needs neither.
-    let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| match try_rebuild(
-        verdict,
-        &tools,
-        venv_dir.as_deref(),
-        cached.as_ref(),
-    ) {
-        Ok(fresh) => {
-            if persist {
-                write_manifest(&manifest_path, &fresh)
-                    .with_context(|| format!("writing {}", manifest_path.display()))?;
+    let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| {
+        // Taken before the build stats anything, and only when writing:
+        // it creates a file in `tools/`.
+        let snapshot_at_ns = persist.then(|| fs_clock_ns(&tools));
+        match try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref()) {
+            Ok(mut fresh) => {
+                if let Some(ns) = snapshot_at_ns {
+                    fresh.input_records.snapshot_at_ns = ns;
+                    write_manifest(&manifest_path, &fresh)
+                        .with_context(|| format!("writing {}", manifest_path.display()))?;
+                }
+                Ok(Some(fresh))
             }
-            Ok(Some(fresh))
-        }
-        // Symlinked modules are fatal: the cache would hide the links again,
-        // and the walk executes nothing, so untrusted repos get it too (F-17).
-        Err(e) if is_symlinked_modules(&e) => Err(e),
-        Err(e) => {
-            warn_and_keep_cache(&e, cached.is_some());
-            Ok(cached)
+            // Symlinked modules are fatal: the cache would hide the links again,
+            // and the walk executes nothing, so untrusted repos get it too (#642).
+            Err(e) if is_symlinked_modules(&e) => Err(e),
+            Err(e) => {
+                warn_and_keep_cache(&e, cached.is_some());
+                Ok(cached)
+            }
         }
     };
     let outcome = if persist {

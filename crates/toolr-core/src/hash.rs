@@ -59,7 +59,7 @@ const TAG_ARGPARSE_BLOCKS: &[u8] = b"\x02";
 /// Fails unwrapped with [`SymlinkedModules`] like [`list_python_files`].
 pub fn compute_static_hash(tools_dir: &Path) -> Result<String> {
     Ok(static_hash_of(
-        &snapshot_static_inputs(tools_dir, None, None)?.files,
+        &snapshot_static_inputs(tools_dir, None)?.files,
     ))
 }
 
@@ -86,12 +86,16 @@ pub(crate) fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
 ///
 /// A record from `previous` is reused, without reading the file, when its
 /// key, size, mtime, ctime and inode all match the live file and its mtime
-/// is strictly older than `written_at`, the mtime of the manifest that
-/// holds it. A file saved in the same timestamp tick as the manifest could
-/// have changed without changing its stat, so it is always reread (git's
-/// racy-index rule). `written_at == None` reuses nothing. The stat is taken
+/// is strictly older than `previous.snapshot_at_ns`, the filesystem's clock
+/// just before that snapshot's first stat (see [`fs_clock_ns`]). A file
+/// saved in the same timestamp tick as its stat could have changed again
+/// without changing its stat, so it is always reread (git's racy-index
+/// rule). A `snapshot_at_ns` of `0` reuses nothing. The stat is taken
 /// before the read: a file that changes in between keeps its old stat in
 /// the record, so the next check rereads it.
+///
+/// The returned records carry `snapshot_at_ns == 0`: only a caller that
+/// persists them takes the bound, before building.
 ///
 /// `tools/pyproject.toml` is read at most once, for both its digest and
 /// its `scan_paths`; when its record is reused, so are the `scan_paths`.
@@ -113,14 +117,25 @@ pub(crate) fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
 pub fn snapshot_static_inputs(
     tools_dir: &Path,
     previous: Option<&InputRecords>,
-    written_at: Option<SystemTime>,
 ) -> Result<InputRecords> {
-    snapshot_from(
-        tools_dir,
-        &list_python_files(tools_dir)?,
-        previous,
-        written_at,
-    )
+    snapshot_from(tools_dir, &list_python_files(tools_dir)?, previous)
+}
+
+/// The filesystem's clock now, in ns since the Unix epoch: the mtime of a
+/// file created (and removed) in `dir`. `0`, which makes the records it
+/// bounds unreusable, when that fails.
+///
+/// Taken from the filesystem rather than the system clock so an NFS
+/// server's skew can't make a record look older than it is. Writes to
+/// `dir`, so only callers that are about to write the manifest there may
+/// call it.
+pub fn fs_clock_ns(dir: &Path) -> u64 {
+    tempfile::Builder::new()
+        .prefix(".toolr-clock.")
+        .suffix(".tmp")
+        .tempfile_in(dir)
+        .and_then(|f| f.as_file().metadata())
+        .map_or(0, |m| nanos(m.modified()))
 }
 
 /// [`snapshot_static_inputs`] with `tools/**/*.py` already listed, so the
@@ -129,11 +144,10 @@ pub(crate) fn snapshot_from(
     tools_dir: &Path,
     py_files: &[PathBuf],
     previous: Option<&InputRecords>,
-    written_at: Option<SystemTime>,
 ) -> Result<InputRecords> {
     let reuse = Reuse {
         files: previous.map_or(&[], |p| p.files.as_slice()),
-        written_at: written_at.map_or(0, |t| nanos(Ok(t))),
+        snapshot_at_ns: previous.map_or(0, |p| p.snapshot_at_ns),
     };
     let project_root = project_root(tools_dir);
     let pyproject = crate::argparse::pyproject_path(project_root);
@@ -175,7 +189,11 @@ pub(crate) fn snapshot_from(
         };
         files.extend(record);
     }
-    Ok(InputRecords { files, scan_paths })
+    Ok(InputRecords {
+        files,
+        scan_paths,
+        snapshot_at_ns: 0,
+    })
 }
 
 /// `static_hash` from the records of [`snapshot_static_inputs`], in their
@@ -253,8 +271,8 @@ fn inputs_for(
 /// The previous records [`record`] may reuse.
 struct Reuse<'a> {
     files: &'a [FileStat],
-    /// The manifest's mtime in ns; `0` reuses nothing.
-    written_at: u64,
+    /// The previous snapshot's bound in ns; `0` reuses nothing.
+    snapshot_at_ns: u64,
 }
 
 impl Reuse<'_> {
@@ -268,7 +286,10 @@ impl Reuse<'_> {
             && old.mtime_ns == live.mtime_ns
             && old.ctime_ns == live.ctime_ns
             && old.ino == live.ino;
-        (same && old.unreadable.is_none() && old.mtime_ns != 0 && old.mtime_ns < self.written_at)
+        (same
+            && old.unreadable.is_none()
+            && old.mtime_ns != 0
+            && old.mtime_ns < self.snapshot_at_ns)
             .then_some(old)
     }
 }
@@ -560,7 +581,7 @@ mod tests {
     fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
         let reuse = Reuse {
             files: &[],
-            written_at: 0,
+            snapshot_at_ns: 0,
         };
         let mut files = Vec::new();
         for input in inputs {
@@ -1183,11 +1204,18 @@ parent = "django"
         }
     }
 
-    /// The manifest a build would write for `project`, and its mtime once
-    /// written to disk.
-    fn written_manifest(project: &TempDir) -> (crate::manifest::Manifest, SystemTime) {
+    /// The manifest a persisting build would write for `project`: the
+    /// filesystem clock read first, then the snapshot.
+    fn written_manifest(project: &TempDir) -> crate::manifest::Manifest {
         let tools = project.path().join("tools");
-        let input_records = snapshot_static_inputs(&tools, None, None).unwrap();
+        let snapshot_at_ns = fs_clock_ns(&tools);
+        let mut input_records = snapshot_static_inputs(&tools, None).unwrap();
+        input_records.snapshot_at_ns = snapshot_at_ns;
+        manifest_of(project, input_records)
+    }
+
+    /// Write a manifest carrying `input_records` to `project`'s `tools/`.
+    fn manifest_of(project: &TempDir, input_records: InputRecords) -> crate::manifest::Manifest {
         let manifest = crate::manifest::Manifest {
             schema_version: crate::manifest::SCHEMA_VERSION,
             static_hash: static_hash_of(&input_records.files),
@@ -1198,28 +1226,30 @@ parent = "django"
             plugin_warnings: Vec::new(),
             input_records,
         };
-        let path = tools.join(".toolr-manifest.json");
+        let path = project.path().join("tools/.toolr-manifest.json");
         crate::manifest::write_manifest(&path, &manifest).unwrap();
-        let written_at = std::fs::metadata(&path).unwrap().modified().unwrap();
-        (manifest, written_at)
+        manifest
     }
 
     fn compare_reads(
         project: &TempDir,
         manifest: &crate::manifest::Manifest,
-        written_at: Option<SystemTime>,
     ) -> (
         crate::freshness::FreshnessVerdict,
         std::collections::HashMap<PathBuf, usize>,
     ) {
         let tools = project.path().join("tools");
         take_reads();
-        let verdict = crate::freshness::compare(Some(manifest), written_at, &tools, None).unwrap();
+        let verdict = crate::freshness::compare(Some(manifest), &tools, None).unwrap();
         (verdict, take_reads())
     }
 
     fn reads_of(project: &TempDir, rels: &[&str]) -> std::collections::HashMap<PathBuf, usize> {
         rels.iter().map(|r| (project.path().join(r), 1)).collect()
+    }
+
+    fn mtime_ns(path: &Path) -> u64 {
+        nanos(std::fs::metadata(path).and_then(|m| m.modified()))
     }
 
     const MIGRATE: &str = "apps/billing/management/commands/migrate.py";
@@ -1230,25 +1260,39 @@ parent = "django"
     fn fresh_compare_reads_nothing() {
         let project = django_project();
         age(&project);
-        let (manifest, written_at) = written_manifest(&project);
-        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let manifest = written_manifest(&project);
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
         assert!(reads.is_empty(), "{reads:?}");
     }
 
-    /// A manifest without records (older, or no mtime) reads every input
-    /// once, the pyproject included, and is still fresh.
+    /// The filesystem clock is now, and leaves no file behind.
     #[test]
-    fn compare_without_records_reads_each_input_once() {
+    fn fs_clock_reads_the_filesystem_and_cleans_up() {
+        let project = tools_tree(&[("a.py", "x")]);
+        let tools = project.path().join("tools");
+        let before = nanos(Ok(SystemTime::now() - std::time::Duration::from_secs(5)));
+        assert!(fs_clock_ns(&tools) > before);
+        let left: Vec<_> = std::fs::read_dir(&tools).unwrap().flatten().collect();
+        assert_eq!(left.len(), 1, "{left:?}");
+        assert_eq!(fs_clock_ns(&project.path().join("missing")), 0);
+    }
+
+    /// Records without a bound (older manifests, or one written by a path
+    /// that took none) reread every input once, the pyproject included, and
+    /// are still fresh.
+    #[test]
+    fn compare_without_a_bound_reads_each_input_once() {
         let project = django_project();
         age(&project);
-        let (mut manifest, written_at) = written_manifest(&project);
-        let (verdict, reads) = compare_reads(&project, &manifest, None);
+        let mut manifest = written_manifest(&project);
+        manifest.input_records.snapshot_at_ns = 0;
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
         assert_eq!(reads, reads_of(&project, &ALL_INPUTS));
 
         manifest.input_records = Default::default();
-        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
         assert_eq!(reads, reads_of(&project, &ALL_INPUTS));
     }
@@ -1260,17 +1304,17 @@ parent = "django"
     fn edited_scanned_file_is_the_only_read() {
         let project = django_project();
         age(&project);
-        let (manifest, written_at) = written_manifest(&project);
+        let manifest = written_manifest(&project);
         write(
             &project,
             MIGRATE,
             &format!("{MIGRATE_PY}    parser.add_argument('--database')\n"),
         );
-        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
         assert_eq!(reads, reads_of(&project, &[MIGRATE]));
 
-        snapshot_static_inputs(&project.path().join("tools"), None, None).unwrap();
+        snapshot_static_inputs(&project.path().join("tools"), None).unwrap();
         assert_eq!(take_reads(), reads_of(&project, &ALL_INPUTS));
     }
 
@@ -1279,10 +1323,10 @@ parent = "django"
     fn new_scanned_file_invalidates() {
         let project = django_project();
         age(&project);
-        let (manifest, written_at) = written_manifest(&project);
+        let manifest = written_manifest(&project);
         let added = "apps/billing/management/commands/sync.py";
         write(&project, added, MIGRATE_PY);
-        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
         assert_eq!(reads, reads_of(&project, &[added]));
     }
@@ -1292,9 +1336,9 @@ parent = "django"
     fn removed_scanned_file_invalidates() {
         let project = django_project();
         age(&project);
-        let (manifest, written_at) = written_manifest(&project);
+        let manifest = written_manifest(&project);
         std::fs::remove_file(project.path().join(MIGRATE)).unwrap();
-        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
         assert!(reads.is_empty(), "{reads:?}");
     }
@@ -1304,16 +1348,14 @@ parent = "django"
     fn edited_pyproject_is_read_once_and_rescanned() {
         let project = django_project();
         age(&project);
-        let (manifest, written_at) = written_manifest(&project);
+        let manifest = written_manifest(&project);
         let pyproject = std::fs::read_to_string(project.path().join("tools/pyproject.toml"))
             .unwrap()
             .replace("apps/*/management/commands/*.py", "nowhere/*.py");
         write(&project, "tools/pyproject.toml", &pyproject);
         let tools = project.path().join("tools");
         take_reads();
-        let records =
-            snapshot_static_inputs(&tools, Some(&manifest.input_records), Some(written_at))
-                .unwrap();
+        let records = snapshot_static_inputs(&tools, Some(&manifest.input_records)).unwrap();
         assert_eq!(take_reads(), reads_of(&project, &["tools/pyproject.toml"]));
         let keys: Vec<_> = records.files.iter().map(|f| f.key.as_str()).collect();
         assert_eq!(keys, ["tools/dispatcher.py", "tools/pyproject.toml"]);
@@ -1321,41 +1363,43 @@ parent = "django"
     }
 
     /// The racy rule: a record whose mtime is not strictly older than the
-    /// manifest is reread even though nothing changed.
+    /// snapshot's bound is reread even though nothing changed.
     #[test]
     fn racy_record_is_reread() {
         let project = django_project();
-        let then = SystemTime::now() - AGED;
         age(&project);
         let tools = project.path().join("tools");
-        let previous = snapshot_static_inputs(&tools, None, None).unwrap();
-        let reads_with = |written_at| {
+        let mut previous = snapshot_static_inputs(&tools, None).unwrap();
+        // `age` gave every file the same mtime.
+        let mtime = mtime_ns(&project.path().join(MIGRATE));
+        let mut reads_with = |bound| {
+            previous.snapshot_at_ns = bound;
             take_reads();
-            let records = snapshot_static_inputs(&tools, Some(&previous), Some(written_at));
-            assert_eq!(records.unwrap(), previous);
+            let records = snapshot_static_inputs(&tools, Some(&previous)).unwrap();
+            assert_eq!(records.files, previous.files);
             take_reads()
         };
-        // `age` set every mtime to `then`, give or take its rounding.
-        let mtime = std::fs::metadata(project.path().join(MIGRATE))
-            .unwrap()
-            .modified()
-            .unwrap();
-        assert!(mtime.duration_since(then).unwrap_or_default() < std::time::Duration::from_secs(1));
         assert_eq!(reads_with(mtime), reads_of(&project, &ALL_INPUTS));
-        let after = mtime + std::time::Duration::from_nanos(1);
-        assert!(reads_with(after).is_empty());
+        assert!(reads_with(mtime + 1).is_empty());
     }
 
-    /// No `written_at` reuses nothing.
+    /// Review of #656, reproduced on a 1 s clock: the file is written, the
+    /// snapshot stats it in the same tick, a same-size edit lands in that
+    /// tick too, and the manifest is written a tick later. The manifest is
+    /// newer than the file, but the snapshot isn't, so the file is reread.
     #[test]
-    fn none_written_at_reuses_nothing() {
+    fn record_as_new_as_its_snapshot_is_reread_though_the_manifest_is_newer() {
         let project = django_project();
         age(&project);
         let tools = project.path().join("tools");
-        let previous = snapshot_static_inputs(&tools, None, None).unwrap();
-        take_reads();
-        snapshot_static_inputs(&tools, Some(&previous), None).unwrap();
-        assert_eq!(take_reads(), reads_of(&project, &ALL_INPUTS));
+        let migrate = project.path().join(MIGRATE);
+        let mut input_records = snapshot_static_inputs(&tools, None).unwrap();
+        // The coarse tick both the file and the snapshot's bound fell in.
+        input_records.snapshot_at_ns = mtime_ns(&migrate);
+        let manifest = manifest_of(&project, input_records);
+        assert!(mtime_ns(&tools.join(".toolr-manifest.json")) > mtime_ns(&migrate));
+        let (_, reads) = compare_reads(&project, &manifest);
+        assert_eq!(reads, reads_of(&project, &ALL_INPUTS));
     }
 
     /// Same size, mtime restored, manifest written well after: ctime still
@@ -1365,13 +1409,13 @@ parent = "django"
     fn same_size_edit_with_restored_mtime_is_detected() {
         let project = django_project();
         age(&project);
-        let (manifest, written_at) = written_manifest(&project);
+        let manifest = written_manifest(&project);
         let path = project.path().join(MIGRATE);
         let mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
         write(&project, MIGRATE, &MIGRATE_PY.replace("--check", "--force"));
         set_mtime(&path, mtime);
         assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), mtime);
-        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
         assert_eq!(reads, reads_of(&project, &[MIGRATE]));
     }
@@ -1384,15 +1428,14 @@ parent = "django"
         let project = django_project();
         age(&project);
         let path = project.path().join(MIGRATE);
-        let Some((manifest, written_at)) = with_unreadable(&path, || written_manifest(&project))
-        else {
+        let Some(manifest) = with_unreadable(&path, || written_manifest(&project)) else {
             return;
         };
         let record = &manifest.input_records.files[0];
         assert_eq!(record.key, MIGRATE);
         assert!(record.unreadable.is_some(), "{record:?}");
         assert_eq!(record.mtime_ns, 0);
-        let (verdict, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
         assert_eq!(reads, reads_of(&project, &[MIGRATE]));
     }
@@ -1403,10 +1446,10 @@ parent = "django"
     fn foreign_records_are_not_reused() {
         let project = django_project();
         age(&project);
-        let (mut manifest, written_at) = written_manifest(&project);
+        let mut manifest = written_manifest(&project);
         manifest.input_records.files.reverse();
         manifest.input_records.files[0].key = "tools/other.py".into();
-        let (_, reads) = compare_reads(&project, &manifest, Some(written_at));
+        let (_, reads) = compare_reads(&project, &manifest);
         assert!(reads.contains_key(&project.path().join("tools/pyproject.toml")));
     }
 

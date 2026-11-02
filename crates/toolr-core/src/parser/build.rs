@@ -40,12 +40,12 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     // the same batch as the native names.
     // One walk feeds both the parser and the hash.
     let py_files = list_python_files(tools_dir)?;
+    // Hashed before anything is parsed, never after: a file edited during
+    // the build must leave a record that no longer matches it, not one
+    // describing bytes the manifest doesn't reflect.
+    let input_records = snapshot_from(tools_dir, &py_files, None).map_err(BuildError::Build)?;
     let (all_groups, all_commands) = build_commands_inner(tools_dir, &py_files, "tools", false)?;
 
-    // Hashed before the parse, never after: an edit during the build must
-    // leave a hash that no longer matches, not one matching the new bytes.
-    let input_records =
-        snapshot_from(tools_dir, &py_files, None, None).map_err(BuildError::Build)?;
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash: static_hash_of(&input_records.files),

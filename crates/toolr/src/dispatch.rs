@@ -738,7 +738,9 @@ fn run_build_static_manifest() -> anyhow::Result<ExitCode> {
     let tools = root.join("tools");
     let path = tools.join(".toolr-manifest.json");
     let _lock = toolr_core::manifest::acquire_rebuild_lock(&path);
-    let manifest = toolr_core::parser::build_static_manifest(&tools)?;
+    let snapshot_at_ns = toolr_core::hash::fs_clock_ns(&tools);
+    let mut manifest = toolr_core::parser::build_static_manifest(&tools)?;
+    manifest.input_records.snapshot_at_ns = snapshot_at_ns;
     toolr_core::manifest::write_manifest(&path, &manifest)?;
     println!(
         "toolr: wrote {} groups / {} commands to {}",

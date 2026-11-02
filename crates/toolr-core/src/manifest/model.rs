@@ -71,11 +71,16 @@ pub struct InputRecords {
     /// the `tools/pyproject.toml` its record describes.
     #[serde(default)]
     pub scan_paths: Vec<Vec<String>>,
+    /// The filesystem's clock, in ns since the Unix epoch, taken just
+    /// before the snapshot's first stat. A record is reused only when its
+    /// mtime is strictly older. `0` reuses nothing.
+    #[serde(default)]
+    pub snapshot_at_ns: u64,
 }
 
 impl InputRecords {
     pub fn is_empty(&self) -> bool {
-        self.files.is_empty() && self.scan_paths.is_empty()
+        self.files.is_empty() && self.scan_paths.is_empty() && self.snapshot_at_ns == 0
     }
 }
 
