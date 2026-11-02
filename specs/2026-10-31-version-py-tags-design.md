@@ -39,6 +39,9 @@ maintainer's answer is yes, and that pre-releases are supported end to end, not 
 - `git describe` output is no longer parsed. The tag, the commit count and the SHA come from three separate git
   commands, and the tag is parsed with `packaging`.
 - A pre-release GitHub release is created with `--prerelease`, never `--latest`.
+- The final release rolls up its pre-releases. An rc's GitHub release body shows everything queued so far, but an
+  rc doesn't clear the queued release notes or prepend a CHANGELOG section, and git-cliff ignores pre-release tags,
+  so the final release's notes and CHANGELOG cover everything since the last final release.
 
 ## Decision
 
@@ -58,6 +61,12 @@ maintainer's answer is yes, and that pre-releases are supported end to end, not 
 `GITHUB_ENV` or `GITHUB_STEP_SUMMARY`. A `ValueError` is reported with `ctx.error` and `ctx.exit(1)`, not a
 traceback. `--new-version v0.36.0` now behaves exactly like `--new-version 0.36.0`, so `--check-existing-tag` looks
 for `v0.36.0`, not `vv0.36.0`.
+
+`--check-existing-tag` compares versions, not tag names. It lists `git tag --list 'v*'`, parses each tag with
+`_parse_release_version` (skipping those that aren't release versions, such as the floating `v0.36`), and fails if
+any equals the version being released. A hand-made `v1.0.0-rc1` or `v1.0.0rc1` therefore stops
+`--new-version 1.0.0-rc1`, which would otherwise tag `v1.0.0-rc.1` as well and fail at the PyPI upload, after the tag
+was pushed, because the wheel versions already exist.
 
 ### Rendering the Cargo version
 
@@ -93,8 +102,11 @@ from.
 3. `git rev-parse --short HEAD` for the SHA, used only on pull-request builds, as `+g<sha>` (the shape the
    `git describe` output gave until now).
 
-The tag is parsed with `_parse_version`. A tag `packaging` can't parse is reported with `ctx.error` naming it, then
-`ctx.exit(1)`.
+`--abbrev=0` returns the nearest matching tag reachable from `HEAD`. Releases are cut from `main`, so on `main` and
+on branches off it that is the latest release.
+
+The tag is parsed with `_parse_release_version`. A tag that isn't a release version (`v1.2.3-foo`, `v1.2.3.4`) is
+reported with `ctx.error` naming it, then `ctx.exit(1)`.
 
 **Rule.** With `N` commits since the tag:
 
@@ -111,9 +123,34 @@ version, compares against the released version in `Cargo.toml` (`1.0.0-rc.1`), w
 
 ### Release outputs and the GitHub release
 
-`bump` also writes `release-prerelease=true|false` (from `Version.is_prerelease`) to `GITHUB_OUTPUT`.
-`_prepare-release.yml` exposes it as a job and workflow output, and `release.yml`'s `Create GitHub release` step
-passes `--prerelease` instead of `--latest` when it is `true`. A final release still passes `--latest`.
+`bump` also writes `release-prerelease=true|false` to `GITHUB_OUTPUT`: `true` when the version has a pre-release
+segment. `Version.is_prerelease` isn't used, because it is also true for dev releases, and a dev build after a final
+release must report `false` so CI dry runs keep exercising the steps a final release runs. `_prepare-release.yml`
+exposes it as a job and workflow output, and `release.yml`'s `Create GitHub release` step passes `--prerelease`
+instead of `--latest` when it is `true`. A final release still passes `--latest`.
+
+### Final releases roll up pre-releases
+
+Decided 2026-11-02 by the maintainer. In `_prepare-release.yml`, an rc:
+
+- still loads the queued release notes and renders the GitHub release body with `git-cliff --unreleased`, so the rc's
+  release shows everything queued since the last final release;
+- skips `Update CHANGELOG.md` (`git-cliff --unreleased --tag … --prepend CHANGELOG.md`) and
+  `Clear queued release notes`. Both steps carry `if: steps.bump-version.outputs.release-prerelease != 'true'`.
+
+`cliff.toml` sets `tag_pattern = "^v[0-9]+\.[0-9]+\.[0-9]+$"`, so git-cliff only treats final release tags as
+releases. Checked with git-cliff 2.13.1 in a scratch repository tagged `v0.35.1`, `v1.0.0-rc.1`, then one more commit:
+
+- `ignore_tags` is the wrong option. It folds an rc's commits into the next section of a full changelog, but
+  `--unreleased` still starts after the ignored tag, so the final release's `--unreleased --tag 1.0.0` section (what
+  the workflow prepends) lost the commits before the rc.
+- `skip_tags` drops the rc's commits entirely.
+- With `tag_pattern`, `--unreleased --tag 1.0.0` lists the commits from before and after the rc, and a full changelog
+  has no `1.0.0-rc.1` section.
+
+On this repository's history the pattern changes nothing: `--unreleased --tag 0.36.0` renders the same with it as with
+the previous config limited to `v*` tags. The pattern also leaves out the floating `vX`/`vX.Y` tags and the old
+unprefixed `0.0.0` tag, which were never release sections that `--unreleased` should start from.
 
 The "latest" lookups need no change. GitHub's latest-release endpoint (`GET /repos/{owner}/{repo}/releases/latest`)
 returns "the most recent non-prerelease, non-draft release", and a release flagged as a pre-release can't be marked
@@ -142,9 +179,11 @@ Rejected alternatives:
 ## Scope and compatibility
 
 - No runner or manifest schema change.
-- Changes `tools/version.py`, `tools/pyproject.toml`, `tools/uv.lock`, `.github/workflows/_prepare-release.yml`,
-  `.github/workflows/release.yml`, `tests/test_tools_version.py` and a new release workflow test under
-  `tests/workflows/`. `action.yml` and the install scripts are unchanged.
+- Changes `tools/version.py`, `tools/pyproject.toml`, `tools/uv.lock`, `cliff.toml`,
+  `.github/workflows/_prepare-release.yml`, `.github/workflows/release.yml`, `tests/test_tools_version.py` and two
+  new workflow tests under `tests/workflows/` (`test_release_create.py`, `test_prepare_release_prerelease.py`; the
+  git-cliff rollup cases skip when `git-cliff` isn't on `PATH`, and a config assertion pins `tag_pattern` either way).
+  `action.yml` and the install scripts are unchanged.
 - The release tooling ships nothing to users, but pre-release versions can now be released, so the change gets a
   short note in `release-notes/`.
 - `--new-version 1.0.0rc1` and `--new-version 1.0.0-rc1` both release as `1.0.0-rc.1` (tag `v1.0.0-rc.1`).

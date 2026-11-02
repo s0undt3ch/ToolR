@@ -97,7 +97,19 @@ the GitHub release.
       step `id: create-release`, pass `RELEASE_PRERELEASE`, choose the flag in bash.
 - [ ] **Step 4:** Run → PASS. Commit Tasks 1–4 as `fix(release): support pre-release versions in version bump`.
 
-### Task 5: Release note, verification, archive
+### Task 5: Round-1 review: tag spellings and pre-release rollup
+
+**Files:** `tools/version.py`, `cliff.toml`, `.github/workflows/_prepare-release.yml`, `tests/test_tools_version.py`,
+`tests/workflows/test_prepare_release_prerelease.py`
+
+- [ ] **Step 1: Tests:** `--new-version 1.0.0-rc1` with an existing `v1.0.0-rc1`, `v1.0.0rc1` or `v1.0.0-rc.1` tag →
+      `SystemExit`; a dev build after a final tag → `release-prerelease=false`; the `update-changelog` and
+      `clear-release-notes` steps are gated on `release-prerelease`; `cliff.toml`'s `tag_pattern` matches final tags
+      only; with git-cliff available, `--unreleased --tag 1.0.0` after `v1.0.0-rc.1` lists the commits from both sides
+      of the rc. Dev-version tests use the canonical `v1.0.0-rc.1`, keeping one hand-made `v1.0.0-rc1` case.
+- [ ] **Step 2:** Implement per the spec. Commit `fix(release): roll pre-releases up into the final release`.
+
+### Task 6: Release note, verification, archive
 
 - [ ] **Step 1:** `toolr release-notes add --slug version-py-tags --text "…"`; commit
       `docs(release-notes): …`. `toolr release-notes check --base origin/main` → exit 0.
