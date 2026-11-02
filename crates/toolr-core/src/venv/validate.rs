@@ -25,7 +25,7 @@ pub enum ValidationError {
 /// editable/direct-url installs where a `.pth` file adds the source root to
 /// `sys.path` (as maturin's editable mode does).
 pub fn locate_toolr_package(venv_dir: &Path) -> Option<PathBuf> {
-    for site_packages in site_packages_dirs(venv_dir) {
+    for site_packages in site_packages_dirs(venv_dir).ok()? {
         // Regular (non-editable) install: toolr/__init__.py is in site-packages.
         let init = site_packages.join("toolr").join("__init__.py");
         if init.is_file() {
@@ -74,7 +74,7 @@ fn locate_via_pth_files(site_packages: &Path) -> Option<PathBuf> {
 /// `toolr_py-<version>.dist-info` directory name. Lists `site-packages`
 /// only: no file reads, no interpreter.
 pub fn installed_toolr_py_version(venv_dir: &Path) -> Option<String> {
-    site_packages_dirs(venv_dir).iter().find_map(|sp| {
+    site_packages_dirs(venv_dir).ok()?.iter().find_map(|sp| {
         fs::read_dir(sp)
             .ok()?
             .filter_map(Result::ok)

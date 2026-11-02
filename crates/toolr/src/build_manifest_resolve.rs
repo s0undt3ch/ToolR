@@ -73,7 +73,7 @@ fn leaf_dir_name(dir: &Path) -> Option<String> {
 /// venv's site-packages directories (see [`site_packages_dirs`]). Picks the first in sorted
 /// order when more than one has it.
 fn find_in_venv(venv_dir: &Path, package: &str) -> Result<PathBuf> {
-    let entries: Vec<PathBuf> = site_packages_dirs(venv_dir)
+    let entries: Vec<PathBuf> = site_packages_dirs(venv_dir)?
         .into_iter()
         .map(|sp| sp.join(package))
         .filter(|p| p.is_dir())
@@ -162,5 +162,23 @@ mod tests {
     fn leaf_dir_name_extracts_basename() {
         let dir = PathBuf::from("/a/b/mypkg");
         assert_eq!(leaf_dir_name(&dir).as_deref(), Some("mypkg"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn find_in_venv_reports_unreadable_lib() {
+        use std::os::unix::fs::PermissionsExt;
+        // SAFETY: geteuid has no preconditions.
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("lib/python3.13/site-packages/pkg")).unwrap();
+        let lib = tmp.path().join("lib");
+        std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let result = find_in_venv(tmp.path(), "pkg");
+        std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("I/O error reading"), "{err}");
     }
 }

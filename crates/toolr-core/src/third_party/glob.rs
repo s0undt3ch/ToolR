@@ -18,11 +18,16 @@ use crate::venv::site_packages_dirs;
 /// Find all third-party manifest fragments under `tools_venv`.
 ///
 /// Returns paths in deterministic (sorted) order for reproducibility.
-/// Errors only when an existing site-packages directory can't be listed;
+/// Errors when a directory on the way to a fragment exists but can't be
+/// read, so an unreadable venv never looks like one with no plugins;
 /// individual path parsing happens later in `parse_fragment`.
 pub fn glob_manifests(tools_venv: &Path) -> Result<Vec<PathBuf>, ThirdPartyError> {
     let mut out = Vec::new();
-    for site_packages in site_packages_dirs(tools_venv) {
+    let dirs = site_packages_dirs(tools_venv).map_err(|e| ThirdPartyError::Io {
+        path: e.path,
+        source: e.source,
+    })?;
+    for site_packages in dirs {
         let entries = fs::read_dir(&site_packages).map_err(|source| ThirdPartyError::Io {
             path: site_packages.clone(),
             source,
