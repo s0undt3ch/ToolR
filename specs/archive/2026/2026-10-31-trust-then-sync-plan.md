@@ -14,7 +14,7 @@ pre-granted. `project_trust` and dispatch call it.
 **Tech Stack:** Rust (clap, anyhow), assert_cmd integration tests with a pty on stdin (`libc::openpty`, as in
 `crates/toolr/tests/quiet_uv_consent.rs`) and the stub uv from `tests/common`.
 
-**Spec:** [`specs/2026-10-31-readme-venv-first-run-design.md`](./2026-10-31-readme-venv-first-run-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-trust-then-sync-design.md`](./2026-10-31-trust-then-sync-design.md)
 
 ## Global Constraints
 
@@ -28,7 +28,8 @@ pre-granted. `project_trust` and dispatch call it.
 
 ## Review Focus
 
-1. Dispatch syncs only after a trust prompt answered `y` in this run, and only a `Missing` venv.
+1. Dispatch offers the sync only after a trust prompt answered `y` in this run, for a `Missing`, `Stale` or `Broken`
+   venv.
 2. At most two prompts: an accepted sync prompt pre-grants uv install consent.
 3. `--quiet`, no terminal and the two env vars answer prompts as in the spec's table.
 
@@ -36,16 +37,17 @@ pre-granted. `project_trust` and dispatch call it.
 
 ### Task 1: Trust outcome
 
-- [ ] `TrustOutcome { AlreadyTrusted, Prompted }`; `decide` and `require_trust` return it. Unit tests: env and record
-  give `AlreadyTrusted`, a `y` gives `Prompted`.
+- [ ] A `Trusted` proof (root + `granted_at_prompt`) that only `toolr_core::trust` builds; `decide`, `require_trust` and
+  `TrustStore::grant` return it. Unit tests: env and record give `granted_at_prompt() == false`, a `y` gives `true`.
 
 ### Task 2: Sync prompt and trust-then-sync step (`toolr_core::project`)
 
 - [ ] `confirm_sync(input, out) -> bool` with the spec's text; `[y/N]`, EOF declines. Unit tests with `Cursor`.
-- [ ] `EnsureOpts::trust_checked` skips the inner `require_trust`.
-- [ ] `sync_after_trust(repo_root, quiet, prompt_io) -> SyncAfterTrust { NotNeeded, Synced(ResolvedVenv), Declined }`;
+- [ ] `EnsureOpts::trusted: Option<Trusted>` skips the inner `require_trust` for the root the proof covers.
+- [ ] `sync_after_trust(&Trusted, quiet, never_prompt, prompt_io) -> SyncAfterTrust { NotNeeded, Synced(ResolvedVenv), Declined }`;
   `SYNC_LATER_HINT`. Answer order: fresh → `NotNeeded`; `TOOLR_AUTO_INSTALL_UV=1` → yes; quiet or no prompt IO →
-  `Declined`; else prompt. A yes syncs with `ConsentMode { yes_flag: true, .. }`.
+  `Declined`; else prompt. A yes syncs with `ConsentMode { yes_flag: true, .. }`, after releasing the stdin lock.
+  pty tests with no uv anywhere prove no uv prompt follows a `y`.
 
 ### Task 3: `toolr project trust`
 
@@ -56,11 +58,11 @@ pre-granted. `project_trust` and dispatch call it.
 
 ### Task 4: Dispatch
 
-- [ ] Integration tests first: trust `y` + sync `y` on a missing venv → uv synced, command ran; sync `n` → exit 1 with
+- [ ] Integration tests first: trust `y` + sync `y` on a missing venv → uv synced, command ran; sync `n` → exit 2 with
   the hint, command not run, trust recorded; fresh venv → one prompt only; `TOOLR_TRUST_ALL=1` + missing venv → the
   existing missing-interpreter error, no sync.
-- [ ] In `dispatch.rs`, after `require_trust`: on `Prompted` and `Missing`, call `sync_after_trust`; otherwise
-  `resync_if_needed` as before.
+- [ ] In `dispatch.rs`, after `require_trust`: when the proof says `granted_at_prompt`, call `sync_after_trust` (any venv that
+  isn't fresh); otherwise `resync_if_needed` as before. Tests for `Stale` and `Broken` after a fresh trust.
 
 ### Task 5: Docs, release note, snippets
 
