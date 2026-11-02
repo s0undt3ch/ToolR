@@ -257,3 +257,32 @@ fn older_schema_version_with_venv_forces_third_party_drift() {
 fn manifest_schema_version_is_2() {
     assert_eq!(crate::manifest::SCHEMA_VERSION, 2);
 }
+
+/// Hash failures name the tools dir, except a symlinked-modules rejection,
+/// which already names every path and must read the same on every caller.
+#[cfg(unix)]
+#[test]
+fn hash_errors_name_the_tools_dir_except_symlinked_modules() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
+    let cached = manifest_for(tmp.path());
+    let tools = tmp.path().join("tools");
+
+    let unreadable = tools.join("a.py");
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o0)).unwrap();
+    let root_can_read = fs::read(&unreadable).is_ok();
+    let result = compare(Some(&cached), &tools, None);
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(result.is_err() || root_can_read);
+    if let Err(e) = result {
+        assert!(format!("{e:#}").starts_with("hashing "), "{e:#}");
+    }
+
+    std::os::unix::fs::symlink("a.py", tools.join("b.py")).unwrap();
+    let e = compare(Some(&cached), &tools, None).unwrap_err();
+    assert!(
+        format!("{e:#}").starts_with("symlinked modules are not supported (1):"),
+        "{e:#}"
+    );
+}

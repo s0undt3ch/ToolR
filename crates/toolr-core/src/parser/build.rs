@@ -40,7 +40,7 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     // the same batch as the native names.
     let (all_groups, all_commands) = build_commands_inner(tools_dir, "tools", false)?;
 
-    let static_hash = hash_tools_dir(tools_dir).map_err(BuildError::Build)?;
+    let static_hash = hash_tools_dir(tools_dir).map_err(hash_build_error)?;
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash,
@@ -277,6 +277,26 @@ pub fn build_static_manifest_with_venv(
 ) -> Result<Manifest, BuildError> {
     let base = build_static_manifest_inner(tools_dir)?;
     discover_and_merge(tools_venv, base).map_err(BuildError::ThirdParty)
+}
+
+/// A link can appear between the parser's walk and the hash's walk; keep it
+/// a [`BuildError::SymlinkedModules`] so callers still recognise it.
+fn hash_build_error(e: anyhow::Error) -> BuildError {
+    match e.downcast::<SymlinkedModules>() {
+        Ok(links) => BuildError::SymlinkedModules(links),
+        Err(e) => BuildError::Build(e),
+    }
+}
+
+/// Whether `err` is a symlinked-modules rejection, however it was wrapped.
+/// Such errors are fatal and carry no extra context: they already name
+/// every offending path.
+pub fn is_symlinked_modules(err: &anyhow::Error) -> bool {
+    err.is::<SymlinkedModules>()
+        || matches!(
+            err.downcast_ref::<BuildError>(),
+            Some(BuildError::SymlinkedModules(_))
+        )
 }
 
 /// Error type covering both the local build and the third-party merge.
@@ -838,6 +858,22 @@ def hello(ctx):
             })
             .collect();
         assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
+    }
+
+    /// A link that appears between the parser's walk and the hash's walk
+    /// still surfaces as `SymlinkedModules`, so dispatch keeps it fatal.
+    #[test]
+    fn hash_errors_keep_symlinked_modules_recognisable() {
+        let links =
+            || crate::hash::SymlinkedModules::new(Path::new("tools"), vec!["tools/x.py".into()]);
+        let err = hash_build_error(anyhow::Error::from(links()));
+        assert!(matches!(err, BuildError::SymlinkedModules(_)), "{err:?}");
+        assert!(is_symlinked_modules(&anyhow::Error::from(err)));
+        assert!(is_symlinked_modules(&anyhow::Error::from(links())));
+
+        let err = hash_build_error(anyhow::anyhow!("disk on fire"));
+        assert!(matches!(err, BuildError::Build(_)), "{err:?}");
+        assert!(!is_symlinked_modules(&anyhow::Error::from(err)));
     }
 
     /// Plugin fragments share the walk: the paths and the hint name the

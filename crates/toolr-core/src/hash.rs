@@ -76,7 +76,7 @@ pub struct SymlinkedModules {
 }
 
 impl SymlinkedModules {
-    fn new(tools_dir: &Path, mut links: Vec<PathBuf>) -> Self {
+    pub(crate) fn new(tools_dir: &Path, mut links: Vec<PathBuf>) -> Self {
         links.sort();
         let root = root_name(tools_dir);
         let paths = links

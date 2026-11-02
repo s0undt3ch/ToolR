@@ -518,11 +518,13 @@ fn symlinked_tools_module_is_rejected() {
             .unwrap();
         assert!(!output.status.success(), "{args:?}: {output:?}");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains(
-                "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/, or share it as a Python package."
+        assert_eq!(
+            stderr,
+            format!(
+                "toolr: {SYMLINK_ERROR}
+"
             ),
-            "{args:?}: {stderr}"
+            "{args:?}"
         );
     }
 }
@@ -562,7 +564,7 @@ fn symlinked_tools_module_is_rejected_over_a_stale_version_cache() {
             .unwrap();
         assert!(!output.status.success(), "{args:?}: {output:?}");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains(SYMLINK_ERROR), "{args:?}: {stderr}");
+        assert_eq!(stderr, format!("toolr: {SYMLINK_ERROR}\n"), "{args:?}");
         assert!(!stderr.contains("falling back"), "{args:?}: {stderr}");
     }
 }
@@ -580,11 +582,49 @@ fn symlinked_tools_module_is_rejected_in_an_untrusted_repo() {
         let output = env.toolr(&root).args(args).output().unwrap();
         assert!(!output.status.success(), "{args:?}: {output:?}");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains(SYMLINK_ERROR), "{args:?}: {stderr}");
+        assert_eq!(stderr, format!("toolr: {SYMLINK_ERROR}\n"), "{args:?}");
         assert!(
             !stderr.contains("unrecognized subcommand"),
             "{args:?}: {stderr}"
         );
     }
     assert!(!root.join("tools/.toolr-manifest.json").exists());
+}
+
+/// A link added after the cache was built is found by the freshness hash
+/// (dispatch) and by the explicit rebuild; both print the same message as
+/// every other path, with no `hashing <dir>:` or `building …:` prefix.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_added_after_the_cache_reads_the_same_everywhere() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    let tools = root.join("tools");
+    std::fs::rename(tools.join("linked.py"), root.join("linked.py.off")).unwrap();
+    common::toolr()
+        .current_dir(&root)
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .arg("--help")
+        .assert()
+        .success();
+    std::fs::rename(root.join("linked.py.off"), tools.join("linked.py")).unwrap();
+
+    for args in [
+        &["--help"][..],
+        &["demo", "hello"][..],
+        &["project", "manifest", "rebuild"][..],
+    ] {
+        let output = common::toolr()
+            .current_dir(&root)
+            .env("TOOLR_NO_CACHE_HINT", "1")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            format!("toolr: {SYMLINK_ERROR}\n"),
+            "{args:?}"
+        );
+    }
 }

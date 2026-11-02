@@ -14,12 +14,13 @@ use std::path::Path;
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::freshness::{FreshnessVerdict, compare};
-use toolr_core::hash::SymlinkedModules;
 use toolr_core::manifest::{
     Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
 };
 use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
-use toolr_core::parser::{BuildError, build_static_manifest, build_static_manifest_with_venv};
+use toolr_core::parser::{
+    build_static_manifest, build_static_manifest_with_venv, is_symlinked_modules,
+};
 use toolr_core::venv::resolve_venv_path;
 
 /// Bootstrap step that runs before clap parses the user's command.
@@ -194,7 +195,8 @@ pub(crate) fn ensure_manifest_fresh(
             }
             Ok(Some(fresh))
         }
-        // Falling back to the cache would hide the links again (F-17).
+        // Symlinked modules are fatal: the cache would hide the links again,
+        // and the walk executes nothing, so untrusted repos get it too (F-17).
         Err(e) if is_symlinked_modules(&e) => Err(e),
         Err(e) => {
             warn_and_keep_cache(&e, cached.is_some());
@@ -301,17 +303,6 @@ fn carry_forward_cached_entries(
     if verdict == FreshnessVerdict::StaticDrift {
         fresh.plugin_warnings.clone_from(&cached.plugin_warnings);
     }
-}
-
-/// Symlinked modules are fatal: unlike a parse error, the cache can't be
-/// trusted to list what `tools/` holds, and the walk executes nothing, so
-/// untrusted repositories get the error too.
-fn is_symlinked_modules(err: &anyhow::Error) -> bool {
-    err.is::<SymlinkedModules>()
-        || matches!(
-            err.downcast_ref::<BuildError>(),
-            Some(BuildError::SymlinkedModules(_))
-        )
 }
 
 fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
