@@ -18,6 +18,9 @@ pub struct StaticInput {
     /// A `tools/**/*.py` module. Only a module's read errors fail the hash;
     /// see [`hash_paths`].
     pub module: bool,
+    /// `tools/pyproject.toml`: only its `[tool.toolr.argparse.*]` blocks
+    /// are hashed; see [`hash_paths`].
+    pub config: bool,
 }
 
 /// The manifest's `static_hash`: every input of the static build, hashed in
@@ -29,8 +32,8 @@ pub fn compute_static_hash(tools_dir: &Path) -> Result<String> {
 }
 
 /// Every input of the static build: `tools/**/*.py`, `tools/pyproject.toml`
-/// and the files its `[tool.toolr.argparse.*]` blocks scan. Sorted by key,
-/// without duplicate keys.
+/// (for its `[tool.toolr.argparse.*]` blocks) and the files those blocks
+/// scan. Sorted by key, without duplicate keys.
 pub fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
     Ok(static_inputs_from(
         tools_dir,
@@ -51,7 +54,8 @@ pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<
     let project_root = tools_dir.parent().unwrap_or(tools_dir);
     let mut paths: Vec<(PathBuf, bool)> = py_files.iter().map(|p| (p.clone(), true)).collect();
     let pyproject = project_root.join("tools").join("pyproject.toml");
-    if pyproject.is_file() {
+    let has_pyproject = pyproject.is_file();
+    if has_pyproject {
         let blocks = read_input(&pyproject)
             .ok()
             .and_then(|bytes| String::from_utf8(bytes).ok())
@@ -64,7 +68,6 @@ pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<
                 paths.extend(scanned.into_iter().map(|p| (p, false)));
             }
         }
-        paths.push((pyproject, false));
     }
     let mut inputs: Vec<StaticInput> = paths
         .into_iter()
@@ -72,10 +75,25 @@ pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<
             key: input_key(project_root, &path),
             path,
             module,
+            config: false,
         })
         .collect();
-    // A module also matched by a `scan_paths` glob keeps its strict reads.
-    inputs.sort_by(|a, b| a.key.cmp(&b.key).then(b.module.cmp(&a.module)));
+    if has_pyproject {
+        inputs.push(StaticInput {
+            key: input_key(project_root, &pyproject),
+            path: pyproject,
+            module: false,
+            config: true,
+        });
+    }
+    // A module also matched by a `scan_paths` glob keeps its strict reads,
+    // and a scanned pyproject its full bytes: the scanner reads all of it.
+    inputs.sort_by(|a, b| {
+        a.key
+            .cmp(&b.key)
+            .then(b.module.cmp(&a.module))
+            .then(a.config.cmp(&b.config))
+    });
     inputs.dedup_by(|a, b| a.key == b.key);
     inputs
 }
@@ -218,6 +236,12 @@ fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
 
 /// Hash each input as `key || 0x00 || len(contents) as u64 LE || contents`.
 ///
+/// The pyproject is hashed as `key || 0x02 || len || <argparse blocks>`
+/// instead, so edits outside `[tool.toolr.argparse.*]` (a dependency bump,
+/// `uv add`) leave the hash alone; see [`argparse_digest`]. A pyproject
+/// the build can't read its blocks from keeps the raw-bytes form, so
+/// fixing it still changes the hash.
+///
 /// A module that can't be read fails the hash, naming the file. Any other
 /// input that can't be read is hashed as `key || 0x01 || <error kind>`
 /// instead: the scanner turns such a file into a placeholder with a
@@ -226,7 +250,13 @@ fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
 /// check. Fixing the permission still changes the hash.
 pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
     let mut hasher = Hasher::new();
-    for StaticInput { key, path, module } in inputs {
+    for StaticInput {
+        key,
+        path,
+        module,
+        config,
+    } in inputs
+    {
         let bytes = match read_input(path) {
             Ok(bytes) => bytes,
             // Deleted since the walk listed it: hash the tree as it now is.
@@ -242,11 +272,24 @@ pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
             }
         };
         hasher.update(key.as_bytes());
-        hasher.update(b"\0");
+        let (tag, bytes) = match config.then(|| argparse_digest(&bytes)).flatten() {
+            Some(digest) => (b"\x02", digest),
+            None => (b"\0", bytes),
+        };
+        hasher.update(tag);
         hasher.update(&(bytes.len() as u64).to_le_bytes());
         hasher.update(&bytes);
     }
     Ok(hasher.finalize().to_hex().to_string())
+}
+
+/// The pyproject's `[tool.toolr.argparse.*]` blocks as the build parses
+/// them, serialised in name order: the only part of the file the build
+/// reads. `None` when they don't parse, so the caller hashes the raw bytes.
+fn argparse_digest(bytes: &[u8]) -> Option<Vec<u8>> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    let blocks = crate::argparse::parse_blocks(text).ok()?;
+    serde_json::to_vec(&blocks).ok()
 }
 
 fn read_input(path: &Path) -> std::io::Result<Vec<u8>> {
@@ -352,6 +395,7 @@ mod tests {
             key: format!("tools/{name}"),
             path: tools.join(name),
             module: true,
+            config: false,
         };
         let with_gone = hash_paths(&[input("a.py"), input("gone.py")]).unwrap();
         let without = hash_paths(&[input("a.py")]).unwrap();
@@ -370,11 +414,13 @@ mod tests {
                 key: "a.py".into(),
                 path: tmp.path().join("a.py"),
                 module: true,
+                config: false,
             },
             StaticInput {
                 key: "pkg.py".into(),
                 path: dir.clone(),
                 module: true,
+                config: false,
             },
         ];
         let err = hash_paths(&inputs).unwrap_err();
@@ -700,6 +746,68 @@ parent = "django"
             ["tools/dispatcher.py", "tools/pyproject.toml"]
         );
         write(&project, "tools/pyproject.toml", "not = = toml at all");
+        assert_ne!(tools_hash(&project), before);
+    }
+
+    /// Only the argparse blocks of the pyproject count: a dependency bump
+    /// or `uv add` must not make the manifest stale.
+    #[test]
+    fn static_hash_ignores_pyproject_edits_outside_argparse() {
+        let project = django_project();
+        let before = tools_hash(&project);
+        let pyproject = std::fs::read_to_string(project.path().join("tools/pyproject.toml"))
+            .unwrap()
+            .replace(
+                "name = \"tools\"\n",
+                "name = \"tools\"\ndependencies = [\"django\"]\n",
+            );
+        write(&project, "tools/pyproject.toml", &pyproject);
+        assert_eq!(tools_hash(&project), before);
+
+        write(
+            &project,
+            "tools/pyproject.toml",
+            &pyproject.replace("django = true", "django = false"),
+        );
+        assert_ne!(tools_hash(&project), before);
+    }
+
+    /// The F-16 review shape: a dependency line mid-edit makes the whole
+    /// file invalid TOML, which counts as drift until it is fixed.
+    #[test]
+    fn invalid_pyproject_outside_argparse_changes_the_hash() {
+        let project = django_project();
+        let path = project.path().join("tools/pyproject.toml");
+        let valid = std::fs::read_to_string(&path).unwrap();
+        let before = tools_hash(&project);
+        write(
+            &project,
+            "tools/pyproject.toml",
+            &valid.replace(
+                "name = \"tools\"\n",
+                "name = \"tools\"\ndependencies = [\"django\"\n",
+            ),
+        );
+        assert_ne!(tools_hash(&project), before);
+        write(&project, "tools/pyproject.toml", &valid);
+        assert_eq!(tools_hash(&project), before);
+    }
+
+    /// A pyproject a `scan_paths` glob also matches is scanned as a file,
+    /// so all of its bytes count.
+    #[test]
+    fn scanned_pyproject_is_hashed_whole() {
+        let pyproject = "[tool.toolr.argparse.all]\nscan_paths = [\"tools/*\"]\n";
+        let project = setup(&[("tools/pyproject.toml", pyproject)]);
+        let inputs = static_inputs(&project.path().join("tools")).unwrap();
+        assert_eq!(inputs.len(), 1, "{inputs:?}");
+        assert!(!inputs[0].config, "{inputs:?}");
+        let before = tools_hash(&project);
+        write(
+            &project,
+            "tools/pyproject.toml",
+            &format!("[project]\nname = \"x\"\n{pyproject}"),
+        );
         assert_ne!(tools_hash(&project), before);
     }
 

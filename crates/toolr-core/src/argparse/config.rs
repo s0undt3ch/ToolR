@@ -2,12 +2,12 @@
 
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::manifest::ArgumentKind;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArgparseBlock {
     /// Block key under `[tool.toolr.argparse.<name>]`. Set by the parser
     /// from the table key, not from a field on the table.
@@ -34,7 +34,7 @@ impl ArgparseBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommonArg {
     pub name: String,
     pub kind: ArgumentKind,
@@ -46,7 +46,7 @@ pub struct CommonArg {
     pub choices: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attachment {
     pub parent: String,
 }
