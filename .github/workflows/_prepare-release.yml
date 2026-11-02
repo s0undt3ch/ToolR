@@ -175,17 +175,15 @@ jobs:
 
       - name: Generate changelog for GH release
         id: git-cliff
-        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
-        with:
-          # Same as the `git-cliff` pin in mise.toml, which the tests run.
-          version: v2.14.2
-          config: cliff.toml
-          args: --unreleased --strip all
+        shell: bash
+        # git-cliff is the mise.toml pin, installed by `Set up mise`.
+        # TOOLR_RELEASE_NOTES is inherited from the loader step's $GITHUB_ENV
+        # write; cliff.toml reads it via Tera get_env. GITHUB_TOKEN and
+        # GITHUB_REPO feed the template's `github.contributors`.
         env:
-          # TOOLR_RELEASE_NOTES is inherited from the previous step's
-          # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
-          OUTPUT: .release-changes.md
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
+        run: git-cliff --config cliff.toml --unreleased --strip all --output .release-changes.md
 
       - name: Prepare GH Release changelog
         id: prepare-release-notes
@@ -212,23 +210,19 @@ jobs:
 
       - name: Update CHANGELOG.md
         id: update-changelog
-        # A final release rolls up its pre-releases: an rc gets a GitHub release
-        # body (rendered above) but no CHANGELOG section of its own.
+        # A pre-release gets no CHANGELOG section: the final release rolls it
+        # up. See "Pre-releases" in release-notes/README.md.
         if: steps.bump-version.outputs.release-prerelease != 'true'
-        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
-        with:
-          # Same as the `git-cliff` pin in mise.toml, which the tests run.
-          version: v2.14.2
-          config: cliff.toml
-          args: --verbose --unreleased --tag '${{ env.RELEASE_VERSION }}' --prepend CHANGELOG.md
+        shell: bash
         env:
-          # TOOLR_RELEASE_NOTES is inherited from the loader step's
-          # $GITHUB_ENV write; cliff.toml reads it via Tera get_env.
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
+        run: git-cliff --config cliff.toml --verbose --unreleased --tag "$RELEASE_VERSION" --prepend CHANGELOG.md
 
       - name: Clear queued release notes
         id: clear-release-notes
-        # An rc leaves the notes queued for the final release.
+        # A pre-release leaves the notes queued for the final release. See
+        # "Pre-releases" in release-notes/README.md.
         if: steps.bump-version.outputs.release-prerelease != 'true'
         shell: bash
         run: toolr release-notes clear --rendered .release-changes.md

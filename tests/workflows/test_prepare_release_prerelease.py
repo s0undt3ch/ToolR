@@ -25,7 +25,6 @@ from tests.workflows.conftest import git_env
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
 CLIFF_TOML = REPO_ROOT / "cliff.toml"
-MISE_TOML = REPO_ROOT / "mise.toml"
 FINAL_ONLY = "steps.bump-version.outputs.release-prerelease != 'true'"
 
 
@@ -60,15 +59,6 @@ def test_release_prerelease_is_exported() -> None:
     )
     workflow_outputs = data[True]["workflow_call"]["outputs"]  # PyYAML reads `on:` as True
     assert "release-prerelease" in workflow_outputs
-
-
-def test_git_cliff_action_uses_the_mise_pin() -> None:
-    """The release renders with the git-cliff version the tests below run."""
-    pin = tomllib.loads(MISE_TOML.read_text())["tools"]["git-cliff"]
-    cliff_steps = [step for step in _steps() if "git-cliff-action" in step.get("uses", "")]
-    assert len(cliff_steps) == 2
-    for step in cliff_steps:
-        assert step["with"]["version"] == f"v{pin}"
 
 
 def test_cliff_tag_pattern_matches_final_releases_only() -> None:
