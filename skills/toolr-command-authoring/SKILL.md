@@ -36,7 +36,7 @@ drift.
 0. **Expect a trust prompt on the first run.** toolr won't import a
    repository's `tools/*.py` or sync its venv until the repository is
    trusted. On a terminal it asks once, then offers to sync a tools
-   venv that was never created; elsewhere it refuses and says to run
+   venv that needs one; elsewhere it refuses and says to run
    `toolr project trust` there, which trusts the repository and syncs
    its venv in one step. Don't set `TOOLR_TRUST_ALL=1` on the user's
    behalf in an interactive session; ask them to trust the repository.

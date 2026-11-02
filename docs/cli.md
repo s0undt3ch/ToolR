@@ -233,9 +233,10 @@ toolr project manifest rebuild --help
 Trust the repository at `PATH` (default: the current directory's project
 root), so toolr will run its `tools/*.py` and sync its tools venv. Prints the
 trusted root. Then, if the tools venv needs a sync, it asks whether to sync
-it now; declining keeps the trust and exits 0. With `--quiet` or no
-terminal it doesn't ask and doesn't sync, unless `TOOLR_AUTO_INSTALL_UV=1`
-is set. `--no-sync` only records the trust. See
+it now; declining keeps the trust and exits 0. If the sync fails, the
+trust is kept and the command exits non-zero. With `--quiet` (or the root
+`toolr -q`) or no terminal it doesn't ask and doesn't sync, unless
+`TOOLR_AUTO_INSTALL_UV=1` is set. `--no-sync` only records the trust. See
 [Repository trust](concepts.md#repository-trust).
 
 ```sh
