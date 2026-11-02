@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev210-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev223-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev210 - 2026-11-01
+        0.35.2-dev223 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev210 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev223 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev210-2026-11-01" class="md-nav__link">
+  <a href="#0352-dev223-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev210 - 2026-11-01
+        0.35.2-dev223 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev210 - 2026-11-01">
+    <nav class="md-nav" aria-label="0.35.2-dev223 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev210-2026-11-01">0.35.2-dev210 - 2026-11-01<a class="headerlink" href="#0352-dev210-2026-11-01" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev223-2026-11-02">0.35.2-dev223 - 2026-11-02<a class="headerlink" href="#0352-dev223-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
@@ -7633,6 +7633,13 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <code>tools/pyproject.toml</code> toolr has no tools venv, so the fallback that ran commands with
 <code>$TOOLR_PYTHON</code>, <code>python3</code> or <code>python</code> from <code>PATH</code> is gone, and toolr no longer reads
 <code>$TOOLR_PYTHON</code>. The <code>toolr.testing</code> pytest plugin finds the repo root the same way.</p>
+<p><code>toolr.testing.CommandsTester.discover()</code> now raises when a <code>tools/*.py</code> module fails to import, for
+example because a command has no docstring. It imports every module first, then raises one
+<code>ExceptionGroup</code> holding each module's error, so a discovery test fails the way <code>toolr</code> does. It
+used to hide those errors and pass, sometimes with a group that had no commands. Discovery also
+keeps the standard library on <code>sys.path</code> now: a <code>tools/*.py</code> that imports <code>sqlite3</code>, <code>tomllib</code> or
+another stdlib module not loaded yet used to vanish from <code>collected_command_groups()</code> without an
+error. A discovery test that passed only because of either problem now fails.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7702,6 +7709,11 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <li><em>(action)</em> Key the tools venv cache on tools/ files only (<a href="https://github.com/s0undt3ch/ToolR/commit/87d6f8e95f1420def6dc2fb3215f8670bcff34d9"><code>87d6f8e</code></a>)</li>
 <li><em>(action)</em> Key the tools venv cache on every tools/ freshness input (<a href="https://github.com/s0undt3ch/ToolR/commit/565a3fe5bfbdbec6f651e8fb0187e11332a8c915"><code>565a3fe</code></a>)</li>
 <li><em>(discovery)</em> [<strong>breaking</strong>] Require tools/pyproject.toml to find the project root (<a href="https://github.com/s0undt3ch/ToolR/commit/e560456e5bd162dd3cac84830bbafa9429c35548"><code>e560456</code></a>)</li>
+<li><em>(testing)</em> Make CommandsTester.discover() raise on tools import errors (<a href="https://github.com/s0undt3ch/ToolR/commit/5d4ff7b7a8bba3dda2e6735b10135b80aa95fe2d"><code>5d4ff7b</code></a>)</li>
+<li><em>(testing)</em> Keep the stdlib on sys.path during CommandsTester discovery (<a href="https://github.com/s0undt3ch/ToolR/commit/19fcd7e5c2b067fc2272f59212bd6a1523e7bd73"><code>19fcd7e</code></a>)</li>
+<li><em>(testing)</em> Report failing tools subpackages instead of aborting discovery (<a href="https://github.com/s0undt3ch/ToolR/commit/c5e492aab53e5a40f395ce04c00affd87aa1ba25"><code>c5e492a</code></a>)</li>
+<li><em>(testing)</em> Walk tools subdirectories without <strong>init</strong>.py (<a href="https://github.com/s0undt3ch/ToolR/commit/fbf2474be3e4647f583dd70aa7f89fa11eafc2a2"><code>fbf2474</code></a>)</li>
+<li><em>(testing)</em> Match the tools name exactly when isolating sys.path (<a href="https://github.com/s0undt3ch/ToolR/commit/7e979fe786284ee4a6e5ab4378d3485e2bfb5ecf"><code>7e979fe</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7725,6 +7737,7 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <li><em>(command)</em> Tidy the stdin deadlock tests and comments (<a href="https://github.com/s0undt3ch/ToolR/commit/cfe1f2f5682e8b295f10d18559df3af34406fc52"><code>cfe1f2f</code></a>)</li>
 <li><em>(release)</em> Split the commit step's path comparison from its reporting (<a href="https://github.com/s0undt3ch/ToolR/commit/1f70d9949439f3a5b347779b97ac0ee1c4366bac"><code>1f70d99</code></a>)</li>
 <li><em>(release)</em> Give push-failure messages one shape (<a href="https://github.com/s0undt3ch/ToolR/commit/4e26ea5ccf6bcc5b2ec58cc6cdf1fcaa825ce234"><code>4e26ea5</code></a>)</li>
+<li><em>(testing)</em> Tie the discovery walk to the manifest walk (<a href="https://github.com/s0undt3ch/ToolR/commit/c7b23fb9b4348bde6ab1da390d34e2cd86817e6e"><code>c7b23fb</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7782,6 +7795,11 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <li><em>(unreleased)</em> Note the action's tools venv cache key change (<a href="https://github.com/s0undt3ch/ToolR/commit/664a706acc03f326d7e8ff0c5ecef8c40cc2f6d4"><code>664a706</code></a>)</li>
 <li><em>(specs)</em> Archive action cache key design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b9af6176cd9ea01a33c48548a5f73ff5aaf739cc"><code>b9af617</code></a>)</li>
 <li><em>(specs)</em> Archive the ancestor tools discovery design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/c6b0d7445bcc53d5e7a9cca3a74cf8720f6aaa28"><code>c6b0d74</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-09 tester discover errors (<a href="https://github.com/s0undt3ch/ToolR/commit/d2251c39b77d7b7c4ac0fc79150233ce04c5d0f0"><code>d2251c3</code></a>)</li>
+<li><em>(testing)</em> Document CommandsTester discovery errors and sys.path (<a href="https://github.com/s0undt3ch/ToolR/commit/ba938172e93cdaec04bf0a45ce6992296edfd90f"><code>ba93817</code></a>)</li>
+<li><em>(specs)</em> Archive tester discover errors design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/ff2104f5a8245465c89f1366aa0b52953f1d4980"><code>ff2104f</code></a>)</li>
+<li><em>(testing)</em> Say a stray tools package replaces a namespace fixture (<a href="https://github.com/s0undt3ch/ToolR/commit/25a5496b46f1690668416fdb20bd4ae1dc59ffb2"><code>25a5496</code></a>)</li>
+<li><em>(testing)</em> Correct which sys.path entries CommandsTester hides (<a href="https://github.com/s0undt3ch/ToolR/commit/df5e844b0c913634c54569cc93f895f3da07c599"><code>df5e844</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7816,6 +7834,7 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <li><em>(command)</em> Make the stdin deadlock tests fail instead of hang (<a href="https://github.com/s0undt3ch/ToolR/commit/e0cd89584b1fe7515231af7fe93dfe9701939c84"><code>e0cd895</code></a>)</li>
 <li><em>(release)</em> Prove the strict prek pass is what fails the commit step (<a href="https://github.com/s0undt3ch/ToolR/commit/75d0f8ff9d4ddcc491810c66a14df9b3aeb5c452"><code>75d0f8f</code></a>)</li>
 <li><em>(action)</em> Simplify the resolve-version harness (<a href="https://github.com/s0undt3ch/ToolR/commit/5cd23f3679a18e3c4dd533432f16eefb1d7a9f79"><code>5cd23f3</code></a>)</li>
+<li><em>(testing)</em> Cover a tools package that raises on import (<a href="https://github.com/s0undt3ch/ToolR/commit/bc85737a08b2a57b847a0dc9182c6032a064ba9d"><code>bc85737</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
