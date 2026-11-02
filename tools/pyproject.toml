@@ -15,6 +15,10 @@ dependencies = [
     # Comment-preserving YAML round-trip for `toolr ci check-gate-needs`,
     # which rewrites workflow gate `needs` lists in place.
     "ruamel.yaml>=0.18",
+    # `toolr version bump` parses and validates release versions with
+    # `packaging.version.Version`. `toolr-py` pulls it in too; declare it so
+    # the release tooling doesn't depend on that.
+    "packaging>=24",
 ]
 
 [tool.uv]

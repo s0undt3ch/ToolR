@@ -100,7 +100,8 @@ for a stacked PR.
   pure bug fix, means minor (`0.X.0`); a release containing only `fix(...)`/`docs(...)`/`chore(...)`
   work is a patch (`0.x.Y`). Conventional Commit prefixes alone aren't sufficient — a PR can carry a
   `feat` commit for internal refactoring with no user-visible new capability, and `release-notes/` is
-  what actually ships in the notes, so read both.
+  what actually ships in the notes, so read both. Pre-releases (`X.Y.Z-rc.N`) follow "Pre-releases" in
+  [`release-notes/README.md`](release-notes/README.md).
 
 ### Actions (how)
 

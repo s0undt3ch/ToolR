@@ -69,6 +69,11 @@ trim = true
 
 
 [git]
+# Only final releases are changelog sections. Pre-release tags (`v1.0.0-rc.1`)
+# and the floating `vX`/`vX.Y` tags don't match, so `--unreleased` runs from
+# the last final release and a final release rolls up its pre-releases. See
+# "Pre-releases" in release-notes/README.md.
+tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
 # Parse commits according to the conventional commits specification.
 # See https://www.conventionalcommits.org
 conventional_commits = true
@@ -102,7 +107,7 @@ commit_parsers = [
   { message = "^refactor", group = "<!-- 2 -->🚜 Refactor" },
   { message = "^style", group = "<!-- 5 -->🎨 Styling" },
   { message = "^test", group = "<!-- 6 -->🧪 Testing" },
-  { message = "^chore\\(release\\): prepare for", skip = true },
+  { message = "(?i)^chore\\(release\\): prepare for", skip = true },
   { message = "^chore\\(deps.*\\)", skip = true },
   { message = "^chore\\(pr\\)", skip = true },
   { message = "^chore\\(pull\\)", skip = true },

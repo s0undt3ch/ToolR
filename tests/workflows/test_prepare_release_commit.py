@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests._git import git
 from tests.workflows.conftest import StepRunner
-from tests.workflows.conftest import git
 from tests.workflows.conftest import workflow_step_script
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

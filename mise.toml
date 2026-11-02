@@ -14,6 +14,9 @@ ruff = "0.17.3"
 typos = "1.51.1"
 rumdl = "v0.3.2"
 gh = "2.103.3"
+# Renders the release changelog in `_prepare-release.yml`; the release
+# workflow tests run it against `cliff.toml`.
+git-cliff = "2.14.2"
 # Without an explicit profile, mise inherits whatever profile the
 # machine's rustup is configured with — CI runners resolve to
 # `minimal`, which ships no clippy. Pin the profile and add the

@@ -182,12 +182,14 @@ name = "toolr-tools"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "packaging" },
     { name = "ruamel-yaml" },
     { name = "toolr-py" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "packaging", specifier = ">=24" },
     { name = "ruamel-yaml", specifier = ">=0.18" },
     { name = "toolr-py", specifier = ">=0.25.0" },
 ]

@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
+from tests._git import git
 from tests.workflows.conftest import StepRunner
 from tests.workflows.conftest import action_step_script
-from tests.workflows.conftest import git
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APPLY_RELEASE_PATCH_YML = REPO_ROOT / ".github" / "actions" / "apply-release-patch" / "action.yml"
