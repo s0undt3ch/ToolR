@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use assert_cmd::Command;
 use tempfile::TempDir;
+#[cfg(unix)]
+use toolr_core::venv::VenvLocation;
 
 fn fixture_with_manifest(json: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
@@ -351,7 +353,7 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
     );
 }
 
-/// Regression (F-18): dispatching against an in-tree venv used to write the
+/// Regression: dispatching against an in-tree venv used to write the
 /// `meta.json` sidecar to `venv_dir.parent()`, i.e. an untracked
 /// `tools/meta.json` that `toolr self cache list` never saw. It must land in
 /// the out-of-repo cache slot `toolr project venv sync` already uses.
@@ -414,8 +416,13 @@ fn dispatch_in_tree_venv_lets_an_abandoned_cache_venv_age_out() {
 
     // The slot the repo's cache venv used before the switch, last used 90 days ago.
     let resolved = toolr_core::venv::resolve_venv_path(tmp.path()).unwrap();
-    let abandoned = cache_root
-        .join(toolr_core::venv::compute_repo_key(tmp.path(), &resolved.python_version).unwrap());
+    let abandoned = toolr_core::venv::cache_slot_dir(
+        &cache_root,
+        tmp.path(),
+        &resolved.python_version,
+        VenvLocation::Cache,
+    )
+    .unwrap();
     std::fs::create_dir_all(abandoned.join("venv/bin")).unwrap();
     let mut old = toolr_core::cache::Meta::new(
         canonical.clone(),
@@ -454,60 +461,61 @@ fn dispatch_in_tree_venv_lets_an_abandoned_cache_venv_age_out() {
     );
 }
 
-/// Run `ci hello` on the in-tree fixture with a regular file as the cache
-/// home, so writing the sidecar fails.
+/// Run `ci hello` against a venv at `location` whose cache slot has a
+/// directory where `meta.json` should be, so touching the sidecar fails.
 #[cfg(unix)]
-fn dispatch_with_unwritable_cache_home(
+fn dispatch_with_unwritable_meta_json(
+    location: VenvLocation,
     flags: &[&str],
-) -> (tempfile::TempDir, std::process::Output) {
+) -> std::process::Output {
     let tmp = preflight_fixture(&[]);
-    let blocked = tmp.path().join("not-a-dir");
-    std::fs::write(&blocked, "").unwrap();
-    let output = common::toolr()
-        .current_dir(tmp.path())
-        .env("XDG_CACHE_HOME", &blocked)
-        .args(flags)
-        .args(["ci", "hello"])
-        .output()
-        .unwrap();
-    (tmp, output)
+    let resolved = toolr_core::venv::resolve_venv_path(tmp.path()).unwrap();
+    let slot = toolr_core::venv::cache_slot_dir(
+        &preflight_cache_home(tmp.path()).join("toolr"),
+        tmp.path(),
+        &resolved.python_version,
+        location,
+    )
+    .unwrap();
+    std::fs::create_dir_all(slot.join("meta.json")).unwrap();
+    let mut cmd = preflight_cmd(tmp.path());
+    if location == VenvLocation::Cache {
+        // Reuse the fixture's fake venv from the cache slot.
+        std::os::unix::fs::symlink(tmp.path().join("tools/.venv"), slot.join("venv")).unwrap();
+        cmd.env("TOOLR_VENV_LOCATION", "cache");
+    }
+    cmd.args(flags).args(["ci", "hello"]).output().unwrap()
 }
 
-/// A sidecar that can't be written never stops dispatch, and for an in-tree
-/// venv only `--debug` reports it.
+/// A sidecar that can't be written never stops dispatch. A cache venv warns
+/// unless `-q`; an in-tree venv, often under a read-only cache home in CI,
+/// warns only with `--debug`.
 #[test]
 #[cfg(unix)]
-fn dispatch_in_tree_venv_reports_unwritable_cache_meta_json_only_under_debug() {
-    let (tmp, output) = dispatch_with_unwritable_cache_home(&["--debug"]);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("toolr: warning: failed to touch cache meta.json"),
-        "expected the touch warning under --debug; stderr:\n{stderr}"
-    );
-    // The fake python exits 1: the runner was spawned, so the warning didn't abort dispatch.
-    assert_eq!(output.status.code(), Some(1), "stderr:\n{stderr}");
-    assert!(!tmp.path().join("tools/meta.json").exists());
-
-    let (_tmp, output) = dispatch_with_unwritable_cache_home(&[]);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !stderr.contains("failed to touch cache meta.json"),
-        "in-tree touch failure should be debug-only; stderr:\n{stderr}"
-    );
-    assert_eq!(output.status.code(), Some(1), "stderr:\n{stderr}");
-}
-
-/// `-q` with a read-only cache home (common in CI) leaves stderr free of toolr output.
-#[test]
-#[cfg(unix)]
-fn dispatch_in_tree_venv_quiet_with_unwritable_cache_home_prints_nothing() {
-    let (_tmp, output) = dispatch_with_unwritable_cache_home(&["-q"]);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !stderr.contains("toolr:"),
-        "expected no toolr output under -q; stderr:\n{stderr}"
-    );
-    assert_eq!(output.status.code(), Some(1), "stderr:\n{stderr}");
+fn dispatch_touch_failure_warning_follows_location_and_verbosity() {
+    let cases: &[(VenvLocation, &[&str], bool)] = &[
+        (VenvLocation::InTree, &[], false),
+        (VenvLocation::InTree, &["-q"], false),
+        (VenvLocation::InTree, &["--debug"], true),
+        (VenvLocation::Cache, &[], true),
+        (VenvLocation::Cache, &["-q"], false),
+        (VenvLocation::Cache, &["--debug"], true),
+    ];
+    for &(location, flags, warns) in cases {
+        let output = dispatch_with_unwritable_meta_json(location, flags);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let case = format!("{location:?} {flags:?}");
+        assert_eq!(
+            stderr.contains("toolr: warning: failed to touch cache meta.json"),
+            warns,
+            "{case}: stderr:\n{stderr}"
+        );
+        if flags == ["-q"] {
+            assert!(!stderr.contains("toolr:"), "{case}: stderr:\n{stderr}");
+        }
+        // The fake python exits 1: the runner was spawned, so the failure didn't abort dispatch.
+        assert_eq!(output.status.code(), Some(1), "{case}: stderr:\n{stderr}");
+    }
 }
 
 /// Regression: when the pre-flight is disabled and the runner emits a
