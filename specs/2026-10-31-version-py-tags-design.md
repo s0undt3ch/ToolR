@@ -148,6 +148,15 @@ releases. Checked with git-cliff 2.13.1 in a scratch repository tagged `v0.35.1`
 - With `tag_pattern`, `--unreleased --tag 1.0.0` lists the commits from before and after the rc, and a full changelog
   has no `1.0.0-rc.1` section.
 
+The skip parser for release commits was `^chore\(release\): prepare for`, but the release commit is
+`chore(release): Prepare for X release`, so it never matched. Before the rollup the commit sat on the tag and fell
+into its own section; with rc tags out of the pattern, each rc's release commit would land in the final release's
+section and in later rc bodies. The parser is now case-insensitive (`(?i)`).
+
+git-cliff is pinned (2.14.2) in `mise.toml`, so CI's test jobs have it, and `_prepare-release.yml` passes the same
+version to `orhun/git-cliff-action`. A test keeps the pins in step, and the git-cliff tests fail instead of skipping
+when `CI` is set and git-cliff is missing.
+
 On this repository's history the pattern changes nothing: `--unreleased --tag 0.36.0` renders the same with it as with
 the previous config limited to `v*` tags. The pattern also leaves out the floating `vX`/`vX.Y` tags and the old
 unprefixed `0.0.0` tag, which were never release sections that `--unreleased` should start from.
@@ -179,11 +188,17 @@ Rejected alternatives:
 ## Scope and compatibility
 
 - No runner or manifest schema change.
-- Changes `tools/version.py`, `tools/pyproject.toml`, `tools/uv.lock`, `cliff.toml`,
+- Changes `tools/version.py`, `tools/pyproject.toml`, `tools/uv.lock`, `cliff.toml`, `mise.toml`, `mise.lock`,
+  `tests/distribution/test_cross_wheel.py`,
   `.github/workflows/_prepare-release.yml`, `.github/workflows/release.yml`, `tests/test_tools_version.py` and two
   new workflow tests under `tests/workflows/` (`test_release_create.py`, `test_prepare_release_prerelease.py`; the
   git-cliff rollup cases skip when `git-cliff` isn't on `PATH`, and a config assertion pins `tag_pattern` either way).
   `action.yml` and the install scripts are unchanged.
+- `tests/distribution/test_cross_wheel.py` compared the wheel version with `toolr --version` as strings, mapping only
+  `.dev` to `-dev`, so a pre-release wheel (`1.0.0rc1`) never matched the binary's `toolr 1.0.0-rc.1`. It now parses
+  both with `packaging`, and unit tests outside the distribution suite pin the comparison. The other version checks
+  compare like with like: the mise smoke tests compare the binary with the tag's Cargo form, and the install smoke's
+  `pip install toolr==<version>` normalises the Cargo form itself.
 - The release tooling ships nothing to users, but pre-release versions can now be released, so the change gets a
   short note in `release-notes/`.
 - `--new-version 1.0.0rc1` and `--new-version 1.0.0-rc1` both release as `1.0.0-rc.1` (tag `v1.0.0-rc.1`).
