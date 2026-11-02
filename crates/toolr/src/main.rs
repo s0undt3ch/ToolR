@@ -110,15 +110,15 @@ fn maybe_emit_cache_hint_from_argv() {
         return;
     }
     // Suppress for tab-completion and `self cache ...` invocations.
+    if bootstrap::is_tab_completion(&argv) {
+        return;
+    }
     let positional: Vec<&str> = argv
         .iter()
         .skip(1)
         .filter(|a| !a.starts_with('-'))
         .map(String::as_str)
         .collect();
-    if positional.first().copied() == Some("__complete") {
-        return;
-    }
     if positional.first().copied() == Some("self") && positional.get(1).copied() == Some("cache") {
         return;
     }

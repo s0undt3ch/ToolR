@@ -66,7 +66,7 @@ pub struct Manifest {
 pub struct InputRecords {
     /// One record per static input, sorted by key.
     #[serde(default)]
-    pub files: Vec<FileStat>,
+    pub files: Vec<InputRecord>,
     /// Each `[tool.toolr.argparse.*]` block's `scan_paths`, as parsed from
     /// the `tools/pyproject.toml` its record describes.
     #[serde(default)]
@@ -91,13 +91,14 @@ impl InputRecords {
     }
 }
 
-/// One static input's stat and content digest.
+/// One static input's stat and what its contents hashed to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FileStat {
+pub struct InputRecord {
     /// `hash::StaticInput::key`.
     pub key: String,
     pub size: u64,
-    /// Nanoseconds since the Unix epoch; `0` means the record is never reused.
+    /// Nanoseconds since the Unix epoch; `0` when unknown, which is never
+    /// reused.
     pub mtime_ns: u64,
     /// Unix only; `0` elsewhere.
     #[serde(default)]
@@ -108,12 +109,21 @@ pub struct FileStat {
     /// The device the file lives on. Unix only; `0` elsewhere.
     #[serde(default)]
     pub dev: u64,
-    /// Lowercase hex blake3 of the contents; empty when `unreadable`.
-    #[serde(default)]
-    pub blake3: String,
-    /// The read error's kind, for a non-module input that couldn't be read.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unreadable: Option<String>,
+    /// Serialised inline, as `"digest": "<hex>"` or
+    /// `"unreadable": "<error kind>"`.
+    #[serde(flatten)]
+    pub content: Content,
+}
+
+/// What an [`InputRecord`]'s file hashed to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Content {
+    /// Lowercase hex blake3; see `hash::static_hash_of`.
+    Digest(String),
+    /// The read error's kind, for a non-module input that couldn't be
+    /// read. Never reused: fixing the permission changes no stat field.
+    Unreadable(String),
 }
 
 /// One plugin problem recorded at merge time so every later run can warn about it.

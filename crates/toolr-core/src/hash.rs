@@ -7,7 +7,7 @@ use anyhow::Result;
 use blake3::Hasher;
 use walkdir::WalkDir;
 
-use crate::manifest::{FileStat, InputRecords};
+use crate::manifest::{Content, InputRecord, InputRecords, Manifest};
 use crate::text::escape_control_chars;
 
 /// One file that feeds `static_hash`.
@@ -32,19 +32,6 @@ pub(crate) enum InputKind {
     Pyproject,
 }
 
-impl InputKind {
-    /// Which kind wins when one path is listed as several: a module keeps
-    /// its strict reads, and a scanned pyproject its full bytes, since the
-    /// scanner reads all of it.
-    fn dedup_rank(self) -> u8 {
-        match self {
-            InputKind::Module => 0,
-            InputKind::Scanned => 1,
-            InputKind::Pyproject => 2,
-        }
-    }
-}
-
 /// Tag after an input's key: its contents' digest follows.
 const TAG_CONTENTS: &[u8] = b"\x00";
 /// Tag after an input's key: it couldn't be read; the error kind follows.
@@ -61,25 +48,6 @@ pub fn compute_static_hash(tools_dir: &Path) -> Result<String> {
     Ok(static_hash_of(
         &snapshot_static_inputs(tools_dir, None)?.files,
     ))
-}
-
-/// Every input of the static build: `tools/**/*.py`, `tools/pyproject.toml`
-/// (for its `[tool.toolr.argparse.*]` blocks) and the files those blocks
-/// scan. Sorted by key, without duplicate keys.
-#[cfg(test)]
-pub(crate) fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
-    let py_files = list_python_files(tools_dir)?;
-    let project_root = project_root(tools_dir);
-    let pyproject = crate::argparse::pyproject_path(project_root);
-    let (scan_paths, pyproject) = if pyproject.is_file() {
-        let scan_paths = read_input(&pyproject)
-            .map(|bytes| parse_scan_paths(&bytes))
-            .unwrap_or_default();
-        (scan_paths, Some(pyproject.as_path()))
-    } else {
-        (Vec::new(), None)
-    };
-    Ok(inputs_for(project_root, &py_files, &scan_paths, pyproject))
 }
 
 /// Stat every static input and hash the ones `previous` can't vouch for.
@@ -104,7 +72,9 @@ pub(crate) fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
 /// takes one, before building.
 ///
 /// `tools/pyproject.toml` is read at most once, for both its digest and
-/// its `scan_paths`; when its record is reused, so are the `scan_paths`.
+/// its `scan_paths` (twice when a `scan_paths` glob also matches it, since
+/// it is then recorded whole, as a scanned file); when its record is
+/// reused, so are the `scan_paths`.
 /// The globs are expanded on every call, so a scanned file that appears or
 /// vanishes changes the result.
 ///
@@ -143,9 +113,8 @@ impl SnapshotClock {
     ///
     /// Taken from the filesystem rather than the system clock, so an NFS
     /// server's skew can't make a record on that filesystem look older than
-    /// it is. Writes to `dir`, so only callers that are about to write the
-    /// manifest there may call it.
-    pub fn now(dir: &Path) -> Self {
+    /// it is. Writes to `dir`; callers go through [`build_to_persist`].
+    pub(crate) fn now(dir: &Path) -> Self {
         tempfile::Builder::new()
             .prefix(".toolr-clock.")
             .suffix(".tmp")
@@ -158,10 +127,25 @@ impl SnapshotClock {
     }
 
     /// Bound `records` by this clock.
-    pub fn stamp(self, records: &mut InputRecords) {
+    pub(crate) fn stamp(self, records: &mut InputRecords) {
         records.snapshot_at_ns = self.at_ns;
         records.snapshot_dev = self.dev;
     }
+}
+
+/// Run `build` for a manifest about to be written to `tools_dir`: read the
+/// [`SnapshotClock`] first, so it predates every stat the build takes, then
+/// stamp it on the built records. Every path that writes the manifest goes
+/// through here; paths that don't write must not, since the clock writes
+/// to `tools_dir`.
+pub fn build_to_persist<E>(
+    tools_dir: &Path,
+    build: impl FnOnce() -> std::result::Result<Manifest, E>,
+) -> std::result::Result<Manifest, E> {
+    let clock = SnapshotClock::now(tools_dir);
+    let mut manifest = build()?;
+    clock.stamp(&mut manifest.input_records);
+    Ok(manifest)
 }
 
 /// [`snapshot_static_inputs`] with `tools/**/*.py` already listed, so the
@@ -184,38 +168,36 @@ pub(crate) fn snapshot_from(
     if pyproject.is_file() {
         let input = StaticInput {
             key: input_key(project_root, &pyproject),
-            path: pyproject.clone(),
+            path: pyproject,
             kind: InputKind::Pyproject,
         };
         let mut parsed = None;
-        let record = record(&input, &reuse, |bytes| {
+        pyproject_record = record(&input, &reuse, |bytes| {
             parsed = Some(parse_scan_paths(bytes))
         })?;
-        scan_paths = match parsed {
-            Some(parsed) => parsed,
-            // Not read, yet readable: reused along with its scan paths.
-            None if record.as_ref().is_some_and(|r| r.unreadable.is_none()) => {
-                previous.map(|p| p.scan_paths.clone()).unwrap_or_default()
-            }
-            None => Vec::new(),
+        scan_paths = match (parsed, &pyproject_record) {
+            (Some(parsed), _) => parsed,
+            // Reused rather than read: unchanged, and so are its scan paths.
+            (
+                None,
+                Some(InputRecord {
+                    content: Content::Digest(_),
+                    ..
+                }),
+            ) => previous.map(|p| p.scan_paths.clone()).unwrap_or_default(),
+            (None, _) => Vec::new(),
         };
-        pyproject_record = record.map(|r| (input.key, r));
     }
-    let inputs = inputs_for(
-        project_root,
-        py_files,
-        &scan_paths,
-        pyproject_record.as_ref().map(|_| pyproject.as_path()),
-    );
-    let mut files = Vec::with_capacity(inputs.len());
-    for input in &inputs {
-        let record = match &mut pyproject_record {
-            Some((key, _)) if input.kind == InputKind::Pyproject && *key == input.key => {
-                pyproject_record.take().map(|(_, r)| r)
-            }
-            _ => record(input, &reuse, |_| {})?,
-        };
-        files.extend(record);
+    let mut files = Vec::new();
+    for input in inputs_for(project_root, py_files, &scan_paths) {
+        files.extend(record(&input, &reuse, |_| {})?);
+    }
+    // A pyproject a `scan_paths` glob also matches is already recorded
+    // whole, as a scanned file: the scanner reads all of it.
+    if let Some(pyproject_record) = pyproject_record
+        && let Err(at) = files.binary_search_by(|f| f.key.cmp(&pyproject_record.key))
+    {
+        files.insert(at, pyproject_record);
     }
     Ok(InputRecords {
         files,
@@ -228,21 +210,15 @@ pub(crate) fn snapshot_from(
 /// `static_hash` from the records of [`snapshot_static_inputs`], in their
 /// order: each is fed as `len(key) as u64 LE || key || 0x00 || hex digest`,
 /// or `len(key) as u64 LE || key || 0x01 || <error kind>` when unreadable.
-pub fn static_hash_of(files: &[FileStat]) -> String {
+pub fn static_hash_of(files: &[InputRecord]) -> String {
     let mut hasher = Hasher::new();
     for file in files {
         hasher.update(&(file.key.len() as u64).to_le_bytes());
         hasher.update(file.key.as_bytes());
-        match &file.unreadable {
-            None => {
-                hasher.update(TAG_CONTENTS);
-                hasher.update(file.blake3.as_bytes());
-            }
-            Some(kind) => {
-                hasher.update(TAG_READ_ERROR);
-                hasher.update(kind.as_bytes());
-            }
-        }
+        match &file.content {
+            Content::Digest(digest) => hasher.update(TAG_CONTENTS).update(digest.as_bytes()),
+            Content::Unreadable(kind) => hasher.update(TAG_READ_ERROR).update(kind.as_bytes()),
+        };
     }
     hasher.finalize().to_hex().to_string()
 }
@@ -264,11 +240,13 @@ fn parse_scan_paths(bytes: &[u8]) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// The modules and scanned files, sorted by key without duplicates; a
+/// module also matched by a `scan_paths` glob keeps its strict reads. The
+/// pyproject is recorded separately, by [`snapshot_from`].
 fn inputs_for(
     project_root: &Path,
     py_files: &[PathBuf],
     scan_paths: &[Vec<String>],
-    pyproject: Option<&Path>,
 ) -> Vec<StaticInput> {
     let mut paths: Vec<(PathBuf, InputKind)> = py_files
         .iter()
@@ -279,7 +257,6 @@ fn inputs_for(
             paths.extend(scanned.into_iter().map(|p| (p, InputKind::Scanned)));
         }
     }
-    paths.extend(pyproject.map(|p| (p.to_path_buf(), InputKind::Pyproject)));
     let mut inputs: Vec<StaticInput> = paths
         .into_iter()
         .map(|(path, kind)| StaticInput {
@@ -288,18 +265,15 @@ fn inputs_for(
             kind,
         })
         .collect();
-    inputs.sort_by(|a, b| {
-        a.key
-            .cmp(&b.key)
-            .then(a.kind.dedup_rank().cmp(&b.kind.dedup_rank()))
-    });
+    let not_module = |i: &StaticInput| i.kind != InputKind::Module;
+    inputs.sort_by(|a, b| a.key.cmp(&b.key).then(not_module(a).cmp(&not_module(b))));
     inputs.dedup_by(|a, b| a.key == b.key);
     inputs
 }
 
 /// The previous records [`record`] may reuse.
 struct Reuse<'a> {
-    files: &'a [FileStat],
+    files: &'a [InputRecord],
     /// The previous snapshot's bound in ns; `0` reuses nothing.
     snapshot_at_ns: u64,
     /// The device the bound was read on.
@@ -308,7 +282,7 @@ struct Reuse<'a> {
 }
 
 impl Reuse<'_> {
-    fn get(&self, input: &StaticInput, live: &FileStat) -> Option<&FileStat> {
+    fn get(&self, input: &StaticInput, live: &Stat) -> Option<&InputRecord> {
         // The bound came from `tools/`'s clock; an mtime from another
         // filesystem can't be compared with it.
         let same_clock = live.dev == self.snapshot_dev && input.path.starts_with(self.project_root);
@@ -326,7 +300,7 @@ impl Reuse<'_> {
             && old.ino == live.ino
             && old.dev == live.dev;
         (same
-            && old.unreadable.is_none()
+            && matches!(old.content, Content::Digest(_))
             && old.mtime_ns != 0
             && old.mtime_ns < self.snapshot_at_ns)
             .then_some(old)
@@ -339,29 +313,22 @@ fn record(
     input: &StaticInput,
     reuse: &Reuse,
     on_read: impl FnOnce(&[u8]),
-) -> Result<Option<FileStat>> {
+) -> Result<Option<InputRecord>> {
     let failed = |e: std::io::Error| match e.kind() {
         // Deleted since it was listed: hash the tree as it now is.
         std::io::ErrorKind::NotFound => Ok(None),
         _ if input.kind == InputKind::Module => {
             Err(anyhow::Error::new(e).context(format!("reading {}", input.path.display())))
         }
-        kind => Ok(Some(FileStat {
-            key: input.key.clone(),
-            size: 0,
-            mtime_ns: 0,
-            ctime_ns: 0,
-            ino: 0,
-            dev: 0,
-            blake3: String::new(),
-            unreadable: Some(kind.to_string()),
-        })),
+        kind => Ok(Some(
+            Stat::default().record(&input.key, Content::Unreadable(kind.to_string())),
+        )),
     };
     let meta = match std::fs::metadata(&input.path) {
         Ok(meta) => meta,
         Err(e) => return failed(e),
     };
-    let mut live = stat_record(&input.key, &meta);
+    let live = Stat::of(&meta);
     if let Some(old) = reuse.get(input, &live) {
         return Ok(Some(old.clone()));
     }
@@ -370,11 +337,13 @@ fn record(
         Err(e) => return failed(e),
     };
     on_read(&bytes);
-    live.blake3 = digest(input, &bytes);
-    Ok(Some(live))
+    Ok(Some(live.record(
+        &input.key,
+        Content::Digest(digest(input, &bytes)),
+    )))
 }
 
-/// A record's `blake3`: of the contents, or for the pyproject, of
+/// A record's [`Content::Digest`]: blake3 of the contents, or for the pyproject, of
 /// [`TAG_ARGPARSE_BLOCKS`] followed by its argparse blocks, so edits outside
 /// `[tool.toolr.argparse.*]` (a dependency bump, `uv add`) leave it alone;
 /// see [`canonical_argparse_blocks`]. A pyproject the build can't read its blocks
@@ -392,28 +361,48 @@ fn digest(input: &StaticInput, bytes: &[u8]) -> String {
     hasher.finalize().to_hex().to_string()
 }
 
-/// A record of `meta` with no digest yet.
-fn stat_record(key: &str, meta: &std::fs::Metadata) -> FileStat {
-    #[cfg(unix)]
-    let (ctime_ns, ino) = {
-        use std::os::unix::fs::MetadataExt;
-        let ctime = u64::try_from(meta.ctime()).map_or(0, |secs| {
-            secs.saturating_mul(1_000_000_000)
-                .saturating_add(u64::try_from(meta.ctime_nsec()).unwrap_or(0))
-        });
-        (ctime, meta.ino())
-    };
-    #[cfg(not(unix))]
-    let (ctime_ns, ino) = (0, 0);
-    FileStat {
-        key: key.to_owned(),
-        size: meta.len(),
-        mtime_ns: nanos(meta.modified()),
-        ctime_ns,
-        ino,
-        dev: device(meta),
-        blake3: String::new(),
-        unreadable: None,
+/// The stat fields of an [`InputRecord`].
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct Stat {
+    size: u64,
+    mtime_ns: u64,
+    ctime_ns: u64,
+    ino: u64,
+    dev: u64,
+}
+
+impl Stat {
+    fn of(meta: &std::fs::Metadata) -> Self {
+        #[cfg(unix)]
+        let (ctime_ns, ino) = {
+            use std::os::unix::fs::MetadataExt;
+            let ctime = u64::try_from(meta.ctime()).map_or(0, |secs| {
+                secs.saturating_mul(1_000_000_000)
+                    .saturating_add(u64::try_from(meta.ctime_nsec()).unwrap_or(0))
+            });
+            (ctime, meta.ino())
+        };
+        #[cfg(not(unix))]
+        let (ctime_ns, ino) = (0, 0);
+        Self {
+            size: meta.len(),
+            mtime_ns: nanos(meta.modified()),
+            ctime_ns,
+            ino,
+            dev: device(meta),
+        }
+    }
+
+    fn record(self, key: &str, content: Content) -> InputRecord {
+        InputRecord {
+            key: key.to_owned(),
+            size: self.size,
+            mtime_ns: self.mtime_ns,
+            ctime_ns: self.ctime_ns,
+            ino: self.ino,
+            dev: self.dev,
+            content,
+        }
     }
 }
 
@@ -586,7 +575,7 @@ fn canonical_argparse_blocks(bytes: &[u8]) -> Option<Vec<u8>> {
 fn read_input(path: &Path) -> std::io::Result<Vec<u8>> {
     #[cfg(test)]
     tests::count_read(path);
-    // `path` is listed by `static_inputs` from the project's own config, not untrusted input.
+    // `path` is listed by `inputs_for`/`snapshot_from` from the project's own config, not untrusted input.
     std::fs::read(path) // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
 }
 
@@ -957,10 +946,11 @@ parent = "django"
     }
 
     fn keys(project: &TempDir) -> Vec<String> {
-        static_inputs(&project.path().join("tools"))
+        snapshot_static_inputs(&project.path().join("tools"), None)
             .unwrap()
+            .files
             .into_iter()
-            .map(|i| i.key)
+            .map(|f| f.key)
             .collect()
     }
 
@@ -1119,9 +1109,10 @@ parent = "django"
     fn scanned_pyproject_is_hashed_whole() {
         let pyproject = "[tool.toolr.argparse.all]\nscan_paths = [\"tools/*\"]\n";
         let project = setup(&[("tools/pyproject.toml", pyproject)]);
-        let inputs = static_inputs(&project.path().join("tools")).unwrap();
+        let inputs = inputs_for(project.path(), &[], &[vec!["tools/*".into()]]);
         assert_eq!(inputs.len(), 1, "{inputs:?}");
         assert_eq!(inputs[0].kind, InputKind::Scanned, "{inputs:?}");
+        assert_eq!(keys(&project), ["tools/pyproject.toml"]);
         let before = tools_hash(&project);
         write(
             &project,
@@ -1141,7 +1132,9 @@ parent = "django"
             ("tools/a.py", "x"),
         ]);
         assert_eq!(keys(&project), ["tools/a.py", "tools/pyproject.toml"]);
-        let inputs = static_inputs(&project.path().join("tools")).unwrap();
+        let a = project.path().join("tools/a.py");
+        let inputs = inputs_for(project.path(), &[a], &[vec!["tools/*.py".into()]]);
+        assert_eq!(inputs.len(), 1, "{inputs:?}");
         assert_eq!(
             inputs[0].kind,
             InputKind::Module,
@@ -1214,12 +1207,16 @@ parent = "django"
         let project = django_project();
         let tools = project.path().join("tools");
         let locked = with_unreadable(&tools.join("pyproject.toml"), || {
-            (static_inputs(&tools).unwrap(), compute_static_hash(&tools))
+            snapshot_static_inputs(&tools, None)
         });
-        if let Some((inputs, hash)) = locked {
-            let keys: Vec<_> = inputs.into_iter().map(|i| i.key).collect();
+        if let Some(records) = locked {
+            let records = records.unwrap();
+            let keys: Vec<_> = records.files.iter().map(|f| f.key.as_str()).collect();
             assert_eq!(keys, ["tools/dispatcher.py", "tools/pyproject.toml"]);
-            assert!(hash.is_ok());
+            assert!(
+                matches!(records.files[1].content, Content::Unreadable(_)),
+                "{records:?}"
+            );
         }
     }
 
@@ -1338,6 +1335,32 @@ parent = "django"
             SnapshotClock::now(&project.path().join("missing")),
             SnapshotClock { at_ns: 0, dev: 0 }
         );
+    }
+
+    /// `build_to_persist` reads the clock before the build and stamps it on
+    /// the built records; a failed build is returned as is.
+    #[test]
+    fn build_to_persist_stamps_a_clock_taken_before_the_build() {
+        let project = tools_tree(&[
+            ("pyproject.toml", "[project]\nname = \"tools\"\n"),
+            ("a.py", "x = 1\n"),
+        ]);
+        let tools = project.path().join("tools");
+        let mut built_at = 0;
+        let manifest = build_to_persist(&tools, || {
+            let probe = tools.join("probe.txt");
+            std::fs::write(&probe, "x").unwrap();
+            built_at = mtime_ns(&probe);
+            std::fs::remove_file(probe).unwrap();
+            crate::parser::build_static_manifest(&tools)
+        })
+        .unwrap();
+        let records = &manifest.input_records;
+        assert_ne!(records.snapshot_at_ns, 0);
+        assert!(records.snapshot_at_ns <= built_at, "{records:?}");
+        assert_eq!(records.snapshot_dev, SnapshotClock::now(&tools).dev);
+        let failed = build_to_persist(&tools, || Err::<crate::manifest::Manifest, _>("no"));
+        assert_eq!(failed.unwrap_err(), "no");
     }
 
     /// Records without a bound (older manifests, or one written by a path
@@ -1557,8 +1580,10 @@ parent = "django"
         };
         let record = &manifest.input_records.files[0];
         assert_eq!(record.key, MIGRATE);
-        assert!(record.unreadable.is_some(), "{record:?}");
-        assert_eq!(record.mtime_ns, 0);
+        assert!(
+            matches!(record.content, Content::Unreadable(_)),
+            "{record:?}"
+        );
         let (verdict, reads) = compare_reads(&project, &manifest);
         assert_eq!(verdict, crate::freshness::FreshnessVerdict::StaticDrift);
         assert_eq!(reads, reads_of(&project, &[MIGRATE]));

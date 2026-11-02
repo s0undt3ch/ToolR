@@ -31,14 +31,18 @@ pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<Re
     // An explicit rebuild always runs; the lock only serialises it with
     // concurrent auto-rebuilds.
     let _lock = acquire_rebuild_lock(&manifest_path);
-    let clock = crate::hash::SnapshotClock::now(&tools);
-    let mut manifest = build_static_manifest_with_venv(&tools, venv_root)
-        .map_err(BuildError::into_anyhow)
-        .map_err(|e| {
-            context_unless_symlinked(e, "building static manifest (incl. third-party fragments)")
-        })?;
-    manifest.third_party_hash = compute_third_party_hash(venv_root)?;
-    clock.stamp(&mut manifest.input_records);
+    let manifest = crate::hash::build_to_persist(&tools, || {
+        let mut manifest = build_static_manifest_with_venv(&tools, venv_root)
+            .map_err(BuildError::into_anyhow)
+            .map_err(|e| {
+                context_unless_symlinked(
+                    e,
+                    "building static manifest (incl. third-party fragments)",
+                )
+            })?;
+        manifest.third_party_hash = compute_third_party_hash(venv_root)?;
+        anyhow::Ok(manifest)
+    })?;
     write_manifest(&manifest_path, &manifest)?;
     Ok(RebuildOutcome {
         manifest_path,

@@ -10,8 +10,8 @@ pub use lock::{
     LOCKS_DIR, ManifestRebuildLock, acquire_rebuild_lock, rebuild_if_stale, rebuild_lock_path,
 };
 pub use model::{
-    ArgMetadata, Argument, ArgumentKind, Command, FRAGMENT_SHAPE_SCHEMA, FileStat, Group,
-    HelpSection, InputRecords, MIN_READABLE_FRAGMENT_SCHEMA, Manifest, Nargs, Origin,
+    ArgMetadata, Argument, ArgumentKind, Command, Content, FRAGMENT_SHAPE_SCHEMA, Group,
+    HelpSection, InputRecord, InputRecords, MIN_READABLE_FRAGMENT_SCHEMA, Manifest, Nargs, Origin,
     PluginWarning, PluginWarningKind, SCHEMA_VERSION,
 };
 

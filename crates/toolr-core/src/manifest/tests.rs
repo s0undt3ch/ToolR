@@ -71,23 +71,29 @@ fn empty_input_records_not_serialised() {
 
     let mut m = sample_manifest();
     m.input_records.scan_paths = vec![vec!["apps/*.py".into()]];
-    m.input_records.files.push(FileStat {
-        key: "tools/a.py".into(),
+    let record = |key: &str, content| InputRecord {
+        key: key.into(),
         size: 1,
         mtime_ns: 2,
         ctime_ns: 3,
         ino: 4,
         dev: 5,
-        blake3: "ab".into(),
-        unreadable: None,
-    });
+        content,
+    };
+    m.input_records.files = vec![
+        record("tools/a.py", Content::Digest("ab".into())),
+        record(
+            "tools/b.py",
+            Content::Unreadable("permission denied".into()),
+        ),
+    ];
     let json = serde_json::to_value(&m).unwrap();
     assert_eq!(json["input_records"]["scan_paths"][0][0], "apps/*.py");
-    assert!(
-        json["input_records"]["files"][0]
-            .get("unreadable")
-            .is_none()
-    );
+    let files = &json["input_records"]["files"];
+    assert_eq!(files[0]["digest"], "ab");
+    assert!(files[0].get("unreadable").is_none(), "{files}");
+    assert_eq!(files[1]["unreadable"], "permission denied");
+    assert!(files[1].get("digest").is_none(), "{files}");
     assert_eq!(serde_json::from_value::<Manifest>(json).unwrap(), m);
 }
 
