@@ -1,5 +1,6 @@
 //! High-level orchestration: find repo, ensure uv, sync venv, validate.
 
+use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -10,7 +11,7 @@ use crate::manifest_build::rebuild_manifest_full;
 use crate::trust::{TrustMode, require_trust};
 use crate::uv::{UvBinary, UvError, ensure_uv, install::ConsentMode, toolr_cache_dir};
 use crate::venv::{
-    ResolvedVenv, UpgradeMode, VenvLocation, cache_slot_dir, resolve_venv_path,
+    ResolvedVenv, UpgradeMode, VenvLocation, cache_slot_dir, check_freshness, resolve_venv_path,
     sync::sync_if_needed, validate::validate_venv,
 };
 
@@ -28,6 +29,8 @@ pub struct EnsureOpts {
     pub upgrade: UpgradeMode,
     /// How to ask for repository trust when the repo isn't trusted yet.
     pub trust: TrustMode,
+    /// The caller has already established trust in this run, so don't check again.
+    pub trust_checked: bool,
 }
 
 impl EnsureOpts {
@@ -47,6 +50,10 @@ impl EnsureOpts {
         self.trust = mode;
         self
     }
+    pub fn with_trust_checked(mut self, v: bool) -> Self {
+        self.trust_checked = v;
+        self
+    }
 }
 
 /// One-stop "make the venv ready" entrypoint. Returns the resolved venv
@@ -61,7 +68,9 @@ pub fn ensure_venv_ready(
     let resolved = resolve_venv_path(&repo_root).context("resolving the tools venv path")?;
     // After the static pyproject read, so a broken one stays a benign
     // `--quiet` exit; before anything repo-controlled runs.
-    require_trust(&repo_root, opts.trust)?;
+    if !opts.trust_checked {
+        require_trust(&repo_root, opts.trust)?;
+    }
     let uv = ensure_uv(consent).map_err(UvError::into_anyhow)?;
     let tools = repo_root.join("tools");
     sync_if_needed(
@@ -78,6 +87,105 @@ pub fn ensure_venv_ready(
         eprintln!("toolr: warning: failed to finalize sync (meta/manifest): {e}");
     }
     Ok((resolved, uv))
+}
+
+/// What to tell a user who declined the sync that follows trust.
+pub const SYNC_LATER_HINT: &str =
+    "the tools venv isn't synced; run `toolr project venv sync` when you're ready.";
+
+/// Result of [`sync_after_trust`].
+#[derive(Debug)]
+pub enum SyncAfterTrust {
+    /// The venv was already fresh.
+    NotNeeded,
+    Synced(ResolvedVenv),
+    /// The sync prompt was declined, or couldn't be asked.
+    Declined,
+}
+
+impl SyncAfterTrust {
+    pub fn into_synced(self) -> Option<ResolvedVenv> {
+        match self {
+            Self::Synced(resolved) => Some(resolved),
+            _ => None,
+        }
+    }
+}
+
+/// The sync prompt. It stands in for the uv install prompt, so a `y` is
+/// consent to download uv and a Python too. EOF and bare Enter decline.
+pub fn confirm_sync(input: &mut dyn BufRead, out: &mut dyn Write) -> bool {
+    let _ = write!(
+        out,
+        "The tools venv needs a sync before toolr can run this repository's commands.\n\
+         Syncing may download uv and a Python, and installs the dependencies in tools/pyproject.toml.\n\
+         Sync it now? [y/N] "
+    );
+    let _ = out.flush();
+    let mut answer = String::new();
+    match input.read_line(&mut answer) {
+        Ok(n) if n > 0 => matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"),
+        _ => {
+            // EOF echoes no newline, so whatever follows would land on the prompt line.
+            let _ = writeln!(out);
+            false
+        }
+    }
+}
+
+/// Sync a trusted repository's venv if it needs it, asking first. The sync
+/// prompt follows the uv install prompt it replaces: `TOOLR_AUTO_INSTALL_UV=1`
+/// answers it, and `never_prompt` or no `prompt_io` (no terminal) declines it.
+pub fn sync_after_trust(
+    repo_root: &Path,
+    quiet: bool,
+    never_prompt: bool,
+    prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
+) -> Result<SyncAfterTrust> {
+    let env = ConsentMode::from_env(never_prompt);
+    let can_answer = env.auto_install_env || (!never_prompt && prompt_io.is_some());
+    let resolved = match resolve_venv_path(repo_root) {
+        Ok(resolved) => resolved,
+        // Nothing would be synced, so leave a config error for `venv sync` to report.
+        Err(_) if !can_answer => return Ok(SyncAfterTrust::Declined),
+        Err(e) => return Err(e).context("resolving the tools venv path"),
+    };
+    if check_freshness(&resolved, &repo_root.join("tools")) == crate::venv::Freshness::Fresh {
+        return Ok(SyncAfterTrust::NotNeeded);
+    }
+    let agreed = env.auto_install_env
+        || match prompt_io {
+            Some((input, out)) if !never_prompt => confirm_sync(input, out),
+            _ => false,
+        };
+    if !agreed {
+        return Ok(SyncAfterTrust::Declined);
+    }
+    let consent = ConsentMode {
+        yes_flag: true,
+        ..env
+    };
+    let opts = EnsureOpts::default()
+        .with_quiet(quiet)
+        .with_trust_checked(true);
+    let (resolved, _uv) = ensure_venv_ready(repo_root, consent, opts)?;
+    Ok(SyncAfterTrust::Synced(resolved))
+}
+
+/// [`sync_after_trust`] prompting on the terminal, when stdin is one.
+pub fn sync_after_trust_on_tty(
+    repo_root: &Path,
+    quiet: bool,
+    never_prompt: bool,
+) -> Result<SyncAfterTrust> {
+    let stdin = std::io::stdin();
+    let mut input = stdin.lock();
+    let mut stderr = std::io::stderr();
+    let prompt_io = stdin.is_terminal().then_some((
+        &mut input as &mut dyn BufRead,
+        &mut stderr as &mut dyn Write,
+    ));
+    sync_after_trust(repo_root, quiet, never_prompt, prompt_io)
 }
 
 /// Resolve the out-of-repo cache directory that holds this repo's
@@ -311,5 +419,111 @@ mod tests {
             "created_at preserved from the existing sidecar"
         );
         assert!(meta.interpreter_path.is_none());
+    }
+
+    fn ask(input: &str) -> (bool, String) {
+        let mut out = Vec::new();
+        let agreed = confirm_sync(&mut std::io::Cursor::new(input), &mut out);
+        (agreed, String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn confirm_sync_takes_only_yes() {
+        for (input, expected) in [
+            ("y\n", true),
+            ("YES\n", true),
+            ("n\n", false),
+            ("\n", false),
+        ] {
+            let (agreed, out) = ask(input);
+            assert_eq!(agreed, expected, "input {input:?}");
+            assert!(out.ends_with("Sync it now? [y/N] "), "{out:?}");
+            assert!(out.contains("may download uv and a Python"));
+        }
+    }
+
+    #[test]
+    fn confirm_sync_eof_declines_and_ends_the_line() {
+        let (agreed, out) = ask("");
+        assert!(!agreed);
+        assert!(out.ends_with("[y/N] \n"), "{out:?}");
+    }
+
+    /// A trusted-looking repository with an in-tree venv that was never synced.
+    fn unsynced_repo() -> TempDir {
+        let repo = TempDir::new().unwrap();
+        let tools = repo.path().join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        std::fs::write(
+            tools.join("pyproject.toml"),
+            "[project]\nname = \"t\"\nversion = \"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
+        )
+        .unwrap();
+        repo
+    }
+
+    fn after_trust(
+        repo: &Path,
+        never_prompt: bool,
+        input: Option<&str>,
+    ) -> (SyncAfterTrust, String) {
+        let mut out = Vec::new();
+        let result = match input {
+            Some(text) => {
+                let mut cursor = std::io::Cursor::new(text.as_bytes().to_vec());
+                sync_after_trust(repo, false, never_prompt, Some((&mut cursor, &mut out)))
+            }
+            None => sync_after_trust(repo, false, never_prompt, None),
+        };
+        (result.unwrap(), String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn sync_after_trust_declines_without_asking_when_it_cannot_prompt() {
+        let mut env = EnvGuard::write();
+        env.remove("TOOLR_AUTO_INSTALL_UV");
+        env.remove("TOOLR_VENV_LOCATION");
+        let repo = unsynced_repo();
+        let (r, out) = after_trust(repo.path(), false, None);
+        assert!(matches!(r, SyncAfterTrust::Declined));
+        assert_eq!(out, "");
+        let (r, out) = after_trust(repo.path(), true, Some("y\n"));
+        assert!(matches!(r, SyncAfterTrust::Declined));
+        assert_eq!(out, "", "never_prompt must not prompt");
+    }
+
+    #[test]
+    fn sync_after_trust_leaves_a_bad_config_to_venv_sync_unless_asked() {
+        let mut env = EnvGuard::write();
+        env.remove("TOOLR_AUTO_INSTALL_UV");
+        env.remove("TOOLR_VENV_LOCATION");
+        let repo = unsynced_repo();
+        std::fs::write(
+            repo.path().join("tools/pyproject.toml"),
+            "[project]\nname = \"t\"\nversion = \"0\"\n\n[tool.toolr]\nvenv-location = \"bogus\"\n",
+        )
+        .unwrap();
+        let (r, _) = after_trust(repo.path(), false, None);
+        assert!(matches!(r, SyncAfterTrust::Declined));
+        let mut out = Vec::new();
+        let mut input = std::io::Cursor::new(b"y\n".to_vec());
+        let err =
+            sync_after_trust(repo.path(), false, false, Some((&mut input, &mut out))).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("resolving the tools venv path"),
+            "{err:#}"
+        );
+    }
+
+    #[test]
+    fn sync_after_trust_declined_at_the_prompt() {
+        let mut env = EnvGuard::write();
+        env.remove("TOOLR_AUTO_INSTALL_UV");
+        env.remove("TOOLR_VENV_LOCATION");
+        let repo = unsynced_repo();
+        let (r, out) = after_trust(repo.path(), false, Some("n\n"));
+        assert!(matches!(r, SyncAfterTrust::Declined));
+        assert!(out.contains("Sync it now?"));
+        assert!(r.into_synced().is_none());
     }
 }

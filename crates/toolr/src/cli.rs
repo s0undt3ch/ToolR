@@ -464,12 +464,25 @@ pub fn build_command(manifest: &Manifest) -> Command {
             .subcommand(
                 Command::new("trust")
                     .disable_help_flag(true)
-                    .about("Allow toolr to run this repository's code")
+                    .about("Allow toolr to run this repository's code, then sync its tools venv")
                     .arg(
                         Arg::new("path")
                             .value_name("PATH")
                             .value_parser(clap::value_parser!(std::path::PathBuf))
                             .help("A path inside the repository (defaults to the current directory)"),
+                    )
+                    .arg(
+                        Arg::new("no-sync")
+                            .long("no-sync")
+                            .action(ArgAction::SetTrue)
+                            .help("Only record the trust; don't offer to sync the tools venv"),
+                    )
+                    .arg(
+                        Arg::new("quiet")
+                            .long("quiet")
+                            .short('q')
+                            .action(ArgAction::SetTrue)
+                            .help("Never prompt to sync, and pass --quiet to uv (no effect with --no-sync)"),
                     ),
             )
             .subcommand(

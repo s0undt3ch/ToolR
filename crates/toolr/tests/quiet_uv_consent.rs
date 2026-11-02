@@ -23,6 +23,11 @@ const PROMPT: &str = "didn't find it on PATH";
 /// empty data dir, so uv can't be found and a prompt would be shown. The empty
 /// `PATH` deliberately hides `VenvFixture`'s stub uv.
 fn run_with_tty_stdin(cwd: &Path, args: &[&str]) -> Output {
+    run_with_tty_stdin_env(cwd, args, &[])
+}
+
+/// [`run_with_tty_stdin`] plus extra environment, such as a private trust store.
+fn run_with_tty_stdin_env(cwd: &Path, args: &[&str], env: &[(&str, &Path)]) -> Output {
     let empty = TempDir::new().unwrap();
     let (mut master, mut slave) = (0, 0);
     // SAFETY: openpty writes two fds into the out-params; the null pointers
@@ -49,6 +54,7 @@ fn run_with_tty_stdin(cwd: &Path, args: &[&str]) -> Output {
         .env("PATH", empty.path())
         .env("XDG_DATA_HOME", empty.path())
         .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .envs(env.iter().copied())
         .stdin(Stdio::from(slave))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -166,4 +172,40 @@ fn root_quiet_before_project_venv_sync_refuses_without_prompt() {
     let fx = VenvFixture::new();
     let out = run_with_tty_stdin(&fx.root, &["-q", "project", "venv", "sync"]);
     assert_refused_without_prompt(&out);
+}
+
+// `project trust` asks to sync, which stands in for the uv prompt; `--quiet`
+// declines that sync before uv is looked for, so it succeeds without asking.
+fn assert_trust_synced_nothing_without_prompt(out: &Output) {
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains(PROMPT), "prompted for uv:\n{stderr}");
+    assert!(
+        !stderr.contains("Sync it now?"),
+        "prompted to sync:\n{stderr}"
+    );
+    assert!(out.status.success(), "{stderr}");
+}
+
+#[test]
+fn trust_quiet_does_not_prompt_for_uv() {
+    let fx = VenvFixture::new();
+    let state = TempDir::new().unwrap();
+    let out = run_with_tty_stdin_env(
+        &fx.root,
+        &["project", "trust", "--quiet"],
+        &[("XDG_STATE_HOME", state.path())],
+    );
+    assert_trust_synced_nothing_without_prompt(&out);
+}
+
+#[test]
+fn root_quiet_before_project_trust_does_not_prompt_for_uv() {
+    let fx = VenvFixture::new();
+    let state = TempDir::new().unwrap();
+    let out = run_with_tty_stdin_env(
+        &fx.root,
+        &["-q", "project", "trust"],
+        &[("XDG_STATE_HOME", state.path())],
+    );
+    assert_trust_synced_nothing_without_prompt(&out);
 }

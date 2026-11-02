@@ -143,6 +143,10 @@ approve the install in advance:
   example in a CI setup step. It installs the managed copy when no uv
   is found, and does nothing when a usable one already is.
 
+The sync that follows [repository trust](../concepts.md#repository-trust)
+asks once, before it starts, whether to sync at all; a `y` there also
+covers the uv download, so this prompt doesn't follow it.
+
 Toolr downloads prebuilt uv binaries for Linux (x86_64 and aarch64),
 macOS (x86_64 and Apple silicon) and Windows (x86_64). On other hosts,
 install uv yourself. Toolr unpacks the download itself, so the host

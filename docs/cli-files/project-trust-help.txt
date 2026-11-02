@@ -1,10 +1,14 @@
-Allow toolr to run this repository's code
+Allow toolr to run this repository's code, then sync its tools venv
 
-Usage: toolr project trust [PATH]
+Usage: toolr project trust [OPTIONS] [PATH]
 
 Arguments:
   [PATH]  A path inside the repository (defaults to the current directory)
 
 Options:
+      --no-sync
+          Only record the trust; don't offer to sync the tools venv
+  -q, --quiet
+          Never prompt to sync, and pass --quiet to uv (no effect with --no-sync)
   -h, --help
           Print help

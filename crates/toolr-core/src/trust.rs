@@ -27,6 +27,15 @@ pub struct TrustMode {
     pub never_prompt: bool,
 }
 
+/// How [`decide`] found the repository trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrustOutcome {
+    /// A record or `TOOLR_TRUST_ALL=1` already allowed it.
+    AlreadyTrusted,
+    /// The user answered `y` at this run's prompt.
+    Prompted,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum TrustError {
     #[error(
@@ -246,14 +255,14 @@ pub fn decide(
     all_env: bool,
     mode: TrustMode,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
-) -> Result<(), TrustError> {
+) -> Result<TrustOutcome, TrustError> {
     if all_env {
-        return Ok(());
+        return Ok(TrustOutcome::AlreadyTrusted);
     }
     let root = canonical(root);
     store.guard(&root)?;
     match store.is_trusted(&root) {
-        Ok(true) => return Ok(()),
+        Ok(true) => return Ok(TrustOutcome::AlreadyTrusted),
         Ok(false) => {}
         Err(e) => eprintln!("toolr: warning: could not read the trust store: {e:#}"),
     }
@@ -265,7 +274,7 @@ pub fn decide(
         if let Err(e) = store.trust(&root) {
             let _ = writeln!(out, "warning: could not record trust: {e:#}");
         }
-        return Ok(());
+        return Ok(TrustOutcome::Prompted);
     }
     Err(TrustError::Untrusted(root))
 }
@@ -281,7 +290,7 @@ pub fn is_trusted_now(root: &Path) -> bool {
     trust_all_env() || TrustStore::open_default().is_ok_and(|s| s.is_trusted(root).unwrap_or(false))
 }
 
-pub fn require_trust(root: &Path, mode: TrustMode) -> Result<()> {
+pub fn require_trust(root: &Path, mode: TrustMode) -> Result<TrustOutcome> {
     let root = fs::canonicalize(root)
         .with_context(|| format!("resolving repository root {}", root.display()))?;
     let store = TrustStore::open_default()?;
@@ -322,7 +331,11 @@ mod tests {
         fn store(&self) -> TrustStore {
             TrustStore::at(self.store_dir.path().join("trust"))
         }
-        fn decide(&self, input: Option<&str>, mode: TrustMode) -> (Result<(), TrustError>, String) {
+        fn decide(
+            &self,
+            input: Option<&str>,
+            mode: TrustMode,
+        ) -> (Result<TrustOutcome, TrustError>, String) {
             let store = self.store();
             let mut err = Vec::new();
             let result = match input {
@@ -367,7 +380,8 @@ mod tests {
     fn trust_all_env_allows() {
         let f = Fixture::new();
         let store = f.store();
-        decide(&f.root(), &store, true, PROMPT, None).unwrap();
+        let outcome = decide(&f.root(), &store, true, PROMPT, None).unwrap();
+        assert_eq!(outcome, TrustOutcome::AlreadyTrusted);
         assert!(!store.is_trusted(&f.root()).unwrap());
         assert!(store.list().unwrap().is_empty());
     }
@@ -377,7 +391,7 @@ mod tests {
         let f = Fixture::new();
         f.store().trust(&f.root()).unwrap();
         let (r, _) = f.decide(None, PROMPT);
-        assert!(r.is_ok());
+        assert_eq!(r.unwrap(), TrustOutcome::AlreadyTrusted);
     }
 
     #[test]
@@ -394,7 +408,7 @@ mod tests {
     fn prompt_yes_records_trust() {
         let f = Fixture::new();
         let (r, err) = f.decide(Some("y\n"), PROMPT);
-        assert!(r.is_ok());
+        assert_eq!(r.unwrap(), TrustOutcome::Prompted);
         assert!(f.store().is_trusted(&f.root()).unwrap());
         assert!(err.contains("Trust it? [y/N]"));
         assert!(err.contains(&f.root().display().to_string()));

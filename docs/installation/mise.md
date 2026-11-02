@@ -190,15 +190,13 @@ trust the repository.
 
 ### First-time bootstrap
 
-The first time you set up a project, run `toolr project venv sync`
-once **without** `--quiet`. That's the run that asks you to trust the
-repository, installs uv if needed (with a normal consent prompt) and
-materialises the venv. Run `toolr project trust` first instead if you'd
-rather not answer the prompt. From then on the enter-hook keeps it fresh:
+The first time you set up a project, run `toolr project trust` once
+**without** `--quiet`. It trusts the repository, then asks whether to
+sync the tools venv; a `y` installs uv if needed and materialises the
+venv. From then on the enter-hook keeps it fresh:
 
 ```sh
-toolr project trust         # one-time, or answer `y` at the sync prompt
-toolr project venv sync     # one-time, interactive
+toolr project trust         # one-time, interactive
 cd ..; cd back              # enter-hook now keeps it fresh
 ```
 

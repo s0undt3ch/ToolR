@@ -51,8 +51,8 @@ A Python virtualenv managed by [uv](https://docs.astral.sh/uv/),
 materialised from `tools/pyproject.toml`. By default lives in
 `$XDG_CACHE_HOME/toolr/<repo-key>/venv/` (one per repo); opt into
 in-tree `tools/.venv/` via `[tool.toolr] venv-location = "in-tree"`.
-Created by `toolr project venv sync` (or automatically by
-`toolr project init`). See [Project configuration](project-config.md).
+Created by `toolr project trust`, `toolr project venv sync` or
+`toolr project init`. See [Project configuration](project-config.md).
 
 ## The manifest
 
@@ -89,11 +89,25 @@ hashed, so a dependency bump never asks again.
 
 Trust a repository in either of two ways:
 
+- Run `toolr project trust [PATH]`. `toolr project untrust [PATH]`
+  removes the record.
 - Answer `y` at the prompt toolr shows on a terminal. Anything else,
   including bare Enter, refuses. With `--quiet` or no terminal, toolr
   never prompts and refuses.
-- Run `toolr project trust [PATH]`. `toolr project untrust [PATH]`
-  removes the record.
+
+Trusting a repository is also when toolr offers to build its tools venv.
+After `toolr project trust`, or a `y` at the prompt when the venv
+hasn't been created yet, toolr asks a second question, `Sync it now? [y/N]`.
+It warns first that syncing may download uv and a Python, and installs
+the dependencies in `tools/pyproject.toml`.
+
+A `y` syncs the venv, installing uv first if needed without asking
+again, and the command you ran carries on. Anything else keeps the
+trust and leaves the venv alone; run `toolr project venv sync` when
+you're ready. This prompt replaces the uv install prompt, so it follows
+the same rules: `TOOLR_AUTO_INSTALL_UV=1` answers `y`, and with
+`--quiet` or no terminal toolr doesn't ask and doesn't sync.
+`toolr project trust --no-sync` only records the trust.
 
 `toolr self trusted` lists the trusted repositories and marks the ones
 whose path no longer exists. `toolr self trusted --prune` removes those.

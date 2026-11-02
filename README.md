@@ -29,8 +29,9 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
 
 - **Fast startup.** The CLI is a Rust binary. `--help` and Tab completion read a cached static
   manifest and never start Python. All three columns above time `toolr -h`.
-- **No system-Python dependency.** Toolr resolves a per-repo Python venv via `uv` on first
-  invocation. The host OS doesn't need Python at all to install toolr — it's a single static binary.
+- **No system-Python dependency.** Toolr builds a per-repo Python venv with `uv` when you trust the
+  repo (`toolr project trust`) or scaffold it (`toolr project init`), and re-syncs it when it goes out
+  of date. The host OS doesn't need Python at all to install toolr — it's a single static binary.
   See [How toolr finds uv and Python](https://toolr.readthedocs.io/latest/installation/#uv-and-python).
 - **Write Python, not framework boilerplate.** Drop a `tools/*.py` file with a `command_group` and a
   `@command` decorator. Type hints become CLI arguments; Google-style docstrings become `--help` text.
@@ -120,6 +121,12 @@ After the binary is on `$PATH`:
 toolr project init                  # writes tools/{pyproject.toml,.gitignore,example.py}
 toolr example hello                 # run the generated example
 toolr self completion install bash  # or zsh / fish
+```
+
+In a clone of a repo that already has `tools/`, the one step is:
+
+```sh
+toolr project trust                 # trust the repo, then sync its tools venv
 ```
 
 The full install matrix (per-OS notes, attestation flags, prefix overrides) lives in

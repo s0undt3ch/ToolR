@@ -283,7 +283,7 @@ pub fn dispatch(
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
     // host-Python path imports `tools/*.py` directly. Building the spec above
     // runs none of it, so a bad path value is reported before the trust prompt.
-    toolr_core::trust::require_trust(
+    let trust = toolr_core::trust::require_trust(
         &repo_root,
         toolr_core::trust::TrustMode {
             never_prompt: output_opts.verbosity == "quiet",
@@ -294,7 +294,14 @@ pub fn dispatch(
     let resolved = resolve_venv_path(&repo_root)?;
     let quiet = output_opts.verbosity == "quiet";
     let verbose = output_opts.verbosity == "verbose";
-    let resolved = resync_if_needed(&repo_root, resolved, quiet)?;
+    let resolved = if trust == toolr_core::trust::TrustOutcome::Prompted
+        && toolr_core::venv::check_freshness(&resolved, &repo_root.join("tools"))
+            == toolr_core::venv::Freshness::Missing
+    {
+        sync_after_trust_prompt(&repo_root, resolved)?
+    } else {
+        resync_if_needed(&repo_root, resolved, quiet)?
+    };
     let python = resolved.python.clone();
 
     // Touch last_used_at, backfilling `meta.json` for entries that predate it,
@@ -389,6 +396,21 @@ fn resync_if_needed(
             format!("{problem} and could not be synced; run `toolr project venv sync`")
         })?;
     Ok(resolved)
+}
+
+/// The user has just trusted the repository at the prompt and its venv was
+/// never synced: offer the sync now, so the command can run (F-32).
+fn sync_after_trust_prompt(
+    repo_root: &std::path::Path,
+    resolved: toolr_core::venv::ResolvedVenv,
+) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
+    use toolr_core::project::{SYNC_LATER_HINT, SyncAfterTrust, sync_after_trust_on_tty};
+    let outcome = sync_after_trust_on_tty(repo_root, false, false)?;
+    if matches!(outcome, SyncAfterTrust::Declined) {
+        anyhow::bail!(SYNC_LATER_HINT);
+    }
+    // Only called on a missing venv, so `NotNeeded` can't happen here.
+    Ok(outcome.into_synced().unwrap_or(resolved))
 }
 
 /// A runner from another minor release can pass the schema check yet
