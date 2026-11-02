@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev310-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev322-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev310 - 2026-11-02
+        0.35.2-dev322 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev310 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev322 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev310-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev322-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev310 - 2026-11-02
+        0.35.2-dev322 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev310 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev322 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev310-2026-11-02">0.35.2-dev310 - 2026-11-02<a class="headerlink" href="#0352-dev310-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev322-2026-11-02">0.35.2-dev322 - 2026-11-02<a class="headerlink" href="#0352-dev322-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7769,6 +7769,7 @@ send SIGTERM instead.</p>
 <li><em>(runner)</em> Unregister signal handlers through a drop guard (<a href="https://github.com/s0undt3ch/ToolR/commit/767807beff07205c5c3041724179973beda07ae0"><code>767807b</code></a>)</li>
 <li><em>(runner)</em> Name the signal poll interval and tidy its tests (<a href="https://github.com/s0undt3ch/ToolR/commit/a3da27c886270386b2da366d141b2cae110eb172"><code>a3da27c</code></a>)</li>
 <li><em>(uv)</em> Narrow path_search's API and share its test helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/a05fbb6392d97898502f025fb5e32f7f760822e3"><code>a05fbb6</code></a>)</li>
+<li><em>(tests)</em> One floor-settings list checked with subtests, fewer redundant asserts (<a href="https://github.com/s0undt3ch/ToolR/commit/7d3748dbd1668c53e900e07eddf9a7eec8ff5bad"><code>7d3748d</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7849,6 +7850,9 @@ send SIGTERM instead.</p>
 <li><em>(specs)</em> Archive uv path lookup design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/478bc307874814211528829fb4aac7d4c9ee0f98"><code>478bc30</code></a>)</li>
 <li><em>(specs)</em> Record the extra PATH lookups in the uv path lookup design (<a href="https://github.com/s0undt3ch/ToolR/commit/f6e074bd25a097c1c62dfa1f0b07bbf033460c9e"><code>f6e074b</code></a>)</li>
 <li><em>(specs)</em> Note access(X_OK) and unset PATH in the uv path lookup design (<a href="https://github.com/s0undt3ch/ToolR/commit/4874471c11bca16e9f82bf461feb90e2a65486ec"><code>4874471</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-38 python version lists (<a href="https://github.com/s0undt3ch/ToolR/commit/821327fd95e9551251bb63589bb2be3732343028"><code>821327f</code></a>)</li>
+<li><em>(ci)</em> Shorten the version-list comments and cross-link the patch-floor rule (<a href="https://github.com/s0undt3ch/ToolR/commit/3283d4d964936fe2f74cd2ba0de531cbe428e831"><code>3283d4d</code></a>)</li>
+<li><em>(specs)</em> Archive python version lists design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/8d65322eb2fc4c42b70c218d5543e4e9a14ff850"><code>8d65322</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7893,6 +7897,11 @@ send SIGTERM instead.</p>
 <li><em>(runner)</em> Assert SIGINT classification without a platform-only branch (<a href="https://github.com/s0undt3ch/ToolR/commit/e33d19736bf91a26de3da829dcfbce1c1958974e"><code>e33d197</code></a>)</li>
 <li><em>(uv)</em> Planted repo uv and python3 never run through relative PATH entries (<a href="https://github.com/s0undt3ch/ToolR/commit/9a741eb68c13169d9546777a8e809482b9790816"><code>9a741eb</code></a>)</li>
 <li><em>(uv)</em> Plant an ldd behind a relative PATH entry (<a href="https://github.com/s0undt3ch/ToolR/commit/01bc93dbc12b7985408cc507ba372d1f3a950753"><code>01bc93d</code></a>)</li>
+<li><em>(ci)</em> Check every Python version list against requires-python (<a href="https://github.com/s0undt3ch/ToolR/commit/3934cf04bebb948639536601feebb4c3b8f1b47f"><code>3934cf0</code></a>)</li>
+<li><em>(ci)</em> Read version-list sources as UTF-8 (<a href="https://github.com/s0undt3ch/ToolR/commit/76288b10a512889c75f75a76c7f24b86e930dae3"><code>76288b1</code></a>)</li>
+<li><em>(ci)</em> Check the remaining hard-coded CPython floors (<a href="https://github.com/s0undt3ch/ToolR/commit/213834a32e5b4f2172feafe87f8931fae71c13ff"><code>213834a</code></a>)</li>
+<li><em>(ci)</em> Reject ambiguous requires-python bounds and check the example floors (<a href="https://github.com/s0undt3ch/ToolR/commit/d610a4a09bf6fec4e7d8687d4f58b93ddeda3c21"><code>d610a4a</code></a>)</li>
+<li><em>(ci)</em> Fail only the floor case whose requires-python is malformed (<a href="https://github.com/s0undt3ch/ToolR/commit/26b21620d6f2a912a6782357222d6ef6a89d6ab6"><code>26b2162</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
