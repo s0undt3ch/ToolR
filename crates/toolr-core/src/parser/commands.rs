@@ -17,9 +17,9 @@ use crate::manifest::{Command, Origin};
 
 type GlobalVars = HashMap<String, String>;
 
-/// Walk module body for functions decorated with `@<var>.command` (legacy
-/// binding style) or `@command(group="…")` (string-path style). Emit
-/// one Command per match.
+/// Walk module body for functions decorated with `@<var>.command`
+/// (group-binding style) or `@command(group="…")` (string-path style).
+/// Emit one Command per match.
 #[allow(clippy::too_many_arguments)] // each context parameter is distinct; bundling would obscure call sites.
 pub fn extract_commands(
     module: &ModModule,
@@ -52,7 +52,7 @@ pub fn extract_commands(
             continue;
         };
         let (group_full_path, override_name) = match target {
-            CommandDecorator::LegacyVar {
+            CommandDecorator::Binding {
                 var, explicit_name, ..
             } => {
                 let Some(group_name) = by_var.get(var.as_str()) else {
@@ -60,12 +60,12 @@ pub fn extract_commands(
                 };
                 (group_name.clone(), explicit_name)
             }
-            CommandDecorator::Direct {
+            CommandDecorator::StringPath {
                 explicit_name,
                 group,
                 ..
             } => {
-                // `group=` is required on the direct form. If it's
+                // `group=` is required on the string-path form. If it's
                 // missing or the targeted group isn't registered
                 // anywhere, we still emit the command — the build-
                 // time validator surfaces a clear error pointing the
@@ -93,12 +93,13 @@ pub fn extract_commands(
 
 /// Which flavour of `@command` decorator we saw on a function, plus the
 /// metadata pulled out of it.
+#[cfg_attr(test, derive(Debug, PartialEq))]
 enum CommandDecorator {
-    /// Legacy: `@<binding>.command` or `@<binding>.command("name")` —
+    /// Group binding: `@<binding>.command` or `@<binding>.command("name")` —
     /// `<binding>` is a Python variable name that must resolve to a
     /// known `CommandGroup`. The call form allows overriding the CLI
     /// name via a leading string positional.
-    LegacyVar {
+    Binding {
         var: String,
         explicit_name: Option<String>,
         /// Both a positional string and a `name=` keyword were passed —
@@ -106,12 +107,12 @@ enum CommandDecorator {
         /// [`CommandNameConflict`].
         name_conflict: bool,
     },
-    /// Modern: `@command(group="dotted.path")` or `@command("name", group=...)`
+    /// String path: `@command(group="dotted.path")` or `@command("name", group=...)`
     /// or bare `@command` (no group — caught by validator).
-    Direct {
+    StringPath {
         explicit_name: Option<String>,
         group: Option<String>,
-        /// See [`CommandDecorator::LegacyVar::name_conflict`].
+        /// See [`CommandDecorator::Binding::name_conflict`].
         name_conflict: bool,
     },
 }
@@ -193,8 +194,8 @@ pub fn detect_name_conflicts(module: &ModModule, module_path: &str) -> Vec<Comma
             continue;
         };
         let conflict = match target {
-            CommandDecorator::LegacyVar { name_conflict, .. }
-            | CommandDecorator::Direct { name_conflict, .. } => name_conflict,
+            CommandDecorator::Binding { name_conflict, .. }
+            | CommandDecorator::StringPath { name_conflict, .. } => name_conflict,
         };
         if conflict {
             out.push(CommandNameConflict {
@@ -208,21 +209,21 @@ pub fn detect_name_conflicts(module: &ModModule, module_path: &str) -> Vec<Comma
 
 fn command_decorator(decorators: &[Decorator]) -> Option<CommandDecorator> {
     for d in decorators {
-        if let Some(meta) = parse_direct_command(&d.expression) {
+        if let Some(meta) = parse_string_path_command(&d.expression) {
             return Some(meta);
         }
-        if let Some(meta) = parse_legacy_command(&d.expression) {
+        if let Some(meta) = parse_binding_command(&d.expression) {
             return Some(meta);
         }
     }
     None
 }
 
-/// Recognise the legacy `@<var>.command` shape, as well as the call form
+/// Recognise the group-binding `@<var>.command` shape, as well as the call form
 /// `@<var>.command("explicit-name")` which overrides the derived CLI
 /// name. Both shapes resolve `<var>` against the binding tables in
 /// `extract_commands`.
-fn parse_legacy_command(expr: &Expr) -> Option<CommandDecorator> {
+fn parse_binding_command(expr: &Expr) -> Option<CommandDecorator> {
     // Bare attribute: `@<var>.command`.
     if let Expr::Attribute(attr) = expr {
         if attr.attr.as_str() != "command" {
@@ -231,7 +232,7 @@ fn parse_legacy_command(expr: &Expr) -> Option<CommandDecorator> {
         let Expr::Name(n) = attr.value.as_ref() else {
             return None;
         };
-        return Some(CommandDecorator::LegacyVar {
+        return Some(CommandDecorator::Binding {
             var: n.id.as_str().to_string(),
             explicit_name: None,
             name_conflict: false,
@@ -257,7 +258,7 @@ fn parse_legacy_command(expr: &Expr) -> Option<CommandDecorator> {
     // (`@<var>.command(name="name")`); the bound `command(self, name)`
     // method accepts both shapes at runtime, but not both at once.
     let (explicit_name, name_conflict) = resolve_explicit_name(&call.arguments);
-    Some(CommandDecorator::LegacyVar {
+    Some(CommandDecorator::Binding {
         var: n.id.as_str().to_string(),
         explicit_name,
         name_conflict,
@@ -282,12 +283,12 @@ fn keyword_str(args: &Arguments, name: &str) -> Option<String> {
         .and_then(|k| literal_str(&k.value))
 }
 
-/// Recognise the new `@command` / `@command("name", group="…")` shape.
-fn parse_direct_command(expr: &Expr) -> Option<CommandDecorator> {
+/// Recognise the string-path `@command` / `@command("name", group="…")` shape.
+fn parse_string_path_command(expr: &Expr) -> Option<CommandDecorator> {
     // Bare `@command` — Name expression on the decorator.
     if let Expr::Name(n) = expr {
         if n.id.as_str() == "command" {
-            return Some(CommandDecorator::Direct {
+            return Some(CommandDecorator::StringPath {
                 explicit_name: None,
                 group: None,
                 name_conflict: false,
@@ -311,7 +312,7 @@ fn parse_direct_command(expr: &Expr) -> Option<CommandDecorator> {
     let (explicit_name, name_conflict) = resolve_explicit_name(&call.arguments);
     // `group=` kwarg, string literal only.
     let group = keyword_str(&call.arguments, "group");
-    Some(CommandDecorator::Direct {
+    Some(CommandDecorator::StringPath {
         explicit_name,
         group,
         name_conflict,
@@ -556,7 +557,7 @@ def hello(ctx):
     }
 
     #[test]
-    fn direct_command_decorator_attaches_to_named_group() {
+    fn string_path_decorator_attaches_to_named_group() {
         let src = r#"command_group("ci", "CI utilities")
 
 @command(group="ci")
@@ -586,7 +587,7 @@ def check_run_build(ctx):
     }
 
     #[test]
-    fn direct_command_decorator_supports_explicit_name() {
+    fn string_path_decorator_supports_explicit_name() {
         let src = r#"command_group("ci.helm-diff-pr-comment", "Helm diff")
 
 @command("snippet-checker", group="ci.helm-diff-pr-comment")
@@ -617,7 +618,7 @@ def check_snippets(ctx):
     }
 
     #[test]
-    fn direct_command_decorator_supports_name_keyword() {
+    fn string_path_decorator_supports_name_keyword() {
         let src = r#"command_group("ci.helm-diff-pr-comment", "Helm diff")
 
 @command(name="snippet-checker", group="ci.helm-diff-pr-comment")
@@ -781,7 +782,7 @@ def go(ctx, pair: tuple[str, int] | None = None):
     }
 
     #[test]
-    fn legacy_decorator_rejects_positional_and_name_keyword() {
+    fn binding_decorator_rejects_positional_and_name_keyword() {
         let src = r#"group = command_group("ci", "CI")
 
 @group.command("positional", name="keyword")
@@ -798,17 +799,14 @@ def do_thing(ctx):
             })
             .unwrap();
         // The decorator resolves to no explicit name, flagged as a conflict.
-        match command_decorator(&func.decorator_list).unwrap() {
-            CommandDecorator::LegacyVar {
-                explicit_name,
-                name_conflict,
-                ..
-            } => {
-                assert_eq!(explicit_name, None);
-                assert!(name_conflict);
+        assert_eq!(
+            command_decorator(&func.decorator_list).unwrap(),
+            CommandDecorator::Binding {
+                var: "group".to_string(),
+                explicit_name: None,
+                name_conflict: true,
             }
-            _ => panic!("expected LegacyVar"),
-        }
+        );
         let conflicts = detect_name_conflicts(&m, "tools.ci");
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].module, "tools.ci");
@@ -816,7 +814,7 @@ def do_thing(ctx):
     }
 
     #[test]
-    fn direct_decorator_rejects_positional_and_name_keyword() {
+    fn string_path_decorator_rejects_positional_and_name_keyword() {
         let src = r#"command_group("ci", "CI")
 
 @command("positional", name="keyword", group="ci")
@@ -832,24 +830,21 @@ def do_thing(ctx):
                 _ => None,
             })
             .unwrap();
-        match command_decorator(&func.decorator_list).unwrap() {
-            CommandDecorator::Direct {
-                explicit_name,
-                name_conflict,
-                ..
-            } => {
-                assert_eq!(explicit_name, None);
-                assert!(name_conflict);
+        assert_eq!(
+            command_decorator(&func.decorator_list).unwrap(),
+            CommandDecorator::StringPath {
+                explicit_name: None,
+                group: Some("ci".to_string()),
+                name_conflict: true,
             }
-            _ => panic!("expected Direct"),
-        }
+        );
         let conflicts = detect_name_conflicts(&m, "tools.ci");
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].function, "do_thing");
     }
 
     #[test]
-    fn legacy_var_decorator_still_works() {
+    fn binding_decorator_works() {
         let src = r#"group = command_group("ci", "CI")
 
 @group.command
@@ -878,7 +873,7 @@ def hello(ctx):
     }
 
     #[test]
-    fn legacy_decorator_attribute_form_no_explicit_name() {
+    fn binding_decorator_attribute_form_no_explicit_name() {
         let src = r#"group = command_group("ci", "CI")
 
 @group.command
@@ -910,23 +905,21 @@ def do_thing(ctx):
                 _ => None,
             })
             .unwrap();
-        let decorated = command_decorator(&func.decorator_list).unwrap();
-        match decorated {
-            CommandDecorator::LegacyVar {
-                var, explicit_name, ..
-            } => {
-                assert_eq!(var, "group");
-                assert_eq!(explicit_name, None);
+        assert_eq!(
+            command_decorator(&func.decorator_list).unwrap(),
+            CommandDecorator::Binding {
+                var: "group".to_string(),
+                explicit_name: None,
+                name_conflict: false,
             }
-            _ => panic!("expected LegacyVar"),
-        }
+        );
         // And confirm the function's own name is used (kebab-cased).
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "do-thing");
     }
 
     #[test]
-    fn legacy_decorator_call_form_with_explicit_name() {
+    fn binding_decorator_call_form_with_explicit_name() {
         let src = r#"group = command_group("ci", "CI")
 
 @group.command("hello")
@@ -957,16 +950,14 @@ def do_thing(ctx):
                 _ => None,
             })
             .unwrap();
-        let decorated = command_decorator(&func.decorator_list).unwrap();
-        match decorated {
-            CommandDecorator::LegacyVar {
-                var, explicit_name, ..
-            } => {
-                assert_eq!(var, "group");
-                assert_eq!(explicit_name.as_deref(), Some("hello"));
+        assert_eq!(
+            command_decorator(&func.decorator_list).unwrap(),
+            CommandDecorator::Binding {
+                var: "group".to_string(),
+                explicit_name: Some("hello".to_string()),
+                name_conflict: false,
             }
-            _ => panic!("expected LegacyVar"),
-        }
+        );
         // CLI name comes from the decorator argument, not the function.
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "hello");
@@ -974,7 +965,7 @@ def do_thing(ctx):
     }
 
     #[test]
-    fn legacy_decorator_call_form_with_name_keyword() {
+    fn binding_decorator_call_form_with_name_keyword() {
         let src = r#"group = command_group("ci", "CI")
 
 @group.command(name="collect")
@@ -1005,16 +996,14 @@ def collect_data(ctx):
                 _ => None,
             })
             .unwrap();
-        let decorated = command_decorator(&func.decorator_list).unwrap();
-        match decorated {
-            CommandDecorator::LegacyVar {
-                var, explicit_name, ..
-            } => {
-                assert_eq!(var, "group");
-                assert_eq!(explicit_name.as_deref(), Some("collect"));
+        assert_eq!(
+            command_decorator(&func.decorator_list).unwrap(),
+            CommandDecorator::Binding {
+                var: "group".to_string(),
+                explicit_name: Some("collect".to_string()),
+                name_conflict: false,
             }
-            _ => panic!("expected LegacyVar"),
-        }
+        );
         // The `name=` keyword wins over the hyphenated function name
         // (`collect`, not the `collect-data` the function name would give).
         assert_eq!(commands.len(), 1);
@@ -1023,7 +1012,7 @@ def collect_data(ctx):
     }
 
     #[test]
-    fn legacy_decorator_call_form_without_name_arg() {
+    fn binding_decorator_call_form_without_name_arg() {
         let src = r#"group = command_group("ci", "CI")
 
 @group.command()
@@ -1054,16 +1043,14 @@ def do_thing(ctx):
                 _ => None,
             })
             .unwrap();
-        let decorated = command_decorator(&func.decorator_list).unwrap();
-        match decorated {
-            CommandDecorator::LegacyVar {
-                var, explicit_name, ..
-            } => {
-                assert_eq!(var, "group");
-                assert_eq!(explicit_name, None);
+        assert_eq!(
+            command_decorator(&func.decorator_list).unwrap(),
+            CommandDecorator::Binding {
+                var: "group".to_string(),
+                explicit_name: None,
+                name_conflict: false,
             }
-            _ => panic!("expected LegacyVar"),
-        }
+        );
         // Falls back to function name (kebab-cased) when no override.
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "do-thing");
