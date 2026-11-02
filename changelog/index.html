@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev383-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev404-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev383 - 2026-11-02
+        0.35.2-dev404 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev383 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev404 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev383-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev404-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev383 - 2026-11-02
+        0.35.2-dev404 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev383 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev404 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev383-2026-11-02">0.35.2-dev383 - 2026-11-02<a class="headerlink" href="#0352-dev383-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev404-2026-11-02">0.35.2-dev404 - 2026-11-02<a class="headerlink" href="#0352-dev404-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7660,13 +7660,16 @@ send SIGTERM instead.</p>
 <p><code>toolr.testing.CommandsTester</code> now records commands declared with the standalone <code>@command(group="…")</code> decorator, whether the group is declared in the same file or another one. They used to be missing from <code>collected_command_groups()</code>, although <code>toolr</code> ran them. A <code>group=</code> that names no declared group now makes <code>collected_command_groups()</code> raise a <code>ValueError</code> with the same message the manifest build gives.</p>
 <p>A standalone <code>@command</code> with no <code>group=</code> now makes <code>collected_command_groups()</code> raise too, as the manifest build fails on it.</p>
 <p>When a command module fails to import, whether it's one of your <code>tools/*.py</code> files or comes from a plugin, toolr now prints the traceback, so an import that fails in a helper module names that file and line. The "run <code>toolr project venv sync</code>" hint no longer appears when the missing module is part of your own <code>tools</code> package (a typo or a circular import), since syncing the venv can't fix those.</p>
+<p><code>toolr.testing</code> now exports <code>ConsoleVerbosity</code>, the type <code>make_context(verbosity=...)</code> takes.</p>
 <p>Running a command in a repo with an in-tree venv (<code>venv-location = "in-tree"</code>) no longer leaves an untracked <code>tools/meta.json</code>. toolr now keeps that file in its cache directory, in an entry of its own (<code>&lt;repo-key&gt;-in-tree</code>) that <code>toolr project venv sync</code> writes too, so <code>toolr self cache list</code> shows the repo. If the repo used a cache venv before switching to in-tree, that old venv no longer looks recently used, and <code>toolr self cache prune</code> reclaims it once it goes stale. You can delete any <code>tools/meta.json</code> an earlier toolr left behind.</p>
+<p>The Setup ToolR action now only accepts a toolr archive whose attestation was produced by ToolR's release workflow on <code>main</code> for that exact archive name. It used to accept an archive attested by any workflow in the ToolR repository, including CI builds of unreleased branches, and a signed archive of another version or platform renamed into place. Every published release still installs as before. Verifying an archive now needs gh 2.56 or later on the runner.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
 <li><em>(security)</em> Add repository trust store (<a href="https://github.com/s0undt3ch/ToolR/commit/8be516351ab84ef2336af3848eef90ad04965d58"><code>8be5163</code></a>)</li>
 <li><em>(security)</em> Require repository trust before running repo code (<a href="https://github.com/s0undt3ch/ToolR/commit/747a3b678fbf03525d86fb32ed62f7b564b391a1"><code>747a3b6</code></a>)</li>
 <li><em>(security)</em> [<strong>breaking</strong>] Start with no trusted repositories (<a href="https://github.com/s0undt3ch/ToolR/commit/e33d125591f3414509faff6c63a437d2ec52409e"><code>e33d125</code></a>)</li>
+<li><em>(testing)</em> Export ConsoleVerbosity from toolr.testing (<a href="https://github.com/s0undt3ch/ToolR/commit/cb5731d1d5a4c60be9348cb4896ceccdc97eaf3a"><code>cb5731d</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7765,6 +7768,9 @@ send SIGTERM instead.</p>
 <li><em>(dispatch)</em> Keep an in-tree venv's meta.json out of tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/fc8eca67addd98692c9187628bbc6b56dabf9bb2"><code>fc8eca6</code></a>)</li>
 <li><em>(dispatch)</em> Give an in-tree venv's meta.json its own cache slot (<a href="https://github.com/s0undt3ch/ToolR/commit/bfd8cd11becb91d588202f15ef29f588c45df38e"><code>bfd8cd1</code></a>)</li>
 <li><em>(dispatch)</em> Keep the meta.json touch warning out of quiet and in-tree runs (<a href="https://github.com/s0undt3ch/ToolR/commit/6e1e7b38ce7b39f11723cb6e7ea768291b8a664f"><code>6e1e7b3</code></a>)</li>
+<li><em>(action)</em> Only accept archives attested by the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/f2af3881610f7bad2758cda433022490a9ca7cfd"><code>f2af388</code></a>)</li>
+<li><em>(action)</em> Pin the attestation check to the release workflow on main (<a href="https://github.com/s0undt3ch/ToolR/commit/2164088e40b08540514a798ebeeb0587ec1f12c2"><code>2164088</code></a>)</li>
+<li><em>(action)</em> Bind the attestation to the archive and require gh 2.56 (<a href="https://github.com/s0undt3ch/ToolR/commit/8803f51f1e7bdbd7565df151b4011fa086cb5d57"><code>8803f51</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7802,6 +7808,7 @@ send SIGTERM instead.</p>
 <li><em>(testing)</em> Reuse the shared control-character escaping (<a href="https://github.com/s0undt3ch/ToolR/commit/22fc4c210236582428ce19803f3499e28fff385a"><code>22fc4c2</code></a>)</li>
 <li><em>(runner)</em> Rename the repo tools check and tighten its comments (<a href="https://github.com/s0undt3ch/ToolR/commit/be121d7f14accffd631fb86a9bc255d18e4f46f5"><code>be121d7</code></a>)</li>
 <li><em>(venv)</em> Share one cache slot rule between resolve and meta_cache_dir (<a href="https://github.com/s0undt3ch/ToolR/commit/7d2716cf8a5a7d8ef96c7e9c3eefadc934769dbb"><code>7d2716c</code></a>)</li>
+<li><em>(action)</em> Name the pinned attestation identities once (<a href="https://github.com/s0undt3ch/ToolR/commit/b0c618493016b891343da632ae098731d736f935"><code>b0c6184</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7902,6 +7909,13 @@ send SIGTERM instead.</p>
 <li><em>(specs)</em> Archive runner import traceback design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e45f45cffc11b99867b4b8020350798ee410b31b"><code>e45f45c</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-18 in-tree venv cache dir (<a href="https://github.com/s0undt3ch/ToolR/commit/bb5ef83f6bfe31e947190c45382232c4a3291a5b"><code>bb5ef83</code></a>)</li>
 <li><em>(specs)</em> Archive in-tree venv cache dir design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/9d002ede34bc2524994507a63570c8470de336a5"><code>9d002ed</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-42 tester stdout docstring (<a href="https://github.com/s0undt3ch/ToolR/commit/9c1ff3dbe0b16ecc1a4853763c18b390ac2643b5"><code>9c1ff3d</code></a>)</li>
+<li><em>(testing)</em> Say which ContextForTesting stream each method writes to (<a href="https://github.com/s0undt3ch/ToolR/commit/3a11e75084748917ca4d64c543ff3d0024353afe"><code>3a11e75</code></a>)</li>
+<li><em>(testing)</em> State the verbosity and prompt caveats of the captured streams (<a href="https://github.com/s0undt3ch/ToolR/commit/fb6e6844e1966521b5c6bec79e7e23ee97dede4d"><code>fb6e684</code></a>)</li>
+<li><em>(testing)</em> Make the ContextForTesting docstrings the one copy of the stream split (<a href="https://github.com/s0undt3ch/ToolR/commit/3220972fb70d26a4d4cc9bc03690f03c260e8ed6"><code>3220972</code></a>)</li>
+<li><em>(specs)</em> Archive tester stdout docstring design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b8b7cdbfe00f39b63171fb15e092118f5131f2dc"><code>b8b7cdb</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-23 action attestation signer (<a href="https://github.com/s0undt3ch/ToolR/commit/bbcb456a7549578760b49ee8d73fbb017b73225a"><code>bbcb456</code></a>)</li>
+<li><em>(specs)</em> Archive action attestation signer design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/69e77cf6b23106bc2144917eb48ad77921f4495c"><code>69e77cf</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7957,6 +7971,8 @@ send SIGTERM instead.</p>
 <li><em>(cli)</em> Share the symlinked-module CLI assertions (<a href="https://github.com/s0undt3ch/ToolR/commit/51a8bab6fec207a8133f128f778e8d51502dba29"><code>51a8bab</code></a>)</li>
 <li><em>(runner)</em> Share the import-failure fixture files and scope module eviction (<a href="https://github.com/s0undt3ch/ToolR/commit/36bb21581a92cb08acd02c1d54ef9c482ddc7f6b"><code>36bb215</code></a>)</li>
 <li><em>(dispatch)</em> Table-drive the meta.json touch warning policy (<a href="https://github.com/s0undt3ch/ToolR/commit/4032295e2127bad9e80916b1d6418da0d0c17651"><code>4032295</code></a>)</li>
+<li><em>(testing)</em> Pin the ContextForTesting stream split across verbosity levels (<a href="https://github.com/s0undt3ch/ToolR/commit/3337b620626081fb43b59cb9aa51e13be09ac283"><code>3337b62</code></a>)</li>
+<li><em>(testing)</em> Drive the stream-split test with RunMock (<a href="https://github.com/s0undt3ch/ToolR/commit/28bed8bbd43bff0ed0b2c24de10ae0046c9b04f7"><code>28bed8b</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7993,6 +8009,7 @@ send SIGTERM instead.</p>
 <li><em>(prek)</em> Fail the toolr-py-deps hook when cargo tree fails (<a href="https://github.com/s0undt3ch/ToolR/commit/56c2376824ae5322360595145324021c7dc645fe"><code>56c2376</code></a>)</li>
 <li><em>(prek)</em> Check toolr-py itself without toolr-core's full feature (<a href="https://github.com/s0undt3ch/ToolR/commit/10ac0e4b1e00f935df418658295cc545882d5170"><code>10ac0e4</code></a>)</li>
 <li><em>(prek)</em> Allowlist toolr-core's lean dependencies (<a href="https://github.com/s0undt3ch/ToolR/commit/f526d8e9c8444e021f01b96854863b16ad0f04f4"><code>f526d8e</code></a>)</li>
+<li><em>(release)</em> Point the release workflows at the action's attestation pins (<a href="https://github.com/s0undt3ch/ToolR/commit/88de4639a01bec1dc20cd092cc3bfa241cef536c"><code>88de463</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

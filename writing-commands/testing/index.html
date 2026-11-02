@@ -1928,8 +1928,14 @@ tempting — don't: <code>Context</code> is a frozen <code>msgspec.Struct</code>
 <p><code>make_context</code> returns a <code>ContextForTesting</code> — a <code>Context</code> subclass — so <code>ctx.repo_root</code> is
 set, <code>ctx.exit(...)</code> raises <code>SystemExit</code> via a real <code>ArgumentParser</code>, exactly as it does under the
 CLI, and <code>ctx.run</code>/<code>ctx.chdir</code>/<code>ctx.prompt</code> all run for real unless you pass
-<code>run=</code>/<code>chdir=</code>/<code>prompt_input=</code> to <code>make_context</code> (see below). <code>ctx.stdout</code>/<code>ctx.stderr</code> capture
-everything written through <code>ctx.print</code>/<code>ctx.info</code>/<code>ctx.error</code>/etc.</p>
+<code>run=</code>/<code>chdir=</code>/<code>prompt_input=</code> to <code>make_context</code> (see below). <code>ctx.stdout</code> captures what
+<code>ctx.print</code> and <code>ctx.prompt</code> write; <code>ctx.stderr</code> captures the log lines (<code>ctx.info</code>, <code>ctx.warn</code>,
+<code>ctx.error</code>, <code>ctx.debug</code>, including the <code>Running '…'</code> line <code>ctx.run</code> logs) and the <code>ctx.exit</code>
+message. Verbosity gates <code>ctx.debug</code> and <code>ctx.info</code>: <code>make_context</code> defaults to
+<code>ConsoleVerbosity.NORMAL</code>, which drops <code>ctx.debug</code>, so pass
+<code>make_context(..., verbosity=ConsoleVerbosity.VERBOSE)</code> (<code>from toolr.testing import
+ConsoleVerbosity</code>) to capture it. The <a href="../../reference/testing/"><code>ContextForTesting</code> reference</a>
+lists exactly what each stream holds at each verbosity.</p>
 <h3 id="mocking-ctxrun">Mocking <code>ctx.run</code><a class="headerlink" href="#mocking-ctxrun" title="Permanent link">&para;</a></h3>
 <p><code>make_context</code>'s <code>run</code> parameter replaces the real subprocess runner with a test double. Pass a
 <code>toolr.testing.RunMock</code>, configure its <code>.mock.return_value</code>/<code>.mock.side_effect</code> with a
@@ -1983,7 +1989,9 @@ the <code>ContextForTesting</code> it returns — a <code>Context</code> subclas
 <p><code>toolr.testing.RunMock</code> and <code>toolr.testing.make_command_result</code> are likewise part of toolr-py's
 public API and tested in toolr's own suite. <code>RunMock</code>'s <code>Mock</code>-style assertion surface and
 <code>make_command_result</code>'s signature are stable across the pre-1.0 series; any change is called out
-in the changelog.</p>
+in the changelog. So is <code>toolr.testing.ConsoleVerbosity</code>, the type of <code>make_context</code>'s
+<code>verbosity</code> parameter: its <code>QUIET</code>/<code>NORMAL</code>/<code>VERBOSE</code> members are stable across the pre-1.0
+series.</p>
 <p>Internal attributes (<code>sys_path</code>, <code>sys_modules</code>, <code>command_group_patcher</code>, <code>cwd</code>) are implementation
 detail and may change without notice.</p>
 
