@@ -3,8 +3,7 @@
 - **Status:** design agreed, not implemented
 - **Origin:** whole-project review finding F-21 (medium, plausible).
 - **Plan:** [`2026-10-31-ctx-run-timeout-kills-tree-plan.md`](./2026-10-31-ctx-run-timeout-kills-tree-plan.md)
-- **Stacks on:** `fix/ctx-run-input-deadlock` (F-08, `specs/2026-10-31-ctx-run-input-deadlock-design.md`); merge that
-  first.
+- **Stacks on:** `fix/ctx-run-input-deadlock` (F-08), now merged into `main`.
 
 ## Problem
 
@@ -45,14 +44,15 @@ the child is still alive and unreaped, so its descendants still point at it:
 - Unix: list the descendants of `child.id()` from a `(pid, ppid)` snapshot and send each `SIGSTOP`, so none of them
   can fork more. Take snapshots until one finds no new pid (at most 5 passes). Then `SIGKILL` every pid found, kill
   the child, and `wait()` it.
-    - Linux: read `/proc/<pid>/stat` for every numeric entry under `/proc`. The ppid is the fourth field after the
-      closing `)` of the command name.
+    - Linux: read `/proc/<pid>/stat` for every numeric entry under `/proc`. The ppid is the second field after the
+      last `)`, which closes the command name (`pid (comm) state ppid ...`).
     - macOS: `libc::proc_listallpids`, then `libc::proc_pidinfo(pid, PROC_PIDTBSDINFO, ..)` for `pbi_ppid`. Both are
       in `libc` 0.2.191.
     - Other unix targets: no snapshot; kill the child only, as today.
 - Windows: `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)` gives `th32ParentProcessID`. `TerminateProcess` each
   descendant, then kill the child. Windows has no `SIGSTOP`, so a process forked mid-walk can escape. That is
-  acceptable for a timeout path.
+  acceptable for a timeout path. Windows keeps a dead parent's pid as the ppid, and the child may have reused it, so
+  only a process created after the child is terminated (`GetProcessTimes`).
 
 Both timeout branches call `kill_tree` instead of `child.kill()` + `child.wait()`.
 
@@ -71,6 +71,13 @@ loop (`start_time` and `last_output`):
 
 A process that was already reparented before the timeout (case 2: `sh` exited first) cannot be found by its ppid. The
 drain bound still stops the call on time, but that process keeps running. The docs say so.
+
+### Decided: a background holder after exit 0 is a timeout
+
+Resolved 2026-11-02 by the maintainer. When the child exits 0 but a process it started keeps the output pipe open,
+and a timeout runs out while `ctx.run` waits for that pipe, `ctx.run` raises the timeout error
+(`CommandTimeoutError` or `CommandTimeoutNoOutputError`). It does not report success. With no timeout set it still
+waits for the pipe to close, as before.
 
 ### Rejected alternatives
 
@@ -92,11 +99,14 @@ drain bound still stops the call on time, but that process keeps running. The do
   `drain_threads` takes it too.
 - Not covered: signal handling for `toolr`'s own Python child (F-29, `execute/signals.rs`). The fd-reuse hazard of
   detached threads is fixed in F-41 (`refactor/ctx-run-owned-fds`).
-- `crates/toolr-core/Cargo.toml`: add `"tlhelp32"` to the Windows `winapi` features.
+- `crates/toolr-core/Cargo.toml`: `command` builds without `full`, because toolr-py links it alone, so its new
+  dependencies are not optional. `libc` becomes a plain dependency, `winapi` (with `tlhelp32`) a plain Windows
+  dependency, and both join the `toolr-core-lean-deps` allowlist in `.pre-commit-config.yaml`, as `CONTRIBUTING.md`
+  describes.
 - Docs: `docs/writing-commands/context.md`, "Running subprocesses", gets one paragraph. On timeout, `ctx.run` kills
   the command and everything it started. A process that the command started and left running in the background
   before it exited can't be tracked, but the timeout still returns on time.
-- `UNRELEASED.md`:
+- Release note (`release-notes/`):
 
   > When a `ctx.run` timeout fires, toolr now kills the processes the command started as well as the command itself.
   > It used to kill only the direct child, so `ctx.run("sh", "-c", "sleep 999", timeout_secs=1)` left `sleep`
