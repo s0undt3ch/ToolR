@@ -24,7 +24,8 @@ boundary between "instant" and "noticeable lag".
 
 Command discovery looks for
 `<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`
-(`<tools-venv>/Lib/site-packages/*/toolr-manifest.json` on Windows).
+or `<tools-venv>/Lib/site-packages/*/toolr-manifest.json` (the Windows
+layout, looked in on every platform).
 Any installed package that ships the file is picked up
 automatically; no project-side configuration is needed.
 
@@ -142,7 +143,8 @@ path (see [Command resolution](#command-resolution)).
 The file lives at `<package_dir>/toolr-manifest.json` — i.e. next to
 `my_pkg/__init__.py`. Toolr's manifest builder finds it as
 `<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`
-(`<tools-venv>/Lib/site-packages/*/toolr-manifest.json` on Windows).
+or `<tools-venv>/Lib/site-packages/*/toolr-manifest.json` (the Windows
+layout, looked in on every platform).
 
 ## Shipping the manifest
 

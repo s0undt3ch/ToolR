@@ -40,7 +40,8 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
 - **`third_party_hash`** — blake3 over the sorted set of
   `toolr-manifest.json` files found under
   `<tools-venv>/lib/python*/site-packages/*/`
-  (`Lib/site-packages/*/` on Windows). Each entry's path
+  or `Lib/site-packages/*/` (the Windows layout, looked in on every
+  platform). Each entry's path
   and content go into the hash. Drives third-party-fragment
   rebuilds: installing an unrelated package no longer invalidates
   the manifest, only changes to packages that ship a toolr
@@ -169,7 +170,8 @@ match the running binary — an upgrade forces a static rebuild even if
 Contributed by installed packages that ship a static
 `toolr-manifest.json` fragment inside their wheel, discovered by
 looking in `<tools-venv>/lib/python*/site-packages/*/`
-(`Lib/site-packages/*/` on Windows) and merged into
+or `Lib/site-packages/*/` (the Windows layout, looked in on every
+platform) and merged into
 the static layer at build time (see
 [Third-party packages](../third-party.md)). No Python import happens
 during discovery — it's an execution-free list-and-parse, same as
@@ -212,7 +214,8 @@ Both hashes use blake3, written as lowercase hex.
   `len(path_bytes) || path_bytes || len(contents) || contents`.
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`
-  (`Lib/site-packages/*/` on Windows), sorted by path,
+  or `Lib/site-packages/*/` (the Windows layout, looked in on every
+  platform), sorted by path,
   each entry hashed as
   `len(path_bytes) || path_bytes || len(contents) || contents`.
   Identical scheme to `static_hash` but over the third-party
