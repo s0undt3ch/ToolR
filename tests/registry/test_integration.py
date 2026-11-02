@@ -29,6 +29,13 @@ BAD_MODULE = (
     "    pass\n"
 )
 BROKEN_MODULE = "raise RuntimeError('boom')\n"
+TYPO_GROUP_MODULE = (
+    "from toolr import command, command_group\n"
+    'command_group("ci", "CI", "CI")\n'
+    '@command(group="ci.typo")\n'
+    "def check(ctx):\n"
+    '    """Check things."""\n'
+)
 ToolsRepo = Callable[[dict[str, str | None]], Path]
 STDLIB_USER_MODULE = (
     "import sqlite3, tomllib, zipfile, csv\n"
@@ -690,3 +697,28 @@ def test_standalone_command_dotted_group(tools_repo: ToolsRepo) -> None:
     group = groups["tools.ci.helm"]
     assert isinstance(group, CommandGroup)
     assert "snippet-checker" in group.get_commands()
+
+
+def test_collected_command_groups_rejects_unknown_group(tools_repo: ToolsRepo) -> None:
+    """A `group=` naming no declared group fails the read, as the manifest build does."""
+    repo = tools_repo({"tools/cmds.py": TYPO_GROUP_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        with pytest.raises(ValueError, match=r"unknown group references \(1\):") as excinfo:
+            tester.collected_command_groups()
+    assert (
+        "  - tools.cmds::check: references group `ci.typo` which has no "
+        "`command_group(...)` declaration."
+    ) in str(excinfo.value)
+
+
+def test_pending_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -> None:
+    """A pending command from one `CommandsTester` doesn't reach the next."""
+    repo = tools_repo({"tools/cmds.py": TYPO_GROUP_MODULE})
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+    other = repo / "other"
+    other.mkdir()
+    with CommandsTester(search_path=other) as tester:
+        tester.discover()
+        assert tester.collected_command_groups() == {}

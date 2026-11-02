@@ -55,6 +55,11 @@ def collected_command_groups(self) -> dict[str, object]:
 
 Get the collected command groups.
 
+Raises:
+    ValueError: A standalone ``@command(group=...)`` names a group
+        that no ``command_group(...)`` declares, which also fails
+        the manifest build.
+
 ```
 
 #### `discover`

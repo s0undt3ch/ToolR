@@ -16,8 +16,10 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 from typing import Self
 from unittest.mock import _patch
 from unittest.mock import patch
@@ -160,7 +162,7 @@ class CommandsTester:
     sys_modules: dict[str, ModuleType] = field(init=False, repr=False)
     command_group_collector: dict[str, object] = field(init=False, repr=False, factory=dict)
     command_group_patcher: _patch = field(init=False, repr=False)
-    pending_command_collector: dict[str, list[tuple[str | None, object]]] = field(
+    pending_command_collector: dict[str, list[tuple[str | None, Callable[..., Any]]]] = field(
         init=False, repr=False, factory=dict
     )
     pending_command_patcher: _patch = field(init=False, repr=False)
@@ -199,7 +201,22 @@ class CommandsTester:
     def collected_command_groups(self) -> dict[str, object]:
         """
         Get the collected command groups.
+
+        Raises:
+            ValueError: A standalone ``@command(group=...)`` names a group
+                that no ``command_group(...)`` declares, which also fails
+                the manifest build.
         """
+        if self.pending_command_collector:
+            lines = sorted(
+                f"  - {func.__module__}::{func.__qualname__}: "
+                f"references group `{full_name.removeprefix('tools.')}` which has no "
+                "`command_group(...)` declaration."
+                for full_name, entries in self.pending_command_collector.items()
+                for _, func in entries
+            )
+            err_msg = "\n".join([f"unknown group references ({len(lines)}):", *lines])
+            raise ValueError(err_msg)
         return {**self.command_group_collector}
 
     def discover(self) -> None:
