@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use super::layout::site_packages_dirs;
+use super::layout::preferred_site_packages_dirs;
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -18,14 +18,14 @@ pub enum ValidationError {
     InterpreterMissing(PathBuf),
 }
 
-/// Look in the venv's `site-packages` directories (see [`site_packages_dirs`])
-/// for the toolr package directory. Returns its path on success.
+/// Look in the venv's `site-packages` directories, its own Python's first (see
+/// [`preferred_site_packages_dirs`]), for the toolr package directory. Returns its path on success.
 ///
 /// Handles both regular installs (package directory in site-packages) and
 /// editable/direct-url installs where a `.pth` file adds the source root to
 /// `sys.path` (as maturin's editable mode does).
 pub fn locate_toolr_package(venv_dir: &Path) -> Option<PathBuf> {
-    for site_packages in site_packages_dirs(venv_dir).ok()? {
+    for site_packages in preferred_site_packages_dirs(venv_dir).ok()? {
         // Regular (non-editable) install: toolr/__init__.py is in site-packages.
         let init = site_packages.join("toolr").join("__init__.py");
         if init.is_file() {
@@ -74,19 +74,22 @@ fn locate_via_pth_files(site_packages: &Path) -> Option<PathBuf> {
 /// `toolr_py-<version>.dist-info` directory name. Lists `site-packages`
 /// only: no file reads, no interpreter.
 pub fn installed_toolr_py_version(venv_dir: &Path) -> Option<String> {
-    site_packages_dirs(venv_dir).ok()?.iter().find_map(|sp| {
-        fs::read_dir(sp)
-            .ok()?
-            .filter_map(Result::ok)
-            .find_map(|entry| {
-                let name = entry.file_name();
-                let version = name
-                    .to_str()?
-                    .strip_prefix("toolr_py-")?
-                    .strip_suffix(".dist-info")?;
-                Some(version.to_string())
-            })
-    })
+    preferred_site_packages_dirs(venv_dir)
+        .ok()?
+        .iter()
+        .find_map(|sp| {
+            fs::read_dir(sp)
+                .ok()?
+                .filter_map(Result::ok)
+                .find_map(|entry| {
+                    let name = entry.file_name();
+                    let version = name
+                        .to_str()?
+                        .strip_prefix("toolr_py-")?
+                        .strip_suffix(".dist-info")?;
+                    Some(version.to_string())
+                })
+        })
 }
 
 /// Order two versions by `major.minor` alone. `None` when either is
@@ -233,6 +236,30 @@ mod tests {
         assert_eq!(
             super::installed_toolr_py_version(tmp.path()).as_deref(),
             Some("0.40.0")
+        );
+    }
+
+    /// A stale `python3.9` dir mustn't shadow the venv's `python3.13`, though it sorts first.
+    #[test]
+    fn toolr_py_version_comes_from_the_venvs_own_python() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        for (py, version) in [("python3.9", "0.30.0"), ("python3.13", "0.40.0")] {
+            let sp = tmp.path().join("lib").join(py).join("site-packages");
+            std::fs::create_dir_all(sp.join("toolr")).unwrap();
+            std::fs::write(sp.join("toolr").join("__init__.py"), b"").unwrap();
+            std::fs::create_dir_all(sp.join(format!("toolr_py-{version}.dist-info"))).unwrap();
+        }
+        let py313 = tmp.path().join("lib/python3.13/site-packages/toolr");
+        assert_eq!(super::locate_toolr_package(tmp.path()), Some(py313.clone()));
+        assert_eq!(
+            super::installed_toolr_py_version(tmp.path()).as_deref(),
+            Some("0.40.0")
+        );
+
+        std::fs::write(tmp.path().join("pyvenv.cfg"), "version_info = 3.9.20\n").unwrap();
+        assert_eq!(
+            super::installed_toolr_py_version(tmp.path()).as_deref(),
+            Some("0.30.0")
         );
     }
 

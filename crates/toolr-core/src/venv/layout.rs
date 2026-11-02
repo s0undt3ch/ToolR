@@ -39,6 +39,45 @@ pub fn site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, SitePackagesE
     Ok(out)
 }
 
+/// [`site_packages_dirs`], best match for the venv's own interpreter first: the
+/// `pythonX.Y` named by `pyvenv.cfg`, then the rest by descending version, then the
+/// unversioned `Lib/site-packages`. For lookups that stop at the first hit, so a stale
+/// `python3.12` left next to `python3.13` doesn't win.
+pub fn preferred_site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, SitePackagesError> {
+    let own = pyvenv_cfg_version(venv_dir);
+    let mut dirs = site_packages_dirs(venv_dir)?;
+    dirs.sort_by_key(|sp| {
+        let version = sp
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.strip_prefix("python"))
+            .and_then(parse_major_minor);
+        std::cmp::Reverse((own.is_some() && version == own, version))
+    });
+    Ok(dirs)
+}
+
+/// `major.minor` of the venv's interpreter from `pyvenv.cfg` (`version_info`, as uv writes it,
+/// or `version`, as `venv` does).
+fn pyvenv_cfg_version(venv_dir: &Path) -> Option<(u32, u32)> {
+    let cfg = fs::read_to_string(venv_dir.join("pyvenv.cfg")).ok()?;
+    cfg.lines().find_map(|line| {
+        let (key, value) = line.split_once('=')?;
+        matches!(key.trim(), "version_info" | "version")
+            .then(|| parse_major_minor(value.trim()))
+            .flatten()
+    })
+}
+
+/// `3.13` from `3.13`, `3.13.1` or `3.14t`.
+fn parse_major_minor(version: &str) -> Option<(u32, u32)> {
+    let mut parts = version.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.trim_end_matches('t').parse().ok()?;
+    Some((major, minor))
+}
+
 /// Paths of the entries in `dir`; none when it doesn't exist.
 fn entries(dir: &Path) -> Result<Vec<PathBuf>, SitePackagesError> {
     match fs::read_dir(dir) {
@@ -214,5 +253,58 @@ mod tests {
         let py = tmp.path().join("lib/python3.13");
         let err = with_mode(&py, 0o000, || site_packages_dirs(tmp.path())).unwrap_err();
         assert_eq!(err.path, sp);
+    }
+
+    #[test]
+    fn preferred_site_packages_dirs_follows_pyvenv_cfg() {
+        let tmp = TempDir::new().unwrap();
+        let py39 = mkdirs(tmp.path(), "lib/python3.9/site-packages");
+        let py313 = mkdirs(tmp.path(), "lib/python3.13/site-packages");
+        fs::write(
+            tmp.path().join("pyvenv.cfg"),
+            "home = /usr/bin\nimplementation = CPython\nversion_info = 3.9.20\n",
+        )
+        .unwrap();
+        assert_eq!(
+            preferred_site_packages_dirs(tmp.path()).unwrap(),
+            [py39, py313]
+        );
+    }
+
+    #[test]
+    fn preferred_site_packages_dirs_reads_venv_style_version_key() {
+        let tmp = TempDir::new().unwrap();
+        let py39 = mkdirs(tmp.path(), "lib/python3.9/site-packages");
+        let py313 = mkdirs(tmp.path(), "lib/python3.13/site-packages");
+        fs::write(
+            tmp.path().join("pyvenv.cfg"),
+            "include-system-site-packages = false\nversion = 3.9.1\n",
+        )
+        .unwrap();
+        assert_eq!(
+            preferred_site_packages_dirs(tmp.path()).unwrap(),
+            [py39, py313]
+        );
+    }
+
+    /// Without `pyvenv.cfg`, the highest version wins, not the lexicographic first
+    /// (`python3.13` < `python3.9`), and the unversioned layout comes last.
+    #[test]
+    fn preferred_site_packages_dirs_falls_back_to_highest_version() {
+        let tmp = TempDir::new().unwrap();
+        let py39 = mkdirs(tmp.path(), "lib/python3.9/site-packages");
+        let py313 = mkdirs(tmp.path(), "lib/python3.13/site-packages");
+        let py314t = mkdirs(tmp.path(), "lib/python3.14t/site-packages");
+        let plain = mkdirs(tmp.path(), "lib/site-packages");
+        let odd = mkdirs(tmp.path(), "lib/python-x/site-packages");
+        fs::write(
+            tmp.path().join("pyvenv.cfg"),
+            "home = /usr/bin\nversion_info = garbage\n",
+        )
+        .unwrap();
+        assert_eq!(
+            preferred_site_packages_dirs(tmp.path()).unwrap(),
+            [py314t, py313, py39, odd, plain]
+        );
     }
 }
