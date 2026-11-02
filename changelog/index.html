@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev223-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev250-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev223 - 2026-11-02
+        0.35.2-dev250 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev223 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev250 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev223-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev250-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev223 - 2026-11-02
+        0.35.2-dev250 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev223 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev250 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,8 +7517,48 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev223-2026-11-02">0.35.2-dev223 - 2026-11-02<a class="headerlink" href="#0352-dev223-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev250-2026-11-02">0.35.2-dev250 - 2026-11-02<a class="headerlink" href="#0352-dev250-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
+<p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
+Every other shape fails the manifest build with "invalid parameter declarations", and all offending
+parameters are listed at once. Rewrite each as follows:</p>
+<ul>
+<li><code>colour: bool = True</code>: write <code>no_colour: bool = False</code> (CLI <code>--no-colour</code>) and test <code>if no_colour:</code>
+  in the body. Or rename it once at the top with <code>colour = not no_colour</code>.</li>
+<li><code>*, verbose: bool</code>, with no default: add <code>= False</code>. A positional <code>flag: bool</code> needs the default
+  too, and should be passed by keyword.</li>
+<li><code>colour: bool | None = None</code> or <code>Optional[bool]</code>: use <code>Literal["auto", "always", "never"]</code> or an
+  <code>Enum</code>.</li>
+<li><code>list[bool]</code>, <code>tuple[bool, ...]</code> and <code>*flags: bool</code>: no replacement. Use one <code>bool = False</code> flag per
+  value.</li>
+<li>Any other default, including <code>= None</code>, a computed value, or a constant imported from another
+  module (<code>verbose: bool = OFF</code>): write the literal <code>verbose: bool = False</code>. toolr can't read an
+  imported value without running your code, and a constant that turned out to be <code>True</code> would
+  bring back the silently ignored default. A constant defined in the same file still works.</li>
+</ul>
+<p>A parameter whose annotation is an alias of <code>bool</code>, such as <code>Verbose = Annotated[bool, arg(env="V")]</code>
+with <code>verbose: Verbose = False</code>, is now a flag. It used to take a <code>true</code>/<code>false</code> value
+(<code>--verbose true</code>). Plugin manifests that were already built keep their old behaviour until the
+plugin is rebuilt.</p>
+<p><strong>Breaking:</strong> toolr now refuses to run a repository's commands or sync its tools venv until you trust that
+repository once: run <code>toolr project trust</code> there, or answer <code>y</code> at the prompt. No repository is
+trusted after upgrading, including ones toolr already built a venv for. In CI, set
+<code>TOOLR_TRUST_ALL=1</code>; the <code>s0undt3ch/ToolR</code> GitHub Action sets it for you from this release on. An
+older pinned action run with a newer <code>version:</code> doesn't, so set <code>TOOLR_TRUST_ALL: "1"</code> yourself in
+that case. <code>--help</code>, tab completion and manifest builds never need trust. The mise <code>enter</code> hook
+(<code>toolr project venv sync --quiet</code>) never prompts, so in an untrusted repository it prints the
+refusal, while a directory with no <code>tools/pyproject.toml</code> still exits silently. The interpreter
+provenance check is removed; repository trust replaces it.</p>
+<p><strong>Breaking:</strong> a <code>tools/</code> directory is a toolr project only if it contains <code>pyproject.toml</code>. toolr
+finds the project by walking up to the nearest <code>tools/pyproject.toml</code>, and ignores any <code>tools/</code>
+without one. An unrelated <code>tools/</code> package below the repo root, such as <code>src/pkg/tools/</code>, used to
+hide every command (<code>unrecognized subcommand</code>); a bare <code>tools/</code> above a project (such as <code>C:\tools</code>)
+can no longer take it over. A repo whose <code>tools/</code> has no <code>pyproject.toml</code> is no longer supported:
+run <code>toolr project init</code> there to create one. Running one of its commands, or a <code>toolr project</code>
+command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</code> is missing. Without a
+<code>tools/pyproject.toml</code> toolr has no tools venv, so the fallback that ran commands with
+<code>$TOOLR_PYTHON</code>, <code>python3</code> or <code>python</code> from <code>PATH</code> is gone, and toolr no longer reads
+<code>$TOOLR_PYTHON</code>. The <code>toolr.testing</code> pytest plugin finds the repo root the same way.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7551,39 +7591,9 @@ uv install.</p>
 They then failed with "does not contain a python interpreter" or "Python interpreter not found"
 until the venv was deleted by hand. Now both re-sync it, and <code>toolr project venv run --no-sync</code>
 says the interpreter is gone and how to fix it.</p>
-<p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
-Every other shape fails the manifest build with "invalid parameter declarations", and all offending
-parameters are listed at once. Rewrite each as follows:</p>
-<ul>
-<li><code>colour: bool = True</code>: write <code>no_colour: bool = False</code> (CLI <code>--no-colour</code>) and test <code>if no_colour:</code>
-  in the body. Or rename it once at the top with <code>colour = not no_colour</code>.</li>
-<li><code>*, verbose: bool</code>, with no default: add <code>= False</code>. A positional <code>flag: bool</code> needs the default
-  too, and should be passed by keyword.</li>
-<li><code>colour: bool | None = None</code> or <code>Optional[bool]</code>: use <code>Literal["auto", "always", "never"]</code> or an
-  <code>Enum</code>.</li>
-<li><code>list[bool]</code>, <code>tuple[bool, ...]</code> and <code>*flags: bool</code>: no replacement. Use one <code>bool = False</code> flag per
-  value.</li>
-<li>Any other default, including <code>= None</code>, a computed value, or a constant imported from another
-  module (<code>verbose: bool = OFF</code>): write the literal <code>verbose: bool = False</code>. toolr can't read an
-  imported value without running your code, and a constant that turned out to be <code>True</code> would
-  bring back the silently ignored default. A constant defined in the same file still works.</li>
-</ul>
-<p>A parameter whose annotation is an alias of <code>bool</code>, such as <code>Verbose = Annotated[bool, arg(env="V")]</code>
-with <code>verbose: Verbose = False</code>, is now a flag. It used to take a <code>true</code>/<code>false</code> value
-(<code>--verbose true</code>). Plugin manifests that were already built keep their old behaviour until the
-plugin is rebuilt.</p>
 <p>Building toolr from an sdist now needs Rust 1.99.1 or newer, the toolchain toolr is built and
 tested with. The crates declare it as <code>rust-version</code>, so an older toolchain fails with a clear
 message instead of a compile error inside a dependency.</p>
-<p>toolr now refuses to run a repository's commands or sync its tools venv until you trust that
-repository once: run <code>toolr project trust</code> there, or answer <code>y</code> at the prompt. No repository is
-trusted after upgrading, including ones toolr already built a venv for. In CI, set
-<code>TOOLR_TRUST_ALL=1</code>; the <code>s0undt3ch/ToolR</code> GitHub Action sets it for you from this release on. An
-older pinned action run with a newer <code>version:</code> doesn't, so set <code>TOOLR_TRUST_ALL: "1"</code> yourself in
-that case. <code>--help</code>, tab completion and manifest builds never need trust. The mise <code>enter</code> hook
-(<code>toolr project venv sync --quiet</code>) never prompts, so in an untrusted repository it prints the
-refusal, while a directory with no <code>tools/pyproject.toml</code> still exits silently. The interpreter
-provenance check is removed; repository trust replaces it.</p>
 <p>Bash tab completion no longer expands candidate values: a value such as <code>$(…)</code> declared in a
 repository's <code>tools/</code> used to run when you pressed TAB. Values are now shell-quoted when inserted, and
 values containing spaces complete as one word. Control characters in command names, choices, help text
@@ -7623,16 +7633,6 @@ its own got its own tag back and the install failed or picked the wrong toolr ve
 changes. The cache key now follows the same <code>tools/</code> inputs toolr's own freshness check tracks:
 <code>tools/pyproject.toml</code>, <code>tools/uv.lock</code>, <code>tools/uv.toml</code> and <code>tools/.python-version</code>. Expect one cache miss after
 upgrading the action.</p>
-<p><strong>Breaking:</strong> a <code>tools/</code> directory is a toolr project only if it contains <code>pyproject.toml</code>. toolr
-finds the project by walking up to the nearest <code>tools/pyproject.toml</code>, and ignores any <code>tools/</code>
-without one. An unrelated <code>tools/</code> package below the repo root, such as <code>src/pkg/tools/</code>, used to
-hide every command (<code>unrecognized subcommand</code>); a bare <code>tools/</code> above a project (such as <code>C:\tools</code>)
-can no longer take it over. A repo whose <code>tools/</code> has no <code>pyproject.toml</code> is no longer supported:
-run <code>toolr project init</code> there to create one. Running one of its commands, or a <code>toolr project</code>
-command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</code> is missing. Without a
-<code>tools/pyproject.toml</code> toolr has no tools venv, so the fallback that ran commands with
-<code>$TOOLR_PYTHON</code>, <code>python3</code> or <code>python</code> from <code>PATH</code> is gone, and toolr no longer reads
-<code>$TOOLR_PYTHON</code>. The <code>toolr.testing</code> pytest plugin finds the repo root the same way.</p>
 <p><code>toolr.testing.CommandsTester.discover()</code> now raises when a <code>tools/*.py</code> module fails to import, for
 example because a command has no docstring. It imports every module first, then raises one
 <code>ExceptionGroup</code> holding each module's error, so a discovery test fails the way <code>toolr</code> does. It
@@ -7761,16 +7761,13 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(security)</em> Document the store-location refusal and path-keyed trust (<a href="https://github.com/s0undt3ch/ToolR/commit/b765f0997055abdd9a5e59d6bc49c8f7745127c5"><code>b765f09</code></a>)</li>
 <li><em>(security)</em> Document the trust commands and the action version caveat (<a href="https://github.com/s0undt3ch/ToolR/commit/3e81f4de3a02c7a9becd7030c7845f6da59d0ed4"><code>3e81f4d</code></a>)</li>
 <li><em>(specs)</em> Add safe shell output design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/c30a9414fe947b9b99c9bae089c737b40303b37d"><code>c30a941</code></a>)</li>
-<li><em>(unreleased)</em> Note safe shell output fixes (<a href="https://github.com/s0undt3ch/ToolR/commit/4984b2bb51bea3232459e733133fd7cb8df5e3e8"><code>4984b2b</code></a>)</li>
 <li><em>(claude)</em> Document coverage commands and gates (<a href="https://github.com/s0undt3ch/ToolR/commit/ca83f28475ec1ddf5d2b0e8f0aa3681ef1ae0187"><code>ca83f28</code></a>)</li>
 <li><em>(specs)</em> Archive safe shell output design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/0439292987ecf659ecbb572f0771a5d123684573"><code>0439292</code></a>)</li>
-<li><em>(unreleased)</em> Note zero-width and bidi rejection in names (<a href="https://github.com/s0undt3ch/ToolR/commit/b8a230ca8867b0e4bf359f2f28d58afc03f5ea7c"><code>b8a230c</code></a>)</li>
 <li><em>(specs)</em> Design and plan for venv freshness covering pyproject edits (<a href="https://github.com/s0undt3ch/ToolR/commit/711ae3c477b5ca1858411efca4a5f991048488ce"><code>711ae3c</code></a>)</li>
 <li><em>(venv)</em> Describe which tools/ files make the venv stale (<a href="https://github.com/s0undt3ch/ToolR/commit/113c0da0338d1f6ccf8df834a5252e34b965885a"><code>113c0da</code></a>)</li>
 <li><em>(specs)</em> Archive venv freshness inputs design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/084cf42789a4bfc5fb2fbc4ddef51f61cfbbe489"><code>084cf42</code></a>)</li>
 <li><em>(venv)</em> Say a python-version change needs a sync on cache venvs (<a href="https://github.com/s0undt3ch/ToolR/commit/170fcf66b4da2dde65b9b9d316cb5a8294f3ff41"><code>170fcf6</code></a>)</li>
 <li><em>(specs)</em> Design and plan for escaping paths before globbing (<a href="https://github.com/s0undt3ch/ToolR/commit/5fd2d721eb772c61d892eb54eabbc5bc253cd902"><code>5fd2d72</code></a>)</li>
-<li><em>(unreleased)</em> Note glob escaping of venv and project paths (<a href="https://github.com/s0undt3ch/ToolR/commit/633fa67fa7ae84acd1aaa3a66a93880cae7c341b"><code>633fa67</code></a>)</li>
 <li><em>(specs)</em> Archive plugin glob escape design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/267a4ed769d338285e8a289784f1b24b3c3969f3"><code>267a4ed</code></a>)</li>
 <li><em>(specs)</em> Point the archived glob escape plan at the shipped approach (<a href="https://github.com/s0undt3ch/ToolR/commit/1b1d73ff7968a63198c70d86e61888bec1c5705e"><code>1b1d73f</code></a>)</li>
 <li><em>(specs)</em> Design and plan for per-parameter type hint resolution (<a href="https://github.com/s0undt3ch/ToolR/commit/525b740928b62d5748b976bc170eed35aa31fd5f"><code>525b740</code></a>)</li>
@@ -7781,18 +7778,15 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(specs)</em> Archive help untrusted manifest write design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/72a0af6534397364354889af573b04d0d2de961b"><code>72a0af6</code></a>)</li>
 <li><em>(security)</em> Narrow the untrusted-manifest promise to automatic rebuilds (<a href="https://github.com/s0undt3ch/ToolR/commit/3b01fd1f214e875e52d8728b6e55257746ebd123"><code>3b01fd1</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-08 ctx.run input deadlock (<a href="https://github.com/s0undt3ch/ToolR/commit/cd2718aa426bdac5c6ab9b64e3110e97f1ed499f"><code>cd2718a</code></a>)</li>
-<li><em>(unreleased)</em> Note the ctx.run input deadlock fix (<a href="https://github.com/s0undt3ch/ToolR/commit/05f7b239520ab59854685271bb99b52bd219a6f3"><code>05f7b23</code></a>)</li>
 <li><em>(specs)</em> Archive ctx.run input deadlock design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/a1fa76a40b508f3b34affba6bf025e1ec7a8e2e3"><code>a1fa76a</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-24 release prek failures (<a href="https://github.com/s0undt3ch/ToolR/commit/d1994c6c854a80aa7ac2feb44b1876a30e67a8d7"><code>d1994c6</code></a>)</li>
 <li><em>(specs)</em> Archive release prek failures design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/77573adcff21de5ecbf98ff6e21791757664e5b1"><code>77573ad</code></a>)</li>
 <li><em>(specs)</em> Note the pre-bump skill reference check in the release prek design (<a href="https://github.com/s0undt3ch/ToolR/commit/e71a3935064482dcc77052c7a5f756aa9dfc539a"><code>e71a393</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-22 action latest repo (<a href="https://github.com/s0undt3ch/ToolR/commit/2c70ad823dee316996727fae4165acdfe49fc195"><code>2c70ad8</code></a>)</li>
-<li><em>(unreleased)</em> Note the action's latest-version lookup fix (<a href="https://github.com/s0undt3ch/ToolR/commit/fcee1a03033eac68de7b7d67c86241d486ed03c9"><code>fcee1a0</code></a>)</li>
 <li><em>(specs)</em> Archive action latest repo design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/1ab49bdee01388565fd9a19f24e5bbf62e0dbef6"><code>1ab49bd</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-10 release tree binding (<a href="https://github.com/s0undt3ch/ToolR/commit/63a16ef0ac982847a9a36a79a95d294ef66c6cbb"><code>63a16ef</code></a>)</li>
 <li><em>(specs)</em> Archive release tree binding design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/d11fa56927db84022a35f3ad49e8db79ba56f837"><code>d11fa56</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-39 action cache key (<a href="https://github.com/s0undt3ch/ToolR/commit/29c9d12b5a0e0ea910a697f1b8be37ed85b2f38c"><code>29c9d12</code></a>)</li>
-<li><em>(unreleased)</em> Note the action's tools venv cache key change (<a href="https://github.com/s0undt3ch/ToolR/commit/664a706acc03f326d7e8ff0c5ecef8c40cc2f6d4"><code>664a706</code></a>)</li>
 <li><em>(specs)</em> Archive action cache key design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b9af6176cd9ea01a33c48548a5f73ff5aaf739cc"><code>b9af617</code></a>)</li>
 <li><em>(specs)</em> Archive the ancestor tools discovery design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/c6b0d7445bcc53d5e7a9cca3a74cf8720f6aaa28"><code>c6b0d74</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-09 tester discover errors (<a href="https://github.com/s0undt3ch/ToolR/commit/d2251c39b77d7b7c4ac0fc79150233ce04c5d0f0"><code>d2251c3</code></a>)</li>
@@ -7800,6 +7794,15 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(specs)</em> Archive tester discover errors design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/ff2104f5a8245465c89f1366aa0b52953f1d4980"><code>ff2104f</code></a>)</li>
 <li><em>(testing)</em> Say a stray tools package replaces a namespace fixture (<a href="https://github.com/s0undt3ch/ToolR/commit/25a5496b46f1690668416fdb20bd4ae1dc59ffb2"><code>25a5496</code></a>)</li>
 <li><em>(testing)</em> Correct which sys.path entries CommandsTester hides (<a href="https://github.com/s0undt3ch/ToolR/commit/df5e844b0c913634c54569cc93f895f3da07c599"><code>df5e844</code></a>)</li>
+<li><em>(specs)</em> Add release notes fragments design (<a href="https://github.com/s0undt3ch/ToolR/commit/a88230cdbd3f3f6c65d2cacfc172112ac7812b1b"><code>a88230c</code></a>)</li>
+<li><em>(specs)</em> Add release notes fragments plan (<a href="https://github.com/s0undt3ch/ToolR/commit/3a1f2adcdb5ab91bb73e29fc1bdb26124d4ff695"><code>3a1f2ad</code></a>)</li>
+<li><em>(specs)</em> Apply adversarial review findings to release notes design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/90d113bf0f6af6eb4c867b7e2df472966ee52e3d"><code>90d113b</code></a>)</li>
+<li>Point contributors at toolr release-notes (<a href="https://github.com/s0undt3ch/ToolR/commit/d59d8cc1b47422e9e5f63b42aafda1ecdc3cb59c"><code>d59d8cc</code></a>)</li>
+<li>Spell out the release-notes gate for contributors (<a href="https://github.com/s0undt3ch/ToolR/commit/3e64705c463ae891011e7a80c26b26488538758f"><code>3e64705</code></a>)</li>
+<li><em>(specs)</em> Drop the skill name from the rebase step (<a href="https://github.com/s0undt3ch/ToolR/commit/9a85a4f6fc2b482bb36950935e96765ad75e075b"><code>9a85a4f</code></a>)</li>
+<li><em>(specs)</em> Archive release notes fragments design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/2c6ef0a3358916f0a818077b5b824357d7628124"><code>2c6ef0a</code></a>)</li>
+<li>Make release-notes/README.md the canonical gate rules (<a href="https://github.com/s0undt3ch/ToolR/commit/844ce8e9caad0c822a9c93fc7967ac13de877f40"><code>844ce8e</code></a>)</li>
+<li>Link the release-notes README by URL so mkdocs --strict resolves it (<a href="https://github.com/s0undt3ch/ToolR/commit/3cfbcd1e1f2bc2444ec7fbc56084340826aaa467"><code>3cfbcd1</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7851,6 +7854,22 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li>Move macOS arm64 jobs from macos-14 to macos-15 (<a href="https://github.com/s0undt3ch/ToolR/commit/e03ed13f8a88f5e499ccc9a4adb46df1ba670e08"><code>e03ed13</code></a>)</li>
 <li><em>(action)</em> Export TOOLR_TRUST_ALL (<a href="https://github.com/s0undt3ch/ToolR/commit/0e305afd117d44eb930485a4d100dc28b0fab889"><code>0e305af</code></a>)</li>
 <li><em>(release)</em> Show the committed release diff and drop the unused local tag (<a href="https://github.com/s0undt3ch/ToolR/commit/aa0478cc997a9714dfb926d1d931fb97e7c4c855"><code>aa0478c</code></a>)</li>
+<li><em>(tools)</em> Add release-notes render command (<a href="https://github.com/s0undt3ch/ToolR/commit/e9bfcdd9249ad0dd2c6a4a44237956aa51305ff1"><code>e9bfcdd</code></a>)</li>
+<li><em>(tools)</em> Add release-notes add and clear commands (<a href="https://github.com/s0undt3ch/ToolR/commit/9af3ce3ec3e8527bbaa987cb6007ab1f4529ca2b"><code>9af3ce3</code></a>)</li>
+<li><em>(tools)</em> Add release-notes check command (<a href="https://github.com/s0undt3ch/ToolR/commit/81810a17aa082c6d0c61bdf3ee95043867ba39b1"><code>81810a1</code></a>)</li>
+<li><em>(tools)</em> Track markdown fences properly in release-notes check (<a href="https://github.com/s0undt3ch/ToolR/commit/ce264e3ed4be9edbe60da8e804fe5c271d1f1471"><code>ce264e3</code></a>)</li>
+<li><em>(tools)</em> Fix indented-fence test input (<a href="https://github.com/s0undt3ch/ToolR/commit/6cfe7e586c2e5a042074aae5f47c82e7b46efeb8"><code>6cfe7e5</code></a>)</li>
+<li><em>(tools)</em> Gate PRs on release notes with check --base (<a href="https://github.com/s0undt3ch/ToolR/commit/4e4b7a3e3686906e82ba5c73078c6e9877a35a83"><code>4e4b7a3</code></a>)</li>
+<li><em>(tools)</em> Print release notes verbatim (<a href="https://github.com/s0undt3ch/ToolR/commit/33d0f7842f63a89f82a8d4075d8098072f5a88df"><code>33d0f78</code></a>)</li>
+<li><em>(release)</em> Build release notes from release-notes/ (<a href="https://github.com/s0undt3ch/ToolR/commit/b813316f914acbd65278cf7792f9c605c5ad93fb"><code>b813316</code></a>)</li>
+<li><em>(tools)</em> Fix release-notes edge cases from final review (<a href="https://github.com/s0undt3ch/ToolR/commit/98f99e0ed0d2e5253f489db2640256bf0519194e"><code>98f99e0</code></a>)</li>
+<li><em>(tools)</em> Flag setext headings in release notes (<a href="https://github.com/s0undt3ch/ToolR/commit/437953b36e7dd69c073e105c8d2de8d97014f9a4"><code>437953b</code></a>)</li>
+<li><em>(tools)</em> Flag unclosed fences and ignore editor files in release notes (<a href="https://github.com/s0undt3ch/ToolR/commit/ce2da6be4091ea7a7dcf1d0352b3b162c955b600"><code>ce2da6b</code></a>)</li>
+<li><em>(lint)</em> Exempt release notes from MD013 (<a href="https://github.com/s0undt3ch/ToolR/commit/24b62387df19e26a95f22622c6f25ab255ab37e4"><code>24b6238</code></a>)</li>
+<li><em>(tools)</em> Only treat release-notes/*.md files as notes (<a href="https://github.com/s0undt3ch/ToolR/commit/2fa78341f557a1d1f8dffa25f45a3534d0eec5a0"><code>2fa7834</code></a>)</li>
+<li><em>(tools)</em> Tidy the release notes tool and its tests (<a href="https://github.com/s0undt3ch/ToolR/commit/5f6a9f34456906ec261b55e73b85459de49d93aa"><code>5f6a9f3</code></a>)</li>
+<li>Explain the release-notes ties in ci.yml and cliff.toml (<a href="https://github.com/s0undt3ch/ToolR/commit/37d6e1bbc025ff26f25b698dbced6131e1371703"><code>37d6e1b</code></a>)</li>
+<li><em>(tools)</em> Print the new note path with forward slashes on Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/3990883ce3c8b0f84bfdc63c924a3c50bec09794"><code>3990883</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

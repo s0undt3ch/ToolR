@@ -1501,6 +1501,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#release-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Release notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pre-commit-hooks" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1665,6 +1676,17 @@
     <span class="md-ellipsis">
       
         Commits
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#release-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Release notes
       
     </span>
   </a>
@@ -1868,7 +1890,7 @@ each <code>non-exhaustive patterns: … not covered</code> error names the next 
    <code>EXPECTED_TOOLR_TYPES_NAMES</code> in <code>tests/test_types_module.py</code>.</li>
 <li>Run <code>cargo xtask build-skill-refs</code> and commit the regenerated type tables in <code>docs/</code> and
    <code>skills/</code>.</li>
-<li>Queue an <code>UNRELEASED.md</code> entry. A new type makes the next release a minor one.</li>
+<li>Queue a release note with <code>toolr release-notes add</code>. A new type makes the next release a minor one.</li>
 </ol>
 <h2 id="commits">Commits<a class="headerlink" href="#commits" title="Permanent link">&para;</a></h2>
 <p><a href="https://www.conventionalcommits.org/">Conventional Commits</a>. Examples:</p>
@@ -1882,10 +1904,18 @@ each <code>non-exhaustive patterns: … not covered</code> error names the next 
 <li><strong>Don't <code>--no-verify</code></strong> without a stated reason in the commit body. Pre-commit failures are signals, not obstacles.</li>
 <li><strong>Don't manually edit <code>CHANGELOG.md</code></strong> — <code>git-cliff</code> generates it on release from the conventional-commit history.</li>
 </ul>
+<h2 id="release-notes">Release notes<a class="headerlink" href="#release-notes" title="Permanent link">&para;</a></h2>
+<p>User-visible changes queue a note in <code>release-notes/</code>:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>add<span class="w"> </span>--text<span class="w"> </span><span class="s2">"…"</span><span class="w">            </span><span class="c1"># new note, slug from the branch name</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>add<span class="w"> </span>--append<span class="w"> </span>--text<span class="w"> </span><span class="s2">"…"</span><span class="w">   </span><span class="c1"># add to the branch's existing note</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>toolr<span class="w"> </span>release-notes<span class="w"> </span>check<span class="w"> </span>--base<span class="w"> </span>&lt;parent&gt;<span class="w">     </span><span class="c1"># the CI gate, run locally</span>
+</span></code></pre></div>
+<p>CI fails a PR with a <code>feat</code>, <code>fix</code>, <code>revert</code> or breaking commit and no note. A <code>Release-Notes: skip</code>
+trailer on any commit exempts the PR. The full rules are in <a href="https://github.com/s0undt3ch/ToolR/blob/main/release-notes/README.md"><code>release-notes/README.md</code></a>.</p>
 <h2 id="pre-commit-hooks">Pre-commit hooks<a class="headerlink" href="#pre-commit-hooks" title="Permanent link">&para;</a></h2>
 <p><code>prek install --install-hooks</code> (above) wires the gate. Manually:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>prek<span class="w"> </span>run<span class="w"> </span>rumdl<span class="w"> </span>--files<span class="w"> </span>docs/internals/manifest.md
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>prek<span class="w"> </span>run<span class="w"> </span>--all-files
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>prek<span class="w"> </span>run<span class="w"> </span>rumdl<span class="w"> </span>--files<span class="w"> </span>docs/internals/manifest.md
 </span></code></pre></div>
 <p>Hooks include <code>ruff</code>, <code>mypy</code>, <code>clippy</code>, <code>cargo check</code>, <code>rumdl</code>, <code>typos</code>, <code>jactionlint</code>,
 <code>shellcheck</code>, plus the project-local hooks (<code>pin-github-actions</code>, <code>regen-doc-snippets</code>).</p>
@@ -1894,7 +1924,7 @@ each <code>non-exhaustive patterns: … not covered</code> error names the next 
 <code>$PATH</code> (<code>toolr</code>, <code>invoke</code>, <code>python-tools-scripts</code>, <code>duty</code>, <code>doit</code>, <code>nox</code>). It's a stdlib-only
 script — no toolr, no rich, no venv to bootstrap — so it can run in a fresh CI job. Add
 <code>--install</code> to let it <code>uv tool install</code> missing Python tools on demand:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python3<span class="w"> </span>scripts/bench.py<span class="w"> </span>--install
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>python3<span class="w"> </span>scripts/bench.py<span class="w"> </span>--install
 </span></code></pre></div>
 <p>Output is a markdown table on stdout (progress goes to stderr); the README's headline benchmark
 table comes from this command. Re-run it on a fresh hardware target before changing the README's
