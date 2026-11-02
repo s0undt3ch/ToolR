@@ -14,8 +14,9 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
 
 ## Global Constraints
 
-- Stacks on `fix/symlinked-tools-files` (F-17): `list_python_files` already follows file symlinks. Don't change it
-  here.
+- Base is `main` after #642 (F-17): `list_python_files` rejects symlinked `*.py` with `SymlinkedModules`, which must
+  reach callers unwrapped. Don't change it here. Scanned sources never go through it.
+- Keep the build's single walk of `tools/`: the build passes its `py_files` to `static_inputs_from`.
 - Input keys are project-root-relative with `/` separators; sorted; deduplicated.
 - Per-input hash bytes: `key || 0x00 || len(contents) as u64 LE || contents`.
 - A config or glob error never fails the hash. It drops that block's scanned files; the pyproject bytes stay an input.
@@ -45,7 +46,8 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
 **Interfaces:** none.
 
 - [ ] **Step 1: Write the regression tests**, reproducing the spec's repro exactly. A helper
-      `write_django_project(root: &Path)` writes `tools/pyproject.toml` (`[project]` plus the
+      `write_django_project(root: &Path)` writes `tools/pyproject.toml` (`common::TOOLS_PYPROJECT`, for the in-tree
+      venv, plus the
       `[tool.toolr.argparse.django]` block with `scan_paths = ["apps/*/management/commands/*.py"]`, `django = true`,
       and `[[tool.toolr.argparse.django.attach]] parent = "django"`), `tools/dispatcher.py` (the docs' `django`
       dispatcher taking `*, dispatched: DispatchCommand`), and `apps/billing/management/commands/migrate.py` with a
@@ -68,7 +70,8 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
   `hash_tools_dir`; tests)
 - Modify: `crates/toolr-core/src/parser/build.rs` (`build_static_manifest_inner`)
 - Modify: `crates/toolr-core/src/freshness/compare.rs`, `crates/toolr-core/src/freshness/tests.rs`
-- Modify: `crates/toolr/tests/cli_smoke.rs`, `crates/toolr/tests/freshness_dispatch.rs` (callers of `hash_tools_dir`)
+- Modify: `crates/toolr/tests/cli_smoke.rs`, `crates/toolr/tests/freshness_dispatch.rs`,
+  `crates/toolr/tests/common/mod.rs` (callers of `hash_tools_dir`)
 
 **Interfaces:**
 
@@ -76,9 +79,12 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
     - `pub fn expand_scan_paths(root: &Path, scan_paths: &[String]) -> Result<Vec<PathBuf>, ScanError>`: matches that
       are files, sorted, deduplicated.
     - `pub(crate) struct StaticInput { pub key: String, pub path: PathBuf }`
-    - `pub(crate) fn static_inputs(tools_dir: &Path) -> Vec<StaticInput>`
+    - `pub fn static_inputs(tools_dir: &Path) -> anyhow::Result<Vec<StaticInput>>` (errors only with
+      `SymlinkedModules`, unwrapped)
+    - `pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<StaticInput>`
+    - `pub(crate) fn hash_paths(inputs: &[StaticInput]) -> anyhow::Result<String>`
     - `pub fn compute_static_hash(tools_dir: &Path) -> anyhow::Result<String>`
-  F-30 (`fix/tab-manifest-freshness`) builds its stat gate on `static_inputs`.
+  F-30 (`fix/tab-manifest-freshness`) builds its stat gate on `static_inputs`; its spec predates the `Result`.
 - [ ] **Step 1: Write the tests.**
     - `scan.rs`: `expand_scan_paths_matches_scan_block_paths`: the existing
       `scan_paths_expands_globs_and_skips_unparsable` fixture → returned paths are a superset of the scanned commands'
@@ -98,12 +104,13 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
       (or don't compile until the new names exist).
 - [ ] **Step 3: Implement.**
     - Move the glob loop out of `scan_block_paths` into `expand_scan_paths`; `scan_block_paths` calls it.
-    - `static_inputs`: `tools/<rel>` from `list_python_files`; `tools/pyproject.toml` if it's a file; if it parses
+    - `static_inputs_from`: `tools/<rel>` from the given list; `tools/pyproject.toml` if it's a file; if it parses
       with `argparse::parse_blocks_from_pyproject`, each block's `expand_scan_paths(project_root, &block.scan_paths)`
       results, skipping blocks that return `Err`. Keys relative to `project_root` with `/`; sort; dedup by key.
     - `compute_static_hash`: the `hash_paths` loop over `static_inputs`, keyed by `key`.
-    - Switch `build_static_manifest_inner` and `compare` to `compute_static_hash`. Remove `hash_tools_dir` and update
-      its callers in `cli_smoke.rs` and `freshness_dispatch.rs`. Update the `Manifest::static_hash` doc comment
+    - Switch `build_static_manifest_inner` to `hash_paths(&static_inputs_from(..))` and `compare` to
+      `compute_static_hash`. Remove `hash_tools_dir` and update its callers in `cli_smoke.rs`, `freshness_dispatch.rs`,
+      `common/mod.rs` and `freshness/tests.rs`. Update the `Manifest::static_hash` doc comment
       (`manifest/model.rs`).
 - [ ] **Step 4: Run** Step 2 → PASS. Then `cargo test -p toolr-core` and
       `cargo test -p toolr --test freshness_dispatch --test cli_smoke` → PASS, including Task 1's tests.
@@ -114,14 +121,18 @@ argparse `scan_paths` matches). The scanner and the hash share `argparse::scan::
 **Files:**
 
 - Modify: `docs/internals/manifest.md`
-- Modify: `UNRELEASED.md`
+- Modify: `docs/writing-commands/external-sources.md`
+- Create: a `release-notes/` entry
 - [ ] **Step 1:** `docs/internals/manifest.md`: the `static_hash` field bullet and the "Hashing details" bullet list
       the three input kinds and the key and byte scheme above. The "static layer is rebuilt when" paragraph names
       scanned files and `tools/pyproject.toml`. Keep F-17's wording about symlinked files.
-- [ ] **Step 2:** Add the spec's `UNRELEASED.md` text verbatim.
-- [ ] **Step 3:** `mise run test`, polling every 30-60 s → green. `prek run --all-files` → green.
-      `uv run mkdocs build --strict` → green. Commit `docs(internals): list every static_hash input`.
-- [ ] **Step 4:**
+- [ ] **Step 2:** `external-sources.md` "Rebuilding the manifest": name the edits that trigger the rebuild. Commit
+      `docs(internals): list every static_hash input`.
+- [ ] **Step 3:** `toolr release-notes add --slug argparse-manifest-hash --text "…"` with the spec's text; commit
+      `docs(release-notes): …`. `toolr release-notes check --base origin/main` exits 0.
+- [ ] **Step 4:** `cargo test -p toolr-core -p toolr`, `uv run pytest`, clippy, `prek run --all-files`,
+      `uv run mkdocs build --strict`, patch coverage ≥ 99 % → green.
+- [ ] **Step 5:**
       `git mv specs/2026-10-31-argparse-manifest-hash-design.md specs/2026-10-31-argparse-manifest-hash-plan.md specs/archive/2026/`;
       fix the plan's `Spec:` link and set the design's status to implemented. Commit
       `docs(specs): archive argparse manifest hash design and plan`.
