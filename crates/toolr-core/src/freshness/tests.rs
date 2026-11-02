@@ -287,7 +287,7 @@ fn hash_errors_name_the_tools_dir_except_symlinked_modules() {
     );
 }
 
-/// F-16: editing a file an argparse block scans is static drift, even
+/// #655: editing a file an argparse block scans is static drift, even
 /// though it lives outside `tools/`.
 #[test]
 fn returns_static_drift_when_scanned_file_changed_without_a_venv() {

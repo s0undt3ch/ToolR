@@ -570,7 +570,7 @@ fn help_stdout(root: &std::path::Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// F-16: editing a scanned file must refresh the grafted command's
+/// #655: editing a scanned file must refresh the grafted command's
 /// arguments without `toolr project manifest rebuild`.
 #[test]
 fn grafted_command_help_reflects_scanned_file_edit() {
@@ -591,7 +591,7 @@ fn grafted_command_help_reflects_scanned_file_edit() {
     assert!(after.contains("--database"), "{after}");
 }
 
-/// F-16: editing the `[tool.toolr.argparse.*]` table must refresh the
+/// #655: editing the `[tool.toolr.argparse.*]` table must refresh the
 /// grafted commands too; here pointing `scan_paths` nowhere drops them.
 #[test]
 fn removing_scan_paths_drops_grafted_commands() {
@@ -665,7 +665,7 @@ fn complete_stdout(root: &std::path::Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// F-16 review: a pyproject mid-edit or a typo'd `scan_paths` glob fails
+/// #655 review: a pyproject mid-edit or a typo'd `scan_paths` glob fails
 /// the rebuild. TAB keeps serving the cached commands, silently.
 #[test]
 fn completion_serves_the_cache_when_the_pyproject_is_broken() {

@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use crate::manifest::ArgumentKind;
 
+/// Its serialised shape is a `static_hash` input; see `hash::hash_paths`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArgparseBlock {
     /// Block key under `[tool.toolr.argparse.<name>]`. Set by the parser

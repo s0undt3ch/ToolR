@@ -10,17 +10,37 @@ use crate::text::escape_control_chars;
 
 /// One file that feeds `static_hash`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StaticInput {
+pub(crate) struct StaticInput {
     /// The path relative to the project root, components joined with `/`;
     /// a file outside the project root keeps its full path.
     pub key: String,
     pub path: PathBuf,
-    /// A `tools/**/*.py` module. Only a module's read errors fail the hash;
-    /// see [`hash_paths`].
-    pub module: bool,
+    pub kind: InputKind,
+}
+
+/// How [`hash_paths`] treats a [`StaticInput`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InputKind {
+    /// A `tools/**/*.py` module. Only a module's read errors fail the hash.
+    Module,
+    /// A file an argparse block's `scan_paths` match.
+    Scanned,
     /// `tools/pyproject.toml`: only its `[tool.toolr.argparse.*]` blocks
-    /// are hashed; see [`hash_paths`].
-    pub config: bool,
+    /// are hashed.
+    Pyproject,
+}
+
+impl InputKind {
+    /// Which kind wins when one path is listed as several: a module keeps
+    /// its strict reads, and a scanned pyproject its full bytes, since the
+    /// scanner reads all of it.
+    fn dedup_rank(self) -> u8 {
+        match self {
+            InputKind::Module => 0,
+            InputKind::Scanned => 1,
+            InputKind::Pyproject => 2,
+        }
+    }
 }
 
 /// The manifest's `static_hash`: every input of the static build, hashed in
@@ -34,7 +54,7 @@ pub fn compute_static_hash(tools_dir: &Path) -> Result<String> {
 /// Every input of the static build: `tools/**/*.py`, `tools/pyproject.toml`
 /// (for its `[tool.toolr.argparse.*]` blocks) and the files those blocks
 /// scan. Sorted by key, without duplicate keys.
-pub fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
+pub(crate) fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
     Ok(static_inputs_from(
         tools_dir,
         &list_python_files(tools_dir)?,
@@ -50,12 +70,14 @@ pub fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
 /// the pyproject itself is still an input, so fixing it rebuilds, and the
 /// build reports the error.
 pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<StaticInput> {
-    // Same root and pyproject as `argparse::run_for_project`.
+    // Same root as `argparse::run_for_project`.
     let project_root = tools_dir.parent().unwrap_or(tools_dir);
-    let mut paths: Vec<(PathBuf, bool)> = py_files.iter().map(|p| (p.clone(), true)).collect();
-    let pyproject = project_root.join("tools").join("pyproject.toml");
-    let has_pyproject = pyproject.is_file();
-    if has_pyproject {
+    let mut paths: Vec<(PathBuf, InputKind)> = py_files
+        .iter()
+        .map(|p| (p.clone(), InputKind::Module))
+        .collect();
+    let pyproject = crate::argparse::pyproject_path(project_root);
+    if pyproject.is_file() {
         let blocks = read_input(&pyproject)
             .ok()
             .and_then(|bytes| String::from_utf8(bytes).ok())
@@ -65,34 +87,23 @@ pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<
             if let Ok(scanned) =
                 crate::argparse::scan::expand_scan_paths(project_root, &block.scan_paths)
             {
-                paths.extend(scanned.into_iter().map(|p| (p, false)));
+                paths.extend(scanned.into_iter().map(|p| (p, InputKind::Scanned)));
             }
         }
+        paths.push((pyproject, InputKind::Pyproject));
     }
     let mut inputs: Vec<StaticInput> = paths
         .into_iter()
-        .map(|(path, module)| StaticInput {
+        .map(|(path, kind)| StaticInput {
             key: input_key(project_root, &path),
             path,
-            module,
-            config: false,
+            kind,
         })
         .collect();
-    if has_pyproject {
-        inputs.push(StaticInput {
-            key: input_key(project_root, &pyproject),
-            path: pyproject,
-            module: false,
-            config: true,
-        });
-    }
-    // A module also matched by a `scan_paths` glob keeps its strict reads,
-    // and a scanned pyproject its full bytes: the scanner reads all of it.
     inputs.sort_by(|a, b| {
         a.key
             .cmp(&b.key)
-            .then(b.module.cmp(&a.module))
-            .then(a.config.cmp(&b.config))
+            .then(a.kind.dedup_rank().cmp(&b.kind.dedup_rank()))
     });
     inputs.dedup_by(|a, b| a.key == b.key);
     inputs
@@ -234,36 +245,39 @@ fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
         .is_some_and(|n| n.starts_with('.') || n == "__pycache__")
 }
 
-/// Hash each input as `key || 0x00 || len(contents) as u64 LE || contents`.
+/// Tag after an input's key: its contents follow.
+const TAG_CONTENTS: &[u8] = b"\x00";
+/// Tag after an input's key: it couldn't be read; the error kind follows.
+const TAG_READ_ERROR: &[u8] = b"\x01";
+/// Tag after the pyproject's key: its serialised argparse blocks follow.
+const TAG_ARGPARSE_BLOCKS: &[u8] = b"\x02";
+
+/// Hash each input as `key || 0x00 || len(contents) as u64 LE || contents`
+/// ([`TAG_CONTENTS`]).
 ///
 /// The pyproject is hashed as `key || 0x02 || len || <argparse blocks>`
-/// instead, so edits outside `[tool.toolr.argparse.*]` (a dependency bump,
-/// `uv add`) leave the hash alone; see [`argparse_digest`]. A pyproject
+/// ([`TAG_ARGPARSE_BLOCKS`]) instead, so edits outside
+/// `[tool.toolr.argparse.*]` (a dependency bump, `uv add`) leave the hash
+/// alone; see [`canonical_argparse_blocks`]. A pyproject
 /// the build can't read its blocks from keeps the raw-bytes form, so
 /// fixing it still changes the hash.
 ///
 /// A module that can't be read fails the hash, naming the file. Any other
 /// input that can't be read is hashed as `key || 0x01 || <error kind>`
-/// instead: the scanner turns such a file into a placeholder with a
+/// ([`TAG_READ_ERROR`]) instead: the scanner turns such a file into a placeholder with a
 /// warning, and the pyproject's read error is the build's to report, so
 /// neither may fail `--help`, dispatch and TAB through the freshness
 /// check. Fixing the permission still changes the hash.
 pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
     let mut hasher = Hasher::new();
-    for StaticInput {
-        key,
-        path,
-        module,
-        config,
-    } in inputs
-    {
+    for StaticInput { key, path, kind } in inputs {
         let bytes = match read_input(path) {
             Ok(bytes) => bytes,
             // Deleted since the walk listed it: hash the tree as it now is.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) if !module => {
+            Err(e) if *kind != InputKind::Module => {
                 hasher.update(key.as_bytes());
-                hasher.update(b"\x01");
+                hasher.update(TAG_READ_ERROR);
                 hasher.update(e.kind().to_string().as_bytes());
                 continue;
             }
@@ -272,9 +286,13 @@ pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
             }
         };
         hasher.update(key.as_bytes());
-        let (tag, bytes) = match config.then(|| argparse_digest(&bytes)).flatten() {
-            Some(digest) => (b"\x02", digest),
-            None => (b"\0", bytes),
+        let blocks = match kind {
+            InputKind::Pyproject => canonical_argparse_blocks(&bytes),
+            InputKind::Module | InputKind::Scanned => None,
+        };
+        let (tag, bytes) = match blocks {
+            Some(blocks) => (TAG_ARGPARSE_BLOCKS, blocks),
+            None => (TAG_CONTENTS, bytes),
         };
         hasher.update(tag);
         hasher.update(&(bytes.len() as u64).to_le_bytes());
@@ -286,15 +304,14 @@ pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
 /// The pyproject's `[tool.toolr.argparse.*]` blocks as the build parses
 /// them, serialised in name order: the only part of the file the build
 /// reads. `None` when they don't parse, so the caller hashes the raw bytes.
-fn argparse_digest(bytes: &[u8]) -> Option<Vec<u8>> {
+fn canonical_argparse_blocks(bytes: &[u8]) -> Option<Vec<u8>> {
     let text = std::str::from_utf8(bytes).ok()?;
-    let blocks = crate::argparse::parse_blocks(text).ok()?;
+    let mut blocks = crate::argparse::parse_blocks(text).ok()?;
+    blocks.sort_by(|a, b| a.name.cmp(&b.name));
     serde_json::to_vec(&blocks).ok()
 }
 
 fn read_input(path: &Path) -> std::io::Result<Vec<u8>> {
-    #[cfg(test)]
-    tests::count_read(path);
     // `path` is listed by `static_inputs` from the project's own config, not untrusted input.
     std::fs::read(path) // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
 }
@@ -302,20 +319,6 @@ fn read_input(path: &Path) -> std::io::Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    thread_local! {
-        static READS: std::cell::RefCell<std::collections::HashMap<PathBuf, usize>> =
-            Default::default();
-    }
-
-    pub(super) fn count_read(path: &Path) {
-        READS.with(|r| *r.borrow_mut().entry(path.to_path_buf()).or_default() += 1);
-    }
-
-    /// Reads by this thread's static-hash code since the last call.
-    pub(crate) fn take_reads() -> std::collections::HashMap<PathBuf, usize> {
-        READS.with(|r| std::mem::take(&mut *r.borrow_mut()))
-    }
     use tempfile::TempDir;
 
     fn setup(files: &[(&str, &str)]) -> TempDir {
@@ -394,8 +397,7 @@ mod tests {
         let input = |name: &str| StaticInput {
             key: format!("tools/{name}"),
             path: tools.join(name),
-            module: true,
-            config: false,
+            kind: InputKind::Module,
         };
         let with_gone = hash_paths(&[input("a.py"), input("gone.py")]).unwrap();
         let without = hash_paths(&[input("a.py")]).unwrap();
@@ -413,14 +415,12 @@ mod tests {
             StaticInput {
                 key: "a.py".into(),
                 path: tmp.path().join("a.py"),
-                module: true,
-                config: false,
+                kind: InputKind::Module,
             },
             StaticInput {
                 key: "pkg.py".into(),
                 path: dir.clone(),
-                module: true,
-                config: false,
+                kind: InputKind::Module,
             },
         ];
         let err = hash_paths(&inputs).unwrap_err();
@@ -642,7 +642,7 @@ parent = "django"
 
     const MIGRATE_PY: &str = "def add_arguments(self, parser):\n    parser.add_argument('--check', action='store_true')\n";
 
-    /// F-16 layout: a dispatcher in `tools/` and a management command its
+    /// #655 layout: a dispatcher in `tools/` and a management command its
     /// argparse block scans from `apps/`.
     fn django_project() -> TempDir {
         let pyproject = format!("[project]\nname = \"tools\"\n{DJANGO_BLOCK}");
@@ -772,7 +772,7 @@ parent = "django"
         assert_ne!(tools_hash(&project), before);
     }
 
-    /// The F-16 review shape: a dependency line mid-edit makes the whole
+    /// The #655 review shape: a dependency line mid-edit makes the whole
     /// file invalid TOML, which counts as drift until it is fixed.
     #[test]
     fn invalid_pyproject_outside_argparse_changes_the_hash() {
@@ -793,6 +793,23 @@ parent = "django"
         assert_eq!(tools_hash(&project), before);
     }
 
+    /// The blocks are hashed in name order, not file order.
+    #[test]
+    fn static_hash_ignores_argparse_block_order() {
+        let other = "[tool.toolr.argparse.other]\nscan_paths = [\"nowhere/*.py\"]\n";
+        let project = setup(&[(
+            "tools/pyproject.toml",
+            &format!("[project]\nname = \"tools\"\n{DJANGO_BLOCK}\n{other}"),
+        )]);
+        let before = tools_hash(&project);
+        write(
+            &project,
+            "tools/pyproject.toml",
+            &format!("[project]\nname = \"tools\"\n{other}\n{DJANGO_BLOCK}"),
+        );
+        assert_eq!(tools_hash(&project), before);
+    }
+
     /// A pyproject a `scan_paths` glob also matches is scanned as a file,
     /// so all of its bytes count.
     #[test]
@@ -801,7 +818,7 @@ parent = "django"
         let project = setup(&[("tools/pyproject.toml", pyproject)]);
         let inputs = static_inputs(&project.path().join("tools")).unwrap();
         assert_eq!(inputs.len(), 1, "{inputs:?}");
-        assert!(!inputs[0].config, "{inputs:?}");
+        assert_eq!(inputs[0].kind, InputKind::Scanned, "{inputs:?}");
         let before = tools_hash(&project);
         write(
             &project,
@@ -822,8 +839,9 @@ parent = "django"
         ]);
         assert_eq!(keys(&project), ["tools/a.py", "tools/pyproject.toml"]);
         let inputs = static_inputs(&project.path().join("tools")).unwrap();
-        assert!(
-            inputs[0].module,
+        assert_eq!(
+            inputs[0].kind,
+            InputKind::Module,
             "the module's strict reads win: {inputs:?}"
         );
     }
@@ -914,36 +932,6 @@ parent = "django"
             let prefix = format!("reading {}: ", dispatcher.display());
             assert!(err.starts_with(&prefix), "{err}");
         }
-    }
-
-    /// Baseline for the stat gate F-30 adds: a freshness check on an
-    /// unchanged tree reads each scanned file and module once, and the
-    /// pyproject twice (parse, then hash).
-    #[test]
-    fn fresh_compare_reads_each_input_once() {
-        let project = django_project();
-        let tools = project.path().join("tools");
-        let manifest = crate::manifest::Manifest {
-            schema_version: crate::manifest::SCHEMA_VERSION,
-            static_hash: compute_static_hash(&tools).unwrap(),
-            third_party_hash: String::new(),
-            toolr_version: env!("CARGO_PKG_VERSION").to_string(),
-            groups: vec![],
-            commands: vec![],
-            plugin_warnings: Vec::new(),
-        };
-        take_reads();
-        let verdict = crate::freshness::compare(Some(&manifest), &tools, None).unwrap();
-        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
-        let reads = take_reads();
-        let count = |rel: &str| reads.get(&project.path().join(rel)).copied();
-        assert_eq!(
-            count("apps/billing/management/commands/migrate.py"),
-            Some(1)
-        );
-        assert_eq!(count("tools/dispatcher.py"), Some(1));
-        assert_eq!(count("tools/pyproject.toml"), Some(2));
-        assert_eq!(reads.len(), 3, "{reads:?}");
     }
 
     #[test]

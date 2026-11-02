@@ -3,7 +3,7 @@
 //! calls as manifest children of user-declared dispatcher commands.
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -35,6 +35,12 @@ pub struct GraftResult {
     pub dispatchers: HashSet<String>,
 }
 
+/// `tools/pyproject.toml` under `project_root`: where the argparse blocks
+/// live. The static hash reads the same file.
+pub fn pyproject_path(project_root: &Path) -> PathBuf {
+    project_root.join("tools").join("pyproject.toml")
+}
+
 /// Run the full argparse pipeline for a project: read pyproject,
 /// scan files, validate attachments, graft children, detect
 /// collisions. Returns a [`GraftResult`] mapping each parent dotted
@@ -51,7 +57,7 @@ pub fn run_for_project(
     project_root: &Path,
     parents: &HashMap<String, (String, String)>,
 ) -> Result<GraftResult, ArgparseError> {
-    let pyproject = project_root.join("tools").join("pyproject.toml");
+    let pyproject = pyproject_path(project_root);
     if !pyproject.exists() {
         return Ok(GraftResult::default());
     }
