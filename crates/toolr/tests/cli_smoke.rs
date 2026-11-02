@@ -402,6 +402,58 @@ fn dispatch_in_tree_venv_keeps_meta_json_out_of_tools() {
     );
 }
 
+/// A repo that moved from a cache venv to an in-tree one leaves
+/// `<cache>/toolr/<repo-key>/venv/` behind. In-tree dispatch must not refresh
+/// that slot's `last_used_at`, or `self cache prune` could never reclaim it.
+#[test]
+#[cfg(unix)]
+fn dispatch_in_tree_venv_lets_an_abandoned_cache_venv_age_out() {
+    let tmp = preflight_fixture(&[]);
+    let canonical = tmp.path().canonicalize().unwrap();
+    let cache_root = preflight_cache_home(tmp.path()).join("toolr");
+
+    // The slot the repo's cache venv used before the switch, last used 90 days ago.
+    let resolved = toolr_core::venv::resolve_venv_path(tmp.path()).unwrap();
+    let abandoned = cache_root
+        .join(toolr_core::venv::compute_repo_key(tmp.path(), &resolved.python_version).unwrap());
+    std::fs::create_dir_all(abandoned.join("venv/bin")).unwrap();
+    let mut old = toolr_core::cache::Meta::new(
+        canonical.clone(),
+        env!("CARGO_PKG_VERSION"),
+        resolved.python_version.clone(),
+    );
+    old.last_used_at -= chrono::Duration::days(90);
+    old.write(&abandoned).unwrap();
+
+    let output = preflight_cmd(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        toolr_core::cache::Meta::load(&abandoned)
+            .unwrap()
+            .last_used_at,
+        old.last_used_at,
+        "in-tree dispatch refreshed the abandoned cache venv's slot; stderr:\n{stderr}"
+    );
+
+    let prune = preflight_cmd(tmp.path())
+        .args(["self", "cache", "prune", "--stale-after-days", "30"])
+        .output()
+        .unwrap();
+    assert!(
+        prune.status.success(),
+        "prune failed: {}",
+        String::from_utf8_lossy(&prune.stderr)
+    );
+    assert!(
+        !abandoned.exists(),
+        "prune should reclaim the abandoned venv; stdout:\n{}",
+        String::from_utf8_lossy(&prune.stdout)
+    );
+}
+
 /// A sidecar that can't be written stays a warning: dispatch still reaches
 /// the runner, and nothing falls back to `tools/meta.json`.
 #[test]
