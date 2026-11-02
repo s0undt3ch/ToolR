@@ -294,7 +294,7 @@ pub fn dispatch(
     let resolved = resolve_venv_path(&repo_root)?;
     let quiet = output_opts.verbosity == "quiet";
     let verbose = output_opts.verbosity == "verbose";
-    let resolved = if trusted.prompted() {
+    let resolved = if trusted.granted_at_prompt() {
         sync_after_trust_prompt(&trusted, resolved)?
     } else {
         resync_if_needed(&repo_root, resolved, quiet)?
@@ -397,17 +397,18 @@ fn resync_if_needed(
 
 /// The user has just trusted the repository at the prompt: a venv that needs
 /// a sync gets the sync prompt, not the uv install prompt, so the command can
-/// run after at most two questions (F-32).
+/// run after at most two questions. See
+/// `specs/archive/2026/2026-10-31-trust-then-sync-design.md`.
 fn sync_after_trust_prompt(
     trusted: &toolr_core::trust::Trusted,
     resolved: toolr_core::venv::ResolvedVenv,
 ) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
     use toolr_core::project::{SYNC_LATER_HINT, SyncAfterTrust, sync_after_trust_on_tty};
-    let outcome = sync_after_trust_on_tty(trusted, false, false)?;
-    if matches!(outcome, SyncAfterTrust::Declined) {
-        anyhow::bail!(SYNC_LATER_HINT);
+    match sync_after_trust_on_tty(trusted, false)? {
+        SyncAfterTrust::Declined => anyhow::bail!(SYNC_LATER_HINT),
+        SyncAfterTrust::Synced(synced) => Ok(synced),
+        SyncAfterTrust::NotNeeded => Ok(resolved),
     }
-    Ok(outcome.into_synced().unwrap_or(resolved))
 }
 
 /// A runner from another minor release can pass the schema check yet

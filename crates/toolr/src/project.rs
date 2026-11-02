@@ -59,7 +59,7 @@ fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
     use toolr_core::project::{SYNC_LATER_HINT, SyncAfterTrust, sync_after_trust_on_tty};
-    let outcome = sync_after_trust_on_tty(&trusted, quiet, quiet)
+    let outcome = sync_after_trust_on_tty(&trusted, quiet)
         .context("the repository is trusted, but syncing its tools venv failed")?;
     match outcome {
         SyncAfterTrust::Synced(resolved) if !quiet => {

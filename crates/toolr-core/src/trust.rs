@@ -33,7 +33,7 @@ pub struct TrustMode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Trusted {
     root: PathBuf,
-    prompted: bool,
+    granted_at_prompt: bool,
 }
 
 impl Trusted {
@@ -42,9 +42,11 @@ impl Trusted {
         &self.root
     }
 
-    /// Whether the user granted trust at this run's prompt.
-    pub fn prompted(&self) -> bool {
-        self.prompted
+    /// Whether the user granted trust at this run's prompt, which is what lets
+    /// dispatch go on to offer a sync. `grant()` sets it false: `toolr project
+    /// trust` is an explicit command that runs its own sync step, not a prompt.
+    pub fn granted_at_prompt(&self) -> bool {
+        self.granted_at_prompt
     }
 
     /// True when this proof covers `root`.
@@ -56,7 +58,7 @@ impl Trusted {
     pub(crate) fn for_tests(root: &Path) -> Self {
         Self {
             root: canonical(root),
-            prompted: false,
+            granted_at_prompt: false,
         }
     }
 }
@@ -180,7 +182,7 @@ impl TrustStore {
             record,
             Trusted {
                 root,
-                prompted: false,
+                granted_at_prompt: false,
             },
         ))
     }
@@ -296,9 +298,9 @@ fn decide(
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
 ) -> Result<Trusted, TrustError> {
     let root = canonical(root);
-    let trusted = |prompted| Trusted {
+    let trusted = |granted_at_prompt| Trusted {
         root: root.clone(),
-        prompted,
+        granted_at_prompt,
     };
     if all_env {
         return Ok(trusted(false));
@@ -429,7 +431,7 @@ mod tests {
         let f = Fixture::new();
         let store = f.store();
         let outcome = decide(&f.root(), &store, true, PROMPT, None).unwrap();
-        assert!(!outcome.prompted());
+        assert!(!outcome.granted_at_prompt());
         assert!(outcome.covers(&f.root()));
         assert!(!store.is_trusted(&f.root()).unwrap());
         assert!(store.list().unwrap().is_empty());
@@ -440,7 +442,7 @@ mod tests {
         let f = Fixture::new();
         f.store().trust(&f.root()).unwrap();
         let (r, _) = f.decide(None, PROMPT);
-        assert!(!r.unwrap().prompted());
+        assert!(!r.unwrap().granted_at_prompt());
     }
 
     #[test]
@@ -458,7 +460,7 @@ mod tests {
         let f = Fixture::new();
         let (r, err) = f.decide(Some("y\n"), PROMPT);
         let proof = r.unwrap();
-        assert!(proof.prompted());
+        assert!(proof.granted_at_prompt());
         assert_eq!(proof.root(), f.root());
         assert!(f.store().is_trusted(&f.root()).unwrap());
         assert!(err.contains("Trust it? [y/N]"));
@@ -471,7 +473,7 @@ mod tests {
         let other = TempDir::new().unwrap();
         let (record, proof) = f.store().grant(&f.root()).unwrap();
         assert_eq!(record.repo_path, f.root());
-        assert!(!proof.prompted());
+        assert!(!proof.granted_at_prompt());
         assert!(proof.covers(f.repo.path()));
         assert!(!proof.covers(other.path()));
     }

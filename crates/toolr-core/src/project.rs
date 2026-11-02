@@ -104,13 +104,12 @@ pub enum SyncAfterTrust {
     Declined,
 }
 
-impl SyncAfterTrust {
-    pub fn into_synced(self) -> Option<ResolvedVenv> {
-        match self {
-            Self::Synced(resolved) => Some(resolved),
-            _ => None,
-        }
-    }
+/// The answer to the sync prompt.
+enum SyncChoice {
+    /// Sync, with this uv install consent.
+    Run(ConsentMode),
+    /// Don't sync; end with this outcome.
+    Skip(SyncAfterTrust),
 }
 
 /// The sync prompt. It stands in for the uv install prompt, so a `y` is
@@ -143,18 +142,15 @@ pub fn sync_after_trust(
     never_prompt: bool,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
 ) -> Result<SyncAfterTrust> {
-    let consent = choose_sync(trusted, never_prompt, prompt_io)?;
-    finish_sync(trusted, quiet, consent)
+    let choice = choose_sync(trusted, never_prompt, prompt_io)?;
+    finish_sync(trusted, quiet, choice)
 }
 
 /// [`sync_after_trust`] prompting on the terminal, when stdin is one.
-pub fn sync_after_trust_on_tty(
-    trusted: &Trusted,
-    quiet: bool,
-    never_prompt: bool,
-) -> Result<SyncAfterTrust> {
+/// `quiet` both silences uv and stops the prompt.
+pub fn sync_after_trust_on_tty(trusted: &Trusted, quiet: bool) -> Result<SyncAfterTrust> {
     // The stdin lock isn't reentrant, and finding uv may lock stdin again.
-    let consent = {
+    let choice = {
         let stdin = std::io::stdin();
         let mut input = stdin.lock();
         let mut stderr = std::io::stderr();
@@ -162,29 +158,27 @@ pub fn sync_after_trust_on_tty(
             &mut input as &mut dyn BufRead,
             &mut stderr as &mut dyn Write,
         ));
-        choose_sync(trusted, never_prompt, prompt_io)?
+        choose_sync(trusted, quiet, prompt_io)?
     };
-    finish_sync(trusted, quiet, consent)
+    finish_sync(trusted, quiet, choice)
 }
 
-/// The answer to the sync prompt: `Err(outcome)` to stop with, or the uv
-/// install consent the sync runs with.
 fn choose_sync(
     trusted: &Trusted,
     never_prompt: bool,
     prompt_io: Option<(&mut dyn BufRead, &mut dyn Write)>,
-) -> Result<std::result::Result<ConsentMode, SyncAfterTrust>> {
+) -> Result<SyncChoice> {
     let repo_root = trusted.root();
     let env = ConsentMode::from_env(never_prompt);
     let can_answer = env.auto_install_env || (!never_prompt && prompt_io.is_some());
     let resolved = match resolve_venv_path(repo_root) {
         Ok(resolved) => resolved,
         // Nothing would be synced, so leave a config error for `venv sync` to report.
-        Err(_) if !can_answer => return Ok(Err(SyncAfterTrust::Declined)),
+        Err(_) if !can_answer => return Ok(SyncChoice::Skip(SyncAfterTrust::Declined)),
         Err(e) => return Err(e).context("resolving the tools venv path"),
     };
     if check_freshness(&resolved, &repo_root.join("tools")) == crate::venv::Freshness::Fresh {
-        return Ok(Err(SyncAfterTrust::NotNeeded));
+        return Ok(SyncChoice::Skip(SyncAfterTrust::NotNeeded));
     }
     let agreed = env.auto_install_env
         || match prompt_io {
@@ -192,22 +186,18 @@ fn choose_sync(
             _ => false,
         };
     if !agreed {
-        return Ok(Err(SyncAfterTrust::Declined));
+        return Ok(SyncChoice::Skip(SyncAfterTrust::Declined));
     }
-    Ok(Ok(ConsentMode {
+    Ok(SyncChoice::Run(ConsentMode {
         yes_flag: true,
         ..env
     }))
 }
 
-fn finish_sync(
-    trusted: &Trusted,
-    quiet: bool,
-    consent: std::result::Result<ConsentMode, SyncAfterTrust>,
-) -> Result<SyncAfterTrust> {
-    let consent = match consent {
-        Ok(consent) => consent,
-        Err(outcome) => return Ok(outcome),
+fn finish_sync(trusted: &Trusted, quiet: bool, choice: SyncChoice) -> Result<SyncAfterTrust> {
+    let consent = match choice {
+        SyncChoice::Run(consent) => consent,
+        SyncChoice::Skip(outcome) => return Ok(outcome),
     };
     let opts = EnsureOpts::default()
         .with_quiet(quiet)
@@ -573,6 +563,5 @@ mod tests {
         let (r, out) = after_trust(repo.path(), false, Some("n\n"));
         assert!(matches!(r, SyncAfterTrust::Declined));
         assert!(out.contains("Sync it now?"));
-        assert!(r.into_synced().is_none());
     }
 }
