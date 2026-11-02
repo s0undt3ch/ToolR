@@ -47,6 +47,15 @@ def _escape_control_chars(text: str) -> str:
     return "".join(f"\\u{{{ord(c):x}}}" if ord(c) in _UNSAFE_CHARS else c for c in text)
 
 
+def _is_pruned_dir(name: str) -> bool:
+    """Whether the ``tools/`` walks skip a directory called ``name``.
+
+    Mirrors ``is_pruned_dir`` in ``crates/toolr-core/src/hash.rs``; change
+    both together.
+    """
+    return name.startswith(".") or name == "__pycache__"
+
+
 def _reject_symlinked_modules(tools_dir: Path) -> None:
     """Raise if any ``*.py`` under ``tools_dir`` is a symlink.
 
@@ -69,7 +78,7 @@ def _reject_symlinked_modules(tools_dir: Path) -> None:
             continue
         for entry in entries:
             if entry.is_dir(follow_symlinks=False):
-                if not (entry.name.startswith(".") or entry.name == "__pycache__"):
+                if not _is_pruned_dir(entry.name):
                     pending.append(Path(entry.path))
             elif (
                 entry.is_symlink()
@@ -139,11 +148,7 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
             if entry.is_symlink():
                 continue
             if entry.is_dir():
-                if (
-                    entry.name.startswith(".")
-                    or entry.name == "__pycache__"
-                    or not entry.name.isidentifier()
-                ):
+                if _is_pruned_dir(entry.name) or not entry.name.isidentifier():
                     continue
                 is_package = True
                 stem = entry.name
