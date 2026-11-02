@@ -454,30 +454,60 @@ fn dispatch_in_tree_venv_lets_an_abandoned_cache_venv_age_out() {
     );
 }
 
-/// A sidecar that can't be written stays a warning: dispatch still reaches
-/// the runner, and nothing falls back to `tools/meta.json`.
-#[test]
+/// Run `ci hello` on the in-tree fixture with a regular file as the cache
+/// home, so writing the sidecar fails.
 #[cfg(unix)]
-fn dispatch_in_tree_venv_warns_when_cache_meta_json_cannot_be_written() {
+fn dispatch_with_unwritable_cache_home(
+    flags: &[&str],
+) -> (tempfile::TempDir, std::process::Output) {
     let tmp = preflight_fixture(&[]);
-    // A regular file where the cache home should be, so creating the slot fails.
     let blocked = tmp.path().join("not-a-dir");
     std::fs::write(&blocked, "").unwrap();
-
     let output = common::toolr()
         .current_dir(tmp.path())
         .env("XDG_CACHE_HOME", &blocked)
+        .args(flags)
         .args(["ci", "hello"])
         .output()
         .unwrap();
+    (tmp, output)
+}
+
+/// A sidecar that can't be written never stops dispatch, and for an in-tree
+/// venv only `--debug` reports it.
+#[test]
+#[cfg(unix)]
+fn dispatch_in_tree_venv_reports_unwritable_cache_meta_json_only_under_debug() {
+    let (tmp, output) = dispatch_with_unwritable_cache_home(&["--debug"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("toolr: warning: failed to touch cache meta.json"),
-        "expected the touch warning; stderr:\n{stderr}"
+        "expected the touch warning under --debug; stderr:\n{stderr}"
     );
     // The fake python exits 1: the runner was spawned, so the warning didn't abort dispatch.
     assert_eq!(output.status.code(), Some(1), "stderr:\n{stderr}");
     assert!(!tmp.path().join("tools/meta.json").exists());
+
+    let (_tmp, output) = dispatch_with_unwritable_cache_home(&[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("failed to touch cache meta.json"),
+        "in-tree touch failure should be debug-only; stderr:\n{stderr}"
+    );
+    assert_eq!(output.status.code(), Some(1), "stderr:\n{stderr}");
+}
+
+/// `-q` with a read-only cache home (common in CI) leaves stderr free of toolr output.
+#[test]
+#[cfg(unix)]
+fn dispatch_in_tree_venv_quiet_with_unwritable_cache_home_prints_nothing() {
+    let (_tmp, output) = dispatch_with_unwritable_cache_home(&["-q"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("toolr:"),
+        "expected no toolr output under -q; stderr:\n{stderr}"
+    );
+    assert_eq!(output.status.code(), Some(1), "stderr:\n{stderr}");
 }
 
 /// Regression: when the pre-flight is disabled and the runner emits a
