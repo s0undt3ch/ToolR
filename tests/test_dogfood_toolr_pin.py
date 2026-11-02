@@ -11,6 +11,7 @@ job, and every call needs an earlier guard step that fails on an empty ``TOOLR_V
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -82,8 +83,11 @@ def _loads_github_env(step: dict[str, Any]) -> bool:
 
 
 def _is_guard(step: dict[str, Any], expected_env: str | None) -> bool:
+    # A conditional or non-fatal guard can't stop the call.
     return (
         GUARD in (step.get("run") or "")
+        and "if" not in step
+        and not step.get("continue-on-error")
         and (step.get("env") or {}).get("TOOLR_VERSION") == expected_env
     )
 
@@ -110,6 +114,8 @@ def _call_offences(step_list: StepList) -> list[str]:
         else:
             offences.append(f"{step_list.where}: passes version {version!r}")
             continue
+        if "TOOLR_VERSION" in (step.get("env") or {}):
+            offences.append(f"{step_list.where}: overrides TOOLR_VERSION on the `uses: ./` step")
         if not any(_is_guard(prior, guard_env) for prior in earlier):
             offences.append(f"{step_list.where}: no earlier `{GUARD}` guard step")
     return offences
@@ -202,10 +208,11 @@ def _guard_scripts() -> list[str]:
 @pytest.mark.parametrize(("value", "passes"), [("", False), ("0.35.1", True)])
 def test_guard_fails_on_an_empty_pin(script: str, value: str, passes: bool) -> None:
     bash = shutil.which("bash")
-    assert bash is not None, "bash is not available"
+    if bash is None:
+        pytest.skip("bash not available; the guard steps only run on ubuntu runners")
     result = subprocess.run(  # noqa: S603  # bash + script come from this repo's workflows
         [bash, "-e", "-c", script],
-        env={"PATH": "/usr/bin:/bin", "TOOLR_VERSION": value},
+        env={**os.environ, "TOOLR_VERSION": value},
         capture_output=True,
         text=True,
         check=False,
