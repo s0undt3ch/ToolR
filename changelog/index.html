@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev269-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev283-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev269 - 2026-11-02
+        0.35.2-dev283 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev269 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev283 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev269-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev283-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev269 - 2026-11-02
+        0.35.2-dev283 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev269 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev283 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev269-2026-11-02">0.35.2-dev269 - 2026-11-02<a class="headerlink" href="#0352-dev269-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev283-2026-11-02">0.35.2-dev283 - 2026-11-02<a class="headerlink" href="#0352-dev283-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7640,6 +7640,11 @@ used to hide those errors and pass, sometimes with a group that had no commands.
 keeps the standard library on <code>sys.path</code> now: a <code>tools/*.py</code> that imports <code>sqlite3</code>, <code>tomllib</code> or
 another stdlib module not loaded yet used to vanish from <code>collected_command_groups()</code> without an
 error. A discovery test that passed only because of either problem now fails.</p>
+<p>A relative default on a path-typed argument, such as <code>cfg: FilePath = "tools/pyproject.toml"</code>, now resolves from
+the repo root, the same place the command runs. It used to be checked against the directory you ran <code>toolr</code>
+from, so from a subdirectory both the command and its <code>--help</code> failed with "path does not exist". An
+<code>AbsolutePath</code> or <code>NewPath</code> default, or <code>DirectoryPath = "."</code>, now also names a path under the repo root wherever
+you run from. A path you type on the command line still resolves from your current directory.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7714,6 +7719,10 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(testing)</em> Report failing tools subpackages instead of aborting discovery (<a href="https://github.com/s0undt3ch/ToolR/commit/c5e492aab53e5a40f395ce04c00affd87aa1ba25"><code>c5e492a</code></a>)</li>
 <li><em>(testing)</em> Walk tools subdirectories without <strong>init</strong>.py (<a href="https://github.com/s0undt3ch/ToolR/commit/fbf2474be3e4647f583dd70aa7f89fa11eafc2a2"><code>fbf2474</code></a>)</li>
 <li><em>(testing)</em> Match the tools name exactly when isolating sys.path (<a href="https://github.com/s0undt3ch/ToolR/commit/7e979fe786284ee4a6e5ab4378d3485e2bfb5ecf"><code>7e979fe</code></a>)</li>
+<li><em>(cli)</em> Resolve relative path defaults from the repo root (<a href="https://github.com/s0undt3ch/ToolR/commit/348804d369a25ed675f54fee162ae43f2180a70a"><code>348804d</code></a>)</li>
+<li><em>(cli)</em> Resolve an env-var path value from the current directory (<a href="https://github.com/s0undt3ch/ToolR/commit/09210fee6931d5b0da7d33ec8d008f7797a03b64"><code>09210fe</code></a>)</li>
+<li><em>(cli)</em> Report a bad path value before the trust prompt (<a href="https://github.com/s0undt3ch/ToolR/commit/977320e37394f7a1c18131e9102a9136bb36effd"><code>977320e</code></a>)</li>
+<li><em>(cli)</em> Render a bad deferred path value as clap does (<a href="https://github.com/s0undt3ch/ToolR/commit/3c79c7a5680efa636bbdc2123219b325c76376d3"><code>3c79c7a</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7739,6 +7748,7 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(release)</em> Split the commit step's path comparison from its reporting (<a href="https://github.com/s0undt3ch/ToolR/commit/1f70d9949439f3a5b347779b97ac0ee1c4366bac"><code>1f70d99</code></a>)</li>
 <li><em>(release)</em> Give push-failure messages one shape (<a href="https://github.com/s0undt3ch/ToolR/commit/4e26ea5ccf6bcc5b2ec58cc6cdf1fcaa825ce234"><code>4e26ea5</code></a>)</li>
 <li><em>(testing)</em> Tie the discovery walk to the manifest walk (<a href="https://github.com/s0undt3ch/ToolR/commit/c7b23fb9b4348bde6ab1da390d34e2cd86817e6e"><code>c7b23fb</code></a>)</li>
+<li><em>(cli)</em> Carry the deferred path rule instead of re-deriving it (<a href="https://github.com/s0undt3ch/ToolR/commit/57ebe2c13be8319b9ad4a4ea64702c12dfdd0a57"><code>57ebe2c</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7807,6 +7817,9 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(specs)</em> Spec and plan F-15 toolr-py dependencies (<a href="https://github.com/s0undt3ch/ToolR/commit/ca0425ed92e6292ec22574fe75d2b7b9b5b19db8"><code>ca0425e</code></a>)</li>
 <li><em>(specs)</em> Archive toolr-py deps design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/64a52352fc484214b763aa67cb4833fcd6c8d8ef"><code>64a5235</code></a>)</li>
 <li><em>(contributing)</em> Explain toolr-core's full feature and the lean build (<a href="https://github.com/s0undt3ch/ToolR/commit/f7d430bfb811cd9e227531d1d90c13258c38d7ac"><code>f7d430b</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-11 path default repo root (<a href="https://github.com/s0undt3ch/ToolR/commit/33fdfc7ad51386a71993743b104978f616a2d155"><code>33fdfc7</code></a>)</li>
+<li><em>(cli)</em> Relative path defaults resolve from the repo root (<a href="https://github.com/s0undt3ch/ToolR/commit/31def937e55227e717637521d093c308ce3fc6db"><code>31def93</code></a>)</li>
+<li><em>(specs)</em> Archive path default repo root design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/28932764724b48dbcac963e8c4febac21d561c07"><code>2893276</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7842,6 +7855,10 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(release)</em> Prove the strict prek pass is what fails the commit step (<a href="https://github.com/s0undt3ch/ToolR/commit/75d0f8ff9d4ddcc491810c66a14df9b3aeb5c452"><code>75d0f8f</code></a>)</li>
 <li><em>(action)</em> Simplify the resolve-version harness (<a href="https://github.com/s0undt3ch/ToolR/commit/5cd23f3679a18e3c4dd533432f16eefb1d7a9f79"><code>5cd23f3</code></a>)</li>
 <li><em>(testing)</em> Cover a tools package that raises on import (<a href="https://github.com/s0undt3ch/ToolR/commit/bc85737a08b2a57b847a0dc9182c6032a064ba9d"><code>bc85737</code></a>)</li>
+<li><em>(cli)</em> Relative path defaults from a subdirectory (<a href="https://github.com/s0undt3ch/ToolR/commit/2b729139ad08d05d397f288724fccd506f1ded12"><code>2b72913</code></a>)</li>
+<li><em>(cli)</em> Run path default fixtures under an in-tree stand-in venv (<a href="https://github.com/s0undt3ch/ToolR/commit/39508b5310ef1e34166babacd99149fc306e4f32"><code>39508b5</code></a>)</li>
+<li><em>(cli)</em> Pin the deferred path parser and extraction pairing (<a href="https://github.com/s0undt3ch/ToolR/commit/c1ae6fa9495ad7532c463fcef0b2a514a833260b"><code>c1ae6fa</code></a>)</li>
+<li><em>(cli)</em> Share one path-default fixture and run helper (<a href="https://github.com/s0undt3ch/ToolR/commit/72f3cd75ba42f809b321a3646cbd19c097848844"><code>72f3cd7</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
