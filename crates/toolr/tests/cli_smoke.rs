@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use assert_cmd::Command;
 use tempfile::TempDir;
+#[cfg(unix)]
+use toolr_core::venv::VenvLocation;
 
 fn fixture_with_manifest(json: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
@@ -349,6 +351,171 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
             || stderr.contains("Python interpreter not found at"),
         "stderr should not be just the bare io::Error display; stderr:\n{stderr}"
     );
+}
+
+/// Regression: dispatching against an in-tree venv used to write the
+/// `meta.json` sidecar to `venv_dir.parent()`, i.e. an untracked
+/// `tools/meta.json` that `toolr self cache list` never saw. It must land in
+/// the out-of-repo cache slot `toolr project venv sync` already uses.
+#[test]
+#[cfg(unix)]
+fn dispatch_in_tree_venv_keeps_meta_json_out_of_tools() {
+    let tmp = preflight_fixture(&[]);
+
+    // The fake python exits 1; only the sidecar side effect matters here.
+    let output = preflight_cmd(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !tmp.path().join("tools/meta.json").exists(),
+        "dispatch must not write tools/meta.json; stderr:\n{stderr}"
+    );
+
+    let cache_root = preflight_cache_home(tmp.path()).join("toolr");
+    let metas: Vec<PathBuf> = std::fs::read_dir(&cache_root)
+        .unwrap_or_else(|e| panic!("no cache root {cache_root:?} ({e}); stderr:\n{stderr}"))
+        .map(|entry| entry.unwrap().path().join("meta.json"))
+        .filter(|p| p.is_file())
+        .collect();
+    assert_eq!(
+        metas.len(),
+        1,
+        "expected one cache meta.json, got {metas:?}; stderr:\n{stderr}"
+    );
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&metas[0]).unwrap()).unwrap();
+    let canonical = tmp.path().canonicalize().unwrap();
+    assert_eq!(
+        meta["repo_path"].as_str().map(PathBuf::from),
+        Some(canonical.clone()),
+        "meta.json repo_path should be the canonical repo; meta: {meta}"
+    );
+
+    let list = preflight_cmd(tmp.path())
+        .args(["self", "cache", "list"])
+        .output()
+        .unwrap();
+    let list_stdout = String::from_utf8_lossy(&list.stdout);
+    assert!(
+        list_stdout.contains(&*canonical.to_string_lossy()),
+        "`self cache list` should show the in-tree repo; stdout:\n{list_stdout}"
+    );
+}
+
+/// A repo that moved from a cache venv to an in-tree one leaves
+/// `<cache>/toolr/<repo-key>/venv/` behind. In-tree dispatch must not refresh
+/// that slot's `last_used_at`, or `self cache prune` could never reclaim it.
+#[test]
+#[cfg(unix)]
+fn dispatch_in_tree_venv_lets_an_abandoned_cache_venv_age_out() {
+    let tmp = preflight_fixture(&[]);
+    let canonical = tmp.path().canonicalize().unwrap();
+    let cache_root = preflight_cache_home(tmp.path()).join("toolr");
+
+    // The slot the repo's cache venv used before the switch, last used 90 days ago.
+    let resolved = toolr_core::venv::resolve_venv_path(tmp.path()).unwrap();
+    let abandoned = toolr_core::venv::cache_slot_dir(
+        &cache_root,
+        tmp.path(),
+        &resolved.python_version,
+        VenvLocation::Cache,
+    )
+    .unwrap();
+    std::fs::create_dir_all(abandoned.join("venv/bin")).unwrap();
+    let mut old = toolr_core::cache::Meta::new(
+        canonical.clone(),
+        env!("CARGO_PKG_VERSION"),
+        resolved.python_version.clone(),
+    );
+    old.last_used_at -= chrono::Duration::days(90);
+    old.write(&abandoned).unwrap();
+
+    let output = preflight_cmd(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        toolr_core::cache::Meta::load(&abandoned)
+            .unwrap()
+            .last_used_at,
+        old.last_used_at,
+        "in-tree dispatch refreshed the abandoned cache venv's slot; stderr:\n{stderr}"
+    );
+
+    let prune = preflight_cmd(tmp.path())
+        .args(["self", "cache", "prune", "--stale-after-days", "30"])
+        .output()
+        .unwrap();
+    assert!(
+        prune.status.success(),
+        "prune failed: {}",
+        String::from_utf8_lossy(&prune.stderr)
+    );
+    assert!(
+        !abandoned.exists(),
+        "prune should reclaim the abandoned venv; stdout:\n{}",
+        String::from_utf8_lossy(&prune.stdout)
+    );
+}
+
+/// Run `ci hello` against a venv at `location` whose cache slot has a
+/// directory where `meta.json` should be, so touching the sidecar fails.
+#[cfg(unix)]
+fn dispatch_with_unwritable_meta_json(
+    location: VenvLocation,
+    flags: &[&str],
+) -> std::process::Output {
+    let tmp = preflight_fixture(&[]);
+    let resolved = toolr_core::venv::resolve_venv_path(tmp.path()).unwrap();
+    let slot = toolr_core::venv::cache_slot_dir(
+        &preflight_cache_home(tmp.path()).join("toolr"),
+        tmp.path(),
+        &resolved.python_version,
+        location,
+    )
+    .unwrap();
+    std::fs::create_dir_all(slot.join("meta.json")).unwrap();
+    let mut cmd = preflight_cmd(tmp.path());
+    if location == VenvLocation::Cache {
+        // Reuse the fixture's fake venv from the cache slot.
+        std::os::unix::fs::symlink(tmp.path().join("tools/.venv"), slot.join("venv")).unwrap();
+        cmd.env("TOOLR_VENV_LOCATION", "cache");
+    }
+    cmd.args(flags).args(["ci", "hello"]).output().unwrap()
+}
+
+/// A sidecar that can't be written never stops dispatch. A cache venv warns
+/// unless `-q`; an in-tree venv, often under a read-only cache home in CI,
+/// warns only with `--debug`.
+#[test]
+#[cfg(unix)]
+fn dispatch_touch_failure_warning_follows_location_and_verbosity() {
+    let cases: &[(VenvLocation, &[&str], bool)] = &[
+        (VenvLocation::InTree, &[], false),
+        (VenvLocation::InTree, &["-q"], false),
+        (VenvLocation::InTree, &["--debug"], true),
+        (VenvLocation::Cache, &[], true),
+        (VenvLocation::Cache, &["-q"], false),
+        (VenvLocation::Cache, &["--debug"], true),
+    ];
+    for &(location, flags, warns) in cases {
+        let output = dispatch_with_unwritable_meta_json(location, flags);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let case = format!("{location:?} {flags:?}");
+        assert_eq!(
+            stderr.contains("toolr: warning: failed to touch cache meta.json"),
+            warns,
+            "{case}: stderr:\n{stderr}"
+        );
+        if flags == ["-q"] {
+            assert!(!stderr.contains("toolr:"), "{case}: stderr:\n{stderr}");
+        }
+        // The fake python exits 1: the runner was spawned, so the failure didn't abort dispatch.
+        assert_eq!(output.status.code(), Some(1), "{case}: stderr:\n{stderr}");
+    }
 }
 
 /// Regression: when the pre-flight is disabled and the runner emits a

@@ -293,21 +293,26 @@ pub fn dispatch(
     let tempfile = write_spec_to_tempfile(&spec)?;
     let resolved = resolve_venv_path(&repo_root)?;
     let quiet = output_opts.verbosity == "quiet";
+    let verbose = output_opts.verbosity == "verbose";
     let resolved = resync_if_needed(&repo_root, resolved, quiet)?;
     let python = resolved.python.clone();
 
-    // Touch last_used_at on every invocation against a cached venv.
-    // Backfill a fresh `meta.json` for cache entries that predate the
-    // sidecar — without this, `toolr self cache list` would silently
-    // hide venvs created by older binaries.
-    if let Some(cache_dir) = resolved.venv_dir.parent() {
-        let py_ver = resolved.python_version.as_str();
-        if let Err(e) = toolr_core::cache::touch_or_backfill(
-            cache_dir,
+    // Touch last_used_at, backfilling `meta.json` for entries that predate it,
+    // in the slot sync writes so `toolr self cache list` sees this repo.
+    let touched = toolr_core::project::meta_cache_dir(&repo_root, &resolved).and_then(|dir| {
+        toolr_core::cache::touch_or_backfill(
+            &dir,
             &repo_root,
             env!("CARGO_PKG_VERSION"),
-            py_ver,
-        ) {
+            &resolved.python_version,
+        )
+        .map_err(anyhow::Error::from)
+    });
+    if let Err(e) = touched {
+        // `finalize_sync` fails on this write; dispatch only warns, as the command runs without it.
+        // In-tree venvs, often under a read-only cache home (CI), warn only with --debug.
+        let in_tree = resolved.is_in_tree();
+        if (in_tree && verbose) || (!in_tree && !quiet) {
             eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
         }
     }

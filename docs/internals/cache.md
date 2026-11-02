@@ -10,10 +10,18 @@ $XDG_CACHE_HOME/toolr/
 ├── <repo-key-1>/
 │   ├── meta.json
 │   └── venv/
-└── <repo-key-2>/
-    ├── meta.json
-    └── venv/
+├── <repo-key-2>/
+│   ├── meta.json
+│   └── venv/
+└── <repo-key-3>-in-tree/
+    └── meta.json
 ```
+
+A repo with an in-tree venv (`venv-location = "in-tree"`) keeps its venv at
+`tools/.venv`, so its entry holds only `meta.json`. The `-in-tree` suffix keeps
+that entry apart from the one the repo's cache venv used: after a switch to
+in-tree, the old `venv/` stops being touched and ages out like any stale entry.
+`toolr self cache prune` on an in-tree entry removes the sidecar, not the venv.
 
 toolr's managed copy of uv lives in the data directory, not here. See
 [Finding uv](../installation/index.md#finding-uv).

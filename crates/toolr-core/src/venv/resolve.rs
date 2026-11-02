@@ -26,6 +26,33 @@ pub struct ResolvedVenv {
     pub config: ToolrConfig,
 }
 
+impl ResolvedVenv {
+    /// True when the venv lives in the repo (`tools/.venv`), not the cache.
+    pub fn is_in_tree(&self) -> bool {
+        self.repo_key.is_empty()
+    }
+}
+
+/// Suffix of the cache slot that holds only an in-tree venv's `meta.json`.
+/// It keeps that slot apart from the one the repo's cache venv uses, so a
+/// repo that moved to in-tree stops refreshing its abandoned `venv/`.
+pub const IN_TREE_SLOT_SUFFIX: &str = "-in-tree";
+
+/// The repo's slot under `cache_root` (toolr's cache dir): `<repo-key>/` for a
+/// cache venv and its sidecar, `<repo-key>-in-tree/` for an in-tree venv's sidecar.
+pub fn cache_slot_dir(
+    cache_root: &Path,
+    repo_root: &Path,
+    python_version: &str,
+    location: VenvLocation,
+) -> Result<PathBuf> {
+    let key = compute_repo_key(repo_root, python_version)?;
+    Ok(match location {
+        VenvLocation::Cache => cache_root.join(key),
+        VenvLocation::InTree => cache_root.join(format!("{key}{IN_TREE_SLOT_SUFFIX}")),
+    })
+}
+
 /// Resolve the tools venv path for the given repo root.
 pub fn resolve_venv_path(repo_root: &Path) -> Result<ResolvedVenv> {
     let tools = repo_root.join("tools");
@@ -51,10 +78,11 @@ pub fn resolve_venv_path(repo_root: &Path) -> Result<ResolvedVenv> {
     let (venv_dir, repo_key) = match venv_location {
         VenvLocation::InTree => (tools.join(".venv"), String::new()),
         VenvLocation::Cache => {
-            let key = compute_repo_key(repo_root, &python_version)?;
             let base = toolr_cache_dir()
                 .ok_or_else(|| anyhow::anyhow!("could not resolve toolr cache directory"))?;
-            (base.join(&key).join("venv"), key)
+            let slot = cache_slot_dir(&base, repo_root, &python_version, VenvLocation::Cache)?;
+            let key = compute_repo_key(repo_root, &python_version)?;
+            (slot.join("venv"), key)
         }
     };
 
@@ -85,6 +113,17 @@ mod tests {
         std::fs::create_dir(&tools).unwrap();
         std::fs::write(tools.join("pyproject.toml"), body).unwrap();
         tmp
+    }
+
+    #[test]
+    fn cache_slot_dir_keeps_in_tree_sidecar_apart_from_the_cache_venv_slot() {
+        let tmp = TempDir::new().unwrap();
+        let root = Path::new("/cache/toolr");
+        let key = compute_repo_key(tmp.path(), "3.13").unwrap();
+        let cache = cache_slot_dir(root, tmp.path(), "3.13", VenvLocation::Cache).unwrap();
+        let in_tree = cache_slot_dir(root, tmp.path(), "3.13", VenvLocation::InTree).unwrap();
+        assert_eq!(cache, root.join(&key));
+        assert_eq!(in_tree, root.join(format!("{key}{IN_TREE_SLOT_SUFFIX}")));
     }
 
     #[test]
