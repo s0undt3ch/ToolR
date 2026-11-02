@@ -63,8 +63,7 @@ cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH.
   # gh before 2.56 can't load GitHub's current Sigstore trusted root, so
   # an old gh fails in `auto` too rather than skipping silently.
   $ghVersion = (& gh --version | Select-Object -First 1) -as [string]
-  if (-not ($ghVersion -match '^gh version (\d+)\.(\d+)') -or
-      [int]$matches[1] -lt 2 -or ([int]$matches[1] -eq 2 -and [int]$matches[2] -lt 56)) {
+  if (-not ($ghVersion -match '^gh version (\d+\.\d+)') -or [version]$matches[1] -lt [version]'2.56') {
     throw @"
 gh >= 2.56 is required to verify attestations (found: $ghVersion)
   upgrade 'gh', or re-run with -VerifyAttestation skip to install WITHOUT supply-chain verification.
@@ -77,24 +76,29 @@ gh >= 2.56 is required to verify attestations (found: $ghVersion)
   $releaseWorkflow = "https://github.com/$Repo/.github/workflows/release.yml@refs/heads/main"
   $archiveName = Split-Path -Leaf $Path
   $jqFilter = '[.[].verificationResult | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))] | length'
-  $archiveSha256 = (Get-FileHash -Algorithm SHA256 $Path).Hash.ToLower()
-  $savedEnv = @{
-    RELEASE_WORKFLOW = $env:RELEASE_WORKFLOW
-    ARCHIVE_NAME = $env:ARCHIVE_NAME
-    ARCHIVE_SHA256 = $env:ARCHIVE_SHA256
+  # What the filter reads as env.*; `irm | iex` runs in the caller's session, so restore them after.
+  $filterEnv = @{
+    RELEASE_WORKFLOW = $releaseWorkflow
+    ARCHIVE_NAME = $archiveName
+    # Get-FileHash prints uppercase hex; attestation digests are lowercase.
+    ARCHIVE_SHA256 = (Get-FileHash -Algorithm SHA256 $Path).Hash.ToLower()
+  }
+  $savedEnv = @{}
+  foreach ($name in $filterEnv.Keys) {
+    $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
   }
   Write-Host "verifying SLSA build provenance via 'gh attestation verify'"
   try {
-    $env:RELEASE_WORKFLOW = $releaseWorkflow
-    $env:ARCHIVE_NAME = $archiveName
-    $env:ARCHIVE_SHA256 = $archiveSha256
+    foreach ($name in $filterEnv.Keys) {
+      [Environment]::SetEnvironmentVariable($name, $filterEnv[$name], "Process")
+    }
     $count = & gh attestation verify $Path --repo $Repo --cert-identity $signerWorkflow `
       --deny-self-hosted-runners --format json --jq $jqFilter
     $ghExit = $LASTEXITCODE
   } finally {
-    $env:RELEASE_WORKFLOW = $savedEnv.RELEASE_WORKFLOW
-    $env:ARCHIVE_NAME = $savedEnv.ARCHIVE_NAME
-    $env:ARCHIVE_SHA256 = $savedEnv.ARCHIVE_SHA256
+    foreach ($name in $savedEnv.Keys) {
+      [Environment]::SetEnvironmentVariable($name, $savedEnv[$name], "Process")
+    }
   }
   if ($ghExit -ne 0) {
     throw "attestation verification failed for $Path"
