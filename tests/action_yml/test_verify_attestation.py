@@ -30,6 +30,7 @@ WORKFLOWS = "https://github.com/s0undt3ch/ToolR/.github/workflows"
 RELEASE_BUILD = f"{WORKFLOWS}/release.yml@refs/heads/main"
 CI_BUILD = f"{WORKFLOWS}/ci.yml@refs/heads/main"
 MAIN_SIGNER = f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/main"
+ARCHIVE_NAME = "toolr-0.35.1-x86_64-unknown-linux-musl.tar.gz"
 REJECTED = "not built by the ToolR release workflow on main"
 
 
@@ -54,10 +55,14 @@ def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[s
     """Return a callable that runs the verify-attestation script.
 
     `build_configs` is the `buildConfigURI` of each verified attestation
-    the stubbed `gh` reports, all signed by `signer`. A non-zero `gh_rc`
-    makes the stub fail the way `gh attestation verify` does when no
-    attestation verifies. `gh_version` is what `gh --version` reports.
-    Every other `gh` argument list is appended to `tmp_path / "gh_calls"`.
+    the stubbed `gh` reports. Each is signed by `signer` and names
+    `subject` (default: the archive under test) as its statement subject.
+    `san_as_object` reports the signer the way gh 2.51 to 2.53 did, as
+    `{"type": …, "value": …}`. `stdout` replaces the filtered output. A
+    non-zero `gh_rc` makes the stub fail the way `gh attestation verify`
+    does when no attestation verifies. `gh_version` is what
+    `gh --version` reports. Every other `gh` argument list is appended to
+    `tmp_path / "gh_calls"`.
     """
     script_body = _step_script("verify-attestation")
     calls = tmp_path / "gh_calls"
@@ -66,24 +71,33 @@ def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[s
         *,
         build_configs: list[str],
         signer: str = MAIN_SIGNER,
+        subject: str = ARCHIVE_NAME,
+        san_as_object: bool = False,
+        stdout: str | None = None,
         gh_rc: int = 0,
         gh_version: str = "2.103.2",
     ) -> subprocess.CompletedProcess[str]:
+        san: object = {"type": "URI", "value": signer} if san_as_object else signer
         payload = json.dumps(
             [
                 {
                     "verificationResult": {
                         "signature": {
                             "certificate": {
-                                "subjectAlternativeName": signer,
+                                "subjectAlternativeName": san,
                                 "buildConfigURI": uri,
                             }
-                        }
+                        },
+                        "statement": {"subject": [{"name": subject}]},
                     }
                 }
                 for uri in build_configs
             ]
         )
+        if stdout is None:
+            emit = f'printf "%s" {shlex.quote(payload)} | jq -c "$jq_expr"'
+        else:
+            emit = f"printf '%s\\n' {shlex.quote(stdout)}"
         stub = f"""
 gh() {{
   if [ "$1" = "--version" ]; then
@@ -103,10 +117,10 @@ gh() {{
     fi
     shift
   done
-  printf '%s' {shlex.quote(payload)} | jq -c "$jq_expr"
+  {emit}
 }}
 """
-        archive = tmp_path / "toolr-0.35.1-x86_64-unknown-linux-musl.tar.gz"
+        archive = tmp_path / ARCHIVE_NAME
         archive.write_bytes(b"")
         wrapped = (
             "#!/bin/bash\n"
@@ -223,22 +237,69 @@ def test_rejects_signer_off_main(
     assert REJECTED in result.stderr
 
 
-@pytest.mark.parametrize("gh_version", ["2.50.0", "2.49.2", "garbage"])
-def test_rejects_gh_older_than_2_51(
+@pytest.mark.parametrize("gh_version", ["2.55.0", "2.51.0", "1.99.0", "garbage"])
+def test_rejects_gh_older_than_2_56(
     verify_runner: Callable[..., subprocess.CompletedProcess[str]],
     tmp_path: Path,
     gh_version: str,
 ) -> None:
+    """gh before 2.56 can't verify ToolR attestations, so fail before calling it."""
     result = verify_runner(build_configs=[RELEASE_BUILD], gh_version=gh_version)
     assert result.returncode != 0
-    assert "setup-toolr: gh >= 2.51 is required to verify attestations" in result.stderr
+    assert "setup-toolr: gh >= 2.56 is required to verify attestations" in result.stderr
     assert not (tmp_path / "gh_calls").exists()
 
 
-@pytest.mark.parametrize("gh_version", ["2.51.0", "2.103.2", "3.0.0"])
-def test_accepts_gh_2_51_and_later(
+@pytest.mark.parametrize("gh_version", ["2.56.0", "2.103.2", "3.0.0"])
+def test_accepts_gh_2_56_and_later(
     verify_runner: Callable[..., subprocess.CompletedProcess[str]],
     gh_version: str,
 ) -> None:
     result = verify_runner(build_configs=[RELEASE_BUILD], gh_version=gh_version)
     assert result.returncode == 0, result.stderr
+
+
+def test_accepts_signer_reported_as_object(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    result = verify_runner(build_configs=[RELEASE_BUILD], san_as_object=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_rejects_object_signer_off_main(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    result = verify_runner(
+        build_configs=[RELEASE_BUILD],
+        signer=f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/feature",
+        san_as_object=True,
+    )
+    assert result.returncode != 0
+    assert REJECTED in result.stderr
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "toolr-0.34.0-x86_64-unknown-linux-musl.tar.gz",
+        "toolr-0.35.1-aarch64-unknown-linux-musl.tar.gz",
+    ],
+)
+def test_rejects_attestation_for_another_archive(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+    subject: str,
+) -> None:
+    """An older or other-triple release archive renamed into place is rejected."""
+    result = verify_runner(build_configs=[RELEASE_BUILD], subject=subject)
+    assert result.returncode != 0
+    assert REJECTED in result.stderr
+
+
+@pytest.mark.parametrize("stdout", ["abc", "", "1 1"])
+def test_non_numeric_count_fails_closed(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+    stdout: str,
+) -> None:
+    result = verify_runner(build_configs=[RELEASE_BUILD], stdout=stdout)
+    assert result.returncode != 0
+    assert REJECTED in result.stderr

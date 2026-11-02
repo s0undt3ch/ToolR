@@ -291,28 +291,36 @@ runs:
           echo "setup-toolr: install gh or pass 'skip-attestation: true' to bypass" >&2
           exit 1
         fi
-        # `--signer-workflow` and `--format json` arrived in gh 2.51;
-        # older gh fails with a bare "unknown flag".
-        gh_version=$(gh --version | sed -n 's/^gh version \([0-9][0-9.]*\).*/\1/p' | head -n 1)
-        if [ -z "$gh_version" ] || [ "$(printf '%s\n%s\n' 2.51.0 "$gh_version" | sort -V | head -n 1)" != "2.51.0" ]; then
-          echo "setup-toolr: gh >= 2.51 is required to verify attestations (found ${gh_version:-unknown})" >&2
+        # gh before 2.56 either reports the certificate SAN as an object or
+        # can't load GitHub's current trusted root, so it can't verify here.
+        gh_version=$(gh --version | sed -n 's/^gh version \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)
+        gh_major=${gh_version%%.*}
+        gh_minor=${gh_version#*.}
+        if [ -z "$gh_version" ] || [ "$gh_major" -lt 2 ] || { [ "$gh_major" -eq 2 ] && [ "$gh_minor" -lt 56 ]; }; then
+          echo "setup-toolr: gh >= 2.56 is required to verify attestations (found ${gh_version:-unknown})" >&2
           exit 1
         fi
         # `ci.yml` calls the same signing workflow as releases, so only the
         # certificate's `buildConfigURI` tells a release from a CI build. Both
         # it and the signer are pinned to `main`: another ref can carry an
-        # edited `release.yml` without the release environment gate.
+        # edited `release.yml` without the release environment gate. The
+        # subject name binds the attestation to this exact version and triple.
+        ARCHIVE_NAME="${ARCHIVE_PATH##*/}"
+        export ARCHIVE_NAME
         count=$(gh attestation verify "$ARCHIVE_PATH" \
           --repo s0undt3ch/ToolR \
           --signer-workflow s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main \
           --deny-self-hosted-runners \
           --format json \
-          --jq '[.[].verificationResult.signature.certificate
-                 | select(.subjectAlternativeName == "https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main"
-                          and .buildConfigURI == "https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main")]
+          --jq '[.[].verificationResult
+                 | select((.signature.certificate.subjectAlternativeName | if type == "object" then .value else . end)
+                            == "https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main"
+                          and .signature.certificate.buildConfigURI
+                            == "https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main"
+                          and any(.statement.subject[]; .name == env.ARCHIVE_NAME))]
                 | length')
-        if [ -z "$count" ] || [ "$count" -lt 1 ]; then
-          echo "setup-toolr: ${ARCHIVE_PATH##*/} has a valid ToolR attestation but was not built by the ToolR release workflow on main" >&2
+        if ! [ "$count" -ge 1 ] 2>/dev/null; then
+          echo "setup-toolr: ${ARCHIVE_NAME} has a valid ToolR attestation but was not built by the ToolR release workflow on main" >&2
           echo "setup-toolr: install a published release; 'skip-attestation: true' turns off this check entirely" >&2
           exit 1
         fi
