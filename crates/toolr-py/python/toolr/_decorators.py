@@ -18,6 +18,7 @@ from collections.abc import Callable
 from types import FunctionType
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import NamedTuple
 from typing import cast
 from typing import overload
 
@@ -214,6 +215,45 @@ def _get_command_group_storage() -> dict[str, CommandGroup]:
     return collector
 
 
+def _group_full_name(group: str) -> str:
+    """The registry key for a ``group=`` path: ``"ci.helm"`` is ``"tools.ci.helm"``."""
+    return f"tools.{group}"
+
+
+def _group_path(full_name: str) -> str:
+    """The ``group=`` path for a registry key, the inverse of :func:`_group_full_name`."""
+    return full_name.removeprefix("tools.")
+
+
+class PendingCommand(NamedTuple):
+    """A standalone ``@command`` waiting for its group to be declared."""
+
+    group: str
+    """The ``group=`` path as written; ``""`` when it was missing."""
+    name: str
+    """The command's CLI name."""
+    func: Callable[..., Any]
+    """The decorated function."""
+
+
+def _get_pending_command_storage() -> list[PendingCommand]:
+    """Get the standalone commands whose group isn't declared yet.
+
+    Entries are in declaration order. ``command_group()`` takes
+    its own entries when it creates the group, so the import order of
+    ``tools/`` modules doesn't matter.
+
+    Only ``CommandsTester`` keeps entries: it patches this function to
+    return its own list. Nothing else reads them, so by default each call
+    returns a new list and the entry is dropped, instead of sitting in
+    process-wide state for a later ``command_group()`` to pick up.
+
+    Returns:
+        The pending entries
+    """
+    return []
+
+
 @overload
 def command(name: F) -> F: ...
 
@@ -239,6 +279,14 @@ def command(
     (``@command("snippet-checker", group=...)``) or by keyword
     (``@command(name="snippet-checker", group=...)``) — but not both;
     doing so raises ``TypeError``.
+
+    toolr reads this decorator from the source without running it, so
+    only one shape counts: ``from toolr import command``, then
+    ``@command(...)`` on a top-level ``def`` with ``group=`` (and any
+    name) as a string literal. ``@toolr.command``, an aliased import, a
+    nested ``def`` or ``group=SOME_CONSTANT`` run here, and pass under
+    :class:`toolr.testing.CommandsTester`, but toolr doesn't register
+    them or fails to build.
 
     Usage::
 
@@ -268,9 +316,10 @@ def command(
             with a clear error.
 
     Returns:
-        The decorated function unchanged; the decorator's only job is
-        to record metadata that the static parser picks up. At runtime
-        toolr calls the function directly with the parsed args.
+        The decorated function unchanged. With ``group=``, it is also
+        recorded under that group, as ``@<binding>.command`` would, so
+        :class:`toolr.testing.CommandsTester` sees it. At runtime toolr
+        calls the function directly with the parsed args.
     """
     # Bare form: @command def f(...) — no kwargs allowed in this shape.
     if callable(name):
@@ -281,15 +330,38 @@ def command(
             )
             raise TypeError(err_msg)
         _require_docstring(name)
+        _record_standalone_command(name, None, None)
         return name
 
     # Parameterised form: @command(...) — returns a decorator. The static
-    # parser is what consumes the `group=` / `name` strings.
+    # parser reads the `group=` / `name` strings; the registry records them
+    # for `CommandsTester`.
+    explicit_name = name
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         _require_docstring(func)
+        _record_standalone_command(func, explicit_name, group)
         return func
 
     return decorator
+
+
+def _record_standalone_command(
+    func: Callable[..., Any], explicit_name: str | None, group: str | None
+) -> None:
+    """Attach a standalone ``@command`` to its group, or park it as pending.
+
+    A command with no ``group=`` (or ``group=""``) is parked under ``""``,
+    which no group ever takes, so ``CommandsTester`` reports it as the
+    manifest build does.
+    """
+    cli_name = explicit_name if explicit_name is not None else func.__name__.replace("_", "-")
+    existing = _get_command_group_storage().get(_group_full_name(group)) if group else None
+    if existing is not None:
+        existing.command(cli_name)(func)
+    else:
+        # The group's module may be imported later; `command_group()` attaches it then.
+        _get_pending_command_storage().append(PendingCommand(group or "", cli_name, func))
 
 
 def command_group(
@@ -388,6 +460,11 @@ def command_group(
         parent=parent,
         long_description=long_description,
     )
+    pending = _get_pending_command_storage()
+    waiting = [entry for entry in pending if _group_full_name(entry.group) == group.full_name]
+    pending[:] = [entry for entry in pending if _group_full_name(entry.group) != group.full_name]
+    for entry in waiting:
+        group.command(entry.name)(entry.func)
     return group
 
 

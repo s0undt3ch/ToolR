@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
 from toolr import Context
+from toolr import command
 from toolr import command_group
 from toolr._decorators import CommandGroup
 
@@ -227,3 +230,37 @@ def test_function_name_to_command_name_conversion(commands_tester):
 
     assert "both-underscores" in command_map
     assert command_map["both-underscores"] == _both_underscores_with_name_
+
+
+def test_standalone_command_attaches_to_existing_group(commands_tester):
+    """A standalone `@command(group=...)` attaches to an already-declared group."""
+    command_group("ci", "CI", "CI tools")
+
+    @command("lint", group="ci")
+    def lint(ctx: Context):
+        """Lint the code."""
+
+    command_groups = commands_tester.collected_command_groups()
+    assert command_groups["tools.ci"].get_commands()["lint"] is lint
+
+
+def test_command_without_group_fails_the_read(commands_tester):
+    """`@command("name")` and bare `@command` without `group=` fail the read, as the manifest build does."""
+
+    @command("orphan")
+    def orphan(ctx: Context):
+        """Belong nowhere."""
+
+    @command
+    def bare_orphan(ctx: Context):
+        """Belong nowhere either."""
+
+    assert orphan.__name__ == "orphan"
+    assert bare_orphan.__name__ == "bare_orphan"
+    with pytest.raises(ValueError, match="unknown group references") as excinfo:
+        commands_tester.collected_command_groups()
+    assert str(excinfo.value) == (
+        "unknown group references (2):\n"
+        f"  - {__name__}::orphan: `@command` is missing a `group=...` kwarg.\n"
+        f"  - {__name__}::bare-orphan: `@command` is missing a `group=...` kwarg."
+    )

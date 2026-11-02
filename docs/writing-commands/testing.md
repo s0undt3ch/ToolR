@@ -121,6 +121,21 @@ assert {"helm-diff-pr-comment", "snippet-checker"} <= set(
 )
 ```
 
+Commands declared with the standalone `@command(group="…")` decorator appear under their group, whether the group
+is declared in the same file or another one, and whatever order the files are imported in. A `group=` that names no
+declared group, or a standalone `@command` with no `group=` at all, makes `collected_command_groups()` raise
+`ValueError` with the message the manifest build gives:
+
+```text
+unknown group references (1):
+  - tools.cmds::check: references group `ci.typo` which has no `command_group(...)` declaration.
+```
+
+`CommandsTester` runs your code, but `toolr` reads it without running it, so only the shape it recognises counts. Write
+`from toolr import command` and decorate a top-level `def` with `@command(...)`, giving `group=` and any name as string
+literals. `CommandsTester` accepts `@toolr.command`, an aliased import, a nested `def` or `group=SOME_CONSTANT`, but
+`toolr` doesn't register those commands or fails to build.
+
 ## What it can't do
 
 `CommandsTester` only exercises the Python-side discovery path. It deliberately does not:

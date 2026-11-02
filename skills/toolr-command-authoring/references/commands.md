@@ -562,6 +562,14 @@ The signature mirrors the bound :meth:`CommandGroup.command`
 (``@command(name="snippet-checker", group=...)``) — but not both;
 doing so raises ``TypeError``.
 
+toolr reads this decorator from the source without running it, so
+only one shape counts: ``from toolr import command``, then
+``@command(...)`` on a top-level ``def`` with ``group=`` (and any
+name) as a string literal. ``@toolr.command``, an aliased import, a
+nested ``def`` or ``group=SOME_CONSTANT`` run here, and pass under
+:class:`toolr.testing.CommandsTester`, but toolr doesn't register
+them or fails to build.
+
 Usage::
 
     from toolr import command, command_group
@@ -590,9 +598,10 @@ Args:
         with a clear error.
 
 Returns:
-    The decorated function unchanged; the decorator's only job is
-    to record metadata that the static parser picks up. At runtime
-    toolr calls the function directly with the parsed args.
+    The decorated function unchanged. With ``group=``, it is also
+    recorded under that group, as ``@<binding>.command`` would, so
+    :class:`toolr.testing.CommandsTester` sees it. At runtime toolr
+    calls the function directly with the parsed args.
 
 ```
 

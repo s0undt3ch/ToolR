@@ -6,6 +6,8 @@ Utilities for testing ToolR commands and command-group discovery.
 ``tools.*`` package so the command-group registry is populated, the
 same way authors register commands at module import time. A module
 that fails to import makes ``discover()`` raise an ``ExceptionGroup``.
+A standalone ``@command(group=...)`` whose group no module declares makes
+``collected_command_groups()`` raise ``ValueError``.
 
 Usage: ``with CommandsTester(search_path=...) as t`` yields an
 isolated collector available via ``t.collected_command_groups()``.
@@ -18,12 +20,18 @@ import os
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING
 from typing import Self
 from unittest.mock import _patch
 from unittest.mock import patch
 
 from attrs import define
 from attrs import field
+
+from toolr.testing._unknown_groups import _format_unknown_groups
+
+if TYPE_CHECKING:
+    from toolr._decorators import PendingCommand
 
 
 def _import_tools_modules() -> list[Exception]:
@@ -153,6 +161,10 @@ class CommandsTester:
     test gets a fresh dict, then (in :meth:`discover`) imports modules
     under the search path's ``tools/`` package to populate that dict.
     Tests then read it via :meth:`collected_command_groups`.
+
+    A standalone ``@command`` whose ``group=`` names no declared group, or
+    that has no ``group=``, makes :meth:`collected_command_groups` raise
+    ``ValueError`` with the message the manifest build gives.
     """
 
     search_path: Path
@@ -160,6 +172,8 @@ class CommandsTester:
     sys_modules: dict[str, ModuleType] = field(init=False, repr=False)
     command_group_collector: dict[str, object] = field(init=False, repr=False, factory=dict)
     command_group_patcher: _patch = field(init=False, repr=False)
+    pending_command_collector: list[PendingCommand] = field(init=False, repr=False, factory=list)
+    pending_command_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
 
     @sys_path.default
@@ -185,10 +199,33 @@ class CommandsTester:
             return_value=self.command_group_collector,
         )
 
+    @pending_command_patcher.default
+    def _default_pending_command_patcher(self) -> _patch:
+        # Standalone `@command`s wait here until their group is declared;
+        # unpatched, `_get_pending_command_storage` keeps nothing.
+        return patch(
+            "toolr._decorators._get_pending_command_storage",
+            return_value=self.pending_command_collector,
+        )
+
     def collected_command_groups(self) -> dict[str, object]:
         """
         Get the collected command groups.
+
+        Raises:
+            ValueError: A standalone ``@command(group=...)`` names a group
+                that no ``command_group(...)`` declares, or passes
+                ``group=""``. The message is the one the manifest build
+                gives, which fails the same way.
         """
+        if self.pending_command_collector:
+            raise ValueError(
+                _format_unknown_groups(
+                    self.pending_command_collector,
+                    self.command_group_collector,
+                    self.search_path / "tools",
+                )
+            )
         return {**self.command_group_collector}
 
     def discover(self) -> None:
@@ -218,6 +255,7 @@ class CommandsTester:
         sys.modules.clear()
         sys.modules.update(self.sys_modules)
         os.chdir(self.search_path)
+        self.pending_command_patcher.start()
         self.command_group_patcher.start()
         # See `_isolated_sys_path` for why other `tools` providers are hidden.
         sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
@@ -230,6 +268,8 @@ class CommandsTester:
         os.chdir(self.cwd)
         self.command_group_patcher.stop()
         self.command_group_collector.clear()
+        self.pending_command_patcher.stop()
+        self.pending_command_collector.clear()
         sys.path[:] = self.sys_path
         # Reverse the module table back to the filtered snapshot `__enter__`
         # installed (real modules minus the volatile `tools` /

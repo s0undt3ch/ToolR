@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from toolr import Context
+from toolr import _decorators
 from toolr import command_group
 from toolr._decorators import CommandGroup
 from toolr.testing import CommandsTester
@@ -29,6 +30,13 @@ BAD_MODULE = (
     "    pass\n"
 )
 BROKEN_MODULE = "raise RuntimeError('boom')\n"
+TYPO_GROUP_MODULE = (
+    "from toolr import command, command_group\n"
+    'command_group("ci", "CI", "CI")\n'
+    '@command(group="ci.typo")\n'
+    "def check(ctx):\n"
+    '    """Check things."""\n'
+)
 ToolsRepo = Callable[[dict[str, str | None]], Path]
 STDLIB_USER_MODULE = (
     "import sqlite3, tomllib, zipfile, csv\n"
@@ -620,3 +628,239 @@ def test_command_group_hierarchy_storage(commands_tester):
     assert "tools.nonexistent" not in command_groups
     assert "tools.app.docker.nonexistent" not in command_groups
     assert "tools.app.docker.build.advanced.nonexistent" not in command_groups
+
+
+def test_standalone_command_in_group_file(tools_repo: ToolsRepo) -> None:
+    """A standalone `@command(group=...)` in the group's own file lands in the group."""
+    repo = tools_repo(
+        {
+            "tools/standalone.py": (
+                "from toolr import command, command_group\n"
+                "\n"
+                'g = command_group("g", "G", "G")\n'
+                "\n"
+                '@command("x", group="g")\n'
+                "def x(ctx):\n"
+                '    """X."""\n'
+                "\n"
+                "@g.command\n"
+                "def y(ctx):\n"
+                '    """Y."""\n'
+            ),
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.g"]
+    assert isinstance(group, CommandGroup)
+    assert set(group.get_commands()) == {"x", "y"}
+
+
+def test_standalone_command_before_its_group_module(tools_repo: ToolsRepo) -> None:
+    """A standalone command imported before its group's module still lands in the group."""
+    repo = tools_repo(
+        {
+            "tools/a_cmds.py": (
+                "from toolr import command\n"
+                '@command(group="ci")\n'
+                "def run_lint(ctx):\n"
+                '    """Run the linters."""\n'
+            ),
+            "tools/b_group.py": 'from toolr import command_group\ncommand_group("ci", "CI", "CI")\n',
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.ci"]
+    assert isinstance(group, CommandGroup)
+    assert "run-lint" in group.get_commands()
+
+
+def test_standalone_command_dotted_group(tools_repo: ToolsRepo) -> None:
+    """`group=` takes the dotted path of a nested group."""
+    repo = tools_repo(
+        {
+            "tools/helm.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                'command_group("ci.helm", "Helm", "Helm")\n'
+                '@command(name="snippet-checker", group="ci.helm")\n'
+                "def check_snippets(ctx):\n"
+                '    """Check the snippets."""\n'
+            ),
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.ci.helm"]
+    assert isinstance(group, CommandGroup)
+    assert "snippet-checker" in group.get_commands()
+
+
+def _unknown_group_error(repo: Path) -> str:
+    """Discover `repo` and return the message `collected_command_groups()` raises."""
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        with pytest.raises(ValueError, match="unknown group references") as excinfo:
+            tester.collected_command_groups()
+    return str(excinfo.value)
+
+
+def test_collected_command_groups_rejects_unknown_group(tools_repo: ToolsRepo) -> None:
+    """A `group=` naming no declared group fails the read, as the manifest build does."""
+    repo = tools_repo({"tools/cmds.py": TYPO_GROUP_MODULE})
+    assert _unknown_group_error(repo) == (
+        "unknown group references (1):\n"
+        "  - tools.cmds::check: references group `ci.typo` which has no "
+        "`command_group(...)` declaration."
+    )
+
+
+def test_unknown_group_error_names_commands_in_source_order(tools_repo: ToolsRepo) -> None:
+    """Lines name the CLI command, hyphenated or explicit, in the order they're declared."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                '@command(group="zebra-tools")\n'
+                "def run_check(ctx):\n"
+                '    """Check things."""\n'
+                '@command(name="alpha-lint", group="alpha-tools")\n'
+                "def lint(ctx):\n"
+                '    """Lint things."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (2):\n"
+        "  - tools.cmds::run-check: references group `zebra-tools` which has no "
+        "`command_group(...)` declaration.\n"
+        "  - tools.cmds::alpha-lint: references group `alpha-tools` which has no "
+        "`command_group(...)` declaration."
+    )
+
+
+@pytest.mark.parametrize(
+    ("declared", "referenced"),
+    [("ci", "cj"), ("my_ci", "my-ci")],
+)
+def test_unknown_group_error_suggests_a_near_miss(
+    tools_repo: ToolsRepo, declared: str, referenced: str
+) -> None:
+    """A declared group within the manifest build's edit distance is suggested."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                f'command_group("{declared}", "G", "G")\n'
+                f'@command(group="{referenced}")\n'
+                "def check(ctx):\n"
+                '    """Check things."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (1):\n"
+        f"  - tools.cmds::check: references group `{referenced}` which has no "
+        f"`command_group(...)` declaration. Did you mean `{declared}`?"
+    )
+
+
+def test_unknown_group_error_follows_file_order(tools_repo: ToolsRepo) -> None:
+    """Lines follow the sorted file paths, as the manifest build's walk does, not import order."""
+    repo = tools_repo(
+        {
+            "tools/a_mod.py": (
+                "from toolr import command\n"
+                "from tools import z_mod  # noqa: F401\n"
+                '@command(group="aaa-nope")\n'
+                "def first(ctx):\n"
+                '    """First."""\n'
+            ),
+            "tools/z_mod.py": (
+                "from toolr import command\n"
+                '@command(group="zzz-nope")\n'
+                "def last(ctx):\n"
+                '    """Last."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (2):\n"
+        "  - tools.a_mod::first: references group `aaa-nope` which has no "
+        "`command_group(...)` declaration.\n"
+        "  - tools.z_mod::last: references group `zzz-nope` which has no "
+        "`command_group(...)` declaration."
+    )
+
+
+def test_unknown_group_error_escapes_invisible_characters(tools_repo: ToolsRepo) -> None:
+    """A tab or a zero-width space in `group=` is shown as `\\u{..}`, as the manifest build does."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                '@command(group="ci\\tx")\n'
+                "def tabbed(ctx):\n"
+                '    """Tab."""\n'
+                '@command(group="c\\u200bi")\n'
+                "def zero_width(ctx):\n"
+                '    """Zero width."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (2):\n"
+        "  - tools.cmds::tabbed: references group `ci\\u{9}x` which has no "
+        "`command_group(...)` declaration. Did you mean `ci`?\n"
+        "  - tools.cmds::zero-width: references group `c\\u{200b}i` which has no "
+        "`command_group(...)` declaration. Did you mean `ci`?"
+    )
+
+
+def test_unknown_group_error_for_an_empty_group(tools_repo: ToolsRepo) -> None:
+    """`group=""` gets the manifest build's missing-kwarg message."""
+    repo = tools_repo(
+        {
+            "tools/cmds.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                '@command(group="")\n'
+                "def check(ctx):\n"
+                '    """Check things."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (1):\n"
+        "  - tools.cmds::check: `@command` is missing a `group=...` kwarg."
+    )
+
+
+def test_pending_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -> None:
+    """A pending command from one `CommandsTester` doesn't reach the next."""
+    repo = tools_repo({"tools/cmds.py": TYPO_GROUP_MODULE})
+    with CommandsTester(search_path=repo) as first:
+        first.discover()
+        assert [(entry.group, entry.name) for entry in first.pending_command_collector] == [
+            ("ci.typo", "check")
+        ]
+    assert first.pending_command_collector == []
+    # Through the module, as `command()` calls it, so a patch left running shows.
+    assert _decorators._get_pending_command_storage() is not first.pending_command_collector
+    other = repo / "other"
+    (other / "tools").mkdir(parents=True)
+    (other / "tools" / "__init__.py").write_text(
+        'from toolr import command_group\ncommand_group("ci", "CI", "CI")\n'
+        'command_group("ci.typo", "Typo", "Typo")\n'
+    )
+    with CommandsTester(search_path=other) as second:
+        second.discover()
+        group = second.collected_command_groups()["tools.ci.typo"]
+        assert isinstance(group, CommandGroup)
+        assert group.get_commands() == {}
