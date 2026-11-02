@@ -160,6 +160,10 @@ class CommandsTester:
     sys_modules: dict[str, ModuleType] = field(init=False, repr=False)
     command_group_collector: dict[str, object] = field(init=False, repr=False, factory=dict)
     command_group_patcher: _patch = field(init=False, repr=False)
+    pending_command_collector: dict[str, list[tuple[str | None, object]]] = field(
+        init=False, repr=False, factory=dict
+    )
+    pending_command_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
 
     @sys_path.default
@@ -183,6 +187,13 @@ class CommandsTester:
         return patch(
             "toolr._decorators._get_command_group_storage",
             return_value=self.command_group_collector,
+        )
+
+    @pending_command_patcher.default
+    def _default_pending_command_patcher(self) -> _patch:
+        return patch(
+            "toolr._decorators._get_pending_command_storage",
+            return_value=self.pending_command_collector,
         )
 
     def collected_command_groups(self) -> dict[str, object]:
@@ -218,6 +229,7 @@ class CommandsTester:
         sys.modules.clear()
         sys.modules.update(self.sys_modules)
         os.chdir(self.search_path)
+        self.pending_command_patcher.start()
         self.command_group_patcher.start()
         # See `_isolated_sys_path` for why other `tools` providers are hidden.
         sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
@@ -230,6 +242,8 @@ class CommandsTester:
         os.chdir(self.cwd)
         self.command_group_patcher.stop()
         self.command_group_collector.clear()
+        self.pending_command_patcher.stop()
+        self.pending_command_collector.clear()
         sys.path[:] = self.sys_path
         # Reverse the module table back to the filtered snapshot `__enter__`
         # installed (real modules minus the volatile `tools` /

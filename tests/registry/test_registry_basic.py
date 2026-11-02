@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from toolr import Context
+from toolr import command
 from toolr import command_group
 from toolr._decorators import CommandGroup
 
@@ -227,3 +228,15 @@ def test_function_name_to_command_name_conversion(commands_tester):
 
     assert "both-underscores" in command_map
     assert command_map["both-underscores"] == _both_underscores_with_name_
+
+
+def test_standalone_command_attaches_to_existing_group(commands_tester):
+    """A standalone `@command(group=...)` attaches to an already-declared group."""
+    command_group("ci", "CI", "CI tools")
+
+    @command("lint", group="ci")
+    def lint(ctx: Context):
+        """Lint the code."""
+
+    command_groups = commands_tester.collected_command_groups()
+    assert command_groups["tools.ci"].get_commands()["lint"] is lint

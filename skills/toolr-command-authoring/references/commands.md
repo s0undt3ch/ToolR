@@ -590,9 +590,10 @@ Args:
         with a clear error.
 
 Returns:
-    The decorated function unchanged; the decorator's only job is
-    to record metadata that the static parser picks up. At runtime
-    toolr calls the function directly with the parsed args.
+    The decorated function unchanged. With ``group=``, it is also
+    recorded under that group, as ``@<binding>.command`` would, so
+    :class:`toolr.testing.CommandsTester` sees it. At runtime toolr
+    calls the function directly with the parsed args.
 
 ```
 

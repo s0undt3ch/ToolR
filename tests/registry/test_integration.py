@@ -620,3 +620,73 @@ def test_command_group_hierarchy_storage(commands_tester):
     assert "tools.nonexistent" not in command_groups
     assert "tools.app.docker.nonexistent" not in command_groups
     assert "tools.app.docker.build.advanced.nonexistent" not in command_groups
+
+
+def test_standalone_command_in_group_file(tools_repo: ToolsRepo) -> None:
+    """A standalone `@command(group=...)` in the group's own file lands in the group."""
+    repo = tools_repo(
+        {
+            "tools/standalone.py": (
+                "from toolr import command, command_group\n"
+                "\n"
+                'g = command_group("g", "G", "G")\n'
+                "\n"
+                '@command("x", group="g")\n'
+                "def x(ctx):\n"
+                '    """X."""\n'
+                "\n"
+                "@g.command\n"
+                "def y(ctx):\n"
+                '    """Y."""\n'
+            ),
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.g"]
+    assert isinstance(group, CommandGroup)
+    assert set(group.get_commands()) == {"x", "y"}
+
+
+def test_standalone_command_before_its_group_module(tools_repo: ToolsRepo) -> None:
+    """A standalone command imported before its group's module still lands in the group."""
+    repo = tools_repo(
+        {
+            "tools/a_cmds.py": (
+                "from toolr import command\n"
+                '@command(group="ci")\n'
+                "def run_lint(ctx):\n"
+                '    """Run the linters."""\n'
+            ),
+            "tools/b_group.py": 'from toolr import command_group\ncommand_group("ci", "CI", "CI")\n',
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.ci"]
+    assert isinstance(group, CommandGroup)
+    assert "run-lint" in group.get_commands()
+
+
+def test_standalone_command_dotted_group(tools_repo: ToolsRepo) -> None:
+    """`group=` takes the dotted path of a nested group."""
+    repo = tools_repo(
+        {
+            "tools/helm.py": (
+                "from toolr import command, command_group\n"
+                'command_group("ci", "CI", "CI")\n'
+                'command_group("ci.helm", "Helm", "Helm")\n'
+                '@command(name="snippet-checker", group="ci.helm")\n'
+                "def check_snippets(ctx):\n"
+                '    """Check the snippets."""\n'
+            ),
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.ci.helm"]
+    assert isinstance(group, CommandGroup)
+    assert "snippet-checker" in group.get_commands()
