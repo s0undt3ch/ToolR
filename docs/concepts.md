@@ -23,6 +23,12 @@ from the current directory to the nearest `tools/pyproject.toml`, so a
 `tools/` without one, such as a `src/pkg/tools/` package in your code or a
 scripts directory above your repo, is ignored.
 
+Command modules must live under `tools/` itself. A `*.py` under `tools/`
+that is a symlink, including a dangling one, is an error: toolr lists every
+such link and refuses to build the command list until each is replaced by
+the file itself. Symlinked directories under `tools/` are ignored, not
+followed.
+
 [pep-420]: https://peps.python.org/pep-0420/
 
 ## `tools/pyproject.toml`

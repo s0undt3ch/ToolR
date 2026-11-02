@@ -203,9 +203,10 @@ includes new commands.
 
 Both hashes use blake3, written as lowercase hex.
 
-- `static_hash` input: every file under `tools/` (excluding
-  `__pycache__`, `.toolr-manifest.json`, and dot-prefixed names),
-  sorted by path, each entry hashed as
+- `static_hash` input: every `*.py` file under `tools/` (skipping
+  `__pycache__` and dot-prefixed directories), sorted by path. A
+  symlinked `*.py` fails the hash instead of being skipped, and symlinked
+  directories are not followed. Each entry is hashed as
   `len(path_bytes) || path_bytes || len(contents) || contents`.
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`, sorted by path,
