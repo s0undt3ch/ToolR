@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.resources
+import importlib.util
 import os
 import shutil
 import sys
@@ -477,6 +478,56 @@ def test_discover_keeps_sys_path_entries_without_tools(
         tester.discover()
         groups = tester.collected_command_groups()
     assert "tools.ci" in groups
+
+
+def test_discover_ignores_host_dirs_added_by_extend_path(
+    tools_repo: ToolsRepo, host_repo: Path
+) -> None:
+    """A fixture `tools/__init__.py` that calls `pkgutil.extend_path` (which
+    scans `sys.path` itself) doesn't get the host's `tools/` walked."""
+    repo = tools_repo(
+        {
+            "tools/__init__.py": (
+                "from pkgutil import extend_path\n__path__ = extend_path(__path__, __name__)\n"
+            ),
+            "tools/ci.py": CI_MODULE,
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+        imported_host = "tools.host_only" in sys.modules
+    assert list(groups) == ["tools.ci"]
+    assert not imported_host
+
+
+def test_find_spec_for_tools_raises_without_a_fixture_tools(
+    tmp_path: Path, host_repo: Path
+) -> None:
+    """With no fixture `tools`, looking `tools` up raises instead of returning
+    `None`, so no other `tools` on `sys.path` can be found."""
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    with CommandsTester(search_path=fixture), pytest.raises(ModuleNotFoundError):
+        importlib.util.find_spec("tools")
+
+
+def test_commands_tester_exit_restores_state_when_cwd_is_gone(
+    tmp_path: Path, tools_repo: ToolsRepo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the original cwd was deleted, `__exit__` still removes its finder
+    and restores `sys.path` before reporting the failed `chdir`."""
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    monkeypatch.chdir(gone)
+    saved_path = sys.path[:]
+    saved_meta_path = sys.meta_path[:]
+    repo = tools_repo({"tools/ci.py": CI_MODULE})
+    tester = CommandsTester(search_path=repo)
+    with pytest.raises(FileNotFoundError), tester:
+        gone.rmdir()
+    assert sys.meta_path == saved_meta_path
+    assert sys.path == saved_path
 
 
 def test_isolated_sys_path_drops_only_cwd_and_search_path(tmp_path: Path) -> None:

@@ -24,6 +24,10 @@ subprocess execution) you'll still want to drive the binary directly.
    `search_path` only. Every other `sys.path` entry stays importable, so the standard library and
    anything installed still import, but no other `tools` (the host repo's own, or a stray one some
    installed package ships) can replace the fixture's `tools/` or merge into it.
+   With no `tools` in `search_path`, `importlib.util.find_spec("tools")` raises
+   `ModuleNotFoundError` instead of returning `None`, since that is what stops the lookup reaching
+   another `tools`. `.discover()` only walks directories under `search_path / "tools"`, so a
+   fixture `tools/__init__.py` that calls `pkgutil.extend_path` doesn't pull in another `tools/`.
 2. Patches `toolr._decorators._get_command_group_storage` with a fresh `dict` so the test gets an isolated registry.
 3. Restores everything on exit (`sys.path`, `sys.meta_path`, `sys.modules`, `cwd`).
 

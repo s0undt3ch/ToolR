@@ -93,11 +93,14 @@ def _reject_symlinked_modules(tools_dir: Path) -> None:
     raise ToolrError(msg)
 
 
-def _import_tools_modules() -> list[Exception]:
+def _import_tools_modules(root: Path) -> list[Exception]:
     """Import every module under the top-level ``tools`` package.
 
-    A module that fails to import doesn't stop the walk; every failure is
-    returned, each with a note naming the module that raised it.
+    Only directories under ``root`` (the fixture's ``tools/``) are walked, so
+    a ``__path__`` that ``pkgutil.extend_path`` filled from ``sys.path`` can't
+    pull in another ``tools/``. A module that fails to import doesn't stop
+    the walk; every failure is returned, each with a note naming the module
+    that raised it.
     """
     try:
         tools_pkg = importlib.import_module("tools")
@@ -109,11 +112,13 @@ def _import_tools_modules() -> list[Exception]:
         return [exc]
 
     errors: list[Exception] = []
-    _import_package_modules(tools_pkg, errors, set())
+    _import_package_modules(tools_pkg, errors, set(), root.resolve())
     return errors
 
 
-def _import_package_modules(package: ModuleType, errors: list[Exception], seen: set[Path]) -> None:
+def _import_package_modules(
+    package: ModuleType, errors: list[Exception], seen: set[Path], root: Path
+) -> None:
     """Import every module under ``package``, recursing into subdirectories.
 
     Mirrors the manifest build's walk in
@@ -125,10 +130,11 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
     identifiers can't be imported and are skipped. A subdirectory is only
     descended into once its own import succeeded, and each directory is
     walked once, so a ``__path__`` pointing back at a parent can't loop.
+    Directories outside ``root`` are skipped.
     """
     for directory in getattr(package, "__path__", ()):
         resolved = Path(directory).resolve()
-        if resolved in seen:
+        if resolved in seen or not resolved.is_relative_to(root):
             continue
         seen.add(resolved)
         try:
@@ -163,7 +169,7 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
                 errors.append(exc)
                 continue
             if is_package:
-                _import_package_modules(module, errors, seen)
+                _import_package_modules(module, errors, seen, root)
 
 
 class _FixtureToolsFinder:
@@ -317,7 +323,7 @@ class CommandsTester:
                 module is imported first; the group holds each failure.
         """
         _reject_symlinked_modules(self.search_path / "tools")
-        errors = _import_tools_modules()
+        errors = _import_tools_modules(self.search_path / "tools")
         if errors:
             msg = (
                 f"CommandsTester.discover(): {len(errors)} module(s) under "
@@ -343,7 +349,6 @@ class CommandsTester:
         """
         Exit the context manager.
         """
-        os.chdir(self.cwd)
         sys.meta_path.remove(self.tools_finder)
         self.command_group_patcher.stop()
         self.command_group_collector.clear()
@@ -360,3 +365,5 @@ class CommandsTester:
         # carrying a stale copy forward would pollute later tests.
         sys.modules.clear()
         sys.modules.update(self.sys_modules)
+        # Last, so the steps above still run if the old cwd is gone.
+        os.chdir(self.cwd)
