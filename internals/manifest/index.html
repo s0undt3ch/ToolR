@@ -1920,9 +1920,10 @@ includes new commands.</p>
 <h2 id="hashing-details">Hashing details<a class="headerlink" href="#hashing-details" title="Permanent link">&para;</a></h2>
 <p>Both hashes use blake3, written as lowercase hex.</p>
 <ul>
-<li><code>static_hash</code> input: every file under <code>tools/</code> (excluding
-  <code>__pycache__</code>, <code>.toolr-manifest.json</code>, and dot-prefixed names),
-  sorted by path, each entry hashed as
+<li><code>static_hash</code> input: every <code>*.py</code> file under <code>tools/</code> (skipping
+  <code>__pycache__</code> and dot-prefixed directories), sorted by path. A
+  symlinked <code>*.py</code> fails the hash instead of being skipped, and symlinked
+  directories are not followed. Each entry is hashed as
   <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.</li>
 <li><code>third_party_hash</code> input: every <code>toolr-manifest.json</code> under
   <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>, sorted by path,

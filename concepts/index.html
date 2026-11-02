@@ -1714,6 +1714,17 @@ directory is a <a href="https://peps.python.org/pep-0420/">PEP 420 namespace pac
 from the current directory to the nearest <code>tools/pyproject.toml</code>, so a
 <code>tools/</code> without one, such as a <code>src/pkg/tools/</code> package in your code or a
 scripts directory above your repo, is ignored.</p>
+<p>Command modules must be regular files under <code>tools/</code>. A <code>*.py</code> under
+<code>tools/</code> that is a symlink, including a dangling one, is an error, so toolr
+never picks up code from outside <code>tools/</code> by surprise: toolr lists every such
+link and refuses to build the command list until each is replaced by the
+file itself. Symlinked directories under <code>tools/</code>, even ones named <code>*.py</code>,
+are ignored, not followed. To share command code between projects, put it in
+a Python package and depend on it from <code>tools/pyproject.toml</code>, published or
+as a path dependency.</p>
+<p>On Windows with <code>core.symlinks=false</code>, git checks a link out as a plain
+file holding the target path, which then fails to parse instead of
+producing this message.</p>
 <h2 id="toolspyprojecttoml"><code>tools/pyproject.toml</code><a class="headerlink" href="#toolspyprojecttoml" title="Permanent link">&para;</a></h2>
 <p>Declares the Python dependencies your commands need (the <code>toolr</code>
 package itself, plus anything your <code>tools/*.py</code> files import) and

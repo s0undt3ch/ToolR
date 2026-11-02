@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev312-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev364-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev312 - 2026-11-02
+        0.35.2-dev364 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev312 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev364 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev312-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev364-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev312 - 2026-11-02
+        0.35.2-dev364 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev312 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev364 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev312-2026-11-02">0.35.2-dev312 - 2026-11-02<a class="headerlink" href="#0352-dev312-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev364-2026-11-02">0.35.2-dev364 - 2026-11-02<a class="headerlink" href="#0352-dev364-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7559,6 +7559,7 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <code>tools/pyproject.toml</code> toolr has no tools venv, so the fallback that ran commands with
 <code>$TOOLR_PYTHON</code>, <code>python3</code> or <code>python</code> from <code>PATH</code> is gone, and toolr no longer reads
 <code>$TOOLR_PYTHON</code>. The <code>toolr.testing</code> pytest plugin finds the repo root the same way.</p>
+<p><strong>Breaking:</strong> a <code>*.py</code> under <code>tools/</code> (or in a plugin package passed to <code>toolr self build-manifest</code>) that is a symlink is now an error instead of being silently skipped, so toolr never picks up code from outside <code>tools/</code> by surprise. toolr lists every such link and stops; replace each with the file itself, or share the code as a Python package that <code>tools/pyproject.toml</code> depends on. <code>CommandsTester.discover()</code> raises the same error. Symlinked directories are still ignored.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7656,6 +7657,8 @@ to the <code>toolr</code> process alone (<code>kill -INT</code>, <code>Popen.sen
 process group with <code>killpg</code> reaches it twice. On macOS, where a Ctrl-C and a <code>kill</code> look the same, toolr never forwards
 SIGINT, so <code>kill -INT</code> aimed at the <code>toolr</code> process alone no longer reaches the command; signal the process group or
 send SIGTERM instead.</p>
+<p><code>toolr.testing.CommandsTester</code> now records commands declared with the standalone <code>@command(group="…")</code> decorator, whether the group is declared in the same file or another one. They used to be missing from <code>collected_command_groups()</code>, although <code>toolr</code> ran them. A <code>group=</code> that names no declared group now makes <code>collected_command_groups()</code> raise a <code>ValueError</code> with the same message the manifest build gives.</p>
+<p>A standalone <code>@command</code> with no <code>group=</code> now makes <code>collected_command_groups()</code> raise too, as the manifest build fails on it.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7740,6 +7743,20 @@ send SIGTERM instead.</p>
 <li><em>(uv)</em> Require an exec bit when searching PATH, as execvp does (<a href="https://github.com/s0undt3ch/ToolR/commit/64e700ea16f523d3064e0b0910a71acd3043ed28"><code>64e700e</code></a>)</li>
 <li><em>(uv)</em> Only run an ldd from an absolute PATH directory (<a href="https://github.com/s0undt3ch/ToolR/commit/8c6e30a6df2dc5ca3932fae60d034b7eb56ec309"><code>8c6e30a</code></a>)</li>
 <li><em>(uv)</em> Judge PATH executables with access(X_OK), as execvp does (<a href="https://github.com/s0undt3ch/ToolR/commit/0beca2df4ef83fc438e8acf89e406a2092a4408e"><code>0beca2d</code></a>)</li>
+<li><em>(testing)</em> Record standalone @command(group=...) commands in the registry (<a href="https://github.com/s0undt3ch/ToolR/commit/546441423ae6da10c34fcaa0cc703bc526590910"><code>5464414</code></a>)</li>
+<li><em>(testing)</em> Fail CommandsTester reads on unknown group references (<a href="https://github.com/s0undt3ch/ToolR/commit/1b975b1cd3fa6ea37e0d3b47a1f8775cb4437ed2"><code>1b975b1</code></a>)</li>
+<li><em>(testing)</em> Word unknown-group errors exactly as the manifest build does (<a href="https://github.com/s0undt3ch/ToolR/commit/8b167d980ae3e6b56948b87ed29d159926456f4c"><code>8b167d9</code></a>)</li>
+<li><em>(decorators)</em> Keep pending standalone commands only inside CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/2d953da25589150026c583232a24b5df21d50601"><code>2d953da</code></a>)</li>
+<li><em>(testing)</em> Report standalone @command without group= under CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/9189886c753c8f21428b6002821a5bec92a26467"><code>9189886</code></a>)</li>
+<li><em>(testing)</em> Order unknown-group errors by file path, as the manifest build does (<a href="https://github.com/s0undt3ch/ToolR/commit/4fe8c232f62ffc0de5c72f2dc2f04c4850e5dadb"><code>4fe8c23</code></a>)</li>
+<li><em>(testing)</em> Escape invisible characters in unknown-group errors (<a href="https://github.com/s0undt3ch/ToolR/commit/76a25b99851337d09e5f74f4817755652c0dbe73"><code>76a25b9</code></a>)</li>
+<li><em>(parser)</em> [<strong>breaking</strong>] Reject symlinked modules under tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/91c0b1cd3f5844cd8af878749fe29338247daf0e"><code>91c0b1c</code></a>)</li>
+<li><em>(dispatch)</em> Fail on symlinked modules instead of using the stale cache (<a href="https://github.com/s0undt3ch/ToolR/commit/dc3839637d65984a812322b2911d0e67e5b2ca92"><code>dc38396</code></a>)</li>
+<li><em>(parser)</em> Ignore .py-named directory links and name relative roots (<a href="https://github.com/s0undt3ch/ToolR/commit/b577e5622396e090d7868d1c432f729490fa8d02"><code>b577e56</code></a>)</li>
+<li><em>(parser)</em> Point at Python packages in the symlinked-modules hint (<a href="https://github.com/s0undt3ch/ToolR/commit/10f6f863dd5ba142f7f11431b9610e27789da5f0"><code>10f6f86</code></a>)</li>
+<li><em>(testing)</em> Report symlinked modules discovery can't resolve (<a href="https://github.com/s0undt3ch/ToolR/commit/e68b673d50cd599f242070a201a4fe9c60cddbde"><code>e68b673</code></a>)</li>
+<li><em>(dispatch)</em> Print symlinked-module errors the same on every path (<a href="https://github.com/s0undt3ch/ToolR/commit/138a3706a79a86cdd9ebd21a92b139e086c75e76"><code>138a370</code></a>)</li>
+<li><em>(cli)</em> Skip root option values when finding the subcommand (<a href="https://github.com/s0undt3ch/ToolR/commit/8375cdfd89513215aba5495c18cd127a08773bd8"><code>8375cdf</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7769,6 +7786,12 @@ send SIGTERM instead.</p>
 <li><em>(runner)</em> Unregister signal handlers through a drop guard (<a href="https://github.com/s0undt3ch/ToolR/commit/767807beff07205c5c3041724179973beda07ae0"><code>767807b</code></a>)</li>
 <li><em>(runner)</em> Name the signal poll interval and tidy its tests (<a href="https://github.com/s0undt3ch/ToolR/commit/a3da27c886270386b2da366d141b2cae110eb172"><code>a3da27c</code></a>)</li>
 <li><em>(uv)</em> Narrow path_search's API and share its test helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/a05fbb6392d97898502f025fb5e32f7f760822e3"><code>a05fbb6</code></a>)</li>
+<li><em>(tests)</em> One floor-settings list checked with subtests, fewer redundant asserts (<a href="https://github.com/s0undt3ch/ToolR/commit/7d3748dbd1668c53e900e07eddf9a7eec8ff5bad"><code>7d3748d</code></a>)</li>
+<li><em>(testing)</em> Name pending command fields and the tools. prefix rule (<a href="https://github.com/s0undt3ch/ToolR/commit/f11804247104a838daf584a7460a7e09cea4e35e"><code>f118042</code></a>)</li>
+<li><em>(testing)</em> Move the unknown-group error port into its own module (<a href="https://github.com/s0undt3ch/ToolR/commit/dbdd30aa6dbbbb5ee69545aedda1aee35febc9e0"><code>dbdd30a</code></a>)</li>
+<li><em>(parser)</em> Walk tools/ once and give symlinked modules one error shape (<a href="https://github.com/s0undt3ch/ToolR/commit/33c1f267f9938d57c351329c3e961968791cc4a9"><code>33c1f26</code></a>)</li>
+<li><em>(testing)</em> Share the pruned-directory check between discovery walks (<a href="https://github.com/s0undt3ch/ToolR/commit/723106ceb12f5f203438f10a7bf9fb967134095e"><code>723106c</code></a>)</li>
+<li><em>(testing)</em> Reuse the shared control-character escaping (<a href="https://github.com/s0undt3ch/ToolR/commit/22fc4c210236582428ce19803f3499e28fff385a"><code>22fc4c2</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7849,6 +7872,22 @@ send SIGTERM instead.</p>
 <li><em>(specs)</em> Archive uv path lookup design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/478bc307874814211528829fb4aac7d4c9ee0f98"><code>478bc30</code></a>)</li>
 <li><em>(specs)</em> Record the extra PATH lookups in the uv path lookup design (<a href="https://github.com/s0undt3ch/ToolR/commit/f6e074bd25a097c1c62dfa1f0b07bbf033460c9e"><code>f6e074b</code></a>)</li>
 <li><em>(specs)</em> Note access(X_OK) and unset PATH in the uv path lookup design (<a href="https://github.com/s0undt3ch/ToolR/commit/4874471c11bca16e9f82bf461feb90e2a65486ec"><code>4874471</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-38 python version lists (<a href="https://github.com/s0undt3ch/ToolR/commit/821327fd95e9551251bb63589bb2be3732343028"><code>821327f</code></a>)</li>
+<li><em>(ci)</em> Shorten the version-list comments and cross-link the patch-floor rule (<a href="https://github.com/s0undt3ch/ToolR/commit/3283d4d964936fe2f74cd2ba0de531cbe428e831"><code>3283d4d</code></a>)</li>
+<li><em>(specs)</em> Archive python version lists design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/8d65322eb2fc4c42b70c218d5543e4e9a14ff850"><code>8d65322</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-19 tester standalone group (<a href="https://github.com/s0undt3ch/ToolR/commit/03805c98c3990e25822641e199e68ae600a85188"><code>03805c9</code></a>)</li>
+<li><em>(testing)</em> Document standalone commands under CommandsTester (<a href="https://github.com/s0undt3ch/ToolR/commit/e3fb4f8e7076071f6a327fb1e9caef1cc790f172"><code>e3fb4f8</code></a>)</li>
+<li><em>(testing)</em> Describe the pending store in the CommandsTester docstrings (<a href="https://github.com/s0undt3ch/ToolR/commit/37b5ed4ef163add7de59a2f8ceec34aafcdb2e2f"><code>37b5ed4</code></a>)</li>
+<li><em>(testing)</em> State the @command shape toolr's static parser recognises (<a href="https://github.com/s0undt3ch/ToolR/commit/c55a7ae70f3432446a6d4c178e60d7e13c8117d7"><code>c55a7ae</code></a>)</li>
+<li><em>(testing)</em> Keep the pending-store patch out of the CommandsTester docstring (<a href="https://github.com/s0undt3ch/ToolR/commit/d62d7e7f4c863bd9ee8abd61d48ba2ffbebe1c66"><code>d62d7e7</code></a>)</li>
+<li><em>(tests)</em> Drop the audit ID from the unknown-group parity test (<a href="https://github.com/s0undt3ch/ToolR/commit/b316ded9f0e1a9eb5eb3eecb7017ad295c68d6ee"><code>b316ded</code></a>)</li>
+<li><em>(core)</em> Point the unknown-group error code at its Python mirror (<a href="https://github.com/s0undt3ch/ToolR/commit/65dd4b829befa297bcf5d6694f8e53a4bbeea82d"><code>65dd4b8</code></a>)</li>
+<li><em>(specs)</em> Archive tester standalone group design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/db7d26459e1a225384f744a94e566bb39a4967b8"><code>db7d264</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-17 symlinked tools files (<a href="https://github.com/s0undt3ch/ToolR/commit/ee57f94f701efa131c4eee8cbe22e99ed4359345"><code>ee57f94</code></a>)</li>
+<li>Note that symlinked modules under tools/ are rejected (<a href="https://github.com/s0undt3ch/ToolR/commit/0fdfaa08756ada73a34b670b4ca80d370a259bec"><code>0fdfaa0</code></a>)</li>
+<li>Note how Windows checkouts without symlinks fail (<a href="https://github.com/s0undt3ch/ToolR/commit/fbf61faff4e925e1a0ea6121b12553ea083a761a"><code>fbf61fa</code></a>)</li>
+<li>Explain symlinked-module rejection as a no-surprises rule (<a href="https://github.com/s0undt3ch/ToolR/commit/958ae4ef305a05843a884cec0dd29e86a52afbb7"><code>958ae4e</code></a>)</li>
+<li><em>(specs)</em> Archive symlinked tools files design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/17eccf431d1678ad6467664dee6ee64e97fd9c31"><code>17eccf4</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7893,6 +7932,15 @@ send SIGTERM instead.</p>
 <li><em>(runner)</em> Assert SIGINT classification without a platform-only branch (<a href="https://github.com/s0undt3ch/ToolR/commit/e33d19736bf91a26de3da829dcfbce1c1958974e"><code>e33d197</code></a>)</li>
 <li><em>(uv)</em> Planted repo uv and python3 never run through relative PATH entries (<a href="https://github.com/s0undt3ch/ToolR/commit/9a741eb68c13169d9546777a8e809482b9790816"><code>9a741eb</code></a>)</li>
 <li><em>(uv)</em> Plant an ldd behind a relative PATH entry (<a href="https://github.com/s0undt3ch/ToolR/commit/01bc93dbc12b7985408cc507ba372d1f3a950753"><code>01bc93d</code></a>)</li>
+<li><em>(ci)</em> Check every Python version list against requires-python (<a href="https://github.com/s0undt3ch/ToolR/commit/3934cf04bebb948639536601feebb4c3b8f1b47f"><code>3934cf0</code></a>)</li>
+<li><em>(ci)</em> Read version-list sources as UTF-8 (<a href="https://github.com/s0undt3ch/ToolR/commit/76288b10a512889c75f75a76c7f24b86e930dae3"><code>76288b1</code></a>)</li>
+<li><em>(ci)</em> Check the remaining hard-coded CPython floors (<a href="https://github.com/s0undt3ch/ToolR/commit/213834a32e5b4f2172feafe87f8931fae71c13ff"><code>213834a</code></a>)</li>
+<li><em>(ci)</em> Reject ambiguous requires-python bounds and check the example floors (<a href="https://github.com/s0undt3ch/ToolR/commit/d610a4a09bf6fec4e7d8687d4f58b93ddeda3c21"><code>d610a4a</code></a>)</li>
+<li><em>(ci)</em> Fail only the floor case whose requires-python is malformed (<a href="https://github.com/s0undt3ch/ToolR/commit/26b21620d6f2a912a6782357222d6ef6a89d6ab6"><code>26b2162</code></a>)</li>
+<li><em>(registry)</em> Cover @command(name) without group= recording nothing (<a href="https://github.com/s0undt3ch/ToolR/commit/2ac194292b55fb98b11cbea12bba97d9b66bd819"><code>2ac1942</code></a>)</li>
+<li><em>(registry)</em> Make the pending-store leak test able to fail (<a href="https://github.com/s0undt3ch/ToolR/commit/739d9b7e6e97f0fb5f6b39823f0cbb91b8ed919d"><code>739d9b7</code></a>)</li>
+<li><em>(parser)</em> Cover symlinked modules whose target can't be stat'd (<a href="https://github.com/s0undt3ch/ToolR/commit/ef1cb7d6d861ad3e295f7db950dfbe638bb1615f"><code>ef1cb7d</code></a>)</li>
+<li><em>(cli)</em> Share the symlinked-module CLI assertions (<a href="https://github.com/s0undt3ch/ToolR/commit/51a8bab6fec207a8133f128f778e8d51502dba29"><code>51a8bab</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
