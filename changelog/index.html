@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev256-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev269-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev256 - 2026-11-02
+        0.35.2-dev269 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev256 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev269 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev256-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev269-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev256 - 2026-11-02
+        0.35.2-dev269 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev256 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev269 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev256-2026-11-02">0.35.2-dev256 - 2026-11-02<a class="headerlink" href="#0352-dev256-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev269-2026-11-02">0.35.2-dev269 - 2026-11-02<a class="headerlink" href="#0352-dev269-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7719,6 +7719,7 @@ error. A discovery test that passed only because of either problem now fails.</p
 <ul>
 <li><em>(rust)</em> Declare rust-version as the pinned mise toolchain (<a href="https://github.com/s0undt3ch/ToolR/commit/c93ae5a328c433fec10858a33dab62bcd2f10615"><code>c93ae5a</code></a>)</li>
 <li><em>(xtask)</em> Add patch-coverage to check changed-line coverage (<a href="https://github.com/s0undt3ch/ToolR/commit/b0fe96fbe83bfdab2261e9dd6d6af4b99ece7cd0"><code>b0fe96f</code></a>)</li>
+<li><em>(toolr-py)</em> Link only toolr-core's command and docstring modules (<a href="https://github.com/s0undt3ch/ToolR/commit/bebb999b8fb99d2ba4ca00218913bd7581dd866c"><code>bebb999</code></a>)</li>
 </ul>
 <h3 id="refactor"><!-- 2 -->🚜 Refactor<a class="headerlink" href="#refactor" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7803,6 +7804,9 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(specs)</em> Archive release notes fragments design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/2c6ef0a3358916f0a818077b5b824357d7628124"><code>2c6ef0a</code></a>)</li>
 <li>Make release-notes/README.md the canonical gate rules (<a href="https://github.com/s0undt3ch/ToolR/commit/844ce8e9caad0c822a9c93fc7967ac13de877f40"><code>844ce8e</code></a>)</li>
 <li>Link the release-notes README by URL so mkdocs --strict resolves it (<a href="https://github.com/s0undt3ch/ToolR/commit/3cfbcd1e1f2bc2444ec7fbc56084340826aaa467"><code>3cfbcd1</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-15 toolr-py dependencies (<a href="https://github.com/s0undt3ch/ToolR/commit/ca0425ed92e6292ec22574fe75d2b7b9b5b19db8"><code>ca0425e</code></a>)</li>
+<li><em>(specs)</em> Archive toolr-py deps design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/64a52352fc484214b763aa67cb4833fcd6c8d8ef"><code>64a5235</code></a>)</li>
+<li><em>(contributing)</em> Explain toolr-core's full feature and the lean build (<a href="https://github.com/s0undt3ch/ToolR/commit/f7d430bfb811cd9e227531d1d90c13258c38d7ac"><code>f7d430b</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7870,6 +7874,10 @@ error. A discovery test that passed only because of either problem now fails.</p
 <li><em>(tools)</em> Tidy the release notes tool and its tests (<a href="https://github.com/s0undt3ch/ToolR/commit/5f6a9f34456906ec261b55e73b85459de49d93aa"><code>5f6a9f3</code></a>)</li>
 <li>Explain the release-notes ties in ci.yml and cliff.toml (<a href="https://github.com/s0undt3ch/ToolR/commit/37d6e1bbc025ff26f25b698dbced6131e1371703"><code>37d6e1b</code></a>)</li>
 <li><em>(tools)</em> Print the new note path with forward slashes on Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/3990883ce3c8b0f84bfdc63c924a3c50bec09794"><code>3990883</code></a>)</li>
+<li><em>(prek)</em> Keep toolr-py's toolr-core build lean (<a href="https://github.com/s0undt3ch/ToolR/commit/c2004ae6f60b767de94dc377e888645df4614af8"><code>c2004ae</code></a>)</li>
+<li><em>(prek)</em> Fail the toolr-py-deps hook when cargo tree fails (<a href="https://github.com/s0undt3ch/ToolR/commit/56c2376824ae5322360595145324021c7dc645fe"><code>56c2376</code></a>)</li>
+<li><em>(prek)</em> Check toolr-py itself without toolr-core's full feature (<a href="https://github.com/s0undt3ch/ToolR/commit/10ac0e4b1e00f935df418658295cc545882d5170"><code>10ac0e4</code></a>)</li>
+<li><em>(prek)</em> Allowlist toolr-core's lean dependencies (<a href="https://github.com/s0undt3ch/ToolR/commit/f526d8e9c8444e021f01b96854863b16ad0f04f4"><code>f526d8e</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

@@ -1795,6 +1795,10 @@ reports, doc fixes, and well-scoped feature PRs are all welcome.</p>
 <li><code>toolr-py</code> — maturin <code>bindings = "pyo3"</code>. The Python package plus the <code>_rust_utils</code> extension module.</li>
 </ul>
 <p>A GitHub release archive of the standalone binary ships alongside.</p>
+<p><code>toolr-py</code> builds <code>toolr-core</code> without its default <code>full</code> feature, so it links only the <code>command</code> and
+<code>docstrings</code> modules. A new <code>toolr-core</code> dependency must be <code>optional = true</code> and listed as <code>dep:&lt;name&gt;</code> in
+<code>full</code>. To use another <code>toolr-core</code> module from <code>toolr-py</code>, ungate it in <code>lib.rs</code> and make its dependencies
+non-optional, then add them to the allowlist in the <code>toolr-core-lean-deps</code> pre-commit hook.</p>
 <h2 id="dev-setup">Dev setup<a class="headerlink" href="#dev-setup" title="Permanent link">&para;</a></h2>
 <p>You need <a href="https://mise.jdx.dev/">mise</a>. Everything else (Rust, Python, <code>uv</code>, <code>prek</code>) installs from the repo's <code>mise.toml</code>:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>https://mise.run<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh<span class="w">        </span><span class="c1"># if you don't have mise yet</span>
