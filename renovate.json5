@@ -65,8 +65,8 @@
       managerFilePatterns: ["/^\\.github/env$/"],
       matchStrings: ["TOOLR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       depNameTemplate: "s0undt3ch/ToolR",
-      // Tags, not releases: the same datasource as the aqua pin in mise.toml,
-      // so the group can't bump one before the GitHub release exists.
+      // Same datasource as the aqua pin in mise.toml, so both move together;
+      // the pin test keeps the group PR red until PyPI (tools/uv.lock) catches up.
       datasourceTemplate: "github-tags",
       extractVersionTemplate: "^v?(?<version>.*)$",
     },
