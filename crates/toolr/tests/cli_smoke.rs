@@ -351,6 +351,83 @@ fn dispatch_emits_clear_error_when_venv_python_is_missing() {
     );
 }
 
+/// Regression (F-18): dispatching against an in-tree venv used to write the
+/// `meta.json` sidecar to `venv_dir.parent()`, i.e. an untracked
+/// `tools/meta.json` that `toolr self cache list` never saw. It must land in
+/// the out-of-repo cache slot `toolr project venv sync` already uses.
+#[test]
+#[cfg(unix)]
+fn dispatch_in_tree_venv_keeps_meta_json_out_of_tools() {
+    let tmp = preflight_fixture(&[]);
+
+    // The fake python exits 1; only the sidecar side effect matters here.
+    let output = preflight_cmd(tmp.path())
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !tmp.path().join("tools/meta.json").exists(),
+        "dispatch must not write tools/meta.json; stderr:\n{stderr}"
+    );
+
+    let cache_root = preflight_cache_home(tmp.path()).join("toolr");
+    let metas: Vec<PathBuf> = std::fs::read_dir(&cache_root)
+        .unwrap_or_else(|e| panic!("no cache root {cache_root:?} ({e}); stderr:\n{stderr}"))
+        .map(|entry| entry.unwrap().path().join("meta.json"))
+        .filter(|p| p.is_file())
+        .collect();
+    assert_eq!(
+        metas.len(),
+        1,
+        "expected one cache meta.json, got {metas:?}; stderr:\n{stderr}"
+    );
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&metas[0]).unwrap()).unwrap();
+    let canonical = tmp.path().canonicalize().unwrap();
+    assert_eq!(
+        meta["repo_path"].as_str().map(PathBuf::from),
+        Some(canonical.clone()),
+        "meta.json repo_path should be the canonical repo; meta: {meta}"
+    );
+
+    let list = preflight_cmd(tmp.path())
+        .args(["self", "cache", "list"])
+        .output()
+        .unwrap();
+    let list_stdout = String::from_utf8_lossy(&list.stdout);
+    assert!(
+        list_stdout.contains(&*canonical.to_string_lossy()),
+        "`self cache list` should show the in-tree repo; stdout:\n{list_stdout}"
+    );
+}
+
+/// A sidecar that can't be written stays a warning: dispatch still reaches
+/// the runner, and nothing falls back to `tools/meta.json`.
+#[test]
+#[cfg(unix)]
+fn dispatch_in_tree_venv_warns_when_cache_meta_json_cannot_be_written() {
+    let tmp = preflight_fixture(&[]);
+    // A regular file where the cache home should be, so creating the slot fails.
+    let blocked = tmp.path().join("not-a-dir");
+    std::fs::write(&blocked, "").unwrap();
+
+    let output = common::toolr()
+        .current_dir(tmp.path())
+        .env("XDG_CACHE_HOME", &blocked)
+        .args(["ci", "hello"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("toolr: warning: failed to touch cache meta.json"),
+        "expected the touch warning; stderr:\n{stderr}"
+    );
+    // The fake python exits 1: the runner was spawned, so the warning didn't abort dispatch.
+    assert_eq!(output.status.code(), Some(1), "stderr:\n{stderr}");
+    assert!(!tmp.path().join("tools/meta.json").exists());
+}
+
 /// Regression: when the pre-flight is disabled and the runner emits a
 /// traceback, the Rust side must pass that traceback through to the
 /// terminal *unaltered* — no capture, no rewriting. The styled

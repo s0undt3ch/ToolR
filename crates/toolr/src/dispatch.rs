@@ -296,20 +296,21 @@ pub fn dispatch(
     let resolved = resync_if_needed(&repo_root, resolved, quiet)?;
     let python = resolved.python.clone();
 
-    // Touch last_used_at on every invocation against a cached venv.
-    // Backfill a fresh `meta.json` for cache entries that predate the
-    // sidecar — without this, `toolr self cache list` would silently
-    // hide venvs created by older binaries.
-    if let Some(cache_dir) = resolved.venv_dir.parent() {
-        let py_ver = resolved.python_version.as_str();
-        if let Err(e) = toolr_core::cache::touch_or_backfill(
-            cache_dir,
+    // Touch last_used_at on every invocation, backfilling `meta.json` for
+    // cache entries that predate the sidecar so `toolr self cache list`
+    // still sees them. Share `meta_cache_dir` with sync: an in-tree venv's
+    // parent is `tools/`, and a sidecar there would land in the repo.
+    let touched = toolr_core::project::meta_cache_dir(&repo_root, &resolved).and_then(|dir| {
+        toolr_core::cache::touch_or_backfill(
+            &dir,
             &repo_root,
             env!("CARGO_PKG_VERSION"),
-            py_ver,
-        ) {
-            eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
-        }
+            &resolved.python_version,
+        )
+        .map_err(anyhow::Error::from)
+    });
+    if let Err(e) = touched {
+        eprintln!("toolr: warning: failed to touch cache meta.json: {e}");
     }
 
     // A missing dependency surfaces as the Python runner's `ImportError`
