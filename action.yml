@@ -284,6 +284,12 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
+        # Releases are built only by `release.yml` dispatched on `main`, which
+        # calls this reusable workflow to build and attest each archive.
+        # Moving releases off `main` (tags, a maintenance branch) means
+        # widening both pins and the `refs/tags` rejection test together.
+        SIGNER_WORKFLOW: https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main
+        RELEASE_WORKFLOW: https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main
       run: |
         set -euo pipefail
         if ! command -v gh >/dev/null 2>&1; then
@@ -291,8 +297,7 @@ runs:
           echo "setup-toolr: install gh or pass 'skip-attestation: true' to bypass" >&2
           exit 1
         fi
-        # gh before 2.56 either reports the certificate SAN as an object or
-        # can't load GitHub's current trusted root, so it can't verify here.
+        # gh before 2.56 can't load GitHub's current Sigstore trusted root.
         gh_version=$(gh --version | sed -n 's/^gh version \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)
         gh_major=${gh_version%%.*}
         gh_minor=${gh_version#*.}
@@ -300,23 +305,21 @@ runs:
           echo "setup-toolr: gh >= 2.56 is required to verify attestations (found ${gh_version:-unknown})" >&2
           exit 1
         fi
-        # `ci.yml` calls the same signing workflow as releases, so only the
-        # certificate's `buildConfigURI` tells a release from a CI build. Both
-        # it and the signer are pinned to `main`: another ref can carry an
-        # edited `release.yml` without the release environment gate. The
-        # subject name binds the attestation to this exact version and triple.
+        # `--cert-identity` matches the signer exactly; `--signer-workflow`
+        # matches by prefix, so it would also accept `@refs/heads/main-evil`.
+        # `ci.yml` calls the same signer, so only `buildConfigURI` tells a
+        # release from a CI build, and `release.yml` on another ref may lack
+        # the release environment gate. The subject name binds the
+        # attestation to this exact version and triple.
         ARCHIVE_NAME="${ARCHIVE_PATH##*/}"
-        export ARCHIVE_NAME
+        export ARCHIVE_NAME RELEASE_WORKFLOW
         count=$(gh attestation verify "$ARCHIVE_PATH" \
           --repo s0undt3ch/ToolR \
-          --signer-workflow s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main \
+          --cert-identity "$SIGNER_WORKFLOW" \
           --deny-self-hosted-runners \
           --format json \
           --jq '[.[].verificationResult
-                 | select((.signature.certificate.subjectAlternativeName | if type == "object" then .value else . end)
-                            == "https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main"
-                          and .signature.certificate.buildConfigURI
-                            == "https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main"
+                 | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW
                           and any(.statement.subject[]; .name == env.ARCHIVE_NAME))]
                 | length')
         if ! [ "$count" -ge 1 ] 2>/dev/null; then
