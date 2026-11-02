@@ -34,7 +34,7 @@ pub fn dispatch_project(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCo
             Some(("rebuild", _)) => manifest_rebuild(),
             _ => unreachable!("clap enforces subcommand_required"),
         },
-        Some(("trust", trust_m)) => project_trust(trust_m),
+        Some(("trust", trust_m)) => project_trust(trust_m, root_quiet),
         Some(("untrust", untrust_m)) => project_untrust(untrust_m),
         _ => unreachable!("clap enforces subcommand_required"),
     }
@@ -48,11 +48,26 @@ fn root_from_path_arg(matches: &ArgMatches) -> Result<PathBuf> {
     Ok(toolr_core::discovery::discover_project_root(&start)?)
 }
 
-fn project_trust(matches: &ArgMatches) -> Result<ExitCode> {
+/// Trust first, then sync: stdout stays the trusted root alone, and a declined
+/// sync keeps the trust and exits 0. The root `-q` means the same as `--quiet`.
+fn project_trust(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
+    let quiet = matches.get_flag("quiet") || root_quiet;
     let root = root_from_path_arg(matches)?;
-    let store = TrustStore::open_default()?;
-    let record = store.trust(&root)?;
+    let (record, trusted) = toolr_core::trust::grant_trust(&root)?;
     println!("{}", shown(&record.repo_path));
+    if matches.get_flag("no-sync") {
+        return Ok(ExitCode::SUCCESS);
+    }
+    use toolr_core::project::{SYNC_LATER_HINT, SyncAfterTrust, sync_after_trust_on_tty};
+    let outcome = sync_after_trust_on_tty(&trusted, quiet)
+        .context("the repository is trusted, but syncing its tools venv failed")?;
+    match outcome {
+        SyncAfterTrust::Synced(resolved) if !quiet => {
+            eprintln!("toolr: synced venv at {}", shown(&resolved.venv_dir));
+        }
+        SyncAfterTrust::Declined if !quiet => eprintln!("toolr: {SYNC_LATER_HINT}"),
+        _ => {}
+    }
     Ok(ExitCode::SUCCESS)
 }
 

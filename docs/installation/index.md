@@ -138,7 +138,9 @@ an error instead. The one exception is `toolr project venv sync
 in pipes and in other non-interactive runs toolr also fails, unless you
 approve the install in advance:
 
-- Set `TOOLR_AUTO_INSTALL_UV=1` to install without asking.
+- Set `TOOLR_AUTO_INSTALL_UV=1` to install without asking. It also
+  answers the sync prompt after
+  [repository trust](../concepts.md#repository-trust).
 - Run [`toolr __install-uv-now`](../cli.md#__install-uv-now), for
   example in a CI setup step. It installs the managed copy when no uv
   is found, and does nothing when a usable one already is.

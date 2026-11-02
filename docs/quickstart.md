@@ -92,6 +92,11 @@ This writes three files under `tools/`:
 It then runs `uv sync` to materialise the tools venv. The next command
 you run uses that venv automatically.
 
+Working in a clone of a repo that already has `tools/`? Skip
+`toolr project init` and run `toolr project trust` instead. It trusts
+the repo, then asks whether to sync its tools venv (see
+[Repository trust](concepts.md#repository-trust)).
+
 ## 3. Run your first command
 
 ```sh

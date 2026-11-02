@@ -283,7 +283,7 @@ pub fn dispatch(
     // Before anything of the repo's runs: the venv path may `uv sync`, and the
     // host-Python path imports `tools/*.py` directly. Building the spec above
     // runs none of it, so a bad path value is reported before the trust prompt.
-    toolr_core::trust::require_trust(
+    let trusted = toolr_core::trust::require_trust(
         &repo_root,
         toolr_core::trust::TrustMode {
             never_prompt: output_opts.verbosity == "quiet",
@@ -294,7 +294,11 @@ pub fn dispatch(
     let resolved = resolve_venv_path(&repo_root)?;
     let quiet = output_opts.verbosity == "quiet";
     let verbose = output_opts.verbosity == "verbose";
-    let resolved = resync_if_needed(&repo_root, resolved, quiet)?;
+    let resolved = if trusted.granted_at_prompt() {
+        sync_after_trust_prompt(&trusted, resolved)?
+    } else {
+        resync_if_needed(&repo_root, resolved, quiet)?
+    };
     let python = resolved.python.clone();
 
     // Touch last_used_at, backfilling `meta.json` for entries that predate it,
@@ -389,6 +393,22 @@ fn resync_if_needed(
             format!("{problem} and could not be synced; run `toolr project venv sync`")
         })?;
     Ok(resolved)
+}
+
+/// The user has just trusted the repository at the prompt: a venv that needs
+/// a sync gets the sync prompt, not the uv install prompt, so the command can
+/// run after at most two questions. See
+/// `specs/archive/2026/2026-10-31-trust-then-sync-design.md`.
+fn sync_after_trust_prompt(
+    trusted: &toolr_core::trust::Trusted,
+    resolved: toolr_core::venv::ResolvedVenv,
+) -> anyhow::Result<toolr_core::venv::ResolvedVenv> {
+    use toolr_core::project::{SYNC_LATER_HINT, SyncAfterTrust, sync_after_trust_on_tty};
+    match sync_after_trust_on_tty(trusted, false)? {
+        SyncAfterTrust::Declined => anyhow::bail!(SYNC_LATER_HINT),
+        SyncAfterTrust::Synced(synced) => Ok(synced),
+        SyncAfterTrust::NotNeeded => Ok(resolved),
+    }
 }
 
 /// A runner from another minor release can pass the schema check yet

@@ -231,8 +231,9 @@ toolr project manifest rebuild --help
 ### `toolr project trust [PATH]` {#project-trust}
 
 Trust the repository at `PATH` (default: the current directory's project
-root), so toolr will run its `tools/*.py` and sync its tools venv. Prints the
-trusted root. See [Repository trust](concepts.md#repository-trust).
+root) and print the trusted root, then offer to sync its tools venv if it
+needs one. `--no-sync` only records the trust. When it asks, syncs or exits
+non-zero is in [Repository trust](concepts.md#repository-trust).
 
 ```sh
 toolr project trust --help
