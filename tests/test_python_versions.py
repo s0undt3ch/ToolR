@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 from tools.ci import ABI3_WHEEL_PYTHONS
 from tools.ci import ALL_CPYTHONS
 from tools.ci import BINARY_WHEEL_PYTHONS
@@ -24,6 +25,8 @@ TOML_FILES = {
     "toolr-py": "crates/toolr-py/pyproject.toml",
     "toolr": "crates/toolr/pyproject.toml",
     "tools": "tools/pyproject.toml",
+    "example-plugin": "examples/plugin-package/pyproject.toml",
+    "skill-example": "skills/toolr-command-packaging/examples/pyproject.toml",
     "root": "pyproject.toml",
     "mise": "mise.toml",
     "cargo": "Cargo.toml",
@@ -37,12 +40,45 @@ CP_TAG_WORKFLOWS = [
     ".github/workflows/_test.yml",
 ]
 CP_TAG_PATTERN = re.compile(r"""\b(?:cp-tag=|cptag=)["']?(cp\d+)""")
+# A `#` at the start of a line or after whitespace opens a YAML or shell comment.
+COMMENT_PATTERN = re.compile(r"(?:^|\s)#.*$", re.MULTILINE)
+
+
+def python3_floor(requires_python: str) -> int:
+    """Return ``N`` from the ``>=3.N`` clause, rejecting a patch-level floor as the Rust lockstep test does."""
+    for specifier in SpecifierSet(requires_python):
+        release = Version(specifier.version).release
+        if specifier.operator == ">=" and release[0] == 3 and len(release) > 1:
+            if len(release) > 2 and release[2] != 0:
+                msg = (
+                    f"requires-python {requires_python!r} sets a patch-level floor, which the "
+                    "version lists (and MIN_PYTHON_MINOR) can't express; use `>=3.N`"
+                )
+                raise ValueError(msg)
+            return release[1]
+    msg = f"requires-python {requires_python!r} has no `>=3.N` clause"
+    raise ValueError(msg)
 
 
 def supported_minors(requires_python: str) -> list[int]:
-    """Return the CPython 3 minors ``requires_python`` admits, capped at 3.39 when unbounded."""
+    """Return the CPython 3 minors ``requires_python`` admits; it needs both a floor and a `<3.N` ceiling."""
     spec = SpecifierSet(requires_python)
-    return [minor for minor in range(40) if f"3.{minor}" in spec]
+    ceilings = [
+        Version(specifier.version).release
+        for specifier in spec
+        if specifier.operator in {"<", "<="}
+    ]
+    ceiling = min(
+        (release[1] for release in ceilings if release[0] == 3 and len(release) > 1), default=None
+    )
+    if ceiling is None:
+        msg = (
+            f"requires-python {requires_python!r} needs an explicit `<3.N` upper bound; "
+            "the version lists are derived from it"
+        )
+        raise ValueError(msg)
+    floor = python3_floor(requires_python)
+    return [minor for minor in range(floor, ceiling + 1) if f"3.{minor}" in spec]
 
 
 @pytest.fixture(scope="module")
@@ -65,11 +101,40 @@ def supported(pyprojects: dict[str, dict[str, Any]]) -> list[int]:
     [
         (">=3.11,<3.16", list(range(11, 16))),
         (">=3.11,<=3.15", list(range(11, 16))),
-        (">=3.12", list(range(12, 40))),
+        ("<3.16, >= 3.12", list(range(12, 16))),
+        (">=3.12.0rc1,<3.14", [12, 13]),
     ],
 )
 def test_supported_minors_reads_bounds(requires_python: str, expected: list[int]) -> None:
     assert supported_minors(requires_python) == expected
+
+
+@pytest.mark.parametrize(
+    ("requires_python", "error"),
+    [
+        (">=3.11.4,<3.16", "patch-level floor"),
+        (">=3.11", "explicit `<3.N` upper bound"),
+        ("~=3.11", "explicit `<3.N` upper bound"),
+        (">=3.11,<4", "explicit `<3.N` upper bound"),
+        ("<3.16", "no `>=3.N` clause"),
+    ],
+)
+def test_supported_minors_rejects(requires_python: str, error: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(error)):
+        supported_minors(requires_python)
+
+
+@pytest.mark.parametrize(
+    ("requires_python", "expected"),
+    [(">=3.11", 11), (">= 3.12, <3.16", 12), (">=3.12.0rc1", 12)],
+)
+def test_python3_floor_reads_the_lower_bound(requires_python: str, expected: int) -> None:
+    assert python3_floor(requires_python) == expected
+
+
+def test_python3_floor_rejects_a_patch_floor() -> None:
+    with pytest.raises(ValueError, match="patch-level floor"):
+        python3_floor(">=3.11.4")
 
 
 def test_all_cpythons_match(supported: list[int]) -> None:
@@ -146,14 +211,26 @@ def _floor_settings(
         (
             "toolr-requires-python",
             "crates/toolr/pyproject.toml project.requires-python floor",
-            supported_minors(pyprojects["toolr"]["project"]["requires-python"])[:1],
-            [floor],
+            python3_floor(pyprojects["toolr"]["project"]["requires-python"]),
+            floor,
         ),
         (
             "tools-requires-python",
             "tools/pyproject.toml project.requires-python floor",
-            supported_minors(pyprojects["tools"]["project"]["requires-python"])[:1],
-            [floor],
+            python3_floor(pyprojects["tools"]["project"]["requires-python"]),
+            floor,
+        ),
+        (
+            "example-plugin-requires-python",
+            "examples/plugin-package/pyproject.toml project.requires-python floor",
+            python3_floor(pyprojects["example-plugin"]["project"]["requires-python"]),
+            floor,
+        ),
+        (
+            "skill-example-requires-python",
+            "skills/toolr-command-packaging/examples/pyproject.toml project.requires-python floor",
+            python3_floor(pyprojects["skill-example"]["project"]["requires-python"]),
+            floor,
         ),
         (
             "ruff",
@@ -169,13 +246,13 @@ def _floor_settings(
         ),
     ]
     for workflow in CP_TAG_WORKFLOWS:
-        tags = CP_TAG_PATTERN.findall((REPO_ROOT / workflow).read_text(encoding="utf-8"))
+        live = COMMENT_PATTERN.sub("", (REPO_ROOT / workflow).read_text(encoding="utf-8"))
         settings.append(
             (
                 f"cp-tag:{workflow}",
-                f"{workflow} cp-tag output",
-                tags or None,
-                [f"cp3{floor}"] * max(len(tags), 1),
+                f"{workflow} cp-tag assignments outside comments (expected exactly one)",
+                CP_TAG_PATTERN.findall(live),
+                [f"cp3{floor}"],
             )
         )
     return settings
@@ -189,6 +266,8 @@ FLOOR_LABELS = [
     "toolr-cibuildwheel",
     "toolr-requires-python",
     "tools-requires-python",
+    "example-plugin-requires-python",
+    "skill-example-requires-python",
     "ruff",
     "mypy",
     *(f"cp-tag:{workflow}" for workflow in CP_TAG_WORKFLOWS),
