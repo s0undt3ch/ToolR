@@ -15,6 +15,7 @@ import pytest
 from packaging.specifiers import SpecifierSet
 from tools.ci import ABI3_WHEEL_PYTHONS
 from tools.ci import ALL_CPYTHONS
+from tools.ci import BINARY_WHEEL_PYTHONS
 from tools.ci import REPO_ROOT
 
 SOURCE = "requires-python in crates/toolr-py/pyproject.toml"
@@ -22,13 +23,20 @@ SOURCE = "requires-python in crates/toolr-py/pyproject.toml"
 TOML_FILES = {
     "toolr-py": "crates/toolr-py/pyproject.toml",
     "toolr": "crates/toolr/pyproject.toml",
+    "tools": "tools/pyproject.toml",
     "root": "pyproject.toml",
     "mise": "mise.toml",
     "cargo": "Cargo.toml",
 }
 
-# Workflow steps that hard-code the abi3 wheel's cp-tag to find the downloaded artefact.
-CP_TAG_WORKFLOWS = [".github/workflows/ci.yml", ".github/workflows/_bench.yml"]
+# Workflow steps that hard-code the abi3 wheel's cp-tag to find the downloaded artefact, either as
+# `echo "cp-tag=cp311"` or as a `cptag="cp311"` shell variable.
+CP_TAG_WORKFLOWS = [
+    ".github/workflows/ci.yml",
+    ".github/workflows/_bench.yml",
+    ".github/workflows/_test.yml",
+]
+CP_TAG_PATTERN = re.compile(r"""\b(?:cp-tag=|cptag=)["']?(cp\d+)""")
 
 
 def supported_minors(requires_python: str) -> list[int]:
@@ -118,6 +126,12 @@ def _floor_settings(
             [f"cp3{floor}"],
         ),
         (
+            "binary-wheel-pythons",
+            "tools/ci.py BINARY_WHEEL_PYTHONS",
+            BINARY_WHEEL_PYTHONS,
+            [f"cp3{floor}"],
+        ),
+        (
             "toolr-py-cibuildwheel",
             "crates/toolr-py/pyproject.toml tool.cibuildwheel.build",
             pyprojects["toolr-py"]["tool"]["cibuildwheel"]["build"],
@@ -136,6 +150,12 @@ def _floor_settings(
             [floor],
         ),
         (
+            "tools-requires-python",
+            "tools/pyproject.toml project.requires-python floor",
+            supported_minors(pyprojects["tools"]["project"]["requires-python"])[:1],
+            [floor],
+        ),
+        (
             "ruff",
             "pyproject.toml tool.ruff.target-version",
             pyprojects["root"]["tool"]["ruff"]["target-version"],
@@ -149,7 +169,7 @@ def _floor_settings(
         ),
     ]
     for workflow in CP_TAG_WORKFLOWS:
-        tags = re.findall(r"cp-tag=(cp\d+)", (REPO_ROOT / workflow).read_text(encoding="utf-8"))
+        tags = CP_TAG_PATTERN.findall((REPO_ROOT / workflow).read_text(encoding="utf-8"))
         settings.append(
             (
                 f"cp-tag:{workflow}",
@@ -164,9 +184,11 @@ def _floor_settings(
 FLOOR_LABELS = [
     "pyo3-abi3",
     "abi3-wheel-pythons",
+    "binary-wheel-pythons",
     "toolr-py-cibuildwheel",
     "toolr-cibuildwheel",
     "toolr-requires-python",
+    "tools-requires-python",
     "ruff",
     "mypy",
     *(f"cp-tag:{workflow}" for workflow in CP_TAG_WORKFLOWS),

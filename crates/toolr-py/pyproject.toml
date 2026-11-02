@@ -6,8 +6,9 @@ build-backend = "maturin"
 name = "toolr-py"
 description = "Python bindings for the toolr framework (import as `toolr`)"
 readme = "README.md"
-# Adding or dropping a CPython? `tests/test_python_versions.py` lists every place to change;
-# `crates/toolr-core/tests/python_floor_lockstep.rs` covers `MIN_PYTHON_MINOR`.
+# Adding or dropping a CPython? `tests/test_python_versions.py` checks every version setting against
+# this line; `crates/toolr-core/tests/python_floor_lockstep.rs` covers `MIN_PYTHON_MINOR`. Prose that
+# quotes a version (comments, docstrings, CI summary text, skill examples) isn't checked; grep for it.
 requires-python = ">=3.11,<3.16"
 license = { file = "LICENSE" }
 authors = [
