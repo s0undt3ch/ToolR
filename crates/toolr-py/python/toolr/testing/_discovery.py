@@ -162,11 +162,9 @@ class CommandsTester:
     under the search path's ``tools/`` package to populate that dict.
     Tests then read it via :meth:`collected_command_groups`.
 
-    It also patches :func:`toolr._decorators._get_pending_command_storage`
-    with its own list, which holds standalone ``@command(group=...)``
-    commands until their group is declared. Entries still there when
-    :meth:`collected_command_groups` is called name groups no module
-    declares, and make it raise ``ValueError``.
+    A standalone ``@command`` whose ``group=`` names no declared group, or
+    that has no ``group=``, makes :meth:`collected_command_groups` raise
+    ``ValueError`` with the message the manifest build gives.
     """
 
     search_path: Path
@@ -203,6 +201,8 @@ class CommandsTester:
 
     @pending_command_patcher.default
     def _default_pending_command_patcher(self) -> _patch:
+        # Standalone `@command`s wait here until their group is declared;
+        # unpatched, `_get_pending_command_storage` keeps nothing.
         return patch(
             "toolr._decorators._get_pending_command_storage",
             return_value=self.pending_command_collector,
