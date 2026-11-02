@@ -587,13 +587,22 @@ def invoke_dispatcher(
     return func(ctx, **parent_kwargs, **{param: dispatched})
 
 
+def _is_first_party_module(name: str | None) -> bool:
+    """Whether ``name`` is the repo's own ``tools`` package or one of its submodules."""
+    return name is not None and (name == "tools" or name.startswith("tools."))
+
+
 def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
     """Append the styled "run `toolr project venv sync`" hint to ``stream``.
 
     The hint replaces what the Rust-side post-mortem stderr capture used
     to do — now that the runner inherits stderr (so Rich's TTY detection
-    works), the runner has to emit the hint itself.
+    works), the runner has to emit the hint itself. Skipped for the repo's
+    own ``tools`` package: it is never installed into the venv, so syncing
+    can't fix a typo or a circular import there.
     """
+    if _is_first_party_module(getattr(exc, "name", None)):
+        return
     missing = getattr(exc, "name", None) or "this module"
     print(
         f"\ntoolr: import `{missing}` failed at runtime. "
@@ -667,13 +676,16 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         print(code, file=sys.stderr)  # noqa: T201
         return 1
     except SpecError as exc:
-        print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
         # `_import_target` wraps an ImportError thrown while loading the
-        # user's command module into a SpecError. Surface the missing-dep
-        # hint when that's the case so a top-level or transitive import
-        # failure still gets the styled "run venv sync" guidance.
-        if isinstance(exc.__cause__, ImportError):
-            _print_missing_dep_hint(exc.__cause__, sys.stderr)
+        # user's command module into a SpecError. Print the cause's traceback
+        # first so a failure in a helper module names its file and line, then
+        # the summary and hint, so the remedy is the last thing on screen.
+        cause = exc.__cause__
+        if isinstance(cause, ImportError):
+            traceback.print_exception(cause, file=sys.stderr)
+        print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
+        if isinstance(cause, ImportError):
+            _print_missing_dep_hint(cause, sys.stderr)
         return 2
     except ImportError as exc:
         # An ImportError raised from inside the command function body

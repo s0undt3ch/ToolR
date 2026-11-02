@@ -25,6 +25,7 @@ import sys
 import textwrap
 import uuid
 from collections.abc import Callable
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated
@@ -43,6 +44,7 @@ from toolr._runner import _build_context
 from toolr._runner import _coerce_args
 from toolr._runner import _dec_hook
 from toolr._runner import _import_target
+from toolr._runner import _is_first_party_module
 from toolr._runner import _unwrap_annotated
 from toolr._runner import load_spec
 from toolr._runner import load_spec_from_env
@@ -977,6 +979,159 @@ def test_run_falls_back_to_generic_hint_when_importerror_has_no_name(
     err = capsys.readouterr().err
     assert "this module" in err
     assert "toolr project venv sync" in err
+
+
+def _drop_tools_modules() -> None:
+    for name in [m for m in sys.modules if m == "tools" or m.startswith("tools.")]:
+        del sys.modules[name]
+
+
+@pytest.fixture
+def make_tools_package(tmp_path: Path) -> Iterator[Callable[[dict[str, str]], Path]]:
+    """Factory: write a ``tools`` package under ``tmp_path``; return it as ``repo_root``.
+
+    Teardown restores ``sys.path`` (``run()`` appends ``repo_root``) and drops
+    every ``tools``/``tools.*`` module so later tests import their own.
+    """
+    saved_path = sys.path[:]
+    _drop_tools_modules()
+
+    def _make(files: dict[str, str]) -> Path:
+        package = tmp_path / "tools"
+        package.mkdir()
+        (package / "__init__.py").write_text("")
+        for name, source in files.items():
+            (package / name).write_text(textwrap.dedent(source).lstrip())
+        return tmp_path
+
+    yield _make
+    sys.path[:] = saved_path
+    _drop_tools_modules()
+
+
+def test_run_prints_traceback_for_transitive_import_failure(
+    make_tools_package: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A third-party import failing in a helper module two files away names that file and line."""
+    repo = make_tools_package(
+        {
+            "demo.py": """
+                from tools._helpers import load
+
+
+                def hello(ctx) -> None:
+                    load()
+                """,
+            "_helpers.py": """
+                import toolr_f28_missing_dep
+
+
+                def load() -> None:
+                    toolr_f28_missing_dep.go()
+                """,
+        }
+    )
+    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
+    err = capsys.readouterr().err
+    assert "Traceback (most recent call last)" in err
+    assert '_helpers.py", line 1' in err
+    assert "ModuleNotFoundError: No module named 'toolr_f28_missing_dep'" in err
+    assert err.index("Traceback") < err.index("toolr runner: failed to import tools.demo")
+    assert "`toolr_f28_missing_dep`" in err
+    assert "toolr project venv sync" in err
+
+
+def test_run_omits_sync_hint_for_missing_tools_submodule(
+    make_tools_package: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A typo in an import of the repo's own `tools` package can't be fixed by syncing the venv."""
+    repo = make_tools_package(
+        {
+            "demo.py": """
+                from tools._helprs import load
+
+
+                def hello(ctx) -> None:
+                    load()
+                """,
+            "_helpers.py": """
+                def load() -> None:
+                    pass
+                """,
+        }
+    )
+    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
+    err = capsys.readouterr().err
+    assert 'demo.py", line' in err
+    assert "toolr runner: failed to import tools.demo" in err
+    assert "toolr project venv sync" not in err
+
+
+def test_run_omits_sync_hint_for_circular_tools_import(
+    make_tools_package: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A circular import between two `tools/*.py` modules gets the traceback but no sync hint."""
+    repo = make_tools_package(
+        {
+            "demo.py": """
+                from tools.a import x
+
+
+                def hello(ctx) -> None:
+                    print(x)
+                """,
+            "a.py": """
+                from tools.b import y
+
+                x = 1
+                """,
+            "b.py": """
+                from tools.a import x
+
+                y = 2
+                """,
+        }
+    )
+    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
+    err = capsys.readouterr().err
+    assert "partially initialized module" in err
+    assert 'b.py", line 1' in err
+    assert "toolr project venv sync" not in err
+
+
+def test_run_omits_sync_hint_for_in_body_tools_import(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The in-body `ImportError` arm applies the same first-party rule."""
+
+    def fake_target(ctx, **_kw) -> None:
+        msg = "No module named 'tools.nope'"
+        raise ImportError(msg, name="tools.nope")
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
+    err = capsys.readouterr().err
+    assert "ImportError: No module named 'tools.nope'" in err
+    assert "toolr project venv sync" not in err
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("tools", True),
+        ("tools.x.y", True),
+        ("toolsmith", False),
+        ("yaml", False),
+        (None, False),
+    ],
+)
+def test_is_first_party_module(name: str | None, *, expected: bool) -> None:
+    assert _is_first_party_module(name) is expected
 
 
 # --------------------------------------------------------------------------
