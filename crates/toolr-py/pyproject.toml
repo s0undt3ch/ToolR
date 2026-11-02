@@ -6,12 +6,8 @@ build-backend = "maturin"
 name = "toolr-py"
 description = "Python bindings for the toolr framework (import as `toolr`)"
 readme = "README.md"
-# Adding or dropping a CPython? `tests/test_python_versions.py` checks the classifiers below, the CI
-# matrices and wheel tags in tools/ci.py, mise.toml's pythons, pyo3's abi3 feature, the cibuildwheel
-# `build` lines, the workflows' wheel cp-tags, ruff/mypy targets and every other `requires-python`
-# floor (crates/toolr, tools/, the example plugin and the packaging skill's example). It doesn't read
-# prose (comments, docstrings, CI summary text); grep for those. `python_floor_lockstep.rs` in
-# crates/toolr-core/tests covers `MIN_PYTHON_MINOR`.
+# Adding or dropping a CPython? tests/test_python_versions.py and python_floor_lockstep.rs enforce the
+# version lists; neither reads prose, so grep for 3.11/cp311 too.
 requires-python = ">=3.11,<3.16"
 license = { file = "LICENSE" }
 authors = [
