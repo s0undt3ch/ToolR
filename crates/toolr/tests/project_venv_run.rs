@@ -95,7 +95,7 @@ fn fake_in_tree_venv(repo: &std::path::Path, python_body: &str) -> std::path::Pa
 /// (`bin/python` on Unix, `Scripts\python.exe` on Windows), plus a fake
 /// installed `toolr` package at the OS-correct site-packages layout
 /// (`lib/pythonX.Y/site-packages/toolr/` on Unix, `Lib/site-packages/toolr/`
-/// on Windows — see `toolr_core::venv::validate::candidate_site_packages`),
+/// on Windows — `toolr_core::venv::site_packages_dirs` finds either),
 /// unless `with_toolr_pkg` is false (used to exercise the validation-failure
 /// path). Returns the venv dir.
 fn fake_in_tree_venv_cross_platform(

@@ -4,7 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use walkdir::WalkDir;
+
+use super::layout::site_packages_dirs;
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -17,14 +18,14 @@ pub enum ValidationError {
     InterpreterMissing(PathBuf),
 }
 
-/// Walk the venv's `lib/python*/site-packages` and look for the toolr
-/// package directory. Returns its path on success.
+/// Look in the venv's `site-packages` directories (see [`site_packages_dirs`])
+/// for the toolr package directory. Returns its path on success.
 ///
 /// Handles both regular installs (package directory in site-packages) and
 /// editable/direct-url installs where a `.pth` file adds the source root to
 /// `sys.path` (as maturin's editable mode does).
 pub fn locate_toolr_package(venv_dir: &Path) -> Option<PathBuf> {
-    for site_packages in candidate_site_packages(venv_dir) {
+    for site_packages in site_packages_dirs(venv_dir) {
         // Regular (non-editable) install: toolr/__init__.py is in site-packages.
         let init = site_packages.join("toolr").join("__init__.py");
         if init.is_file() {
@@ -69,36 +70,11 @@ fn locate_via_pth_files(site_packages: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Iterate possible `site-packages` directories within a venv.
-/// Linux/macOS: `<venv>/lib/python*/site-packages/`.
-/// Windows: `<venv>/Lib/site-packages/`.
-pub fn candidate_site_packages(venv_dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    if cfg!(windows) {
-        out.push(venv_dir.join("Lib").join("site-packages"));
-    } else {
-        let lib = venv_dir.join("lib");
-        if lib.is_dir() {
-            for entry in WalkDir::new(&lib)
-                .max_depth(1)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                let name = entry.file_name().to_string_lossy();
-                if name.starts_with("python") {
-                    out.push(entry.path().join("site-packages"));
-                }
-            }
-        }
-    }
-    out
-}
-
 /// The `toolr-py` version installed in the venv, read from its
 /// `toolr_py-<version>.dist-info` directory name. Lists `site-packages`
 /// only: no file reads, no interpreter.
 pub fn installed_toolr_py_version(venv_dir: &Path) -> Option<String> {
-    candidate_site_packages(venv_dir).iter().find_map(|sp| {
+    site_packages_dirs(venv_dir).iter().find_map(|sp| {
         fs::read_dir(sp)
             .ok()?
             .filter_map(Result::ok)
@@ -240,6 +216,24 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         fake_unix_venv(tmp.path(), true, true);
         assert_eq!(installed_toolr_py_version(tmp.path()), None);
+    }
+
+    /// The Windows `Lib/site-packages` layout is found on every platform.
+    #[test]
+    fn locates_toolr_package_and_version_in_windows_layout() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let sp = tmp.path().join("Lib").join("site-packages");
+        std::fs::create_dir_all(sp.join("toolr")).unwrap();
+        std::fs::write(sp.join("toolr").join("__init__.py"), b"").unwrap();
+        std::fs::create_dir_all(sp.join("toolr_py-0.40.0.dist-info")).unwrap();
+        assert_eq!(
+            super::locate_toolr_package(tmp.path()),
+            Some(sp.join("toolr"))
+        );
+        assert_eq!(
+            super::installed_toolr_py_version(tmp.path()).as_deref(),
+            Some("0.40.0")
+        );
     }
 
     #[test]
