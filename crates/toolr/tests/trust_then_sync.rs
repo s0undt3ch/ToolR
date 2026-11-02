@@ -17,6 +17,7 @@ const TRUST_PROMPT: &str = "Trust it? [y/N]";
 const SYNC_PROMPT: &str = "Sync it now? [y/N]";
 const UV_PROMPT: &str = "didn't find it on PATH";
 const HINT: &str = "run `toolr project venv sync` when you're ready";
+const REFUSAL: &str = "refusing to run code from an untrusted repository";
 const UV_INSTALL_FAILED: &str = "HTTP error during uv install";
 const UNREACHABLE_PROXY: &str = "http://127.0.0.1:9";
 const HELLO_TOOLS: &str = "\"\"\"Hi.\"\"\"\nfrom toolr import command_group\ngroup = command_group(\"hello\", \"Hi\")\n@group.command\ndef world(ctx):\n    \"\"\"World.\"\"\"\n";
@@ -157,9 +158,42 @@ impl Clone {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .envs(env.iter().copied());
-        let out = cmd.spawn().unwrap().wait_with_output().unwrap();
+        let out = wait_or_kill(cmd.spawn().unwrap());
         drop(master);
         out
+    }
+}
+
+/// An unexpected prompt would wait on the pty forever, so give up after a
+/// deadline and fail with whatever toolr printed.
+fn wait_or_kill(mut child: std::process::Child) -> Output {
+    use std::io::Read;
+    fn drain(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            buf
+        })
+    }
+    let stdout = drain(child.stdout.take().unwrap());
+    let stderr = drain(child.stderr.take().unwrap());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            let err = String::from_utf8_lossy(&stderr.join().unwrap()).into_owned();
+            panic!("toolr still running after 20s, waiting on a prompt?\n{err}");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    Output {
+        status,
+        stdout: stdout.join().unwrap(),
+        stderr: stderr.join().unwrap(),
     }
 }
 
@@ -332,6 +366,8 @@ fn dispatch_trust_declined_syncs_nothing() {
     let out = c.run_with_tty(&["hello", "world"], "n\n");
     let err = stderr(&out);
     assert!(!out.status.success());
+    assert!(err.contains(TRUST_PROMPT), "{err}");
+    assert!(err.contains(REFUSAL), "{err}");
     assert!(!err.contains(SYNC_PROMPT), "{err}");
     assert!(!c.fx.uv_ran_sync());
     assert!(!c.sentinel.exists());
@@ -369,6 +405,9 @@ fn dispatch_trust_all_leaves_a_missing_venv_alone() {
     let c = Clone::new();
     let out = c.run_with_tty_env(&["hello", "world"], "", &[("TOOLR_TRUST_ALL", "1")]);
     let err = stderr(&out);
+    // The fixture's interpreter exists, so the never-synced venv runs as it is.
+    assert!(out.status.success(), "{err}");
+    assert!(c.sentinel.exists(), "the command should have run");
     assert!(!err.contains(TRUST_PROMPT), "{err}");
     assert!(!err.contains(SYNC_PROMPT), "{err}");
     assert!(!c.fx.uv_ran_sync());
@@ -377,7 +416,12 @@ fn dispatch_trust_all_leaves_a_missing_venv_alone() {
 #[test]
 fn dispatch_without_a_terminal_syncs_nothing() {
     let c = Clone::new();
-    c.toolr().args(["hello", "world"]).assert().failure();
+    c.toolr()
+        .args(["hello", "world"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(REFUSAL))
+        .stderr(predicates::str::contains("Run `toolr project trust`"));
     assert!(!c.fx.uv_ran_sync());
     assert!(!c.sentinel.exists());
 }
