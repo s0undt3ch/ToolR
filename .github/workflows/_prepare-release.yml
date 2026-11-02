@@ -25,10 +25,6 @@ on:
         required: true
         type: string
         description: 'Version of mise to install. Pass the caller workflow''s MISE_VERSION env var.'
-      toolr-version:
-        required: true
-        type: string
-        description: 'toolr binary version to dogfood. Pass the caller workflow''s TOOLR_VERSION env var.'
     secrets:
       github-app-private-key:
         required: false
@@ -113,21 +109,14 @@ jobs:
           cache: true
           cache_key_prefix: ${{ inputs.cache-seed }}|mise|${{ inputs.mise-version }}|prepare-release|${{ runner.os }}|${{ runner.arch }}
 
-      - name: Require the toolr pin
-        # The action installs `latest` when `version` is empty.
-        env:
-          TOOLR_VERSION: ${{ inputs.toolr-version }}
-        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
-
       - name: Setup ToolR
         # In-repo composite action: downloads the toolr binary from a
         # GitHub release, verifies the SLSA build provenance, and
         # caches the in-tree `tools/.venv` for the prepare-release
         # job's `toolr` invocations.
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: ${{ inputs.toolr-version }}
           cache-prefix: ${{ inputs.cache-seed }}|setup-toolr|prepare-release
 
       - name: Setup Prek

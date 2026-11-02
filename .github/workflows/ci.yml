@@ -46,13 +46,11 @@ jobs:
       test-pythons: ${{ steps.generate-build-matrix.outputs.test-pythons }}
       test-pythons-narrow: ${{ steps.generate-build-matrix.outputs.test-pythons-narrow }}
       run-full-bench: ${{ steps.generate-build-matrix.outputs.run-full-bench }}
-      # Mirrors env.CACHE_SEED / env.MISE_VERSION / env.TOOLR_VERSION.
-      # Exposed as outputs so reusable workflows can read them via
-      # `needs.prepare-ci.outputs.*`
+      # Mirrors env.CACHE_SEED / env.MISE_VERSION. Exposed as outputs so
+      # reusable workflows can read them via `needs.prepare-ci.outputs.*`
       # (the `env` context is not allowed in workflow-call `with:` blocks).
       cache-seed: ${{ steps.cache-seed.outputs.cache-seed }}
       mise-version: ${{ steps.mise-version.outputs.mise-version }}
-      toolr-version: ${{ steps.toolr-version.outputs.toolr-version }}
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
@@ -80,20 +78,12 @@ jobs:
         id: mise-version
         run: echo "mise-version=$MISE_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Expose toolr version
-        id: toolr-version
-        run: echo "toolr-version=$TOOLR_VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Set up mise
         uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         with:
           version: ${{ env.MISE_VERSION }}
           cache: true
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|prepare-ci|${{ runner.os }}|${{ runner.arch }}
-
-      - name: Require the toolr pin
-        # The action installs `latest` when `version` is empty.
-        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
 
       - name: Setup ToolR
         # In-repo composite action: downloads the toolr binary from a
@@ -102,9 +92,8 @@ jobs:
         # on `tools/{pyproject.toml,uv.lock}` so subsequent runs skip
         # the `uv sync` toolr would otherwise run on first invocation.
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|prepare-ci
 
       - name: Generate Build Matrix
@@ -154,18 +143,13 @@ jobs:
           cache-seed: ${{ env.CACHE_SEED }}|ci
           mise-version: ${{ env.MISE_VERSION }}
 
-      - name: Require the toolr pin
-        # The action installs `latest` when `version` is empty.
-        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
-
       - name: Setup ToolR
         # The prek hooks backed by `toolr pre-commit <command>`
         # dispatch from the tools venv (see mise.toml for the local
         # equivalent).
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|pre-commit
 
       - name: Run Prek
@@ -192,7 +176,6 @@ jobs:
     with:
       cache-seed: ${{ needs.prepare-ci.outputs.cache-seed }}
       mise-version: ${{ needs.prepare-ci.outputs.mise-version }}
-      toolr-version: ${{ needs.prepare-ci.outputs.toolr-version }}
     permissions:
       contents: read
       id-token: write
@@ -262,15 +245,10 @@ jobs:
           cache: true
           cache_key_prefix: ${{ env.CACHE_SEED }}|mise|${{ env.MISE_VERSION }}|packslip-check|${{ runner.os }}|${{ runner.arch }}
 
-      - name: Require the toolr pin
-        # The action installs `latest` when `version` is empty.
-        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
-
       - name: Setup ToolR
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|packslip-check
 
       - name: Install the packslip CLI
@@ -689,21 +667,13 @@ jobs:
           chmod +x "$dest/toolr"
           echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
 
-      - name: Require the toolr pin
-        # The action installs `latest` when `version` is empty.
-        run: test -n "$TOOLR_VERSION" || { echo "::error::TOOLR_VERSION is empty"; exit 1; }
-
       - name: Setup ToolR
-        # Dispatches `toolr pre-commit regen-doc-snippets`. The
-        # released binary from this action only drives the command —
-        # TOOLR_VERSION pins it to the toolr-py in the tools venv, so
-        # the runner-schema contract holds — while the freshly
-        # built binary under test is what the captures actually run,
-        # via TOOLR_REGEN_BINARY below.
+        # This pinned release binary dispatches `toolr pre-commit
+        # regen-doc-snippets` into the tools venv. The snippets capture
+        # the freshly built binary under test, via TOOLR_REGEN_BINARY.
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: ${{ env.TOOLR_VERSION }}
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|docs
 
       - name: Verify doc snippets are in sync
