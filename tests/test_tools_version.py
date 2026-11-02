@@ -4,7 +4,7 @@ After delegating Cargo.toml writes to ``cargo set-version`` (cargo-edit), the
 remaining Python surface is:
 
 * ``_read_workspace_version`` — a stdlib ``tomllib`` reader.
-* ``_parse_version`` / ``_parse_release_version`` / ``_cargo_version`` — parse a
+* ``_parse_release_version`` / ``_cargo_version`` — parse a
   version with ``packaging`` and render the SemVer form Cargo needs.
 * ``_compute_dev_version`` — derives a dev version from the latest tag, tested
   against real git repositories.
@@ -209,6 +209,11 @@ def github_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, P
     return paths
 
 
+def _dev_version(ctx: ContextForTesting) -> str:
+    """``_compute_dev_version`` in the Cargo form ``bump`` writes."""
+    return _cargo_version(_compute_dev_version(ctx))
+
+
 def _short_sha(ctx: ContextForTesting) -> str:
     return git(ctx.repo_root, "rev-parse", "--short", "HEAD").strip()
 
@@ -218,7 +223,7 @@ def test_compute_dev_version_after_final_tag(
 ) -> None:
     """After ``v0.20.0``, the dev version targets the next patch release."""
     ctx = release_repo("v0.20.0", commits=2)
-    assert _compute_dev_version(ctx) == "0.20.1-dev2"
+    assert _dev_version(ctx) == "0.20.1-dev2"
 
 
 def test_compute_dev_version_pull_request_appends_sha(
@@ -227,7 +232,7 @@ def test_compute_dev_version_pull_request_appends_sha(
     """Pull-request builds append ``+g<sha>`` so concurrent PRs don't collide."""
     ctx = release_repo("v0.11.0", commits=7)
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-    assert _compute_dev_version(ctx) == f"0.11.1-dev7+g{_short_sha(ctx)}"
+    assert _dev_version(ctx) == f"0.11.1-dev7+g{_short_sha(ctx)}"
 
 
 @pytest.mark.parametrize(
@@ -246,7 +251,7 @@ def test_compute_dev_version_after_prerelease_tag(
 ) -> None:
     """After a pre-release, the dev version targets the next pre-release of the same kind."""
     ctx = release_repo(tag, commits=3)
-    dev = _compute_dev_version(ctx)
+    dev = _dev_version(ctx)
     assert dev == expected
     assert Version(tag) < Version(dev) < Version(tag.removeprefix("v").split("-")[0])
 
@@ -256,13 +261,13 @@ def test_compute_dev_version_prerelease_tag_pull_request(
 ) -> None:
     ctx = release_repo("v1.0.0-rc.1", commits=5)
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-    assert _compute_dev_version(ctx) == f"1.0.0-rc.2.dev5+g{_short_sha(ctx)}"
+    assert _dev_version(ctx) == f"1.0.0-rc.2.dev5+g{_short_sha(ctx)}"
 
 
 def test_compute_dev_version_on_the_tag(release_repo: Callable[..., ContextForTesting]) -> None:
     """Zero commits since the tag still yields a dev version above it."""
     ctx = release_repo("v0.20.0")
-    assert _compute_dev_version(ctx) == "0.20.1-dev0"
+    assert _dev_version(ctx) == "0.20.1-dev0"
 
 
 def test_compute_dev_version_no_tags_fallback(
@@ -271,7 +276,7 @@ def test_compute_dev_version_no_tags_fallback(
     """Without a matching tag, fall back to ``TODAY_VERSION`` and the total commit count."""
     ctx = release_repo("not-a-release", commits=2)
     major, minor, _ = TODAY_VERSION.split(".")
-    assert _compute_dev_version(ctx) == f"{major}.{minor}.1-dev3"
+    assert _dev_version(ctx) == f"{major}.{minor}.1-dev3"
 
 
 @pytest.mark.parametrize("tag", ["v1.2.3-foo", "v1.2.3.4"])
@@ -281,7 +286,7 @@ def test_compute_dev_version_unparsable_tag(
     """A tag matching the glob that isn't a release version is an error naming the tag."""
     ctx = release_repo(tag, commits=1)
     with pytest.raises(SystemExit) as excinfo:
-        _compute_dev_version(ctx)
+        _dev_version(ctx)
     assert excinfo.value.code == 1
     assert tag in ctx.stderr
 

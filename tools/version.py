@@ -1,4 +1,16 @@
-"""Versioning utilities."""
+"""Versioning utilities.
+
+Release versions are parsed with ``packaging`` (PEP 440) and rendered in two
+forms:
+
+* Cargo (SemVer), e.g. ``1.0.0-rc.1``: ``Cargo.toml``, the release tag
+  (``v1.0.0-rc.1``), the GitHub Actions outputs, ``action.yml``'s default and
+  the CHANGELOG.
+* PEP 440, e.g. ``1.0.0rc1``: the wheels (maturin normalises the Cargo version)
+  and every version comparison here.
+
+Pre-release policy: see "Pre-releases" in ``release-notes/README.md``.
+"""
 
 from __future__ import annotations
 
@@ -106,27 +118,23 @@ def _set_action_yml_default_version(
     ctx.info(f"Set {action_yml_path} `version` input default to '{new_version}'")
 
 
-def _parse_version(raw: str) -> Version:
-    """Parse ``raw`` (one leading ``v`` allowed) as a PEP 440 version."""
-    msg = f"{raw!r} is not a valid version"
-    stripped = raw.removeprefix("v")
-    # `packaging` takes a leading `v` itself, so check there was only one.
-    if not stripped[:1].isdigit():
-        raise ValueError(msg)
-    try:
-        return Version(stripped)
-    except InvalidVersion as exc:
-        raise ValueError(msg) from exc
-
-
 def _parse_release_version(raw: str) -> Version:
     """Parse a version to release: ``X.Y.Z`` with an optional pre-release.
 
-    Rejects what Cargo's ``X.Y.Z[-pre]`` can't hold or isn't a release: an
-    epoch, a post-release (PEP 440 reads ``1.0.0-1`` as one), a dev release,
-    a local segment, or a release segment that isn't three numbers.
+    One leading ``v`` is allowed. Rejects what Cargo's ``X.Y.Z[-pre]`` can't
+    hold or isn't a release: an epoch, a post-release (PEP 440 reads
+    ``1.0.0-1`` as one), a dev release, a local segment, or a release segment
+    that isn't three numbers.
     """
-    version = _parse_version(raw)
+    invalid = f"{raw!r} is not a valid version"
+    stripped = raw.removeprefix("v")
+    # `packaging` takes a leading `v` itself, so check there was only one.
+    if not stripped[:1].isdigit():
+        raise ValueError(invalid)
+    try:
+        version = Version(stripped)
+    except InvalidVersion as exc:
+        raise ValueError(invalid) from exc
     if (
         len(version.release) != 3
         or version.epoch
@@ -201,8 +209,8 @@ def _find_release_tag(ctx: Context, version: Version) -> str | None:
     return None
 
 
-def _compute_dev_version(ctx: Context) -> str:
-    """Compute the dev version from the latest release tag, in Cargo form.
+def _compute_dev_version(ctx: Context) -> Version:
+    """Compute the dev version from the latest release tag.
 
     The tag, the commit count since it and the SHA come from separate git
     commands, and the tag is parsed with ``packaging``; see
@@ -215,8 +223,7 @@ def _compute_dev_version(ctx: Context) -> str:
     if returncode != 0 or not tag:
         # No matching tag in history — use the fallback base, counting every commit.
         _, count = _git_output(ctx, "rev-list", "--count", "HEAD")
-        version = _next_dev_version(Version(TODAY_VERSION), int(count or "0"))
-        return _cargo_version(version)
+        return _next_dev_version(Version(TODAY_VERSION), int(count or "0"))
     try:
         tag_version = _parse_release_version(tag)
     except ValueError as exc:
@@ -226,7 +233,7 @@ def _compute_dev_version(ctx: Context) -> str:
     sha = None
     if os.environ.get("GITHUB_EVENT_NAME", "") == "pull_request":
         _, sha = _git_output(ctx, "rev-parse", "--short", "HEAD")
-    return _cargo_version(_next_dev_version(tag_version, int(count), sha))
+    return _next_dev_version(tag_version, int(count), sha)
 
 
 @group.command
@@ -258,48 +265,52 @@ def bump(
     """
     if new_version:
         try:
-            parsed = _parse_release_version(new_version)
+            pep440 = _parse_release_version(new_version)
         except ValueError as exc:
             ctx.error(str(exc))
             ctx.exit(1)
-        version = _cargo_version(parsed)
     else:
-        version = _compute_dev_version(ctx)
-        parsed = Version(version)
+        pep440 = _compute_dev_version(ctx)
+    cargo_version = _cargo_version(pep440)
 
     if check_existing_tag:
-        existing = _find_release_tag(ctx, parsed)
+        existing = _find_release_tag(ctx, pep440)
         if existing:
-            ctx.error(f"Tag {existing} already exists for version {version}")
+            ctx.error(f"Tag {existing} already exists for version {cargo_version}")
             ctx.exit(1)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         ctx.info("Writing release-version and release-patch-name to GitHub output file ...")
         with open(github_output, "a") as f:
-            f.write(f"release-version={version}\n")
-            f.write(f"release-patch-name=toolr-{version}.patch\n")
-            # Only a pre-release segment counts: a dev build after a final
-            # release reports false, so CI dry runs keep exercising the
-            # CHANGELOG and release-notes steps a final release runs.
-            f.write(f"release-prerelease={str(parsed.pre is not None).lower()}\n")
+            f.write(f"release-version={cargo_version}\n")
+            f.write(f"release-patch-name=toolr-{cargo_version}.patch\n")
+            # Only a pre-release segment counts, not `is_prerelease` (true for
+            # any dev release): a dev build after a final release reports false,
+            # so CI dry runs exercise the CHANGELOG and release-notes steps a
+            # final release runs. A dev build after an rc reports true, so while
+            # an rc is the latest tag, CI dry runs on main skip those steps.
+            # See "Pre-releases" in release-notes/README.md.
+            f.write(f"release-prerelease={str(pep440.pre is not None).lower()}\n")
 
     github_env = os.environ.get("GITHUB_ENV")
     if github_env:
         ctx.info("Writing RELEASE_VERSION to GitHub environment file ...")
         with open(github_env, "a") as f:
-            f.write(f"RELEASE_VERSION={version}\n")
+            f.write(f"RELEASE_VERSION={cargo_version}\n")
 
     github_step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if github_step_summary:
         with open(github_step_summary, "a") as f:
-            f.write(f"Releasing version: `{version}`\n")
+            f.write(f"Releasing version: `{cargo_version}`\n")
 
     if write:
-        ctx.info(f"Setting [workspace.package] version to {version} via cargo set-version ...")
-        _set_workspace_version(ctx, version)
+        ctx.info(
+            f"Setting [workspace.package] version to {cargo_version} via cargo set-version ..."
+        )
+        _set_workspace_version(ctx, cargo_version)
         if include_action:
-            ctx.info(f"Updating action.yml `version` input default to '{version}' ...")
-            _set_action_yml_default_version(ctx, version)
+            ctx.info(f"Updating action.yml `version` input default to '{cargo_version}' ...")
+            _set_action_yml_default_version(ctx, cargo_version)
 
-    ctx.print(version)
+    ctx.print(cargo_version)
