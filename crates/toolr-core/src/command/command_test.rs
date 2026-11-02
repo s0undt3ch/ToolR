@@ -909,16 +909,16 @@ mod test_suite {
         /// Pids whose full command line matches `pattern`.
         #[cfg(unix)]
         fn pids_matching(pattern: &str) -> Vec<u32> {
-            let output = Command::new("pgrep").args(["-f", pattern]).output();
-            output.map_or_else(
-                |_| Vec::new(),
-                |out| {
+            Command::new("pgrep")
+                .args(["-f", pattern])
+                .output()
+                .map(|out| {
                     String::from_utf8_lossy(&out.stdout)
                         .lines()
                         .filter_map(|l| l.parse().ok())
                         .collect()
-                },
-            )
+                })
+                .unwrap_or_default()
         }
 
         #[cfg(unix)]

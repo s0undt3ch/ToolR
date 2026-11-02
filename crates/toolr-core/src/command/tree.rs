@@ -49,15 +49,12 @@ fn parent_of(pid: u32) -> Option<u32> {
 
 #[cfg(target_os = "linux")]
 fn all_pids() -> Vec<u32> {
-    std::fs::read_dir("/proc").map_or_else(
-        |_| Vec::new(),
-        |entries| {
-            entries
-                .flatten()
-                .filter_map(|entry| entry.file_name().to_str()?.parse().ok())
-                .collect()
-        },
-    )
+    std::fs::read_dir("/proc")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_str()?.parse().ok())
+        .collect()
 }
 
 #[cfg(target_os = "macos")]
@@ -173,17 +170,16 @@ fn process_table() -> Vec<(u32, u32)> {
     let mut table = Vec::new();
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if snapshot == INVALID_HANDLE_VALUE {
-            return table;
+        if snapshot != INVALID_HANDLE_VALUE {
+            let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+            let mut more = Process32FirstW(snapshot, &mut entry);
+            while more != 0 {
+                table.push((entry.th32ProcessID, entry.th32ParentProcessID));
+                more = Process32NextW(snapshot, &mut entry);
+            }
+            CloseHandle(snapshot);
         }
-        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
-        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        let mut more = Process32FirstW(snapshot, &mut entry);
-        while more != 0 {
-            table.push((entry.th32ProcessID, entry.th32ParentProcessID));
-            more = Process32NextW(snapshot, &mut entry);
-        }
-        CloseHandle(snapshot);
     }
     table
 }
