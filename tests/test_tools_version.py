@@ -233,9 +233,11 @@ def test_compute_dev_version_pull_request_appends_sha(
 @pytest.mark.parametrize(
     ("tag", "expected"),
     [
-        # The shape from the F-26 report: `git describe` gave `v1.0.0-rc1-3-g<sha>`.
-        ("v1.0.0-rc1", "1.0.0-rc.2.dev3"),
+        # The tag spelling the release pipeline produces.
         ("v1.0.0-rc.1", "1.0.0-rc.2.dev3"),
+        # A hand-made tag, the shape from the F-26 report: `git describe` gave
+        # `v1.0.0-rc1-3-g<sha>`, which split into four parts.
+        ("v1.0.0-rc1", "1.0.0-rc.2.dev3"),
         ("v1.0.0-beta.1", "1.0.0-beta.2.dev3"),
     ],
 )
@@ -252,7 +254,7 @@ def test_compute_dev_version_after_prerelease_tag(
 def test_compute_dev_version_prerelease_tag_pull_request(
     release_repo: Callable[..., ContextForTesting], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    ctx = release_repo("v1.0.0-rc1", commits=5)
+    ctx = release_repo("v1.0.0-rc.1", commits=5)
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     assert _compute_dev_version(ctx) == f"1.0.0-rc.2.dev5+g{_short_sha(ctx)}"
 
@@ -288,7 +290,8 @@ def test_bump_strips_leading_v(
     release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
 ) -> None:
     """``--new-version v0.36.0`` releases ``0.36.0``; the tag check looks for ``v0.36.0``."""
-    ctx = release_repo("v0.35.0", commits=1)
+    # `vnext` and the floating `v0.36` aren't release versions; the tag check skips them.
+    ctx = release_repo("v0.35.0", "vnext", "v0.36", commits=1)
     bump(ctx, new_version="v0.36.0", check_existing_tag=True)
     output = github_files["GITHUB_OUTPUT"].read_text()
     assert "release-version=0.36.0\n" in output
@@ -343,8 +346,8 @@ def test_bump_rejects_malformed_version_before_writing(
 def test_bump_dev_version_after_prerelease_tag(
     release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
 ) -> None:
-    """Without ``--new-version``, a repo tagged ``v1.0.0-rc1`` gets the next rc's dev version."""
-    ctx = release_repo("v1.0.0-rc1", commits=3)
+    """Without ``--new-version``, a repo tagged ``v1.0.0-rc.1`` gets the next rc's dev version."""
+    ctx = release_repo("v1.0.0-rc.1", commits=3)
     bump(ctx)
     output = github_files["GITHUB_OUTPUT"].read_text()
     assert "release-version=1.0.0-rc.2.dev3\n" in output
@@ -468,3 +471,29 @@ def test_set_action_yml_default_version_round_trip(
     # We assert byte-for-byte equivalence here as a strong idempotency
     # check; if the regex starts to over-match, this test will catch it.
     assert path.read_text(encoding="utf-8") == textwrap.dedent(ACTION_YML_BASE)
+
+
+def test_bump_dev_version_after_final_tag_is_not_prerelease(
+    release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
+) -> None:
+    """A dev build after a final release isn't flagged, so CI dry runs keep the final-release steps."""
+    ctx = release_repo("v0.20.0", commits=2)
+    bump(ctx, check_existing_tag=True)
+    output = github_files["GITHUB_OUTPUT"].read_text()
+    assert "release-version=0.20.1-dev2\n" in output
+    assert "release-prerelease=false\n" in output
+
+
+@pytest.mark.parametrize("existing", ["v1.0.0-rc1", "v1.0.0rc1", "v1.0.0-rc.1"])
+def test_bump_finds_existing_tag_in_any_spelling(
+    release_repo: Callable[..., ContextForTesting],
+    github_files: dict[str, Path],
+    existing: str,
+) -> None:
+    """``1.0.0-rc1`` is released as ``v1.0.0-rc.1``; any tag for the same version stops it."""
+    ctx = release_repo(existing, commits=1)
+    with pytest.raises(SystemExit) as excinfo:
+        bump(ctx, new_version="1.0.0-rc1", check_existing_tag=True)
+    assert excinfo.value.code == 1
+    assert f"Tag {existing} already exists for version 1.0.0-rc.1" in ctx.stderr
+    assert not any(path.exists() for path in github_files.values())

@@ -165,9 +165,9 @@ def _next_dev_version(tag: Version, count: int, sha: str | None = None) -> Versi
 
     After a final release ``X.Y.Z`` the dev version is ``X.Y.(Z+1).devN``;
     after a pre-release ``X.Y.Z{a,b,rc}K`` it is ``X.Y.Z{a,b,rc}(K+1).devN``.
-    Either way it sorts above the tag and below the next release, and above
-    the released version in ``Cargo.toml``, which ``cargo set-version``
-    refuses to lower.
+    Either way it sorts above the tag, below the next release under PEP 440
+    (which orders the wheels), and above the released version in
+    ``Cargo.toml``, which ``cargo set-version`` refuses to lower.
     """
     if tag.pre is not None:
         letter, number = tag.pre
@@ -183,6 +183,22 @@ def _git_output(ctx: Context, *args: str) -> tuple[int, str]:
     ret = ctx.run("git", *args, capture_output=True, stream_output=False)
     stdout: str = ret.stdout.read().strip()  # type: ignore[assignment]
     return ret.returncode, stdout
+
+
+def _find_release_tag(ctx: Context, version: Version) -> str | None:
+    """Return the existing release tag for ``version``, whatever its spelling.
+
+    ``v1.0.0-rc1``, ``v1.0.0rc1`` and ``v1.0.0-rc.1`` are the same release; a
+    second tag for it would publish the same wheel versions again.
+    """
+    _, tags = _git_output(ctx, "tag", "--list", "v*")
+    for tag in tags.splitlines():
+        try:
+            if _parse_release_version(tag) == version:
+                return tag
+        except ValueError:
+            continue
+    return None
 
 
 def _compute_dev_version(ctx: Context) -> str:
@@ -234,8 +250,8 @@ def bump(
             pre-release (``1.0.0-rc.1``, ``1.0.0rc1``). A leading ``v`` is
             accepted and stripped. Written in its Cargo form. If omitted, a dev
             version is derived from the latest release tag.
-        check_existing_tag: Refuse to write if a tag ``v<version>`` already
-            exists (release safety net).
+        check_existing_tag: Refuse to write if a tag for the same version
+            already exists, in any spelling (release safety net).
         include_action: Also update the action.yml `version` input default.
         write: Actually apply the bump via ``cargo set-version --workspace``;
             otherwise this is a dry-run that only prints the resolved version.
@@ -252,10 +268,9 @@ def bump(
         parsed = Version(version)
 
     if check_existing_tag:
-        ret = ctx.run("git", "tag", "-l", f"v{version}", capture_output=True, stream_output=False)
-        existing: str = ret.stdout.read().strip()  # type: ignore[assignment]
+        existing = _find_release_tag(ctx, parsed)
         if existing:
-            ctx.error(f"Tag v{version} already exists")
+            ctx.error(f"Tag {existing} already exists for version {version}")
             ctx.exit(1)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -264,7 +279,10 @@ def bump(
         with open(github_output, "a") as f:
             f.write(f"release-version={version}\n")
             f.write(f"release-patch-name=toolr-{version}.patch\n")
-            f.write(f"release-prerelease={str(parsed.is_prerelease).lower()}\n")
+            # Only a pre-release segment counts: a dev build after a final
+            # release reports false, so CI dry runs keep exercising the
+            # CHANGELOG and release-notes steps a final release runs.
+            f.write(f"release-prerelease={str(parsed.pre is not None).lower()}\n")
 
     github_env = os.environ.get("GITHUB_ENV")
     if github_env:

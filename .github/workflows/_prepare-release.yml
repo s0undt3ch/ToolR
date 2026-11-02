@@ -209,6 +209,10 @@ jobs:
           subject-path: ${{ steps.prepare-release-notes.outputs.release-notes-filename }}
 
       - name: Update CHANGELOG.md
+        id: update-changelog
+        # A final release rolls up its pre-releases: an rc gets a GitHub release
+        # body (rendered above) but no CHANGELOG section of its own.
+        if: steps.bump-version.outputs.release-prerelease != 'true'
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           config: cliff.toml
@@ -219,6 +223,9 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
 
       - name: Clear queued release notes
+        id: clear-release-notes
+        # An rc leaves the notes queued for the final release.
+        if: steps.bump-version.outputs.release-prerelease != 'true'
         shell: bash
         run: toolr release-notes clear --rendered .release-changes.md
 
