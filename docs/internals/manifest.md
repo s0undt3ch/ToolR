@@ -222,7 +222,10 @@ Both hashes use blake3, written as lowercase hex.
   `key || 0x00 || len(contents) as u64 LE || contents`. A
   `tools/pyproject.toml` that doesn't parse, or a block with an invalid
   glob, adds no scanned files instead of failing the check; the build
-  reports the error.
+  reports the error. A `tools/**/*.py` module that can't be read fails
+  the check, naming the file. Any other input that can't be read is
+  hashed as `key || 0x01 || <error kind>`, so an unreadable scanned file
+  doesn't break every command, and fixing it still triggers a rebuild.
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`
   or `Lib/site-packages/*/` (the Windows layout, looked in on every
