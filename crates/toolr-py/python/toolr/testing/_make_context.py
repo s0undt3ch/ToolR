@@ -53,12 +53,18 @@ class ContextForTesting(Context, frozen=True):
 
     @property
     def stdout(self) -> str:
-        """Everything written to `print`/`info` so far."""
+        """Everything written through `print` so far, plus `prompt`'s question text."""
         return self._console_stdout.file.getvalue()  # type: ignore[attr-defined]
 
     @property
     def stderr(self) -> str:
-        """Everything written to `error`/`warn`/`debug` so far."""
+        """Everything written through `info`, `warn`, `error` and `debug` so far.
+
+        `debug` only at verbose verbosity, `info` not at quiet. Also holds the message passed to
+        `exit` and the `Running '…'` line `run` prints before each command. The subprocess's own
+        streamed output goes to the real process streams, not here; pass `capture_output=True`
+        and read the returned `CommandResult` instead.
+        """
         return self._console_stderr.file.getvalue()  # type: ignore[attr-defined]
 
     def replace(self, **changes: object) -> ContextForTesting:

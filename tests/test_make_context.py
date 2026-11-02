@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from toolr._context import Context
+from toolr.testing import make_command_result
 from toolr.testing import make_context
 from toolr.utils import command
 
@@ -31,6 +32,27 @@ def test_make_context_captures_stderr(tmp_path: Path) -> None:
     ctx = make_context(tmp_path)
     ctx.error("something broke")
     assert "something broke" in ctx.stderr
+
+
+def test_make_context_stream_split(tmp_path: Path) -> None:
+    def fake_run(
+        *args: object, **kwargs: object
+    ) -> command.CommandResult[str] | command.CommandResult[bytes]:
+        return make_command_result()
+
+    ctx = make_context(tmp_path, prompt_input="bob\n", run=fake_run)
+    ctx.print("to-stdout")
+    ctx.info("info-line")
+    ctx.warn("warn-line")
+    ctx.prompt("Name?")
+    ctx.run("echo", "sub")
+    with pytest.raises(SystemExit):
+        ctx.exit(1, "exit-message")
+    assert "to-stdout" in ctx.stdout
+    assert "Name?" in ctx.stdout
+    for text in ("info-line", "warn-line", "Running 'echo sub'", "exit-message"):
+        assert text in ctx.stderr
+        assert text not in ctx.stdout
 
 
 def test_make_context_exit_raises_system_exit(tmp_path: Path) -> None:

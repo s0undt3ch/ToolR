@@ -206,8 +206,11 @@ Feed a "no" answer the same way to test the abort path of a confirm-style comman
 `make_context` returns a `ContextForTesting` — a `Context` subclass — so `ctx.repo_root` is
 set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
 CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
-`run=`/`chdir=`/`prompt_input=` to `make_context` (see below). `ctx.stdout`/`ctx.stderr` capture
-everything written through `ctx.print`/`ctx.info`/`ctx.error`/etc.
+`run=`/`chdir=`/`prompt_input=` to `make_context` (see below). `ctx.stdout` captures `ctx.print`
+and the question text of `ctx.prompt`. `ctx.stderr` captures `ctx.info`/`ctx.warn`/`ctx.error`/
+`ctx.debug`, the `ctx.exit` message and the `Running '…'` line `ctx.run` prints before each
+command. A subprocess's own streamed output isn't captured in either; pass `capture_output=True`
+and read the returned `CommandResult`.
 
 ### Mocking `ctx.run`
 
