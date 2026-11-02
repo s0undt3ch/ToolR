@@ -29,6 +29,9 @@ from unittest.mock import patch
 from attrs import define
 from attrs import field
 
+from toolr._decorators import PendingCommand
+from toolr._decorators import _group_path
+
 
 def _import_tools_modules() -> list[Exception]:
     """Import every module under the top-level ``tools`` package.
@@ -254,9 +257,7 @@ class CommandsTester:
     sys_modules: dict[str, ModuleType] = field(init=False, repr=False)
     command_group_collector: dict[str, object] = field(init=False, repr=False, factory=dict)
     command_group_patcher: _patch = field(init=False, repr=False)
-    pending_command_collector: list[tuple[str, str, Callable[..., Any]]] = field(
-        init=False, repr=False, factory=list
-    )
+    pending_command_collector: list[PendingCommand] = field(init=False, repr=False, factory=list)
     pending_command_patcher: _patch = field(init=False, repr=False)
     cwd: Path = field(init=False, repr=False, factory=Path.cwd)
 
@@ -301,17 +302,15 @@ class CommandsTester:
                 gives, which fails the same way.
         """
         if self.pending_command_collector:
-            registered = sorted(
-                name.removeprefix("tools.") for name in self.command_group_collector
-            )
+            registered = sorted(_group_path(name) for name in self.command_group_collector)
             tools_dir = self.search_path / "tools"
             pending = sorted(
                 self.pending_command_collector,
-                key=lambda entry: _source_order_key(entry[2], tools_dir),
+                key=lambda entry: _source_order_key(entry.func, tools_dir),
             )
             lines = [
-                _unknown_group_line(group, func.__module__, name, registered)
-                for group, name, func in pending
+                _unknown_group_line(entry.group, entry.func.__module__, entry.name, registered)
+                for entry in pending
             ]
             err_msg = "\n".join([f"unknown group references ({len(lines)}):", *lines])
             raise ValueError(err_msg)

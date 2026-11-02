@@ -847,7 +847,9 @@ def test_pending_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -> 
     repo = tools_repo({"tools/cmds.py": TYPO_GROUP_MODULE})
     with CommandsTester(search_path=repo) as first:
         first.discover()
-        assert [entry[:2] for entry in first.pending_command_collector] == [("ci.typo", "check")]
+        assert [(entry.group, entry.name) for entry in first.pending_command_collector] == [
+            ("ci.typo", "check")
+        ]
     assert first.pending_command_collector == []
     # Through the module, as `command()` calls it, so a patch left running shows.
     assert _decorators._get_pending_command_storage() is not first.pending_command_collector

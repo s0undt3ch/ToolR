@@ -18,6 +18,7 @@ from collections.abc import Callable
 from types import FunctionType
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import NamedTuple
 from typing import cast
 from typing import overload
 
@@ -214,11 +215,31 @@ def _get_command_group_storage() -> dict[str, CommandGroup]:
     return collector
 
 
-def _get_pending_command_storage() -> list[tuple[str, str, Callable[..., Any]]]:
+def _group_full_name(group: str) -> str:
+    """The registry key for a ``group=`` path: ``"ci.helm"`` is ``"tools.ci.helm"``."""
+    return f"tools.{group}"
+
+
+def _group_path(full_name: str) -> str:
+    """The ``group=`` path for a registry key, the inverse of :func:`_group_full_name`."""
+    return full_name.removeprefix("tools.")
+
+
+class PendingCommand(NamedTuple):
+    """A standalone ``@command`` waiting for its group to be declared."""
+
+    group: str
+    """The ``group=`` path as written; ``""`` when it was missing."""
+    name: str
+    """The command's CLI name."""
+    func: Callable[..., Any]
+    """The decorated function."""
+
+
+def _get_pending_command_storage() -> list[PendingCommand]:
     """Get the standalone commands whose group isn't declared yet.
 
-    Each entry is ``(group, command name, function)``, with ``group`` as
-    written in ``group=``, in declaration order. ``command_group()`` takes
+    Entries are in declaration order. ``command_group()`` takes
     its own entries when it creates the group, so the import order of
     ``tools/`` modules doesn't matter.
 
@@ -228,7 +249,7 @@ def _get_pending_command_storage() -> list[tuple[str, str, Callable[..., Any]]]:
     process-wide state for a later ``command_group()`` to pick up.
 
     Returns:
-        The pending ``(group, name, func)`` entries
+        The pending entries
     """
     return []
 
@@ -335,12 +356,12 @@ def _record_standalone_command(
     manifest build does.
     """
     cli_name = explicit_name if explicit_name is not None else func.__name__.replace("_", "-")
-    existing = _get_command_group_storage().get(f"tools.{group}") if group else None
+    existing = _get_command_group_storage().get(_group_full_name(group)) if group else None
     if existing is not None:
         existing.command(cli_name)(func)
     else:
         # The group's module may be imported later; `command_group()` attaches it then.
-        _get_pending_command_storage().append((group or "", cli_name, func))
+        _get_pending_command_storage().append(PendingCommand(group or "", cli_name, func))
 
 
 def command_group(
@@ -440,10 +461,10 @@ def command_group(
         long_description=long_description,
     )
     pending = _get_pending_command_storage()
-    waiting = [entry for entry in pending if f"tools.{entry[0]}" == group.full_name]
-    pending[:] = [entry for entry in pending if f"tools.{entry[0]}" != group.full_name]
-    for _, command_name, func in waiting:
-        group.command(command_name)(func)
+    waiting = [entry for entry in pending if _group_full_name(entry.group) == group.full_name]
+    pending[:] = [entry for entry in pending if _group_full_name(entry.group) != group.full_name]
+    for entry in waiting:
+        group.command(entry.name)(entry.func)
     return group
 
 
