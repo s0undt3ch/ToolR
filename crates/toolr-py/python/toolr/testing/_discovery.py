@@ -18,10 +18,9 @@ from __future__ import annotations
 import importlib
 import os
 import sys
-from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING
 from typing import Self
 from unittest.mock import _patch
 from unittest.mock import patch
@@ -29,8 +28,10 @@ from unittest.mock import patch
 from attrs import define
 from attrs import field
 
-from toolr._decorators import PendingCommand
-from toolr._decorators import _group_path
+from toolr.testing._unknown_groups import _format_unknown_groups
+
+if TYPE_CHECKING:
+    from toolr._decorators import PendingCommand
 
 
 def _import_tools_modules() -> list[Exception]:
@@ -151,90 +152,6 @@ def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     return [str(search_path), *kept]
 
 
-def _is_control(char: str) -> bool:
-    """C0, DEL and C1 controls, as ``is_control`` in ``crates/toolr-core/src/text.rs``."""
-    code = ord(char)
-    return code <= 0x1F or 0x7F <= code <= 0x9F
-
-
-def _is_invisible_format(char: str) -> bool:
-    """Zero-width and bidi format characters, as ``is_invisible_format`` in ``text.rs``."""
-    code = ord(char)
-    return (
-        code == 0x061C
-        or 0x200B <= code <= 0x200F
-        or 0x202A <= code <= 0x202E
-        or 0x2060 <= code <= 0x2064
-        or 0x2066 <= code <= 0x2069
-        or code == 0xFEFF
-    )
-
-
-def _escape_control_chars(text: str) -> str:
-    r"""Show control and invisible format characters as ``\u{..}``, like ``escape_control_chars``."""
-    return "".join(
-        f"\\u{{{ord(char):x}}}" if _is_control(char) or _is_invisible_format(char) else char
-        for char in text
-    )
-
-
-def _edit_distance(a: str, b: str) -> int:
-    """Levenshtein distance, as ``edit_distance`` in the manifest build."""
-    previous = list(range(len(b) + 1))
-    for i, char_a in enumerate(a, start=1):
-        current = [i]
-        for j, char_b in enumerate(b, start=1):
-            cost = 0 if char_a == char_b else 1
-            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost))
-        previous = current
-    return previous[-1]
-
-
-def _nearest_group(target: str, registered: list[str]) -> str | None:
-    """The closest declared group to ``target``, as ``nearest_group`` in the manifest build.
-
-    The threshold uses the UTF-8 length, as Rust's ``str::len`` does.
-    ``registered`` is sorted, so among equally close groups the first
-    one wins; the manifest build picks one of them in hash order.
-    """
-    limit = max(len(target.encode()) // 3, 2)
-    best: tuple[int, str] | None = None
-    for candidate in registered:
-        distance = _edit_distance(target, candidate)
-        if distance <= limit and (best is None or distance < best[0]):
-            best = (distance, candidate)
-    return None if best is None else best[1]
-
-
-def _unknown_group_line(group: str, module: str, command: str, registered: list[str]) -> str:
-    """One line of the unknown-group error, worded as ``format_unknown_groups`` in Rust."""
-    location = f"{_escape_control_chars(module)}::{_escape_control_chars(command)}"
-    if not group:
-        return f"  - {location}: `@command` is missing a `group=...` kwarg."
-    line = (
-        f"  - {location}: references group `{_escape_control_chars(group)}` which has no "
-        "`command_group(...)` declaration."
-    )
-    suggestion = _nearest_group(group, registered)
-    if suggestion is not None:
-        line += f" Did you mean `{_escape_control_chars(suggestion)}`?"
-    return line
-
-
-def _source_order_key(func: Callable[..., Any], tools_dir: Path) -> tuple[int, tuple[str, ...]]:
-    """Sort key for a command's file, matching the manifest build's sorted walk.
-
-    Files under ``tools_dir`` sort by path components, as Rust sorts its
-    ``PathBuf`` list in ``list_python_files``. Functions defined elsewhere
-    (a test body, say) sort after them; the stable sort keeps their order.
-    """
-    try:
-        relative = Path(func.__code__.co_filename).relative_to(tools_dir)
-    except ValueError:
-        return (1, ())
-    return (0, relative.parts)
-
-
 @define(slots=True, frozen=True)
 class CommandsTester:
     """
@@ -302,18 +219,13 @@ class CommandsTester:
                 gives, which fails the same way.
         """
         if self.pending_command_collector:
-            registered = sorted(_group_path(name) for name in self.command_group_collector)
-            tools_dir = self.search_path / "tools"
-            pending = sorted(
-                self.pending_command_collector,
-                key=lambda entry: _source_order_key(entry.func, tools_dir),
+            raise ValueError(
+                _format_unknown_groups(
+                    self.pending_command_collector,
+                    self.command_group_collector,
+                    self.search_path / "tools",
+                )
             )
-            lines = [
-                _unknown_group_line(entry.group, entry.func.__module__, entry.name, registered)
-                for entry in pending
-            ]
-            err_msg = "\n".join([f"unknown group references ({len(lines)}):", *lines])
-            raise ValueError(err_msg)
         return {**self.command_group_collector}
 
     def discover(self) -> None:
