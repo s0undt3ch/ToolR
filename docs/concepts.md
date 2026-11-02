@@ -26,8 +26,12 @@ scripts directory above your repo, is ignored.
 Command modules must live under `tools/` itself. A `*.py` under `tools/`
 that is a symlink, including a dangling one, is an error: toolr lists every
 such link and refuses to build the command list until each is replaced by
-the file itself. Symlinked directories under `tools/` are ignored, not
-followed.
+the file itself. Symlinked directories under `tools/`, even ones named
+`*.py`, are ignored, not followed.
+
+On Windows with `core.symlinks=false`, git checks a link out as a plain
+file holding the target path, which then fails to parse instead of
+producing this message.
 
 [pep-420]: https://peps.python.org/pep-0420/
 
