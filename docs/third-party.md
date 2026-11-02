@@ -22,8 +22,9 @@ A `toolr-manifest.json` is a `glob()` + JSON parse,
 no Python involved. For interactive use the difference is the
 boundary between "instant" and "noticeable lag".
 
-Command discovery globs
-`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`.
+Command discovery looks for
+`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`
+(`<tools-venv>/Lib/site-packages/*/toolr-manifest.json` on Windows).
 Any installed package that ships the file is picked up
 automatically; no project-side configuration is needed.
 
@@ -139,8 +140,9 @@ To add commands to a group of the host repo, declare that group in the plugin wi
 path (see [Command resolution](#command-resolution)).
 
 The file lives at `<package_dir>/toolr-manifest.json` — i.e. next to
-`my_pkg/__init__.py`. Toolr's manifest builder finds it via the glob
-`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`.
+`my_pkg/__init__.py`. Toolr's manifest builder finds it as
+`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`
+(`<tools-venv>/Lib/site-packages/*/toolr-manifest.json` on Windows).
 
 ## Shipping the manifest
 
