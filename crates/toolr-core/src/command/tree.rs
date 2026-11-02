@@ -208,12 +208,9 @@ mod tests {
     #[test]
     fn process_table_includes_self() {
         let me = std::process::id();
-        let table = process_table();
-        let entry = table.iter().find(|&&(pid, _)| pid == me);
-        assert!(
-            matches!(entry, Some(&(_, ppid)) if ppid != 0),
-            "{me} missing from {} entries",
-            table.len()
-        );
+        let found = process_table()
+            .iter()
+            .any(|&(pid, ppid)| pid == me && ppid != 0);
+        assert!(found, "{me} missing from the process table");
     }
 }

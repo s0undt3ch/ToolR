@@ -868,13 +868,12 @@ mod test_suite {
 
         fn wait_until_dead(pid: u32, within: Duration) -> bool {
             let deadline = Instant::now() + within;
-            while Instant::now() < deadline {
-                if !process_alive(pid) {
-                    return true;
-                }
+            loop {
                 thread::sleep(Duration::from_millis(20));
+                if !process_alive(pid) || Instant::now() > deadline {
+                    return !process_alive(pid);
+                }
             }
-            !process_alive(pid)
         }
 
         /// First line of a capture file, parsed as a pid.
@@ -912,11 +911,13 @@ mod test_suite {
 
         /// Child that starts a long-lived Python grandchild, prints its pid and
         /// then sleeps, or exits at once when `child_exits` is set.
+        /// The grandchild gets the pipes explicitly: Windows only inherits redirected handles.
         fn grandchild_script(grandchild_secs: u32, child_exits: bool) -> String {
             let tail = if child_exits { "" } else { "; time.sleep(60)" };
             format!(
                 "import subprocess, sys, time; \
-                 p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep({grandchild_secs})']); \
+                 p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep({grandchild_secs})'], \
+                 stdout=sys.stdout, stderr=sys.stderr); \
                  print(p.pid, flush=True){tail}"
             )
         }
@@ -938,13 +939,11 @@ mod test_suite {
             result: std::result::Result<i32, Box<dyn std::error::Error + Send + Sync>>,
             expected: &str,
         ) {
-            match result {
-                Ok(code) => panic!("expected a timeout error, the call returned {code}"),
-                Err(e) => assert!(
-                    e.to_string().contains(expected),
-                    "expected {expected:?}, got: {e}"
-                ),
-            }
+            let err = result.expect_err("expected a timeout error");
+            assert!(
+                err.to_string().contains(expected),
+                "expected {expected:?}, got: {err}"
+            );
         }
 
         /// The audit's exact shape: the shell's child must not outlive the timeout.
@@ -1063,6 +1062,36 @@ mod test_suite {
             assert!(
                 elapsed < Duration::from_secs(20),
                 "the call waited {elapsed:?} for the background holder"
+            );
+            Ok(())
+        }
+
+        /// A process that left the tree before the timeout escapes the walk and
+        /// keeps the pipes open: the call still returns once the grace runs out.
+        #[cfg(unix)]
+        #[test]
+        fn timeout_returns_when_an_escaped_process_holds_the_pipe() -> Result<()> {
+            // The subshell exits at once, so `sleep 30` is reparented before the timeout.
+            let (mut config, mut stdout_file, _stderr) = capturing_config(vec![
+                "sh".into(),
+                "-c".into(),
+                "(sleep 30 & echo $!); sleep 60".into(),
+            ]);
+            config.timeout_secs = Some(2.0);
+
+            let start = Instant::now();
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            let elapsed = start.elapsed();
+            let _guard = KillOnDrop(read_pid(&mut stdout_file));
+            assert_timeout_error(result, "timed out after");
+            assert!(
+                elapsed < Duration::from_secs(20),
+                "the call waited {elapsed:?} for the escaped process"
+            );
+            // Timeout plus `KILL_GRACE`: the drain waited out the grace, then detached.
+            assert!(
+                elapsed >= Duration::from_secs(4),
+                "returned after {elapsed:?}"
             );
             Ok(())
         }
