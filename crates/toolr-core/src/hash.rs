@@ -15,6 +15,9 @@ pub struct StaticInput {
     /// a file outside the project root keeps its full path.
     pub key: String,
     pub path: PathBuf,
+    /// A `tools/**/*.py` module. Only a module's read errors fail the hash;
+    /// see [`hash_paths`].
+    pub module: bool,
 }
 
 /// The manifest's `static_hash`: every input of the static build, hashed in
@@ -46,30 +49,33 @@ pub fn static_inputs(tools_dir: &Path) -> Result<Vec<StaticInput>> {
 pub(crate) fn static_inputs_from(tools_dir: &Path, py_files: &[PathBuf]) -> Vec<StaticInput> {
     // Same root and pyproject as `argparse::run_for_project`.
     let project_root = tools_dir.parent().unwrap_or(tools_dir);
-    let mut paths = py_files.to_vec();
+    let mut paths: Vec<(PathBuf, bool)> = py_files.iter().map(|p| (p.clone(), true)).collect();
     let pyproject = project_root.join("tools").join("pyproject.toml");
     if pyproject.is_file() {
-        let blocks = std::fs::read_to_string(&pyproject)
+        let blocks = read_input(&pyproject)
             .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
             .and_then(|text| crate::argparse::parse_blocks(&text).ok())
             .unwrap_or_default();
         for block in blocks {
             if let Ok(scanned) =
                 crate::argparse::scan::expand_scan_paths(project_root, &block.scan_paths)
             {
-                paths.extend(scanned);
+                paths.extend(scanned.into_iter().map(|p| (p, false)));
             }
         }
-        paths.push(pyproject);
+        paths.push((pyproject, false));
     }
     let mut inputs: Vec<StaticInput> = paths
         .into_iter()
-        .map(|path| StaticInput {
+        .map(|(path, module)| StaticInput {
             key: input_key(project_root, &path),
             path,
+            module,
         })
         .collect();
-    inputs.sort_by(|a, b| a.key.cmp(&b.key));
+    // A module also matched by a `scan_paths` glob keeps its strict reads.
+    inputs.sort_by(|a, b| a.key.cmp(&b.key).then(b.module.cmp(&a.module)));
     inputs.dedup_by(|a, b| a.key == b.key);
     inputs
 }
@@ -211,16 +217,29 @@ fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
 }
 
 /// Hash each input as `key || 0x00 || len(contents) as u64 LE || contents`.
+///
+/// A module that can't be read fails the hash, naming the file. Any other
+/// input that can't be read is hashed as `key || 0x01 || <error kind>`
+/// instead: the scanner turns such a file into a placeholder with a
+/// warning, and the pyproject's read error is the build's to report, so
+/// neither may fail `--help`, dispatch and TAB through the freshness
+/// check. Fixing the permission still changes the hash.
 pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
     let mut hasher = Hasher::new();
-    for StaticInput { key, path } in inputs {
-        // `path` is listed by `static_inputs` from the project's own config, not untrusted input.
-        let read = std::fs::read(path); // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
-        let bytes = match read {
+    for StaticInput { key, path, module } in inputs {
+        let bytes = match read_input(path) {
             Ok(bytes) => bytes,
             // Deleted since the walk listed it: hash the tree as it now is.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e.into()),
+            Err(e) if !module => {
+                hasher.update(key.as_bytes());
+                hasher.update(b"\x01");
+                hasher.update(e.kind().to_string().as_bytes());
+                continue;
+            }
+            Err(e) => {
+                return Err(anyhow::Error::new(e).context(format!("reading {}", path.display())));
+            }
         };
         hasher.update(key.as_bytes());
         hasher.update(b"\0");
@@ -230,9 +249,30 @@ pub(crate) fn hash_paths(inputs: &[StaticInput]) -> Result<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+fn read_input(path: &Path) -> std::io::Result<Vec<u8>> {
+    #[cfg(test)]
+    tests::count_read(path);
+    // `path` is listed by `static_inputs` from the project's own config, not untrusted input.
+    std::fs::read(path) // nosemgrep: rust.actix.path-traversal.tainted-path.tainted-path
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        static READS: std::cell::RefCell<std::collections::HashMap<PathBuf, usize>> =
+            Default::default();
+    }
+
+    pub(super) fn count_read(path: &Path) {
+        READS.with(|r| *r.borrow_mut().entry(path.to_path_buf()).or_default() += 1);
+    }
+
+    /// Reads by this thread's static-hash code since the last call.
+    pub(crate) fn take_reads() -> std::collections::HashMap<PathBuf, usize> {
+        READS.with(|r| std::mem::take(&mut *r.borrow_mut()))
+    }
     use tempfile::TempDir;
 
     fn setup(files: &[(&str, &str)]) -> TempDir {
@@ -311,6 +351,7 @@ mod tests {
         let input = |name: &str| StaticInput {
             key: format!("tools/{name}"),
             path: tools.join(name),
+            module: true,
         };
         let with_gone = hash_paths(&[input("a.py"), input("gone.py")]).unwrap();
         let without = hash_paths(&[input("a.py")]).unwrap();
@@ -328,13 +369,19 @@ mod tests {
             StaticInput {
                 key: "a.py".into(),
                 path: tmp.path().join("a.py"),
+                module: true,
             },
             StaticInput {
                 key: "pkg.py".into(),
-                path: dir,
+                path: dir.clone(),
+                module: true,
             },
         ];
-        assert!(hash_paths(&inputs).is_err());
+        let err = hash_paths(&inputs).unwrap_err();
+        assert!(
+            format!("{err:#}").starts_with(&format!("reading {}: ", dir.display())),
+            "{err:#}"
+        );
     }
 
     /// #544 mechanism: `uv sync` recreating `tools/.venv` while toolr
@@ -666,6 +713,11 @@ parent = "django"
             ("tools/a.py", "x"),
         ]);
         assert_eq!(keys(&project), ["tools/a.py", "tools/pyproject.toml"]);
+        let inputs = static_inputs(&project.path().join("tools")).unwrap();
+        assert!(
+            inputs[0].module,
+            "the module's strict reads win: {inputs:?}"
+        );
     }
 
     #[test]
@@ -695,6 +747,95 @@ parent = "django"
             keys(&project),
             [cmd.display().to_string(), "tools/pyproject.toml".into()]
         );
+    }
+
+    /// Run `f` while `path` is mode 000. `None` when this process can read
+    /// it anyway (root), where the case can't be exercised.
+    #[cfg(unix)]
+    fn with_unreadable<R>(path: &Path, f: impl FnOnce() -> R) -> Option<R> {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |m| std::fs::set_permissions(path, std::fs::Permissions::from_mode(m)).unwrap();
+        mode(0o000);
+        let out = std::fs::read(path).is_err().then(f);
+        mode(0o644);
+        out
+    }
+
+    /// The scanner turns an unreadable scanned file into a placeholder, so
+    /// the hash must not fail on it either; fixing it still rebuilds.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_scanned_file_is_hashed_not_fatal() {
+        let project = django_project();
+        let migrate = project
+            .path()
+            .join("apps/billing/management/commands/migrate.py");
+        let readable = tools_hash(&project);
+        let tools = project.path().join("tools");
+        if let Some(locked) = with_unreadable(&migrate, || compute_static_hash(&tools)) {
+            assert_ne!(locked.unwrap(), readable);
+            assert_eq!(tools_hash(&project), readable);
+        }
+    }
+
+    /// The same holds for `tools/pyproject.toml`: the build reports it.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_pyproject_is_hashed_not_fatal() {
+        let project = django_project();
+        let tools = project.path().join("tools");
+        let locked = with_unreadable(&tools.join("pyproject.toml"), || {
+            (static_inputs(&tools).unwrap(), compute_static_hash(&tools))
+        });
+        if let Some((inputs, hash)) = locked {
+            let keys: Vec<_> = inputs.into_iter().map(|i| i.key).collect();
+            assert_eq!(keys, ["tools/dispatcher.py", "tools/pyproject.toml"]);
+            assert!(hash.is_ok());
+        }
+    }
+
+    /// An unreadable module still fails, naming the file.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_module_fails_naming_the_file() {
+        let project = django_project();
+        let tools = project.path().join("tools");
+        let dispatcher = tools.join("dispatcher.py");
+        if let Some(result) = with_unreadable(&dispatcher, || compute_static_hash(&tools)) {
+            let err = format!("{:#}", result.unwrap_err());
+            let prefix = format!("reading {}: ", dispatcher.display());
+            assert!(err.starts_with(&prefix), "{err}");
+        }
+    }
+
+    /// Baseline for the stat gate F-30 adds: a freshness check on an
+    /// unchanged tree reads each scanned file and module once, and the
+    /// pyproject twice (parse, then hash).
+    #[test]
+    fn fresh_compare_reads_each_input_once() {
+        let project = django_project();
+        let tools = project.path().join("tools");
+        let manifest = crate::manifest::Manifest {
+            schema_version: crate::manifest::SCHEMA_VERSION,
+            static_hash: compute_static_hash(&tools).unwrap(),
+            third_party_hash: String::new(),
+            toolr_version: env!("CARGO_PKG_VERSION").to_string(),
+            groups: vec![],
+            commands: vec![],
+            plugin_warnings: Vec::new(),
+        };
+        take_reads();
+        let verdict = crate::freshness::compare(Some(&manifest), &tools, None).unwrap();
+        assert_eq!(verdict, crate::freshness::FreshnessVerdict::Fresh);
+        let reads = take_reads();
+        let count = |rel: &str| reads.get(&project.path().join(rel)).copied();
+        assert_eq!(
+            count("apps/billing/management/commands/migrate.py"),
+            Some(1)
+        );
+        assert_eq!(count("tools/dispatcher.py"), Some(1));
+        assert_eq!(count("tools/pyproject.toml"), Some(2));
+        assert_eq!(reads.len(), 3, "{reads:?}");
     }
 
     #[test]
