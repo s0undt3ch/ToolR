@@ -1,4 +1,4 @@
-"""`CommandsTester` reports unknown groups the way the real manifest build does (F-19)."""
+"""`CommandsTester` reports unknown groups the way the real manifest build does."""
 
 from __future__ import annotations
 
