@@ -23,7 +23,7 @@ use crate::third_party::glob::glob_manifests;
 pub fn compute_third_party_hash(venv_root: &Path) -> Result<String> {
     let paths = glob_manifests(venv_root).with_context(|| {
         format!(
-            "globbing third-party manifests under {}",
+            "finding third-party manifests under {}",
             venv_root.display()
         )
     })?;
