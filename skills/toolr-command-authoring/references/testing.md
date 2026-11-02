@@ -9,6 +9,7 @@ Every name exposed by `import toolr.testing` is documented below. The list is ge
 ```python
 from toolr.testing import (
     CommandsTester,
+    ConsoleVerbosity,
     ContextForTesting,
     DEFAULT_TEST_CONSOLE_WIDTH,
     RunMock,
@@ -89,6 +90,24 @@ Raises:
 
 ```
 
+### `ConsoleVerbosity`
+
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.utils._console`
+
+```python
+class ConsoleVerbosity
+```
+
+```text
+Console verbosity levels, which decide which `ctx` log lines are written.
+
+- `QUIET` — drops `ctx.info` (including the `Running '…'` line `ctx.run` logs) and
+  `ctx.debug`. `ctx.print`, `ctx.warn`, `ctx.error` and the `ctx.exit` message still show.
+- `NORMAL` — the default: drops only `ctx.debug`.
+- `VERBOSE` — drops nothing.
+
+```
+
 ### `ContextForTesting`
 
 **Kind:** class &nbsp;·&nbsp; **Source:** `toolr.testing._make_context`
@@ -114,7 +133,12 @@ def stdout(self) -> str:
 ```
 
 ```text
-Everything written to `print`/`info` so far.
+Everything written to the captured stdout so far.
+
+- `print` — always.
+- `prompt` — always: the question with any choices and default (`Pick [1/2] (2): `)
+  and, on invalid input, rich's validation message followed by the question again.
+
 ```
 
 #### `stderr`
@@ -125,7 +149,18 @@ def stderr(self) -> str:
 ```
 
 ```text
-Everything written to `error`/`warn`/`debug` so far.
+Everything written to the captured stderr so far.
+
+- `warn`, `error`, and the message passed to `exit` (any status) — always.
+- `info`, and the `Running '…'` line `run` logs through `info` before each command —
+  not at `ConsoleVerbosity.QUIET`.
+- `debug` — only at `ConsoleVerbosity.VERBOSE`.
+
+`make_context` defaults to `ConsoleVerbosity.NORMAL`. The output of a command `run`
+spawns is captured in neither: pass `capture_output=True` to get it in the returned
+`CommandResult`, plus `stream_output=False` to stop it also printing to the real
+process streams.
+
 ```
 
 #### `replace`
@@ -365,7 +400,8 @@ Build a `Context` usable in a unit test.
 
 Args:
     repo_root: Value for `ctx.repo_root`.
-    verbosity: Value for `ctx.verbosity`.
+    verbosity: Value for `ctx.verbosity`, a `ConsoleVerbosity`
+        (`from toolr.testing import ConsoleVerbosity`).
     default_timeout_secs: Value for `ctx.default_timeout_secs`.
     default_no_output_timeout_secs: Value for `ctx.default_no_output_timeout_secs`.
     width: Width of the captured `stdout`/`stderr` consoles, in columns. Defaults to

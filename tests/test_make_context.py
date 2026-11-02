@@ -8,12 +8,15 @@ from pathlib import Path
 import pytest
 
 from toolr._context import Context
+from toolr.testing import ConsoleVerbosity
+from toolr.testing import RunMock
+from toolr.testing import make_command_result
 from toolr.testing import make_context
+from toolr.utils import _console
 from toolr.utils import command
 
-# `RunMock` and `Mock` are imported locally inside the `run=`/`chdir=` tests below rather than
-# here, so the `--8<--` doc snippets they carry are self-contained when included in
-# docs/writing-commands/testing.md.
+# The `run=`/`chdir=` doc-snippet tests below also import `RunMock` and `Mock` locally, so the
+# `--8<--` snippets they carry are self-contained when included in docs/writing-commands/testing.md.
 
 
 def test_make_context_sets_repo_root(tmp_path: Path) -> None:
@@ -31,6 +34,73 @@ def test_make_context_captures_stderr(tmp_path: Path) -> None:
     ctx = make_context(tmp_path)
     ctx.error("something broke")
     assert "something broke" in ctx.stderr
+
+
+def test_console_verbosity_is_exported_from_toolr_testing() -> None:
+    assert ConsoleVerbosity is _console.ConsoleVerbosity
+
+
+@pytest.mark.parametrize(
+    ("verbosity", "debug_shown", "info_shown"),
+    [
+        (ConsoleVerbosity.QUIET, False, False),
+        (ConsoleVerbosity.NORMAL, False, True),
+        (ConsoleVerbosity.VERBOSE, True, True),
+    ],
+)
+# Keep `ContextForTesting.stdout`/`.stderr` and `ConsoleVerbosity` docstrings in step with this test.
+def test_make_context_stream_split(
+    tmp_path: Path, verbosity: ConsoleVerbosity, debug_shown: bool, info_shown: bool
+) -> None:
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result()
+    ctx = make_context(tmp_path, prompt_input="bob\n", run=run_mock, verbosity=verbosity)
+    ctx.print("to-stdout")
+    ctx.debug("debug-line")
+    ctx.info("info-line")
+    ctx.warn("warn-line")
+    ctx.error("error-line")
+    ctx.prompt("Name?")
+    ctx.run("echo", "sub")
+    with pytest.raises(SystemExit):
+        ctx.exit(1, "exit-message")
+    assert "to-stdout" in ctx.stdout
+    assert "Name?: " in ctx.stdout
+    assert "Name?" not in ctx.stderr
+    for text in ("warn-line", "error-line", "exit-message"):
+        assert text in ctx.stderr
+    assert ("debug-line" in ctx.stderr) is debug_shown
+    assert ("info-line" in ctx.stderr) is info_shown
+    assert ("Running 'echo sub'" in ctx.stderr) is info_shown
+    for text in (
+        "debug-line",
+        "info-line",
+        "warn-line",
+        "error-line",
+        "Running 'echo sub'",
+        "exit-message",
+    ):
+        assert text not in ctx.stdout
+
+
+def test_make_context_exit_ok_message_goes_to_stderr(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        ctx.exit(0, "all done")
+    assert exc_info.value.code == 0
+    assert "all done" in ctx.stderr
+    assert "all done" not in ctx.stdout
+
+
+def test_make_context_prompt_renders_choices_and_reasks_to_stdout(tmp_path: Path) -> None:
+    ctx = make_context(tmp_path, prompt_input="x\n3\n2\n")
+    assert ctx.prompt("Pick", int, choices=["1", "2"], default=2) == 2
+    assert ctx.stdout == (
+        "Pick [1/2] (2): Please enter a valid integer number\n"
+        "Pick [1/2] (2): Please select one of the available options\n"
+        "Pick [1/2] (2): "
+    )
+    assert ctx.stderr == ""
 
 
 def test_make_context_exit_raises_system_exit(tmp_path: Path) -> None:

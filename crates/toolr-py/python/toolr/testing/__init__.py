@@ -10,6 +10,8 @@
   objects to configure it with. See `_run_mock`.
 - `DEFAULT_TEST_CONSOLE_WIDTH` — the console width `make_context` defaults
   to, deliberately wide so captured output never wraps. See `_make_context`.
+- `ConsoleVerbosity` — the type `make_context(verbosity=...)` takes, which
+  decides whether `ctx.debug` and `ctx.info` output is captured.
 - `set_current_context` — make `toolr.current_context()` resolve to a given
   `Context` for a `with` block, for testing helpers that read it instead of
   taking `ctx` as a parameter. See `_current_context`.
@@ -28,10 +30,12 @@ from toolr.testing._make_context import ContextForTesting
 from toolr.testing._make_context import make_context
 from toolr.testing._run_mock import RunMock
 from toolr.testing._run_mock import make_command_result
+from toolr.utils._console import ConsoleVerbosity
 
 __all__ = [
     "DEFAULT_TEST_CONSOLE_WIDTH",
     "CommandsTester",
+    "ConsoleVerbosity",
     "ContextForTesting",
     "RunMock",
     "make_command_result",

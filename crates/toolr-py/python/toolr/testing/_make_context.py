@@ -53,12 +53,28 @@ class ContextForTesting(Context, frozen=True):
 
     @property
     def stdout(self) -> str:
-        """Everything written to `print`/`info` so far."""
+        """Everything written to the captured stdout so far.
+
+        - `print` — always.
+        - `prompt` — always: the question with any choices and default (`Pick [1/2] (2): `)
+          and, on invalid input, rich's validation message followed by the question again.
+        """
         return self._console_stdout.file.getvalue()  # type: ignore[attr-defined]
 
     @property
     def stderr(self) -> str:
-        """Everything written to `error`/`warn`/`debug` so far."""
+        """Everything written to the captured stderr so far.
+
+        - `warn`, `error`, and the message passed to `exit` (any status) — always.
+        - `info`, and the `Running '…'` line `run` logs through `info` before each command —
+          not at `ConsoleVerbosity.QUIET`.
+        - `debug` — only at `ConsoleVerbosity.VERBOSE`.
+
+        `make_context` defaults to `ConsoleVerbosity.NORMAL`. The output of a command `run`
+        spawns is captured in neither: pass `capture_output=True` to get it in the returned
+        `CommandResult`, plus `stream_output=False` to stop it also printing to the real
+        process streams.
+        """
         return self._console_stderr.file.getvalue()  # type: ignore[attr-defined]
 
     def replace(self, **changes: object) -> ContextForTesting:
@@ -94,7 +110,8 @@ def make_context(
 
     Args:
         repo_root: Value for `ctx.repo_root`.
-        verbosity: Value for `ctx.verbosity`.
+        verbosity: Value for `ctx.verbosity`, a `ConsoleVerbosity`
+            (`from toolr.testing import ConsoleVerbosity`).
         default_timeout_secs: Value for `ctx.default_timeout_secs`.
         default_no_output_timeout_secs: Value for `ctx.default_no_output_timeout_secs`.
         width: Width of the captured `stdout`/`stderr` consoles, in columns. Defaults to
