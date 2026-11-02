@@ -20,7 +20,6 @@ chrono.workspace = true
 clap.workspace = true
 dunce.workspace = true
 email_address.workspace = true
-glob.workspace = true
 humansize.workspace = true
 libc.workspace = true
 pep440_rs.workspace = true

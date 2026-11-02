@@ -16,12 +16,6 @@ const MIN_READABLE_FRAGMENT_RELEASE: &str = "0.34.0";
 
 #[derive(Debug, Error)]
 pub enum ThirdPartyError {
-    #[error("non-UTF-8 path: {0}")]
-    NonUtf8Path(PathBuf),
-    #[error("glob pattern error: {0}")]
-    Pattern(#[from] glob::PatternError),
-    #[error("glob iteration error: {0}")]
-    Glob(#[from] glob::GlobError),
     #[error("I/O error reading {path}: {source}")]
     Io {
         path: PathBuf,

@@ -113,9 +113,9 @@ pub fn packaging(repo_root: &Path) -> Result<Generated> {
 
     body.push_str("## Discovery\n\n");
     body.push_str(
-        "Toolr discovers your plugin by globbing every installed \
+        "Toolr discovers your plugin by looking in every installed \
         wheel's package root for a file named `toolr-manifest.json`.\n\
-        The exact globbing pattern is in the toolr repository's \
+        The lookup is in the toolr repository's \
         crates/toolr-core/src/third_party/glob.rs:\n\n",
     );
     body.push_str("```text\n");
@@ -124,7 +124,7 @@ pub fn packaging(repo_root: &Path) -> Result<Generated> {
     body.push_str(
         "Either layout works on every supported platform. If your \
         wheel installs `<pkg>/toolr-manifest.json` next to the \
-        package's `__init__.py`, the glob picks it up.\n\n",
+        package's `__init__.py`, toolr picks it up.\n\n",
     );
 
     for section in SECTIONS {

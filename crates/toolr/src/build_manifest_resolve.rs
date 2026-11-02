@@ -1,8 +1,8 @@
 //! Resolve `(source_dir, package_name)` for `toolr self build-manifest`.
 //!
 //! Two entry modes (mutually exclusive at the CLI level):
-//! 1. `<package>` positional → glob the tools venv for the installed
-//!    package directory.
+//! 1. `<package>` positional → look in the tools venv's site-packages
+//!    directories for the installed package directory.
 //! 2. `--source-dir PATH` → use the path verbatim; package name comes
 //!    from `--package PKG` or the leaf directory name.
 
@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use toolr_core::discovery::discover_project_root;
-use toolr_core::glob_path;
-use toolr_core::venv::resolve_venv_path;
+use toolr_core::venv::{resolve_venv_path, site_packages_dirs};
 
 pub struct ResolvedSource {
     pub source_dir: PathBuf,
@@ -70,33 +69,28 @@ fn leaf_dir_name(dir: &Path) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Glob `<venv>/lib/python*/site-packages/<package>/` for an installed
-/// plugin's source directory. Picks the first match lexicographically
-/// when more than one Python version is present.
+/// Find an installed plugin's source directory, `<site-packages>/<package>/`, in any of the
+/// venv's site-packages directories (see [`site_packages_dirs`]). Picks the first in sorted
+/// order when more than one has it.
 fn find_in_venv(venv_dir: &Path, package: &str) -> Result<PathBuf> {
-    let venv_prefix = glob_path::escape_path(venv_dir)
-        .with_context(|| format!("non-UTF-8 venv path {}", venv_dir.display()))?;
-    let pattern = format!(
-        "{venv_prefix}/lib/python*/site-packages/{}",
-        glob::Pattern::escape(package)
-    );
-    let entries = glob::glob(&pattern)
-        .with_context(|| format!("globbing `{pattern}`"))?
-        .filter_map(Result::ok)
+    let entries: Vec<PathBuf> = site_packages_dirs(venv_dir)
+        .into_iter()
+        .map(|sp| sp.join(package))
         .filter(|p| p.is_dir())
-        .collect::<Vec<_>>();
-    let mut entries = entries;
-    entries.sort();
-    if entries.is_empty() {
-        anyhow::bail!("no site-packages directory matches `{pattern}`");
-    }
+        .collect();
+    let Some(first) = entries.first() else {
+        anyhow::bail!(
+            "no site-packages directory in {} contains `{package}`",
+            venv_dir.display()
+        );
+    };
     if entries.len() > 1 {
         eprintln!(
             "toolr: warning: multiple matches for `{package}` in venv, using {}",
-            entries[0].display()
+            first.display()
         );
     }
-    Ok(entries.into_iter().next().unwrap())
+    Ok(first.clone())
 }
 
 #[cfg(test)]
@@ -130,8 +124,38 @@ mod tests {
     #[test]
     fn find_in_venv_errors_when_missing() {
         let tmp = TempDir::new().unwrap();
-        let err = find_in_venv(tmp.path(), "nope").unwrap_err();
-        assert!(err.to_string().contains("no site-packages"));
+        std::fs::create_dir_all(tmp.path().join("lib/python3.13/site-packages/other")).unwrap();
+        let err = find_in_venv(tmp.path(), "nope").unwrap_err().to_string();
+        assert!(err.contains("no site-packages directory in"), "{err}");
+        assert!(err.contains("contains `nope`"), "{err}");
+    }
+
+    /// The reported shape: on Windows the package lives under `Lib\site-packages`.
+    #[test]
+    fn find_in_venv_finds_windows_layout() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path();
+        std::fs::create_dir_all(venv.join("Lib/site-packages/pkg")).unwrap();
+        let found = find_in_venv(venv, "pkg").unwrap();
+        assert_eq!(found, venv.join("Lib").join("site-packages").join("pkg"));
+    }
+
+    #[test]
+    fn find_in_venv_finds_free_threaded_layout() {
+        let tmp = TempDir::new().unwrap();
+        let venv = tmp.path();
+        std::fs::create_dir_all(venv.join("lib/python3.14t/site-packages/pkg")).unwrap();
+        let found = find_in_venv(venv, "pkg").unwrap();
+        assert_eq!(found, venv.join("lib/python3.14t/site-packages/pkg"));
+    }
+
+    #[test]
+    fn find_in_venv_ignores_a_file_named_like_the_package() {
+        let tmp = TempDir::new().unwrap();
+        let sp = tmp.path().join("lib/python3.13/site-packages");
+        std::fs::create_dir_all(&sp).unwrap();
+        std::fs::write(sp.join("pkg"), "").unwrap();
+        assert!(find_in_venv(tmp.path(), "pkg").is_err());
     }
 
     #[test]

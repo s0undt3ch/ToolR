@@ -2563,7 +2563,6 @@ dependencies = [
  "clap",
  "dunce",
  "email_address",
- "glob",
  "humansize",
  "libc",
  "pep440_rs",

@@ -136,6 +136,51 @@ fn glob_finds_only_toolr_manifest_files() {
     assert!(hits[1].ends_with("b_pkg/toolr-manifest.json"));
 }
 
+/// The Windows `Lib/site-packages` layout, found on every platform.
+#[test]
+fn glob_finds_fragments_in_windows_layout() {
+    let tmp = TempDir::new().unwrap();
+    let pkg = tmp.path().join("Lib").join("site-packages").join("a_pkg");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::write(pkg.join("toolr-manifest.json"), "{}").unwrap();
+    let found = glob_manifests(tmp.path()).unwrap();
+    assert_eq!(found, [pkg.join("toolr-manifest.json")]);
+}
+
+#[test]
+fn glob_skips_package_dir_without_manifest() {
+    let tmp = setup_fake_venv(&[("a_pkg", "{}")]);
+    let site = tmp
+        .path()
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages");
+    std::fs::create_dir_all(site.join("x")).unwrap();
+    std::fs::write(site.join("stray.json"), "{}").unwrap();
+    std::fs::create_dir_all(site.join("y").join("toolr-manifest.json")).unwrap();
+    let found = glob_manifests(tmp.path()).unwrap();
+    assert_eq!(package_names(&found), ["a_pkg"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn glob_reports_unreadable_site_packages() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = setup_fake_venv(&[("a_pkg", "{}")]);
+    let site = tmp
+        .path()
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages");
+    std::fs::set_permissions(&site, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let result = glob_manifests(tmp.path());
+    std::fs::set_permissions(&site, std::fs::Permissions::from_mode(0o755)).unwrap();
+    match result {
+        Err(ThirdPartyError::Io { path, .. }) => assert_eq!(path, site),
+        other => panic!("expected an I/O error, got {other:?}"),
+    }
+}
+
 #[test]
 fn glob_returns_empty_when_no_site_packages() {
     let tmp = TempDir::new().unwrap();

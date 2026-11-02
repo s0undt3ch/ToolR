@@ -310,3 +310,37 @@ fn symlinked_module_in_package_is_rejected() {
     );
     assert!(!pkg.join("toolr-manifest.json").exists());
 }
+
+/// `toolr self build-manifest <package>` finds the package in the tools venv's
+/// site-packages, in either layout, on every platform. `Lib/site-packages` is the
+/// Windows shape it used to miss.
+#[test]
+fn package_positional_finds_package_in_either_venv_layout() {
+    for layout in ["Lib/site-packages", "lib/python3.13/site-packages"] {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/pyproject.toml",
+            "[project]\nname = \"x\"\nversion = \"0\"\n\n[tool.toolr]\nvenv-location = \"in-tree\"\n",
+        );
+        let site_packages = tmp.path().join("tools/.venv").join(layout);
+        let pkg = minimal_plugin(&site_packages, "mypkg");
+
+        let output = common::toolr()
+            .current_dir(tmp.path())
+            .env_remove("TOOLR_VENV_LOCATION")
+            .args(["self", "build-manifest", "mypkg"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{layout}: build-manifest failed: stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            pkg.join("toolr-manifest.json").is_file(),
+            "{layout}: manifest was not written to {}",
+            pkg.display()
+        );
+    }
+}
