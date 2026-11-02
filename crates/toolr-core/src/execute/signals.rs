@@ -1,26 +1,50 @@
-//! Forward SIGINT and SIGTERM from the parent toolr process to the
-//! Python runner subprocess.
+//! Wait for the Python runner subprocess, forwarding SIGTERM, and on Linux
+//! a process-sent SIGINT, to it.
 //!
-//! Strategy: register signal handlers that write the received signal
-//! number to an `Arc<AtomicI32>`. A polling loop in [`wait_with_signals`]
-//! checks the atomic between waits and re-sends the signal to the child
-//! pid.
+//! The runner shares toolr's process group. Ctrl-C makes the terminal
+//! deliver SIGINT to the whole group, so the runner already has it; sending
+//! it again would raise a second `KeyboardInterrupt` inside the runner's
+//! cleanup. toolr catches SIGINT so Ctrl-C doesn't kill it, and reports the
+//! runner's exit code. The runner stays in toolr's group because its own
+//! group would leave the terminal's foreground group, so reading the terminal
+//! raises SIGTTIN and `ctx.run(interactive=True)` breaks unless toolr also
+//! manages the foreground group with `tcsetpgrp`. See
+//! `specs/archive/2026/2026-10-31-sigint-forwarding-design.md`.
 //!
-//! On Windows we install Ctrl-C handling only — SIGTERM does not exist
-//! and Ctrl-C is propagated to the child by the console subsystem by
-//! default, so this is effectively a no-op there.
+//! Which SIGINTs get forwarded depends on what the kernel tells us about the
+//! sender (`siginfo_t::si_code`):
+//!
+//! - Linux: a terminal-generated SIGINT carries `SI_KERNEL` and is not
+//!   forwarded. One sent by a process with `kill`/`killpg`/`tgkill`/
+//!   `sigqueue` is forwarded, so `kill -INT <toolr pid>` still interrupts
+//!   the command. A process-sent `killpg` therefore reaches the runner twice.
+//!   Unrecognised codes are forwarded too: only the terminal path is
+//!   positively identified.
+//! - macOS (measured) and other Unix (assumed the same): `si_code` is 0 for
+//!   both a terminal Ctrl-C and a `kill`, so they can't be told apart. SIGINT
+//!   is never forwarded; signal the process group or send SIGTERM instead.
+//!
+//! SIGTERM is always forwarded. The handler only sets atomic flags; a
+//! polling loop in [`wait_with_signals`] checks them between waits and
+//! signals the child pid, which `try_wait` has not yet reaped.
+//!
+//! On Windows nothing is installed: the console already delivers Ctrl-C to
+//! the child, and toolr just waits.
 
 use std::io;
 use std::process::{Child, ExitStatus};
 #[cfg(unix)]
-use std::sync::Arc;
-#[cfg(unix)]
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(unix)]
 use std::time::Duration;
 
-/// Wait for `child` to exit, forwarding SIGINT/SIGTERM received by the
-/// current process to the child along the way.
+/// Polling `try_wait` rather than blocking in `wait` is what keeps toolr from
+/// signalling a reaped, possibly reused pid; the interval caps forwarding delay.
+#[cfg(unix)]
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+/// Wait for `child` to exit, forwarding signals received by the current
+/// process to the child as described in the module docs.
 pub fn wait_with_signals(child: &mut Child) -> io::Result<ExitStatus> {
     #[cfg(unix)]
     {
@@ -37,58 +61,216 @@ pub fn wait_with_signals(child: &mut Child) -> io::Result<ExitStatus> {
 mod unix {
     use super::*;
 
-    use signal_hook::consts::{SIGINT, SIGTERM};
-    use signal_hook::iterator::Signals;
+    use libc::{SIGINT, SIGTERM, c_int, siginfo_t};
+    use signal_hook_registry::{SigId, register_sigaction, unregister};
+    use std::sync::Arc;
+
+    /// Whether a SIGINT with this `si_code` came from another process rather
+    /// than the terminal, which already delivered it to the runner.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub(super) fn forward_sigint(si_code: c_int) -> bool {
+        si_code != libc::SI_KERNEL
+    }
+
+    /// `si_code` is 0 for a terminal Ctrl-C and a `kill` alike here.
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    pub(super) fn forward_sigint(_si_code: c_int) -> bool {
+        false
+    }
+
+    #[derive(Default)]
+    pub(super) struct Pending {
+        pub(super) sigint: AtomicBool,
+        pub(super) sigterm: AtomicBool,
+    }
+
+    impl Pending {
+        /// Async-signal-safe: only touches atomics.
+        pub(super) fn record(&self, info: &siginfo_t) {
+            match info.si_signo {
+                SIGTERM => self.sigterm.store(true, Ordering::SeqCst),
+                SIGINT if forward_sigint(info.si_code) => self.sigint.store(true, Ordering::SeqCst),
+                _ => {}
+            }
+        }
+
+        /// The signals to forward since the last call.
+        pub(super) fn take(&self) -> impl Iterator<Item = c_int> {
+            let sigint = self.sigint.swap(false, Ordering::SeqCst).then_some(SIGINT);
+            let sigterm = self
+                .sigterm
+                .swap(false, Ordering::SeqCst)
+                .then_some(SIGTERM);
+            sigint.into_iter().chain(sigterm)
+        }
+    }
+
+    /// Unregisters its handlers when dropped, including on an early return.
+    pub(super) struct Handlers(Vec<SigId>);
+
+    impl Handlers {
+        pub(super) fn install(signals: &[c_int], pending: &Arc<Pending>) -> io::Result<Self> {
+            let mut handlers = Self(Vec::with_capacity(signals.len()));
+            for &sig in signals {
+                let pending = Arc::clone(pending);
+                // SAFETY: the action only stores to atomics, which is
+                // async-signal-safe.
+                let id = unsafe { register_sigaction(sig, move |info| pending.record(info))? };
+                handlers.0.push(id);
+            }
+            Ok(handlers)
+        }
+    }
+
+    impl Drop for Handlers {
+        fn drop(&mut self) {
+            for id in self.0.drain(..) {
+                unregister(id);
+            }
+        }
+    }
 
     pub fn wait_with_signals(child: &mut Child) -> io::Result<ExitStatus> {
-        let pending = Arc::new(AtomicI32::new(0));
-        let mut signals = Signals::new([SIGINT, SIGTERM])?;
-        let pending_for_thread = Arc::clone(&pending);
-        let handle = signals.handle();
+        let pending = Arc::new(Pending::default());
+        let _handlers = Handlers::install(&[SIGINT, SIGTERM], &pending)?;
+        poll_child(child, &pending)
+    }
 
-        let listener = std::thread::spawn(move || {
-            for sig in &mut signals {
-                pending_for_thread.store(sig, Ordering::SeqCst);
-            }
-        });
-
+    /// Only signals a child that `try_wait` has not yet reaped, so the pid
+    /// can't have been reused.
+    pub(super) fn poll_child(child: &mut Child, pending: &Pending) -> io::Result<ExitStatus> {
         let child_pid = child.id() as i32;
-        let status = loop {
+        loop {
             if let Some(status) = child.try_wait()? {
-                break status;
+                return Ok(status);
             }
-            let sig = pending.swap(0, Ordering::SeqCst);
-            if sig != 0 {
-                // Re-send to the child. Ignore errors (the child may have
-                // just exited).
+            for sig in pending.take() {
+                // Ignore errors (the child may have just exited).
                 // SAFETY: `kill` is a libc FFI call with no preconditions
                 // beyond the pid being a valid signed int.
                 unsafe {
                     libc::kill(child_pid, sig);
                 }
             }
-            std::thread::sleep(Duration::from_millis(50));
-        };
-
-        handle.close();
-        let _ = listener.join();
-        Ok(status)
+            std::thread::sleep(POLL_INTERVAL);
+        }
     }
 }
 
+// Unix-only so Windows builds don't drag in the otherwise-unused imports.
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
+    use super::unix::{Handlers, Pending, forward_sigint, poll_child};
     use super::*;
+    use libc::{SIGINT, SIGTERM, c_int, siginfo_t};
+    use std::os::unix::process::ExitStatusExt;
     use std::process::Command;
 
-    /// `true` exits immediately with status 0. Unix-only — the whole
-    /// test module is gated so Windows builds don't drag in the
-    /// otherwise-unused imports.
+    fn info(signo: c_int, code: c_int) -> siginfo_t {
+        // SAFETY: `siginfo_t` is plain old data; all-zero is a valid value.
+        let mut info: siginfo_t = unsafe { std::mem::zeroed() };
+        info.si_signo = signo;
+        info.si_code = code;
+        info
+    }
+
+    /// The `si_code` a `kill()` from another process carries: `SI_USER` on
+    /// Linux, and on macOS the 0 it reports for a terminal Ctrl-C as well.
+    const KILL_CODE: c_int = 0;
+
+    fn taken(pending: &Pending) -> Vec<c_int> {
+        pending.take().collect()
+    }
+
+    /// `true` exits immediately with status 0.
     #[test]
     fn wait_returns_for_quick_child() {
         let mut child = Command::new("true").spawn().expect("spawn true");
         let status = wait_with_signals(&mut child).expect("wait");
         assert!(status.success());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn linux_forwards_only_process_sent_sigint() {
+        assert!(!forward_sigint(libc::SI_KERNEL));
+        assert!(forward_sigint(libc::SI_USER));
+        assert!(forward_sigint(libc::SI_TKILL));
+        assert!(forward_sigint(libc::SI_QUEUE));
+        // Unrecognised codes are forwarded.
+        assert!(forward_sigint(12345));
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[test]
+    fn sigint_is_never_forwarded_without_a_reliable_sender() {
+        assert!(!forward_sigint(KILL_CODE));
+    }
+
+    #[test]
+    fn record_follows_the_classification() {
+        let pending = Pending::default();
+        pending.record(&info(SIGINT, KILL_CODE));
+        assert_eq!(taken(&pending) == [SIGINT], forward_sigint(KILL_CODE));
+    }
+
+    #[test]
+    fn sigterm_is_always_recorded_and_survives_a_sigint() {
+        let pending = Pending::default();
+        pending.record(&info(SIGTERM, KILL_CODE));
+        pending.record(&info(SIGINT, KILL_CODE));
+        assert!(taken(&pending).contains(&SIGTERM));
+        assert_eq!(taken(&pending), Vec::<c_int>::new());
+    }
+
+    #[test]
+    fn other_signals_are_ignored() {
+        let pending = Pending::default();
+        pending.record(&info(libc::SIGHUP, KILL_CODE));
+        assert_eq!(taken(&pending), Vec::<c_int>::new());
+    }
+
+    #[test]
+    fn take_yields_every_pending_signal_once() {
+        let pending = Pending::default();
+        pending.sigint.store(true, Ordering::SeqCst);
+        pending.sigterm.store(true, Ordering::SeqCst);
+        let mut signals = taken(&pending);
+        signals.sort_unstable();
+        assert_eq!(signals, vec![SIGINT, SIGTERM]);
+        assert_eq!(taken(&pending), Vec::<c_int>::new());
+    }
+
+    /// 9999 is above `NSIG` everywhere, so `sigaction` rejects it with
+    /// `EINVAL` after SIGTERM was registered, and the guard unwinds it.
+    #[test]
+    fn install_fails_for_an_invalid_signal() {
+        let pending = std::sync::Arc::new(Pending::default());
+        assert!(Handlers::install(&[SIGTERM, 9999], &pending).is_err());
+    }
+
+    /// Bounded by `sleep 10`: if no signal is sent, the child exits 0 and the
+    /// caller's assertion fails instead of hanging.
+    fn sleeper_status(pending: &Pending) -> ExitStatus {
+        let mut child = Command::new("sleep")
+            .arg("10")
+            .spawn()
+            .expect("spawn sleep");
+        poll_child(&mut child, pending).expect("wait")
+    }
+
+    #[test]
+    fn pending_sigterm_reaches_the_child() {
+        let pending = Pending::default();
+        pending.sigterm.store(true, Ordering::SeqCst);
+        assert_eq!(sleeper_status(&pending).signal(), Some(SIGTERM));
+    }
+
+    #[test]
+    fn pending_sigint_reaches_the_child() {
+        let pending = Pending::default();
+        pending.sigint.store(true, Ordering::SeqCst);
+        assert_eq!(sleeper_status(&pending).signal(), Some(SIGINT));
     }
 }
