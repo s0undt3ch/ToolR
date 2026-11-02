@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from functools import partial
 from typing import Any
 
 import pytest
@@ -174,7 +175,10 @@ def test_mise_pythons_match(pyprojects: dict[str, dict[str, Any]], supported: li
 def _floor_settings(
     pyprojects: dict[str, dict[str, Any]], floor: int
 ) -> list[tuple[str, str, object, object]]:
-    """Return ``(label, location, actual, expected)`` for every setting pinned to the floor."""
+    """Return ``(label, location, actual, expected)`` for every setting pinned to the floor.
+
+    A ``requires-python`` floor is a ``partial`` so a malformed one fails only its own case.
+    """
     pyo3_features = pyprojects["cargo"]["workspace"]["dependencies"]["pyo3"]["features"]
     abi3 = [feature for feature in pyo3_features if feature.startswith("abi3-")]
     settings: list[tuple[str, str, object, object]] = [
@@ -211,25 +215,25 @@ def _floor_settings(
         (
             "toolr-requires-python",
             "crates/toolr/pyproject.toml project.requires-python floor",
-            python3_floor(pyprojects["toolr"]["project"]["requires-python"]),
+            partial(python3_floor, pyprojects["toolr"]["project"]["requires-python"]),
             floor,
         ),
         (
             "tools-requires-python",
             "tools/pyproject.toml project.requires-python floor",
-            python3_floor(pyprojects["tools"]["project"]["requires-python"]),
+            partial(python3_floor, pyprojects["tools"]["project"]["requires-python"]),
             floor,
         ),
         (
             "example-plugin-requires-python",
             "examples/plugin-package/pyproject.toml project.requires-python floor",
-            python3_floor(pyprojects["example-plugin"]["project"]["requires-python"]),
+            partial(python3_floor, pyprojects["example-plugin"]["project"]["requires-python"]),
             floor,
         ),
         (
             "skill-example-requires-python",
             "skills/toolr-command-packaging/examples/pyproject.toml project.requires-python floor",
-            python3_floor(pyprojects["skill-example"]["project"]["requires-python"]),
+            partial(python3_floor, pyprojects["skill-example"]["project"]["requires-python"]),
             floor,
         ),
         (
@@ -282,4 +286,6 @@ def test_floor_settings_match(
     settings = {entry[0]: entry[1:] for entry in _floor_settings(pyprojects, floor)}
     assert settings.keys() == set(FLOOR_LABELS)
     location, actual, expected = settings[label]
+    if callable(actual):
+        actual = actual()
     assert actual == expected, f"{location} is {actual!r}; {SOURCE} implies {expected!r}"
