@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev437-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev454-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev437 - 2026-11-02
+        0.35.2-dev454 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev437 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev454 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev437-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev454-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev437 - 2026-11-02
+        0.35.2-dev454 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev437 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev454 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev437-2026-11-02">0.35.2-dev437 - 2026-11-02<a class="headerlink" href="#0352-dev437-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev454-2026-11-02">0.35.2-dev454 - 2026-11-02<a class="headerlink" href="#0352-dev454-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7560,6 +7560,8 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <code>$TOOLR_PYTHON</code>, <code>python3</code> or <code>python</code> from <code>PATH</code> is gone, and toolr no longer reads
 <code>$TOOLR_PYTHON</code>. The <code>toolr.testing</code> pytest plugin finds the repo root the same way.</p>
 <p><strong>Breaking:</strong> a <code>*.py</code> under <code>tools/</code> (or in a plugin package passed to <code>toolr self build-manifest</code>) that is a symlink is now an error instead of being silently skipped, so toolr never picks up code from outside <code>tools/</code> by surprise. toolr lists every such link and stops; replace each with the file itself, or share the code as a Python package that <code>tools/pyproject.toml</code> depends on. <code>CommandsTester.discover()</code> raises the same error. Symlinked directories are still ignored.</p>
+<p><strong>Breaking:</strong> <code>ctx.run</code> timeouts now cover the whole call. If the command exits but something it started in the background keeps its output open, <code>ctx.run(..., timeout_secs=N)</code> raises <code>CommandTimeoutError</code> (or <code>CommandTimeoutNoOutputError</code>) when the limit runs out. It used to wait for that process with no limit and then return the command's exit code. Without a timeout, <code>ctx.run</code> still waits for the output to close.</p>
+<p>When a timeout fires, toolr now also kills the processes the command started, not just the command. It used to kill only the direct child, so <code>ctx.run("sh", "-c", "sleep 999; true", timeout_secs=1)</code> left <code>sleep</code> running. A process that detached itself first, such as a daemon that double-forks, can't be found and keeps running.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7784,6 +7786,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(release)</em> Support pre-release versions in version bump (<a href="https://github.com/s0undt3ch/ToolR/commit/6101a0677da254810767bcf6fcf85f9b07da82b3"><code>6101a06</code></a>)</li>
 <li><em>(release)</em> Roll pre-releases up into the final release (<a href="https://github.com/s0undt3ch/ToolR/commit/cc37004feed6e6b760921dc0b638bdd8bd89894a"><code>cc37004</code></a>)</li>
 <li><em>(release)</em> Skip release commits in git-cliff whatever their case (<a href="https://github.com/s0undt3ch/ToolR/commit/c9935eb826645099a617ce6325517c18bbb57a0e"><code>c9935eb</code></a>)</li>
+<li><em>(command)</em> [<strong>breaking</strong>] Kill the process tree on ctx.run timeouts (<a href="https://github.com/s0undt3ch/ToolR/commit/9b1263723d31051d7508d748789c215401d17564"><code>9b12637</code></a>)</li>
+<li><em>(command)</em> Give ctx.run reader threads their own output fds (<a href="https://github.com/s0undt3ch/ToolR/commit/cf8edc77ceec668729d0790026f3f67270b3f6d8"><code>cf8edc7</code></a>)</li>
+<li><em>(command)</em> Vet each edge of the ctx.run tree walk (<a href="https://github.com/s0undt3ch/ToolR/commit/746b69933d85a8a048a0259fb0d793d5d9f0a1c5"><code>746b699</code></a>)</li>
+<li><em>(command)</em> Tell slow sinks from pipe holders in ctx.run timeouts (<a href="https://github.com/s0undt3ch/ToolR/commit/296bc0b04d33e9f1dd86ff8d24eebbd180ce4e95"><code>296bc0b</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7824,6 +7830,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(action)</em> Name the pinned attestation identities once (<a href="https://github.com/s0undt3ch/ToolR/commit/b0c618493016b891343da632ae098731d736f935"><code>b0c6184</code></a>)</li>
 <li><em>(testing)</em> Gather the private namespace-path dependency in one helper (<a href="https://github.com/s0undt3ch/ToolR/commit/d2b2356a2ca29f080d38b99b55fe49d8343e1451"><code>d2b2356</code></a>)</li>
 <li><em>(release)</em> Render the Cargo version once in version bump (<a href="https://github.com/s0undt3ch/ToolR/commit/f98b77803d6d4fa64cd0e33af5b032b62da2de53"><code>f98b778</code></a>)</li>
+<li><em>(command)</em> Spell out the ctx.run timeout phases (<a href="https://github.com/s0undt3ch/ToolR/commit/a105241fa782d0f746017405bef245ed53fa1c37"><code>a105241</code></a>)</li>
+<li><em>(command)</em> Give infallible-in-practice branches no line of their own (<a href="https://github.com/s0undt3ch/ToolR/commit/db0fd60cbc9d3eb74dd237c3e5bca49041229939"><code>db0fd60</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7943,6 +7951,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Record the F-26 round-2 release fixes (<a href="https://github.com/s0undt3ch/ToolR/commit/0acfb2f62794e48a1a0dcfd496e1586001be0130"><code>0acfb2f</code></a>)</li>
 <li><em>(specs)</em> Record the F-26 round-3 maintainability changes (<a href="https://github.com/s0undt3ch/ToolR/commit/ec1dbd933dbd0c40e35311be7043965ccd93bc3b"><code>ec1dbd9</code></a>)</li>
 <li><em>(specs)</em> Archive version py tags design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/b3707035aa50c5af64731285cdebeaf12c2a4d12"><code>b370703</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-21 ctx.run timeout kills tree (<a href="https://github.com/s0undt3ch/ToolR/commit/43b1f61f18319473a6282c827aaff38f54aa040c"><code>43b1f61</code></a>)</li>
+<li><em>(command)</em> Document ctx.run timeouts killing the process tree (<a href="https://github.com/s0undt3ch/ToolR/commit/9d65a1310c5ae5d1e9f429b8cbc30ad78b282776"><code>9d65a13</code></a>)</li>
+<li><em>(command)</em> Say which processes a ctx.run timeout can't kill (<a href="https://github.com/s0undt3ch/ToolR/commit/b057e2bc227b9a616999f527543cf64de4cdb1ae"><code>b057e2b</code></a>)</li>
+<li><em>(command)</em> Note how far a ctx.run timeout can overrun (<a href="https://github.com/s0undt3ch/ToolR/commit/c3f58d59b43d7eb5a732a2f9bc8cb6e0dd09b41f"><code>c3f58d5</code></a>)</li>
+<li><em>(specs)</em> Archive ctx-run timeout kills tree design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/fac27a36d0b979a37a53813635e579622b3a9044"><code>fac27a3</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8004,6 +8017,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(distribution)</em> Compare the binary and wheel versions as parsed versions (<a href="https://github.com/s0undt3ch/ToolR/commit/c4c8f13e0d0466b1a30065c6f971ea41ff5d5b4e"><code>c4c8f13</code></a>)</li>
 <li>Share the git repository helpers between test modules (<a href="https://github.com/s0undt3ch/ToolR/commit/be055547217b88f9763753fc9077dbb178bb8c4f"><code>be05554</code></a>)</li>
 <li><em>(release)</em> Cover the version bump write path (<a href="https://github.com/s0undt3ch/ToolR/commit/1bf8a50b9bcbe94fa9ffda122c18654c3916f528"><code>1bf8a50</code></a>)</li>
+<li><em>(command)</em> Cover the post-kill grace for an escaped pipe holder (<a href="https://github.com/s0undt3ch/ToolR/commit/437e75f60cf2571a73eb63968c44419e148cb3b7"><code>437e75f</code></a>)</li>
+<li><em>(command)</em> Reproduce the sh grandchild shape and reap test leftovers (<a href="https://github.com/s0undt3ch/ToolR/commit/cbb71dab394ddd0e1bbd8dc2f873bd665163a389"><code>cbb71da</code></a>)</li>
+<li><em>(command)</em> Fold the ctx.run tree tests into shared helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/8fc64916010d8a33e4980d05269a0e08dc5d87d3"><code>8fc6491</code></a>)</li>
+<li><em>(command)</em> Prove the timed-out grandchild was alive before it died (<a href="https://github.com/s0undt3ch/ToolR/commit/862d10ef91d5c843572f747b1adcb5925919b5e8"><code>862d10e</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

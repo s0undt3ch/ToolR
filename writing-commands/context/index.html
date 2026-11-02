@@ -1745,6 +1745,18 @@ prompt — pass <code>interactive=True</code> instead. It inherits stdin/stdout/
 directly rather than piping them, so the child sees a TTY on all three.
 It's incompatible with <code>capture_output</code>, <code>stream_output</code>,
 <code>no_output_timeout_secs</code>, and <code>input</code> — all of those require piping.</p>
+<p>When <code>timeout_secs</code> or <code>no_output_timeout_secs</code> runs out, <code>ctx.run</code> kills
+the command and the processes it started, then raises. A process that
+detached itself first (a daemon that double-forks, or a subshell's
+background job whose subshell has exited) is no longer linked to the
+command, so toolr can't find it and leaves it running. Both limits cover
+the whole call: if the command exits but something it left running keeps
+its output open, <code>ctx.run</code> still raises when the limit runs out rather
+than reporting success. When a process escapes the kill and still holds
+the output open, <code>ctx.run</code> waits about half a second for output already
+written before it raises, so the call can overrun its limit by that much.
+A command that finished in time is not timed out because the place its
+output goes, such as a pipe to a slow reader, is still catching up.</p>
 <h2 id="working-directory">Working directory<a class="headerlink" href="#working-directory" title="Permanent link">&para;</a></h2>
 <p>Commands run with the working directory set to the <strong>repo root</strong>, no
 matter where you invoke <code>toolr</code> from — the same convention <code>make</code> and
