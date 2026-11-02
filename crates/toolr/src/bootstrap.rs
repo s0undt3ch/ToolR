@@ -120,12 +120,28 @@ pub(crate) fn names_user_command(argv: &[String]) -> bool {
     first_positional(argv).is_some_and(|name| !BUILTINS.contains(&name))
 }
 
-/// First arg after `toolr` that doesn't start with `-`.
+/// Root options whose value is the next argument, with their aliases.
+/// `root_value_options_match_the_cli` fails when `cli::build_command` adds
+/// one this list lacks.
+const ROOT_VALUE_OPTIONS: &[&str] = &[
+    "--timeout-secs",
+    "--timeout",
+    "--no-output-timeout-secs",
+    "--nots",
+];
+
+/// First arg after `toolr` that isn't an option or a root option's value.
 fn first_positional(argv: &[String]) -> Option<&str> {
-    argv.iter()
-        .skip(1)
-        .map(String::as_str)
-        .find(|a| !a.starts_with('-'))
+    let mut args = argv.iter().skip(1).map(String::as_str);
+    while let Some(arg) = args.next() {
+        if !arg.starts_with('-') {
+            return Some(arg);
+        }
+        if ROOT_VALUE_OPTIONS.contains(&arg) {
+            args.next();
+        }
+    }
+    None
 }
 
 /// Dispatch-time freshness step: detect a stale manifest, rebuild it
@@ -353,6 +369,73 @@ mod tests {
             commands: vec![],
             plugin_warnings: Vec::new(),
         }
+    }
+
+    /// A value-taking root option's value isn't the subcommand, so
+    /// `toolr --timeout-secs 5 self …` still skips the build.
+    #[test]
+    fn first_positional_skips_root_option_values() {
+        let argv = |args: &[&str]| -> Vec<String> {
+            std::iter::once("toolr")
+                .chain(args.iter().copied())
+                .map(String::from)
+                .collect()
+        };
+        for args in [
+            &["--timeout-secs", "5", "self", "--help"][..],
+            &["--timeout", "5", "--nots", "7", "self"][..],
+            &["--no-output-timeout-secs", "5", "-d", "self"][..],
+            &["--timeout-secs=5", "self"][..],
+        ] {
+            assert_eq!(
+                super::first_positional(&argv(args)),
+                Some("self"),
+                "{args:?}"
+            );
+            assert!(should_skip_auto_rebuild(&argv(args)), "{args:?}");
+        }
+        assert_eq!(super::first_positional(&argv(&["--timeout-secs"])), None);
+    }
+
+    /// Every value-taking root option in the CLI, aliases included, is in
+    /// `ROOT_VALUE_OPTIONS`, and nothing else is.
+    #[test]
+    fn root_value_options_match_the_cli() {
+        let command = crate::cli::build_command(&Manifest {
+            schema_version: SCHEMA_VERSION,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups: Vec::new(),
+            commands: Vec::new(),
+            plugin_warnings: Vec::new(),
+        });
+        let mut from_cli: Vec<String> = command
+            .get_arguments()
+            .filter(|a| !a.is_positional() && a.get_action().takes_values())
+            .flat_map(|a| {
+                let aliases = a.get_all_aliases().unwrap_or_default();
+                // A short value option would need handling too; listing it
+                // as `-x` makes the comparison below fail.
+                a.get_short()
+                    .map(|c| format!("-{c}"))
+                    .into_iter()
+                    .chain(
+                        a.get_long()
+                            .into_iter()
+                            .chain(aliases)
+                            .map(|l| format!("--{l}")),
+                    )
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        from_cli.sort();
+        let mut listed: Vec<String> = super::ROOT_VALUE_OPTIONS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        listed.sort();
+        assert_eq!(from_cli, listed);
     }
 
     #[test]

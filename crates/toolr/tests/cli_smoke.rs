@@ -628,3 +628,35 @@ fn symlinked_tools_module_added_after_the_cache_reads_the_same_everywhere() {
         );
     }
 }
+
+/// Built-ins skip the manifest build even after a value-taking root
+/// option, so they keep working in a repo with a symlinked module.
+#[cfg(unix)]
+#[test]
+fn built_ins_after_a_root_option_value_ignore_symlinked_modules() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    for args in [
+        &["--timeout-secs", "5", "self", "--help"][..],
+        &[
+            "--no-output-timeout-secs",
+            "5",
+            "self",
+            "completion",
+            "print",
+            "bash",
+        ][..],
+    ] {
+        let output = common::toolr()
+            .current_dir(&root)
+            .env("TOOLR_NO_CACHE_HINT", "1")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("symlinked"),
+            "{args:?}: {output:?}"
+        );
+    }
+}
