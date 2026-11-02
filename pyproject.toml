@@ -50,6 +50,7 @@ dev = [
     "pytest-skip-markers>=1.5.2",
     "pytest-subtests>=0.15.0",
     "pyyaml",
+    "packaging>=26.3",
 ]
 docs = [
     "toolr-py",
