@@ -946,6 +946,20 @@ mod test_suite {
             );
         }
 
+        #[cfg(unix)]
+        #[test]
+        fn closed_capture_fd_is_an_error() -> Result<()> {
+            // Past any fd limit, so no other test can have it open.
+            let config = CommandConfig {
+                args: vec!["true".into()],
+                stdout_fd: Some(i32::MAX),
+                ..Default::default()
+            };
+            let err = bounded_run_command(config, TREE_BOUND)?.expect_err("the fd is closed");
+            assert!(err.to_string().contains("Failed to duplicate"), "{err}");
+            Ok(())
+        }
+
         /// The audit's exact shape: the shell's child must not outlive the timeout.
         #[cfg(unix)]
         #[test]

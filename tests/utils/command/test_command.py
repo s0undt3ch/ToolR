@@ -294,13 +294,41 @@ def test_timeout(sleep_command):
     assert elapsed < 1.0  # Verify timeout happened quickly
 
 
+@pytest.fixture
+def kill_leftovers():
+    """Register `pkill -f` patterns for background processes a test leaves running."""
+    patterns: list[str] = []
+    yield patterns.append
+    for pattern in patterns:
+        subprocess.run(["pkill", "-f", pattern], check=False)  # noqa: S603, S607
+
+
 @pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")
-def test_timeout_holds_when_background_process_keeps_pipe_open():
-    # `sh` exits 0 at once; the backgrounded `sleep` keeps stdout open.
+def test_timeout_holds_when_background_process_keeps_pipe_open(kill_leftovers):
+    # `sh` exits 0 at once; the backgrounded `sleep` keeps stdout open. Its unique
+    # duration lets the teardown find it.
+    kill_leftovers("sleep 303")
     start = time.time()
     with pytest.raises(CommandTimeoutError):
-        run(["sh", "-c", "sleep 30 &"], timeout_secs=1)
+        run(["sh", "-c", "sleep 303 &"], timeout_secs=1)
     assert time.time() - start < 20
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")
+def test_timeout_never_writes_into_a_reused_fd():
+    # After the timeout, `run` closes its capture files; the background `echo` must not
+    # land in whatever file reuses their fd numbers.
+    with pytest.raises(CommandTimeoutError):
+        run(
+            ["sh", "-c", "(sleep 3; echo LEAKED-INTO-YOUR-FILE) &"],
+            timeout_secs=1,
+            capture_output=True,
+        )
+    with tempfile.TemporaryFile() as first, tempfile.TemporaryFile() as second:
+        time.sleep(4)
+        for reused in (first, second):
+            reused.seek(0)
+            assert b"LEAKED" not in reused.read()
 
 
 def test_no_output_timeout(sleep_command):

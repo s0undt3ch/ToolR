@@ -11,10 +11,10 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
-use std::os::unix::io::{FromRawFd, RawFd};
+use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
 
 #[cfg(windows)]
-use std::os::windows::io::{FromRawHandle, RawHandle};
+use std::os::windows::io::{BorrowedHandle, RawHandle};
 
 mod tree;
 
@@ -211,6 +211,50 @@ fn spawn_stdin_writer<W: Write + Send + 'static>(
     })
 }
 
+#[cfg(unix)]
+type Sink = RawFd;
+#[cfg(windows)]
+type Sink = ThreadSafeHandle;
+
+/// Duplicate a caller-owned fd (or handle) so the reader thread owns and closes its copy.
+fn own_sink(sink: Option<&Sink>) -> io::Result<Option<File>> {
+    // `fcntl` rather than `BorrowedFd`, so a closed fd is an error, not a broken contract.
+    #[cfg(unix)]
+    let owned = |fd: &RawFd| match unsafe { libc::fcntl(*fd, libc::F_DUPFD_CLOEXEC, 0) } {
+        -1 => Err(io::Error::last_os_error()),
+        dup => Ok(unsafe { OwnedFd::from_raw_fd(dup) }),
+    };
+    #[cfg(windows)]
+    let owned =
+        |h: &ThreadSafeHandle| unsafe { BorrowedHandle::borrow_raw(h.raw()) }.try_clone_to_owned();
+    sink.map(|sink| owned(sink).map(File::from)).transpose()
+}
+
+/// Copy `pipe` into each sink until EOF, stamping `last_output` on every read. A failed write
+/// stops the copy, as before.
+fn spawn_reader<R: Read + Send + 'static>(
+    mut pipe: R,
+    sinks: [Option<File>; 2],
+    last_output: Arc<Mutex<Instant>>,
+) -> JoinHandle<()> {
+    thread::spawn(move || {
+        let mut sinks: Vec<File> = sinks.into_iter().flatten().collect();
+        let mut buffer = [0; 8192];
+        while let Ok(n @ 1..) = pipe.read(&mut buffer) {
+            if let Ok(mut last) = last_output.lock() {
+                *last = Instant::now();
+            }
+            let chunk = &buffer[..n];
+            if sinks
+                .iter_mut()
+                .any(|sink| sink.write_all(chunk).and_then(|()| sink.flush()).is_err())
+            {
+                break;
+            }
+        }
+    })
+}
+
 struct Timeouts {
     total: Option<f64>,
     no_output: Option<f64>,
@@ -303,6 +347,24 @@ pub fn run_command_internal(
         command.stderr(Stdio::piped());
     }
 
+    // Owned copies, made before the spawn: a thread detached on timeout keeps writing to its
+    // own fd, never to a number the caller has closed and the OS has handed out again.
+    let own = |sink| {
+        own_sink(sink).map_err(|e| {
+            Box::new(CommandExecutionError::new(format!(
+                "Failed to duplicate an output handle: {e}"
+            )))
+        })
+    };
+    let stdout_sinks = [
+        own(config.stdout_fd.as_ref())?,
+        own(config.sys_stdout_fd.as_ref())?,
+    ];
+    let stderr_sinks = [
+        own(config.stderr_fd.as_ref())?,
+        own(config.sys_stderr_fd.as_ref())?,
+    ];
+
     // Start the command
     let mut child = command.spawn().map_err(|e| {
         Box::new(CommandExecutionError::new(format!(
@@ -314,191 +376,18 @@ pub fn run_command_internal(
     // stdout pipe before reading stdin would otherwise deadlock us.
     let stdin_payload = child.stdin.take().zip(config.input.take());
 
-    // Take stdout and stderr pipes — `None` in interactive mode, where
-    // stdio was inherited above rather than piped.
-    let stdout =
-        (!config.interactive).then(|| child.stdout.take().expect("Failed to get stdout handle"));
-    let stderr =
-        (!config.interactive).then(|| child.stderr.take().expect("Failed to get stderr handle"));
-
     // Track last output time for no_output_timeout_secs
     let last_output = Arc::new(Mutex::new(Instant::now()));
 
-    // Setup stdout handling
-    let last_output_clone = Arc::clone(&last_output);
-
-    // Clone these Option values so they can be moved into the thread
-    #[cfg(windows)]
-    let stdout_fd_clone = config.stdout_fd.clone();
-    #[cfg(windows)]
-    let sys_stdout_fd_clone = config.sys_stdout_fd.clone();
-
-    #[cfg(unix)]
-    let stdout_fd = config.stdout_fd;
-    #[cfg(unix)]
-    let sys_stdout_fd = config.sys_stdout_fd;
-
-    let stdout_thread = stdout.map(|stdout| {
-        thread::spawn(move || {
-            let mut buffer = [0; 8192];
-            let mut reader = stdout;
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        // Update last output time
-                        if let Ok(mut last) = last_output_clone.lock() {
-                            *last = Instant::now();
-                        }
-
-                        // Write to capture file if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = stdout_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = stdout_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        // Stream to stdout if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = sys_stdout_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = sys_stdout_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        })
-    });
-
-    // Setup stderr handling - similar to stdout
-    let last_output_clone = Arc::clone(&last_output);
-
-    // Clone these Option values so they can be moved into the thread
-    #[cfg(windows)]
-    let stderr_fd_clone = config.stderr_fd.clone();
-    #[cfg(windows)]
-    let sys_stderr_fd_clone = config.sys_stderr_fd.clone();
-
-    #[cfg(unix)]
-    let stderr_fd = config.stderr_fd;
-    #[cfg(unix)]
-    let sys_stderr_fd = config.sys_stderr_fd;
-
-    let stderr_thread = stderr.map(|stderr| {
-        thread::spawn(move || {
-            let mut buffer = [0; 8192];
-            let mut reader = stderr;
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        // Update last output time
-                        if let Ok(mut last) = last_output_clone.lock() {
-                            *last = Instant::now();
-                        }
-
-                        // Write to capture file if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = stderr_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = stderr_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        // Stream to stderr if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = sys_stderr_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = sys_stderr_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        })
-    });
+    // `None` in interactive mode, where stdio was inherited above rather than piped.
+    let stdout_thread = child
+        .stdout
+        .take()
+        .map(|pipe| spawn_reader(pipe, stdout_sinks, Arc::clone(&last_output)));
+    let stderr_thread = child
+        .stderr
+        .take()
+        .map(|pipe| spawn_reader(pipe, stderr_sinks, Arc::clone(&last_output)));
 
     // Spawned after the readers. On timeout the kill closes the pipe and the
     // thread ends on its own, or is detached after `KILL_GRACE`.
