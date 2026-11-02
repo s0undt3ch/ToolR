@@ -1814,7 +1814,9 @@ venv to uv, and uv picks the interpreter.</p>
 <h3 id="finding-uv">Finding uv<a class="headerlink" href="#finding-uv" title="Permanent link">&para;</a></h3>
 <p>Toolr uses the first uv it finds:</p>
 <ol>
-<li><code>uv</code> on <code>PATH</code>.</li>
+<li><code>uv</code> in an absolute <code>PATH</code> directory. Toolr skips empty and relative
+   <code>PATH</code> entries (<code>.</code>, <code>bin</code>, <code>~/bin</code>), so a <code>uv</code> inside the repository
+   never runs by accident.</li>
 <li>A toolr-managed copy at <code>$XDG_DATA_HOME/toolr/bin/uv</code> (<code>uv.exe</code> on
    Windows). When <code>XDG_DATA_HOME</code> is unset, toolr uses the platform data
    directory: <code>~/.local/share</code> on Linux, <code>~/Library/Application Support</code>

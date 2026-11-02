@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev283-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev310-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev283 - 2026-11-02
+        0.35.2-dev310 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev283 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev310 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev283-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev310-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev283 - 2026-11-02
+        0.35.2-dev310 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev283 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev310 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev283-2026-11-02">0.35.2-dev283 - 2026-11-02<a class="headerlink" href="#0352-dev283-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev310-2026-11-02">0.35.2-dev310 - 2026-11-02<a class="headerlink" href="#0352-dev310-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7640,11 +7640,22 @@ used to hide those errors and pass, sometimes with a group that had no commands.
 keeps the standard library on <code>sys.path</code> now: a <code>tools/*.py</code> that imports <code>sqlite3</code>, <code>tomllib</code> or
 another stdlib module not loaded yet used to vanish from <code>collected_command_groups()</code> without an
 error. A discovery test that passed only because of either problem now fails.</p>
+<p>Toolr no longer runs a <code>uv</code> or <code>python3</code> found through an empty or relative <code>PATH</code> entry such as <code>.</code>
+or a trailing <code>:</code>. Those entries point at the current directory, which is usually the repository
+toolr is running in, so a file in the repo could run in place of the real tool. Toolr now skips them.
+If you relied on one, put the absolute directory on <code>PATH</code> instead.</p>
 <p>A relative default on a path-typed argument, such as <code>cfg: FilePath = "tools/pyproject.toml"</code>, now resolves from
 the repo root, the same place the command runs. It used to be checked against the directory you ran <code>toolr</code>
 from, so from a subdirectory both the command and its <code>--help</code> failed with "path does not exist". An
 <code>AbsolutePath</code> or <code>NewPath</code> default, or <code>DirectoryPath = "."</code>, now also names a path under the repo root wherever
 you run from. A path you type on the command line still resolves from your current directory.</p>
+<p>Pressing Ctrl-C during a toolr command now interrupts it once. toolr used to forward the terminal's SIGINT to the
+command as well, so a second <code>KeyboardInterrupt</code> could cut a <code>finally:</code> or <code>except KeyboardInterrupt:</code> block short.
+toolr now forwards SIGTERM, and forwards SIGINT only when it can tell another process sent it. On Linux, a SIGINT sent
+to the <code>toolr</code> process alone (<code>kill -INT</code>, <code>Popen.send_signal</code>) still reaches the command, while one sent to the whole
+process group with <code>killpg</code> reaches it twice. On macOS, where a Ctrl-C and a <code>kill</code> look the same, toolr never forwards
+SIGINT, so <code>kill -INT</code> aimed at the <code>toolr</code> process alone no longer reaches the command; signal the process group or
+send SIGTERM instead.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7723,6 +7734,12 @@ you run from. A path you type on the command line still resolves from your curre
 <li><em>(cli)</em> Resolve an env-var path value from the current directory (<a href="https://github.com/s0undt3ch/ToolR/commit/09210fee6931d5b0da7d33ec8d008f7797a03b64"><code>09210fe</code></a>)</li>
 <li><em>(cli)</em> Report a bad path value before the trust prompt (<a href="https://github.com/s0undt3ch/ToolR/commit/977320e37394f7a1c18131e9102a9136bb36effd"><code>977320e</code></a>)</li>
 <li><em>(cli)</em> Render a bad deferred path value as clap does (<a href="https://github.com/s0undt3ch/ToolR/commit/3c79c7a5680efa636bbdc2123219b325c76376d3"><code>3c79c7a</code></a>)</li>
+<li><em>(runner)</em> Stop forwarding SIGINT the terminal already delivered (<a href="https://github.com/s0undt3ch/ToolR/commit/d30918164bc5c7a7e8dc6caee44d8d2f394935ba"><code>d309181</code></a>)</li>
+<li><em>(runner)</em> Forward a process-sent SIGINT on Linux (<a href="https://github.com/s0undt3ch/ToolR/commit/a12389f4dfddd462920ea7aa1ad524fec8c2cbd4"><code>a12389f</code></a>)</li>
+<li><em>(uv)</em> Skip relative PATH entries when looking up uv and python3 (<a href="https://github.com/s0undt3ch/ToolR/commit/e6babab37c9b1d57ff0b1e0fbd16e03ed384b964"><code>e6babab</code></a>)</li>
+<li><em>(uv)</em> Require an exec bit when searching PATH, as execvp does (<a href="https://github.com/s0undt3ch/ToolR/commit/64e700ea16f523d3064e0b0910a71acd3043ed28"><code>64e700e</code></a>)</li>
+<li><em>(uv)</em> Only run an ldd from an absolute PATH directory (<a href="https://github.com/s0undt3ch/ToolR/commit/8c6e30a6df2dc5ca3932fae60d034b7eb56ec309"><code>8c6e30a</code></a>)</li>
+<li><em>(uv)</em> Judge PATH executables with access(X_OK), as execvp does (<a href="https://github.com/s0undt3ch/ToolR/commit/0beca2df4ef83fc438e8acf89e406a2092a4408e"><code>0beca2d</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7749,6 +7766,9 @@ you run from. A path you type on the command line still resolves from your curre
 <li><em>(release)</em> Give push-failure messages one shape (<a href="https://github.com/s0undt3ch/ToolR/commit/4e26ea5ccf6bcc5b2ec58cc6cdf1fcaa825ce234"><code>4e26ea5</code></a>)</li>
 <li><em>(testing)</em> Tie the discovery walk to the manifest walk (<a href="https://github.com/s0undt3ch/ToolR/commit/c7b23fb9b4348bde6ab1da390d34e2cd86817e6e"><code>c7b23fb</code></a>)</li>
 <li><em>(cli)</em> Carry the deferred path rule instead of re-deriving it (<a href="https://github.com/s0undt3ch/ToolR/commit/57ebe2c13be8319b9ad4a4ea64702c12dfdd0a57"><code>57ebe2c</code></a>)</li>
+<li><em>(runner)</em> Unregister signal handlers through a drop guard (<a href="https://github.com/s0undt3ch/ToolR/commit/767807beff07205c5c3041724179973beda07ae0"><code>767807b</code></a>)</li>
+<li><em>(runner)</em> Name the signal poll interval and tidy its tests (<a href="https://github.com/s0undt3ch/ToolR/commit/a3da27c886270386b2da366d141b2cae110eb172"><code>a3da27c</code></a>)</li>
+<li><em>(uv)</em> Narrow path_search's API and share its test helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/a05fbb6392d97898502f025fb5e32f7f760822e3"><code>a05fbb6</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7820,6 +7840,15 @@ you run from. A path you type on the command line still resolves from your curre
 <li><em>(specs)</em> Spec and plan F-11 path default repo root (<a href="https://github.com/s0undt3ch/ToolR/commit/33fdfc7ad51386a71993743b104978f616a2d155"><code>33fdfc7</code></a>)</li>
 <li><em>(cli)</em> Relative path defaults resolve from the repo root (<a href="https://github.com/s0undt3ch/ToolR/commit/31def937e55227e717637521d093c308ce3fc6db"><code>31def93</code></a>)</li>
 <li><em>(specs)</em> Archive path default repo root design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/28932764724b48dbcac963e8c4febac21d561c07"><code>2893276</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-29 single SIGINT delivery (<a href="https://github.com/s0undt3ch/ToolR/commit/32ac9eb5393996cbacf0d75545ea0af283f72771"><code>32ac9eb</code></a>)</li>
+<li><em>(specs)</em> Archive sigint-forwarding spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/17ec38637dcafcb620b9ca318c66fc23817208eb"><code>17ec386</code></a>)</li>
+<li><em>(specs)</em> Record the Linux SIGINT origin check (<a href="https://github.com/s0undt3ch/ToolR/commit/7dbdf0735dd1b007d9735956f2f32ead834029ff"><code>7dbdf07</code></a>)</li>
+<li><em>(specs)</em> Mark sigint-forwarding sections superseded by the revision (<a href="https://github.com/s0undt3ch/ToolR/commit/b5247628e79d91779673589ef92c48d7571885c5"><code>b524762</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-35 uv PATH lookup (<a href="https://github.com/s0undt3ch/ToolR/commit/b0dc1d010951f7e340b94f0aa61657042ef17b93"><code>b0dc1d0</code></a>)</li>
+<li><em>(uv)</em> Document that relative PATH entries are skipped (<a href="https://github.com/s0undt3ch/ToolR/commit/bd2a6992492df0f92ea357bcf14b78ca8f9431c6"><code>bd2a699</code></a>)</li>
+<li><em>(specs)</em> Archive uv path lookup design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/478bc307874814211528829fb4aac7d4c9ee0f98"><code>478bc30</code></a>)</li>
+<li><em>(specs)</em> Record the extra PATH lookups in the uv path lookup design (<a href="https://github.com/s0undt3ch/ToolR/commit/f6e074bd25a097c1c62dfa1f0b07bbf033460c9e"><code>f6e074b</code></a>)</li>
+<li><em>(specs)</em> Note access(X_OK) and unset PATH in the uv path lookup design (<a href="https://github.com/s0undt3ch/ToolR/commit/4874471c11bca16e9f82bf461feb90e2a65486ec"><code>4874471</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7859,6 +7888,11 @@ you run from. A path you type on the command line still resolves from your curre
 <li><em>(cli)</em> Run path default fixtures under an in-tree stand-in venv (<a href="https://github.com/s0undt3ch/ToolR/commit/39508b5310ef1e34166babacd99149fc306e4f32"><code>39508b5</code></a>)</li>
 <li><em>(cli)</em> Pin the deferred path parser and extraction pairing (<a href="https://github.com/s0undt3ch/ToolR/commit/c1ae6fa9495ad7532c463fcef0b2a514a833260b"><code>c1ae6fa</code></a>)</li>
 <li><em>(cli)</em> Share one path-default fixture and run helper (<a href="https://github.com/s0undt3ch/ToolR/commit/72f3cd75ba42f809b321a3646cbd19c097848844"><code>72f3cd7</code></a>)</li>
+<li><em>(e2e)</em> Reproduce double SIGINT delivery to commands (<a href="https://github.com/s0undt3ch/ToolR/commit/90e33ea91e2afe66f5fd23935cc369db9638f131"><code>90e33ea</code></a>)</li>
+<li><em>(e2e)</em> Parametrise SIGINT senders and name signal test timings (<a href="https://github.com/s0undt3ch/ToolR/commit/fc52be17f5dbd5f7276d854a8c9ce8d2adc4d4b2"><code>fc52be1</code></a>)</li>
+<li><em>(runner)</em> Assert SIGINT classification without a platform-only branch (<a href="https://github.com/s0undt3ch/ToolR/commit/e33d19736bf91a26de3da829dcfbce1c1958974e"><code>e33d197</code></a>)</li>
+<li><em>(uv)</em> Planted repo uv and python3 never run through relative PATH entries (<a href="https://github.com/s0undt3ch/ToolR/commit/9a741eb68c13169d9546777a8e809482b9790816"><code>9a741eb</code></a>)</li>
+<li><em>(uv)</em> Plant an ldd behind a relative PATH entry (<a href="https://github.com/s0undt3ch/ToolR/commit/01bc93dbc12b7985408cc507ba372d1f3a950753"><code>01bc93d</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
