@@ -50,7 +50,11 @@ background job whose subshell has exited) is no longer linked to the
 command, so toolr can't find it and leaves it running. Both limits cover
 the whole call: if the command exits but something it left running keeps
 its output open, `ctx.run` still raises when the limit runs out rather
-than reporting success.
+than reporting success. When a process escapes the kill and still holds
+the output open, `ctx.run` waits about half a second for output already
+written before it raises, so the call can overrun its limit by that much.
+A command that finished in time is not timed out because the place its
+output goes, such as a pipe to a slow reader, is still catching up.
 
 ## Working directory
 
