@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -12,6 +13,7 @@ from toolr import Context
 from toolr import _decorators
 from toolr import command_group
 from toolr._decorators import CommandGroup
+from toolr._exc import ToolrError
 from toolr.testing import CommandsTester
 from toolr.testing._discovery import _isolated_sys_path
 
@@ -36,6 +38,20 @@ TYPO_GROUP_MODULE = (
     '@command(group="ci.typo")\n'
     "def check(ctx):\n"
     '    """Check things."""\n'
+)
+DEMO_MODULE = (
+    "from toolr import command_group\n"
+    'group = command_group("demo", "Demo", "Demo commands")\n'
+    "@group.command\n"
+    "def hello(ctx):\n"
+    '    """Say hello."""\n'
+)
+LINKED_MODULE = (
+    "from toolr import command_group\n"
+    'group = command_group("linked", "Linked", "Linked commands")\n'
+    "@group.command\n"
+    "def hi(ctx):\n"
+    '    """Say hi."""\n'
 )
 ToolsRepo = Callable[[dict[str, str | None]], Path]
 STDLIB_USER_MODULE = (
@@ -213,11 +229,92 @@ def test_discover_reports_a_failing_module_in_a_namespace_subdirectory(
     assert "raised while importing `tools.precommit.zz`" in error.__notes__
 
 
+def test_discover_rejects_a_symlinked_module(tmp_path: Path, tools_repo: ToolsRepo) -> None:
+    """F-17 repro: `tools/linked.py -> ../shared/linked.py` fails discovery
+    with the manifest build's message, before any module is imported.
+
+    Runs on Windows too when the runner may create file symlinks.
+    """
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / "linked.py").write_text(LINKED_MODULE)
+    repo = tools_repo({"tools/demo.py": DEMO_MODULE})
+    try:
+        (repo / "tools" / "linked.py").symlink_to(Path("..", "shared", "linked.py"))
+    except OSError as exc:  # Windows without the symlink privilege
+        pytest.skip(f"cannot create file symlinks: {exc}")
+    with CommandsTester(search_path=repo) as tester:
+        with pytest.raises(ToolrError) as excinfo:
+            tester.discover()
+        imported = {name for name in sys.modules if name.startswith("tools.")}
+    assert str(excinfo.value) == (
+        "symlinked modules are not supported (1):\n"
+        "  - tools/linked.py\n"
+        "Put the file itself under tools/, or share it as a Python package."
+    )
+    assert imported == set()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
+def test_discover_reports_every_symlinked_module(tmp_path: Path, tools_repo: ToolsRepo) -> None:
+    """Nested, dangling and non-importable links are all reported, sorted, with
+    control characters escaped, as `toolr` reports them."""
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / "linked.py").write_text(LINKED_MODULE)
+    repo = tools_repo({"tools/demo.py": DEMO_MODULE, "tools/sub/__init__.py": ""})
+    tools = repo / "tools"
+    (tools / "sub" / "other.py").symlink_to(tmp_path / "shared" / "linked.py")
+    (tools / "my-dir").mkdir()
+    (tools / "my-dir" / "l.py").symlink_to(tmp_path / "shared" / "linked.py")
+    (tools / "gone.py").symlink_to(tmp_path / "shared" / "missing.py")
+    (tools / "a\x1b]0;x\x07.py").symlink_to("demo.py")
+    with CommandsTester(search_path=repo) as tester, pytest.raises(ToolrError) as excinfo:
+        tester.discover()
+    assert str(excinfo.value) == (
+        "symlinked modules are not supported (4):\n"
+        "  - tools/a\\u{1b}]0;x\\u{7}.py\n"
+        "  - tools/gone.py\n"
+        "  - tools/my-dir/l.py\n"
+        "  - tools/sub/other.py\n"
+        "Put the file itself under tools/, or share it as a Python package."
+    )
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
+def test_discover_reports_symlinked_modules_it_cannot_resolve(
+    tmp_path: Path, tools_repo: ToolsRepo
+) -> None:
+    """A looping link and links into an unreadable directory are reported like
+    any other, as `toolr` reports them, instead of failing the walk."""
+    repo = tools_repo({"tools/demo.py": DEMO_MODULE, "locked/x.py": BROKEN_MODULE})
+    tools = repo / "tools"
+    locked = tmp_path / "locked"
+    (locked / "d").mkdir()
+    (tools / "loop.py").symlink_to("loop.py")
+    (tools / "inlocked.py").symlink_to(Path("..", "locked", "x.py"))
+    (tools / "dirlink.py").symlink_to(Path("..", "locked", "d"))
+    locked.chmod(0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("root can stat through a mode-000 directory")
+        with CommandsTester(search_path=repo) as tester, pytest.raises(ToolrError) as excinfo:
+            tester.discover()
+    finally:
+        locked.chmod(0o755)
+    assert str(excinfo.value) == (
+        "symlinked modules are not supported (3):\n"
+        "  - tools/dirlink.py\n"
+        "  - tools/inlocked.py\n"
+        "  - tools/loop.py\n"
+        "Put the file itself under tools/, or share it as a Python package."
+    )
+
+
 def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
     tmp_path: Path, tools_repo: ToolsRepo
 ) -> None:
     """Pruned and non-identifier directories, non-identifier and non-`.py`
-    files, and symlinks are not imported."""
+    files, and symlinked directories (even one named `*.py`) are not imported,
+    and `.py` links under pruned directories are not rejected."""
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "linked.py").write_text(BROKEN_MODULE)
@@ -232,7 +329,10 @@ def test_discover_skips_what_toolr_does_not_walk_or_cannot_import(
         }
     )
     (repo / "tools" / "linked_dir").symlink_to(outside, target_is_directory=True)
-    (repo / "tools" / "linked.py").symlink_to(outside / "linked.py")
+    (repo / "tools" / ".venv").symlink_to(outside, target_is_directory=True)
+    (repo / "tools" / "pkg.py").symlink_to(outside, target_is_directory=True)
+    (repo / "tools" / "__pycache__" / "linked.py").symlink_to(outside / "linked.py")
+    (repo / "tools" / ".hidden" / "linked.py").symlink_to(outside / "linked.py")
     # Every skipped `.py` raises if imported, so a clean discover() proves none was.
     with CommandsTester(search_path=repo) as tester:
         tester.discover()

@@ -481,3 +481,152 @@ fn project_deps_removed_prints_migration_hint() {
         "stderr missing pointer to new path:\n{stderr}"
     );
 }
+
+/// F-17 repro tree: `tools/linked.py -> ../shared/linked.py` next to a
+/// regular `tools/demo.py`. Returns the project root.
+#[cfg(unix)]
+fn symlinked_module_project(tmp: &TempDir) -> PathBuf {
+    let tools = common::write_project(tmp.path());
+    std::fs::write(
+        tools.join("demo.py"),
+        "group = command_group(\"demo\", \"Demo commands\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir(tmp.path().join("shared")).unwrap();
+    std::fs::write(
+        tmp.path().join("shared/linked.py"),
+        "group = command_group(\"linked\", \"Linked commands\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink("../shared/linked.py", tools.join("linked.py")).unwrap();
+    tmp.path().to_path_buf()
+}
+
+/// What every path prints for [`symlinked_module_project`], after `toolr: `.
+#[cfg(unix)]
+const SYMLINK_ERROR: &str = "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/, or share it as a Python package.";
+
+/// `toolr` in `root` with the trust check off.
+#[cfg(unix)]
+fn toolr_in(root: &std::path::Path) -> Command {
+    let mut cmd = common::toolr();
+    cmd.current_dir(root).env("TOOLR_NO_CACHE_HINT", "1");
+    cmd
+}
+
+/// Run `cmd` with `args` and assert it fails printing exactly
+/// [`SYMLINK_ERROR`]: no context prefix, no cache-fallback warning, no
+/// clap error about an unknown subcommand.
+#[cfg(unix)]
+fn assert_rejected(mut cmd: Command, args: &[&str]) {
+    let output = cmd.args(args).output().unwrap();
+    assert!(!output.status.success(), "{args:?}: {output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        format!("toolr: {SYMLINK_ERROR}\n"),
+        "{args:?}"
+    );
+}
+
+/// Build the cache with the link moved aside, then put it back.
+#[cfg(unix)]
+fn cache_without_the_link(root: &std::path::Path) {
+    let link = root.join("tools/linked.py");
+    let aside = root.join("linked.py.off");
+    std::fs::rename(&link, &aside).unwrap();
+    toolr_in(root).arg("--help").assert().success();
+    std::fs::rename(&aside, &link).unwrap();
+}
+
+/// F-17: a symlinked `tools/*.py` used to vanish from `--help` without a
+/// word; `--help` and dispatch now refuse the tree and name the link.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    for args in [&["--help"][..], &["demo", "hello"][..]] {
+        assert_rejected(toolr_in(&root), args);
+    }
+}
+
+/// The first run after upgrading toolr sees a cache stamped by the old
+/// version, so the rebuild finds the link before any hash does. It must
+/// fail with the full list, not warn and dispatch from the stale cache.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_is_rejected_over_a_stale_version_cache() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    cache_without_the_link(&root);
+    let manifest_path = root.join("tools/.toolr-manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    manifest["toolr_version"] = "0.0.1".into();
+    std::fs::write(&manifest_path, manifest.to_string()).unwrap();
+
+    for args in [&["--help"][..], &["demo", "hello"][..]] {
+        assert_rejected(toolr_in(&root), args);
+    }
+}
+
+/// An untrusted repository never writes a cache, so every run rebuilds in
+/// memory; the error must surface there too rather than leaving `demo`
+/// as an unrecognised subcommand. Walking `tools/` executes nothing.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_is_rejected_in_an_untrusted_repo() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    let env = common::TrustEnv::new();
+    for args in [&["--help"][..], &["demo", "hello"][..]] {
+        assert_rejected(env.toolr(&root), args);
+    }
+    assert!(!root.join("tools/.toolr-manifest.json").exists());
+}
+
+/// A link added after the cache was built is found by the freshness hash
+/// (dispatch) and by the explicit rebuilds; all print the same message as
+/// every other path, with no `hashing <dir>:` or `building …:` prefix.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_added_after_the_cache_reads_the_same_everywhere() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    cache_without_the_link(&root);
+    for args in [
+        &["--help"][..],
+        &["demo", "hello"][..],
+        &["project", "manifest", "rebuild"][..],
+        &["__build-static-manifest"][..],
+    ] {
+        assert_rejected(toolr_in(&root), args);
+    }
+}
+
+/// Built-ins skip the manifest build even after a value-taking root
+/// option, so they keep working in a repo with a symlinked module.
+#[cfg(unix)]
+#[test]
+fn built_ins_after_a_root_option_value_ignore_symlinked_modules() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    for args in [
+        &["--timeout-secs", "5", "self", "--help"][..],
+        &[
+            "--no-output-timeout-secs",
+            "5",
+            "self",
+            "completion",
+            "print",
+            "bash",
+        ][..],
+    ] {
+        let output = toolr_in(&root).args(args).output().unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("symlinked"),
+            "{args:?}: {output:?}"
+        );
+    }
+}

@@ -14,11 +14,12 @@ use std::path::Path;
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::freshness::{FreshnessVerdict, compare};
+use toolr_core::hash::is_symlinked_modules;
 use toolr_core::manifest::{
     Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
 };
 use toolr_core::manifest_build::{compute_third_party_hash, empty_third_party_hash};
-use toolr_core::parser::{build_static_manifest, build_static_manifest_with_venv};
+use toolr_core::parser::{BuildError, build_static_manifest, build_static_manifest_with_venv};
 use toolr_core::venv::resolve_venv_path;
 
 /// Bootstrap step that runs before clap parses the user's command.
@@ -66,7 +67,7 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
         let manifest = match venv_dir.as_deref() {
             Some(v) if v.join("pyvenv.cfg").is_file() => {
-                build_static_manifest_with_venv(&tools, v).map_err(anyhow::Error::from)?
+                build_static_manifest_with_venv(&tools, v).map_err(BuildError::into_anyhow)?
             }
             _ => build_static_manifest(&tools)?,
         };
@@ -118,12 +119,29 @@ pub(crate) fn names_user_command(argv: &[String]) -> bool {
     first_positional(argv).is_some_and(|name| !BUILTINS.contains(&name))
 }
 
-/// First arg after `toolr` that doesn't start with `-`.
+/// Root options whose value is the next argument, with their aliases.
+/// `root_value_options_match_the_cli` fails when `cli::build_command` adds
+/// one this list lacks. A short value option (`-t 5`, `-t5`) would also
+/// need code in [`first_positional`], not just an entry here.
+const ROOT_VALUE_OPTIONS: &[&str] = &[
+    "--timeout-secs",
+    "--timeout",
+    "--no-output-timeout-secs",
+    "--nots",
+];
+
+/// First arg after `toolr` that isn't an option or a root option's value.
 fn first_positional(argv: &[String]) -> Option<&str> {
-    argv.iter()
-        .skip(1)
-        .map(String::as_str)
-        .find(|a| !a.starts_with('-'))
+    let mut args = argv.iter().skip(1).map(String::as_str);
+    while let Some(arg) = args.next() {
+        if !arg.starts_with('-') {
+            return Some(arg);
+        }
+        if ROOT_VALUE_OPTIONS.contains(&arg) {
+            args.next();
+        }
+    }
+    None
 }
 
 /// Dispatch-time freshness step: detect a stale manifest, rebuild it
@@ -134,8 +152,9 @@ fn first_positional(argv: &[String]) -> Option<&str> {
 /// dispatches against it instead of re-reading a file another toolr
 /// process may be rewriting (#542). `Ok(None)` means the step didn't
 /// apply (no project, skip-list argv) or the rebuild failed with no
-/// usable cache; the caller then reads the file itself. Only I/O errors
-/// from writing the freshly rebuilt manifest propagate.
+/// usable cache; the caller then reads the file itself. Errors propagate
+/// from writing the freshly rebuilt manifest and for symlinked modules
+/// (F-17), which never fall back to the cache.
 pub(crate) fn ensure_manifest_fresh(
     cwd: &Path,
     argv: &[String],
@@ -193,6 +212,9 @@ pub(crate) fn ensure_manifest_fresh(
             }
             Ok(Some(fresh))
         }
+        // Symlinked modules are fatal: the cache would hide the links again,
+        // and the walk executes nothing, so untrusted repos get it too (F-17).
+        Err(e) if is_symlinked_modules(&e) => Err(e),
         Err(e) => {
             warn_and_keep_cache(&e, cached.is_some());
             Ok(cached)
@@ -229,7 +251,9 @@ fn try_rebuild(
     let mut fresh = match verdict {
         FreshnessVerdict::StaticDrift => build_static_manifest(tools)?,
         FreshnessVerdict::ThirdPartyDrift => match venv {
-            Some(v) => build_static_manifest_with_venv(tools, v).map_err(anyhow::Error::from)?,
+            Some(v) => {
+                build_static_manifest_with_venv(tools, v).map_err(BuildError::into_anyhow)?
+            }
             None => build_static_manifest(tools)?,
         },
         FreshnessVerdict::Fresh => unreachable!("Fresh handled by caller"),
@@ -348,6 +372,73 @@ mod tests {
             commands: vec![],
             plugin_warnings: Vec::new(),
         }
+    }
+
+    /// A value-taking root option's value isn't the subcommand, so
+    /// `toolr --timeout-secs 5 self …` still skips the build.
+    #[test]
+    fn first_positional_skips_root_option_values() {
+        let argv = |args: &[&str]| -> Vec<String> {
+            std::iter::once("toolr")
+                .chain(args.iter().copied())
+                .map(String::from)
+                .collect()
+        };
+        for args in [
+            &["--timeout-secs", "5", "self", "--help"][..],
+            &["--timeout", "5", "--nots", "7", "self"][..],
+            &["--no-output-timeout-secs", "5", "-d", "self"][..],
+            &["--timeout-secs=5", "self"][..],
+        ] {
+            assert_eq!(
+                super::first_positional(&argv(args)),
+                Some("self"),
+                "{args:?}"
+            );
+            assert!(should_skip_auto_rebuild(&argv(args)), "{args:?}");
+        }
+        assert_eq!(super::first_positional(&argv(&["--timeout-secs"])), None);
+    }
+
+    /// Every value-taking root option in the CLI, aliases included, is in
+    /// `ROOT_VALUE_OPTIONS`, and nothing else is.
+    #[test]
+    fn root_value_options_match_the_cli() {
+        let command = crate::cli::build_command(&Manifest {
+            schema_version: SCHEMA_VERSION,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups: Vec::new(),
+            commands: Vec::new(),
+            plugin_warnings: Vec::new(),
+        });
+        let mut from_cli: Vec<String> = command
+            .get_arguments()
+            .filter(|a| !a.is_positional() && a.get_action().takes_values())
+            .flat_map(|a| {
+                let aliases = a.get_all_aliases().unwrap_or_default();
+                // A short value option would need handling too; listing it
+                // as `-x` makes the comparison below fail.
+                a.get_short()
+                    .map(|c| format!("-{c}"))
+                    .into_iter()
+                    .chain(
+                        a.get_long()
+                            .into_iter()
+                            .chain(aliases)
+                            .map(|l| format!("--{l}")),
+                    )
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        from_cli.sort();
+        let mut listed: Vec<String> = super::ROOT_VALUE_OPTIONS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        listed.sort();
+        assert_eq!(from_cli, listed);
     }
 
     #[test]

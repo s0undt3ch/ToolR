@@ -28,10 +28,66 @@ from unittest.mock import patch
 from attrs import define
 from attrs import field
 
+from toolr._exc import ToolrError
+from toolr.testing._unknown_groups import _escape_control_chars
 from toolr.testing._unknown_groups import _format_unknown_groups
 
 if TYPE_CHECKING:
     from toolr._decorators import PendingCommand
+
+
+def _is_pruned_dir(name: str) -> bool:
+    """Whether the ``tools/`` walks skip a directory called ``name``.
+
+    Mirrors ``is_pruned_dir`` in ``crates/toolr-core/src/hash.rs``; change
+    both together.
+    """
+    return name.startswith(".") or name == "__pycache__"
+
+
+def _reject_symlinked_modules(tools_dir: Path) -> None:
+    """Raise if any ``*.py`` under ``tools_dir`` is a symlink.
+
+    Mirrors ``list_python_files`` in ``crates/toolr-core/src/hash.rs``;
+    change both together. Dot-directories and ``__pycache__`` are pruned and
+    symlinked directories, ``.py``-named or not, are not followed, so none of
+    them is checked.
+
+    Raises:
+        ToolrError: With the same text ``toolr`` prints for the tree.
+    """
+    links: list[Path] = []
+    pending = [tools_dir]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as it:
+                entries = list(it)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False):
+                if not _is_pruned_dir(entry.name):
+                    pending.append(Path(entry.path))
+            elif (
+                entry.is_symlink()
+                and os.path.splitext(entry.name)[1] == ".py"
+                # A `.py`-named link to a directory is a directory link. A
+                # target that can't be stat'd (loop, unreadable) still counts.
+                and not os.path.isdir(entry.path)
+            ):
+                links.append(Path(entry.path))
+    if not links:
+        return
+    base = tools_dir.parent
+    paths = sorted(link.relative_to(base) for link in links)
+    details = "\n".join(f"  - {_escape_control_chars(path.as_posix())}" for path in paths)
+    root = _escape_control_chars(tools_dir.name)
+    msg = (
+        f"symlinked modules are not supported ({len(paths)}):\n{details}\n"
+        f"Put the file itself under {root}/, or share it as a Python package."
+    )
+    raise ToolrError(msg)
 
 
 def _import_tools_modules() -> list[Exception]:
@@ -61,7 +117,8 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
     ``crates/toolr-core/src/hash.rs`` (``list_python_files`` and
     ``is_pruned_dir``); change both together. Every ``.py`` file and every
     subdirectory, with or without ``__init__.py``, is visited except
-    dot-directories, ``__pycache__`` and symlinks. Names that aren't Python
+    dot-directories, ``__pycache__`` and symlinks (``discover()`` has already
+    rejected ``.py`` links). Names that aren't Python
     identifiers can't be imported and are skipped. A subdirectory is only
     descended into once its own import succeeded, and each directory is
     walked once, so a ``__path__`` pointing back at a parent can't loop.
@@ -80,11 +137,7 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
             if entry.is_symlink():
                 continue
             if entry.is_dir():
-                if (
-                    entry.name.startswith(".")
-                    or entry.name == "__pycache__"
-                    or not entry.name.isidentifier()
-                ):
+                if _is_pruned_dir(entry.name) or not entry.name.isidentifier():
                     continue
                 is_package = True
                 stem = entry.name
@@ -236,10 +289,13 @@ class CommandsTester:
         register commands at module import time.
 
         Raises:
+            ToolrError: A ``*.py`` under ``tools/`` is a symlink, which
+                ``toolr`` refuses too. Raised before anything is imported.
             ExceptionGroup: One or more ``tools`` modules failed to import,
                 for example because a command has no docstring. Every
                 module is imported first; the group holds each failure.
         """
+        _reject_symlinked_modules(self.search_path / "tools")
         errors = _import_tools_modules()
         if errors:
             msg = (

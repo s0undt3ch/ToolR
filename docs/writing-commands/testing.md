@@ -44,6 +44,9 @@ with CommandsTester(search_path=tmp_path) as tester:
 assert excinfo.group_contains(ValueError, match="add a docstring")
 ```
 
+Before importing anything, `.discover()` also raises an error when a `*.py` under `tools/`
+is a symlink, with the same message `toolr` prints, since `toolr` refuses that tree too.
+
 ## Usage
 
 ```python

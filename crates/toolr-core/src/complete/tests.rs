@@ -897,6 +897,35 @@ fn preserves_third_party_entries_from_cache_when_reparsing() {
     );
 }
 
+/// F-17: a symlinked module fails the TAB-time resolve whether the walk is
+/// reached through the rebuild (no cache) or the freshness hash (cache);
+/// `run_complete` turns that into built-ins only.
+#[cfg(unix)]
+#[test]
+fn symlinked_module_fails_resolve_with_and_without_a_cache() {
+    let tmp = make_tree(&[(
+        "demo.py",
+        "group = command_group(\"demo\", \"Demo\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
+    )]);
+    let tools = tmp.path().join("tools");
+    let manifest = resolve_manifest_at_tab(tmp.path()).unwrap().manifest;
+    write_manifest(&tools.join(".toolr-manifest.json"), &manifest).unwrap();
+
+    std::fs::create_dir(tmp.path().join("shared")).unwrap();
+    std::fs::write(tmp.path().join("shared/linked.py"), "").unwrap();
+    std::os::unix::fs::symlink("../shared/linked.py", tools.join("linked.py")).unwrap();
+
+    let with_cache = format!("{:#}", resolve_manifest_at_tab(tmp.path()).unwrap_err());
+    std::fs::remove_file(tools.join(".toolr-manifest.json")).unwrap();
+    let without_cache = format!("{:#}", resolve_manifest_at_tab(tmp.path()).unwrap_err());
+    for msg in [with_cache, without_cache] {
+        assert!(
+            msg.contains("symlinked modules are not supported (1):\n  - tools/linked.py\n"),
+            "{msg}"
+        );
+    }
+}
+
 #[test]
 fn errors_when_no_tools_dir_exists() {
     let tmp = TempDir::new().unwrap();

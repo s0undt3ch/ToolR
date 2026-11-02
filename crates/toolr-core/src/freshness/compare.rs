@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::hash::hash_tools_dir;
+use crate::hash::{context_unless_symlinked, hash_tools_dir};
 use crate::manifest::Manifest;
 use crate::manifest_build::compute_third_party_hash;
 
@@ -75,8 +75,8 @@ pub fn compare(
         return Ok(verdict);
     }
 
-    let live_static =
-        hash_tools_dir(tools_dir).with_context(|| format!("hashing {}", tools_dir.display()))?;
+    let live_static = hash_tools_dir(tools_dir)
+        .map_err(|e| context_unless_symlinked(e, format!("hashing {}", tools_dir.display())))?;
 
     // Third-party axis is only checked when the caller actually has a
     // venv. When `venv_dir` is `None`, the caller has explicitly opted

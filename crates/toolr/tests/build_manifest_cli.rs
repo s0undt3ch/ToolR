@@ -278,3 +278,35 @@ def bare(ctx: Context) -> None:
         "manifest was written"
     );
 }
+
+/// F-17: plugin fragments share the `tools/` walk, so a symlinked module in
+/// the package fails the build instead of being left out of the fragment.
+/// `--source-dir .` still names the package (unit-tested in `hash.rs`).
+#[cfg(unix)]
+#[test]
+fn symlinked_module_in_package_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let pkg = minimal_plugin(tmp.path(), "mypkg");
+    write(tmp.path(), "shared/linked.py", "");
+    std::os::unix::fs::symlink("../shared/linked.py", pkg.join("linked.py")).unwrap();
+
+    let output = common::toolr()
+        .current_dir(&pkg)
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .args([
+            "self",
+            "build-manifest",
+            "--source-dir",
+            ".",
+            "--package",
+            "mypkg",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "toolr: symlinked modules are not supported (1):\n  - mypkg/linked.py\nPut the file itself under mypkg/, or share it as a Python package.\n"
+    );
+    assert!(!pkg.join("toolr-manifest.json").exists());
+}
