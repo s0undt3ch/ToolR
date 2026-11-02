@@ -886,11 +886,16 @@ mod test_suite {
 
         /// Kills a test's grandchild when the test ends, pass or fail, so a red
         /// run doesn't leave sleepers behind.
-        struct KillOnDrop(Option<u32>);
+        struct KillOnDrop(Vec<u32>);
 
         impl Drop for KillOnDrop {
             fn drop(&mut self) {
-                let Some(pid) = self.0 else { return };
+                self.0.iter().for_each(|&pid| kill(pid));
+            }
+        }
+
+        fn kill(pid: u32) {
+            {
                 #[cfg(unix)]
                 unsafe {
                     libc::kill(pid as libc::pid_t, libc::SIGKILL);
@@ -906,6 +911,34 @@ mod test_suite {
                         CloseHandle(handle);
                     }
                 }
+            }
+        }
+
+        /// Pids whose full command line matches `pattern`; for processes a test can't learn the
+        /// pid of any other way.
+        #[cfg(unix)]
+        fn pids_matching(pattern: &str) -> Vec<u32> {
+            let output = Command::new("pgrep").args(["-f", pattern]).output();
+            output.map_or_else(
+                |_| Vec::new(),
+                |out| {
+                    String::from_utf8_lossy(&out.stdout)
+                        .lines()
+                        .filter_map(|l| l.parse().ok())
+                        .collect()
+                },
+            )
+        }
+
+        #[cfg(unix)]
+        fn wait_for_pids(pattern: &str, within: Duration) -> Vec<u32> {
+            let deadline = Instant::now() + within;
+            loop {
+                let pids = pids_matching(pattern);
+                if !pids.is_empty() || Instant::now() > deadline {
+                    return pids;
+                }
+                thread::sleep(Duration::from_millis(20));
             }
         }
 
@@ -960,16 +993,27 @@ mod test_suite {
             Ok(())
         }
 
-        /// The audit's exact shape: the shell's child must not outlive the timeout.
+        /// The reported shape: `; true` stops `sh` exec-ing `sleep`, so `sleep` is a
+        /// grandchild, and it must not outlive the timeout.
         #[cfg(unix)]
         #[test]
-        fn reported_shape_sh_sleep_timeout_returns() -> Result<()> {
+        fn reported_shape_sh_sleep_timeout_kills_sleep() -> Result<()> {
             let config = CommandConfig {
-                args: vec!["sh".into(), "-c".into(), "sleep 999".into()],
-                timeout_secs: Some(1.0),
+                args: vec!["sh".into(), "-c".into(), "sleep 999; true".into()],
+                timeout_secs: Some(3.0),
                 ..Default::default()
             };
-            assert_timeout_error(bounded_run_command(config, TREE_BOUND)?, "timed out after");
+            let run = thread::spawn(move || bounded_run_command(config, TREE_BOUND));
+            let sleeper = wait_for_pids("^sleep 999$", DEATH_WAIT);
+            let _guard = KillOnDrop(sleeper.clone());
+            assert_timeout_error(run.join().expect("run thread")?, "timed out after");
+            assert!(!sleeper.is_empty(), "never saw `sleep 999` start");
+            for pid in sleeper {
+                assert!(
+                    wait_until_dead(pid, DEATH_WAIT),
+                    "sleep {pid} survived the timeout"
+                );
+            }
             Ok(())
         }
 
@@ -984,7 +1028,7 @@ mod test_suite {
 
             let result = bounded_run_command(config, TREE_BOUND)?;
             let pid = read_pid(&mut stdout_file);
-            let _guard = KillOnDrop(pid);
+            let _guard = KillOnDrop(pid.into_iter().collect());
             assert_timeout_error(result, "no output for");
             let pid = pid.ok_or_else(|| anyhow!("the child never printed the grandchild pid"))?;
             assert!(
@@ -1006,7 +1050,7 @@ mod test_suite {
 
             let result = bounded_run_command(config, TREE_BOUND)?;
             let pid = read_pid(&mut stdout_file);
-            let _guard = KillOnDrop(pid);
+            let _guard = KillOnDrop(pid.into_iter().collect());
             assert_timeout_error(result, "timed out after");
             let pid = pid.ok_or_else(|| anyhow!("sh never printed the sleep pid"))?;
             assert!(
@@ -1031,7 +1075,7 @@ mod test_suite {
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND)?;
             let elapsed = start.elapsed();
-            let _guard = KillOnDrop(read_pid(&mut stdout_file));
+            let _guard = KillOnDrop(read_pid(&mut stdout_file).into_iter().collect());
             assert_timeout_error(result, "timed out after");
             assert!(
                 elapsed < Duration::from_secs(20),
@@ -1040,18 +1084,20 @@ mod test_suite {
             Ok(())
         }
 
-        /// The spec's repro, exactly: `sh` exits 0 at once, `sleep` holds the pipes.
+        /// The spec's repro: `sh` exits 0 at once, `sleep` holds the pipes. Unique
+        /// durations let the guard find the `sleep` afterwards.
         #[cfg(unix)]
         #[test]
         fn timeout_holds_when_background_child_keeps_pipe_open_sh() -> Result<()> {
             let config = CommandConfig {
-                args: vec!["sh".into(), "-c".into(), "sleep 30 &".into()],
+                args: vec!["sh".into(), "-c".into(), "sleep 301 &".into()],
                 timeout_secs: Some(1.0),
                 ..Default::default()
             };
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND)?;
             let elapsed = start.elapsed();
+            let _guard = KillOnDrop(pids_matching("^sleep 301$"));
             assert_timeout_error(result, "timed out after");
             assert!(
                 elapsed < Duration::from_secs(20),
@@ -1065,13 +1111,14 @@ mod test_suite {
         #[test]
         fn no_output_timeout_holds_when_background_child_keeps_pipe_open() -> Result<()> {
             let config = CommandConfig {
-                args: vec!["sh".into(), "-c".into(), "sleep 30 &".into()],
+                args: vec!["sh".into(), "-c".into(), "sleep 302 &".into()],
                 no_output_timeout_secs: Some(1.0),
                 ..Default::default()
             };
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND)?;
             let elapsed = start.elapsed();
+            let _guard = KillOnDrop(pids_matching("^sleep 302$"));
             assert_timeout_error(result, "no output for");
             assert!(
                 elapsed < Duration::from_secs(20),
@@ -1096,7 +1143,7 @@ mod test_suite {
             let start = Instant::now();
             let result = bounded_run_command(config, TREE_BOUND)?;
             let elapsed = start.elapsed();
-            let _guard = KillOnDrop(read_pid(&mut stdout_file));
+            let _guard = KillOnDrop(read_pid(&mut stdout_file).into_iter().collect());
             assert_timeout_error(result, "timed out after");
             assert!(
                 elapsed < Duration::from_secs(20),
