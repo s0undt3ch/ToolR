@@ -10,7 +10,7 @@
 
 **Tech Stack:** Python, rich, pytest, mkdocs.
 
-**Spec:** [`specs/2026-10-31-tester-stdout-docstring-design.md`](./2026-10-31-tester-stdout-docstring-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-tester-stdout-docstring-design.md`](./2026-10-31-tester-stdout-docstring-design.md)
 
 ## Global Constraints
 

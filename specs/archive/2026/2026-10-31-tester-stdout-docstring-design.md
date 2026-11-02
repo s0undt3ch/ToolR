@@ -1,6 +1,6 @@
 # Say which `ContextForTesting` stream each `Context` method writes to
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-42 (low).
 - **Plan:** [`2026-10-31-tester-stdout-docstring-plan.md`](./2026-10-31-tester-stdout-docstring-plan.md)
 
