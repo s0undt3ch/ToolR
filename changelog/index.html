@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev454-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev461-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev454 - 2026-11-02
+        0.35.2-dev461 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev454 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev461 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev454-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev461-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev454 - 2026-11-02
+        0.35.2-dev461 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev454 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev461 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev454-2026-11-02">0.35.2-dev454 - 2026-11-02<a class="headerlink" href="#0352-dev454-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev461-2026-11-02">0.35.2-dev461 - 2026-11-02<a class="headerlink" href="#0352-dev461-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7832,6 +7832,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(release)</em> Render the Cargo version once in version bump (<a href="https://github.com/s0undt3ch/ToolR/commit/f98b77803d6d4fa64cd0e33af5b032b62da2de53"><code>f98b778</code></a>)</li>
 <li><em>(command)</em> Spell out the ctx.run timeout phases (<a href="https://github.com/s0undt3ch/ToolR/commit/a105241fa782d0f746017405bef245ed53fa1c37"><code>a105241</code></a>)</li>
 <li><em>(command)</em> Give infallible-in-practice branches no line of their own (<a href="https://github.com/s0undt3ch/ToolR/commit/db0fd60cbc9d3eb74dd237c3e5bca49041229939"><code>db0fd60</code></a>)</li>
+<li><em>(parser)</em> Call @group.command the binding form, not legacy (<a href="https://github.com/s0undt3ch/ToolR/commit/174cef5cdbe8e8e4cb8528b33789ee036db78670"><code>174cef5</code></a>)</li>
+<li><em>(parser)</em> Name the string-path decorator form StringPath (<a href="https://github.com/s0undt3ch/ToolR/commit/e0ee6bd63d750b0a00ccf2b359e5671f36cdbf40"><code>e0ee6bd</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7956,6 +7958,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Say which processes a ctx.run timeout can't kill (<a href="https://github.com/s0undt3ch/ToolR/commit/b057e2bc227b9a616999f527543cf64de4cdb1ae"><code>b057e2b</code></a>)</li>
 <li><em>(command)</em> Note how far a ctx.run timeout can overrun (<a href="https://github.com/s0undt3ch/ToolR/commit/c3f58d59b43d7eb5a732a2f9bc8cb6e0dd09b41f"><code>c3f58d5</code></a>)</li>
 <li><em>(specs)</em> Archive ctx-run timeout kills tree design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/fac27a36d0b979a37a53813635e579622b3a9044"><code>fac27a3</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-43 misc maintainability (<a href="https://github.com/s0undt3ch/ToolR/commit/e3cd0fe1f222242fc142c7e5cfcc8dd5cc4d5239"><code>e3cd0fe</code></a>)</li>
+<li><em>(specs)</em> Archive misc maintainability design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/174b00e8882a883273f16da3da8ee8e86d3c3d65"><code>174b00e</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8021,6 +8025,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Reproduce the sh grandchild shape and reap test leftovers (<a href="https://github.com/s0undt3ch/ToolR/commit/cbb71dab394ddd0e1bbd8dc2f873bd665163a389"><code>cbb71da</code></a>)</li>
 <li><em>(command)</em> Fold the ctx.run tree tests into shared helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/8fc64916010d8a33e4980d05269a0e08dc5d87d3"><code>8fc6491</code></a>)</li>
 <li><em>(command)</em> Prove the timed-out grandchild was alive before it died (<a href="https://github.com/s0undt3ch/ToolR/commit/862d10ef91d5c843572f747b1adcb5925919b5e8"><code>862d10e</code></a>)</li>
+<li><em>(uv)</em> Drop offline install tests that duplicate unit tests (<a href="https://github.com/s0undt3ch/ToolR/commit/81aeb40c59d6491c739484fff2cf058a6272c510"><code>81aeb40</code></a>)</li>
+<li><em>(parser)</em> Compare the whole string-path decorator in the conflict test (<a href="https://github.com/s0undt3ch/ToolR/commit/8f773c2766e5d7fff12be845156c113de7d2c48d"><code>8f773c2</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
