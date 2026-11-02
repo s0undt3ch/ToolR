@@ -45,7 +45,7 @@ from toolr._runner import _build_context
 from toolr._runner import _coerce_args
 from toolr._runner import _dec_hook
 from toolr._runner import _import_target
-from toolr._runner import _is_first_party_module
+from toolr._runner import _is_repo_tools_module
 from toolr._runner import _unwrap_annotated
 from toolr._runner import load_spec
 from toolr._runner import load_spec_from_env
@@ -1190,8 +1190,8 @@ def test_run_omits_sync_hint_for_in_body_tools_import(
         (None, False),
     ],
 )
-def test_is_first_party_module(name: str | None, *, expected: bool) -> None:
-    assert _is_first_party_module(name) is expected
+def test_is_repo_tools_module(name: str | None, *, expected: bool) -> None:
+    assert _is_repo_tools_module(name) is expected
 
 
 # --------------------------------------------------------------------------

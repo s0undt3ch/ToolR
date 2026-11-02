@@ -590,8 +590,12 @@ def invoke_dispatcher(
     return func(ctx, **parent_kwargs, **{param: dispatched})
 
 
-def _is_first_party_module(name: str | None) -> bool:
-    """Whether ``name`` is the repo's own ``tools`` package or one of its submodules."""
+def _is_repo_tools_module(name: str | None) -> bool:
+    """Whether ``name`` is the repo's own ``tools`` package or one of its submodules.
+
+    ``"tools"`` mirrors the prefix the Rust side passes to ``build_commands_inner``
+    (``crates/toolr-core/src/parser/build.rs``). Plugin modules are deliberately excluded.
+    """
     return name is not None and (name == "tools" or name.startswith("tools."))
 
 
@@ -604,9 +608,10 @@ def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
     own ``tools`` package: it is never installed into the venv, so syncing
     can't fix a typo or a circular import there.
     """
-    if _is_first_party_module(getattr(exc, "name", None)):
+    name = exc.name
+    if _is_repo_tools_module(name):
         return
-    missing = getattr(exc, "name", None) or "this module"
+    missing = name or "this module"
     print(
         f"\ntoolr: import `{missing}` failed at runtime. "
         "A dependency may be missing - run `toolr project venv sync` "
@@ -679,10 +684,8 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         print(code, file=sys.stderr)  # noqa: T201
         return 1
     except SpecError as exc:
-        # `_import_target` wraps an ImportError thrown while loading the
-        # user's command module into a SpecError. Print the cause's traceback
-        # first so a failure in a helper module names its file and line, then
-        # the summary and hint, so the remedy is the last thing on screen.
+        # A command module's ImportError, wrapped by `_import_target`: traceback first
+        # so it names the failing file and line, then summary and hint, remedy last.
         cause = exc.__cause__
         if isinstance(cause, ImportError):
             traceback.print_exception(cause, file=sys.stderr)
