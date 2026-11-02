@@ -44,11 +44,13 @@ It's incompatible with `capture_output`, `stream_output`,
 `no_output_timeout_secs`, and `input` — all of those require piping.
 
 When `timeout_secs` or `no_output_timeout_secs` runs out, `ctx.run` kills
-the command and every process it started, then raises. Both limits cover
-the whole call: if the command exits but a process it left running in the
-background keeps its output open, `ctx.run` still raises when the limit
-runs out rather than reporting success. That background process was already
-detached from the command, so toolr can't find it and leaves it running.
+the command and the processes it started, then raises. A process that
+detached itself first (a daemon that double-forks, or a subshell's
+background job whose subshell has exited) is no longer linked to the
+command, so toolr can't find it and leaves it running. Both limits cover
+the whole call: if the command exits but something it left running keeps
+its output open, `ctx.run` still raises when the limit runs out rather
+than reporting success.
 
 ## Working directory
 
