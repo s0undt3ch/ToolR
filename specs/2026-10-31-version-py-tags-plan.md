@@ -3,103 +3,106 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A pre-release tag no longer breaks dev-version computation, and `--new-version` is normalised and validated
-before `toolr version bump` writes anything (F-26).
+**Goal:** Pre-release versions can be released, a pre-release tag no longer breaks dev-version computation, and
+`--new-version` is normalised and validated before `toolr version bump` writes anything (F-26).
 
-**Architecture:** `_compute_dev_version` parses `git describe` output with one regex and bumps the numeric core.
-`bump` passes an explicit version through `_normalise_release_version` before any side effect.
+**Architecture:** `tools/version.py` parses every version (explicit input and latest tag) with
+`packaging.version.Version` and renders the SemVer form Cargo needs from the parsed parts. The dev version comes from
+three git commands instead of parsed `git describe` output. A `release-prerelease` output drives `--prerelease` on
+the GitHub release.
 
-**Tech Stack:** Python 3.11+, pytest, `unittest.mock`.
+**Tech Stack:** Python 3.11+, `packaging`, pytest, real git repositories in `tmp_path`, bash for the workflow step.
 
 **Spec:** [`specs/2026-10-31-version-py-tags-design.md`](./2026-10-31-version-py-tags-design.md)
 
 ## Global Constraints
 
-- Only `tools/version.py` and `tests/test_tools_version.py` change.
-- Reuse the module's `_FakeRun` / `_ctx_with_run` stubs. For paths that call `ctx.exit`, set
-  `ctx.exit.side_effect = SystemExit` so execution stops there, as the real `Context.exit` does.
+- Tests use real git repositories built by factory fixtures in `tmp_path`, and a real `Context` from
+  `toolr.testing.make_context`; git is not mocked. `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_NOSYSTEM` are set with
+  `monkeypatch.setenv` so the developer's git config doesn't leak in.
 - `GITHUB_OUTPUT`, `GITHUB_ENV` and `GITHUB_STEP_SUMMARY` go to `tmp_path` files via `monkeypatch.setenv`;
   `monkeypatch.delenv` them where a test doesn't need them.
 - Imports at the top of the test module. Conventional Commits; no `Co-Authored-By`. Stage by path.
+- Don't touch `action.yml` (another open PR edits it).
 
 ## Review Focus
 
-1. **The rc-shaped describe output.** Task 1, `test_compute_dev_version_after_prerelease_tag`, uses the exact
-   `v1.0.0-rc1-3-gabc1234` shape from the finding.
-2. **Nothing written before validation.** Task 2, `test_bump_rejects_malformed_version_before_writing`: the
-   `GITHUB_OUTPUT` file stays empty and `ctx.run` is never called.
-3. **The `v` slip checks the right tag.** Task 2, `test_bump_strips_leading_v`: the `git tag -l` call uses `v0.36.0`,
-   not `vv0.36.0`.
+1. **The reported tag shape.** `test_compute_dev_version_after_prerelease_tag` tags a real repository `v1.0.0-rc1`
+   and expects `1.0.0-rc.2.dev3`.
+2. **Nothing written before validation.** `test_bump_rejects_malformed_version_before_writing`: the `GITHUB_OUTPUT`,
+   `GITHUB_ENV` and `GITHUB_STEP_SUMMARY` files stay absent.
+3. **The `v` slip checks the right tag.** `test_bump_strips_leading_v` and
+   `test_bump_leading_v_finds_existing_tag`: with `v0.36.0` tagged, `--new-version v0.36.0 --check-existing-tag`
+   exits 1.
+4. **Wheel versions.** `test_cargo_version_maps_back_to_pep440`: each rendered Cargo version normalises back to the
+   PEP 440 version it came from.
 
 ---
 
-### Task 1: Parse pre-release describe output
+### Task 1: Parse and render versions with `packaging`
 
-**Files:**
+**Files:** `tools/version.py`, `tools/pyproject.toml`, `tools/uv.lock`, `tests/test_tools_version.py`
 
-- Modify: `tools/version.py` (`_compute_dev_version`, new `_DESCRIBE_RE`)
-- Test: `tests/test_tools_version.py`
+- [ ] **Step 1: Tests.**
+    - `_parse_release_version` accepts `0.36.0`, `v0.36.0`, `1.0.0-rc1`, `1.0.0rc1`, `1.0.0-rc.1`, `1.0.0-alpha.2`;
+      rejects `0.36`, `0.36.0.1`, `vv0.36.0`, `latest`, `""`, `1.0.0-1` (post), `1.0.0.dev1`, `1!1.0.0`,
+      `1.0.0+local`.
+    - `_cargo_version` renders the spec's table, and `str(Version(_cargo_version(v))) == str(v)` for each row.
+- [ ] **Step 2:** Run them → FAIL (missing helpers).
+- [ ] **Step 3:** Add `packaging` to `tools/pyproject.toml`, `uv lock --project tools`. Implement `_parse_version`,
+      `_parse_release_version`, `_cargo_version`. Remove `_bump_patch`.
+- [ ] **Step 4:** Run → PASS.
 
-**Interfaces:**
+### Task 2: Dev versions from three git commands
 
-- `_DESCRIBE_RE: Final[re.Pattern[str]]` as in the spec.
-- [ ] **Step 1: Write the tests:**
-    - `test_compute_dev_version_after_prerelease_tag`: `_FakeRun(["v1.0.0-rc1-3-gabc1234\n"])`, no
-      `GITHUB_EVENT_NAME` → `"1.0.1-dev3"`.
-    - `test_compute_dev_version_after_hyphenated_prerelease_tag`: `"v1.0.0-rc-1-3-gabc1234\n"` → `"1.0.1-dev3"`.
-    - `test_compute_dev_version_prerelease_tag_pull_request`: `GITHUB_EVENT_NAME=pull_request`,
-      `"v1.0.0-rc.2-5-gdeadbee\n"` → `"1.0.1-dev5+gdeadbee"`.
-    - `test_compute_dev_version_unparsable_describe`: `"garbage\n"`, `ctx.exit.side_effect = SystemExit` →
-      `pytest.raises(SystemExit)`; `ctx.error` called once with a message containing `garbage`.
-- [ ] **Step 2: Run** `uv run pytest tests/test_tools_version.py -v -k compute_dev_version` → the four new tests FAIL
-      (`ValueError: too many values to unpack`, or `not enough values` for `garbage`); the existing ones PASS.
-- [ ] **Step 3: Implement.** Replace the `split("-")` with `_DESCRIBE_RE.fullmatch(describe)`; on no match,
-      `ctx.error(f"cannot parse git describe output {describe!r}")` and `ctx.exit(1)`. Bump from `core`. Update the
-      format comment above it.
-- [ ] **Step 4: Run** Step 2 → PASS.
-- [ ] **Step 5: Commit.** `fix(release): derive dev versions after pre-release tags`
+**Files:** `tools/version.py`, `tests/test_tools_version.py`
 
-### Task 2: Normalise and validate `--new-version`
+- [ ] **Step 1: Tests** (real repositories, `monkeypatch.chdir`):
+    - final tag `v0.20.0` + 2 commits → `0.20.1-dev2`; with `GITHUB_EVENT_NAME=pull_request` →
+      `0.20.1-dev2+g<sha>`.
+    - tag `v1.0.0-rc1` + 3 commits → `1.0.0-rc.2.dev3`; same with `v1.0.0-rc.1`, and with `v1.0.0-beta.1` →
+      `1.0.0-beta.2.dev3`.
+    - no tag, 1 commit → `<TODAY_VERSION patch+1>-dev1`.
+    - tag `v1.2.3-foo` (matches the glob, not PEP 440) → `SystemExit`, error names the tag.
+- [ ] **Step 2:** Run → the rc and bad-tag tests FAIL (`ValueError: too many values to unpack`).
+- [ ] **Step 3:** Rewrite `_compute_dev_version` per the spec.
+- [ ] **Step 4:** Run → PASS.
 
-**Files:**
+### Task 3: Validate `--new-version` in `bump`, emit `release-prerelease`
 
-- Modify: `tools/version.py` (`bump`, new `_SEMVER_RE`, `_normalise_release_version`)
-- Test: `tests/test_tools_version.py`
+**Files:** `tools/version.py`, `tests/test_tools_version.py`
 
-**Interfaces:**
+- [ ] **Step 1: Tests:**
+    - `bump(new_version="v0.36.0", check_existing_tag=True)` in a repo without that tag → `release-version=0.36.0`,
+      `release-patch-name=toolr-0.36.0.patch`, `release-prerelease=false`, `RELEASE_VERSION=0.36.0`.
+    - the same with `v0.36.0` tagged → `SystemExit`, nothing written.
+    - `new_version="1.0.0rc1"` → `release-version=1.0.0-rc.1`, `release-prerelease=true`.
+    - `new_version` in `0.36`, `latest`, `1.0.0-1` with `write=True` → `SystemExit` with code 1, no output, env or
+      summary file created.
+    - no `new_version` in a repo tagged `v1.0.0-rc1` → prints the dev version, `release-prerelease=true`.
+- [ ] **Step 2:** Run → FAIL.
+- [ ] **Step 3:** Implement; update the `new_version` docstring.
+- [ ] **Step 4:** Run → PASS.
 
-- `_SEMVER_RE: Final[re.Pattern[str]]` as in the spec.
-- `_normalise_release_version(raw: str) -> str`: `raw.removeprefix("v")`, then `fullmatch` or
-  `ValueError(f"{raw!r} is not a semantic version (expected X.Y.Z)")`.
-- [ ] **Step 1: Write the tests:**
-    - `test_normalise_release_version` (parametrised): `"0.36.0"` → `"0.36.0"`; `"v0.36.0"` → `"0.36.0"`;
-      `"1.0.0-rc1"` → `"1.0.0-rc1"`; `"1.0.0-rc.1+build.5"` unchanged.
-    - `test_normalise_release_version_rejects` (parametrised): `"0.36"`, `"vv0.36.0"`, `"0.36.0.1"`, `"latest"`, `""`,
-      `"0.36.0-"` → `pytest.raises(ValueError)`.
-    - `test_bump_strips_leading_v`: `_FakeRun([""])` (no existing tag), `GITHUB_OUTPUT`/`GITHUB_ENV` in `tmp_path`;
-      `bump(ctx, new_version="v0.36.0", check_existing_tag=True)` → `run.calls[0] == ("git", "tag", "-l",
-      "v0.36.0")`; the output file contains `release-version=0.36.0` and `release-patch-name=toolr-0.36.0.patch`;
-      the env file contains `RELEASE_VERSION=0.36.0`.
-    - `test_bump_rejects_malformed_version_before_writing`: `bump(ctx, new_version="0.36", check_existing_tag=True,
-      write=True)` with `ctx.exit.side_effect = SystemExit` → raises `SystemExit`; `ctx.exit` called with `1`;
-      `run.calls == []`; the `GITHUB_OUTPUT` and `GITHUB_ENV` files are empty or absent.
-- [ ] **Step 2: Run** `uv run pytest tests/test_tools_version.py -v -k "normalise or bump_"` → all new tests FAIL
-      (`ImportError` for the helper; `vv0.36.0` in the tag call; the output file written).
-- [ ] **Step 3: Implement.** At the top of `bump`, if `new_version` is set, normalise it inside `try`/`except
-      ValueError` → `ctx.error(str(exc))`, `ctx.exit(1)`. Update the `new_version` docstring line: "A leading `v` is
-      accepted and stripped."
-- [ ] **Step 4: Run** Step 2 → PASS. `uv run pytest tests/test_tools_version.py` → all PASS. Update the module
-      docstring of the test file, which lists the covered surface, to include `bump` and
-      `_normalise_release_version`.
-- [ ] **Step 5: Commit.** `fix(release): validate and normalise --new-version before writing outputs`
+### Task 4: Pre-release GitHub releases
 
-### Task 3: Verification, archive
+**Files:** `.github/workflows/_prepare-release.yml`, `.github/workflows/release.yml`,
+`tests/workflows/test_release_create.py`
 
-- [ ] **Step 1:** No `UNRELEASED.md` entry (release tooling only).
-- [ ] **Step 2:** `mise run test`, polling every 30-60 s → green. `prek run --all-files` → green (ruff, mypy).
-- [ ] **Step 3:** The PR's own `Prepare Release` job runs `toolr version bump` with a dev version: check it still
-      writes `X.Y.Z-devN+gSHA`.
-- [ ] **Step 4:**
+- [ ] **Step 1: Test:** extract the `create-release` step from `release.yml`, run it with a stub `gh` on `PATH` that
+      records its arguments. `RELEASE_PRERELEASE=true` → `--prerelease` present, `--latest` absent; `false` → the
+      reverse.
+- [ ] **Step 2:** Run → FAIL (no step with id `create-release`).
+- [ ] **Step 3:** Expose `release-prerelease` from `_prepare-release.yml` (job and `workflow_call` outputs); give the
+      step `id: create-release`, pass `RELEASE_PRERELEASE`, choose the flag in bash.
+- [ ] **Step 4:** Run → PASS. Commit Tasks 1–4 as `fix(release): support pre-release versions in version bump`.
+
+### Task 5: Release note, verification, archive
+
+- [ ] **Step 1:** `toolr release-notes add --slug version-py-tags --text "…"`; commit
+      `docs(release-notes): …`. `toolr release-notes check --base origin/main` → exit 0.
+- [ ] **Step 2:** `uv run pytest`, `prek run --all-files` → green. Coverage of the changed lines in
+      `tools/version.py` ≥ 99%.
+- [ ] **Step 3:**
       `git mv specs/2026-10-31-version-py-tags-design.md specs/2026-10-31-version-py-tags-plan.md specs/archive/2026/`;
-      fix the plan's `Spec:` link and set the design's status to implemented. Commit
-      `docs(specs): archive version py tags design and plan`.
+      set the design's status to implemented. Commit `docs(specs): archive version py tags design and plan`.
