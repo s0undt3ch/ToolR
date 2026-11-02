@@ -1,6 +1,6 @@
 # Bind the installers' attestation check to the release workflow
 
-- **Status:** approved
+- **Status:** implemented
 - **Origin:** whole-project review finding F-44, plus follow-up FU-11 (maintainer decision 2026-11-02).
 - **Plan:** [`2026-11-02-installer-attestation-signer-plan.md`](./2026-11-02-installer-attestation-signer-plan.md)
 - **Stacks on:** `fix/action-attestation-signer` (F-23, #646,
@@ -37,13 +37,20 @@ Both installers apply the action's rules unchanged:
   (exact SAN match, unlike the prefix match of `--signer-workflow`).
 - `--deny-self-hosted-runners`.
 - `--format json --jq` counting the verified attestations whose `buildConfigURI` is exactly
-  `https://github.com/<repo>/.github/workflows/release.yml@refs/heads/main` and whose statement names a subject
-  exactly like the downloaded archive.
+  `https://github.com/<repo>/.github/workflows/release.yml@refs/heads/main` and one of whose statement subjects
+  carries both the downloaded archive's exact name and its SHA-256.
 - The count check fails closed on non-numeric output.
 - `gh` 2.56 or later, checked before verifying, with a message naming the floor.
 
-The `--jq` filter is the action's filter, byte for byte after whitespace is collapsed, and reads the two values from
-the environment (`env.RELEASE_WORKFLOW`, `env.ARCHIVE_NAME`). gh runs jq itself, so neither installer needs `jq`.
+The `--jq` filter is the action's filter, byte for byte after whitespace is collapsed, and reads its values from
+the environment (`env.RELEASE_WORKFLOW`, `env.ARCHIVE_NAME`, `env.ARCHIVE_SHA256`).
+
+Review round 1 tied the name and the digest to the same subject:
+`any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256)`. Matching the name
+alone left the name and the digest gh matched free to sit on different subjects of a multi-subject statement. The
+same filter goes into `action.yml`'s verify-attestation step in this PR, so #646 stays as reviewed. `install.sh`
+hashes the archive from stdin with `sha256sum`, `shasum -a 256` or `openssl dgst -sha256`, and fails closed when none
+exists; `install.ps1` uses `Get-FileHash`; the action uses `sha256sum` or `shasum`. gh runs jq itself, so neither installer needs `jq`.
 Keeping the filter free of quotes and `$` also matters on Windows PowerShell 5.1, whose native-command argument
 quoting mangles embedded double quotes.
 
@@ -51,7 +58,8 @@ The identities are built from the installer's repository setting (`TOOLR_REPO` /
 `s0undt3ch/ToolR`), the same value already passed to `--repo` and used for the download URLs. With the default the
 pins are byte-identical to the action's `SIGNER_WORKFLOW` and `RELEASE_WORKFLOW`. Someone who points the installer
 at another repository already trusts that repository's releases; the override gets the same rules against that
-repository instead of a guaranteed, confusing failure.
+repository instead of a guaranteed, confusing failure. The installation docs say the override moves the whole trust
+anchor, downloads and attestation identities, so it is only for a fork you trust.
 
 #### install.sh
 
@@ -82,7 +90,7 @@ native stderr into a terminating error. The script checks `$LASTEXITCODE`, then 
 (gh before 2.56 can't load GitHub's current Sigstore trusted root, F-23 spec), so failing with a clear floor message
 changes no outcome. Silently skipping instead would turn an outdated verifier into an unverified install.
 
-The rejection message names the cause and the escape hatch (`--verify-attestation=skip` / `-VerifyAttestation skip`),
+The rejection message names the repository it checked, the cause and the escape hatch (`--verify-attestation=skip` / `-VerifyAttestation skip`),
 as the action's does.
 
 ### Manual command in the docs
@@ -145,9 +153,12 @@ them and asserts they agree, with the installers' default repository substituted
 - Every published release (0.20.0 to 0.35.1, all built by `release.yml` on `main`) still installs through both
   installers. Archives built by any other workflow or ref, or attested for another file name, are rejected. Hosts
   verifying with `gh` need gh 2.56 or later, which they already needed in practice.
+- `README.md` and `docs/quickstart.md` state the gh 2.56 floor next to their install commands. `mise.md`'s
+  recommended `.mise.toml` example carries the pin too.
 - Behaviour without `gh`, and with `--verify-attestation=skip` / `-VerifyAttestation skip`, is unchanged.
 - `install-smoke.yml` already runs both installers with `require` on every PR that touches them, against the latest
-  release, so CI checks the positive path on Linux, macOS and Windows.
+  release, so CI checks the positive path on Linux, macOS and Windows. It gains a `shell: powershell` step so
+  `install.ps1` also runs under Windows PowerShell 5.1, not only `pwsh`.
 - Skills: `skills/toolr-ci-setup` describes the action only. No skill text covers the installers or the mise pin, so
   no skill or reference change.
 - Release note:

@@ -13,7 +13,7 @@ the docs and `action.yml` in step with a cross-file consistency test.
 
 **Tech Stack:** POSIX sh, PowerShell 5.1/7, `gh attestation verify`, pytest, `jq` (tests only).
 
-**Spec:** [`2026-11-02-installer-attestation-signer-design.md`](./2026-11-02-installer-attestation-signer-design.md)
+**Spec:** [`specs/archive/2026/2026-11-02-installer-attestation-signer-design.md`](./2026-11-02-installer-attestation-signer-design.md)
 
 ## Global Constraints
 
