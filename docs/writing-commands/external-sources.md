@@ -267,4 +267,7 @@ toolr project manifest rebuild
 
 toolr also rebuilds automatically when the manifest is missing or stale, so the
 first invocation after adding or editing a source picks the change up on its
-own. See [Manifest layers](../internals/manifest.md) for when rebuilds trigger.
+own. That covers editing a scanned file, adding or removing one that a
+`scan_paths` glob matches, and changing the `[tool.toolr.argparse.*]` blocks in
+`tools/pyproject.toml`. See [Manifest layers](../internals/manifest.md) for when
+rebuilds trigger.
