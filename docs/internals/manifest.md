@@ -27,7 +27,8 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   "third_party_hash": "<blake3 hex>",
   "toolr_version": "<CARGO_PKG_VERSION>",
   "groups": [...],
-  "commands": [...]
+  "commands": [...],
+  "input_records": {"files": [...], "scan_paths": [...]}
 }
 ```
 
@@ -35,10 +36,16 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   manifest with a higher schema than it understands. Version 2 removed
   `path_constraints`. A cache with any other schema version is rebuilt
   on the next run.
-- **`static_hash`** — blake3 over the sorted `(path, contents)` of
+- **`static_hash`** — blake3 over the sorted per-file digests of
   every input of the static build: each `tools/**/*.py` file, the
   `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`, and every
   file an external command source scans. Drives static-layer rebuilds.
+- **`input_records`** — what `static_hash` was computed from: one
+  record per input (`key`, `size`, `mtime_ns`, `ctime_ns`, `ino`,
+  `blake3`, and `unreadable` for an input that couldn't be read), plus
+  each argparse block's `scan_paths`. The freshness check uses them to
+  skip rereading unchanged files. Absent on older manifests, which then
+  reread everything once.
 - **`third_party_hash`** — blake3 over the sorted set of
   `toolr-manifest.json` files found under
   `<tools-venv>/lib/python*/site-packages/*/`
@@ -219,19 +226,34 @@ Both hashes use blake3, written as lowercase hex.
   of being skipped, and symlinked directories there are not followed.
   Each file is keyed by its path relative to the project root, with `/`
   separators (a scanned file outside the project keeps its full path),
-  sorted by key, and hashed as
-  `key || 0x00 || len(contents) as u64 LE || contents`. The build reads
-  only the `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`,
-  so the hash takes those blocks as parsed, serialised in name order,
-  under a `0x02` tag instead of `0x00`: a dependency bump or `uv add`
-  doesn't trigger a rebuild. A `tools/pyproject.toml` whose blocks don't
-  parse is hashed whole, so fixing it does; it also adds no scanned
-  files, and neither does a block with an invalid glob. The check
-  doesn't fail on either; the build reports the error, and tab
-  completion keeps serving the cached manifest until it's fixed. A `tools/**/*.py` module that can't be read fails
-  the check, naming the file. Any other input that can't be read is
-  hashed as `key || 0x01 || <error kind>`, so an unreadable scanned file
-  doesn't break every command, and fixing it still triggers a rebuild.
+  sorted by key. Each file contributes
+  `len(key) as u64 LE || key || 0x00 || <hex blake3 of its contents>`.
+  The build reads only the `[tool.toolr.argparse.*]` blocks of
+  `tools/pyproject.toml`, so its digest is of `0x02` followed by those
+  blocks as parsed, serialised in name order: a dependency bump or
+  `uv add` doesn't trigger a rebuild. A `tools/pyproject.toml` whose
+  blocks don't parse is digested whole, so fixing it does; it also adds
+  no scanned files, and neither does a block with an invalid glob. The
+  check doesn't fail on either; the build reports the error, and tab
+  completion keeps serving the cached manifest until it's fixed. A
+  `tools/**/*.py` module that can't be read fails the check, naming the
+  file. Any other input that can't be read contributes
+  `len(key) as u64 LE || key || 0x01 || <error kind>`, so an unreadable
+  scanned file doesn't break every command, and fixing it still triggers
+  a rebuild.
+- The stat gate: the freshness check stats every input and reuses the
+  digest in `input_records` without reading the file when its size,
+  mtime, ctime and inode (the last two on Unix) all match and its mtime
+  is strictly older than the manifest file's own mtime. A file saved in
+  the same timestamp tick as the manifest is always reread, as git does
+  for its index, since it could have changed without changing its stat.
+  `tools/pyproject.toml` is read at most once per check, and its
+  `scan_paths` are reused with its digest; the globs are expanded on
+  every check, so a new or removed scanned file is noticed. A record
+  for an unreadable input is never reused. On an unchanged tree the
+  check reads no input at all. A fresh manifest is never rewritten, so
+  a file whose stat changed without its contents (after `touch`) is
+  reread on each check until the next rebuild.
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`
   or `Lib/site-packages/*/` (the Windows layout, looked in on every
