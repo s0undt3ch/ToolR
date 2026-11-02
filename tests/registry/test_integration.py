@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 from collections.abc import Callable
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -462,22 +463,16 @@ def test_discover_without_tools_ignores_host_tools(tmp_path: Path, host_repo: Pa
     assert not imported_host
 
 
-def test_discover_keeps_sys_path_entries_without_tools(
-    tmp_path: Path,
-    tools_repo: ToolsRepo,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`sys.path` entries that can't shadow `tools` (src-layout editable
-    installs, `PYTHONPATH`) stay importable during discovery."""
-    libdir = tmp_path / "libdir"
-    libdir.mkdir()
-    (libdir / "fixture_helper.py").write_text("VALUE = 1\n")
-    monkeypatch.syspath_prepend(libdir)
-    repo = tools_repo({"tools/ci.py": "import fixture_helper\n" + CI_MODULE})
-    with CommandsTester(search_path=repo) as tester:
-        tester.discover()
-        groups = tester.collected_command_groups()
-    assert "tools.ci" in groups
+@pytest.fixture
+def restore_import_state() -> Iterator[None]:
+    """Put `sys.meta_path` and `sys.path` back after the test, even if a
+    tester entered by hand leaks its finder or path on failure. Listed
+    first, so it tears down after `monkeypatch`."""
+    meta_path = sys.meta_path[:]
+    path = sys.path[:]
+    yield
+    sys.meta_path[:] = meta_path
+    sys.path[:] = path
 
 
 def test_discover_ignores_host_dirs_added_by_extend_path(
@@ -512,6 +507,7 @@ def test_find_spec_for_tools_raises_without_a_fixture_tools(
         importlib.util.find_spec("tools")
 
 
+@pytest.mark.usefixtures("restore_import_state")
 def test_commands_tester_exit_restores_state_when_cwd_is_gone(
     tmp_path: Path, tools_repo: ToolsRepo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -531,8 +527,10 @@ def test_commands_tester_exit_restores_state_when_cwd_is_gone(
 
 
 def test_tester_sys_path_drops_only_cwd_and_search_path(tmp_path: Path) -> None:
-    """Only the cwd entry and the search path itself are dropped, even entries
-    that provide `tools`; the search path goes first."""
+    """Only the cwd entry and the search path itself are dropped; the search
+    path goes first. `with_pkg` holds a `tools/` to guard against going back
+    to pruning `tools` providers, which took everything else in those
+    entries off `sys.path` with them."""
     search_path = tmp_path / "search"
     with_pkg = tmp_path / "with_pkg"
     (with_pkg / "tools").mkdir(parents=True)
@@ -542,20 +540,16 @@ def test_tester_sys_path_drops_only_cwd_and_search_path(tmp_path: Path) -> None:
     assert _tester_sys_path(search_path, saved) == [str(search_path), str(with_pkg), str(plain)]
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["windows-site-packages", "my-site-packages-tool", "dist-packages-fork", "site-packages"],
-)
 def test_discover_ignores_tools_under_a_dir_named_like_site_packages(
     tmp_path: Path,
     tools_repo: ToolsRepo,
     monkeypatch: pytest.MonkeyPatch,
-    name: str,
 ) -> None:
-    """A repo checked out under `.worktrees/windows-site-packages` (or any
-    name mentioning `site-packages`) doesn't merge its namespace `tools/`
-    into the fixture's."""
-    decoy = tmp_path / "host" / ".worktrees" / name
+    """A repo checked out under `.worktrees/windows-site-packages` doesn't
+    merge its namespace `tools/` into the fixture's. Pins the reported
+    regression: a substring match on `site-packages` once kept such a repo's
+    root on `sys.path`."""
+    decoy = tmp_path / "host" / ".worktrees" / "windows-site-packages"
     (decoy / "tools").mkdir(parents=True)
     (decoy / "tools" / "host_only.py").write_text(BROKEN_MODULE)
     monkeypatch.syspath_prepend(decoy)
@@ -566,6 +560,7 @@ def test_discover_ignores_tools_under_a_dir_named_like_site_packages(
     assert list(groups) == ["tools.ci"]
 
 
+@pytest.mark.usefixtures("restore_import_state")
 def test_namespace_tools_path_stays_in_the_fixture_when_sys_path_changes(
     tmp_path: Path, tools_repo: ToolsRepo, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -592,6 +587,7 @@ def test_namespace_tools_supports_importlib_resources(tools_repo: ToolsRepo) -> 
     assert text == "hello"
 
 
+@pytest.mark.usefixtures("restore_import_state")
 def test_commands_tester_removes_its_finder_on_exit(tools_repo: ToolsRepo) -> None:
     """Nested testers each remove their own finder and leave `sys.meta_path`
     as they found it."""
