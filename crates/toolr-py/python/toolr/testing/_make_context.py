@@ -53,17 +53,23 @@ class ContextForTesting(Context, frozen=True):
 
     @property
     def stdout(self) -> str:
-        """Everything written through `print` so far, plus `prompt`'s question text."""
+        """Everything written through `print` so far, plus everything `prompt` renders.
+
+        `prompt` writes its question with any choices and default (`Pick [1/2] (2): `), and on
+        invalid input rich's validation message and the question again.
+        """
         return self._console_stdout.file.getvalue()  # type: ignore[attr-defined]
 
     @property
     def stderr(self) -> str:
         """Everything written through `info`, `warn`, `error` and `debug` so far.
 
-        `debug` only at verbose verbosity, `info` not at quiet. Also holds the message passed to
-        `exit` and the `Running '…'` line `run` prints before each command. The subprocess's own
-        streamed output goes to the real process streams, not here; pass `capture_output=True`
-        and read the returned `CommandResult` instead.
+        `debug` appears only at `ConsoleVerbosity.VERBOSE`; `info` is dropped at
+        `ConsoleVerbosity.QUIET`. `make_context` defaults to `ConsoleVerbosity.NORMAL`. Also holds
+        the message passed to `exit`, whatever the status, and the `Running '…'` line `run` logs
+        through `info` before each command, so that line is absent at quiet too. The subprocess's
+        own streamed output goes to the real process streams, not here; pass
+        `capture_output=True` and read the returned `CommandResult` instead.
         """
         return self._console_stderr.file.getvalue()  # type: ignore[attr-defined]
 

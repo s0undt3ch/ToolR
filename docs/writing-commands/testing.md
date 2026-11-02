@@ -207,10 +207,18 @@ Feed a "no" answer the same way to test the abort path of a confirm-style comman
 set, `ctx.exit(...)` raises `SystemExit` via a real `ArgumentParser`, exactly as it does under the
 CLI, and `ctx.run`/`ctx.chdir`/`ctx.prompt` all run for real unless you pass
 `run=`/`chdir=`/`prompt_input=` to `make_context` (see below). `ctx.stdout` captures `ctx.print`
-and the question text of `ctx.prompt`. `ctx.stderr` captures `ctx.info`/`ctx.warn`/`ctx.error`/
-`ctx.debug`, the `ctx.exit` message and the `Running '…'` line `ctx.run` prints before each
+and everything `ctx.prompt` renders: the question with any choices and default
+(`Pick [1/2] (2): `), and on invalid input the validation message and the question again.
+`ctx.stderr` captures `ctx.info`/`ctx.warn`/`ctx.error`/`ctx.debug`, the `ctx.exit` message
+whatever the status, and the `Running '…'` line `ctx.run` logs through `ctx.info` before each
 command. A subprocess's own streamed output isn't captured in either; pass `capture_output=True`
 and read the returned `CommandResult`.
+
+Verbosity decides which log lines reach `ctx.stderr`. `make_context` defaults to
+`ConsoleVerbosity.NORMAL`, which drops `ctx.debug`. Pass
+`make_context(..., verbosity=ConsoleVerbosity.VERBOSE)` to capture it. At
+`ConsoleVerbosity.QUIET`, `ctx.info` and the `Running '…'` line are dropped as well. Import the
+enum with `from toolr.utils._console import ConsoleVerbosity`.
 
 ### Mocking `ctx.run`
 
