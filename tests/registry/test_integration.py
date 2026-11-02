@@ -770,6 +770,34 @@ def test_unknown_group_error_suggests_a_near_miss(
     )
 
 
+def test_unknown_group_error_follows_file_order(tools_repo: ToolsRepo) -> None:
+    """Lines follow the sorted file paths, as the manifest build's walk does, not import order."""
+    repo = tools_repo(
+        {
+            "tools/a_mod.py": (
+                "from toolr import command\n"
+                "from tools import z_mod  # noqa: F401\n"
+                '@command(group="aaa-nope")\n'
+                "def first(ctx):\n"
+                '    """First."""\n'
+            ),
+            "tools/z_mod.py": (
+                "from toolr import command\n"
+                '@command(group="zzz-nope")\n'
+                "def last(ctx):\n"
+                '    """Last."""\n'
+            ),
+        }
+    )
+    assert _unknown_group_error(repo) == (
+        "unknown group references (2):\n"
+        "  - tools.a_mod::first: references group `aaa-nope` which has no "
+        "`command_group(...)` declaration.\n"
+        "  - tools.z_mod::last: references group `zzz-nope` which has no "
+        "`command_group(...)` declaration."
+    )
+
+
 def test_unknown_group_error_for_an_empty_group(tools_repo: ToolsRepo) -> None:
     """`group=""` gets the manifest build's missing-kwarg message."""
     repo = tools_repo(

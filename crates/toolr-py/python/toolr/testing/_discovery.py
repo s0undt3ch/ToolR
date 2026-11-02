@@ -176,8 +176,9 @@ def _nearest_group(target: str, registered: list[str]) -> str | None:
     return None if best is None else best[1]
 
 
-def _unknown_group_line(group: str, location: str, registered: list[str]) -> str:
+def _unknown_group_line(group: str, module: str, command: str, registered: list[str]) -> str:
     """One line of the unknown-group error, worded as ``format_unknown_groups`` in Rust."""
+    location = f"{module}::{command}"
     if not group:
         return f"  - {location}: `@command` is missing a `group=...` kwarg."
     line = (
@@ -187,6 +188,20 @@ def _unknown_group_line(group: str, location: str, registered: list[str]) -> str
     if suggestion is not None:
         line += f" Did you mean `{suggestion}`?"
     return line
+
+
+def _source_order_key(func: Callable[..., Any], tools_dir: Path) -> tuple[int, tuple[str, ...]]:
+    """Sort key for a command's file, matching the manifest build's sorted walk.
+
+    Files under ``tools_dir`` sort by path components, as Rust sorts its
+    ``PathBuf`` list in ``list_python_files``. Functions defined elsewhere
+    (a test body, say) sort after them; the stable sort keeps their order.
+    """
+    try:
+        relative = Path(func.__code__.co_filename).relative_to(tools_dir)
+    except ValueError:
+        return (1, ())
+    return (0, relative.parts)
 
 
 @define(slots=True, frozen=True)
@@ -261,9 +276,14 @@ class CommandsTester:
             registered = sorted(
                 name.removeprefix("tools.") for name in self.command_group_collector
             )
+            tools_dir = self.search_path / "tools"
+            pending = sorted(
+                self.pending_command_collector,
+                key=lambda entry: _source_order_key(entry[2], tools_dir),
+            )
             lines = [
-                _unknown_group_line(group, f"{func.__module__}::{name}", registered)
-                for group, name, func in self.pending_command_collector
+                _unknown_group_line(group, func.__module__, name, registered)
+                for group, name, func in pending
             ]
             err_msg = "\n".join([f"unknown group references ({len(lines)}):", *lines])
             raise ValueError(err_msg)
