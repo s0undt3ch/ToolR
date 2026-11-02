@@ -36,6 +36,15 @@ All tests live in `tests/registry/test_integration.py`, which already has the `t
 - [ ] Mutation check: disabling the namespace rebuild, the plain-list conversion or the `ModuleNotFoundError` each
       makes a test fail.
 
+## Task 2b: review round 2
+
+- [ ] `test_discover_ignores_host_dirs_added_by_extend_path`: a fixture `tools/__init__.py` calling
+      `pkgutil.extend_path`, with the host repo on `sys.path`; fails until the walk skips directories outside
+      `search_path / "tools"`.
+- [ ] `test_commands_tester_exit_restores_state_when_cwd_is_gone`: delete the original cwd inside the tester; `__exit__`
+      raises `FileNotFoundError` but the finder is gone and `sys.path` restored. Restore the cwd last.
+- [ ] `test_find_spec_for_tools_raises_without_a_fixture_tools` pins the documented `ModuleNotFoundError`.
+
 ## Task 3: docs and release note
 
 - [ ] `docs/writing-commands/testing.md`: describe the finder instead of the `sys.path` filtering.

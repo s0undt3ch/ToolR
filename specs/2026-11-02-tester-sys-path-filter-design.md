@@ -53,6 +53,11 @@ only:
   namespace package.
 - `__enter__` inserts the finder at `sys.meta_path[0]`; `__exit__` removes that instance, so nested testers unwind in
   order.
+- `pkgutil.extend_path` scans `sys.path` directly and ignores `sys.meta_path`, so a fixture `tools/__init__.py` that
+  calls it still gets the host's `tools/` on its `__path__`. `discover()` therefore walks only directories that resolve
+  under `search_path / "tools"`.
+- `__exit__` removes the finder first and restores the cwd last, so a deleted original cwd can't leave the finder
+  installed for the rest of the process.
 
 `_isolated_sys_path` keeps every entry: it drops only `""` (the cwd is `search_path` while the tester is active) and
 `search_path`, which it puts first. The stdlib, site-packages, overlays, `.pth` additions, editable installs and
@@ -84,6 +89,10 @@ only:
   modules now sees them, after the fixture's.
 - Closes the case F-09 left open: a regular `tools` package installed in site-packages no longer replaces a fixture
   `tools/` that has no `__init__.py`.
+- With no fixture `tools`, `importlib.util.find_spec("tools")` inside the tester raises `ModuleNotFoundError` rather
+  than returning `None`. That raise is what keeps another `tools` from being found; the testing docs say so.
+- A fixture `tools/__init__.py` that calls `pkgutil.extend_path` still has the host's directories on `tools.__path__`,
+  so an explicit `import tools.<host module>` would succeed; `discover()` doesn't walk them.
 - The finder bypasses later meta-path hooks for the top-level `tools` module only, pytest's assertion rewriter among
   them. `tools.*` submodules still go through every hook.
 - User-visible for `toolr.testing` users: one release note. `docs/writing-commands/testing.md` describes the finder
