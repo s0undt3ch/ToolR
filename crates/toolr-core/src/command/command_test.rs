@@ -836,6 +836,276 @@ mod test_suite {
 
             Ok(())
         }
+
+        // Generous bounds: these run under a loaded workspace test run.
+
+        const TREE_BOUND: Duration = Duration::from_secs(30);
+        const DEATH_WAIT: Duration = Duration::from_secs(10);
+
+        #[cfg(unix)]
+        fn process_alive(pid: u32) -> bool {
+            // Killed grandchildren are reparented, so init reaps them promptly.
+            unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+        }
+
+        #[cfg(windows)]
+        fn process_alive(pid: u32) -> bool {
+            use winapi::um::handleapi::CloseHandle;
+            use winapi::um::minwinbase::STILL_ACTIVE;
+            use winapi::um::processthreadsapi::{GetExitCodeProcess, OpenProcess};
+            use winapi::um::winnt::PROCESS_QUERY_LIMITED_INFORMATION;
+            unsafe {
+                let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+                if handle.is_null() {
+                    return false;
+                }
+                let mut code = 0;
+                let ok = GetExitCodeProcess(handle, &mut code);
+                CloseHandle(handle);
+                ok != 0 && code == STILL_ACTIVE
+            }
+        }
+
+        fn wait_until_dead(pid: u32, within: Duration) -> bool {
+            let deadline = Instant::now() + within;
+            while Instant::now() < deadline {
+                if !process_alive(pid) {
+                    return true;
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            !process_alive(pid)
+        }
+
+        /// First line of a capture file, parsed as a pid.
+        fn read_pid(file: &mut NamedTempFile) -> Option<u32> {
+            file.seek(SeekFrom::Start(0)).ok()?;
+            let mut text = String::new();
+            file.read_to_string(&mut text).ok()?;
+            text.lines().next()?.trim().parse().ok()
+        }
+
+        /// Kills a test's grandchild when the test ends, pass or fail, so a red
+        /// run doesn't leave sleepers behind.
+        struct KillOnDrop(Option<u32>);
+
+        impl Drop for KillOnDrop {
+            fn drop(&mut self) {
+                let Some(pid) = self.0 else { return };
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(pid as libc::pid_t, libc::SIGKILL);
+                }
+                #[cfg(windows)]
+                unsafe {
+                    use winapi::um::handleapi::CloseHandle;
+                    use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
+                    use winapi::um::winnt::PROCESS_TERMINATE;
+                    let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+                    if !handle.is_null() {
+                        TerminateProcess(handle, 1);
+                        CloseHandle(handle);
+                    }
+                }
+            }
+        }
+
+        /// Child that starts a long-lived Python grandchild, prints its pid and
+        /// then sleeps, or exits at once when `child_exits` is set.
+        fn grandchild_script(grandchild_secs: u32, child_exits: bool) -> String {
+            let tail = if child_exits { "" } else { "; time.sleep(60)" };
+            format!(
+                "import subprocess, sys, time; \
+                 p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep({grandchild_secs})']); \
+                 print(p.pid, flush=True){tail}"
+            )
+        }
+
+        /// Captures stdout so the test can read the grandchild's pid.
+        fn capturing_config(args: Vec<String>) -> (CommandConfig, NamedTempFile, NamedTempFile) {
+            let stdout_file = NamedTempFile::new().expect("stdout temp file");
+            let stderr_file = NamedTempFile::new().expect("stderr temp file");
+            let config = CommandConfig {
+                args,
+                stdout_fd: wrap_fd(get_file_descriptor(stdout_file.as_file())),
+                stderr_fd: wrap_fd(get_file_descriptor(stderr_file.as_file())),
+                ..Default::default()
+            };
+            (config, stdout_file, stderr_file)
+        }
+
+        fn assert_timeout_error(
+            result: std::result::Result<i32, Box<dyn std::error::Error + Send + Sync>>,
+            expected: &str,
+        ) {
+            match result {
+                Ok(code) => panic!("expected a timeout error, the call returned {code}"),
+                Err(e) => assert!(
+                    e.to_string().contains(expected),
+                    "expected {expected:?}, got: {e}"
+                ),
+            }
+        }
+
+        /// The audit's exact shape: the shell's child must not outlive the timeout.
+        #[cfg(unix)]
+        #[test]
+        fn reported_shape_sh_sleep_timeout_returns() -> Result<()> {
+            let config = CommandConfig {
+                args: vec!["sh".into(), "-c".into(), "sleep 999".into()],
+                timeout_secs: Some(1.0),
+                ..Default::default()
+            };
+            assert_timeout_error(bounded_run_command(config, TREE_BOUND)?, "timed out after");
+            Ok(())
+        }
+
+        /// `no_output_timeout_secs` counts from the pid print, so a slow
+        /// interpreter start can't fire it before the grandchild exists.
+        #[test]
+        fn timeout_kills_grandchild() -> Result<()> {
+            require_python!(python, "timeout_kills_grandchild");
+            let (mut config, mut stdout_file, _stderr) =
+                capturing_config(vec![python, "-c".into(), grandchild_script(60, false)]);
+            config.no_output_timeout_secs = Some(5.0);
+
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            let pid = read_pid(&mut stdout_file);
+            let _guard = KillOnDrop(pid);
+            assert_timeout_error(result, "no output for");
+            let pid = pid.ok_or_else(|| anyhow!("the child never printed the grandchild pid"))?;
+            assert!(
+                wait_until_dead(pid, DEATH_WAIT),
+                "grandchild {pid} survived the timeout"
+            );
+            Ok(())
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn timeout_kills_grandchild_sh() -> Result<()> {
+            let (mut config, mut stdout_file, _stderr) = capturing_config(vec![
+                "sh".into(),
+                "-c".into(),
+                "sleep 60 & echo $!; wait".into(),
+            ]);
+            config.timeout_secs = Some(2.0);
+
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            let pid = read_pid(&mut stdout_file);
+            let _guard = KillOnDrop(pid);
+            assert_timeout_error(result, "timed out after");
+            let pid = pid.ok_or_else(|| anyhow!("sh never printed the sleep pid"))?;
+            assert!(
+                wait_until_dead(pid, DEATH_WAIT),
+                "sleep {pid} survived the timeout"
+            );
+            Ok(())
+        }
+
+        /// The child exits 0 but its grandchild keeps stdout open: the timeout
+        /// still holds, and the call reports it rather than success.
+        #[test]
+        fn timeout_holds_when_background_child_keeps_pipe_open() -> Result<()> {
+            require_python!(
+                python,
+                "timeout_holds_when_background_child_keeps_pipe_open"
+            );
+            let (mut config, mut stdout_file, _stderr) =
+                capturing_config(vec![python, "-c".into(), grandchild_script(60, true)]);
+            config.timeout_secs = Some(3.0);
+
+            let start = Instant::now();
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            let elapsed = start.elapsed();
+            let _guard = KillOnDrop(read_pid(&mut stdout_file));
+            assert_timeout_error(result, "timed out after");
+            assert!(
+                elapsed < Duration::from_secs(20),
+                "the call waited {elapsed:?} for the background holder"
+            );
+            Ok(())
+        }
+
+        /// The spec's repro, exactly: `sh` exits 0 at once, `sleep` holds the pipes.
+        #[cfg(unix)]
+        #[test]
+        fn timeout_holds_when_background_child_keeps_pipe_open_sh() -> Result<()> {
+            let config = CommandConfig {
+                args: vec!["sh".into(), "-c".into(), "sleep 30 &".into()],
+                timeout_secs: Some(1.0),
+                ..Default::default()
+            };
+            let start = Instant::now();
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            let elapsed = start.elapsed();
+            assert_timeout_error(result, "timed out after");
+            assert!(
+                elapsed < Duration::from_secs(20),
+                "the call waited {elapsed:?} for the background holder"
+            );
+            Ok(())
+        }
+
+        /// Same holder shape under `no_output_timeout_secs`.
+        #[cfg(unix)]
+        #[test]
+        fn no_output_timeout_holds_when_background_child_keeps_pipe_open() -> Result<()> {
+            let config = CommandConfig {
+                args: vec!["sh".into(), "-c".into(), "sleep 30 &".into()],
+                no_output_timeout_secs: Some(1.0),
+                ..Default::default()
+            };
+            let start = Instant::now();
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            let elapsed = start.elapsed();
+            assert_timeout_error(result, "no output for");
+            assert!(
+                elapsed < Duration::from_secs(20),
+                "the call waited {elapsed:?} for the background holder"
+            );
+            Ok(())
+        }
+
+        /// Without a timeout, a background writer is still waited for, as before.
+        #[cfg(unix)]
+        #[test]
+        fn no_timeout_still_waits_for_background_writer() -> Result<()> {
+            let (config, mut stdout_file, _stderr) = capturing_config(vec![
+                "sh".into(),
+                "-c".into(),
+                "(sleep 1; echo late) &".into(),
+            ]);
+            let start = Instant::now();
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+            assert!(start.elapsed() >= Duration::from_secs(1));
+            stdout_file.seek(SeekFrom::Start(0))?;
+            let mut captured = String::new();
+            stdout_file.read_to_string(&mut captured)?;
+            assert_eq!(captured.trim(), "late");
+            Ok(())
+        }
+
+        /// A timeout set but not reached doesn't cut a late background writer short.
+        #[cfg(unix)]
+        #[test]
+        fn unexpired_timeout_waits_for_background_writer() -> Result<()> {
+            let (mut config, mut stdout_file, _stderr) = capturing_config(vec![
+                "sh".into(),
+                "-c".into(),
+                "(sleep 1; echo late) &".into(),
+            ]);
+            config.timeout_secs = Some(60.0);
+            config.no_output_timeout_secs = Some(60.0);
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+            stdout_file.seek(SeekFrom::Start(0))?;
+            let mut captured = String::new();
+            stdout_file.read_to_string(&mut captured)?;
+            assert_eq!(captured.trim(), "late");
+            Ok(())
+        }
     }
 
     // --------------------------------------------------------------------

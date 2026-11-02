@@ -294,6 +294,15 @@ def test_timeout(sleep_command):
     assert elapsed < 1.0  # Verify timeout happened quickly
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")
+def test_timeout_holds_when_background_process_keeps_pipe_open():
+    # `sh` exits 0 at once; the backgrounded `sleep` keeps stdout open.
+    start = time.time()
+    with pytest.raises(CommandTimeoutError):
+        run(["sh", "-c", "sleep 30 &"], timeout_secs=1)
+    assert time.time() - start < 20
+
+
 def test_no_output_timeout(sleep_command):
     start = time.time()
     with pytest.raises(CommandTimeoutNoOutputError):

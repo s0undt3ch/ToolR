@@ -19,7 +19,6 @@ full = [
     "dep:blake3",
     "dep:chrono",
     "dep:uuid",
-    "dep:libc",
     "dep:email_address",
     "dep:pep440_rs",
     "dep:walkdir",
@@ -46,7 +45,8 @@ thiserror = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
-libc = { workspace = true, optional = true }
+# `command` uses it, so toolr-py links it too.
+libc.workspace = true
 email_address = { workspace = true, optional = true }
 pep440_rs = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
@@ -64,11 +64,14 @@ flate2 = { workspace = true, optional = true }
 tar = { workspace = true, optional = true }
 zip = { workspace = true, optional = true }
 
+[target.'cfg(windows)'.dependencies]
+# `command` walks and kills the child's process tree with it.
+winapi = { version = "0.3", features = ["handleapi", "processthreadsapi", "tlhelp32", "winnt", "minwinbase"] }
+
 [dev-dependencies]
 tokio.workspace = true
 tempfile.workspace = true
 anyhow.workspace = true
-libc.workspace = true
 assert_cmd.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies]

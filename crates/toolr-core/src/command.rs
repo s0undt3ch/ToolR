@@ -16,6 +16,12 @@ use std::os::unix::io::{FromRawFd, RawFd};
 #[cfg(windows)]
 use std::os::windows::io::{FromRawHandle, RawHandle};
 
+mod tree;
+
+/// How long the I/O threads get to finish once the tree is killed; only an escaped process holds
+/// them past EOF.
+const KILL_GRACE: Duration = Duration::from_secs(2);
+
 // Custom error types
 #[derive(Debug)]
 pub struct CommandExecutionError {
@@ -203,6 +209,51 @@ fn spawn_stdin_writer<W: Write + Send + 'static>(
         Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
         result => result,
     })
+}
+
+struct Timeouts {
+    total: Option<f64>,
+    no_output: Option<f64>,
+}
+
+impl Timeouts {
+    /// The error for whichever limit has run out, if any.
+    fn expired(
+        &self,
+        start: Instant,
+        last_output: &Mutex<Instant>,
+    ) -> Option<Box<dyn Error + Send + Sync>> {
+        if let Some(timeout) = self.total
+            && start.elapsed() > Duration::from_secs_f64(timeout)
+        {
+            return Some(Box::new(CommandTimeoutExceededError::new(format!(
+                "Command timed out after {timeout:.2} seconds"
+            ))));
+        }
+        if let Some(timeout) = self.no_output
+            && last_output.lock().unwrap().elapsed() > Duration::from_secs_f64(timeout)
+        {
+            return Some(Box::new(CommandNoOutputTimeoutError::new(format!(
+                "Command timed out due to no output for {timeout:.2} seconds"
+            ))));
+        }
+        None
+    }
+}
+
+/// Poll until `finished` holds or `give_up` returns a reason, which is passed back. Threads still
+/// running are then detached by dropping their handles.
+fn drain_threads<E>(
+    finished: &dyn Fn() -> bool,
+    mut give_up: impl FnMut() -> Option<E>,
+) -> Option<E> {
+    while !finished() {
+        if let Some(reason) = give_up() {
+            return Some(reason);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    None
 }
 
 fn join_stdin_writer(handle: JoinHandle<io::Result<()>>) -> Result<(), CommandExecutionError> {
@@ -450,46 +501,33 @@ pub fn run_command_internal(
     });
 
     // Spawned after the readers. On timeout the kill closes the pipe and the
-    // thread ends on its own, unless a grandchild still holds stdin (a known gap).
+    // thread ends on its own, or is detached after `KILL_GRACE`.
     let stdin_thread = stdin_payload.map(|(stdin, input)| spawn_stdin_writer(stdin, input));
+
+    let all_finished = || {
+        stdout_thread.as_ref().is_none_or(JoinHandle::is_finished)
+            && stderr_thread.as_ref().is_none_or(JoinHandle::is_finished)
+            && stdin_thread.as_ref().is_none_or(JoinHandle::is_finished)
+    };
+    let timeouts = Timeouts {
+        total: config.timeout_secs,
+        no_output: config.no_output_timeout_secs,
+    };
 
     // Wait for command completion with timeout handling
     let start_time = Instant::now();
     let status = loop {
-        // Check for command completion
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => {
-                // Check for timeout
-                if let Some(timeout) = config.timeout_secs {
-                    // Convert float seconds to Duration
-                    let timeout_duration = Duration::from_secs_f64(timeout);
-                    if start_time.elapsed() > timeout_duration {
-                        let _ = child.kill();
-                        let _ = child.wait(); // Make sure it's dead
-
-                        return Err(Box::new(CommandTimeoutExceededError::new(format!(
-                            "Command timed out after {timeout:.2} seconds"
-                        ))));
-                    }
+                if let Some(err) = timeouts.expired(start_time, &last_output) {
+                    tree::kill_tree(&mut child);
+                    let killed_at = Instant::now();
+                    drain_threads(&all_finished, || {
+                        (killed_at.elapsed() > KILL_GRACE).then_some(())
+                    });
+                    return Err(err);
                 }
-
-                // Check for no-output timeout - when monitoring for output
-                if let Some(no_output_timeout) = config.no_output_timeout_secs {
-                    let last_output_time = *last_output.lock().unwrap();
-
-                    // Convert float seconds to Duration
-                    let no_output_duration = Duration::from_secs_f64(no_output_timeout);
-                    if last_output_time.elapsed() > no_output_duration {
-                        let _ = child.kill();
-                        let _ = child.wait(); // Make sure it's dead
-
-                        return Err(Box::new(CommandNoOutputTimeoutError::new(format!(
-                            "Command timed out due to no output for {no_output_timeout:.2} seconds"
-                        ))));
-                    }
-                }
-
                 thread::sleep(Duration::from_millis(10));
             }
             Err(e) => {
@@ -499,6 +537,12 @@ pub fn run_command_internal(
             }
         }
     };
+
+    // The child has exited, but something it started may still hold the pipes: the
+    // timeouts cover the whole call, so they keep running until the threads finish.
+    if let Some(err) = drain_threads(&all_finished, || timeouts.expired(start_time, &last_output)) {
+        return Err(err);
+    }
 
     let stdin_result = stdin_thread.map_or(Ok(()), join_stdin_writer);
 
