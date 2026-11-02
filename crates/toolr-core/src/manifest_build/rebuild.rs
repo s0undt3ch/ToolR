@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use super::hash::compute_third_party_hash;
+use crate::hash::context_unless_symlinked;
 use crate::manifest::{acquire_rebuild_lock, write_manifest};
-use crate::parser::{build_static_manifest_with_venv, is_symlinked_modules};
+use crate::parser::{BuildError, build_static_manifest_with_venv};
 
 /// Result of a rebuild, returned for diagnostics / CLI output.
 #[derive(Debug)]
@@ -31,13 +32,9 @@ pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<Re
     // concurrent auto-rebuilds.
     let _lock = acquire_rebuild_lock(&manifest_path);
     let mut manifest = build_static_manifest_with_venv(&tools, venv_root)
-        .map_err(anyhow::Error::from)
+        .map_err(BuildError::into_anyhow)
         .map_err(|e| {
-            if is_symlinked_modules(&e) {
-                e
-            } else {
-                e.context("building static manifest (incl. third-party glob-merge)")
-            }
+            context_unless_symlinked(e, "building static manifest (incl. third-party glob-merge)")
         })?;
     manifest.third_party_hash = compute_third_party_hash(venv_root)?;
     write_manifest(&manifest_path, &manifest)?;

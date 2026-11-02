@@ -27,8 +27,9 @@ pub fn hash_tools_dir(tools_dir: &Path) -> Result<String> {
 /// followed. The symlink check reads the directory entry, so it costs no
 /// extra syscall.
 ///
-/// `toolr.testing._discovery._reject_symlinked_modules` mirrors this walk in
-/// Python; change both together.
+/// `toolr.testing._discovery._reject_symlinked_modules` (the symlink check)
+/// and `_import_package_modules` (the imports) mirror this walk in Python;
+/// change all three together.
 pub(crate) fn list_python_files(tools_dir: &Path) -> Result<Vec<PathBuf>, SymlinkedModules> {
     let mut paths = Vec::new();
     let mut links = Vec::new();
@@ -60,8 +61,13 @@ pub(crate) fn list_python_files(tools_dir: &Path) -> Result<Vec<PathBuf>, Symlin
     Ok(paths)
 }
 
-/// `*.py` symlinks found by [`list_python_files`]. toolr supports modules
-/// living under `tools/` itself, not modules shared into it by links.
+/// `*.py` symlinks found by [`list_python_files`]. toolr never reads or
+/// imports code from wherever a link points, so these are rejected.
+///
+/// The message already names every offending path and must reach the user
+/// unwrapped, and dispatch must not fall back to a cached manifest for it:
+/// check [`is_symlinked_modules`] before adding context or recovering from
+/// a build error ([`context_unless_symlinked`] does the former).
 #[derive(Debug, thiserror::Error)]
 #[error(
     "symlinked modules are not supported ({count}):\n{details}\nPut the file itself under {root}/, or share it as a Python package.",
@@ -105,8 +111,27 @@ fn root_name(dir: &Path) -> String {
     let named = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
     named(dir)
         .or_else(|| std::path::absolute(dir).ok().as_deref().and_then(named))
+        // `absolute` keeps a trailing `..`, which has no name; resolve it.
         .or_else(|| dir.canonicalize().ok().as_deref().and_then(named))
         .unwrap_or_else(|| dir.display().to_string())
+}
+
+/// Whether `err` is a [`SymlinkedModules`] rejection.
+pub fn is_symlinked_modules(err: &anyhow::Error) -> bool {
+    err.is::<SymlinkedModules>()
+}
+
+/// Add `context` to `err`, unless it is a [`SymlinkedModules`] rejection,
+/// which must read the same on every path.
+pub fn context_unless_symlinked<C>(err: anyhow::Error, context: C) -> anyhow::Error
+where
+    C: std::fmt::Display + Send + Sync + 'static,
+{
+    if is_symlinked_modules(&err) {
+        err
+    } else {
+        err.context(context)
+    }
 }
 
 fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
@@ -114,7 +139,7 @@ fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
         .is_some_and(|n| n.starts_with('.') || n == "__pycache__")
 }
 
-fn hash_paths(tools_dir: &Path, paths: &[PathBuf]) -> Result<String> {
+pub(crate) fn hash_paths(tools_dir: &Path, paths: &[PathBuf]) -> Result<String> {
     let mut hasher = Hasher::new();
     for path in paths {
         // `path` is enumerated by WalkDir under `tools_dir`, not untrusted input.
@@ -349,11 +374,10 @@ mod tests {
         assert_eq!(err.paths, expected);
     }
 
-    /// A walk rooted at `.` or `..` still names the directory, not `.`.
-    #[cfg(unix)]
+    /// A walk rooted at `.` names the directory, not `.`. The expected name
+    /// comes from the test process's cwd, whatever that is.
     #[test]
     fn symlinked_modules_name_a_relative_root() {
-        let tmp = setup(&[("my_plugin/sub/x.py", "x")]);
         let links = vec![PathBuf::from("./linked.py"), PathBuf::from("./sub/l.py")];
         let err = SymlinkedModules::new(Path::new("."), links);
         let cwd = std::env::current_dir().unwrap();
@@ -363,10 +387,32 @@ mod tests {
             [format!("{name}/linked.py"), format!("{name}/sub/l.py")]
         );
         assert_eq!(err.root, name);
+    }
 
+    /// `..` is resolved to the directory's name; a root with no name at all
+    /// falls back to its display form.
+    #[cfg(unix)]
+    #[test]
+    fn root_name_resolves_parent_and_nameless_paths() {
+        let tmp = setup(&[("my_plugin/sub/x.py", "x")]);
         let sub = tmp.path().join("my_plugin/sub");
         assert_eq!(root_name(&sub.join("..")), "my_plugin");
         assert_eq!(root_name(Path::new("/")), "/");
+    }
+
+    /// Context is added to other errors but never to a rejection, which
+    /// must read the same on every path.
+    #[test]
+    fn context_is_never_added_to_symlinked_modules() {
+        let links = SymlinkedModules::new(Path::new("tools"), vec!["tools/x.py".into()]);
+        let expected = links.to_string();
+        let err = context_unless_symlinked(links.into(), "hashing tools");
+        assert!(is_symlinked_modules(&err));
+        assert_eq!(format!("{err:#}"), expected);
+
+        let err = context_unless_symlinked(anyhow::anyhow!("disk on fire"), "hashing tools");
+        assert!(!is_symlinked_modules(&err));
+        assert_eq!(format!("{err:#}"), "hashing tools: disk on fire");
     }
 
     /// Directory links are still not followed, and links under pruned

@@ -1,11 +1,11 @@
 //! Build a complete static `Manifest` from a `tools/` directory.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::hash::{SymlinkedModules, hash_tools_dir, list_python_files};
+use crate::hash::{SymlinkedModules, hash_paths, list_python_files};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
 use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
@@ -38,9 +38,11 @@ pub fn build_static_manifest(tools_dir: &Path) -> Result<Manifest> {
 fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest, BuildError> {
     // Name validation is deferred so argparse-scanned flags are reported in
     // the same batch as the native names.
-    let (all_groups, all_commands) = build_commands_inner(tools_dir, "tools", false)?;
+    // One walk feeds both the parser and the hash.
+    let py_files = list_python_files(tools_dir)?;
+    let (all_groups, all_commands) = build_commands_inner(tools_dir, &py_files, "tools", false)?;
 
-    let static_hash = hash_tools_dir(tools_dir).map_err(hash_build_error)?;
+    let static_hash = hash_paths(tools_dir, &py_files).map_err(BuildError::Build)?;
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash,
@@ -105,16 +107,16 @@ pub(crate) fn build_commands(
     source_root: &Path,
     module_prefix: &str,
 ) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
-    build_commands_inner(source_root, module_prefix, true)
+    let py_files = list_python_files(source_root)?;
+    build_commands_inner(source_root, &py_files, module_prefix, true)
 }
 
 fn build_commands_inner(
     source_root: &Path,
+    py_files: &[PathBuf],
     module_prefix: &str,
     check_names: bool,
 ) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
-    let py_files = list_python_files(source_root)?;
-
     // Pass 1: build cross-file enum + type-alias + arg-section tables
     // from every module so later passes can resolve symbols regardless
     // of which file they live in.
@@ -123,7 +125,7 @@ fn build_commands_inner(
     let mut sections = ArgSectionTable::default();
     let mut all_imports: std::collections::HashMap<String, ImportTable> =
         std::collections::HashMap::new();
-    for path in &py_files {
+    for path in py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let is_package = path.file_stem().map(|s| s == "__init__").unwrap_or(false);
@@ -154,7 +156,7 @@ fn build_commands_inner(
         std::collections::HashMap::new();
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
     let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
-    for path in &py_files {
+    for path in py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
@@ -279,26 +281,6 @@ pub fn build_static_manifest_with_venv(
     discover_and_merge(tools_venv, base).map_err(BuildError::ThirdParty)
 }
 
-/// A link can appear between the parser's walk and the hash's walk; keep it
-/// a [`BuildError::SymlinkedModules`] so callers still recognise it.
-fn hash_build_error(e: anyhow::Error) -> BuildError {
-    match e.downcast::<SymlinkedModules>() {
-        Ok(links) => BuildError::SymlinkedModules(links),
-        Err(e) => BuildError::Build(e),
-    }
-}
-
-/// Whether `err` is a symlinked-modules rejection, however it was wrapped.
-/// Such errors are fatal and carry no extra context: they already name
-/// every offending path.
-pub fn is_symlinked_modules(err: &anyhow::Error) -> bool {
-    err.is::<SymlinkedModules>()
-        || matches!(
-            err.downcast_ref::<BuildError>(),
-            Some(BuildError::SymlinkedModules(_))
-        )
-}
-
 /// Error type covering both the local build and the third-party merge.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
@@ -324,6 +306,17 @@ pub enum BuildError {
     Argparse(#[from] crate::argparse::ArgparseError),
     #[error(transparent)]
     SymlinkedModules(#[from] SymlinkedModules),
+}
+
+impl BuildError {
+    /// Convert for `anyhow` callers, surfacing a symlinked-modules rejection
+    /// as a bare [`SymlinkedModules`] the way [`build_static_manifest`] does.
+    pub fn into_anyhow(self) -> anyhow::Error {
+        match self {
+            BuildError::SymlinkedModules(links) => links.into(),
+            other => other.into(),
+        }
+    }
 }
 
 fn format_invalid_names(errors: &[InvalidName]) -> String {
@@ -858,22 +851,6 @@ def hello(ctx):
             })
             .collect();
         assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
-    }
-
-    /// A link that appears between the parser's walk and the hash's walk
-    /// still surfaces as `SymlinkedModules`, so dispatch keeps it fatal.
-    #[test]
-    fn hash_errors_keep_symlinked_modules_recognisable() {
-        let links =
-            || crate::hash::SymlinkedModules::new(Path::new("tools"), vec!["tools/x.py".into()]);
-        let err = hash_build_error(anyhow::Error::from(links()));
-        assert!(matches!(err, BuildError::SymlinkedModules(_)), "{err:?}");
-        assert!(is_symlinked_modules(&anyhow::Error::from(err)));
-        assert!(is_symlinked_modules(&anyhow::Error::from(links())));
-
-        let err = hash_build_error(anyhow::anyhow!("disk on fire"));
-        assert!(matches!(err, BuildError::Build(_)), "{err:?}");
-        assert!(!is_symlinked_modules(&anyhow::Error::from(err)));
     }
 
     /// Plugin fragments share the walk: the paths and the hint name the
