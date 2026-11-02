@@ -28,10 +28,61 @@ from unittest.mock import patch
 from attrs import define
 from attrs import field
 
+from toolr._exc import ToolrError
 from toolr.testing._unknown_groups import _format_unknown_groups
 
 if TYPE_CHECKING:
     from toolr._decorators import PendingCommand
+
+# C0, DEL, C1, plus the zero-width and bidi format characters; matches
+# `crates/toolr-core/src/text.rs::escape_control_chars`.
+_UNSAFE_CHARS = frozenset(
+    [*range(0x20), *range(0x7F, 0xA0), 0x061C, *range(0x200B, 0x2010), *range(0x202A, 0x202F)]
+    + [*range(0x2060, 0x2065), *range(0x2066, 0x206A), 0xFEFF]
+)
+
+
+def _escape_control_chars(text: str) -> str:
+    """Render control and invisible format characters as Rust-style unicode escapes."""
+    return "".join(f"\\u{{{ord(c):x}}}" if ord(c) in _UNSAFE_CHARS else c for c in text)
+
+
+def _reject_symlinked_modules(tools_dir: Path) -> None:
+    """Raise if any ``*.py`` under ``tools_dir`` is a symlink.
+
+    Mirrors ``list_python_files`` in ``crates/toolr-core/src/hash.rs``;
+    change both together. Dot-directories and ``__pycache__`` are pruned and
+    symlinked directories are not followed, so neither is checked.
+
+    Raises:
+        ToolrError: With the same text ``toolr`` prints for the tree.
+    """
+    links: list[Path] = []
+    pending = [tools_dir]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as it:
+                entries = list(it)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False):
+                if not (entry.name.startswith(".") or entry.name == "__pycache__"):
+                    pending.append(Path(entry.path))
+            elif entry.is_symlink() and os.path.splitext(entry.name)[1] == ".py":
+                links.append(Path(entry.path))
+    if not links:
+        return
+    base = tools_dir.parent
+    paths = sorted(link.relative_to(base) for link in links)
+    details = "\n".join(f"  - {_escape_control_chars(path.as_posix())}" for path in paths)
+    root = _escape_control_chars(tools_dir.name)
+    msg = (
+        f"symlinked modules are not supported ({len(paths)}):\n{details}\n"
+        f"Put the file itself under {root}/."
+    )
+    raise ToolrError(msg)
 
 
 def _import_tools_modules() -> list[Exception]:
@@ -61,7 +112,8 @@ def _import_package_modules(package: ModuleType, errors: list[Exception], seen: 
     ``crates/toolr-core/src/hash.rs`` (``list_python_files`` and
     ``is_pruned_dir``); change both together. Every ``.py`` file and every
     subdirectory, with or without ``__init__.py``, is visited except
-    dot-directories, ``__pycache__`` and symlinks. Names that aren't Python
+    dot-directories, ``__pycache__`` and symlinks (``discover()`` has already
+    rejected ``.py`` links). Names that aren't Python
     identifiers can't be imported and are skipped. A subdirectory is only
     descended into once its own import succeeded, and each directory is
     walked once, so a ``__path__`` pointing back at a parent can't loop.
@@ -236,10 +288,13 @@ class CommandsTester:
         register commands at module import time.
 
         Raises:
+            ToolrError: A ``*.py`` under ``tools/`` is a symlink, which
+                ``toolr`` refuses too. Raised before anything is imported.
             ExceptionGroup: One or more ``tools`` modules failed to import,
                 for example because a command has no docstring. Every
                 module is imported first; the group holds each failure.
         """
+        _reject_symlinked_modules(self.search_path / "tools")
         errors = _import_tools_modules()
         if errors:
             msg = (

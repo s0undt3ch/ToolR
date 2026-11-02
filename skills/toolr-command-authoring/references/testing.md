@@ -81,6 +81,8 @@ command-group registry is populated, the same way authors
 register commands at module import time.
 
 Raises:
+    ToolrError: A ``*.py`` under ``tools/`` is a symlink, which
+        ``toolr`` refuses too. Raised before anything is imported.
     ExceptionGroup: One or more ``tools`` modules failed to import,
         for example because a command has no docstring. Every
         module is imported first; the group holds each failure.

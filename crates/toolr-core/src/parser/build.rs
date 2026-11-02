@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::hash::{hash_tools_dir, list_python_files};
+use crate::hash::{SymlinkedModules, hash_tools_dir, list_python_files};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
 use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
@@ -111,7 +111,7 @@ fn build_commands_inner(
     module_prefix: &str,
     check_names: bool,
 ) -> std::result::Result<(Vec<Group>, Vec<Command>), BuildError> {
-    let py_files = list_python_files(source_root);
+    let py_files = list_python_files(source_root)?;
 
     // Pass 1: build cross-file enum + type-alias + arg-section tables
     // from every module so later passes can resolve symbols regardless
@@ -300,6 +300,8 @@ pub enum BuildError {
     InvalidNames(Vec<InvalidName>),
     #[error("argparse scanner error: {0}")]
     Argparse(#[from] crate::argparse::ArgparseError),
+    #[error(transparent)]
+    SymlinkedModules(#[from] SymlinkedModules),
 }
 
 fn format_invalid_names(errors: &[InvalidName]) -> String {
@@ -823,7 +825,7 @@ def hello(ctx):
         );
         write(&tools, ".git/hooks/pre-commit.py", "z = 3\n");
 
-        let files = list_python_files(&tools);
+        let files = list_python_files(&tools).unwrap();
         let rels: Vec<String> = files
             .iter()
             .map(|p| {
@@ -834,6 +836,24 @@ def hello(ctx):
             })
             .collect();
         assert_eq!(rels, vec!["ci.py".to_string()], "got: {rels:?}");
+    }
+
+    /// Plugin fragments share the walk: the paths and the hint name the
+    /// package directory.
+    #[cfg(unix)]
+    #[test]
+    fn build_commands_rejects_symlinked_modules_in_a_package() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("my_plugin");
+        write(&pkg, "__init__.py", "");
+        write(tmp.path(), "shared/linked.py", "x = 1\n");
+        std::os::unix::fs::symlink("../shared/linked.py", pkg.join("linked.py")).unwrap();
+        let err = build_commands(&pkg, "my_plugin").unwrap_err();
+        assert!(matches!(err, BuildError::SymlinkedModules(_)), "{err:?}");
+        assert_eq!(
+            err.to_string(),
+            "symlinked modules are not supported (1):\n  - my_plugin/linked.py\nPut the file itself under my_plugin/."
+        );
     }
 
     fn invalid_names_for<S: AsRef<str>>(files: &[(&str, S)]) -> Vec<InvalidName> {

@@ -6,10 +6,12 @@ use anyhow::Result;
 use blake3::Hasher;
 use walkdir::WalkDir;
 
+use crate::text::escape_control_chars;
+
 /// Hash all `*.py` files under `tools_dir`. Path order is deterministic
 /// (sorted) so the result is reproducible across runs and machines.
 pub fn hash_tools_dir(tools_dir: &Path) -> Result<String> {
-    hash_paths(tools_dir, &list_python_files(tools_dir))
+    hash_paths(tools_dir, &list_python_files(tools_dir)?)
 }
 
 /// Every `*.py` under `tools_dir`, sorted. Shared by the hasher and the
@@ -21,21 +23,72 @@ pub fn hash_tools_dir(tools_dir: &Path) -> Result<String> {
 /// under `.venv` would otherwise become `tools..venv.lib.<pkg>`. The root
 /// itself is never pruned, even if its basename starts with a dot.
 ///
-/// `toolr.testing._discovery._import_package_modules` mirrors this walk in
+/// A `*.py` symlink fails the walk (F-17); symlinked directories are not
+/// followed. The symlink check reads the directory entry, so it costs no
+/// extra syscall.
+///
+/// `toolr.testing._discovery._reject_symlinked_modules` mirrors this walk in
 /// Python; change both together.
-pub(crate) fn list_python_files(tools_dir: &Path) -> Vec<PathBuf> {
-    let mut paths: Vec<_> = WalkDir::new(tools_dir)
+pub(crate) fn list_python_files(tools_dir: &Path) -> Result<Vec<PathBuf>, SymlinkedModules> {
+    let mut paths = Vec::new();
+    let mut links = Vec::new();
+    let walk = WalkDir::new(tools_dir)
         .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
             e.depth() == 0 || !e.file_type().is_dir() || !is_pruned_dir(e.file_name())
         })
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x == "py"))
-        .map(|e| e.into_path())
-        .collect();
+        .filter_map(|e| e.ok());
+    for e in walk {
+        if e.path().extension().is_none_or(|x| x != "py") {
+            continue;
+        }
+        if e.path_is_symlink() {
+            links.push(e.into_path());
+        } else if e.file_type().is_file() {
+            paths.push(e.into_path());
+        }
+    }
+    if !links.is_empty() {
+        return Err(SymlinkedModules::new(tools_dir, links));
+    }
     paths.sort();
-    paths
+    Ok(paths)
+}
+
+/// `*.py` symlinks found by [`list_python_files`]. toolr supports modules
+/// living under `tools/` itself, not modules shared into it by links.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "symlinked modules are not supported ({count}):\n{details}\nPut the file itself under {root}/.",
+    count = .paths.len(),
+    details = .paths.iter().map(|p| format!("  - {p}")).collect::<Vec<_>>().join("\n"),
+)]
+pub struct SymlinkedModules {
+    /// The walked directory's name, e.g. `tools` or a plugin package.
+    root: String,
+    /// Each link, relative to the walked directory's parent, sorted.
+    paths: Vec<String>,
+}
+
+impl SymlinkedModules {
+    fn new(tools_dir: &Path, mut links: Vec<PathBuf>) -> Self {
+        links.sort();
+        let base = tools_dir.parent().unwrap_or(tools_dir);
+        let display = |p: &Path| {
+            let rel = p.strip_prefix(base).unwrap_or(p);
+            let joined = rel
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
+            escape_control_chars(&joined)
+        };
+        Self {
+            root: display(tools_dir),
+            paths: links.iter().map(|p| display(p)).collect(),
+        }
+    }
 }
 
 fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
@@ -199,6 +252,75 @@ mod tests {
         for r in results {
             assert_eq!(r.unwrap(), expected);
         }
+    }
+
+    /// F-17 repro tree: `tools/linked.py -> ../shared/linked.py` next to a
+    /// regular `tools/demo.py`, plus a nested and a dangling link. Every link
+    /// is reported at once, sorted, relative to the project root.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_modules_are_rejected_all_at_once() {
+        use std::os::unix::fs::symlink;
+        let tmp = setup(&[
+            ("tools/demo.py", "x"),
+            ("shared/linked.py", "y"),
+            ("shared/other.py", "z"),
+        ]);
+        let tools = tmp.path().join("tools");
+        symlink("../shared/linked.py", tools.join("linked.py")).unwrap();
+        std::fs::create_dir(tools.join("sub")).unwrap();
+        symlink("../../shared/other.py", tools.join("sub/other.py")).unwrap();
+        symlink("../shared/missing.py", tools.join("gone.py")).unwrap();
+
+        let err = list_python_files(&tools).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "symlinked modules are not supported (3):\n  - tools/gone.py\n  - tools/linked.py\n  - tools/sub/other.py\nPut the file itself under tools/."
+        );
+        let err = hash_tools_dir(&tools).unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("symlinked modules are not supported (3):"),
+            "{err}"
+        );
+    }
+
+    /// Directory links are still not followed, and links under pruned
+    /// directories are never looked at.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_directories_and_pruned_links_are_not_rejected() {
+        use std::os::unix::fs::symlink;
+        let tmp = setup(&[
+            ("tools/demo.py", "x"),
+            ("venv/lib/site-packages/pkg/mod.py", "y"),
+            ("shared/lib/mod.py", "z"),
+            ("shared/linked.py", "w"),
+        ]);
+        let tools = tmp.path().join("tools");
+        symlink("../venv", tools.join(".venv")).unwrap();
+        symlink("../shared/lib", tools.join("lib")).unwrap();
+        symlink("../shared/lib", tools.join("pkg.py.d")).unwrap();
+        symlink("../shared/linked.py", tools.join("notes.txt")).unwrap();
+        for pruned in ["__pycache__", ".cache"] {
+            std::fs::create_dir(tools.join(pruned)).unwrap();
+            symlink("../../shared/linked.py", tools.join(pruned).join("x.py")).unwrap();
+        }
+
+        assert_eq!(
+            list_python_files(&tools).unwrap(),
+            vec![tools.join("demo.py")]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_module_names_are_escaped() {
+        let tmp = setup(&[("tools/demo.py", "x")]);
+        let tools = tmp.path().join("tools");
+        std::os::unix::fs::symlink("demo.py", tools.join("a\x1b]0;x\x07.py")).unwrap();
+        let err = list_python_files(&tools).unwrap_err().to_string();
+        assert!(err.contains("  - tools/a\\u{1b}]0;x\\u{7}.py\n"), "{err}");
     }
 
     #[test]

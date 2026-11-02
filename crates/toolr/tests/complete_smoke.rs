@@ -304,3 +304,33 @@ fn self_completion_print_emits_bash_script() {
     assert!(stdout.contains("toolr __complete"));
     assert!(stdout.contains("complete -F _toolr_complete toolr"));
 }
+
+/// F-17: TAB on a tree with a symlinked module stays silent. The resolve
+/// fails, `run_complete` falls back to the built-ins only, exit 0, nothing
+/// on stderr to clobber the prompt.
+#[cfg(unix)]
+#[test]
+fn symlinked_module_offers_only_built_ins_silently() {
+    let tmp = fixture();
+    let tools = tmp.path().join("tools");
+    std::fs::create_dir(tmp.path().join("shared")).unwrap();
+    std::fs::write(tmp.path().join("shared/linked.py"), "").unwrap();
+    std::os::unix::fs::symlink("../shared/linked.py", tools.join("linked.py")).unwrap();
+
+    let output = common::toolr()
+        .current_dir(tmp.path())
+        .arg("__complete")
+        .arg(tmp.path())
+        .arg("")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let values: Vec<&str> = stdout
+        .lines()
+        .map(|l| l.split('\t').next().unwrap_or(l))
+        .collect();
+    assert!(values.contains(&"self"), "{stdout}");
+    assert!(!values.contains(&"ci"), "{stdout}");
+}

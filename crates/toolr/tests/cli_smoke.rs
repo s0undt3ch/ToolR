@@ -481,3 +481,48 @@ fn project_deps_removed_prints_migration_hint() {
         "stderr missing pointer to new path:\n{stderr}"
     );
 }
+
+/// F-17 repro tree: `tools/linked.py -> ../shared/linked.py` next to a
+/// regular `tools/demo.py`. Returns the project root.
+#[cfg(unix)]
+fn symlinked_module_project(tmp: &TempDir) -> PathBuf {
+    let tools = common::write_project(tmp.path());
+    std::fs::write(
+        tools.join("demo.py"),
+        "group = command_group(\"demo\", \"Demo commands\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Say hello.\"\"\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir(tmp.path().join("shared")).unwrap();
+    std::fs::write(
+        tmp.path().join("shared/linked.py"),
+        "group = command_group(\"linked\", \"Linked commands\")\n\n@group.command\ndef hi(ctx):\n    \"\"\"Say hi.\"\"\"\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink("../shared/linked.py", tools.join("linked.py")).unwrap();
+    tmp.path().to_path_buf()
+}
+
+/// F-17: a symlinked `tools/*.py` used to vanish from `--help` without a
+/// word; `--help` and dispatch now refuse the tree and name the link.
+#[cfg(unix)]
+#[test]
+fn symlinked_tools_module_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let root = symlinked_module_project(&tmp);
+    for args in [&["--help"][..], &["demo", "hello"][..]] {
+        let output = common::toolr()
+            .current_dir(&root)
+            .env("TOOLR_NO_CACHE_HINT", "1")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(
+                "symlinked modules are not supported (1):\n  - tools/linked.py\nPut the file itself under tools/."
+            ),
+            "{args:?}: {stderr}"
+        );
+    }
+}
