@@ -8,10 +8,11 @@ from pathlib import Path
 import pytest
 
 from toolr._context import Context
+from toolr.testing import ConsoleVerbosity
 from toolr.testing import make_command_result
 from toolr.testing import make_context
+from toolr.utils import _console
 from toolr.utils import command
-from toolr.utils._console import ConsoleVerbosity
 
 # `RunMock` and `Mock` are imported locally inside the `run=`/`chdir=` tests below rather than
 # here, so the `--8<--` doc snippets they carry are self-contained when included in
@@ -33,6 +34,10 @@ def test_make_context_captures_stderr(tmp_path: Path) -> None:
     ctx = make_context(tmp_path)
     ctx.error("something broke")
     assert "something broke" in ctx.stderr
+
+
+def test_console_verbosity_is_exported_from_toolr_testing() -> None:
+    assert ConsoleVerbosity is _console.ConsoleVerbosity
 
 
 def _fake_run(

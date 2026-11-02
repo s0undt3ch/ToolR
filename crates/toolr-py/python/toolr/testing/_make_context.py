@@ -106,7 +106,8 @@ def make_context(
 
     Args:
         repo_root: Value for `ctx.repo_root`.
-        verbosity: Value for `ctx.verbosity`.
+        verbosity: Value for `ctx.verbosity`, a `ConsoleVerbosity`
+            (`from toolr.testing import ConsoleVerbosity`).
         default_timeout_secs: Value for `ctx.default_timeout_secs`.
         default_no_output_timeout_secs: Value for `ctx.default_no_output_timeout_secs`.
         width: Width of the captured `stdout`/`stderr` consoles, in columns. Defaults to

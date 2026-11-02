@@ -218,7 +218,7 @@ Verbosity decides which log lines reach `ctx.stderr`. `make_context` defaults to
 `ConsoleVerbosity.NORMAL`, which drops `ctx.debug`. Pass
 `make_context(..., verbosity=ConsoleVerbosity.VERBOSE)` to capture it. At
 `ConsoleVerbosity.QUIET`, `ctx.info` and the `Running '…'` line are dropped as well. Import the
-enum with `from toolr.utils._console import ConsoleVerbosity`.
+enum with `from toolr.testing import ConsoleVerbosity`.
 
 ### Mocking `ctx.run`
 

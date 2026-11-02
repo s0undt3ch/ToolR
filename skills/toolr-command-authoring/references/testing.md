@@ -9,6 +9,7 @@ Every name exposed by `import toolr.testing` is documented below. The list is ge
 ```python
 from toolr.testing import (
     CommandsTester,
+    ConsoleVerbosity,
     ContextForTesting,
     DEFAULT_TEST_CONSOLE_WIDTH,
     RunMock,
@@ -85,6 +86,18 @@ Raises:
         for example because a command has no docstring. Every
         module is imported first; the group holds each failure.
 
+```
+
+### `ConsoleVerbosity`
+
+**Kind:** class &nbsp;·&nbsp; **Source:** `toolr.utils._console`
+
+```python
+class ConsoleVerbosity
+```
+
+```text
+Console verbosity levels.
 ```
 
 ### `ContextForTesting`
@@ -375,7 +388,8 @@ Build a `Context` usable in a unit test.
 
 Args:
     repo_root: Value for `ctx.repo_root`.
-    verbosity: Value for `ctx.verbosity`.
+    verbosity: Value for `ctx.verbosity`, a `ConsoleVerbosity`
+        (`from toolr.testing import ConsoleVerbosity`).
     default_timeout_secs: Value for `ctx.default_timeout_secs`.
     default_no_output_timeout_secs: Value for `ctx.default_no_output_timeout_secs`.
     width: Width of the captured `stdout`/`stderr` consoles, in columns. Defaults to
