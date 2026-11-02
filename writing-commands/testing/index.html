@@ -1769,16 +1769,22 @@ subprocess execution) you'll still want to drive the binary directly.</p>
 <h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
 <p><code>CommandsTester(search_path=tmp_path)</code> is a context manager that:</p>
 <ol>
-<li>Saves and replaces <code>sys.path</code> so <code>search_path</code> comes first and drops every other entry that
-   provides a <code>tools</code> package, except <code>site-packages</code> directories. The standard library stays too.
-   A regular <code>tools</code> package installed in <code>site-packages</code> can therefore still replace a fixture
-   <code>tools/</code> that has no <code>__init__.py</code>.</li>
+<li>Puts <code>search_path</code> first on <code>sys.path</code> and makes the top-level <code>tools</code> package resolve from
+   <code>search_path</code> only. Every other <code>sys.path</code> entry stays importable, so the standard library and
+   anything installed still import, but no other <code>tools</code> (the host repo's own, or a stray one some
+   installed package ships) can replace the fixture's <code>tools/</code> or merge into it.
+   With no <code>tools</code> in <code>search_path</code>, <code>importlib.util.find_spec("tools")</code> raises
+   <code>ModuleNotFoundError</code> instead of returning <code>None</code>, since that is what stops the lookup reaching
+   another <code>tools</code>. pytest's assertion rewriting doesn't apply to the top-level
+   <code>tools/__init__.py</code> under the tester; <code>tools.*</code> submodules are unaffected.</li>
 <li>Patches <code>toolr._decorators._get_command_group_storage</code> with a fresh <code>dict</code> so the test gets an isolated registry.</li>
-<li>Restores everything on exit (<code>sys.path</code>, <code>sys.modules</code>, <code>cwd</code>).</li>
+<li>Restores everything on exit (<code>sys.path</code>, <code>sys.meta_path</code>, <code>sys.modules</code>, <code>cwd</code>).</li>
 </ol>
 <p>Calling <code>.discover()</code> inside the context imports every <code>.py</code> module under <code>tools/</code>, including
 subdirectories with no <code>__init__.py</code>, registering each <code>command_group</code> / <code>@command</code> call exactly as
-a real <code>import tools.*</code> would. After it returns,
+a real <code>import tools.*</code> would. It only walks directories under <code>search_path / "tools"</code>, so a
+fixture <code>tools/__init__.py</code> that calls <code>pkgutil.extend_path</code> doesn't pull in another <code>tools/</code>.
+After it returns,
 <code>.collected_command_groups()</code> gives you a <code>{full_name: CommandGroup}</code> dict you can assert against.</p>
 <p>If any module fails to import, <code>.discover()</code> still imports the rest, then raises one
 <code>ExceptionGroup</code> holding each module's error, so a discovery test fails the way <code>toolr</code> would.
