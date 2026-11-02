@@ -3,7 +3,8 @@
 An rc gets a GitHub release body, but neither a CHANGELOG section nor a cleared
 release-notes queue: `_prepare-release.yml` gates those two steps on
 `release-prerelease`, and `cliff.toml`'s `tag_pattern` only treats final
-release tags as changelog sections.
+release tags as changelog sections. The policy is "Pre-releases" in
+`release-notes/README.md`.
 """
 
 from __future__ import annotations
@@ -11,16 +12,17 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from tests.workflows.conftest import configure_identity
-from tests.workflows.conftest import git
-from tests.workflows.conftest import git_env
+from tests._git import git
+from tests._git import git_env
+from tests._git import make_repo
+from tests._git import require_git
+from tests.workflows.conftest import workflow_step
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_RELEASE_YML = REPO_ROOT / ".github" / "workflows" / "_prepare-release.yml"
@@ -28,16 +30,8 @@ CLIFF_TOML = REPO_ROOT / "cliff.toml"
 FINAL_ONLY = "steps.bump-version.outputs.release-prerelease != 'true'"
 
 
-def _steps() -> list[dict[str, Any]]:
-    data = yaml.safe_load(PREPARE_RELEASE_YML.read_text())
-    return data["jobs"]["prepare-release"]["steps"]
-
-
 def _step(step_id: str) -> dict[str, Any]:
-    for step in _steps():
-        if step.get("id") == step_id:
-            return step
-    pytest.fail(f"no step with id `{step_id}` in {PREPARE_RELEASE_YML.name}")
+    return workflow_step(PREPARE_RELEASE_YML, "prepare-release", step_id)
 
 
 @pytest.mark.parametrize("step_id", ["update-changelog", "clear-release-notes"])
@@ -61,33 +55,24 @@ def test_release_prerelease_is_exported() -> None:
     assert "release-prerelease" in workflow_outputs
 
 
-def test_cliff_tag_pattern_matches_final_releases_only() -> None:
-    pattern = tomllib.loads(CLIFF_TOML.read_text())["git"]["tag_pattern"]
-    assert pattern == r"^v[0-9]+\.[0-9]+\.[0-9]+$"
-
-
 @pytest.fixture
 def rc_history(tmp_path: Path) -> Path:
     """A repository with `v0.35.1`, then `v1.0.0-rc.1`, then one more fix.
 
     Each tag sits on a release commit worded as `_prepare-release.yml` words it.
     """
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    git(repo, "init", "-q", "-b", "main")
-    configure_identity(repo)
-
-    def commit(message: str) -> None:
-        git(repo, "commit", "-q", "--allow-empty", "-m", message)
-
-    commit("feat: base feature")
-    commit("chore(release): Prepare for 0.35.1 release")
-    git(repo, "tag", "-a", "-m", "v0.35.1", "v0.35.1")
-    commit("feat: before the rc")
-    commit("chore(release): Prepare for 1.0.0-rc.1 release")
-    git(repo, "tag", "-a", "-m", "v1.0.0-rc.1", "v1.0.0-rc.1")
-    commit("fix: after the rc")
-    return repo
+    require_git()
+    return make_repo(
+        tmp_path / "repo",
+        commits=[
+            "feat: base feature",
+            "chore(release): Prepare for 0.35.1 release",
+            "feat: before the rc",
+            "chore(release): Prepare for 1.0.0-rc.1 release",
+            "fix: after the rc",
+        ],
+        tags={"v0.35.1": 1, "v1.0.0-rc.1": 3},
+    )
 
 
 def _git_cliff(repo: Path, *args: str) -> str:

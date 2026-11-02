@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from tests._git import configure_identity
+from tests._git import git
 from tests.workflows.conftest import StepRunner
-from tests.workflows.conftest import configure_identity
-from tests.workflows.conftest import git
 from tests.workflows.conftest import workflow_step_script
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

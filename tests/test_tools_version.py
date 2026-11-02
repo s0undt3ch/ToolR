@@ -37,8 +37,9 @@ from tools.version import bump
 from toolr.testing import ContextForTesting
 from toolr.testing import make_context
 
-from tests.workflows.conftest import configure_identity
-from tests.workflows.conftest import git
+from tests._git import git
+from tests._git import make_repo
+from tests._git import require_git
 
 GITHUB_FILES = ("GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_STEP_SUMMARY")
 
@@ -184,16 +185,14 @@ def release_repo(
     for name in ("GITHUB_EVENT_NAME", *GITHUB_FILES):
         monkeypatch.delenv(name, raising=False)
 
+    require_git()
+
     def make(*tags: str, commits: int = 0) -> ContextForTesting:
-        repo = tmp_path / "repo"
-        repo.mkdir()
-        git(repo, "init", "-q", "-b", "main")
-        configure_identity(repo)
-        git(repo, "commit", "-q", "--allow-empty", "-m", "initial")
-        for tag in tags:
-            git(repo, "tag", "-a", "-m", f"Release {tag}", tag)
-        for index in range(commits):
-            git(repo, "commit", "-q", "--allow-empty", "-m", f"change {index}")
+        repo = make_repo(
+            tmp_path / "repo",
+            commits=["initial", *(f"change {index}" for index in range(commits))],
+            tags=dict.fromkeys(tags, 0),
+        )
         monkeypatch.chdir(repo)
         return make_context(repo)
 
@@ -359,6 +358,32 @@ def test_bump_dev_version_after_prerelease_tag(
     assert "release-prerelease=true\n" in output
 
 
+def test_bump_dev_version_after_final_tag_is_not_prerelease(
+    release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
+) -> None:
+    """A dev build after a final release isn't flagged, so CI dry runs keep the final-release steps."""
+    ctx = release_repo("v0.20.0", commits=2)
+    bump(ctx, check_existing_tag=True)
+    output = github_files["GITHUB_OUTPUT"].read_text()
+    assert "release-version=0.20.1-dev2\n" in output
+    assert "release-prerelease=false\n" in output
+
+
+@pytest.mark.parametrize("existing", ["v1.0.0-rc1", "v1.0.0rc1", "v1.0.0-rc.1"])
+def test_bump_finds_existing_tag_in_any_spelling(
+    release_repo: Callable[..., ContextForTesting],
+    github_files: dict[str, Path],
+    existing: str,
+) -> None:
+    """``1.0.0-rc1`` is released as ``v1.0.0-rc.1``; any tag for the same version stops it."""
+    ctx = release_repo(existing, commits=1)
+    with pytest.raises(SystemExit) as excinfo:
+        bump(ctx, new_version="1.0.0-rc1", check_existing_tag=True)
+    assert excinfo.value.code == 1
+    assert f"Tag {existing} already exists for version 1.0.0-rc.1" in ctx.stderr
+    assert not any(path.exists() for path in github_files.values())
+
+
 # --------------------------------------------------------------------
 # `_set_action_yml_default_version`
 # --------------------------------------------------------------------
@@ -476,29 +501,3 @@ def test_set_action_yml_default_version_round_trip(
     # We assert byte-for-byte equivalence here as a strong idempotency
     # check; if the regex starts to over-match, this test will catch it.
     assert path.read_text(encoding="utf-8") == textwrap.dedent(ACTION_YML_BASE)
-
-
-def test_bump_dev_version_after_final_tag_is_not_prerelease(
-    release_repo: Callable[..., ContextForTesting], github_files: dict[str, Path]
-) -> None:
-    """A dev build after a final release isn't flagged, so CI dry runs keep the final-release steps."""
-    ctx = release_repo("v0.20.0", commits=2)
-    bump(ctx, check_existing_tag=True)
-    output = github_files["GITHUB_OUTPUT"].read_text()
-    assert "release-version=0.20.1-dev2\n" in output
-    assert "release-prerelease=false\n" in output
-
-
-@pytest.mark.parametrize("existing", ["v1.0.0-rc1", "v1.0.0rc1", "v1.0.0-rc.1"])
-def test_bump_finds_existing_tag_in_any_spelling(
-    release_repo: Callable[..., ContextForTesting],
-    github_files: dict[str, Path],
-    existing: str,
-) -> None:
-    """``1.0.0-rc1`` is released as ``v1.0.0-rc.1``; any tag for the same version stops it."""
-    ctx = release_repo(existing, commits=1)
-    with pytest.raises(SystemExit) as excinfo:
-        bump(ctx, new_version="1.0.0-rc1", check_existing_tag=True)
-    assert excinfo.value.code == 1
-    assert f"Tag {existing} already exists for version 1.0.0-rc.1" in ctx.stderr
-    assert not any(path.exists() for path in github_files.values())
