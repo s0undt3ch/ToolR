@@ -1,6 +1,6 @@
 # Resolve `tools` from the fixture only in `CommandsTester`
 
-- **Status:** proposed
+- **Status:** implemented
 - **Origin:** audit follow-up FU-10.
 - **Plan:** [`2026-11-02-tester-sys-path-filter-plan.md`](./2026-11-02-tester-sys-path-filter-plan.md)
 
