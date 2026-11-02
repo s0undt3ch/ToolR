@@ -6,8 +6,8 @@ build-backend = "maturin"
 name = "toolr-py"
 description = "Python bindings for the toolr framework (import as `toolr`)"
 readme = "README.md"
-# Raising the floor? Also bump MIN_PYTHON_MINOR in crates/toolr-core/src/execute/python.rs
-# (a test enforces it), pyo3's abi3-py3XX feature in the root Cargo.toml and `build = "cp3XX-*"` below.
+# Adding or dropping a CPython? `tests/test_python_versions.py` lists every place to change;
+# `crates/toolr-core/tests/python_floor_lockstep.rs` covers `MIN_PYTHON_MINOR`.
 requires-python = ">=3.11,<3.16"
 license = { file = "LICENSE" }
 authors = [
