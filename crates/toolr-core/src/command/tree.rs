@@ -280,6 +280,14 @@ mod tests {
         assert_eq!(parse_stat_ppid("garbage"), None);
     }
 
+    /// `OpenProcess` refuses pid 0, the System Idle Process, so its creation time is unknown.
+    #[cfg(windows)]
+    #[test]
+    fn creation_time_needs_an_openable_process() {
+        assert!(creation_time(std::process::id()).is_some());
+        assert_eq!(creation_time(0), None);
+    }
+
     #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     #[test]
     fn process_table_includes_self() {

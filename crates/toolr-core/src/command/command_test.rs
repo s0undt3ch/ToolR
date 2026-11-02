@@ -878,11 +878,25 @@ mod test_suite {
         }
 
         /// First line of a capture file, parsed as a pid.
-        fn read_pid(file: &mut NamedTempFile) -> Option<u32> {
+        fn read_pid(file: &mut (impl Read + Seek)) -> Option<u32> {
             file.seek(SeekFrom::Start(0)).ok()?;
             let mut text = String::new();
             file.read_to_string(&mut text).ok()?;
             text.lines().next()?.trim().parse().ok()
+        }
+
+        /// The pid the child prints to `file`, read while `run` is still going. Polls a
+        /// reopened handle: seeking `file` itself would move the child's write offset.
+        fn pid_while_running<T>(file: &NamedTempFile, run: &thread::JoinHandle<T>) -> Option<u32> {
+            let mut reader = file.reopen().ok()?;
+            loop {
+                let finished = run.is_finished();
+                let pid = read_pid(&mut reader);
+                if pid.is_some() || finished {
+                    return pid;
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
         }
 
         /// Kills a test's leftover processes when the test ends, pass or fail.
@@ -1018,15 +1032,17 @@ mod test_suite {
         #[test]
         fn timeout_kills_grandchild() -> Result<()> {
             require_python!(python, "timeout_kills_grandchild");
-            let (mut config, mut stdout_file, _stderr) =
+            let (mut config, stdout_file, _stderr) =
                 capturing_config(vec![python, "-c".into(), grandchild_script(60, false)]);
             config.no_output_timeout_secs = Some(5.0);
 
-            let result = bounded_run_command(config, TREE_BOUND);
-            let pid = read_pid(&mut stdout_file);
+            let run = thread::spawn(move || bounded_run_command(config, TREE_BOUND));
+            let pid = pid_while_running(&stdout_file, &run);
             let _cleanup = KillOnDrop(pid.into_iter().collect());
-            assert_timeout_error(result?, "no output for");
+            let seen_alive = pid.is_some_and(process_alive);
+            assert_timeout_error(run.join().expect("run thread")?, "no output for");
             let pid = pid.ok_or_else(|| anyhow!("the child never printed the grandchild pid"))?;
+            assert!(seen_alive, "grandchild {pid} was never seen alive");
             assert!(
                 wait_until_dead(pid, DEATH_WAIT),
                 "grandchild {pid} survived the timeout"
