@@ -1,9 +1,10 @@
 //! Translate a parsed [`clap::ArgMatches`] into an [`ExecutionSpec`].
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::ArgMatches;
+use clap::parser::ValueSource;
 use serde_json::Value;
 
 use toolr_core::execute::{
@@ -13,33 +14,32 @@ use toolr_core::execute::{
 use toolr_core::manifest::{Argument, ArgumentKind, Command, Nargs};
 use toolr_core::parser::SupportedType;
 
+use crate::value_parsers::{DeferredPath, deferred_path, passes_path_as_typed};
+
 /// Build the spec to write to disk, given:
 ///
 /// - `cmd`: the matched manifest command (already located by `dispatch`).
 /// - `matches`: clap's parsed matches *for this command* (not the root).
-/// - `repo_root`: the project root previously resolved by
-///   `discover_project_root`.
+/// - `bases`: the invocation cwd and the project root previously resolved
+///   by `discover_project_root`.
 /// - `output_opts`: the values of toolr's root-level "Output Options"
 ///   flags (`--debug` / `--quiet` / `--timestamps` /
 ///   `--timeout-secs` / `--no-output-timeout-secs`).
 pub fn build_spec(
     cmd: &Command,
     matches: &ArgMatches,
-    repo_root: &Path,
+    bases: &PathBases,
     output_opts: &OutputOptions,
-) -> ExecutionSpec {
-    // SEC-02: the runner chdirs to repo_root, so a relative path typed from a
-    // subdirectory resolves from the repo root, not the user's cwd. Warn here
+) -> anyhow::Result<ExecutionSpec> {
+    let repo_root = bases.repo_root;
+    // SEC-02: the runner chdirs to repo_root, so a relative bare `Path` typed
+    // from a subdirectory resolves from the repo root, not the user's cwd
+    // (every other path type is resolved here, against the cwd). Warn here
     // (the Rust layer knows the cwd, the arg types, and which values the user
     // actually typed) rather than after coercion in Python.
-    warn_relative_paths(cmd, matches, repo_root);
-    let mut args = BTreeMap::new();
-    for arg in &cmd.arguments {
-        if let Some(value) = extract_value(arg, matches) {
-            args.insert(arg.name.clone(), value);
-        }
-    }
-    ExecutionSpec {
+    warn_relative_paths(cmd, matches, bases);
+    let args = extract_args(cmd, matches, bases)?;
+    Ok(ExecutionSpec {
         schema_version: RUNNER_SCHEMA_VERSION,
         group: cmd.group.clone(),
         command: cmd.name.clone(),
@@ -56,7 +56,29 @@ pub fn build_spec(
         },
         enum_modules: enum_modules_for(&cmd.arguments),
         dispatch: None,
+    })
+}
+
+/// Where relative path values resolve from: a typed value from the
+/// invocation cwd, a deferred default from the repo root.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PathBases<'a> {
+    pub cwd: &'a Path,
+    pub repo_root: &'a Path,
+}
+
+fn extract_args(
+    cmd: &Command,
+    matches: &ArgMatches,
+    bases: &PathBases,
+) -> anyhow::Result<BTreeMap<String, Value>> {
+    let mut args = BTreeMap::new();
+    for arg in &cmd.arguments {
+        if let Some(value) = extract_value(arg, matches, bases)? {
+            args.insert(arg.name.clone(), value);
+        }
     }
+    Ok(args)
 }
 
 /// Packed payload extracted from clap matches for a dispatched leaf.
@@ -89,18 +111,16 @@ pub struct PackedChild {
 /// on-the-wire shape of dispatched-leaf args is identical to a normal
 /// command invocation. Consumed by [`build_dispatch_spec`] on the
 /// Rust side and `toolr._runner.invoke_dispatcher` on the Python side.
-pub(crate) fn pack_child_args(cmd: &Command, matches: &ArgMatches) -> PackedChild {
-    let mut args = BTreeMap::new();
-    for arg in &cmd.arguments {
-        if let Some(value) = extract_value(arg, matches) {
-            args.insert(arg.name.clone(), value);
-        }
-    }
-    PackedChild {
+pub(crate) fn pack_child_args(
+    cmd: &Command,
+    matches: &ArgMatches,
+    bases: &PathBases,
+) -> anyhow::Result<PackedChild> {
+    Ok(PackedChild {
         name: cmd.name.clone(),
-        args,
+        args: extract_args(cmd, matches, bases)?,
         schema: cmd.clone(),
-    }
+    })
 }
 
 /// Build the execution spec for a dispatched leaf invocation.
@@ -118,19 +138,15 @@ pub fn build_dispatch_spec(
     parent: &Command,
     parent_matches: &ArgMatches,
     packed: PackedChild,
-    repo_root: &Path,
+    bases: &PathBases,
     output_opts: &OutputOptions,
 ) -> anyhow::Result<ExecutionSpec> {
+    let repo_root = bases.repo_root;
     reject_leaked_dispatcher_flags(parent, &packed)?;
     // Covers the dispatcher's own (parent) args. A dispatched child's args are
     // packed separately and not checked here — same scope as before.
-    warn_relative_paths(parent, parent_matches, repo_root);
-    let mut parent_args = BTreeMap::new();
-    for arg in &parent.arguments {
-        if let Some(value) = extract_value(arg, parent_matches) {
-            parent_args.insert(arg.name.clone(), value);
-        }
-    }
+    warn_relative_paths(parent, parent_matches, bases);
+    let parent_args = extract_args(parent, parent_matches, bases)?;
     Ok(ExecutionSpec {
         schema_version: RUNNER_SCHEMA_VERSION,
         group: parent.group.clone(),
@@ -169,7 +185,12 @@ fn arg_long_flag_spelling(arg: &Argument) -> Option<String> {
         | ArgumentKind::OptionalPositional
         | ArgumentKind::VarPositional => false,
     };
-    has_long_flag.then(|| format!("--{}", arg.name.replace('_', "-")))
+    has_long_flag.then(|| long_flag(&arg.name))
+}
+
+/// The `--kebab-case` long flag clap gives the arg named `name`.
+fn long_flag(name: &str) -> String {
+    format!("--{}", name.replace('_', "-"))
 }
 
 /// Guard against dispatcher-level flags (e.g. `--dry-run`) typed *after*
@@ -319,7 +340,11 @@ impl Default for OutputOptions {
     }
 }
 
-fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
+fn extract_value(
+    arg: &Argument,
+    matches: &ArgMatches,
+    bases: &PathBases,
+) -> anyhow::Result<Option<Value>> {
     // Heterogeneous tuples are configured with `num_args(N)` and need
     // multi-value retrieval even when the manifest `kind` says
     // `Positional` or `Optional`. Route them through `extract_many`
@@ -329,9 +354,9 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
         Some(SupportedType::Tuple(_))
     );
     if is_tuple {
-        return extract_optional_many(arg, matches);
+        return Ok(extract_optional_many(arg, matches));
     }
-    match arg.kind {
+    Ok(match arg.kind {
         ArgumentKind::Flag => {
             // clap stored as bool via ArgAction::SetTrue.
             let v = matches.get_flag(arg.name.as_str());
@@ -345,7 +370,7 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
             Some(Value::Number(u64::from(n).into()))
         }
         ArgumentKind::Positional | ArgumentKind::Optional | ArgumentKind::OptionalPositional => {
-            extract_scalar(arg, matches)
+            return extract_scalar(arg, matches, bases);
         }
         ArgumentKind::Repeated => extract_optional_many(arg, matches),
         ArgumentKind::VarPositional => Some(Value::Array(extract_many(arg, matches))),
@@ -363,7 +388,7 @@ fn extract_value(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
                 None
             }
         }
-    }
+    })
 }
 
 /// Multi-value extraction for `list[T] | None` / `tuple[...] | None`
@@ -401,9 +426,19 @@ fn scalar_element_type(arg: &Argument) -> Option<&SupportedType> {
     })
 }
 
-fn extract_scalar(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
+fn extract_scalar(
+    arg: &Argument,
+    matches: &ArgMatches,
+    bases: &PathBases,
+) -> anyhow::Result<Option<Value>> {
     let name = arg.name.as_str();
-    match scalar_element_type(arg) {
+    if let Some(deferred) = deferred_path(arg) {
+        return matches
+            .get_one::<PathBuf>(name)
+            .map(|raw| resolve_deferred(arg, deferred, matches, raw, bases))
+            .transpose();
+    }
+    Ok(match scalar_element_type(arg) {
         Some(SupportedType::Int) => matches
             .get_one::<i64>(name)
             .map(|n| Value::Number((*n).into())),
@@ -419,7 +454,88 @@ fn extract_scalar(arg: &Argument, matches: &ArgMatches) -> Option<Value> {
         _ => matches
             .get_one::<String>(name)
             .map(|s| Value::String(s.clone())),
+    })
+}
+
+/// Where a deferred path value that failed its check came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PathValueOrigin {
+    Typed,
+    Env(String),
+    Default { repo_root: PathBuf },
+}
+
+/// A deferred path value that failed its check. `dispatch` renders it as a
+/// clap error against the command that owns `arg`; `Display` spells the arg
+/// as its plain long flag.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PathValueError {
+    /// The clap arg id (the manifest argument name).
+    pub arg: String,
+    pub value: String,
+    pub origin: PathValueOrigin,
+    pub reason: String,
+}
+
+impl PathValueError {
+    /// The message with `shown` as the arg's spelling (clap's `--cfg <cfg>`).
+    pub(crate) fn message(&self, shown: &str) -> String {
+        let Self { value, reason, .. } = self;
+        match &self.origin {
+            PathValueOrigin::Typed => format!("invalid value '{value}' for '{shown}': {reason}"),
+            PathValueOrigin::Env(var) => {
+                format!("invalid value '{value}' for '{shown}' (from {var}): {reason}")
+            }
+            PathValueOrigin::Default { repo_root } => format!(
+                "default '{value}' for '{shown}' (resolved from the repo root {}): {reason}",
+                repo_root.display()
+            ),
+        }
     }
+}
+
+impl std::fmt::Display for PathValueError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message(&long_flag(&self.arg)))
+    }
+}
+
+impl std::error::Error for PathValueError {}
+
+/// Resolve a deferred path arg's raw value: from the repo root when it is
+/// the default, from the cwd when typed or read from its env var.
+fn resolve_deferred(
+    arg: &Argument,
+    deferred: DeferredPath,
+    matches: &ArgMatches,
+    raw: &Path,
+    bases: &PathBases,
+) -> anyhow::Result<Value> {
+    let origin = match matches.value_source(arg.name.as_str()) {
+        Some(ValueSource::DefaultValue) => PathValueOrigin::Default {
+            repo_root: bases.repo_root.to_path_buf(),
+        },
+        Some(ValueSource::EnvVariable) => PathValueOrigin::Env(
+            arg.metadata
+                .env
+                .clone()
+                .expect("clap only reads an env var for an arg that names one"),
+        ),
+        _ => PathValueOrigin::Typed,
+    };
+    let base = match origin {
+        PathValueOrigin::Default { .. } => bases.repo_root,
+        _ => bases.cwd,
+    };
+    let path = deferred
+        .resolve(raw, base)
+        .map_err(|reason| PathValueError {
+            arg: arg.name.clone(),
+            value: raw.display().to_string(),
+            origin,
+            reason,
+        })?;
+    Ok(Value::String(path.to_string_lossy().into_owned()))
 }
 
 fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
@@ -454,17 +570,15 @@ fn extract_many(arg: &Argument, matches: &ArgMatches) -> Vec<Value> {
     }
 }
 
-/// True when `arg` is a path-typed argument whose value the user typed on
+/// True when `arg` is a bare `Path` argument whose value the user typed on
 /// the command line (not a default) and that value is a relative path.
 ///
-/// Type-driven: only path types (`SupportedType::is_path`) count — never a `str` arg
-/// that merely looks path-like. Source-precise: `ValueSource::CommandLine` only, so a
-/// relative *default* never warns.
+/// Type-driven: only a path type that reaches Python as typed counts. Every
+/// other path type is resolved against the cwd here, so it never surprises,
+/// and a `str` arg that merely looks path-like never counts. Source-precise:
+/// `ValueSource::CommandLine` only, so a relative *default* never warns.
 fn arg_has_relative_cli_path(arg: &Argument, matches: &ArgMatches) -> bool {
-    use clap::parser::ValueSource;
-
-    let is_path = scalar_element_type(arg).is_some_and(SupportedType::is_path);
-    if !is_path {
+    if !scalar_element_type(arg).is_some_and(passes_path_as_typed) {
         return false;
     }
     let name = arg.name.as_str();
@@ -519,12 +633,10 @@ pub(crate) fn relative_path_warning(
     ))
 }
 
-/// Side-effecting wrapper: resolve the invocation cwd and print the note (if
-/// any) to stderr. Called by the spec builders before the runner is spawned.
-fn warn_relative_paths(cmd: &Command, matches: &ArgMatches, repo_root: &Path) {
-    if let Ok(cwd) = std::env::current_dir()
-        && let Some(msg) = relative_path_warning(cmd, matches, repo_root, &cwd)
-    {
+/// Side-effecting wrapper: print the note (if any) to stderr. Called by the
+/// spec builders before the runner is spawned.
+fn warn_relative_paths(cmd: &Command, matches: &ArgMatches, bases: &PathBases) {
+    if let Some(msg) = relative_path_warning(cmd, matches, bases.repo_root, bases.cwd) {
         eprintln!("{msg}");
     }
 }
@@ -570,12 +682,7 @@ mod tests {
     fn build_spec_copies_static_fields() {
         let cmd = cmd_hello_with_name_arg();
         let matches = parse("Alice");
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.group, "ci");
         assert_eq!(spec.command, "hello");
         assert_eq!(spec.module, "tools.ci");
@@ -585,10 +692,9 @@ mod tests {
 
     #[test]
     fn build_spec_runs_the_relative_path_warning_wrapper() {
-        // Drives `warn_relative_paths` (the `std::env::current_dir()` +
-        // `eprintln!` wrapper, not just the pure `relative_path_warning`):
-        // a relative Path arg plus a repo_root that differs from the test's
-        // cwd makes the note fire. The note only goes to stderr; we just
+        // Drives `warn_relative_paths` (the `eprintln!` wrapper, not just
+        // the pure `relative_path_warning`): a relative Path arg plus a
+        // repo_root that differs from the cwd makes the note fire. The note only goes to stderr; we just
         // assert the spec still builds.
         let cmd = cmd_with(vec![arg_of(
             "file",
@@ -599,9 +705,10 @@ mod tests {
         let spec = build_spec(
             &cmd,
             &matches,
-            Path::new("/nonexistent-repo-xyz"),
+            &bases("/nonexistent-repo-xyz"),
             &OutputOptions::default(),
-        );
+        )
+        .unwrap();
         assert!(spec.args.contains_key("file"));
     }
 
@@ -609,12 +716,7 @@ mod tests {
     fn build_spec_extracts_optional_arg_value() {
         let cmd = cmd_hello_with_name_arg();
         let matches = parse("Alice");
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("name"), Some(&Value::String("Alice".into())));
     }
 
@@ -645,12 +747,7 @@ mod tests {
         let matches = clap::Command::new("switch")
             .arg(Arg::new("force").long("force").action(ArgAction::SetTrue))
             .get_matches_from(["switch", "--force"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("force"), Some(&Value::Bool(true)));
     }
 
@@ -685,6 +782,234 @@ mod tests {
             dispatched_from: None,
             is_dispatcher: false,
         }
+    }
+
+    /// Bases for tests that don't touch the filesystem: the cwd is never
+    /// the repo root.
+    pub(super) fn bases(repo_root: &'static str) -> PathBases<'static> {
+        PathBases {
+            cwd: Path::new("/elsewhere"),
+            repo_root: Path::new(repo_root),
+        }
+    }
+
+    /// A repo with `sub/dir` to run from.
+    struct Layout {
+        repo: tempfile::TempDir,
+        cwd: std::path::PathBuf,
+    }
+
+    impl Layout {
+        fn new() -> Self {
+            let repo = tempfile::TempDir::new().unwrap();
+            let cwd = repo.path().join("sub").join("dir");
+            std::fs::create_dir_all(&cwd).unwrap();
+            Self { repo, cwd }
+        }
+
+        fn write(&self, rel: &str) -> std::path::PathBuf {
+            let path = self.repo.path().join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "x").unwrap();
+            path
+        }
+
+        fn bases(&self) -> PathBases<'_> {
+            PathBases {
+                cwd: &self.cwd,
+                repo_root: self.repo.path(),
+            }
+        }
+    }
+
+    fn deferred_cmd(ty: SupportedType, default: &str) -> Command {
+        let mut arg = arg_of("cfg", ArgumentKind::Optional, ty);
+        arg.default = Some(default.into());
+        cmd_with(vec![arg])
+    }
+
+    fn user_matches(cmd: &Command, argv: &[&str]) -> ArgMatches {
+        crate::cli::build_user_command(cmd)
+            .try_get_matches_from(argv)
+            .unwrap()
+    }
+
+    fn spec_args(
+        cmd: &Command,
+        argv: &[&str],
+        bases: &PathBases,
+    ) -> anyhow::Result<BTreeMap<String, Value>> {
+        let matches = user_matches(cmd, argv);
+        build_spec(cmd, &matches, bases, &OutputOptions::default()).map(|spec| spec.args)
+    }
+
+    fn path_value(path: &Path) -> Value {
+        Value::String(path.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn default_resolves_against_repo_root() {
+        let layout = Layout::new();
+        let cfg = layout.write("tools/pyproject.toml");
+        let cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
+        let args = spec_args(&cmd, &["test"], &layout.bases()).unwrap();
+        assert_eq!(args["cfg"], path_value(&dunce::canonicalize(cfg).unwrap()));
+    }
+
+    #[test]
+    fn typed_value_for_deferred_arg_resolves_against_cwd() {
+        let layout = Layout::new();
+        layout.write("x.toml");
+        let typed = layout.write("sub/dir/x.toml");
+        let cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
+        let args = spec_args(&cmd, &["test", "--cfg", "x.toml"], &layout.bases()).unwrap();
+        assert_eq!(
+            args["cfg"],
+            path_value(&dunce::canonicalize(typed).unwrap())
+        );
+    }
+
+    #[test]
+    fn typed_missing_value_for_deferred_arg_errors_like_clap() {
+        let layout = Layout::new();
+        let cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
+        let err = spec_args(&cmd, &["test", "--cfg", "nope.toml"], &layout.bases()).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid value 'nope.toml' for '--cfg': path does not exist: nope.toml"
+        );
+    }
+
+    #[test]
+    fn missing_default_errors_naming_repo_root() {
+        let layout = Layout::new();
+        let cmd = deferred_cmd(SupportedType::FilePath, "tools/missing.toml");
+        let err = spec_args(&cmd, &["test"], &layout.bases()).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "default 'tools/missing.toml' for '--cfg' (resolved from the repo root {}): \
+                 path does not exist: tools/missing.toml",
+                layout.repo.path().display()
+            )
+        );
+    }
+
+    #[test]
+    fn dot_directory_default_resolves_to_repo_root() {
+        let layout = Layout::new();
+        let cmd = deferred_cmd(
+            SupportedType::Optional(Box::new(SupportedType::DirectoryPath)),
+            ".",
+        );
+        let args = spec_args(&cmd, &["test"], &layout.bases()).unwrap();
+        assert_eq!(
+            args["cfg"],
+            path_value(&dunce::canonicalize(layout.repo.path()).unwrap())
+        );
+    }
+
+    /// A deferred arg bound to `env_name` (clap's `.env()`, via the
+    /// manifest metadata), parsed with that variable set and no flag typed.
+    fn env_spec(
+        layout: &Layout,
+        env_name: &str,
+        value: &str,
+    ) -> anyhow::Result<BTreeMap<String, Value>> {
+        let mut cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
+        cmd.arguments[0].metadata.env = Some(env_name.into());
+        // SAFETY: the variable name is unique to the calling test.
+        unsafe { std::env::set_var(env_name, value) };
+        let matches = user_matches(&cmd, &["test"]);
+        unsafe { std::env::remove_var(env_name) };
+        build_spec(&cmd, &matches, &layout.bases(), &OutputOptions::default()).map(|s| s.args)
+    }
+
+    #[test]
+    fn env_value_for_deferred_arg_resolves_against_cwd() {
+        let layout = Layout::new();
+        let local = layout.write("sub/dir/local.toml");
+        let args = env_spec(&layout, "TOOLR_TEST_DEFERRED_ENV_OK", "local.toml").unwrap();
+        assert_eq!(
+            args["cfg"],
+            path_value(&dunce::canonicalize(local).unwrap())
+        );
+    }
+
+    #[test]
+    fn env_value_error_names_the_env_var_not_a_default() {
+        let layout = Layout::new();
+        let err = env_spec(&layout, "TOOLR_TEST_DEFERRED_ENV_BAD", "nope.toml").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid value 'nope.toml' for '--cfg' (from TOOLR_TEST_DEFERRED_ENV_BAD): \
+             path does not exist: nope.toml"
+        );
+    }
+
+    /// `cli` swaps a deferred arg to an unchecked `PathBuf` parser and
+    /// `extract_scalar` reads it back as one; both ask `deferred_path`. Pins that pairing for every path type,
+    /// bare and `Optional`, typed and defaulted, so a divergence fails here
+    /// rather than as a clap type-mismatch panic at run time.
+    #[test]
+    fn every_path_type_parses_and_extracts_a_relative_default() {
+        use toolr_core::parser::types::SupportedTypeKind;
+        let layout = Layout::new();
+        let path_types = SupportedTypeKind::ALL
+            .iter()
+            .map(|kind| kind.representative())
+            .filter(SupportedType::is_path);
+        for inner in path_types {
+            for ty in [
+                inner.clone(),
+                SupportedType::Optional(Box::new(inner.clone())),
+            ] {
+                let cmd = deferred_cmd(ty.clone(), "missing/out");
+                assert_eq!(
+                    deferred_path(&cmd.arguments[0]).is_some(),
+                    inner != SupportedType::Path,
+                    "{ty:?}"
+                );
+                for argv in [&["test"][..], &["test", "--cfg", "missing/out"]] {
+                    // Parsing never checks the disk; extraction must not
+                    // panic on the stored type, whatever it decides.
+                    let matches = user_matches(&cmd, argv);
+                    let _ = build_spec(&cmd, &matches, &layout.bases(), &OutputOptions::default());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn absolute_path_default_joins_repo_root() {
+        let layout = Layout::new();
+        let cmd = deferred_cmd(SupportedType::AbsolutePath, "build/out");
+        let args = spec_args(&cmd, &["test"], &layout.bases()).unwrap();
+        assert_eq!(
+            args["cfg"],
+            path_value(&layout.repo.path().join("build/out"))
+        );
+    }
+
+    #[test]
+    fn relative_path_warning_ignores_deferred_args() {
+        let layout = Layout::new();
+        let cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
+        let matches = user_matches(&cmd, &["test", "--cfg", "x.toml"]);
+        assert!(relative_path_warning(&cmd, &matches, layout.repo.path(), &layout.cwd).is_none());
+    }
+
+    #[test]
+    fn pack_child_args_resolves_deferred_default_from_repo_root() {
+        let layout = Layout::new();
+        let cfg = layout.write("tools/pyproject.toml");
+        let cmd = deferred_cmd(SupportedType::FilePath, "tools/pyproject.toml");
+        let matches = user_matches(&cmd, &["test"]);
+        let packed = pack_child_args(&cmd, &matches, &layout.bases()).unwrap();
+        assert_eq!(
+            packed.args["cfg"],
+            path_value(&dunce::canonicalize(cfg).unwrap())
+        );
     }
 
     /// Parse `argv` against a single `file` arg with a `PathBuf` value-parser,
@@ -774,12 +1099,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("verbose").short('v').action(ArgAction::Count))
             .get_matches_from(["test", "-vvv"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("verbose"), Some(&Value::Number(3.into())));
     }
 
@@ -798,12 +1118,7 @@ mod tests {
                     .default_value("42"),
             )
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("n"), Some(&Value::Number(42.into())));
     }
 
@@ -822,12 +1137,7 @@ mod tests {
                     .default_value("1.5"),
             )
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         match spec.args.get("ratio") {
             Some(Value::Number(n)) => assert_eq!(n.as_f64(), Some(1.5)),
             other => panic!("expected Float number, got {other:?}"),
@@ -849,12 +1159,7 @@ mod tests {
                     .default_value("false"),
             )
             .get_matches_from(["test", "--dry", "true"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("dry"), Some(&Value::Bool(true)));
     }
 
@@ -873,12 +1178,7 @@ mod tests {
                     .default_value("/tmp/x"),
             )
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("file"), Some(&Value::String("/tmp/x".into())));
     }
 
@@ -898,12 +1198,7 @@ mod tests {
                     .default_value("7"),
             )
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("maybe_n"), Some(&Value::Number(7.into())));
     }
 
@@ -922,12 +1217,7 @@ mod tests {
                     .value_parser(clap::value_parser!(i64)),
             )
             .get_matches_from(["test", "--port", "80", "--port", "443"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(
             spec.args.get("ports"),
             Some(&Value::Array(vec![
@@ -951,12 +1241,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("items").long("items").action(ArgAction::Append))
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("items"), None);
     }
 
@@ -970,12 +1255,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("items").long("items").action(ArgAction::Append))
             .get_matches_from(["test", "--items", "a", "--items", "b"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(
             spec.args.get("items"),
             Some(&Value::Array(vec![
@@ -1000,12 +1280,7 @@ mod tests {
                     .value_parser(clap::value_parser!(std::path::PathBuf)),
             )
             .get_matches_from(["test", "--file", "/a", "--file", "/b"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(
             spec.args.get("files"),
             Some(&Value::Array(vec![
@@ -1031,12 +1306,7 @@ mod tests {
                     .value_parser(clap::value_parser!(String)),
             )
             .get_matches_from(["test", "name", "42"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(
             spec.args.get("pair"),
             Some(&Value::Array(vec![
@@ -1064,12 +1334,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("pair").long("pair").num_args(2))
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(spec.args.get("pair"), None);
     }
 
@@ -1087,12 +1352,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("absent").long("absent"))
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert!(!spec.args.contains_key("absent"));
     }
 
@@ -1109,12 +1369,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("pair").long("pair").num_args(2).required(false))
             .get_matches_from(["test"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert!(!spec.args.contains_key("pair"));
     }
 
@@ -1127,12 +1382,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("pair").long("pair").num_args(2).required(false))
             .get_matches_from(["test", "--pair", "a", "b"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(
             spec.args.get("pair"),
             Some(&Value::Array(vec![
@@ -1150,12 +1400,7 @@ mod tests {
         let matches = clap::Command::new("test")
             .arg(Arg::new("files").num_args(3).required(true))
             .get_matches_from(["test", "x", "y", "z"]);
-        let spec = build_spec(
-            &cmd,
-            &matches,
-            Path::new("/repo"),
-            &OutputOptions::default(),
-        );
+        let spec = build_spec(&cmd, &matches, &bases("/repo"), &OutputOptions::default()).unwrap();
         assert_eq!(
             spec.args.get("files"),
             Some(&Value::Array(vec![
@@ -1226,7 +1471,7 @@ mod tests {
                 &ty,
             ));
             let matches = clap_cmd.try_get_matches_from(["t", "--p", &value]).unwrap();
-            let got = extract_scalar(&arg, &matches);
+            let got = extract_scalar(&arg, &matches, &bases("/repo")).unwrap();
             assert!(
                 matches!(got, Some(Value::String(_))),
                 "{kind:?} got {got:?}"
@@ -1259,6 +1504,7 @@ mod dispatched_pack_tests {
     //! arguments stay absent rather than null) — `build_dispatch_spec`
     //! and the Python runner read the resulting `args` map and must keep
     //! getting the same JSON shape `build_spec` would have produced.
+    use super::tests::bases;
     use super::*;
     use clap::{Arg, ArgAction};
     use toolr_core::manifest::{Argument, ArgumentKind, Command, Origin};
@@ -1296,7 +1542,7 @@ mod dispatched_pack_tests {
             .try_get_matches_from(vec!["migrate", "--check"])
             .unwrap();
         let cmd = migrate_cmd();
-        let packed = pack_child_args(&cmd, &matches);
+        let packed = pack_child_args(&cmd, &matches, &bases("/repo")).unwrap();
         assert_eq!(packed.name, "migrate");
         assert_eq!(packed.args.get("check"), Some(&Value::Bool(true)));
         // Schema round-trips intact for the Python runner to consume.
@@ -1316,7 +1562,7 @@ mod dispatched_pack_tests {
         let clap_cmd = clap::Command::new("migrate")
             .arg(Arg::new("check").long("check").action(ArgAction::SetTrue));
         let matches = clap_cmd.try_get_matches_from(vec!["migrate"]).unwrap();
-        let packed = pack_child_args(&migrate_cmd(), &matches);
+        let packed = pack_child_args(&migrate_cmd(), &matches, &bases("/repo")).unwrap();
         assert_eq!(packed.args.get("check"), Some(&Value::Bool(false)));
     }
 
@@ -1332,7 +1578,9 @@ mod dispatched_pack_tests {
                 .arg(Arg::new("check").long("check").action(ArgAction::SetTrue))
                 .try_get_matches_from(vec!["migrate", "--check"])
                 .unwrap(),
-        );
+            &bases("/repo"),
+        )
+        .unwrap();
         // Parent dispatcher has no own args in this scenario — use a
         // copy of the leaf shape but with an empty arguments list so
         // `build_dispatch_spec` won't try to extract a `check` arg
@@ -1348,7 +1596,7 @@ mod dispatched_pack_tests {
             &parent,
             &parent_matches,
             packed,
-            Path::new("/repo"),
+            &bases("/repo"),
             &OutputOptions::default(),
         )
         .unwrap();
@@ -1390,12 +1638,12 @@ mod dispatched_pack_tests {
             .arg(Arg::new("check").long("check").action(ArgAction::SetTrue))
             .try_get_matches_from(vec!["migrate"])
             .unwrap();
-        let packed = pack_child_args(&migrate_cmd(), &leaf_matches);
+        let packed = pack_child_args(&migrate_cmd(), &leaf_matches, &bases("/repo")).unwrap();
         let spec = build_dispatch_spec(
             &parent,
             &parent_matches,
             packed,
-            Path::new("/repo"),
+            &bases("/repo"),
             &OutputOptions::default(),
         )
         .unwrap();
@@ -1467,7 +1715,7 @@ mod dispatched_pack_tests {
             )
             .try_get_matches_from(vec!["wrapup_company", "12345", "--dry-run"])
             .unwrap();
-        let packed = pack_child_args(&leaf, &leaf_matches);
+        let packed = pack_child_args(&leaf, &leaf_matches, &bases("/repo")).unwrap();
         let parent = dry_run_dispatcher();
         let parent_matches = clap::Command::new("job")
             .arg(
@@ -1481,7 +1729,7 @@ mod dispatched_pack_tests {
             &parent,
             &parent_matches,
             packed,
-            Path::new("/repo"),
+            &bases("/repo"),
             &OutputOptions::default(),
         )
         .expect_err("leaked --dry-run must be rejected");
@@ -1515,7 +1763,7 @@ mod dispatched_pack_tests {
             )
             .try_get_matches_from(vec!["wrapup_company", "12345"])
             .unwrap();
-        let packed = pack_child_args(&leaf, &leaf_matches);
+        let packed = pack_child_args(&leaf, &leaf_matches, &bases("/repo")).unwrap();
         let parent = dry_run_dispatcher();
         let parent_matches = clap::Command::new("job")
             .arg(
@@ -1529,7 +1777,7 @@ mod dispatched_pack_tests {
             &parent,
             &parent_matches,
             packed,
-            Path::new("/repo"),
+            &bases("/repo"),
             &OutputOptions::default(),
         )
         .unwrap();
@@ -1552,7 +1800,7 @@ mod dispatched_pack_tests {
             )
             .try_get_matches_from(vec!["wrapup_company", "--stuck-company"])
             .unwrap();
-        let packed = pack_child_args(&leaf, &leaf_matches);
+        let packed = pack_child_args(&leaf, &leaf_matches, &bases("/repo")).unwrap();
         let parent = dry_run_dispatcher();
         let parent_matches = clap::Command::new("job")
             .arg(
@@ -1566,7 +1814,7 @@ mod dispatched_pack_tests {
             &parent,
             &parent_matches,
             packed,
-            Path::new("/repo"),
+            &bases("/repo"),
             &OutputOptions::default(),
         )
         .unwrap();
@@ -1727,7 +1975,7 @@ mod dispatched_pack_tests {
         };
         let clap_cmd = clap::Command::new("migrate").arg(Arg::new("label").long("label"));
         let matches = clap_cmd.try_get_matches_from(vec!["migrate"]).unwrap();
-        let packed = pack_child_args(&cmd, &matches);
+        let packed = pack_child_args(&cmd, &matches, &bases("/repo")).unwrap();
         assert!(!packed.args.contains_key("label"));
     }
 }

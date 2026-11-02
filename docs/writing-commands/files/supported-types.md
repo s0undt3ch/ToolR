@@ -7,7 +7,7 @@
 | `bool` | clap | JSON bool | `bool` |
 | `str` | none (passthrough) | JSON string | `str` |
 | `pathlib.Path` | clap (custom parser) | string | `pathlib.Path` |
-| `toolr.types.AbsolutePath` | clap (absolutise vs cwd) | absolute string | `pathlib.Path` |
+| `toolr.types.AbsolutePath` | clap (absolutise vs cwd; defaults vs repo root) | absolute string | `pathlib.Path` |
 | `toolr.types.NewPath` | clap (must not exist; parent dir must) | absolute string | `pathlib.Path` |
 | `toolr.types.ResolvedPath` | clap (`canonicalize()`) | resolved string | `pathlib.Path` |
 | `toolr.types.FilePath` | clap (`canonicalize()`, regular file) | resolved string | `pathlib.Path` |

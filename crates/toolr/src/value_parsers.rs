@@ -7,7 +7,7 @@
 //! everything else, with values pre-validated by these parsers).
 
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use clap::Arg;
@@ -17,6 +17,7 @@ use email_address::EmailAddress;
 use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
+use toolr_core::manifest::Argument;
 use toolr_core::parser::SupportedType;
 
 /// Choices clap lists in `[possible values: ...]`. Values with control or
@@ -154,36 +155,75 @@ fn path_hint(check: PathCheck) -> ValueHint {
     }
 }
 
-/// Error messages name the path as the user typed it.
+/// Error messages name the path as the user typed it. Relative values
+/// resolve against the process cwd.
 fn path_parser(form: PathForm, check: PathCheck) -> ValueParser {
     ValueParser::new(move |s: &str| -> Result<PathBuf, String> {
-        let typed = std::path::Path::new(s);
-        let path = match form {
-            PathForm::AsTyped => typed.to_path_buf(),
-            PathForm::Absolute => absolutise(typed)?,
-            PathForm::Canonical => {
-                if !typed
-                    .try_exists()
-                    .map_err(|e| format!("invalid path `{s}`: {e}"))?
-                {
-                    return Err(format!("path does not exist: {s}"));
-                }
-                // `dunce` drops Windows' `\\?\` verbatim prefix when the plain
-                // form is valid; elsewhere it is `std::fs::canonicalize`.
-                dunce::canonicalize(typed).map_err(|e| format!("invalid path `{s}`: {e}"))?
-            }
-        };
-        check_path(&path, check, s)?;
-        Ok(path)
+        let cwd = std::env::current_dir().map_err(|e| format!("could not resolve cwd: {e}"))?;
+        resolve_with(form, check, Path::new(s), &cwd)
     })
 }
 
-fn absolutise(path: &std::path::Path) -> Result<PathBuf, String> {
-    if path.is_absolute() {
-        return Ok(path.to_path_buf());
+/// How a deferred path arg resolves: an `Optional` flag of a path type
+/// that resolves on disk (every one but bare `Path`, which Python resolves
+/// after the runner's chdir) with a relative literal clap default. Its
+/// default must resolve from the repo root after parsing, not by clap
+/// against the cwd.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeferredPath {
+    form: PathForm,
+    check: PathCheck,
+}
+
+impl DeferredPath {
+    /// Resolve and check `raw` against `base` rather than the process cwd.
+    /// Errors name `raw` as given, in the clap value parser's wording.
+    pub fn resolve(self, raw: &Path, base: &Path) -> Result<PathBuf, String> {
+        resolve_with(self.form, self.check, raw, base)
     }
-    let cwd = std::env::current_dir().map_err(|e| format!("could not resolve cwd: {e}"))?;
-    Ok(cwd.join(path))
+}
+
+/// The [`DeferredPath`] for `arg`, or `None` when clap resolves it as usual.
+pub fn deferred_path(arg: &Argument) -> Option<DeferredPath> {
+    let default = crate::cli::literal_cli_default(arg)?;
+    if Path::new(default).is_absolute() {
+        return None;
+    }
+    let (form, check) = path_rule(unwrap_optional(arg.resolved_type.as_ref()?))?;
+    (form != PathForm::AsTyped).then_some(DeferredPath { form, check })
+}
+
+/// True for a path type whose value reaches Python as typed, unresolved
+/// (bare `Path`): the runner's chdir decides what a relative one means.
+pub fn passes_path_as_typed(ty: &SupportedType) -> bool {
+    path_rule(ty).is_some_and(|(form, _)| form == PathForm::AsTyped)
+}
+
+fn resolve_with(
+    form: PathForm,
+    check: PathCheck,
+    raw: &Path,
+    base: &Path,
+) -> Result<PathBuf, String> {
+    let s = raw.to_string_lossy();
+    let path = match form {
+        PathForm::AsTyped => raw.to_path_buf(),
+        PathForm::Absolute => base.join(raw),
+        PathForm::Canonical => {
+            let joined = base.join(raw);
+            if !joined
+                .try_exists()
+                .map_err(|e| format!("invalid path `{s}`: {e}"))?
+            {
+                return Err(format!("path does not exist: {s}"));
+            }
+            // `dunce` drops Windows' `\\?\` verbatim prefix when the plain
+            // form is valid; elsewhere it is `std::fs::canonicalize`.
+            dunce::canonicalize(&joined).map_err(|e| format!("invalid path `{s}`: {e}"))?
+        }
+    };
+    check_path(&path, check, &s)?;
+    Ok(path)
 }
 
 fn check_path(path: &std::path::Path, check: PathCheck, typed: &str) -> Result<(), String> {
@@ -362,6 +402,7 @@ mod tests {
 
     use std::fs;
     use tempfile::TempDir;
+    use toolr_core::manifest::ArgumentKind;
     use toolr_core::parser::types::SupportedTypeKind;
 
     fn parse(ty: &SupportedType, value: &str) -> Result<PathBuf, String> {
@@ -626,6 +667,87 @@ mod tests {
             err.to_string().contains("path does not exist"),
             "got: {err}"
         );
+    }
+
+    fn deferred(ty: SupportedType) -> DeferredPath {
+        deferred_path(&optional_arg(ty, Some("rel"))).unwrap()
+    }
+
+    #[test]
+    fn deferred_path_resolves_against_the_given_base() {
+        let base = TempDir::new().unwrap();
+        fs::create_dir(base.path().join("tools")).unwrap();
+        fs::write(base.path().join("tools").join("a.toml"), "x").unwrap();
+        let got = deferred(SupportedType::FilePath).resolve(Path::new("tools/a.toml"), base.path());
+        assert_eq!(
+            got,
+            Ok(dunce::canonicalize(base.path().join("tools").join("a.toml")).unwrap())
+        );
+    }
+
+    #[test]
+    fn deferred_path_errors_name_the_raw_value() {
+        let base = TempDir::new().unwrap();
+        let got = deferred(SupportedType::Optional(Box::new(SupportedType::FilePath)))
+            .resolve(Path::new("tools/missing.toml"), base.path());
+        assert_eq!(
+            got,
+            Err("path does not exist: tools/missing.toml".to_string())
+        );
+    }
+
+    #[test]
+    fn deferred_absolute_path_joins_base() {
+        let base = TempDir::new().unwrap();
+        let got =
+            deferred(SupportedType::AbsolutePath).resolve(Path::new("build/out"), base.path());
+        assert_eq!(got, Ok(base.path().join("build/out")));
+    }
+
+    fn optional_arg(ty: SupportedType, default: Option<&str>) -> Argument {
+        Argument {
+            name: "cfg".into(),
+            kind: ArgumentKind::Optional,
+            help: String::new(),
+            default: default.map(str::to_string),
+            type_annotation: None,
+            resolved_type: Some(ty),
+            allowed_values: vec![],
+            metadata: toolr_core::manifest::ArgMetadata::default(),
+            long_flag: None,
+        }
+    }
+
+    #[test]
+    fn deferred_path_cases() {
+        let opt = |ty| SupportedType::Optional(Box::new(ty));
+        for (ty, default) in [
+            (SupportedType::FilePath, "tools/pyproject.toml"),
+            (opt(SupportedType::DirectoryPath), "."),
+            (SupportedType::NewPath, "out"),
+        ] {
+            let arg = optional_arg(ty.clone(), Some(default));
+            assert!(deferred_path(&arg).is_some(), "{ty:?} = {default:?}");
+        }
+        let absolute = std::env::temp_dir();
+        for (ty, default) in [
+            (SupportedType::Path, Some("tools/pyproject.toml")),
+            (SupportedType::FilePath, absolute.to_str()),
+            (SupportedType::FilePath, Some("")),
+            (SupportedType::FilePath, Some("<expr>")),
+            (SupportedType::FilePath, Some("bad\x1b[2J.toml")),
+            (SupportedType::Str, Some("tools/pyproject.toml")),
+            (SupportedType::FilePath, None),
+        ] {
+            let arg = optional_arg(ty.clone(), default);
+            assert!(deferred_path(&arg).is_none(), "{ty:?} = {default:?}");
+        }
+        let mut positional = optional_arg(SupportedType::FilePath, Some("tools/pyproject.toml"));
+        positional.kind = ArgumentKind::Positional;
+        assert!(deferred_path(&positional).is_none());
+        let mut untyped = optional_arg(SupportedType::FilePath, Some("tools/pyproject.toml"));
+        untyped.resolved_type = None;
+        assert!(deferred_path(&untyped).is_none());
     }
 
     #[test]
