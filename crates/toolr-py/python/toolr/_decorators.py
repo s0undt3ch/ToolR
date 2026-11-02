@@ -301,6 +301,7 @@ def command(
             )
             raise TypeError(err_msg)
         _require_docstring(name)
+        _record_standalone_command(name, None, None)
         return name
 
     # Parameterised form: @command(...) — returns a decorator. The static
@@ -310,18 +311,28 @@ def command(
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         _require_docstring(func)
-        if group is None:
-            return func
-        cli_name = explicit_name if explicit_name is not None else func.__name__.replace("_", "-")
-        existing = _get_command_group_storage().get(f"tools.{group}")
-        if existing is not None:
-            existing.command(cli_name)(func)
-        else:
-            # The group's module may be imported later; `command_group()` attaches it then.
-            _get_pending_command_storage().append((group, cli_name, func))
+        _record_standalone_command(func, explicit_name, group)
         return func
 
     return decorator
+
+
+def _record_standalone_command(
+    func: Callable[..., Any], explicit_name: str | None, group: str | None
+) -> None:
+    """Attach a standalone ``@command`` to its group, or park it as pending.
+
+    A command with no ``group=`` (or ``group=""``) is parked under ``""``,
+    which no group ever takes, so ``CommandsTester`` reports it as the
+    manifest build does.
+    """
+    cli_name = explicit_name if explicit_name is not None else func.__name__.replace("_", "-")
+    existing = _get_command_group_storage().get(f"tools.{group}") if group else None
+    if existing is not None:
+        existing.command(cli_name)(func)
+    else:
+        # The group's module may be imported later; `command_group()` attaches it then.
+        _get_pending_command_storage().append((group or "", cli_name, func))
 
 
 def command_group(

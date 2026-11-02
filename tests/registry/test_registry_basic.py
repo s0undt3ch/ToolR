@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from toolr import Context
 from toolr import command
 from toolr import command_group
@@ -242,12 +244,23 @@ def test_standalone_command_attaches_to_existing_group(commands_tester):
     assert command_groups["tools.ci"].get_commands()["lint"] is lint
 
 
-def test_standalone_command_without_group_is_not_recorded(commands_tester):
-    """`@command("name")` with no `group=` has no group to attach to and records nothing."""
+def test_command_without_group_fails_the_read(commands_tester):
+    """`@command("name")` and bare `@command` without `group=` fail the read, as the manifest build does."""
 
     @command("orphan")
     def orphan(ctx: Context):
         """Belong nowhere."""
 
+    @command
+    def bare_orphan(ctx: Context):
+        """Belong nowhere either."""
+
     assert orphan.__name__ == "orphan"
-    assert commands_tester.collected_command_groups() == {}
+    assert bare_orphan.__name__ == "bare_orphan"
+    with pytest.raises(ValueError, match="unknown group references") as excinfo:
+        commands_tester.collected_command_groups()
+    assert str(excinfo.value) == (
+        "unknown group references (2):\n"
+        f"  - {__name__}::orphan: `@command` is missing a `group=...` kwarg.\n"
+        f"  - {__name__}::bare-orphan: `@command` is missing a `group=...` kwarg."
+    )
