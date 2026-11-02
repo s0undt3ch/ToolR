@@ -37,6 +37,12 @@ test gets a fresh dict, then (in :meth:`discover`) imports modules
 under the search path's ``tools/`` package to populate that dict.
 Tests then read it via :meth:`collected_command_groups`.
 
+It also patches :func:`toolr._decorators._get_pending_command_storage`
+with its own list, which holds standalone ``@command(group=...)``
+commands until their group is declared. Entries still there when
+:meth:`collected_command_groups` is called name groups no module
+declares, and make it raise ``ValueError``.
+
 ```
 
 #### `search_path`
@@ -57,8 +63,9 @@ Get the collected command groups.
 
 Raises:
     ValueError: A standalone ``@command(group=...)`` names a group
-        that no ``command_group(...)`` declares, which also fails
-        the manifest build.
+        that no ``command_group(...)`` declares, or passes
+        ``group=""``. The message is the one the manifest build
+        gives, which fails the same way.
 
 ```
 

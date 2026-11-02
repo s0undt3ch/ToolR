@@ -6,6 +6,8 @@ Utilities for testing ToolR commands and command-group discovery.
 ``tools.*`` package so the command-group registry is populated, the
 same way authors register commands at module import time. A module
 that fails to import makes ``discover()`` raise an ``ExceptionGroup``.
+A standalone ``@command(group=...)`` whose group no module declares makes
+``collected_command_groups()`` raise ``ValueError``.
 
 Usage: ``with CommandsTester(search_path=...) as t`` yields an
 isolated collector available via ``t.collected_command_groups()``.
@@ -196,6 +198,12 @@ class CommandsTester:
     test gets a fresh dict, then (in :meth:`discover`) imports modules
     under the search path's ``tools/`` package to populate that dict.
     Tests then read it via :meth:`collected_command_groups`.
+
+    It also patches :func:`toolr._decorators._get_pending_command_storage`
+    with its own list, which holds standalone ``@command(group=...)``
+    commands until their group is declared. Entries still there when
+    :meth:`collected_command_groups` is called name groups no module
+    declares, and make it raise ``ValueError``.
     """
 
     search_path: Path
@@ -245,8 +253,9 @@ class CommandsTester:
 
         Raises:
             ValueError: A standalone ``@command(group=...)`` names a group
-                that no ``command_group(...)`` declares, which also fails
-                the manifest build.
+                that no ``command_group(...)`` declares, or passes
+                ``group=""``. The message is the one the manifest build
+                gives, which fails the same way.
         """
         if self.pending_command_collector:
             registered = sorted(
