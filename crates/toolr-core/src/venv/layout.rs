@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use super::pyvenv_cfg::pyvenv_cfg_value;
+
 /// A directory on the way to `site-packages` exists but can't be read.
 #[derive(Debug, Error)]
 #[error("I/O error reading {path}: {source}")]
@@ -15,45 +17,26 @@ pub struct SitePackagesError {
     pub source: io::Error,
 }
 
+/// A `major.minor` Python version.
+type PyVersion = (u32, u32);
+
 /// Existing `site-packages` directories in `venv_dir`, sorted: `lib/python*/site-packages` and
-/// `Lib/site-packages`, on every platform.
+/// `Lib/site-packages`, on every platform, since a venv can be copied between them.
 ///
-/// Probes those names rather than globbing, so nothing in `venv_dir` is read as a pattern, and
-/// never lists the venv root itself. A missing venv or `lib` gives an empty list. An unreadable
-/// `lib`, `Lib/site-packages`, or `site-packages` of the Python named by `pyvenv.cfg` is an error,
-/// so an unreadable venv never looks like one with nothing installed. Another `python*`
-/// directory that can't be read, such as one left by an older Python, is skipped.
+/// It probes those names rather than globbing, so nothing in `venv_dir` is read as a pattern.
+/// `site-packages` is matched by its exact name, as uv and `venv` write it. What a directory
+/// that can't be read means depends on which one it is:
+///
+/// - A missing venv or `lib` is an empty list: nothing is installed yet.
+/// - The venv root itself is never listed, so one that can be searched but not listed works.
+/// - An unreadable `lib`, `Lib/site-packages`, or the `site-packages` of the Python that
+///   `pyvenv.cfg` names is an error. Each may hold the venv's packages, and reading it as empty
+///   would quietly drop every plugin's commands.
+/// - Any other unreadable `python*` directory is skipped: it is left over from an older Python,
+///   and a stale directory must not block dispatch. Without `pyvenv.cfg` there is no own Python
+///   to tell apart, so every unreadable `python*` directory is skipped.
 pub fn site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, SitePackagesError> {
-    let own = pyvenv_cfg_version(venv_dir);
-    let mut out = Vec::new();
-
-    let lib = venv_dir.join("lib");
-    if is_dir(&lib)? {
-        for child in entries(&lib)? {
-            if !name_is(&child, |n| n.starts_with("python")) || !child.is_dir() {
-                continue;
-            }
-            match push_if_dir(&mut out, child.join("site-packages")) {
-                Err(e) if own.is_none() || dir_version(&e.path) != own => {}
-                result => {
-                    result?;
-                }
-            }
-        }
-    }
-
-    // The Windows layout, and the same without a `pythonX.Y` level. On a case-insensitive file
-    // system both names are one directory, kept once under the first spelling.
-    let upper = venv_dir.join("Lib").join("site-packages");
-    let lower = venv_dir.join("lib").join("site-packages");
-    let had_upper = push_if_dir(&mut out, upper.clone())?;
-    if !(had_upper && is_dir(&lower)? && same_dir(&upper, &lower)) {
-        push_if_dir(&mut out, lower)?;
-    }
-
-    out.sort();
-    out.dedup();
-    Ok(out)
+    site_packages_dirs_for(venv_dir, pyvenv_cfg_version(venv_dir))
 }
 
 /// [`site_packages_dirs`], best match for the venv's own interpreter first: the
@@ -62,7 +45,7 @@ pub fn site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, SitePackagesE
 /// `python3.12` left next to `python3.13` doesn't win.
 pub fn preferred_site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, SitePackagesError> {
     let own = pyvenv_cfg_version(venv_dir);
-    let mut dirs = site_packages_dirs(venv_dir)?;
+    let mut dirs = site_packages_dirs_for(venv_dir, own)?;
     dirs.sort_by_key(|sp| {
         let version = dir_version(sp);
         std::cmp::Reverse((own.is_some() && version == own, version))
@@ -70,8 +53,56 @@ pub fn preferred_site_packages_dirs(venv_dir: &Path) -> Result<Vec<PathBuf>, Sit
     Ok(dirs)
 }
 
+/// [`site_packages_dirs`] for a venv whose own Python is `own`, as read from `pyvenv.cfg`.
+fn site_packages_dirs_for(
+    venv_dir: &Path,
+    own: Option<PyVersion>,
+) -> Result<Vec<PathBuf>, SitePackagesError> {
+    let mut out = Vec::new();
+
+    let lib = venv_dir.join("lib");
+    if is_dir(&lib)? {
+        for child in entries(&lib)? {
+            let is_python = child
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("python"));
+            if !is_python || !child.is_dir() {
+                continue;
+            }
+            let site_packages = child.join("site-packages");
+            match is_dir(&site_packages) {
+                Ok(true) => out.push(site_packages),
+                Ok(false) => {}
+                Err(e) if must_read(&site_packages, own) => return Err(e),
+                Err(_) => {}
+            }
+        }
+    }
+
+    // The Windows layout, and the same without a `pythonX.Y` level. On a case-insensitive file
+    // system both names are one directory, kept once under the first spelling.
+    for site_packages in [
+        venv_dir.join("Lib").join("site-packages"),
+        lib.join("site-packages"),
+    ] {
+        if is_dir(&site_packages)? && !out.iter().any(|seen| same_dir(seen, &site_packages)) {
+            out.push(site_packages);
+        }
+    }
+
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+/// Whether an unreadable `pythonX.Y/site-packages` is an error rather than a stale directory to
+/// skip: only when it belongs to the Python that `pyvenv.cfg` names.
+fn must_read(site_packages: &Path, own: Option<PyVersion>) -> bool {
+    own.is_some() && dir_version(site_packages) == own
+}
+
 /// The `major.minor` in a `.../pythonX.Y/site-packages` path.
-fn dir_version(site_packages: &Path) -> Option<(u32, u32)> {
+fn dir_version(site_packages: &Path) -> Option<PyVersion> {
     site_packages
         .parent()
         .and_then(|p| p.file_name())
@@ -80,20 +111,17 @@ fn dir_version(site_packages: &Path) -> Option<(u32, u32)> {
         .and_then(parse_major_minor)
 }
 
-/// `major.minor` of the venv's interpreter from `pyvenv.cfg` (`version_info`, as uv writes it,
-/// or `version`, as `venv` does).
-fn pyvenv_cfg_version(venv_dir: &Path) -> Option<(u32, u32)> {
-    let cfg = fs::read_to_string(venv_dir.join("pyvenv.cfg")).ok()?;
-    cfg.lines().find_map(|line| {
-        let (key, value) = line.split_once('=')?;
-        matches!(key.trim(), "version_info" | "version")
-            .then(|| parse_major_minor(value.trim()))
-            .flatten()
-    })
+/// `major.minor` of the venv's interpreter from `pyvenv.cfg`: `version_info`, as uv writes it,
+/// or `version`, as `venv` does.
+fn pyvenv_cfg_version(venv_dir: &Path) -> Option<PyVersion> {
+    pyvenv_cfg_value(venv_dir, "version_info")
+        .or_else(|| pyvenv_cfg_value(venv_dir, "version"))
+        .as_deref()
+        .and_then(parse_major_minor)
 }
 
 /// `3.13` from `3.13`, `3.13.1` or `3.14t`.
-fn parse_major_minor(version: &str) -> Option<(u32, u32)> {
+fn parse_major_minor(version: &str) -> Option<PyVersion> {
     let mut parts = version.split('.');
     let major = parts.next()?.parse().ok()?;
     let minor = parts.next()?.trim_end_matches('t').parse().ok()?;
@@ -130,15 +158,6 @@ fn is_dir(dir: &Path) -> Result<bool, SitePackagesError> {
     }
 }
 
-/// Push `dir` when it is a directory, and say whether it was.
-fn push_if_dir(out: &mut Vec<PathBuf>, dir: PathBuf) -> Result<bool, SitePackagesError> {
-    let found = is_dir(&dir)?;
-    if found {
-        out.push(dir);
-    }
-    Ok(found)
-}
-
 /// Whether two existing paths are one directory.
 #[cfg(unix)]
 fn same_dir(a: &Path, b: &Path) -> bool {
@@ -149,17 +168,16 @@ fn same_dir(a: &Path, b: &Path) -> bool {
 
 /// Whether two existing paths are one directory: Windows file systems ignore case.
 #[cfg(not(unix))]
-fn same_dir(_: &Path, _: &Path) -> bool {
-    true
-}
-
-fn name_is(path: &Path, pred: impl Fn(&str) -> bool) -> bool {
-    path.file_name().and_then(|n| n.to_str()).is_some_and(pred)
+fn same_dir(a: &Path, b: &Path) -> bool {
+    a.as_os_str().eq_ignore_ascii_case(b.as_os_str())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_fs::ignores_case;
+    #[cfg(unix)]
+    use crate::test_fs::with_mode;
     use tempfile::TempDir;
 
     fn mkdirs(root: &Path, rel: &str) -> PathBuf {
@@ -189,8 +207,8 @@ mod tests {
         assert_eq!(site_packages_dirs(tmp.path()).unwrap(), [sp]);
     }
 
-    // Needs a case-sensitive file system to hold both `lib` and `Lib`.
-    #[cfg(not(any(windows, target_os = "macos")))]
+    /// On a case-insensitive file system `Lib/site-packages` lands in `lib`, and is still listed
+    /// once under the `Lib` spelling.
     #[test]
     fn site_packages_dirs_returns_both_layouts_sorted() {
         let tmp = TempDir::new().unwrap();
@@ -210,16 +228,16 @@ mod tests {
     }
 
     /// An upper-case `LIB`, as some Windows tools write it, is the `Lib` a case-insensitive file
-    /// system finds; once, though `lib` names it too.
-    #[cfg(any(windows, target_os = "macos"))]
+    /// system finds; once, though `lib` names it too. A case-sensitive one has neither.
     #[test]
-    fn site_packages_dirs_matches_lib_ignoring_case() {
+    fn site_packages_dirs_matches_lib_by_the_file_systems_case_rule() {
         let tmp = TempDir::new().unwrap();
         mkdirs(tmp.path(), "LIB/site-packages");
-        assert_eq!(
-            site_packages_dirs(tmp.path()).unwrap(),
-            [tmp.path().join("Lib").join("site-packages")]
-        );
+        let expected: Vec<_> = ignores_case(tmp.path())
+            .then(|| tmp.path().join("Lib").join("site-packages"))
+            .into_iter()
+            .collect();
+        assert_eq!(site_packages_dirs(tmp.path()).unwrap(), expected);
     }
 
     #[test]
@@ -252,20 +270,6 @@ mod tests {
         let venv = tmp.path().join("[wip]").join("venv");
         let sp = mkdirs(&venv, "lib/python3.13/site-packages");
         assert_eq!(site_packages_dirs(&venv).unwrap(), [sp]);
-    }
-
-    /// Run `f` with `dir` at `mode`. `None` as root, which chmod 000 doesn't stop.
-    #[cfg(unix)]
-    fn with_mode<T>(dir: &Path, mode: u32, f: impl FnOnce() -> T) -> Option<T> {
-        use std::os::unix::fs::PermissionsExt;
-        // SAFETY: geteuid has no preconditions.
-        let is_root = unsafe { libc::geteuid() == 0 };
-        (!is_root).then(|| {
-            fs::set_permissions(dir, fs::Permissions::from_mode(mode)).unwrap();
-            let out = f();
-            fs::set_permissions(dir, fs::Permissions::from_mode(0o755)).unwrap();
-            out
-        })
     }
 
     #[cfg(unix)]

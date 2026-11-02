@@ -3,6 +3,7 @@
 pub mod config;
 pub mod edit;
 pub mod layout;
+mod pyvenv_cfg;
 pub mod repo_key;
 pub mod resolve;
 pub mod sync;

@@ -32,3 +32,26 @@ pub(crate) fn relative_to_cwd(dir: &Path) -> PathBuf {
     rel.extend(normal(dir.canonicalize().unwrap()));
     rel
 }
+
+/// Run `f` with `dir` at permissions `mode`, then put back `0o755`. `None` as root, where
+/// `chmod 000` stops nothing; tests assert with `is_none_or` so they hold there too.
+#[cfg(unix)]
+pub(crate) fn with_mode<T>(dir: &Path, mode: u32, f: impl FnOnce() -> T) -> Option<T> {
+    use std::os::unix::fs::PermissionsExt;
+    // SAFETY: geteuid has no preconditions.
+    let is_root = unsafe { libc::geteuid() == 0 };
+    (!is_root).then(|| {
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(mode)).unwrap();
+        let out = f();
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        out
+    })
+}
+
+/// Whether the file system holding `dir` ignores case, probed by creating a file in it.
+pub(crate) fn ignores_case(dir: &Path) -> bool {
+    std::fs::write(dir.join("case-probe"), "").unwrap();
+    let ignores = dir.join("CASE-PROBE").exists();
+    std::fs::remove_file(dir.join("case-probe")).unwrap();
+    ignores
+}

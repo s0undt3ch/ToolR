@@ -16,7 +16,7 @@ pub enum ValidationError {
     ToolrPackageMissing,
     #[error("toolr: venv at {0} does not contain a python interpreter")]
     InterpreterMissing(PathBuf),
-    #[error("toolr: can't read {path} in the tools venv: {source}")]
+    #[error("toolr: I/O error reading {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -287,33 +287,30 @@ mod tests {
     }
 
     /// A permissions problem names the path and the OS error, not a missing `toolr-py` pin.
+    /// The one test that pins this wording; others match on the error kind.
     #[cfg(unix)]
     #[test]
     fn unreadable_lib_is_an_io_error() {
-        use std::os::unix::fs::PermissionsExt;
         let tmp = TempDir::new().unwrap();
         fake_unix_venv(tmp.path(), true, true);
         let python = tmp.path().join("bin").join("python");
         let lib = tmp.path().join("lib");
-        // SAFETY: geteuid has no preconditions. Root ignores chmod 000.
-        let result = (unsafe { libc::geteuid() } != 0).then(|| {
-            std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o000)).unwrap();
-            let result = (
+        let result = crate::test_fs::with_mode(&lib, 0o000, || {
+            (
                 validate_venv(tmp.path(), &python),
                 installed_toolr_py_version(tmp.path()).map_err(ValidationError::from),
-            );
-            std::fs::set_permissions(&lib, std::fs::Permissions::from_mode(0o755)).unwrap();
-            result
+            )
         });
         assert!(
             result.as_ref().is_none_or(|(validated, version)| {
-                matches!(validated, Err(ValidationError::Io { path, .. }) if path.starts_with(&lib))
-                    && matches!(version, Err(ValidationError::Io { path, .. }) if path.starts_with(&lib))
-                    && validated
-                        .as_ref()
-                        .unwrap_err()
-                        .to_string()
-                        .contains("Permission denied")
+                matches!(version, Err(ValidationError::Io { path, .. }) if path.starts_with(&lib))
+                    && validated.as_ref().is_err_and(|e| {
+                        e.to_string()
+                            == format!(
+                                "toolr: I/O error reading {}: Permission denied (os error 13)",
+                                lib.display()
+                            )
+                    })
             }),
             "{result:?}"
         );
