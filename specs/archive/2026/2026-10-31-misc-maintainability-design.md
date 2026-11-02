@@ -1,8 +1,8 @@
 # Misc maintainability: a dead test file and a misleading "legacy" label
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-43 (low).
-- **Plan:** [`2026-10-31-misc-maintainability-plan.md`](./2026-10-31-misc-maintainability-plan.md)
+- **Plan:** [`specs/archive/2026/2026-10-31-misc-maintainability-plan.md`](./2026-10-31-misc-maintainability-plan.md)
 
 ## Problem
 
@@ -21,18 +21,17 @@ Both are covered better in `crates/toolr-core/src/uv/install.rs` `mod tests`:
 `host_asset_returns_a_known_triple_or_none` asserts the triple on supported hosts, and
 `asset_url_points_at_latest_download` checks the URL. The file adds a test binary to link and nothing else.
 
-**2. Duplicate crates.** `cargo tree -d --depth 0 -e normal` lists `signal-hook` 0.3 + 0.4, `syn` 2 + 3,
-`unicode-width` 0.1 + 0.2, and `memchr` and `smallvec` once each.
+**2. Duplicate crates.** `cargo tree -d --depth 0 -e normal` lists `syn` 2 + 3, `unicode-width` 0.1 + 0.2, and
+`memchr` and `smallvec` once each. (The audit also listed `signal-hook` 0.3 + 0.4. PR #632 replaced toolr-core's
+`signal-hook` with `signal-hook-registry`, so that duplicate is gone.)
 
-- `signal-hook` 0.3 comes from `crossterm` 0.29, through `termimad`. toolr-core already uses 0.4.
 - `unicode-width` 0.1 comes from `termimad`. 0.2 comes from `pep440_rs` and `annotate-snippets`.
 - `syn` 3 comes from `clap_derive` and a few other proc-macro crates; the rest still use `syn` 2. Build time only.
 - `memchr` and `smallvec` have a single version. They show up because the host (proc-macro) and target builds are
   separate units, not because two versions exist.
 
-None of these is toolr's to fix. Downgrading toolr-core to `signal-hook` 0.3 would trade a newer dependency for an older
-one. Renovate will pick up the upstream releases. F-15 (`chore/toolr-py-deps`) removes most of this tree from the
-`toolr-py` build anyway.
+None of these is toolr's to fix. Renovate will pick up the upstream releases. F-15 (`chore/toolr-py-deps`) removes
+most of this tree from the `toolr-py` build anyway.
 
 **3. `LegacyVar`.** `crates/toolr-core/src/parser/commands.rs` names the `@<group>.command` decorator form
 `CommandDecorator::LegacyVar`, parses it in `parse_legacy_command`, and calls it "legacy" in doc comments
@@ -60,10 +59,18 @@ gain.
     - `parse_legacy_command` → `parse_binding_command`.
     - Tests: `legacy_decorator_rejects_positional_and_name_keyword` →
       `binding_decorator_rejects_positional_and_name_keyword`, `legacy_var_decorator_still_works` →
-      `binding_decorator_works`, and `legacy_decorator_*` → `binding_decorator_*` for the other three. Panic messages
-      `"expected LegacyVar"` → `"expected Binding"`.
+      `binding_decorator_works`, and `legacy_decorator_*` → `binding_decorator_*` for the other three. The five
+      `_ => panic!("expected LegacyVar")` arms are replaced by `assert_eq!` on the whole `CommandDecorator` (a
+      test-only `Debug, PartialEq` derive): renaming them would have made those never-run lines changed lines and failed
+      patch coverage, and the full comparison also checks `name_conflict`.
     - Doc comments: "legacy binding style" → "group-binding style", and "Legacy:" on the variant → "Group binding:".
-      The `Direct` variant's "Modern:" becomes "String path:", so neither form reads as the old one.
+      The other variant's "Modern:" becomes "String path:", so neither form reads as the old one.
+      For the same reason, `groups.rs` drops "modern" from "the modern string-path style" and "the new and old
+      styles" becomes "the two styles".
+    - So the code names both forms as the docs do, the string-path side is renamed too:
+      `CommandDecorator::Direct` → `CommandDecorator::StringPath`, `parse_direct_command` →
+      `parse_string_path_command`, and the `direct_*` decorator tests → `string_path_decorator_*`. The string-path
+      conflict test gets the same whole-value `assert_eq!`, so it now checks `group` too.
 - **Items 2 and 4:** no change. This spec records why.
 
 Rejected alternatives:
@@ -71,11 +78,9 @@ Rejected alternatives:
 - **Deprecate `@group.command` for 1.0** (the audit's suggestion). It's the documented canonical form. Deprecating it
   would be a product change with wide breakage, and nothing argues for it.
 - **Remove `MANIFEST_SCHEMA_VERSION` from `__all__`.** Breaks a promised public name for no benefit.
-- **Pin `signal-hook` 0.3 in toolr-core** to drop one duplicate. Moves toolr-core backwards to suit a transitive
-  dependency.
 
 ## Scope and compatibility
 
 - No schema change, no public API change, no behaviour change.
 - Docs: none.
-- `UNRELEASED.md`: none.
+- Release notes: none. Nothing user-visible changes.
