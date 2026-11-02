@@ -334,7 +334,10 @@ def _import_target(spec: RunnerSpec) -> Any:
         # `spec.module` comes from the toolr-controlled manifest/spec (written by
         # the toolr binary), not untrusted external input. SEC-05 tracks
         # defense-in-depth confinement of the import target.
-        module = importlib.import_module(spec.module)  # nosemgrep
+        # `__import__` keeps importlib's frames out of a failure traceback; it returns
+        # the top package, so read the module from `sys.modules` (a shim may skip that).
+        __import__(spec.module)  # nosemgrep
+        module = sys.modules.get(spec.module) or importlib.import_module(spec.module)  # nosemgrep
     except ImportError as exc:
         msg = f"failed to import {spec.module}: {exc}"
         raise SpecError(msg) from exc
@@ -587,14 +590,28 @@ def invoke_dispatcher(
     return func(ctx, **parent_kwargs, **{param: dispatched})
 
 
+def _is_repo_tools_module(name: str | None) -> bool:
+    """Whether ``name`` is the repo's own ``tools`` package or one of its submodules.
+
+    ``"tools"`` mirrors the prefix the Rust side passes to ``build_commands_inner``
+    (``crates/toolr-core/src/parser/build.rs``). Plugin modules are deliberately excluded.
+    """
+    return name is not None and (name == "tools" or name.startswith("tools."))
+
+
 def _print_missing_dep_hint(exc: ImportError, stream: Any) -> None:
     """Append the styled "run `toolr project venv sync`" hint to ``stream``.
 
     The hint replaces what the Rust-side post-mortem stderr capture used
     to do — now that the runner inherits stderr (so Rich's TTY detection
-    works), the runner has to emit the hint itself.
+    works), the runner has to emit the hint itself. Skipped for the repo's
+    own ``tools`` package: it is never installed into the venv, so syncing
+    can't fix a typo or a circular import there.
     """
-    missing = getattr(exc, "name", None) or "this module"
+    name = exc.name
+    if _is_repo_tools_module(name):
+        return
+    missing = name or "this module"
     print(
         f"\ntoolr: import `{missing}` failed at runtime. "
         "A dependency may be missing - run `toolr project venv sync` "
@@ -667,13 +684,14 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         print(code, file=sys.stderr)  # noqa: T201
         return 1
     except SpecError as exc:
+        # A command module's ImportError, wrapped by `_import_target`: traceback first
+        # so it names the failing file and line, then summary and hint, remedy last.
+        cause = exc.__cause__
+        if isinstance(cause, ImportError):
+            traceback.print_exception(cause, file=sys.stderr)
         print(f"toolr runner: {exc}", file=sys.stderr)  # noqa: T201
-        # `_import_target` wraps an ImportError thrown while loading the
-        # user's command module into a SpecError. Surface the missing-dep
-        # hint when that's the case so a top-level or transitive import
-        # failure still gets the styled "run venv sync" guidance.
-        if isinstance(exc.__cause__, ImportError):
-            _print_missing_dep_hint(exc.__cause__, sys.stderr)
+        if isinstance(cause, ImportError):
+            _print_missing_dep_hint(cause, sys.stderr)
         return 2
     except ImportError as exc:
         # An ImportError raised from inside the command function body

@@ -12,6 +12,7 @@ swallows-and-formats-stderr behaviour for unhandled exit codes.
 
 from __future__ import annotations
 
+import builtins
 import contextvars
 import datetime as dt
 import enum
@@ -25,6 +26,7 @@ import sys
 import textwrap
 import uuid
 from collections.abc import Callable
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated
@@ -43,6 +45,7 @@ from toolr._runner import _build_context
 from toolr._runner import _coerce_args
 from toolr._runner import _dec_hook
 from toolr._runner import _import_target
+from toolr._runner import _is_repo_tools_module
 from toolr._runner import _unwrap_annotated
 from toolr._runner import load_spec
 from toolr._runner import load_spec_from_env
@@ -977,6 +980,187 @@ def test_run_falls_back_to_generic_hint_when_importerror_has_no_name(
     err = capsys.readouterr().err
     assert "this module" in err
     assert "toolr project venv sync" in err
+
+
+# The F-28 report: a helper module two files from the command fails a third-party import.
+_TRANSITIVE_IMPORT_FILES = {
+    "demo.py": """
+        from tools._helpers import load
+
+
+        def hello(ctx) -> None:
+            load()
+        """,
+    "_helpers.py": """
+        import toolr_f28_missing_dep
+
+
+        def load() -> None:
+            toolr_f28_missing_dep.go()
+        """,
+}
+
+
+@pytest.fixture
+def make_tools_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Callable[[dict[str, str]], Path]]:
+    """Factory: write a ``tools`` package under ``tmp_path``; return it as ``repo_root``.
+
+    Unlike conftest's ``make_tools_module`` it doesn't import anything: ``run()`` must do the
+    (failing) import. The tmp package wins over the repo's own ``tools/`` only because that one
+    is a namespace package, which a regular package later on ``sys.path`` takes precedence over.
+    """
+    monkeypatch.setattr(sys, "path", sys.path[:])
+    for name in [m for m in sys.modules if _is_repo_tools_module(m)]:
+        monkeypatch.delitem(sys.modules, name)
+    package = tmp_path / "tools"
+
+    def _make(files: dict[str, str]) -> Path:
+        package.mkdir()
+        (package / "__init__.py").write_text("")
+        for name, source in files.items():
+            (package / name).write_text(textwrap.dedent(source).lstrip())
+        return tmp_path
+
+    yield _make
+    for name, module in list(sys.modules.items()):
+        if str(getattr(module, "__file__", None) or "").startswith(str(package)):
+            del sys.modules[name]
+
+
+def test_run_prints_traceback_for_transitive_import_failure(
+    make_tools_package: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The failing helper's file and line show, with no importlib frames above the user's."""
+    repo = make_tools_package(_TRANSITIVE_IMPORT_FILES)
+    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
+    err = capsys.readouterr().err
+    assert "Traceback (most recent call last)" in err
+    assert '_helpers.py", line 1' in err
+    assert "<frozen importlib._bootstrap" not in err
+    assert "ModuleNotFoundError: No module named 'toolr_f28_missing_dep'" in err
+    assert err.index("Traceback") < err.index("toolr runner: failed to import tools.demo")
+    assert "`toolr_f28_missing_dep`" in err
+    assert "toolr project venv sync" in err
+
+
+def test_import_target_falls_back_when_import_hook_skips_registration(
+    importable_module: Callable[[str, str], str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A replaced ``builtins.__import__`` that doesn't fill ``sys.modules`` still resolves the target."""
+    module = importable_module(
+        "f28_unregistered_mod",
+        """
+        def hello(ctx) -> None:
+            pass
+        """,
+    )
+    real_import = builtins.__import__
+
+    def skipping_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == module:
+            return ModuleType(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", skipping_import)
+    target = _import_target(_runner_spec(module=module, function="hello"))
+    assert target.__module__ == module
+    assert module in sys.modules
+    del sys.modules[module]
+
+
+def test_run_omits_sync_hint_for_missing_tools_submodule(
+    make_tools_package: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A typo in an import of the repo's own `tools` package can't be fixed by syncing the venv."""
+    repo = make_tools_package(
+        {
+            "demo.py": """
+                from tools._helprs import load
+
+
+                def hello(ctx) -> None:
+                    load()
+                """,
+            "_helpers.py": """
+                def load() -> None:
+                    pass
+                """,
+        }
+    )
+    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
+    err = capsys.readouterr().err
+    assert 'demo.py", line' in err
+    assert "toolr runner: failed to import tools.demo" in err
+    assert "toolr project venv sync" not in err
+
+
+def test_run_omits_sync_hint_for_circular_tools_import(
+    make_tools_package: Callable[[dict[str, str]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A circular import between two `tools/*.py` modules gets the traceback but no sync hint."""
+    repo = make_tools_package(
+        {
+            "demo.py": """
+                from tools.a import x
+
+
+                def hello(ctx) -> None:
+                    print(x)
+                """,
+            "a.py": """
+                from tools.b import y
+
+                x = 1
+                """,
+            "b.py": """
+                from tools.a import x
+
+                y = 2
+                """,
+        }
+    )
+    assert _run_isolated(_runner_spec(module="tools.demo", function="hello", repo_root=repo)) == 2
+    err = capsys.readouterr().err
+    assert "partially initialized module" in err
+    assert 'b.py", line 1' in err
+    assert "toolr project venv sync" not in err
+
+
+def test_run_omits_sync_hint_for_in_body_tools_import(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The in-body `ImportError` arm applies the same first-party rule."""
+
+    def fake_target(ctx, **_kw) -> None:
+        msg = "No module named 'tools.nope'"
+        raise ImportError(msg, name="tools.nope")
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
+    err = capsys.readouterr().err
+    assert "ImportError: No module named 'tools.nope'" in err
+    assert "toolr project venv sync" not in err
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("tools", True),
+        ("tools.x.y", True),
+        ("toolsmith", False),
+        ("yaml", False),
+        (None, False),
+    ],
+)
+def test_is_repo_tools_module(name: str | None, *, expected: bool) -> None:
+    assert _is_repo_tools_module(name) is expected
 
 
 # --------------------------------------------------------------------------
