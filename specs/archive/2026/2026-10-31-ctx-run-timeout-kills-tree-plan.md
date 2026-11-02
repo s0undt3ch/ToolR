@@ -11,7 +11,7 @@ before the child is reaped. A `drain_threads` loop replaces the unbounded joins 
 
 **Tech Stack:** Rust, `libc` (Linux `/proc`, macOS `proc_listallpids`/`proc_pidinfo`), `winapi` `tlhelp32`.
 
-**Spec:** [`specs/2026-10-31-ctx-run-timeout-kills-tree-design.md`](./2026-10-31-ctx-run-timeout-kills-tree-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-ctx-run-timeout-kills-tree-design.md`](./2026-10-31-ctx-run-timeout-kills-tree-design.md)
 
 ## Global Constraints
 

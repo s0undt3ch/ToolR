@@ -1,6 +1,6 @@
 # Kill the whole process tree when a `ctx.run` timeout fires
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-21 (medium, plausible).
 - **Plan:** [`2026-10-31-ctx-run-timeout-kills-tree-plan.md`](./2026-10-31-ctx-run-timeout-kills-tree-plan.md)
 - **Stacks on:** `fix/ctx-run-input-deadlock` (F-08), now merged into `main`.
@@ -58,15 +58,15 @@ Both timeout branches call `kill_tree` instead of `child.kill()` + `child.wait()
 
 ### 2. Bounded drain
 
-Replace the bare `join()` calls with a `drain_threads` loop that polls `JoinHandle::is_finished()` every 10 ms. It
-covers the reader threads and F-08's `stdin_thread`, and checks both timeouts with the same clocks as the main poll
-loop (`start_time` and `last_output`):
+Replace the bare `join()` calls with wait loops that poll `JoinHandle::is_finished()` every 10 ms. They cover the
+reader threads and F-08's `stdin_thread`. After a normal exit they check both timeouts against the same start time
+and output clock as the main poll loop, but only while no reader is writing to a sink (review round 2, below):
 
 - After a normal exit: if a timeout expires while a reader is still running, detach the threads and return that
   timeout error. The child's status is dropped: the caller asked for the whole call to finish within the limit, and
   it didn't. With no timeouts set, the drain waits as long as it takes, as today. A command that starts a daemon
   holding stdout still behaves the same.
-- After `kill_tree`: drain with a fixed 2-second grace, then detach. Once the tree is dead, the pipes hit EOF at once,
+- After `kill_tree`: drain with a fixed 0.5-second grace (2 seconds before review round 2), then detach. Once the tree is dead, the pipes hit EOF at once,
   so the grace only matters when a process escaped the walk.
 
 A process that was already reparented before the timeout (case 2: `sh` exited first) cannot be found by its ppid. The
@@ -96,17 +96,37 @@ waits for the pipe to close, as before.
 
 - No runner schema change. The pyo3 signature does not change.
 - Assumes F-08 is merged: `run_command_internal` owns an optional `stdin_thread` that is joined with the readers.
-  `drain_threads` takes it too.
-- Not covered: signal handling for `toolr`'s own Python child (F-29, `execute/signals.rs`). The fd-reuse hazard of
-  detached threads is fixed in F-41 (`refactor/ctx-run-owned-fds`).
+  The wait loops cover it too.
+- Not covered: signal handling for `toolr`'s own Python child (F-29, `execute/signals.rs`).
+- Owned output fds, pulled forward from F-41. The bounded drain detaches reader threads after a normal exit, which
+  `main` never did, and `toolr.utils.command.run` then closes its capture files. A detached thread writing through the
+  caller's raw fd number put its output in whatever file reused it next. Each reader thread now writes to its own
+  duplicate (`fcntl(F_DUPFD_CLOEXEC)` on Unix, `DuplicateHandle` via `try_clone_to_owned` on Windows), made before
+  the spawn. F-41 (`refactor/ctx-run-owned-fds`) must rebase onto this and drop what it duplicates.
+- Review round 2:
+    - A reader blocked writing to a slow sink isn't a holder: the timeouts after a normal exit, and the no-output
+      timeout throughout, only count while no reader is writing, and the output clock is stamped after each write
+      too. A command that finished in time therefore returns its status with all output delivered.
+    - Giving up on the readers sets a shared `detached` flag. A detached reader stops at its next read and drops the
+      pipe and its sink copies, so an escaped writer gets EPIPE, as it did on `main` once the call returned.
+    - With that, the kill grace only flushes output the dead tree already wrote, so it is 0.5 s rather than 2 s. It
+      still extends the GIL hold by that much when a process escapes; the docs say so.
+- Review round 3 (no behaviour change): the timeout rules are documented by phase on `Timeouts`, one `expired`
+  check gates both timeouts on idle readers, a drop guard sets `detached` on every return path, and the
+  `drain_threads` helper became two plain wait loops.
+- Windows checks each edge of the walk, not just the root: a process must be no older than the tree member it names
+  as its parent. Unix reads each ppid again just before the `SIGSTOP`.
 - `crates/toolr-core/Cargo.toml`: `command` builds without `full`, because toolr-py links it alone, so its new
-  dependencies are not optional. `libc` becomes a plain dependency, `winapi` (with `tlhelp32`) a plain Windows
-  dependency, and both join the `toolr-core-lean-deps` allowlist in `.pre-commit-config.yaml`, as `CONTRIBUTING.md`
+  dependencies are not optional. `libc` becomes a plain dependency, `winapi` a plain Windows dependency with the
+  features the code uses (`handleapi`, `processthreadsapi`, `tlhelp32`, `winnt`; the tests add `namedpipeapi`,
+  `fileapi` and `minwinbase` as dev-dependency features), and both join the `toolr-core-lean-deps` allowlist in `.pre-commit-config.yaml`, as `CONTRIBUTING.md`
   describes.
 - Docs: `docs/writing-commands/context.md`, "Running subprocesses", gets one paragraph. On timeout, `ctx.run` kills
   the command and everything it started. A process that the command started and left running in the background
   before it exited can't be tracked, but the timeout still returns on time.
-- Release note (`release-notes/`):
+- Release note (`release-notes/`), marked breaking in review: a timed call that used to return the exit code after
+  waiting out a background holder now raises. The headline example uses `sleep 999; true`, because `sh -c "sleep 999"`
+  execs `sleep` and has no grandchild. Original draft:
 
   > When a `ctx.run` timeout fires, toolr now kills the processes the command started as well as the command itself.
   > It used to kill only the direct child, so `ctx.run("sh", "-c", "sleep 999", timeout_secs=1)` left `sleep`
