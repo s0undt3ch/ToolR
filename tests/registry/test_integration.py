@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -274,6 +275,36 @@ def test_discover_reports_every_symlinked_module(tmp_path: Path, tools_repo: Too
         "  - tools/gone.py\n"
         "  - tools/my-dir/l.py\n"
         "  - tools/sub/other.py\n"
+        "Put the file itself under tools/, or share it as a Python package."
+    )
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need a privilege on Windows")
+def test_discover_reports_symlinked_modules_it_cannot_resolve(
+    tmp_path: Path, tools_repo: ToolsRepo
+) -> None:
+    """A looping link and links into an unreadable directory are reported like
+    any other, as `toolr` reports them, instead of failing the walk."""
+    repo = tools_repo({"tools/demo.py": DEMO_MODULE, "locked/x.py": BROKEN_MODULE})
+    tools = repo / "tools"
+    locked = tmp_path / "locked"
+    (locked / "d").mkdir()
+    (tools / "loop.py").symlink_to("loop.py")
+    (tools / "inlocked.py").symlink_to(Path("..", "locked", "x.py"))
+    (tools / "dirlink.py").symlink_to(Path("..", "locked", "d"))
+    locked.chmod(0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("root can stat through a mode-000 directory")
+        with CommandsTester(search_path=repo) as tester, pytest.raises(ToolrError) as excinfo:
+            tester.discover()
+    finally:
+        locked.chmod(0o755)
+    assert str(excinfo.value) == (
+        "symlinked modules are not supported (3):\n"
+        "  - tools/dirlink.py\n"
+        "  - tools/inlocked.py\n"
+        "  - tools/loop.py\n"
         "Put the file itself under tools/, or share it as a Python package."
     )
 

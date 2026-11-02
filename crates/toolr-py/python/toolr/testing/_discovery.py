@@ -74,8 +74,9 @@ def _reject_symlinked_modules(tools_dir: Path) -> None:
             elif (
                 entry.is_symlink()
                 and os.path.splitext(entry.name)[1] == ".py"
-                # A `.py`-named link to a directory is a directory link.
-                and not entry.is_dir()
+                # A `.py`-named link to a directory is a directory link. A
+                # target that can't be stat'd (loop, unreadable) still counts.
+                and not os.path.isdir(entry.path)
             ):
                 links.append(Path(entry.path))
     if not links:
