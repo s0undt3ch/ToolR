@@ -830,17 +830,14 @@ def do_thing(ctx):
                 _ => None,
             })
             .unwrap();
-        match command_decorator(&func.decorator_list).unwrap() {
+        assert_eq!(
+            command_decorator(&func.decorator_list).unwrap(),
             CommandDecorator::Direct {
-                explicit_name,
-                name_conflict,
-                ..
-            } => {
-                assert_eq!(explicit_name, None);
-                assert!(name_conflict);
+                explicit_name: None,
+                group: Some("ci".to_string()),
+                name_conflict: true,
             }
-            _ => panic!("expected Direct"),
-        }
+        );
         let conflicts = detect_name_conflicts(&m, "tools.ci");
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].function, "do_thing");
