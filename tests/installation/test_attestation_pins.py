@@ -122,7 +122,8 @@ def test_mise_workflow_pin_matches_the_packslip_signer(action_pins: dict[str, st
         for spec in tomllib.loads(block).get("tools", {}).values()
         if isinstance(spec, dict) and "workflow" in spec
     ]
-    assert pins == ["release.yml@refs/heads/main"]
-    identity = f"{WORKFLOWS}/{pins[0]}"
-    assert f"--identity {identity} " in RELEASE_YML.read_text()
-    assert identity == action_pins["RELEASE_WORKFLOW"]
+    assert pins
+    for pin in pins:
+        identity = f"{WORKFLOWS}/{pin}"
+        assert f"--identity {identity} " in RELEASE_YML.read_text()
+        assert identity == action_pins["RELEASE_WORKFLOW"]

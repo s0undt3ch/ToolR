@@ -119,8 +119,11 @@ signature a pre-packslip release never published.
 
 ```toml
 [tools]
-"packslip:github.com/s0undt3ch/ToolR" = "X.Y.Z"
+"packslip:github.com/s0undt3ch/ToolR" = { version = "X.Y.Z", workflow = "release.yml@refs/heads/main" }
 ```
+
+`"packslip:github.com/s0undt3ch/ToolR" = "X.Y.Z"` works too, without
+the [release workflow pin](#pin-the-release-workflow).
 
 Then run `mise install` from the project root. mise resolves the
 version from `.mise.toml` and installs it on demand.
