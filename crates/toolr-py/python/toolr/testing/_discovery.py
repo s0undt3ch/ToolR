@@ -29,22 +29,11 @@ from attrs import define
 from attrs import field
 
 from toolr._exc import ToolrError
+from toolr.testing._unknown_groups import _escape_control_chars
 from toolr.testing._unknown_groups import _format_unknown_groups
 
 if TYPE_CHECKING:
     from toolr._decorators import PendingCommand
-
-# C0, DEL, C1, plus the zero-width and bidi format characters; matches
-# `crates/toolr-core/src/text.rs::escape_control_chars`.
-_UNSAFE_CHARS = frozenset(
-    [*range(0x20), *range(0x7F, 0xA0), 0x061C, *range(0x200B, 0x2010), *range(0x202A, 0x202F)]
-    + [*range(0x2060, 0x2065), *range(0x2066, 0x206A), 0xFEFF]
-)
-
-
-def _escape_control_chars(text: str) -> str:
-    """Render control and invisible format characters as Rust-style unicode escapes."""
-    return "".join(f"\\u{{{ord(c):x}}}" if ord(c) in _UNSAFE_CHARS else c for c in text)
 
 
 def _is_pruned_dir(name: str) -> bool:

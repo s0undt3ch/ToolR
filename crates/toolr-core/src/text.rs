@@ -90,8 +90,6 @@ pub fn strip_control_chars_per_line(s: &str) -> String {
 ///
 /// `toolr.testing._unknown_groups._escape_control_chars` mirrors this in
 /// Python; change both together.
-/// `toolr/testing/_discovery.py::_escape_control_chars` mirrors this for
-/// the symlinked-modules message; change both together.
 pub fn escape_control_chars(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
