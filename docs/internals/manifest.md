@@ -28,7 +28,7 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   "toolr_version": "<CARGO_PKG_VERSION>",
   "groups": [...],
   "commands": [...],
-  "input_records": {"files": [...], "scan_paths": [...], "snapshot_at_ns": <ns>}
+  "input_records": {"files": [...], "scan_paths": [...], "snapshot_at_ns": <ns>, "snapshot_dev": <dev>}
 }
 ```
 
@@ -42,9 +42,10 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   file an external command source scans. Drives static-layer rebuilds.
 - **`input_records`** — what `static_hash` was computed from: one
   record per input (`key`, `size`, `mtime_ns`, `ctime_ns`, `ino`,
-  `blake3`, and `unreadable` for an input that couldn't be read),
-  each argparse block's `scan_paths`, and `snapshot_at_ns`, the bound
-  the stat gate compares mtimes against. The freshness check uses them to
+  `dev`, `blake3`, and `unreadable` for an input that couldn't be
+  read), each argparse block's `scan_paths`, and `snapshot_at_ns` and
+  `snapshot_dev`, the bound the stat gate compares mtimes against and
+  the device it was read on. The freshness check uses them to
   skip rereading unchanged files. Absent on older manifests, which then
   reread everything once.
 - **`third_party_hash`** — blake3 over the sorted set of
@@ -244,24 +245,35 @@ Both hashes use blake3, written as lowercase hex.
   a rebuild.
 - The stat gate: the freshness check stats every input and reuses the
   digest in `input_records` without reading the file when its size,
-  mtime, ctime and inode (the last two on Unix) all match and its mtime
-  is strictly older than `input_records.snapshot_at_ns`. That bound is
-  the filesystem's clock, read from a temporary file in `tools/` just
-  before the build's first stat, so NFS clock skew doesn't affect it. A
-  file saved in the same timestamp tick as the build's stat is always
-  reread, as git does for its index, since it could have changed again
-  without changing its stat. Only runs that write the manifest take the
-  bound; a manifest without one reuses nothing.
-  `tools/pyproject.toml` is read at most once per check, and its
-  `scan_paths` are reused with its digest; the globs are expanded on
-  every check, so a new or removed scanned file is noticed. A record
+  mtime, ctime, inode and device (the last three on Unix) all match and
+  its mtime is strictly older than `input_records.snapshot_at_ns`. That
+  bound is the clock of `tools/`'s filesystem, read from a temporary
+  file in `tools/` just before the build's first stat, so NFS clock skew
+  doesn't affect inputs on that filesystem. It can't be compared with
+  another filesystem's mtimes, so only inputs under the project root
+  and on `tools/`'s device (`snapshot_dev`) are reused; the rest are
+  reread on every check. A file saved in the same timestamp tick as the
+  build's stat is always reread, as git does for its index, since it
+  could have changed again without changing its stat. Only runs that
+  write the manifest take the bound; a manifest without one reuses
+  nothing. `tools/pyproject.toml` is read at most once per check, and
+  its `scan_paths` are reused with its digest; the globs are expanded
+  on every check, so a new or removed scanned file is noticed. A record
   for an unreadable input is never reused. On an unchanged tree the
   check reads no input at all. A fresh manifest is never rewritten, so
-  a file whose stat changed without its contents (after `touch`) is
-  reread on each check until the next rebuild. Off Unix, ctime and
-  inode aren't available, so a same-size edit whose mtime is restored
-  to an older value (`cp -p`, unpacking an archive) goes unnoticed
-  until that file changes again.
+  a file whose stat changed without its contents (after `touch`), or
+  that was saved in the build's own tick, is reread on each check until
+  the next rebuild.
+- Limits of the stat gate:
+    - Off Unix, ctime, inode and device aren't available, so a
+      same-size edit whose mtime is restored to an older value
+      (`cp -p`, unpacking an archive) goes unnoticed until that file
+      changes again.
+    - On NFS, a stat is answered from the client's attribute cache, and
+      an unchanged stat never opens the file, so close-to-open
+      revalidation never happens. An edit made from another NFS client
+      can go unnoticed until the attribute cache expires (typically 5
+      to 60 seconds).
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`
   or `Lib/site-packages/*/` (the Windows layout, looked in on every
