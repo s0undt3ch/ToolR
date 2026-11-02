@@ -12,7 +12,7 @@ stubs `gh` and runs the step's script.
 
 **Tech Stack:** composite GitHub Action (bash, `gh attestation verify`), pytest + PyYAML, `jq` (tests only).
 
-**Spec:** [`specs/2026-10-31-action-attestation-signer-design.md`](./2026-10-31-action-attestation-signer-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-action-attestation-signer-design.md`](./2026-10-31-action-attestation-signer-design.md)
 
 ## Global Constraints
 
@@ -26,8 +26,12 @@ stubs `gh` and runs the step's script.
 
 1. **The filter reads only verified results.** The count comes from `gh attestation verify --format json`, which
    prints attestations that passed `gh`'s checks, never from a separate unverified fetch.
-2. **Prefix is exact.** `startswith("https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@")`: the
-   trailing `@` stops `release.yml.evil` or `release.yml-copy` matching. Task 1, `test_rejects_lookalike_workflow`.
+2. **Match is exact.** Round-1 review replaced the original `startswith("…/release.yml@")` prefix with an exact match
+   on `release.yml@refs/heads/main` and on the signer `_build-binary-archive.yml@refs/heads/main`, so an edited
+   `release.yml` on another branch or PR ref is rejected. `test_rejects_other_workflow_or_ref`,
+   `test_rejects_signer_off_main`. Round 2 added the archive-name subject match
+   (`test_rejects_attestation_for_another_archive`), a fail-closed count check and a gh 2.56 floor.
+   Round 3 pinned the signer with `--cert-identity` (exact) in place of `--signer-workflow` plus a `--jq` SAN check.
 3. **Every real release still passes,** across all triples. Task 2, Step 3.
 4. **CI-built archives fail,** checked against a real artifact, not only the stub. Task 2, Step 3.
 
