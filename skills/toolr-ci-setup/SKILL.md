@@ -265,6 +265,10 @@ prompt, so the action also exports **`TOOLR_TRUST_ALL=1`**.
   understand you are turning off the supply-chain gate. Prefer
   installing `gh` (it's already present on GitHub-hosted runners) or
   pre-baking it into self-hosted runner images.
+- **`… was not built by the ToolR release workflow`** — the archive
+  has a valid attestation from the ToolR repository, but it came from
+  a CI or branch build, not a release. Install a published release
+  version; don't reach for `skip-attestation` to get around it.
 - **`tools/.venv` cache misses every run** — the venv cache key
   hashes `tools/pyproject.toml`, `tools/uv.lock`, `tools/uv.toml`
   and `tools/.python-version`; the root `uv.lock` is not part of

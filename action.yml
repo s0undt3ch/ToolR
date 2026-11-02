@@ -275,6 +275,7 @@ runs:
         echo "ARCHIVE_PATH=${work}/${ARCHIVE}" >> "$GITHUB_ENV"
 
     - name: Verify SLSA build provenance
+      id: verify-attestation
       # No cache-hit guard: attestation is verified on every run against
       # GitHub's attestation store, so a poisoned cached archive is
       # rejected before it reaches PATH (SEC-09). Only fork PRs / an
@@ -290,7 +291,22 @@ runs:
           echo "setup-toolr: install gh or pass 'skip-attestation: true' to bypass" >&2
           exit 1
         fi
-        gh attestation verify "$ARCHIVE_PATH" --repo s0undt3ch/ToolR
+        # `ci.yml` calls the same signing workflow as releases, so only the
+        # certificate's `buildConfigURI` (the top-level workflow) tells a
+        # CI build from a release; `--jq` reads it from verified results.
+        count=$(gh attestation verify "$ARCHIVE_PATH" \
+          --repo s0undt3ch/ToolR \
+          --signer-workflow s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml \
+          --deny-self-hosted-runners \
+          --format json \
+          --jq '[.[].verificationResult.signature.certificate.buildConfigURI
+                 | select(startswith("https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@"))]
+                | length')
+        if [ -z "$count" ] || [ "$count" -lt 1 ]; then
+          echo "setup-toolr: ${ARCHIVE_PATH##*/} has a valid ToolR attestation but was not built by the ToolR release workflow" >&2
+          echo "setup-toolr: install a published release; 'skip-attestation: true' turns off this check entirely" >&2
+          exit 1
+        fi
 
     - name: Force in-tree tools venv and trust the checkout
       shell: bash
