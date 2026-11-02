@@ -29,7 +29,8 @@ ACTION_YML = REPO_ROOT / "action.yml"
 WORKFLOWS = "https://github.com/s0undt3ch/ToolR/.github/workflows"
 RELEASE_BUILD = f"{WORKFLOWS}/release.yml@refs/heads/main"
 CI_BUILD = f"{WORKFLOWS}/ci.yml@refs/heads/main"
-REJECTED = "not built by the ToolR release workflow"
+MAIN_SIGNER = f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/main"
+REJECTED = "not built by the ToolR release workflow on main"
 
 
 def _step_script(step_id: str) -> str:
@@ -53,22 +54,43 @@ def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[s
     """Return a callable that runs the verify-attestation script.
 
     `build_configs` is the `buildConfigURI` of each verified attestation
-    the stubbed `gh` reports. A non-zero `gh_rc` makes the stub fail the
-    way `gh attestation verify` does when no attestation verifies. Every
-    `gh` argument list is appended to `tmp_path / "gh_calls"`.
+    the stubbed `gh` reports, all signed by `signer`. A non-zero `gh_rc`
+    makes the stub fail the way `gh attestation verify` does when no
+    attestation verifies. `gh_version` is what `gh --version` reports.
+    Every other `gh` argument list is appended to `tmp_path / "gh_calls"`.
     """
     script_body = _step_script("verify-attestation")
     calls = tmp_path / "gh_calls"
 
-    def run(*, build_configs: list[str], gh_rc: int = 0) -> subprocess.CompletedProcess[str]:
+    def run(
+        *,
+        build_configs: list[str],
+        signer: str = MAIN_SIGNER,
+        gh_rc: int = 0,
+        gh_version: str = "2.103.2",
+    ) -> subprocess.CompletedProcess[str]:
         payload = json.dumps(
             [
-                {"verificationResult": {"signature": {"certificate": {"buildConfigURI": uri}}}}
+                {
+                    "verificationResult": {
+                        "signature": {
+                            "certificate": {
+                                "subjectAlternativeName": signer,
+                                "buildConfigURI": uri,
+                            }
+                        }
+                    }
+                }
                 for uri in build_configs
             ]
         )
         stub = f"""
 gh() {{
+  if [ "$1" = "--version" ]; then
+    printf 'gh version %s (2026-01-01)\\nhttps://github.com/cli/cli/releases/tag/v%s\\n' \\
+      {shlex.quote(gh_version)} {shlex.quote(gh_version)}
+    return 0
+  fi
   printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
   if [ {gh_rc} -ne 0 ]; then
     echo 'gh: no matching attestations' >&2
@@ -136,9 +158,13 @@ def test_accepts_when_any_attestation_is_release(
         f"{WORKFLOWS}/release.yml-copy@refs/heads/main",
         f"{WORKFLOWS}/release.yml.evil@refs/heads/main",
         "https://github.com/someone/ToolR/.github/workflows/release.yml@refs/heads/main",
+        f"{WORKFLOWS}/release.yml@refs/heads/feature",
+        f"{WORKFLOWS}/release.yml@refs/heads/main-evil",
+        f"{WORKFLOWS}/release.yml@refs/pull/1/merge",
+        f"{WORKFLOWS}/release.yml@refs/tags/v0.35.1",
     ],
 )
-def test_rejects_lookalike_workflow(
+def test_rejects_other_workflow_or_ref(
     verify_runner: Callable[..., subprocess.CompletedProcess[str]],
     build_config: str,
 ) -> None:
@@ -172,6 +198,47 @@ def test_passes_signer_and_hosted_runner_flags(
     call = (tmp_path / "gh_calls").read_text()
     assert call.startswith("attestation verify ")
     assert "--repo s0undt3ch/ToolR" in call
-    assert "--signer-workflow s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml" in call
+    assert (
+        "--signer-workflow s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main "
+        in call
+    )
     assert "--deny-self-hosted-runners" in call
     assert "--format json" in call
+
+
+@pytest.mark.parametrize(
+    "signer",
+    [
+        f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/feature",
+        f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/main-evil",
+    ],
+)
+def test_rejects_signer_off_main(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+    signer: str,
+) -> None:
+    """`--signer-workflow` matches by prefix, so the filter re-checks the signer exactly."""
+    result = verify_runner(build_configs=[RELEASE_BUILD], signer=signer)
+    assert result.returncode != 0
+    assert REJECTED in result.stderr
+
+
+@pytest.mark.parametrize("gh_version", ["2.50.0", "2.49.2", "garbage"])
+def test_rejects_gh_older_than_2_51(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+    tmp_path: Path,
+    gh_version: str,
+) -> None:
+    result = verify_runner(build_configs=[RELEASE_BUILD], gh_version=gh_version)
+    assert result.returncode != 0
+    assert "setup-toolr: gh >= 2.51 is required to verify attestations" in result.stderr
+    assert not (tmp_path / "gh_calls").exists()
+
+
+@pytest.mark.parametrize("gh_version", ["2.51.0", "2.103.2", "3.0.0"])
+def test_accepts_gh_2_51_and_later(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+    gh_version: str,
+) -> None:
+    result = verify_runner(build_configs=[RELEASE_BUILD], gh_version=gh_version)
+    assert result.returncode == 0, result.stderr
