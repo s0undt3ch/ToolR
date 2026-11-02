@@ -42,8 +42,9 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   file an external command source scans. Drives static-layer rebuilds.
 - **`input_records`** — what `static_hash` was computed from: one
   record per input (`key`, `size`, `mtime_ns`, `ctime_ns`, `ino`,
-  `dev`, `blake3`, and `unreadable` for an input that couldn't be
-  read), each argparse block's `scan_paths`, and `snapshot_at_ns` and
+  `dev`, and either `digest`, the hex blake3 of its contents, or
+  `unreadable`, the error kind for an input that couldn't be read),
+  each argparse block's `scan_paths`, and `snapshot_at_ns` and
   `snapshot_dev`, the bound the stat gate compares mtimes against and
   the device it was read on. The freshness check uses them to
   skip rereading unchanged files. Absent on older manifests, which then
@@ -244,26 +245,37 @@ Both hashes use blake3, written as lowercase hex.
   scanned file doesn't break every command, and fixing it still triggers
   a rebuild.
 - The stat gate: the freshness check stats every input and reuses the
-  digest in `input_records` without reading the file when its size,
-  mtime, ctime, inode and device (the last three on Unix) all match and
-  its mtime is strictly older than `input_records.snapshot_at_ns`. That
-  bound is the clock of `tools/`'s filesystem, read from a temporary
-  file in `tools/` just before the build's first stat, so NFS clock skew
-  doesn't affect inputs on that filesystem. It can't be compared with
-  another filesystem's mtimes, so only inputs under the project root
-  and on `tools/`'s device (`snapshot_dev`) are reused; the rest are
-  reread on every check. A file saved in the same timestamp tick as the
-  build's stat is always reread, as git does for its index, since it
-  could have changed again without changing its stat. Only runs that
-  write the manifest take the bound; a manifest without one reuses
-  nothing. `tools/pyproject.toml` is read at most once per check, and
-  its `scan_paths` are reused with its digest; the globs are expanded
-  on every check, so a new or removed scanned file is noticed. A record
-  for an unreadable input is never reused. On an unchanged tree the
-  check reads no input at all. A fresh manifest is never rewritten, so
-  a file whose stat changed without its contents (after `touch`), or
-  that was saved in the build's own tick, is reread on each check until
-  the next rebuild.
+  `digest` in `input_records` without reading the file when all of
+  these hold:
+    - its size, mtime, ctime, inode and device all match the record
+      (ctime, inode and device on Unix only);
+    - its mtime is strictly older than `input_records.snapshot_at_ns`.
+      That bound is the clock of `tools/`'s filesystem, read from a
+      temporary file in `tools/` just before the build's first stat, so
+      NFS clock skew doesn't affect inputs on that filesystem. A file
+      saved in the same timestamp tick as the build's stat is always
+      reread, as git does for its index, since it could have changed
+      again without changing its stat;
+    - it is under the project root and on `tools/`'s device
+      (`snapshot_dev`), since the bound can't be compared with another
+      filesystem's mtimes. Every other input is reread on every check;
+    - its record holds a `digest`: an `unreadable` record is never
+      reused, since fixing the permission changes no stat field.
+
+  More about the gate:
+
+    - Only runs that write the manifest take the bound; a manifest
+      without one reuses nothing.
+    - `tools/pyproject.toml` is read at most once per check, for both
+      its digest and its `scan_paths`, which are reused with its
+      digest. A `scan_paths` glob that also matches it makes it a
+      scanned file, recorded whole, so it is then read twice.
+    - The globs are expanded on every check, so a new or removed
+      scanned file is noticed.
+    - On an unchanged tree the check reads no input at all.
+    - A fresh manifest is never rewritten, so a file whose stat changed
+      without its contents (after `touch`), or that was saved in the
+      build's own tick, is reread on each check until the next rebuild.
 - Limits of the stat gate:
     - Off Unix, ctime, inode and device aren't available, so a
       same-size edit whose mtime is restored to an older value
