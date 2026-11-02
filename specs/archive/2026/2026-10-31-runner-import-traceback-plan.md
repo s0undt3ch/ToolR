@@ -11,7 +11,7 @@ appears for the repo's own `tools` package (F-28).
 
 **Tech Stack:** Python 3.11+, pytest.
 
-**Spec:** [`specs/2026-10-31-runner-import-traceback-design.md`](./2026-10-31-runner-import-traceback-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-runner-import-traceback-design.md`](./2026-10-31-runner-import-traceback-design.md)
 
 **Stacks on:** `fix/runner-type-hints` (F-03). Its changes to `_coerce_args` and `toolr/utils/_annotations.py` are
 already in this branch; nothing here touches them.
@@ -52,9 +52,9 @@ already in this branch; nothing here touches them.
 **Interfaces:**
 
 - `_print_missing_dep_hint(exc: ImportError, stream: Any) -> None`: unchanged signature. Returns early when
-  `_is_first_party_module(exc.name)`.
+  `_is_repo_tools_module(exc.name)`.
 
-- New `_is_first_party_module(name: str | None) -> bool`: `name is not None and (name == "tools" or
+- New `_is_repo_tools_module(name: str | None) -> bool`: `name is not None and (name == "tools" or
   name.startswith("tools."))`.
 
 - [ ] **Step 1: Write the tests** in `tests/runner/test_runner_coverage.py`, next to the existing missing-dep hint tests.
@@ -77,14 +77,14 @@ already in this branch; nothing here touches them.
     - `test_run_omits_sync_hint_for_in_body_tools_import` (Review Focus 4): monkeypatch `_import_target` to return a
       target that raises `ImportError("No module named 'tools.nope'", name="tools.nope")` → exit code 1;
       `"toolr project venv sync" not in err`.
-    - `test_is_first_party_module` parametrised: `"tools"` → True, `"tools.x.y"` → True, `"toolsmith"` → False,
+    - `test_is_repo_tools_module` parametrised: `"tools"` → True, `"tools.x.y"` → True, `"toolsmith"` → False,
       `"yaml"` → False, `None` → False.
 
 - [ ] **Step 2: Run them and confirm they fail.**
-      `uv run pytest tests/runner/test_runner_coverage.py -k "traceback or first_party or omits_sync_hint"` → the
-      traceback and hint assertions fail; `test_is_first_party_module` fails on the import.
+      `uv run pytest tests/runner/test_runner_coverage.py -k "traceback or repo_tools or omits_sync_hint"` → the
+      traceback and hint assertions fail; `test_is_repo_tools_module` fails on the import.
 
-- [ ] **Step 3: Implement.** Add `_is_first_party_module` and the early return in `_print_missing_dep_hint`. In the
+- [ ] **Step 3: Implement.** Add `_is_repo_tools_module` and the early return in `_print_missing_dep_hint`. In the
       `except SpecError` arm, when `isinstance(exc.__cause__, ImportError)`, call
       `traceback.print_exception(exc.__cause__, file=sys.stderr)` before the `toolr runner:` print, then the hint as
       now. Update the arm's comment to say why the traceback is printed. Keep the `# noqa: T201` on the print.
@@ -96,10 +96,21 @@ already in this branch; nothing here touches them.
 
 - [ ] **Step 5: Commit.** `fix(runner): show the traceback when a command module fails to import`
 
+**As implemented.** Review added three changes to Task 1:
+
+- `_import_target` calls `__import__(spec.module)` instead of `importlib.import_module`, so the printed traceback has
+  no `<frozen importlib._bootstrap>` frames. It then reads `sys.modules.get(spec.module)` and falls back to
+  `importlib.import_module` when a replaced `builtins.__import__` skips registration.
+  `test_run_prints_traceback_for_transitive_import_failure` asserts the frozen frames are absent, and
+  `test_import_target_falls_back_when_import_hook_skips_registration` covers the fallback.
+- The helper is named `_is_repo_tools_module`, since it deliberately excludes plugin modules.
+- `make_tools_package` uses `monkeypatch` for `sys.path` and `sys.modules`, and evicts only the modules it wrote.
+
 ### Task 2: Release notes, verification, archive
 
-- [ ] **Step 1:** Add the spec's `UNRELEASED.md` text verbatim. Commit
-      `docs(release): note import tracebacks for command modules`.
+- [ ] **Step 1:** Add the spec's release note with
+      `toolr release-notes add --slug runner-import-traceback --text "…"`. Commit
+      `docs(release-notes): note import tracebacks for command modules`.
 - [ ] **Step 2:** `mise run test`, polling the output every 30-60 s → green. `prek run --all-files` → green. No docs
       change, so no `mkdocs build`.
 - [ ] **Step 3:**
