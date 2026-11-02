@@ -108,7 +108,7 @@ The compiler doesn't check the rest. Tests catch some of it, but not all:
    `EXPECTED_TOOLR_TYPES_NAMES` in `tests/test_types_module.py`.
 5. Run `cargo xtask build-skill-refs` and commit the regenerated type tables in `docs/` and
    `skills/`.
-6. Queue an `UNRELEASED.md` entry. A new type makes the next release a minor one.
+6. Queue a release note with `toolr release-notes add`. A new type makes the next release a minor one.
 
 ## Commits
 
@@ -122,6 +122,19 @@ Repo policies:
 
 - **Don't `--no-verify`** without a stated reason in the commit body. Pre-commit failures are signals, not obstacles.
 - **Don't manually edit `CHANGELOG.md`** — `git-cliff` generates it on release from the conventional-commit history.
+
+## Release notes
+
+User-visible changes queue a note in `release-notes/`:
+
+```sh
+toolr release-notes add --text "…"            # new note, slug from the branch name
+toolr release-notes add --append --text "…"   # add to the branch's existing note
+toolr release-notes check --base <parent>     # the CI gate, run locally
+```
+
+CI fails a PR with a `feat`, `fix`, `revert` or breaking commit and no note. A `Release-Notes: skip`
+trailer on any commit exempts the PR. The full rules are in [`release-notes/README.md`](https://github.com/s0undt3ch/ToolR/blob/main/release-notes/README.md).
 
 ## Pre-commit hooks
 

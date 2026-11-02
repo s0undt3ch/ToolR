@@ -28,7 +28,7 @@ body = """
 {%- endif %}\
 
 {%- set release_notes = get_env(name="TOOLR_RELEASE_NOTES", default="") -%}
-{%- if release_notes | trim != "" %}
+{%- if release_notes | trim != "" %}{# `toolr release-notes clear --rendered` requires the `### Notes` line below. #}
 
 ### Notes
 
@@ -95,6 +95,8 @@ commit_parsers = [
   { body = "Changelog: skip", skip = true },
   { message = "^feat", group = "<!-- 0 -->🚀 Features" },
   { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+  # `unreleased` covers legacy `docs(unreleased)` commits; drop it after the next release.
+  { message = "^docs\\((release-notes|unreleased)\\)", skip = true },
   { message = "^doc", group = "<!-- 3 -->📚 Documentation" },
   { message = "^perf", group = "<!-- 4 -->⚡ Performance" },
   { message = "^refactor", group = "<!-- 2 -->🚜 Refactor" },

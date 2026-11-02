@@ -21,7 +21,7 @@ fn workspace_rust_version_matches_mise_toolchain() {
         declared, pinned,
         "workspace rust-version is {declared:?} but mise.toml pins Rust {pinned:?}. Renovate's \
          \"Rust toolchain\" group bumps both; by hand, set `rust-version` in the root Cargo.toml \
-         to the pinned version and note the new minimum Rust in UNRELEASED.md.",
+         to the pinned version and add a release note with `toolr release-notes add`.",
     );
 }
 
