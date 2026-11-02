@@ -9,14 +9,14 @@ import pytest
 
 from toolr._context import Context
 from toolr.testing import ConsoleVerbosity
+from toolr.testing import RunMock
 from toolr.testing import make_command_result
 from toolr.testing import make_context
 from toolr.utils import _console
 from toolr.utils import command
 
-# `RunMock` and `Mock` are imported locally inside the `run=`/`chdir=` tests below rather than
-# here, so the `--8<--` doc snippets they carry are self-contained when included in
-# docs/writing-commands/testing.md.
+# The `run=`/`chdir=` doc-snippet tests below also import `RunMock` and `Mock` locally, so the
+# `--8<--` snippets they carry are self-contained when included in docs/writing-commands/testing.md.
 
 
 def test_make_context_sets_repo_root(tmp_path: Path) -> None:
@@ -40,12 +40,6 @@ def test_console_verbosity_is_exported_from_toolr_testing() -> None:
     assert ConsoleVerbosity is _console.ConsoleVerbosity
 
 
-def _fake_run(
-    *args: object, **kwargs: object
-) -> command.CommandResult[str] | command.CommandResult[bytes]:
-    return make_command_result()
-
-
 @pytest.mark.parametrize(
     ("verbosity", "debug_shown", "info_shown"),
     [
@@ -54,10 +48,13 @@ def _fake_run(
         (ConsoleVerbosity.VERBOSE, True, True),
     ],
 )
+# Keep `ContextForTesting.stdout`/`.stderr` and `ConsoleVerbosity` docstrings in step with this test.
 def test_make_context_stream_split(
     tmp_path: Path, verbosity: ConsoleVerbosity, debug_shown: bool, info_shown: bool
 ) -> None:
-    ctx = make_context(tmp_path, prompt_input="bob\n", run=_fake_run, verbosity=verbosity)
+    run_mock = RunMock()
+    run_mock.mock.return_value = make_command_result()
+    ctx = make_context(tmp_path, prompt_input="bob\n", run=run_mock, verbosity=verbosity)
     ctx.print("to-stdout")
     ctx.debug("debug-line")
     ctx.info("info-line")
