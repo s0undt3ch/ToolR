@@ -259,6 +259,14 @@ def command(
     (``@command(name="snippet-checker", group=...)``) — but not both;
     doing so raises ``TypeError``.
 
+    toolr reads this decorator from the source without running it, so
+    only one shape counts: ``from toolr import command``, then
+    ``@command(...)`` on a top-level ``def`` with ``group=`` (and any
+    name) as a string literal. ``@toolr.command``, an aliased import, a
+    nested ``def`` or ``group=SOME_CONSTANT`` run here, and pass under
+    :class:`toolr.testing.CommandsTester`, but toolr doesn't register
+    them or fails to build.
+
     Usage::
 
         from toolr import command, command_group
