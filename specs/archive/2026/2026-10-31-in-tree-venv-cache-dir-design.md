@@ -1,6 +1,6 @@
 # Keep the in-tree venv's meta.json out of the repo
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-18 (medium).
 - **Plan:** [`2026-10-31-in-tree-venv-cache-dir-plan.md`](./2026-10-31-in-tree-venv-cache-dir-plan.md)
 - **Stacks on:** `fix/venv-sync-pyproject` (F-04,
@@ -66,3 +66,15 @@ the sidecar block after them, so nothing overlaps. It needs the `ResolvedVenv` (
   > Running a command in a repo with an in-tree venv (`venv-location = "in-tree"`) no longer leaves an untracked
   > `tools/meta.json`. toolr now keeps that file in its cache directory, where `toolr project venv sync` already put it.
   > You can delete any `tools/meta.json` an earlier toolr left behind.
+
+## Implementation notes
+
+Review of the implementing PR changed the following:
+
+- The in-tree sidecar slot is `<repo-key>-in-tree/`, not `<repo-key>/`. The plain key is the slot a cache-located
+  venv of the same repo uses, so after a switch to in-tree every dispatch kept refreshing the abandoned `venv/` and
+  `prune` never reclaimed it. `meta_cache_dir` adds the suffix, so sync, dispatch, list and prune agree, and
+  cache-located keys are unchanged.
+- A failed touch for an in-tree venv is reported only under `--debug`, and never under `-q` for either location. The
+  cache home is often read-only where in-tree venvs are used (CI, sandboxes).
+- `docs/internals/cache.md` now describes the in-tree slot, and the release note says where the sidecar goes.

@@ -11,7 +11,7 @@
 
 **Tech Stack:** Rust (edition 2024), `assert_cmd` integration tests.
 
-**Spec:** [`specs/2026-10-31-in-tree-venv-cache-dir-design.md`](./2026-10-31-in-tree-venv-cache-dir-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-in-tree-venv-cache-dir-design.md`](./2026-10-31-in-tree-venv-cache-dir-design.md)
 
 **Stacks on:** `fix/venv-sync-pyproject` (F-04). Its `resync_if_needed`/`check_freshness` changes are already in this
 branch; nothing here touches them.
