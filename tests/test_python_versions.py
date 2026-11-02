@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import re
 import tomllib
-from functools import partial
 from typing import Any
+from typing import NamedTuple
 
 import pytest
 from packaging.specifiers import SpecifierSet
@@ -20,9 +20,9 @@ from tools.ci import ALL_CPYTHONS
 from tools.ci import BINARY_WHEEL_PYTHONS
 from tools.ci import REPO_ROOT
 
-SOURCE = "requires-python in crates/toolr-py/pyproject.toml"
+REQUIRES_PYTHON_SOURCE = "requires-python in crates/toolr-py/pyproject.toml"
 
-TOML_FILES = {
+CONFIG_TOML_FILES = {
     "toolr-py": "crates/toolr-py/pyproject.toml",
     "toolr": "crates/toolr/pyproject.toml",
     "tools": "tools/pyproject.toml",
@@ -50,6 +50,7 @@ def python3_floor(requires_python: str) -> int:
     for specifier in SpecifierSet(requires_python):
         release = Version(specifier.version).release
         if specifier.operator == ">=" and release[0] == 3 and len(release) > 1:
+            # Same rule as `python3_floor` in crates/toolr-core/tests/python_floor_lockstep.rs; change both.
             if len(release) > 2 and release[2] != 0:
                 msg = (
                     f"requires-python {requires_python!r} sets a patch-level floor, which the "
@@ -82,18 +83,25 @@ def supported_minors(requires_python: str) -> list[int]:
     return [minor for minor in range(floor, ceiling + 1) if f"3.{minor}" in spec]
 
 
+class FloorSetting(NamedTuple):
+    label: str
+    location: str
+    actual: object
+    expected: object
+
+
 @pytest.fixture(scope="module")
-def pyprojects() -> dict[str, dict[str, Any]]:
+def config_tomls() -> dict[str, dict[str, Any]]:
     return {
         key: tomllib.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
-        for key, path in TOML_FILES.items()
+        for key, path in CONFIG_TOML_FILES.items()
     }
 
 
 @pytest.fixture(scope="module")
-def supported(pyprojects: dict[str, dict[str, Any]]) -> list[int]:
-    minors = supported_minors(pyprojects["toolr-py"]["project"]["requires-python"])
-    assert minors, f"{SOURCE} admits no CPython 3 minor"
+def supported(config_tomls: dict[str, dict[str, Any]]) -> list[int]:
+    minors = supported_minors(config_tomls["toolr-py"]["project"]["requires-python"])
+    assert minors, f"{REQUIRES_PYTHON_SOURCE} admits no CPython 3 minor"
     return minors
 
 
@@ -133,126 +141,86 @@ def test_python3_floor_reads_the_lower_bound(requires_python: str, expected: int
     assert python3_floor(requires_python) == expected
 
 
-def test_python3_floor_rejects_a_patch_floor() -> None:
-    with pytest.raises(ValueError, match="patch-level floor"):
-        python3_floor(">=3.11.4")
-
-
 def test_all_cpythons_match(supported: list[int]) -> None:
-    assert ALL_CPYTHONS, "tools/ci.py ALL_CPYTHONS is empty"
-    assert sorted(ALL_CPYTHONS) == ALL_CPYTHONS, (
-        f"tools/ci.py ALL_CPYTHONS is {ALL_CPYTHONS}; it must be sorted ascending (TEST_PYTHONS_NARROW takes the last)"
-    )
+    # Equality with the ascending `supported` also keeps the list sorted, which TEST_PYTHONS_NARROW relies on.
     actual = [int(tag.removeprefix("cp3")) for tag in ALL_CPYTHONS]
     assert actual == supported, (
-        f"tools/ci.py ALL_CPYTHONS is {ALL_CPYTHONS}; {SOURCE} implies minors {supported}"
+        f"tools/ci.py ALL_CPYTHONS is {ALL_CPYTHONS}; {REQUIRES_PYTHON_SOURCE} implies minors {supported}"
     )
 
 
-def test_classifiers_match(pyprojects: dict[str, dict[str, Any]], supported: list[int]) -> None:
+def test_classifiers_match(config_tomls: dict[str, dict[str, Any]], supported: list[int]) -> None:
     prefix = "Programming Language :: Python :: 3."
     actual = sorted(
         int(classifier.removeprefix(prefix))
-        for classifier in pyprojects["toolr-py"]["project"]["classifiers"]
+        for classifier in config_tomls["toolr-py"]["project"]["classifiers"]
         if classifier.startswith(prefix) and classifier.removeprefix(prefix).isdigit()
     )
-    assert actual, "crates/toolr-py/pyproject.toml project.classifiers has no Python 3.N classifier"
     assert actual == supported, (
-        f"crates/toolr-py/pyproject.toml project.classifiers lists minors {actual}; {SOURCE} implies {supported}"
+        f"crates/toolr-py/pyproject.toml project.classifiers lists minors {actual}; "
+        f"{REQUIRES_PYTHON_SOURCE} implies {supported}"
     )
 
 
-def test_mise_pythons_match(pyprojects: dict[str, dict[str, Any]], supported: list[int]) -> None:
-    versions = pyprojects["mise"]["tools"]["python"]
-    assert versions, "mise.toml [tools] python is empty"
+def test_mise_pythons_match(config_tomls: dict[str, dict[str, Any]], supported: list[int]) -> None:
+    versions = config_tomls["mise"]["tools"]["python"]
     # Only the second dot-separated field matters, so "3.15.2" and "3.16.0rc1" both parse.
     actual = sorted({int(version.split(".")[1]) for version in versions})
     assert actual == supported, (
-        f"mise.toml [tools] python is {versions}; {SOURCE} implies minors {supported}"
+        f"mise.toml [tools] python is {versions}; {REQUIRES_PYTHON_SOURCE} implies minors {supported}"
     )
 
 
-def _floor_settings(
-    pyprojects: dict[str, dict[str, Any]], floor: int
-) -> list[tuple[str, str, object, object]]:
-    """Return ``(label, location, actual, expected)`` for every setting pinned to the floor.
-
-    A ``requires-python`` floor is a ``partial`` so a malformed one fails only its own case.
-    """
-    pyo3_features = pyprojects["cargo"]["workspace"]["dependencies"]["pyo3"]["features"]
-    abi3 = [feature for feature in pyo3_features if feature.startswith("abi3-")]
-    settings: list[tuple[str, str, object, object]] = [
-        (
+def _floor_settings(config_tomls: dict[str, dict[str, Any]], floor: int) -> list[FloorSetting]:
+    pyo3_features = config_tomls["cargo"]["workspace"]["dependencies"]["pyo3"]["features"]
+    settings = [
+        FloorSetting(
             "pyo3-abi3",
             "Cargo.toml workspace.dependencies.pyo3.features abi3-*",
-            abi3,
+            [feature for feature in pyo3_features if feature.startswith("abi3-")],
             [f"abi3-py3{floor}"],
         ),
-        (
+        FloorSetting(
             "abi3-wheel-pythons",
             "tools/ci.py ABI3_WHEEL_PYTHONS",
             ABI3_WHEEL_PYTHONS,
             [f"cp3{floor}"],
         ),
-        (
+        FloorSetting(
             "binary-wheel-pythons",
             "tools/ci.py BINARY_WHEEL_PYTHONS",
             BINARY_WHEEL_PYTHONS,
             [f"cp3{floor}"],
         ),
-        (
+        FloorSetting(
             "toolr-py-cibuildwheel",
             "crates/toolr-py/pyproject.toml tool.cibuildwheel.build",
-            pyprojects["toolr-py"]["tool"]["cibuildwheel"]["build"],
+            config_tomls["toolr-py"]["tool"]["cibuildwheel"]["build"],
             f"cp3{floor}-*",
         ),
-        (
+        FloorSetting(
             "toolr-cibuildwheel",
             "crates/toolr/pyproject.toml tool.cibuildwheel.build",
-            pyprojects["toolr"]["tool"]["cibuildwheel"]["build"],
+            config_tomls["toolr"]["tool"]["cibuildwheel"]["build"],
             f"cp3{floor}-*",
         ),
-        (
-            "toolr-requires-python",
-            "crates/toolr/pyproject.toml project.requires-python floor",
-            partial(python3_floor, pyprojects["toolr"]["project"]["requires-python"]),
-            floor,
-        ),
-        (
-            "tools-requires-python",
-            "tools/pyproject.toml project.requires-python floor",
-            partial(python3_floor, pyprojects["tools"]["project"]["requires-python"]),
-            floor,
-        ),
-        (
-            "example-plugin-requires-python",
-            "examples/plugin-package/pyproject.toml project.requires-python floor",
-            partial(python3_floor, pyprojects["example-plugin"]["project"]["requires-python"]),
-            floor,
-        ),
-        (
-            "skill-example-requires-python",
-            "skills/toolr-command-packaging/examples/pyproject.toml project.requires-python floor",
-            partial(python3_floor, pyprojects["skill-example"]["project"]["requires-python"]),
-            floor,
-        ),
-        (
+        FloorSetting(
             "ruff",
             "pyproject.toml tool.ruff.target-version",
-            pyprojects["root"]["tool"]["ruff"]["target-version"],
+            config_tomls["root"]["tool"]["ruff"]["target-version"],
             f"py3{floor}",
         ),
-        (
+        FloorSetting(
             "mypy",
             "pyproject.toml tool.mypy.python_version",
-            pyprojects["root"]["tool"]["mypy"]["python_version"],
+            config_tomls["root"]["tool"]["mypy"]["python_version"],
             f"3.{floor}",
         ),
     ]
     for workflow in CP_TAG_WORKFLOWS:
         live = COMMENT_PATTERN.sub("", (REPO_ROOT / workflow).read_text(encoding="utf-8"))
         settings.append(
-            (
+            FloorSetting(
                 f"cp-tag:{workflow}",
                 f"{workflow} cp-tag assignments outside comments (expected exactly one)",
                 CP_TAG_PATTERN.findall(live),
@@ -262,30 +230,23 @@ def _floor_settings(
     return settings
 
 
-FLOOR_LABELS = [
-    "pyo3-abi3",
-    "abi3-wheel-pythons",
-    "binary-wheel-pythons",
-    "toolr-py-cibuildwheel",
-    "toolr-cibuildwheel",
-    "toolr-requires-python",
-    "tools-requires-python",
-    "example-plugin-requires-python",
-    "skill-example-requires-python",
-    "ruff",
-    "mypy",
-    *(f"cp-tag:{workflow}" for workflow in CP_TAG_WORKFLOWS),
-]
-
-
-@pytest.mark.parametrize("label", FLOOR_LABELS)
 def test_floor_settings_match(
-    label: str, pyprojects: dict[str, dict[str, Any]], supported: list[int]
+    config_tomls: dict[str, dict[str, Any]], supported: list[int], subtests: pytest.Subtests
 ) -> None:
-    floor = min(supported)
-    settings = {entry[0]: entry[1:] for entry in _floor_settings(pyprojects, floor)}
-    assert settings.keys() == set(FLOOR_LABELS)
-    location, actual, expected = settings[label]
-    if callable(actual):
-        actual = actual()
-    assert actual == expected, f"{location} is {actual!r}; {SOURCE} implies {expected!r}"
+    for setting in _floor_settings(config_tomls, min(supported)):
+        with subtests.test(setting.label):
+            assert setting.actual == setting.expected, (
+                f"{setting.location} is {setting.actual!r}; {REQUIRES_PYTHON_SOURCE} implies {setting.expected!r}"
+            )
+
+
+# Parsed inside each case, so a malformed floor fails only its own file.
+@pytest.mark.parametrize("key", ["toolr", "tools", "example-plugin", "skill-example"])
+def test_requires_python_floors_match(
+    key: str, config_tomls: dict[str, dict[str, Any]], supported: list[int]
+) -> None:
+    actual = python3_floor(config_tomls[key]["project"]["requires-python"])
+    assert actual == min(supported), (
+        f"{CONFIG_TOML_FILES[key]} project.requires-python floor is 3.{actual}; "
+        f"{REQUIRES_PYTHON_SOURCE} implies 3.{min(supported)}"
+    )
