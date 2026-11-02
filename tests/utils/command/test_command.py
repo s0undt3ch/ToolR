@@ -294,6 +294,23 @@ def test_timeout(sleep_command):
     assert elapsed < 1.0  # Verify timeout happened quickly
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")
+def test_timeout_never_writes_into_a_reused_fd():
+    # After the timeout, `run` closes its capture files; the background `echo` must not
+    # land in whatever file reuses their fd numbers.
+    with pytest.raises(CommandTimeoutError):
+        run(
+            ["sh", "-c", "(sleep 3; echo LEAKED-INTO-YOUR-FILE) &"],
+            timeout_secs=1,
+            capture_output=True,
+        )
+    with tempfile.TemporaryFile() as first, tempfile.TemporaryFile() as second:
+        time.sleep(4)
+        for reused in (first, second):
+            reused.seek(0)
+            assert b"LEAKED" not in reused.read()
+
+
 def test_no_output_timeout(sleep_command):
     start = time.time()
     with pytest.raises(CommandTimeoutNoOutputError):

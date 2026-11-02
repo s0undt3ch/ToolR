@@ -198,7 +198,8 @@ def run(  # noqa: PLR0913, PLR0915
         )
 
     except Exception as exc:
-        # Clean up on error
+        # Clean up on error. Safe even after a timeout: the Rust readers write to their own
+        # duplicates of these fds, never to the numbers closed here.
         if stdout_file and hasattr(stdout_file, "close"):
             stdout_file.close()
         if stderr_file and hasattr(stderr_file, "close"):

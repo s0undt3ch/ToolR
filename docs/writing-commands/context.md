@@ -43,6 +43,19 @@ directly rather than piping them, so the child sees a TTY on all three.
 It's incompatible with `capture_output`, `stream_output`,
 `no_output_timeout_secs`, and `input` — all of those require piping.
 
+When `timeout_secs` or `no_output_timeout_secs` runs out, `ctx.run` kills
+the command and the processes it started, then raises. A process that
+detached itself first (a daemon that double-forks, or a subshell's
+background job whose subshell has exited) is no longer linked to the
+command, so toolr can't find it and leaves it running. Both limits cover
+the whole call: if the command exits but something it left running keeps
+its output open, `ctx.run` still raises when the limit runs out rather
+than reporting success. When a process escapes the kill and still holds
+the output open, `ctx.run` waits about half a second for output already
+written before it raises, so the call can overrun its limit by that much.
+A command that finished in time is not timed out because the place its
+output goes, such as a pipe to a slow reader, is still catching up.
+
 ## Working directory
 
 Commands run with the working directory set to the **repo root**, no

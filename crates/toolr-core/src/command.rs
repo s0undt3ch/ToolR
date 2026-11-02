@@ -6,15 +6,26 @@ use std::fs::File;
 use std::io::{self, ErrorKind, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
-use std::os::unix::io::{FromRawFd, RawFd};
+use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
 
 #[cfg(windows)]
-use std::os::windows::io::{FromRawHandle, RawHandle};
+use std::os::windows::io::{BorrowedHandle, RawHandle};
+
+mod tree;
+
+/// How long the I/O threads get to finish once the tree is killed. Only an escaped process holds
+/// them past EOF, and a detached reader lets go of the pipe at its next read, so this only buys
+/// time to flush what the dead tree already wrote.
+const KILL_GRACE: Duration = Duration::from_millis(500);
+
+/// How long the wait loops sleep between checks.
+const POLL: Duration = Duration::from_millis(10);
 
 // Custom error types
 #[derive(Debug)]
@@ -205,6 +216,138 @@ fn spawn_stdin_writer<W: Write + Send + 'static>(
     })
 }
 
+#[cfg(unix)]
+type Sink = RawFd;
+#[cfg(windows)]
+type Sink = ThreadSafeHandle;
+
+/// Duplicate a caller-owned fd (or handle) so the reader thread owns and closes its copy.
+fn own_sink(sink: Option<&Sink>) -> io::Result<Option<File>> {
+    // `fcntl` rather than `BorrowedFd`, so a closed fd is an error, not a broken contract.
+    #[cfg(unix)]
+    let owned = |fd: &RawFd| match unsafe { libc::fcntl(*fd, libc::F_DUPFD_CLOEXEC, 0) } {
+        -1 => Err(io::Error::last_os_error()),
+        dup => Ok(unsafe { OwnedFd::from_raw_fd(dup) }),
+    };
+    #[cfg(windows)]
+    let owned =
+        |h: &ThreadSafeHandle| unsafe { BorrowedHandle::borrow_raw(h.raw()) }.try_clone_to_owned();
+    sink.map(|sink| owned(sink).map(File::from)).transpose()
+}
+
+/// State the reader threads share with the call.
+struct ReaderState {
+    /// When a reader last read or delivered output.
+    last_output: Mutex<Instant>,
+    /// Readers busy writing to a sink: a slow sink isn't the child running late.
+    writing: AtomicUsize,
+    /// Set when the call gives up on the readers; each stops at its next read.
+    detached: AtomicBool,
+}
+
+impl ReaderState {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            last_output: Mutex::new(Instant::now()),
+            writing: AtomicUsize::new(0),
+            detached: AtomicBool::new(false),
+        })
+    }
+
+    fn stamp(&self) {
+        *self.last_output.lock().unwrap() = Instant::now();
+    }
+
+    fn quiet_for(&self) -> Duration {
+        self.last_output.lock().unwrap().elapsed()
+    }
+
+    fn idle(&self) -> bool {
+        self.writing.load(Ordering::SeqCst) == 0
+    }
+}
+
+/// Detaches the readers however the call returns; on success they've already finished.
+struct DetachOnDrop(Arc<ReaderState>);
+
+impl Drop for DetachOnDrop {
+    fn drop(&mut self) {
+        self.0.detached.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Copy `pipe` into each sink until EOF, stamping the output clock after each read and write. A
+/// failed write stops the copy. A detached reader stops at its next read and drops the
+/// pipe, so a writer that escaped the kill gets EPIPE rather than feeding it forever.
+fn spawn_reader<R: Read + Send + 'static>(
+    mut pipe: R,
+    sinks: [Option<File>; 2],
+    state: Arc<ReaderState>,
+) -> JoinHandle<()> {
+    thread::spawn(move || {
+        let mut sinks: Vec<File> = sinks.into_iter().flatten().collect();
+        let mut buffer = [0; 8192];
+        while let Ok(n @ 1..) = pipe.read(&mut buffer) {
+            state.writing.fetch_add(1, Ordering::SeqCst);
+            state.stamp();
+            let failed = state.detached.load(Ordering::SeqCst)
+                || sinks.iter_mut().any(|sink| {
+                    sink.write_all(&buffer[..n])
+                        .and_then(|()| sink.flush())
+                        .is_err()
+                });
+            state.stamp();
+            state.writing.fetch_sub(1, Ordering::SeqCst);
+            if failed {
+                break;
+            }
+        }
+    })
+}
+
+/// The two limits, enforced in three phases of `run_command_internal`:
+///
+/// - **Running:** `total` counts from the spawn whatever the readers are doing; `no_output` only
+///   while no reader is writing to a sink.
+/// - **After exit**, while the readers drain: both count only while no reader is writing, so a
+///   slow sink isn't mistaken for a background process holding the pipe.
+/// - **After a kill:** the readers get a fixed `KILL_GRACE`, then are detached.
+///
+/// `expired` applies the first two; the third is the grace loop after `tree::kill_tree`.
+struct Timeouts {
+    total: Option<f64>,
+    no_output: Option<f64>,
+}
+
+impl Timeouts {
+    /// The error for whichever limit has run out, if any.
+    fn expired(
+        &self,
+        start: Instant,
+        readers: &ReaderState,
+        child_running: bool,
+    ) -> Option<Box<dyn Error + Send + Sync>> {
+        let idle = readers.idle();
+        if let Some(timeout) = self.total
+            && (child_running || idle)
+            && start.elapsed() > Duration::from_secs_f64(timeout)
+        {
+            return Some(Box::new(CommandTimeoutExceededError::new(format!(
+                "Command timed out after {timeout:.2} seconds"
+            ))));
+        }
+        if let Some(timeout) = self.no_output
+            && idle
+            && readers.quiet_for() > Duration::from_secs_f64(timeout)
+        {
+            return Some(Box::new(CommandNoOutputTimeoutError::new(format!(
+                "Command timed out due to no output for {timeout:.2} seconds"
+            ))));
+        }
+        None
+    }
+}
+
 fn join_stdin_writer(handle: JoinHandle<io::Result<()>>) -> Result<(), CommandExecutionError> {
     match handle.join() {
         Ok(Err(e)) => Err(CommandExecutionError::new(format!(
@@ -252,6 +395,24 @@ pub fn run_command_internal(
         command.stderr(Stdio::piped());
     }
 
+    // Owned copies, made before the spawn: a thread detached on timeout keeps writing to its
+    // own fd, never to a number the caller has closed and the OS has handed out again.
+    let own = |sink| {
+        own_sink(sink).map_err(|e| {
+            Box::new(CommandExecutionError::new(format!(
+                "Failed to duplicate an output handle: {e}"
+            )))
+        })
+    };
+    let stdout_sinks = [
+        own(config.stdout_fd.as_ref())?,
+        own(config.sys_stdout_fd.as_ref())?,
+    ];
+    let stderr_sinks = [
+        own(config.stderr_fd.as_ref())?,
+        own(config.sys_stderr_fd.as_ref())?,
+    ];
+
     // Start the command
     let mut child = command.spawn().map_err(|e| {
         Box::new(CommandExecutionError::new(format!(
@@ -263,234 +424,48 @@ pub fn run_command_internal(
     // stdout pipe before reading stdin would otherwise deadlock us.
     let stdin_payload = child.stdin.take().zip(config.input.take());
 
-    // Take stdout and stderr pipes — `None` in interactive mode, where
-    // stdio was inherited above rather than piped.
-    let stdout =
-        (!config.interactive).then(|| child.stdout.take().expect("Failed to get stdout handle"));
-    let stderr =
-        (!config.interactive).then(|| child.stderr.take().expect("Failed to get stderr handle"));
+    let readers = ReaderState::new();
+    let _detach = DetachOnDrop(Arc::clone(&readers));
 
-    // Track last output time for no_output_timeout_secs
-    let last_output = Arc::new(Mutex::new(Instant::now()));
-
-    // Setup stdout handling
-    let last_output_clone = Arc::clone(&last_output);
-
-    // Clone these Option values so they can be moved into the thread
-    #[cfg(windows)]
-    let stdout_fd_clone = config.stdout_fd.clone();
-    #[cfg(windows)]
-    let sys_stdout_fd_clone = config.sys_stdout_fd.clone();
-
-    #[cfg(unix)]
-    let stdout_fd = config.stdout_fd;
-    #[cfg(unix)]
-    let sys_stdout_fd = config.sys_stdout_fd;
-
-    let stdout_thread = stdout.map(|stdout| {
-        thread::spawn(move || {
-            let mut buffer = [0; 8192];
-            let mut reader = stdout;
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        // Update last output time
-                        if let Ok(mut last) = last_output_clone.lock() {
-                            *last = Instant::now();
-                        }
-
-                        // Write to capture file if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = stdout_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = stdout_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        // Stream to stdout if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = sys_stdout_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = sys_stdout_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        })
-    });
-
-    // Setup stderr handling - similar to stdout
-    let last_output_clone = Arc::clone(&last_output);
-
-    // Clone these Option values so they can be moved into the thread
-    #[cfg(windows)]
-    let stderr_fd_clone = config.stderr_fd.clone();
-    #[cfg(windows)]
-    let sys_stderr_fd_clone = config.sys_stderr_fd.clone();
-
-    #[cfg(unix)]
-    let stderr_fd = config.stderr_fd;
-    #[cfg(unix)]
-    let sys_stderr_fd = config.sys_stderr_fd;
-
-    let stderr_thread = stderr.map(|stderr| {
-        thread::spawn(move || {
-            let mut buffer = [0; 8192];
-            let mut reader = stderr;
-
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        // Update last output time
-                        if let Ok(mut last) = last_output_clone.lock() {
-                            *last = Instant::now();
-                        }
-
-                        // Write to capture file if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = stderr_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = stderr_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        // Stream to stderr if requested
-                        #[cfg(unix)]
-                        if let Some(fd) = sys_stderr_fd {
-                            let mut file = unsafe { File::from_raw_fd(fd) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the file descriptor - it's owned by Python
-                            std::mem::forget(file);
-                        }
-
-                        #[cfg(windows)]
-                        if let Some(ref handle) = sys_stderr_fd_clone {
-                            let mut file = unsafe { File::from_raw_handle(handle.raw()) };
-                            if file.write_all(&buffer[0..n]).is_err() {
-                                break;
-                            }
-                            if file.flush().is_err() {
-                                break;
-                            }
-                            // Don't close the handle - it's owned by Python
-                            std::mem::forget(file);
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        })
-    });
+    // `None` in interactive mode, where stdio was inherited above rather than piped.
+    let stdout_thread = child
+        .stdout
+        .take()
+        .map(|pipe| spawn_reader(pipe, stdout_sinks, Arc::clone(&readers)));
+    let stderr_thread = child
+        .stderr
+        .take()
+        .map(|pipe| spawn_reader(pipe, stderr_sinks, Arc::clone(&readers)));
 
     // Spawned after the readers. On timeout the kill closes the pipe and the
-    // thread ends on its own, unless a grandchild still holds stdin (a known gap).
+    // thread ends on its own, or is detached after `KILL_GRACE`.
     let stdin_thread = stdin_payload.map(|(stdin, input)| spawn_stdin_writer(stdin, input));
+
+    let all_finished = || {
+        stdout_thread.as_ref().is_none_or(JoinHandle::is_finished)
+            && stderr_thread.as_ref().is_none_or(JoinHandle::is_finished)
+            && stdin_thread.as_ref().is_none_or(JoinHandle::is_finished)
+    };
+    let timeouts = Timeouts {
+        total: config.timeout_secs,
+        no_output: config.no_output_timeout_secs,
+    };
 
     // Wait for command completion with timeout handling
     let start_time = Instant::now();
     let status = loop {
-        // Check for command completion
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => {
-                // Check for timeout
-                if let Some(timeout) = config.timeout_secs {
-                    // Convert float seconds to Duration
-                    let timeout_duration = Duration::from_secs_f64(timeout);
-                    if start_time.elapsed() > timeout_duration {
-                        let _ = child.kill();
-                        let _ = child.wait(); // Make sure it's dead
-
-                        return Err(Box::new(CommandTimeoutExceededError::new(format!(
-                            "Command timed out after {timeout:.2} seconds"
-                        ))));
+                if let Some(err) = timeouts.expired(start_time, &readers, true) {
+                    tree::kill_tree(&mut child);
+                    let grace_ends = Instant::now() + KILL_GRACE;
+                    while !all_finished() && Instant::now() < grace_ends {
+                        thread::sleep(POLL);
                     }
+                    return Err(err);
                 }
-
-                // Check for no-output timeout - when monitoring for output
-                if let Some(no_output_timeout) = config.no_output_timeout_secs {
-                    let last_output_time = *last_output.lock().unwrap();
-
-                    // Convert float seconds to Duration
-                    let no_output_duration = Duration::from_secs_f64(no_output_timeout);
-                    if last_output_time.elapsed() > no_output_duration {
-                        let _ = child.kill();
-                        let _ = child.wait(); // Make sure it's dead
-
-                        return Err(Box::new(CommandNoOutputTimeoutError::new(format!(
-                            "Command timed out due to no output for {no_output_timeout:.2} seconds"
-                        ))));
-                    }
-                }
-
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(POLL);
             }
             Err(e) => {
                 return Err(Box::new(CommandExecutionError::new(format!(
@@ -499,6 +474,15 @@ pub fn run_command_internal(
             }
         }
     };
+
+    // The child has exited, but something it started may still hold the pipes: the
+    // timeouts cover the whole call, so they keep running until the threads finish.
+    while !all_finished() {
+        if let Some(err) = timeouts.expired(start_time, &readers, false) {
+            return Err(err);
+        }
+        thread::sleep(POLL);
+    }
 
     let stdin_result = stdin_thread.map_or(Ok(()), join_stdin_writer);
 
