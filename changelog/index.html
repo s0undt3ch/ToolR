@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev374-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev383-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev374 - 2026-11-02
+        0.35.2-dev383 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev374 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev383 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev374-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev383-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev374 - 2026-11-02
+        0.35.2-dev383 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev374 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev383 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev374-2026-11-02">0.35.2-dev374 - 2026-11-02<a class="headerlink" href="#0352-dev374-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev383-2026-11-02">0.35.2-dev383 - 2026-11-02<a class="headerlink" href="#0352-dev383-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7660,6 +7660,7 @@ send SIGTERM instead.</p>
 <p><code>toolr.testing.CommandsTester</code> now records commands declared with the standalone <code>@command(group="…")</code> decorator, whether the group is declared in the same file or another one. They used to be missing from <code>collected_command_groups()</code>, although <code>toolr</code> ran them. A <code>group=</code> that names no declared group now makes <code>collected_command_groups()</code> raise a <code>ValueError</code> with the same message the manifest build gives.</p>
 <p>A standalone <code>@command</code> with no <code>group=</code> now makes <code>collected_command_groups()</code> raise too, as the manifest build fails on it.</p>
 <p>When a command module fails to import, whether it's one of your <code>tools/*.py</code> files or comes from a plugin, toolr now prints the traceback, so an import that fails in a helper module names that file and line. The "run <code>toolr project venv sync</code>" hint no longer appears when the missing module is part of your own <code>tools</code> package (a typo or a circular import), since syncing the venv can't fix those.</p>
+<p>Running a command in a repo with an in-tree venv (<code>venv-location = "in-tree"</code>) no longer leaves an untracked <code>tools/meta.json</code>. toolr now keeps that file in its cache directory, in an entry of its own (<code>&lt;repo-key&gt;-in-tree</code>) that <code>toolr project venv sync</code> writes too, so <code>toolr self cache list</code> shows the repo. If the repo used a cache venv before switching to in-tree, that old venv no longer looks recently used, and <code>toolr self cache prune</code> reclaims it once it goes stale. You can delete any <code>tools/meta.json</code> an earlier toolr left behind.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7761,6 +7762,9 @@ send SIGTERM instead.</p>
 <li><em>(runner)</em> Show the traceback when a command module fails to import (<a href="https://github.com/s0undt3ch/ToolR/commit/9fa2ca48d24ec5685340d2e06e0f28ce7c549ecc"><code>9fa2ca4</code></a>)</li>
 <li><em>(runner)</em> Keep importlib frames out of command import tracebacks (<a href="https://github.com/s0undt3ch/ToolR/commit/59a1de69dc5688cd38c4ff15c8b3f366ef467100"><code>59a1de6</code></a>)</li>
 <li><em>(runner)</em> Fall back to import_module when an import hook skips sys.modules (<a href="https://github.com/s0undt3ch/ToolR/commit/1df3e071db266672f0948d9cce2ad877f933c54b"><code>1df3e07</code></a>)</li>
+<li><em>(dispatch)</em> Keep an in-tree venv's meta.json out of tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/fc8eca67addd98692c9187628bbc6b56dabf9bb2"><code>fc8eca6</code></a>)</li>
+<li><em>(dispatch)</em> Give an in-tree venv's meta.json its own cache slot (<a href="https://github.com/s0undt3ch/ToolR/commit/bfd8cd11becb91d588202f15ef29f588c45df38e"><code>bfd8cd1</code></a>)</li>
+<li><em>(dispatch)</em> Keep the meta.json touch warning out of quiet and in-tree runs (<a href="https://github.com/s0undt3ch/ToolR/commit/6e1e7b38ce7b39f11723cb6e7ea768291b8a664f"><code>6e1e7b3</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7797,6 +7801,7 @@ send SIGTERM instead.</p>
 <li><em>(testing)</em> Share the pruned-directory check between discovery walks (<a href="https://github.com/s0undt3ch/ToolR/commit/723106ceb12f5f203438f10a7bf9fb967134095e"><code>723106c</code></a>)</li>
 <li><em>(testing)</em> Reuse the shared control-character escaping (<a href="https://github.com/s0undt3ch/ToolR/commit/22fc4c210236582428ce19803f3499e28fff385a"><code>22fc4c2</code></a>)</li>
 <li><em>(runner)</em> Rename the repo tools check and tighten its comments (<a href="https://github.com/s0undt3ch/ToolR/commit/be121d7f14accffd631fb86a9bc255d18e4f46f5"><code>be121d7</code></a>)</li>
+<li><em>(venv)</em> Share one cache slot rule between resolve and meta_cache_dir (<a href="https://github.com/s0undt3ch/ToolR/commit/7d2716cf8a5a7d8ef96c7e9c3eefadc934769dbb"><code>7d2716c</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7895,6 +7900,8 @@ send SIGTERM instead.</p>
 <li><em>(specs)</em> Archive symlinked tools files design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/17eccf431d1678ad6467664dee6ee64e97fd9c31"><code>17eccf4</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-28 runner import traceback (<a href="https://github.com/s0undt3ch/ToolR/commit/1eea85854b96b2d9c592d869a30f30d506eab022"><code>1eea858</code></a>)</li>
 <li><em>(specs)</em> Archive runner import traceback design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/e45f45cffc11b99867b4b8020350798ee410b31b"><code>e45f45c</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-18 in-tree venv cache dir (<a href="https://github.com/s0undt3ch/ToolR/commit/bb5ef83f6bfe31e947190c45382232c4a3291a5b"><code>bb5ef83</code></a>)</li>
+<li><em>(specs)</em> Archive in-tree venv cache dir design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/9d002ede34bc2524994507a63570c8470de336a5"><code>9d002ed</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7949,6 +7956,7 @@ send SIGTERM instead.</p>
 <li><em>(parser)</em> Cover symlinked modules whose target can't be stat'd (<a href="https://github.com/s0undt3ch/ToolR/commit/ef1cb7d6d861ad3e295f7db950dfbe638bb1615f"><code>ef1cb7d</code></a>)</li>
 <li><em>(cli)</em> Share the symlinked-module CLI assertions (<a href="https://github.com/s0undt3ch/ToolR/commit/51a8bab6fec207a8133f128f778e8d51502dba29"><code>51a8bab</code></a>)</li>
 <li><em>(runner)</em> Share the import-failure fixture files and scope module eviction (<a href="https://github.com/s0undt3ch/ToolR/commit/36bb21581a92cb08acd02c1d54ef9c482ddc7f6b"><code>36bb215</code></a>)</li>
+<li><em>(dispatch)</em> Table-drive the meta.json touch warning policy (<a href="https://github.com/s0undt3ch/ToolR/commit/4032295e2127bad9e80916b1d6418da0d0c17651"><code>4032295</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
