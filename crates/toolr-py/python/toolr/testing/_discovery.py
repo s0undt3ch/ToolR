@@ -172,6 +172,32 @@ def _import_package_modules(
                 _import_package_modules(module, errors, seen, root)
 
 
+def _fixture_only_namespace_path(spec: ModuleSpec, locations: list[str]) -> None:
+    """Make a namespace ``spec``'s ``__path__`` recompute from ``locations`` only.
+
+    A namespace ``__path__`` recomputes itself from all of ``sys.path`` whenever
+    ``sys.path`` or the import caches change. Keep importlib's own type
+    (``importlib.resources`` rejects any other) but give it a path finder that
+    only looks in ``locations`` and hands back a plain list, which can't
+    recompute itself.
+    """
+    # Private importlib API: `importlib._bootstrap_external._NamespacePath`
+    # (also `NamespacePath` in 3.15) takes `(name, path, path_finder)` on CPython
+    # 3.11-3.15; `test_namespace_tools_path_stays_in_the_fixture_when_sys_path_changes`
+    # and `test_namespace_tools_supports_importlib_resources` guard it.
+
+    def path_finder(fullname: str, _parent_path: object) -> ModuleSpec | None:
+        found = PathFinder.find_spec(fullname, locations)
+        if found is not None and found.loader is None:
+            found.submodule_search_locations = list(found.submodule_search_locations or ())
+        return found
+
+    namespace_path: Any = spec.submodule_search_locations
+    spec.submodule_search_locations = type(namespace_path)(
+        spec.name, list(namespace_path), path_finder
+    )
+
+
 class _FixtureToolsFinder:
     """Resolve the top-level ``tools`` package from the fixture only.
 
@@ -181,7 +207,9 @@ class _FixtureToolsFinder:
     fixture's, or merge into it when the fixture's is a namespace package.
     Every ``sys.path`` entry stays, so the rest of what lives there stays
     importable. Submodules need no help: they resolve through
-    ``tools.__path__``, which only names the fixture.
+    ``tools.__path__``, which only names the fixture. When the fixture has
+    no ``tools``, ``find_spec`` raises ``ModuleNotFoundError`` instead of
+    returning ``None``, because raising is what stops later finders.
     """
 
     def __init__(self, search_path: Path) -> None:
@@ -194,30 +222,14 @@ class _FixtureToolsFinder:
             return None
         spec = PathFinder.find_spec(fullname, self._locations, target)
         if spec is None:
-            # Stop the remaining finders from finding another `tools`.
             msg = f"No module named {fullname!r}"
             raise ModuleNotFoundError(msg, name=fullname)
         if spec.loader is None:
-            # A namespace `__path__` recomputes itself from all of `sys.path`
-            # whenever `sys.path` or the import caches change. Keep importlib's
-            # own type (`importlib.resources` requires it) but recompute from
-            # the fixture only.
-            namespace_path: Any = spec.submodule_search_locations
-            spec.submodule_search_locations = type(namespace_path)(
-                fullname, list(namespace_path), self._namespace_spec
-            )
-        return spec
-
-    def _namespace_spec(self, fullname: str, _parent_path: object) -> ModuleSpec | None:
-        spec = PathFinder.find_spec(fullname, self._locations)
-        if spec is not None and spec.loader is None:
-            # A plain list, so the recomputed path can't recompute itself
-            # from all of `sys.path` either.
-            spec.submodule_search_locations = list(spec.submodule_search_locations or ())
+            _fixture_only_namespace_path(spec, self._locations)
         return spec
 
 
-def _isolated_sys_path(search_path: Path, saved: list[str]) -> list[str]:
+def _tester_sys_path(search_path: Path, saved: list[str]) -> list[str]:
     """Return ``saved`` with ``search_path`` first and without the ``""`` (cwd) entry.
 
     The cwd is ``search_path`` while the tester is active, so ``""`` would
@@ -340,7 +352,7 @@ class CommandsTester:
         os.chdir(self.search_path)
         self.pending_command_patcher.start()
         self.command_group_patcher.start()
-        sys.path[:] = _isolated_sys_path(self.search_path, self.sys_path)
+        sys.path[:] = _tester_sys_path(self.search_path, self.sys_path)
         # Only the fixture may provide `tools`; see `_FixtureToolsFinder`.
         sys.meta_path.insert(0, self.tools_finder)
         return self

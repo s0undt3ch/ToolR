@@ -19,7 +19,7 @@ from toolr import command_group
 from toolr._decorators import CommandGroup
 from toolr._exc import ToolrError
 from toolr.testing import CommandsTester
-from toolr.testing._discovery import _isolated_sys_path
+from toolr.testing._discovery import _tester_sys_path
 
 CI_MODULE = (
     "from toolr import command_group\n"
@@ -530,7 +530,7 @@ def test_commands_tester_exit_restores_state_when_cwd_is_gone(
     assert sys.path == saved_path
 
 
-def test_isolated_sys_path_drops_only_cwd_and_search_path(tmp_path: Path) -> None:
+def test_tester_sys_path_drops_only_cwd_and_search_path(tmp_path: Path) -> None:
     """Only the cwd entry and the search path itself are dropped, even entries
     that provide `tools`; the search path goes first."""
     search_path = tmp_path / "search"
@@ -539,7 +539,7 @@ def test_isolated_sys_path_drops_only_cwd_and_search_path(tmp_path: Path) -> Non
     plain = tmp_path / "plain"
     plain.mkdir()
     saved = ["", str(with_pkg), str(search_path), str(plain)]
-    assert _isolated_sys_path(search_path, saved) == [str(search_path), str(with_pkg), str(plain)]
+    assert _tester_sys_path(search_path, saved) == [str(search_path), str(with_pkg), str(plain)]
 
 
 @pytest.mark.parametrize(
