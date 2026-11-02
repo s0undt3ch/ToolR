@@ -539,20 +539,14 @@ fn split_docstring(raw: &str) -> (String, String) {
 
 use std::path::Path;
 
-/// Expand every glob in `scan_paths` against `root`, scan each match, and return one
-/// `ScannedCommand` per file. Files that failed to parse become placeholder `ScannedCommand`s
-/// (no arguments) with the failure recorded in their `warnings` field — the rest of the build
-/// continues. Underscore-prefixed filenames (`_helpers.py`, `__init__.py`) are always skipped.
-///
-/// `django` opts this block into one additional Django management-command convention: a file
-/// with no `add_argument()` calls is still kept if it defines Django's `Command` entry point.
-/// Plain argparse blocks (`django == false`) treat a file with no `add_argument()` calls as a
-/// non-command helper regardless of its shape.
-pub fn scan_block_paths(
+/// Every file a block's `scan_paths` globs match under `root`, sorted and
+/// deduplicated. Shared by the scanner and the static hash so both agree on
+/// the file set; underscore-prefixed files are included here and skipped by
+/// the scanner.
+pub fn expand_scan_paths(
     root: &Path,
     scan_paths: &[String],
-    django: bool,
-) -> Result<Vec<ScannedCommand>, ScanError> {
+) -> Result<Vec<std::path::PathBuf>, ScanError> {
     let mut all_paths: Vec<std::path::PathBuf> = Vec::new();
     // The root is a literal path; only the user's `scan_paths` entry is a glob.
     let root_prefix = crate::glob_path::escape_path(root).ok_or_else(|| ScanError::Parse {
@@ -581,6 +575,24 @@ pub fn scan_block_paths(
     }
     all_paths.sort();
     all_paths.dedup();
+    Ok(all_paths)
+}
+
+/// Expand every glob in `scan_paths` against `root`, scan each match, and return one
+/// `ScannedCommand` per file. Files that failed to parse become placeholder `ScannedCommand`s
+/// (no arguments) with the failure recorded in their `warnings` field — the rest of the build
+/// continues. Underscore-prefixed filenames (`_helpers.py`, `__init__.py`) are always skipped.
+///
+/// `django` opts this block into one additional Django management-command convention: a file
+/// with no `add_argument()` calls is still kept if it defines Django's `Command` entry point.
+/// Plain argparse blocks (`django == false`) treat a file with no `add_argument()` calls as a
+/// non-command helper regardless of its shape.
+pub fn scan_block_paths(
+    root: &Path,
+    scan_paths: &[String],
+    django: bool,
+) -> Result<Vec<ScannedCommand>, ScanError> {
+    let all_paths = expand_scan_paths(root, scan_paths)?;
 
     let mut out = Vec::with_capacity(all_paths.len());
     for path in all_paths {
@@ -1106,6 +1118,31 @@ def add_arguments(self, parser):
                 .iter()
                 .any(|s| s.warnings.iter().any(|w| w.contains("broken")))
         );
+    }
+
+    /// The file set the static hash shares with the scanner: every match,
+    /// `_`-prefixed ones included, sorted and deduplicated across patterns;
+    /// directories are dropped.
+    #[test]
+    fn expand_scan_paths_lists_every_matching_file() {
+        let project = tempfile::tempdir().unwrap();
+        let cmds = project.path().join("apps/x/management/commands");
+        std::fs::create_dir_all(cmds.join("pkg.py")).unwrap();
+        for name in ["runserver.py", "migrate.py", "_helpers.py", "notes.txt"] {
+            std::fs::write(cmds.join(name), "").unwrap();
+        }
+        let patterns = [
+            "apps/*/management/commands/*.py".to_string(),
+            "apps/x/management/commands/migrate.py".to_string(),
+        ];
+        let paths = expand_scan_paths(project.path(), &patterns).unwrap();
+        let expected: Vec<_> = ["_helpers.py", "migrate.py", "runserver.py"]
+            .iter()
+            .map(|n| cmds.join(n))
+            .collect();
+        assert_eq!(paths, expected);
+
+        assert!(expand_scan_paths(project.path(), &["apps/[/x.py".to_string()]).is_err());
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::hash::{SymlinkedModules, hash_paths, list_python_files};
+use crate::hash::{SymlinkedModules, hash_paths, list_python_files, static_inputs_from};
 use crate::manifest::{ArgumentKind, Command, Group, Manifest, SCHEMA_VERSION};
 use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
@@ -42,7 +42,8 @@ fn build_static_manifest_inner(tools_dir: &Path) -> std::result::Result<Manifest
     let py_files = list_python_files(tools_dir)?;
     let (all_groups, all_commands) = build_commands_inner(tools_dir, &py_files, "tools", false)?;
 
-    let static_hash = hash_paths(tools_dir, &py_files).map_err(BuildError::Build)?;
+    let static_hash =
+        hash_paths(&static_inputs_from(tools_dir, &py_files)).map_err(BuildError::Build)?;
     let mut manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         static_hash,

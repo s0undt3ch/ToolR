@@ -31,7 +31,9 @@ const _: () = assert!(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     pub schema_version: u32,
-    /// Hash over `tools/**/*.py` contents — used for fast freshness checks.
+    /// Hash over the static build's inputs (`tools/**/*.py`,
+    /// `tools/pyproject.toml` and the files its argparse blocks scan) —
+    /// used for fast freshness checks.
     pub static_hash: String,
     /// Will hash the sorted list of `site-packages/*/toolr-manifest.json`
     /// files (path + content) discovered in the tools venv. Equals
