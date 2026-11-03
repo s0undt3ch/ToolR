@@ -11,7 +11,7 @@ clap tree (F-31).
 
 **Tech Stack:** Rust, clap 4.
 
-**Spec:** [`specs/2026-10-31-cli-build-command-design.md`](./2026-10-31-cli-build-command-design.md)
+**Spec:** [`specs/archive/2026/2026-10-31-cli-build-command-design.md`](./2026-10-31-cli-build-command-design.md)
 
 ## Global Constraints
 

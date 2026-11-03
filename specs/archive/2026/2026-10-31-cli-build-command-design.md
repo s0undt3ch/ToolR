@@ -1,6 +1,6 @@
 # Split `cli::build_command` into one builder per built-in subtree
 
-- **Status:** design agreed, not implemented
+- **Status:** implemented
 - **Origin:** whole-project review finding F-31 (medium).
 - **Plan:** [`2026-10-31-cli-build-command-plan.md`](./2026-10-31-cli-build-command-plan.md)
 
