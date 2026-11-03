@@ -875,6 +875,26 @@ def test_run_returns_integer_exit_code_from_systemexit(
     assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 7
 
 
+def test_run_maps_negative_systemexit_to_128_plus_signal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_target(ctx, **_kw) -> None:
+        raise SystemExit(-15)
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 143
+
+
+def test_run_maps_out_of_range_systemexit_to_1(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_target(ctx, **_kw) -> None:
+        raise SystemExit(256)
+
+    monkeypatch.setattr("toolr._runner._import_target", lambda _spec: fake_target)
+    assert _run_isolated(_runner_spec(repo_root=tmp_path)) == 1
+
+
 def test_run_returns_1_on_unhandled_exception(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

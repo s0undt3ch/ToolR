@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from toolr._context import status_to_exit_code
+
 
 def test_exit_with_message(ctx, capfd):
     """Test exit with message."""
@@ -52,3 +54,18 @@ def test_exit_with_custom_code(verbose_ctx):
         verbose_ctx.exit(42)
 
     assert exc_info.value.code == 42
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(0, 0), (3, 3), (255, 255), (-15, 143), (-9, 137), (256, 1), (-1000, 1), (-1073741819, 1)],
+)
+def test_status_to_exit_code(status, expected):
+    assert status_to_exit_code(status) == expected
+
+
+def test_exit_maps_negative_status_to_128_plus_signal(ctx, capfd):
+    with pytest.raises(SystemExit) as exc_info:
+        ctx.exit(-15, "killed")
+    assert exc_info.value.code == 143
+    assert "killed" in capfd.readouterr().err

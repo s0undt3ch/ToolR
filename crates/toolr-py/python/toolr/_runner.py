@@ -43,6 +43,7 @@ from packaging.version import Version
 
 from toolr._context import Context
 from toolr._context import _current_ctx
+from toolr._context import status_to_exit_code
 from toolr._exc import SpecError
 from toolr._exc import ToolrDeprecationWarning
 from toolr.sources import CommandSchema
@@ -639,7 +640,8 @@ def _append_repo_root(repo_root: str, path_list: list[str] | None = None) -> Non
 def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     """Execute the command described by ``spec``. Returns a process exit code.
 
-    ``ctx.exit(status, ...)`` raises :class:`SystemExit`; we honor its code.
+    ``ctx.exit(status, ...)`` raises :class:`SystemExit`; we honor its code, mapped the way
+    a shell would: a negative code exits ``128 + N`` and anything else outside ``0..=255`` exits 1.
     Any other uncaught exception is logged to stderr and returns 1.
     """
     repo_root = Path(spec.context.repo_root)
@@ -679,7 +681,7 @@ def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
         if code is None:
             return 0
         if isinstance(code, int):
-            return code
+            return status_to_exit_code(code)
         # str / other: print and return 1
         print(code, file=sys.stderr)  # noqa: T201
         return 1

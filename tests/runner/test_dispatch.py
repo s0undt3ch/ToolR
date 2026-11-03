@@ -166,6 +166,30 @@ def test_runner_propagates_nonzero_exit_via_ctx_exit(
     assert result.returncode == 7
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX signals")
+def test_runner_exits_128_plus_signal_for_signal_killed_ctx_run(
+    tools_module: Callable[[str], Path],
+    spec_file: Callable[..., Path],
+    run_runner: Callable[[Path], subprocess.CompletedProcess[str]],
+) -> None:
+    tools_module(
+        """
+        from toolr import command_group
+
+        group = command_group("demo", "Demo", description="demo group")
+
+        @group.command
+        def boom(ctx) -> None:
+            "Do it."
+            result = ctx.run("sh", "-c", "kill -TERM $$")
+            ctx.exit(result.returncode, "child was killed")
+        """
+    )
+    spec_path = spec_file(command="boom", function="boom")
+    result = run_runner(spec_path)
+    assert result.returncode == 143
+
+
 def test_runner_propagates_exception_as_exit_1(
     tools_module: Callable[[str], Path],
     spec_file: Callable[..., Path],
