@@ -1,21 +1,15 @@
 """Tests for the `setup-toolr` composite action's attestation step.
 
 The "Verify SLSA build provenance" step is a bash script embedded in
-`action.yml`. These tests extract its body, prepend a stubbed `gh` shell
-function and run the result through `bash`.
-
-The stub stands in for `gh attestation verify --format json`: it enforces
-`--cert-identity` the way `gh` does, prints the attestations that passed,
-each carrying the `buildConfigURI` of the workflow run that produced it,
-and applies the step's own `--jq` expression with the real `jq`. That
-keeps the decision logic (which top-level workflow built the archive)
-testable offline. The step's literal `env:` values (the pinned workflow
-identities) are exported first, as the runner would.
+`action.yml`. These tests extract its body and run it through `bash` with
+the stub `gh` from `tests/attestation_stub.py` first on `PATH`. The
+step's literal `env:` values (the pinned workflow identities) are
+exported first, as the runner would.
 """
 
 from __future__ import annotations
 
-import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -26,14 +20,17 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.attestation_stub import ARCHIVE_NAME
+from tests.attestation_stub import CI_BUILD
+from tests.attestation_stub import MAIN_SIGNER
+from tests.attestation_stub import RELEASE_BUILD
+from tests.attestation_stub import WORKFLOWS
+from tests.attestation_stub import subject
+from tests.attestation_stub import write_gh_stub
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ACTION_YML = REPO_ROOT / "action.yml"
 
-WORKFLOWS = "https://github.com/s0undt3ch/ToolR/.github/workflows"
-RELEASE_BUILD = f"{WORKFLOWS}/release.yml@refs/heads/main"
-CI_BUILD = f"{WORKFLOWS}/ci.yml@refs/heads/main"
-MAIN_SIGNER = f"{WORKFLOWS}/_build-binary-archive.yml@refs/heads/main"
-ARCHIVE_NAME = "toolr-0.35.1-x86_64-unknown-linux-musl.tar.gz"
 REJECTED = "not built by the ToolR release workflow on main"
 
 
@@ -62,89 +59,28 @@ def _skip_if_no_bash_or_jq() -> None:
 def verify_runner(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[str]]:
     """Return a callable that runs the verify-attestation script.
 
-    `build_configs` is the `buildConfigURI` of each attestation the
-    stubbed `gh` finds. Each is signed by `signer`, which must equal the
-    step's `--cert-identity` as in real `gh`, and names `subject`
-    (default: the archive under test) as its statement subject.
-    `stdout` replaces the filtered output. A
-    non-zero `gh_rc` makes the stub fail the way `gh attestation verify`
-    does when no attestation verifies. `gh_version` is what
-    `gh --version` reports. Every other `gh` argument list is appended to
+    Its keyword arguments go to `write_gh_stub`, whose `gh` comes first on
+    `PATH`. Every `gh` argument list but `--version` is appended to
     `tmp_path / "gh_calls"`.
     """
     step = _step("verify-attestation")
     exports = "".join(
         f"{name}={shlex.quote(value)}\nexport {name}\n" for name, value in _static_env(step).items()
     )
-    script_body = step["run"]
-    calls = tmp_path / "gh_calls"
+    stub_bin = tmp_path / "stub-bin"
+    archive = tmp_path / ARCHIVE_NAME
+    archive.write_bytes(b"")
+    script_path = tmp_path / "wrapped.sh"
+    script_path.write_text(
+        "#!/bin/bash\n"
+        "set -euo pipefail\n"
+        f"ARCHIVE_PATH={shlex.quote(archive.as_posix())}\n"
+        "export ARCHIVE_PATH\n" + exports + step["run"],
+        newline="\n",
+    )
 
-    def run(
-        *,
-        build_configs: list[str],
-        signer: str = MAIN_SIGNER,
-        subject: str = ARCHIVE_NAME,
-        stdout: str | None = None,
-        gh_rc: int = 0,
-        gh_version: str = "2.103.2",
-    ) -> subprocess.CompletedProcess[str]:
-        payload = json.dumps(
-            [
-                {
-                    "verificationResult": {
-                        "signature": {
-                            "certificate": {
-                                "subjectAlternativeName": signer,
-                                "buildConfigURI": uri,
-                            }
-                        },
-                        "statement": {"subject": [{"name": subject}]},
-                    }
-                }
-                for uri in build_configs
-            ]
-        )
-        if stdout is None:
-            emit = f'printf "%s" {shlex.quote(payload)} | jq -c "$jq_expr"'
-        else:
-            emit = f"printf '%s\\n' {shlex.quote(stdout)}"
-        stub = f"""
-gh() {{
-  if [ "$1" = "--version" ]; then
-    printf 'gh version %s (2026-01-01)\\nhttps://github.com/cli/cli/releases/tag/v%s\\n' \\
-      {shlex.quote(gh_version)} {shlex.quote(gh_version)}
-    return 0
-  fi
-  printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
-  if [ {gh_rc} -ne 0 ]; then
-    echo 'gh: no matching attestations' >&2
-    return {gh_rc}
-  fi
-  local jq_expr="." identity=""
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --jq) jq_expr="$2" ;;
-      --cert-identity) identity="$2" ;;
-    esac
-    shift
-  done
-  if [ "$identity" != {shlex.quote(signer)} ]; then
-    echo 'gh: no matching CertificateIdentity found' >&2
-    return 1
-  fi
-  {emit}
-}}
-"""
-        archive = tmp_path / ARCHIVE_NAME
-        archive.write_bytes(b"")
-        wrapped = (
-            "#!/bin/bash\n"
-            "set -euo pipefail\n"
-            f"ARCHIVE_PATH={shlex.quote(archive.as_posix())}\n"
-            "export ARCHIVE_PATH\n" + exports + stub + script_body
-        )
-        script_path = tmp_path / "wrapped.sh"
-        script_path.write_text(wrapped)
+    def run(**stub: Any) -> subprocess.CompletedProcess[str]:
+        write_gh_stub(stub_bin, tmp_path / "gh_calls", **stub)
         bash = shutil.which("bash")
         assert bash is not None, "bash disappeared between fixture setup and test body"
         return subprocess.run(  # noqa: S603  # bash + script path are test-controlled
@@ -152,6 +88,7 @@ gh() {{
             capture_output=True,
             text=True,
             check=False,
+            env={**os.environ, "PATH": f"{stub_bin}{os.pathsep}{os.environ['PATH']}"},
         )
 
     return run
@@ -273,7 +210,7 @@ def test_accepts_gh_2_56_and_later(
 
 
 @pytest.mark.parametrize(
-    "subject",
+    "other_archive",
     [
         "toolr-0.34.0-x86_64-unknown-linux-musl.tar.gz",
         "toolr-0.35.1-aarch64-unknown-linux-musl.tar.gz",
@@ -281,10 +218,10 @@ def test_accepts_gh_2_56_and_later(
 )
 def test_rejects_attestation_for_another_archive(
     verify_runner: Callable[..., subprocess.CompletedProcess[str]],
-    subject: str,
+    other_archive: str,
 ) -> None:
     """An older or other-triple release archive renamed into place is rejected."""
-    result = verify_runner(build_configs=[RELEASE_BUILD], subject=subject)
+    result = verify_runner(build_configs=[RELEASE_BUILD], subjects=[subject(other_archive)])
     assert result.returncode != 0
     assert REJECTED in result.stderr
 
@@ -325,3 +262,27 @@ def test_pinned_workflows_match_the_release_pipeline() -> None:
         f"--identity {pins['RELEASE_WORKFLOW']} "
         in (REPO_ROOT / paths["RELEASE_WORKFLOW"]).read_text()
     )
+
+
+def test_rejects_subject_with_another_digest(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    """The name matches but the digest is another file's."""
+    result = verify_runner(build_configs=[RELEASE_BUILD], subjects=[subject(sha256="0" * 64)])
+    assert result.returncode != 0
+    assert REJECTED in result.stderr
+
+
+def test_rejects_name_and_digest_on_different_subjects(
+    verify_runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    """One subject must carry both: a name from one and a digest from another doesn't count."""
+    result = verify_runner(
+        build_configs=[RELEASE_BUILD],
+        subjects=[
+            subject(sha256="0" * 64),
+            subject("toolr-0.34.0-x86_64-unknown-linux-musl.tar.gz"),
+        ],
+    )
+    assert result.returncode != 0
+    assert REJECTED in result.stderr

@@ -48,8 +48,8 @@ scaffolds for you.
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
-Verifies the SLSA attestation by default (requires the `gh` CLI; pass
-`--verify-attestation=skip` to bypass). Pin a version with
+Verifies the SLSA attestation by default (requires the `gh` CLI, 2.56 or
+later; pass `--verify-attestation=skip` to bypass). Pin a version with
 `sh -s -- --version X.Y.Z`. Custom prefix: `sh -s -- --prefix /opt/toolr/bin`.
 
 ### PowerShell (Windows)

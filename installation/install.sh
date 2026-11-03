@@ -91,19 +91,35 @@ fetch() {
   fi
 }
 
+# Print the lowercase hex SHA-256 of file $1. On failure, explain on stderr
+# (naming the escape hatch $2) and return 1; the caller exits.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest=$(sha256sum < "$1" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    digest=$(shasum -a 256 < "$1" | awk '{print $1}')
+  elif command -v openssl >/dev/null 2>&1; then
+    digest=$(openssl dgst -sha256 < "$1" | sed 's/^.*= *//')
+  else
+    printf 'install.sh: no sha256 tool available (install coreutils); rerun with %s to skip\n' "$2" >&2
+    return 1
+  fi
+  # No pipefail in POSIX sh: a hasher that fails still leaves the pipeline at status 0.
+  case "$digest" in
+    ''|*[!0-9a-f]*) ;;
+    *) if [ "${#digest}" -eq 64 ]; then printf '%s\n' "$digest"; return 0; fi ;;
+  esac
+  printf 'install.sh: could not compute the SHA-256 of %s; rerun with %s to skip\n' "$1" "$2" >&2
+  return 1
+}
+
 verify_sha256() {
   file="$1"; expected="$2"
   if [ "$NO_VERIFY" -eq 1 ]; then
     info "skipping checksum verification (--no-verify)"
     return 0
   fi
-  if command -v sha256sum >/dev/null 2>&1; then
-    actual=$(sha256sum "$file" | awk '{print $1}')
-  elif command -v shasum >/dev/null 2>&1; then
-    actual=$(shasum -a 256 "$file" | awk '{print $1}')
-  else
-    err "no sha256 tool available (install coreutils); rerun with --no-verify to skip"
-  fi
+  actual=$(sha256_of "$file" --no-verify) || exit 1
   [ "$actual" = "$expected" ] || err "checksum mismatch: expected $expected got $actual"
 }
 
@@ -139,9 +155,43 @@ verify_attestation() {
     warn "skipping attestation verification ('gh' CLI not installed) -- the archive is NOT supply-chain verified"
     return 0
   fi
+  # gh before 2.56 can't load GitHub's current Sigstore trusted root, so
+  # an old gh fails in `auto` too rather than skipping silently.
+  gh_version=$(gh --version | sed -n 's/^gh version \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)
+  gh_major=${gh_version%%.*}
+  gh_minor=${gh_version#*.}
+  if [ -z "$gh_version" ] || [ "$gh_major" -lt 2 ] || { [ "$gh_major" -eq 2 ] && [ "$gh_minor" -lt 56 ]; }; then
+    printf '%s\n' \
+      "install.sh: gh >= 2.56 is required to verify attestations (found ${gh_version:-unknown})" \
+      "  upgrade 'gh', or re-run with --verify-attestation=skip to install WITHOUT supply-chain verification." \
+      >&2
+    exit 1
+  fi
+  # Same rules as action.yml's verify-attestation step: ci.yml shares the signer, so only
+  # buildConfigURI tells a release from a CI build; one subject must carry this name and digest.
+  SIGNER_WORKFLOW="https://github.com/${REPO}/.github/workflows/_build-binary-archive.yml@refs/heads/main"
+  RELEASE_WORKFLOW="https://github.com/${REPO}/.github/workflows/release.yml@refs/heads/main"
+  ARCHIVE_NAME="${file##*/}"
+  ARCHIVE_SHA256=$(sha256_of "$file" --verify-attestation=skip) || exit 1
+  export ARCHIVE_NAME ARCHIVE_SHA256 RELEASE_WORKFLOW
   info "verifying SLSA build provenance via 'gh attestation verify'"
-  if ! gh attestation verify "$file" --repo "$REPO" >&2; then
+  if ! count=$(gh attestation verify "$file" \
+    --repo "$REPO" \
+    --cert-identity "$SIGNER_WORKFLOW" \
+    --deny-self-hosted-runners \
+    --format json \
+    --jq '[.[].verificationResult
+           | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW
+                    and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))]
+          | length'); then
     err "attestation verification failed for $file"
+  fi
+  if ! [ "$count" -ge 1 ] 2>/dev/null; then
+    printf '%s\n' \
+      "install.sh: ${ARCHIVE_NAME} has a valid ${REPO} attestation, but none from the ${REPO} release workflow on main for this exact archive" \
+      "  install a published release; --verify-attestation=skip turns off this check entirely." \
+      >&2
+    exit 1
   fi
 }
 

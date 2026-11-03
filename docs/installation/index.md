@@ -31,7 +31,10 @@ mise use packslip:github.com/s0undt3ch/ToolR@latest
 Installs toolr from its signed [packslip](https://packslip.dev/)
 manifest via mise's packslip backend — no plugin to register. mise
 verifies the release against the ToolR repository's signing identity
-and checks the digest and size of the downloaded archive. For
+and checks the digest and size of the downloaded archive. Pin the
+signer to ToolR's release workflow with
+[`workflow = "release.yml@refs/heads/main"`](mise.md#pin-the-release-workflow).
+For
 projects that already pin tool versions via `.mise.toml`, this
 is the most-natural fit — toolr's version becomes part of your
 project's reproducible tool set. Releases before 0.34.0
@@ -60,8 +63,10 @@ front-end rewrite; use the `toolr` executable instead.
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
-Verifies the SLSA attestation by default (requires the `gh` CLI; pass
-`--verify-attestation=skip` to bypass). Pin a version
+Verifies the SLSA attestation by default (requires the `gh` CLI, 2.56
+or later; pass `--verify-attestation=skip` to bypass). See
+[Supply-chain verification](#supply-chain-verification-slsa-attestations).
+Pin a version
 with `sh -s -- --version X.Y.Z`. Custom prefix:
 `sh -s -- --prefix /opt/toolr/bin`. Default prefix is
 `$XDG_BIN_HOME` (or `~/.local/bin`).
@@ -71,6 +76,9 @@ with `sh -s -- --version X.Y.Z`. Custom prefix:
 ```powershell
 irm https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.ps1 | iex
 ```
+
+Verifies the SLSA attestation the same way as `install.sh` (requires
+`gh` 2.56 or later; pass `-VerifyAttestation skip` to bypass).
 
 ### GitHub release archives
 
@@ -220,10 +228,31 @@ your tools venv when it executes commands.
 Every release archive is signed with a SLSA build-provenance
 attestation produced by the GitHub-hosted release workflow. The
 `install.sh` and `install.ps1` scripts verify the attestation **by
-default** (`--verify-attestation=require`), which needs the `gh` CLI: if
-`gh` is missing the install **fails** rather than silently downgrading to
-a checksum-only install (the `.sha256` ships from the same release, so it
-catches transport corruption, not a tampered release asset).
+default** (`--verify-attestation=require`), which needs the `gh` CLI,
+2.56 or later (older `gh` can't load GitHub's current Sigstore trusted
+root). If `gh` is missing the install **fails** rather than silently
+downgrading to a checksum-only install (the `.sha256` ships from the same
+release, so it catches transport corruption, not a tampered release
+asset). With `--verify-attestation=auto` (`-VerifyAttestation auto`), a
+missing `gh` skips the check with a warning; an outdated one still fails.
+
+The check accepts an archive only when all of these hold:
+
+- The attestation was signed by ToolR's archive-building workflow,
+  `_build-binary-archive.yml`, running on `main` on a GitHub-hosted
+  runner.
+- That run was started by the release workflow, `release.yml`, on
+  `main`. CI calls the same archive-building workflow, so this is what
+  tells a release from a CI build of some branch.
+- One subject of the attestation carries both the archive's exact file
+  name and its SHA-256, so a signed archive of another version or
+  platform can't be renamed into place.
+
+The Setup ToolR GitHub Action applies the same rules.
+
+`TOOLR_REPO` (`install.sh`) and `-Repo` (`install.ps1`) move the whole
+trust anchor to another repository: the downloads, and the workflows the
+attestation must come from. Only set them for a fork you trust.
 
 To install without supply-chain verification (accepting the risk — e.g.
 on a host where you can't install `gh`):
@@ -233,12 +262,33 @@ sh installation/install.sh --verify-attestation=skip   # POSIX
 ./installation/install.ps1 -VerifyAttestation skip     # Windows
 ```
 
-Or verify a downloaded archive manually:
+Or verify a downloaded archive manually, from the directory you
+downloaded it to:
 
 ```sh
-gh attestation verify toolr-1.2.3-aarch64-apple-darwin.tar.gz \
-  --repo s0undt3ch/ToolR
+export ARCHIVE_NAME=toolr-1.2.3-aarch64-apple-darwin.tar.gz
+export RELEASE_WORKFLOW=https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main
+export ARCHIVE_SHA256=$(sha256sum < "$ARCHIVE_NAME" | cut -d' ' -f1)    # Linux
+# export ARCHIVE_SHA256=$(shasum -a 256 < "$ARCHIVE_NAME" | cut -d' ' -f1)  # macOS
+gh attestation verify "$ARCHIVE_NAME" \
+  --repo s0undt3ch/ToolR \
+  --cert-identity https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main \
+  --deny-self-hosted-runners \
+  --format json \
+  --jq '[.[].verificationResult
+         | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW
+                  and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))]
+        | length'
 ```
+
+It prints `1` for a release archive. A non-zero exit means `gh` found no
+valid attestation from ToolR's archive-building workflow on `main`. `0`
+means the archive has one, but not from a release build of that exact
+file: a CI build, or another release's archive renamed. `gh attestation
+verify --repo s0undt3ch/ToolR` alone accepts both. `0` also appears when
+`ARCHIVE_SHA256` is empty; check it with `echo $ARCHIVE_SHA256`. The
+command is for a POSIX shell; on Windows, use Git Bash or WSL, or let
+`install.ps1` do the check.
 
 ## Verifying the install
 

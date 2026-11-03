@@ -19,7 +19,9 @@ backend instead; see "Aqua fallback" below.
 - **Supply-chain verified.** mise verifies the release against the
   ToolR repository's signing identity, remembering the release
   workflow after the first install, and checks the digest and size
-  of the archive for your platform before unpacking it.
+  of the archive for your platform before unpacking it. Pin that
+  workflow from the first install with the
+  [`workflow` option](#pin-the-release-workflow).
 
 ## Install toolr
 
@@ -67,6 +69,36 @@ global config with a tool you mostly use inside specific repos.
 toolr --version
 ```
 
+### Pin the release workflow
+
+Pin the workflow that signs ToolR's packslip with mise's per-tool
+`workflow` option (mise 2026.10.5 or later):
+
+```toml
+[tools]
+"packslip:github.com/s0undt3ch/ToolR" = { version = "X.Y.Z", workflow = "release.yml@refs/heads/main" }
+```
+
+Without it, mise accepts a packslip signed by any workflow in the ToolR
+repository on the first install, then remembers that signer. With it,
+mise accepts only a packslip signed by `release.yml` running on `main`
+in `s0undt3ch/ToolR`, from the first install on, and refuses anything
+else, such as a CI workflow or a copy of `release.yml` on another
+branch. The ref is matched exactly.
+
+Keep the `@refs/heads/main` suffix. A bare `workflow = "release.yml"`
+means "`release.yml` running on a tag" to mise, and ToolR releases are
+signed on `main`, so every install would fail with
+`expected an identity starting with ".../release.yml@refs/tags/"`.
+
+What the pin doesn't cover: which workflow built the archives. The
+signed packslip lists each archive's digest and size, and mise checks
+them, so you get exactly the archives `release.yml` signed for. But
+packslip only links the archives' build provenance by digest, and
+neither mise nor `packslip verify` checks it. To check that an archive
+was built by ToolR's release workflow, verify it with
+[`gh attestation verify`](index.md#supply-chain-verification-slsa-attestations).
+
 ### Aqua fallback
 
 Releases before 0.34.0 have no packslip manifest to install
@@ -87,8 +119,11 @@ signature a pre-packslip release never published.
 
 ```toml
 [tools]
-"packslip:github.com/s0undt3ch/ToolR" = "X.Y.Z"
+"packslip:github.com/s0undt3ch/ToolR" = { version = "X.Y.Z", workflow = "release.yml@refs/heads/main" }
 ```
+
+`"packslip:github.com/s0undt3ch/ToolR" = "X.Y.Z"` works too, without
+the [release workflow pin](#pin-the-release-workflow).
 
 Then run `mise install` from the project root. mise resolves the
 version from `.mise.toml` and installs it on demand.

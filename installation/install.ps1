@@ -60,10 +60,55 @@ cannot verify the release's SLSA build provenance: the 'gh' CLI is not on PATH.
     Write-Warning "skipping attestation verification ('gh' CLI not installed) -- the archive is NOT supply-chain verified"
     return
   }
+  # gh before 2.56 can't load GitHub's current Sigstore trusted root, so
+  # an old gh fails in `auto` too rather than skipping silently.
+  $ghVersion = (& gh --version | Select-Object -First 1) -as [string]
+  if (-not ($ghVersion -match '^gh version (\d+\.\d+)') -or [version]$matches[1] -lt [version]'2.56') {
+    throw @"
+gh >= 2.56 is required to verify attestations (found: $ghVersion)
+  upgrade 'gh', or re-run with -VerifyAttestation skip to install WITHOUT supply-chain verification.
+"@
+  }
+  # Same rules as action.yml's verify-attestation step: ci.yml shares the signer, so only
+  # buildConfigURI tells a release from a CI build; one subject must carry this name and digest.
+  # The filter stays on one line with no quotes for Windows PowerShell's native argument passing.
+  $signerWorkflow = "https://github.com/$Repo/.github/workflows/_build-binary-archive.yml@refs/heads/main"
+  $releaseWorkflow = "https://github.com/$Repo/.github/workflows/release.yml@refs/heads/main"
+  $archiveName = Split-Path -Leaf $Path
+  $jqFilter = '[.[].verificationResult | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))] | length'
+  # What the filter reads as env.*; `irm | iex` runs in the caller's session, so restore them after.
+  $filterEnv = @{
+    RELEASE_WORKFLOW = $releaseWorkflow
+    ARCHIVE_NAME = $archiveName
+    # Get-FileHash prints uppercase hex; attestation digests are lowercase.
+    ARCHIVE_SHA256 = (Get-FileHash -Algorithm SHA256 $Path).Hash.ToLower()
+  }
+  $savedEnv = @{}
+  foreach ($name in $filterEnv.Keys) {
+    $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+  }
   Write-Host "verifying SLSA build provenance via 'gh attestation verify'"
-  & gh attestation verify $Path --repo $Repo
-  if ($LASTEXITCODE -ne 0) {
+  try {
+    foreach ($name in $filterEnv.Keys) {
+      [Environment]::SetEnvironmentVariable($name, $filterEnv[$name], "Process")
+    }
+    $count = & gh attestation verify $Path --repo $Repo --cert-identity $signerWorkflow `
+      --deny-self-hosted-runners --format json --jq $jqFilter
+    $ghExit = $LASTEXITCODE
+  } finally {
+    foreach ($name in $savedEnv.Keys) {
+      [Environment]::SetEnvironmentVariable($name, $savedEnv[$name], "Process")
+    }
+  }
+  if ($ghExit -ne 0) {
     throw "attestation verification failed for $Path"
+  }
+  $parsed = 0
+  if (-not ([int]::TryParse((($count | Out-String).Trim()), [ref]$parsed)) -or $parsed -lt 1) {
+    throw @"
+$archiveName has a valid $Repo attestation, but none from the $Repo release workflow on main for this exact archive
+  install a published release; -VerifyAttestation skip turns off this check entirely.
+"@
   }
 }
 

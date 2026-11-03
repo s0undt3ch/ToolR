@@ -40,8 +40,8 @@ Reproduce locally with `python3 scripts/bench.py` (stdlib-only; emits the table 
 - **Signed releases.** Every release archive ships with a SLSA build-provenance attestation, and
   every release from 0.34.0 onward publishes a signed [packslip](https://packslip.dev/) manifest that mise verifies
   against the ToolR repository's signing identity, remembering the release workflow after the
-  first install. The install scripts verify the attestation by default (requires the `gh` CLI);
-  pass `--verify-attestation=skip` to bypass, accepting the supply-chain risk.
+  first install. The install scripts verify the attestation by default (requires the `gh` CLI, 2.56
+  or later); pass `--verify-attestation=skip` to bypass, accepting the supply-chain risk.
 
 ## Two wheels, two roles
 
@@ -96,8 +96,8 @@ See "Two wheels, two roles" above for the split.
 curl -fsSL https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh | sh
 ```
 
-Verifies the SLSA attestation by default (requires the `gh` CLI; pass `--verify-attestation=skip`
-to bypass). Pin a version with `sh -s -- --version X.Y.Z`.
+Verifies the SLSA attestation by default (requires the `gh` CLI, 2.56 or later; pass
+`--verify-attestation=skip` to bypass). Pin a version with `sh -s -- --version X.Y.Z`.
 Custom prefix: `sh -s -- --prefix /opt/toolr/bin`.
 
 ### PowerShell (Windows)
