@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev496-2026-11-03" class="md-nav__link">
+  <a href="#0352-dev543-2026-11-03" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev496 - 2026-11-03
+        0.35.2-dev543 - 2026-11-03
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev496 - 2026-11-03">
+    <nav class="md-nav" aria-label="0.35.2-dev543 - 2026-11-03">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev496-2026-11-03" class="md-nav__link">
+  <a href="#0352-dev543-2026-11-03" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev496 - 2026-11-03
+        0.35.2-dev543 - 2026-11-03
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev496 - 2026-11-03">
+    <nav class="md-nav" aria-label="0.35.2-dev543 - 2026-11-03">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev496-2026-11-03">0.35.2-dev496 - 2026-11-03<a class="headerlink" href="#0352-dev496-2026-11-03" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev543-2026-11-03">0.35.2-dev543 - 2026-11-03<a class="headerlink" href="#0352-dev543-2026-11-03" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7675,6 +7675,9 @@ the newest final release. A pre-release's notes show everything since the last f
 final release's notes and CHANGELOG entry cover all of it, pre-releases included. The release tooling
 also no longer breaks once a pre-release tag exists, and it checks an explicit release version (a
 leading <code>v</code> is accepted) before writing anything.</p>
+<p>The <code>install.sh</code> and <code>install.ps1</code> installers, and the manual <code>gh attestation verify</code> command in the installation docs, now only accept a toolr archive whose attestation was produced by ToolR's release workflow on <code>main</code> for that exact archive name, as the Setup ToolR action does. They used to accept an archive attested by any workflow in the ToolR repository, including CI builds of unreleased branches, and a signed archive of another version or platform renamed into place. Every published release still installs as before. Verifying an archive now needs gh 2.56 or later, also with <code>--verify-attestation=auto</code> (<code>-VerifyAttestation auto</code>) when <code>gh</code> is installed. The mise installation docs now recommend pinning the packslip signer with <code>workflow = "release.yml@refs/heads/main"</code> (mise 2026.10.5 or later).</p>
+<p>The installers, the documented manual command and the Setup ToolR action now also require the attestation subject that names the archive to carry the archive's SHA-256. With <code>TOOLR_REPO</code> (<code>install.sh</code>) or <code>-Repo</code> (<code>install.ps1</code>) set, both the downloads and the attestation identities come from that repository, and a rejection names it.</p>
+<p>Editing the <code>[tool.toolr.argparse.*]</code> blocks in <code>tools/pyproject.toml</code>, or any file that an external command source scans, now refreshes the manifest on the next run. toolr used to keep showing the old commands and arguments until <code>toolr project manifest rebuild</code>. Other <code>tools/pyproject.toml</code> edits, such as a new dependency, don't trigger a rebuild, and tab completion keeps offering the cached commands while that file or a <code>scan_paths</code> glob is broken.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7801,6 +7804,14 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(venv)</em> Don't fail on venv directories main never needed to read (<a href="https://github.com/s0undt3ch/ToolR/commit/88e61da3ed9559d706f8ae44153b9f689f4bf890"><code>88e61da</code></a>)</li>
 <li><em>(venv)</em> Report unreadable venv directories in toolr-py validation (<a href="https://github.com/s0undt3ch/ToolR/commit/097c9ae2d223f708f95d1840d0b204d49d0c5297"><code>097c9ae</code></a>)</li>
 <li><em>(manifest-build)</em> Say finding, not globbing, third-party manifests (<a href="https://github.com/s0undt3ch/ToolR/commit/7e99a58d6e1f75a4575daca402957459b87e9d29"><code>7e99a58</code></a>)</li>
+<li><em>(install)</em> Bind install.sh attestation check to the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/4cba1a1a3876bfd0a0d536ee99ae3c1c9e7e3d6c"><code>4cba1a1</code></a>)</li>
+<li><em>(install)</em> Bind install.ps1 attestation check to the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/adf901fb99ae213cc680ffb0055b826c9581f6cd"><code>adf901f</code></a>)</li>
+<li><em>(install)</em> Require one attested subject to carry the archive's name and digest (<a href="https://github.com/s0undt3ch/ToolR/commit/bd7bf4517646a1b4778bd1e80234d6b835db769a"><code>bd7bf45</code></a>)</li>
+<li><em>(install)</em> Fail closed when install.sh can't compute a SHA-256 (<a href="https://github.com/s0undt3ch/ToolR/commit/bc7e2b0f0943e40d7cb639959b44bc6d8fcee372"><code>bc7e2b0</code></a>)</li>
+<li><em>(manifest)</em> Hash argparse sources and tools/pyproject.toml into static_hash (<a href="https://github.com/s0undt3ch/ToolR/commit/441b505ace745c2fcbc4ff1c9526938f1be82503"><code>441b505</code></a>)</li>
+<li><em>(manifest)</em> Don't fail the static hash on an unreadable scanned file (<a href="https://github.com/s0undt3ch/ToolR/commit/a1731e13610085ba41d7425df9e74e01c4c9816b"><code>a1731e1</code></a>)</li>
+<li><em>(complete)</em> Serve the cached manifest when a TAB rebuild fails (<a href="https://github.com/s0undt3ch/ToolR/commit/03a482424ae4cb9efb6d77b9e34784f7bc287305"><code>03a4824</code></a>)</li>
+<li><em>(manifest)</em> Hash only the argparse blocks of tools/pyproject.toml (<a href="https://github.com/s0undt3ch/ToolR/commit/eac0ad0953b54ef1659035891065fee3cce63bd0"><code>eac0ad0</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7850,6 +7861,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(venv)</em> One site-packages locator for both venv layouts (<a href="https://github.com/s0undt3ch/ToolR/commit/24ae6994523c977ec51b584d2fa762ebdbf7167c"><code>24ae699</code></a>)</li>
 <li><em>(venv)</em> Name the site-packages read rule and share the pyvenv.cfg reader (<a href="https://github.com/s0undt3ch/ToolR/commit/67ca9e3dba13bbf4d8271170d0378a4b9237f694"><code>67ca9e3</code></a>)</li>
 <li><em>(third-party)</em> Rename glob.rs to find.rs and glob_manifests to find_manifests (<a href="https://github.com/s0undt3ch/ToolR/commit/cf15506aa40418083376177599825289f9c232da"><code>cf15506</code></a>)</li>
+<li><em>(ci)</em> Pin toolr through one setup-toolr wrapper action (<a href="https://github.com/s0undt3ch/ToolR/commit/e9dad2ea568d4a63c9a0bd83bb5ea11963c56f2e"><code>e9dad2e</code></a>)</li>
+<li><em>(install)</em> Reject an unusable digest in one place in install.sh (<a href="https://github.com/s0undt3ch/ToolR/commit/727938e714973d93406fb8ac9a074e1ec3ec5c6b"><code>727938e</code></a>)</li>
+<li><em>(install)</em> Compare gh versions with [version] and drive install.ps1's filter env from one table (<a href="https://github.com/s0undt3ch/ToolR/commit/0ceb586c24d16398bd2ba7835bc01c468ebbfafb"><code>0ceb586</code></a>)</li>
+<li><em>(manifest)</em> Name static_hash input kinds and tags (<a href="https://github.com/s0undt3ch/ToolR/commit/4e24eea64b025d08dc27aab60d73440056341073"><code>4e24eea</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7986,6 +8001,20 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(plugins)</em> Describe fragment discovery as a lookup, not a glob (<a href="https://github.com/s0undt3ch/ToolR/commit/2d06820dceadf614750c6a2de1a7ab7f60b153de"><code>2d06820</code></a>)</li>
 <li><em>(plugins)</em> Name Lib/site-packages as a layout looked in everywhere (<a href="https://github.com/s0undt3ch/ToolR/commit/2c8f451c04847cae9fb2a363a4b5bca159da330e"><code>2c8f451</code></a>)</li>
 <li><em>(specs)</em> Archive windows site-packages design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/dc4df4791f3920fc89e049d75e9af49cd16c35a8"><code>dc4df47</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-25 dogfood pinned version (<a href="https://github.com/s0undt3ch/ToolR/commit/24c298f6a0ae0a9bb9a64a4fb85e95669376b5ee"><code>24c298f</code></a>)</li>
+<li><em>(specs)</em> Archive dogfood pinned version design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/76c71d3a45316975a7026a5232955e97625e7f5d"><code>76c71d3</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-44 installer attestation signer (<a href="https://github.com/s0undt3ch/ToolR/commit/76c414de76bdb8fd77e7ecb04516f3817a5f086a"><code>76c414d</code></a>)</li>
+<li><em>(installation)</em> Document the release-workflow attestation check and mise pin (<a href="https://github.com/s0undt3ch/ToolR/commit/e61d79142a56614d5f41513c957b1e2ba8d2dec1"><code>e61d791</code></a>)</li>
+<li><em>(installation)</em> State the gh 2.56 floor and show the mise pin in the recommended config (<a href="https://github.com/s0undt3ch/ToolR/commit/b202a653b5c0d94563be29d616053d69496266ab"><code>b202a65</code></a>)</li>
+<li><em>(installation)</em> Give the Linux hashing command for manual verification (<a href="https://github.com/s0undt3ch/ToolR/commit/db5cf9fa77a8640b7dc8ef0e7016d4fafd8eca0e"><code>db5cf9f</code></a>)</li>
+<li><em>(installation)</em> Trim the note after the manual verification command (<a href="https://github.com/s0undt3ch/ToolR/commit/475534d440fefb1788e718ffb882cce0864142ce"><code>475534d</code></a>)</li>
+<li><em>(specs)</em> Archive installer attestation signer design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/120196768b6b0cbb17e3a3b2a925c840ced65d40"><code>1201967</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-16 argparse manifest hash (<a href="https://github.com/s0undt3ch/ToolR/commit/c6ff1afff5457de7ad7ba02043846c1185e7ceb7"><code>c6ff1af</code></a>)</li>
+<li><em>(specs)</em> Update F-16 spec to current main (<a href="https://github.com/s0undt3ch/ToolR/commit/61d643ee894779981e11f884e4e65c48085f9699"><code>61d643e</code></a>)</li>
+<li><em>(internals)</em> List every static_hash input (<a href="https://github.com/s0undt3ch/ToolR/commit/0716ba7bd542067fa34907c54770e721e9784b8b"><code>0716ba7</code></a>)</li>
+<li><em>(internals)</em> Describe unreadable static_hash inputs (<a href="https://github.com/s0undt3ch/ToolR/commit/1fc04ed6f7625ce809092750291ced01ee880c84"><code>1fc04ed</code></a>)</li>
+<li><em>(internals)</em> Hash only the argparse blocks of tools/pyproject.toml (<a href="https://github.com/s0undt3ch/ToolR/commit/024e97ce5742225d921c0b2ee2952b67360fa51b"><code>024e97c</code></a>)</li>
+<li><em>(specs)</em> Archive argparse manifest hash design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/4fb4cc6b64dac761990d7212743054c3fc99b2a7"><code>4fb4cc6</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8058,6 +8087,12 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(action)</em> Pass the archive path in POSIX form, as the action's download step does (<a href="https://github.com/s0undt3ch/ToolR/commit/d723e296053f05c2e38b8539a1a4737966a63429"><code>d723e29</code></a>)</li>
 <li><em>(venv)</em> Fold the root check into the chmod helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/7eb742016e7eb024057992bb39c687da66075815"><code>7eb7420</code></a>)</li>
 <li><em>(manifest-build)</em> Pin third_party_hash for uv and Windows venv layouts (<a href="https://github.com/s0undt3ch/ToolR/commit/b0174cb7393f7c10b89945afe9d3c04ac64fe861"><code>b0174cb</code></a>)</li>
+<li><em>(ci)</em> Reject conditional guards and TOOLR_VERSION overrides, inherit env for bash (<a href="https://github.com/s0undt3ch/ToolR/commit/5573b7b162083b0694265d3a0f3d744f2f2bb3ae"><code>5573b7b</code></a>)</li>
+<li><em>(ci)</em> Compare workflow paths in posix form so the wrapper check passes on Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/8518fdbb3e32dcc272593241d54cb102600778a5"><code>8518fdb</code></a>)</li>
+<li><em>(installation)</em> Pin install.ps1's lowercase archive digest (<a href="https://github.com/s0undt3ch/ToolR/commit/1d973b1dce9a65b0bf52f4cd0fdaf5b8a9b92289"><code>1d973b1</code></a>)</li>
+<li><em>(installation)</em> Share the gh attestation stub with the action's tests (<a href="https://github.com/s0undt3ch/ToolR/commit/848c0cde98f44d1e2dbd97727cb4afdc0c053266"><code>848c0cd</code></a>)</li>
+<li><em>(installation)</em> Check the gh floor everywhere and assert install.ps1's behaviour (<a href="https://github.com/s0undt3ch/ToolR/commit/d13401e95ce305d190645a6f46f2f04c16f79d0a"><code>d13401e</code></a>)</li>
+<li><em>(installation)</em> Write the gh stub and scripts so Git Bash on Windows can run them (<a href="https://github.com/s0undt3ch/ToolR/commit/c12ec2d008e3e033c617a16919143e05f18d8454"><code>c12ec2d</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8097,6 +8132,13 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(release)</em> Point the release workflows at the action's attestation pins (<a href="https://github.com/s0undt3ch/ToolR/commit/88de4639a01bec1dc20cd092cc3bfa241cef536c"><code>88de463</code></a>)</li>
 <li><em>(release)</em> Pin git-cliff in mise and the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/631b60c1cdf62305c7a258a76178fbdf41b1a375"><code>631b60c</code></a>)</li>
 <li><em>(release)</em> Run the mise-installed git-cliff in the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/e485bef25c25c2c97973c0102811773e5bfea6ab"><code>e485bef</code></a>)</li>
+<li>Dogfood the pinned toolr version instead of latest (<a href="https://github.com/s0undt3ch/ToolR/commit/a9f566cec8acda2eeca11d5dbe980e838511ff97"><code>a9f566c</code></a>)</li>
+<li><em>(renovate)</em> Bump the CI toolr pin with the toolr release group (<a href="https://github.com/s0undt3ch/ToolR/commit/c52e3ad7cea38d7e4f26461c5be644dfe5f54035"><code>c52e3ad</code></a>)</li>
+<li>Fail on an empty toolr pin before every Setup ToolR call (<a href="https://github.com/s0undt3ch/ToolR/commit/7f3be7ce4a76a5c5f6d95c3c7f5a25e16fa2ad27"><code>7f3be7c</code></a>)</li>
+<li><em>(renovate)</em> Look up the CI toolr pin by tag, like mise.toml (<a href="https://github.com/s0undt3ch/ToolR/commit/aeefd22345acee1cdd996b3be3c17510b6a0c7ca"><code>aeefd22</code></a>)</li>
+<li><em>(renovate)</em> Correct why the CI toolr pin uses github-tags (<a href="https://github.com/s0undt3ch/ToolR/commit/e13a4b399197e0482cc48906e2fe0df5f2e50b60"><code>e13a4b3</code></a>)</li>
+<li><em>(renovate)</em> Name the setup-toolr wrapper in the CI toolr pin manager (<a href="https://github.com/s0undt3ch/ToolR/commit/3d99559fb15641ba057c44a8958b45d05ff7ee1b"><code>3d99559</code></a>)</li>
+<li><em>(install-smoke)</em> Run install.ps1 under Windows PowerShell 5.1 too (<a href="https://github.com/s0undt3ch/ToolR/commit/aae88487892b3384f18735509a189310ca5e5d7c"><code>aae8848</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

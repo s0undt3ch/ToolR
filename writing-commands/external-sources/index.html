@@ -1974,7 +1974,11 @@ onto the file-stem rule.</p>
 </span></code></pre></div>
 <p>toolr also rebuilds automatically when the manifest is missing or stale, so the
 first invocation after adding or editing a source picks the change up on its
-own. See <a href="../../internals/manifest/">Manifest layers</a> for when rebuilds trigger.</p>
+own. That covers editing a scanned file, adding or removing one that a
+<code>scan_paths</code> glob matches, and changing the <code>[tool.toolr.argparse.*]</code> blocks in
+<code>tools/pyproject.toml</code>. Edits elsewhere in that file, such as a new dependency,
+don't trigger a rebuild. See <a href="../../internals/manifest/">Manifest layers</a> for when
+rebuilds trigger.</p>
 
 
 

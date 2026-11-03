@@ -1772,7 +1772,9 @@ directory (<code>$XDG_CACHE_HOME/toolr/locks/</code>), not in <code>tools/</code
   <code>path_constraints</code>. A cache with any other schema version is rebuilt
   on the next run.</li>
 <li><strong><code>static_hash</code></strong> — blake3 over the sorted <code>(path, contents)</code> of
-  every <code>tools/**/*.py</code> file. Drives static-layer rebuilds.</li>
+  every input of the static build: each <code>tools/**/*.py</code> file, the
+  <code>[tool.toolr.argparse.*]</code> blocks of <code>tools/pyproject.toml</code>, and every
+  file an external command source scans. Drives static-layer rebuilds.</li>
 <li><strong><code>third_party_hash</code></strong> — blake3 over the sorted set of
   <code>toolr-manifest.json</code> files found under
   <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>
@@ -1887,9 +1889,12 @@ without a working venv. Captures:</p>
   files via a symbol table).</li>
 </ul>
 <p>The static layer is rebuilt when toolr detects <code>static_hash</code> drift
-against the on-disk files, or when the cached <code>toolr_version</code> doesn't
-match the running binary — an upgrade forces a static rebuild even if
-<code>tools/*.py</code> hasn't changed at all.</p>
+against the on-disk files (a <code>tools/*.py</code> module, the
+<code>[tool.toolr.argparse.*]</code> blocks of <code>tools/pyproject.toml</code>, or a file an
+<a href="../../writing-commands/external-sources/">external command source</a>
+scans), or when the cached <code>toolr_version</code> doesn't match the running
+binary — an upgrade forces a static rebuild even if none of those files
+changed.</p>
 <h2 id="third-party-layer">Third-party layer<a class="headerlink" href="#third-party-layer" title="Permanent link">&para;</a></h2>
 <p>Contributed by installed packages that ship a static
 <code>toolr-manifest.json</code> fragment inside their wheel, discovered by
@@ -1925,18 +1930,30 @@ includes new commands.</p>
 <p>Both hashes use blake3, written as lowercase hex.</p>
 <ul>
 <li><code>static_hash</code> input: every <code>*.py</code> file under <code>tools/</code> (skipping
-  <code>__pycache__</code> and dot-prefixed directories), sorted by path. A
-  symlinked <code>*.py</code> fails the hash instead of being skipped, and symlinked
-  directories are not followed. Each entry is hashed as
-  <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.</li>
+  <code>__pycache__</code> and dot-prefixed directories), <code>tools/pyproject.toml</code>,
+  and every file the <code>scan_paths</code> of its <code>[tool.toolr.argparse.*]</code>
+  blocks match. A symlinked <code>*.py</code> under <code>tools/</code> fails the hash instead
+  of being skipped, and symlinked directories there are not followed.
+  Each file is keyed by its path relative to the project root, with <code>/</code>
+  separators (a scanned file outside the project keeps its full path),
+  sorted by key, and hashed as
+  <code>key || 0x00 || len(contents) as u64 LE || contents</code>. The build reads
+  only the <code>[tool.toolr.argparse.*]</code> blocks of <code>tools/pyproject.toml</code>,
+  so the hash takes those blocks as parsed, serialised in name order,
+  under a <code>0x02</code> tag instead of <code>0x00</code>: a dependency bump or <code>uv add</code>
+  doesn't trigger a rebuild. A <code>tools/pyproject.toml</code> whose blocks don't
+  parse is hashed whole, so fixing it does; it also adds no scanned
+  files, and neither does a block with an invalid glob. The check
+  doesn't fail on either; the build reports the error, and tab
+  completion keeps serving the cached manifest until it's fixed. A <code>tools/**/*.py</code> module that can't be read fails
+  the check, naming the file. Any other input that can't be read is
+  hashed as <code>key || 0x01 || &lt;error kind&gt;</code>, so an unreadable scanned file
+  doesn't break every command, and fixing it still triggers a rebuild.</li>
 <li><code>third_party_hash</code> input: every <code>toolr-manifest.json</code> under
   <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>
   or <code>Lib/site-packages/*/</code> (the Windows layout, looked in on every
-  platform), sorted by path,
-  each entry hashed as
-  <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.
-  Identical scheme to <code>static_hash</code> but over the third-party
-  fragment file set instead of <code>tools/**/*.py</code>.</li>
+  platform), sorted by path, with each file's path and contents in the
+  hash.</li>
 </ul>
 <p>This gives stable, content-addressable rebuild decisions across
 machines and across CI / dev environments.</p>
