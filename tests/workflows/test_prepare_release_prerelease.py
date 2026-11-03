@@ -87,7 +87,8 @@ def _git_cliff(repo: Path, *args: str) -> str:
         cwd=repo,
         env=git_env(),
         capture_output=True,
-        text=True,
+        # cliff.toml's group headings carry emoji; Windows' locale codec can't decode them.
+        encoding="utf-8",
         check=True,
     ).stdout
 
