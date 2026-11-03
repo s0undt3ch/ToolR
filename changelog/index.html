@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev478-2026-11-03" class="md-nav__link">
+  <a href="#0352-dev508-2026-11-03" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev478 - 2026-11-03
+        0.35.2-dev508 - 2026-11-03
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev478 - 2026-11-03">
+    <nav class="md-nav" aria-label="0.35.2-dev508 - 2026-11-03">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev478-2026-11-03" class="md-nav__link">
+  <a href="#0352-dev508-2026-11-03" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev478 - 2026-11-03
+        0.35.2-dev508 - 2026-11-03
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev478 - 2026-11-03">
+    <nav class="md-nav" aria-label="0.35.2-dev508 - 2026-11-03">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev478-2026-11-03">0.35.2-dev478 - 2026-11-03<a class="headerlink" href="#0352-dev478-2026-11-03" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev508-2026-11-03">0.35.2-dev508 - 2026-11-03<a class="headerlink" href="#0352-dev508-2026-11-03" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7667,6 +7667,7 @@ send SIGTERM instead.</p>
 <p><code>toolr.testing</code> now exports <code>ConsoleVerbosity</code>, the type <code>make_context(verbosity=...)</code> takes.</p>
 <p>Running a command in a repo with an in-tree venv (<code>venv-location = "in-tree"</code>) no longer leaves an untracked <code>tools/meta.json</code>. toolr now keeps that file in its cache directory, in an entry of its own (<code>&lt;repo-key&gt;-in-tree</code>) that <code>toolr project venv sync</code> writes too, so <code>toolr self cache list</code> shows the repo. If the repo used a cache venv before switching to in-tree, that old venv no longer looks recently used, and <code>toolr self cache prune</code> reclaims it once it goes stale. You can delete any <code>tools/meta.json</code> an earlier toolr left behind.</p>
 <p>The Setup ToolR action now only accepts a toolr archive whose attestation was produced by ToolR's release workflow on <code>main</code> for that exact archive name. It used to accept an archive attested by any workflow in the ToolR repository, including CI builds of unreleased branches, and a signed archive of another version or platform renamed into place. Every published release still installs as before. Verifying an archive now needs gh 2.56 or later on the runner.</p>
+<p><code>toolr self build-manifest &lt;package&gt;</code> now finds the package on Windows, where it lives under <code>Lib\site-packages</code> in the tools venv. It used to look only under <code>lib/python*/site-packages</code> and always reported the package as not found. toolr now finds <code>site-packages</code> in the same way everywhere it looks.</p>
 <p><code>toolr.testing.CommandsTester</code> now resolves the top-level <code>tools</code> package from the fixture's <code>search_path</code> only, and no longer removes other entries from <code>sys.path</code>. Before, any entry whose path contained <code>site-packages</code> or <code>dist-packages</code> was kept even when it provided <code>tools</code>, so a repo checked out under a directory such as <code>windows-site-packages</code> could have its own <code>tools/</code> imported instead of the fixture's. Everything else on <code>sys.path</code> stays importable, including site directories that ship a stray top-level <code>tools</code> package, and such a package can no longer replace a fixture <code>tools/</code> that has no <code>__init__.py</code>.</p>
 <p>ToolR can now release pre-release versions such as <code>1.0.0-rc.1</code>. They are published as GitHub
 pre-releases, so the Setup ToolR action's <code>version: latest</code> and the install scripts keep resolving to
@@ -7794,6 +7795,12 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Vet each edge of the ctx.run tree walk (<a href="https://github.com/s0undt3ch/ToolR/commit/746b69933d85a8a048a0259fb0d793d5d9f0a1c5"><code>746b699</code></a>)</li>
 <li><em>(command)</em> Tell slow sinks from pipe holders in ctx.run timeouts (<a href="https://github.com/s0undt3ch/ToolR/commit/296bc0b04d33e9f1dd86ff8d24eebbd180ce4e95"><code>296bc0b</code></a>)</li>
 <li><em>(trust)</em> Prove trust with a token and keep the sync prompt the only one (<a href="https://github.com/s0undt3ch/ToolR/commit/757a9e354781609887f55a853882b8cbc5ec092b"><code>757a9e3</code></a>)</li>
+<li><em>(build-manifest)</em> Find packages in Windows venvs (<a href="https://github.com/s0undt3ch/ToolR/commit/64e0a80ae89c62033f86bbf6ef8727920ec54076"><code>64e0a80</code></a>)</li>
+<li><em>(venv)</em> Report unreadable venv directories instead of skipping them (<a href="https://github.com/s0undt3ch/ToolR/commit/11a96531c681fe61ed43456fff7af1cae2f3d5c3"><code>11a9653</code></a>)</li>
+<li><em>(venv)</em> Prefer the venv's own Python when locating toolr-py (<a href="https://github.com/s0undt3ch/ToolR/commit/72a4167c6104d09dc4f9b56ef587848b5ff0b7f3"><code>72a4167</code></a>)</li>
+<li><em>(venv)</em> Don't fail on venv directories main never needed to read (<a href="https://github.com/s0undt3ch/ToolR/commit/88e61da3ed9559d706f8ae44153b9f689f4bf890"><code>88e61da</code></a>)</li>
+<li><em>(venv)</em> Report unreadable venv directories in toolr-py validation (<a href="https://github.com/s0undt3ch/ToolR/commit/097c9ae2d223f708f95d1840d0b204d49d0c5297"><code>097c9ae</code></a>)</li>
+<li><em>(manifest-build)</em> Say finding, not globbing, third-party manifests (<a href="https://github.com/s0undt3ch/ToolR/commit/7e99a58d6e1f75a4575daca402957459b87e9d29"><code>7e99a58</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7840,6 +7847,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(parser)</em> Name the string-path decorator form StringPath (<a href="https://github.com/s0undt3ch/ToolR/commit/e0ee6bd63d750b0a00ccf2b359e5671f36cdbf40"><code>e0ee6bd</code></a>)</li>
 <li><em>(trust)</em> Mint trust proofs only from the default store (<a href="https://github.com/s0undt3ch/ToolR/commit/c0da33153b0a2ccb8ed2d95085a6a2c8f274ba74"><code>c0da331</code></a>)</li>
 <li><em>(trust)</em> Name the sync choice and the prompt-granted proof (<a href="https://github.com/s0undt3ch/ToolR/commit/391ebe7c5cb18d0e5dd61d2937e15eb3be203cda"><code>391ebe7</code></a>)</li>
+<li><em>(venv)</em> One site-packages locator for both venv layouts (<a href="https://github.com/s0undt3ch/ToolR/commit/24ae6994523c977ec51b584d2fa762ebdbf7167c"><code>24ae699</code></a>)</li>
+<li><em>(venv)</em> Name the site-packages read rule and share the pyvenv.cfg reader (<a href="https://github.com/s0undt3ch/ToolR/commit/67ca9e3dba13bbf4d8271170d0378a4b9237f694"><code>67ca9e3</code></a>)</li>
+<li><em>(third-party)</em> Rename glob.rs to find.rs and glob_manifests to find_manifests (<a href="https://github.com/s0undt3ch/ToolR/commit/cf15506aa40418083376177599825289f9c232da"><code>cf15506</code></a>)</li>
+<li><em>(ci)</em> Pin toolr through one setup-toolr wrapper action (<a href="https://github.com/s0undt3ch/ToolR/commit/e9dad2ea568d4a63c9a0bd83bb5ea11963c56f2e"><code>e9dad2e</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7971,6 +7982,13 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(trust)</em> Document the sync prompt's env var, quiet and exit code (<a href="https://github.com/s0undt3ch/ToolR/commit/7347e47344d61d558392ba7bd9570298b8563c72"><code>7347e47</code></a>)</li>
 <li><em>(trust)</em> Keep the sync consent rules in one place (<a href="https://github.com/s0undt3ch/ToolR/commit/9187eced30c4764dd7ef7438b188e2247a206811"><code>9187ece</code></a>)</li>
 <li><em>(specs)</em> Archive trust-then-sync design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/91e3f46b782dd178124ab87d12b8bf7427b3595a"><code>91e3f46</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-14 windows site-packages locator (<a href="https://github.com/s0undt3ch/ToolR/commit/d7d381b302183d336506911c6045dce1bfa8c86f"><code>d7d381b</code></a>)</li>
+<li><em>(plugins)</em> Document the Windows site-packages layout (<a href="https://github.com/s0undt3ch/ToolR/commit/3e640369229a102a21b00a299982d3b6350290bd"><code>3e64036</code></a>)</li>
+<li><em>(plugins)</em> Describe fragment discovery as a lookup, not a glob (<a href="https://github.com/s0undt3ch/ToolR/commit/2d06820dceadf614750c6a2de1a7ab7f60b153de"><code>2d06820</code></a>)</li>
+<li><em>(plugins)</em> Name Lib/site-packages as a layout looked in everywhere (<a href="https://github.com/s0undt3ch/ToolR/commit/2c8f451c04847cae9fb2a363a4b5bca159da330e"><code>2c8f451</code></a>)</li>
+<li><em>(specs)</em> Archive windows site-packages design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/dc4df4791f3920fc89e049d75e9af49cd16c35a8"><code>dc4df47</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-25 dogfood pinned version (<a href="https://github.com/s0undt3ch/ToolR/commit/24c298f6a0ae0a9bb9a64a4fb85e95669376b5ee"><code>24c298f</code></a>)</li>
+<li><em>(specs)</em> Archive dogfood pinned version design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/76c71d3a45316975a7026a5232955e97625e7f5d"><code>76c71d3</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8041,6 +8059,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(trust)</em> Assert dispatch outcomes and stop pty runs that hang (<a href="https://github.com/s0undt3ch/ToolR/commit/a3b8b79236d6163aa5faa4cb2190441ae121479f"><code>a3b8b79</code></a>)</li>
 <li><em>(trust)</em> Share the pty harness and its deadline across prompt tests (<a href="https://github.com/s0undt3ch/ToolR/commit/436b1a650bc74ad0baeaedd9be447d93bac4a188"><code>436b1a6</code></a>)</li>
 <li><em>(action)</em> Pass the archive path in POSIX form, as the action's download step does (<a href="https://github.com/s0undt3ch/ToolR/commit/d723e296053f05c2e38b8539a1a4737966a63429"><code>d723e29</code></a>)</li>
+<li><em>(venv)</em> Fold the root check into the chmod helpers (<a href="https://github.com/s0undt3ch/ToolR/commit/7eb742016e7eb024057992bb39c687da66075815"><code>7eb7420</code></a>)</li>
+<li><em>(manifest-build)</em> Pin third_party_hash for uv and Windows venv layouts (<a href="https://github.com/s0undt3ch/ToolR/commit/b0174cb7393f7c10b89945afe9d3c04ac64fe861"><code>b0174cb</code></a>)</li>
+<li><em>(ci)</em> Reject conditional guards and TOOLR_VERSION overrides, inherit env for bash (<a href="https://github.com/s0undt3ch/ToolR/commit/5573b7b162083b0694265d3a0f3d744f2f2bb3ae"><code>5573b7b</code></a>)</li>
+<li><em>(ci)</em> Compare workflow paths in posix form so the wrapper check passes on Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/8518fdbb3e32dcc272593241d54cb102600778a5"><code>8518fdb</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8080,6 +8102,12 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(release)</em> Point the release workflows at the action's attestation pins (<a href="https://github.com/s0undt3ch/ToolR/commit/88de4639a01bec1dc20cd092cc3bfa241cef536c"><code>88de463</code></a>)</li>
 <li><em>(release)</em> Pin git-cliff in mise and the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/631b60c1cdf62305c7a258a76178fbdf41b1a375"><code>631b60c</code></a>)</li>
 <li><em>(release)</em> Run the mise-installed git-cliff in the release workflow (<a href="https://github.com/s0undt3ch/ToolR/commit/e485bef25c25c2c97973c0102811773e5bfea6ab"><code>e485bef</code></a>)</li>
+<li>Dogfood the pinned toolr version instead of latest (<a href="https://github.com/s0undt3ch/ToolR/commit/a9f566cec8acda2eeca11d5dbe980e838511ff97"><code>a9f566c</code></a>)</li>
+<li><em>(renovate)</em> Bump the CI toolr pin with the toolr release group (<a href="https://github.com/s0undt3ch/ToolR/commit/c52e3ad7cea38d7e4f26461c5be644dfe5f54035"><code>c52e3ad</code></a>)</li>
+<li>Fail on an empty toolr pin before every Setup ToolR call (<a href="https://github.com/s0undt3ch/ToolR/commit/7f3be7ce4a76a5c5f6d95c3c7f5a25e16fa2ad27"><code>7f3be7c</code></a>)</li>
+<li><em>(renovate)</em> Look up the CI toolr pin by tag, like mise.toml (<a href="https://github.com/s0undt3ch/ToolR/commit/aeefd22345acee1cdd996b3be3c17510b6a0c7ca"><code>aeefd22</code></a>)</li>
+<li><em>(renovate)</em> Correct why the CI toolr pin uses github-tags (<a href="https://github.com/s0undt3ch/ToolR/commit/e13a4b399197e0482cc48906e2fe0df5f2e50b60"><code>e13a4b3</code></a>)</li>
+<li><em>(renovate)</em> Name the setup-toolr wrapper in the CI toolr pin manager (<a href="https://github.com/s0undt3ch/ToolR/commit/3d99559fb15641ba057c44a8958b45d05ff7ee1b"><code>3d99559</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

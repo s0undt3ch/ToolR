@@ -1892,7 +1892,7 @@ packages that contribute commands to the <code>toolr</code> CLI when present in
 the tools venv.</p>
 <p>Commands are discovered via a static JSON manifest file
 (<code>toolr-manifest.json</code>) that lives at the root of the installed
-package. Toolr's Rust binary globs for these files at startup; no
+package. Toolr's Rust binary looks for these files at startup; no
 Python import is involved.</p>
 <h2 id="why-ship-a-json-manifest">Why ship a JSON manifest<a class="headerlink" href="#why-ship-a-json-manifest" title="Permanent link">&para;</a></h2>
 <p>Toolr's CLI is a native Rust binary that starts without Python. Tab
@@ -1901,11 +1901,13 @@ completion and <code>--help</code> need the full command tree available
 approach that was removed in the 2025 rewrite), toolr had to spawn
 Python and import every registered module to learn what commands
 existed — one import per package, on every shell tab press.</p>
-<p>A <code>toolr-manifest.json</code> is a <code>glob()</code> + JSON parse,
+<p>A <code>toolr-manifest.json</code> is a directory listing + JSON parse,
 no Python involved. For interactive use the difference is the
 boundary between "instant" and "noticeable lag".</p>
-<p>Command discovery globs
-<code>&lt;tools-venv&gt;/lib/python*/site-packages/*/toolr-manifest.json</code>.
+<p>Command discovery looks for
+<code>&lt;tools-venv&gt;/lib/python*/site-packages/*/toolr-manifest.json</code>
+or <code>&lt;tools-venv&gt;/Lib/site-packages/*/toolr-manifest.json</code> (the Windows
+layout, looked in on every platform).
 Any installed package that ships the file is picked up
 automatically; no project-side configuration is needed.</p>
 <h2 id="generating-the-manifest">Generating the manifest<a class="headerlink" href="#generating-the-manifest" title="Permanent link">&para;</a></h2>
@@ -2018,8 +2020,10 @@ arguments in the wrong order, and a command in a group the plugin doesn't declar
 To add commands to a group of the host repo, declare that group in the plugin with the same full
 path (see <a href="#command-resolution">Command resolution</a>).</p>
 <p>The file lives at <code>&lt;package_dir&gt;/toolr-manifest.json</code> — i.e. next to
-<code>my_pkg/__init__.py</code>. Toolr's manifest builder finds it via the glob
-<code>&lt;tools-venv&gt;/lib/python*/site-packages/*/toolr-manifest.json</code>.</p>
+<code>my_pkg/__init__.py</code>. Toolr's manifest builder finds it as
+<code>&lt;tools-venv&gt;/lib/python*/site-packages/*/toolr-manifest.json</code>
+or <code>&lt;tools-venv&gt;/Lib/site-packages/*/toolr-manifest.json</code> (the Windows
+layout, looked in on every platform).</p>
 <h2 id="shipping-the-manifest">Shipping the manifest<a class="headerlink" href="#shipping-the-manifest" title="Permanent link">&para;</a></h2>
 <p>The generated file must be included in the built wheel. The exact
 mechanism depends on your build backend.</p>
@@ -2076,7 +2080,7 @@ prevent committing a stale manifest:</p>
 </span></code></pre></div>
 <h2 id="what-happens-if-you-skip-it">What happens if you skip it<a class="headerlink" href="#what-happens-if-you-skip-it" title="Permanent link">&para;</a></h2>
 <p>If <code>toolr-manifest.json</code> is not present in the installed package,
-toolr's discovery glob will not find it and your plugin's commands
+toolr's discovery will not find it and your plugin's commands
 will not appear in <code>toolr --help</code> or <code>toolr &lt;group&gt; --help</code>.</p>
 <p>To diagnose a missing manifest after installing a plugin, check
 whether the file is in the installed package directory:</p>

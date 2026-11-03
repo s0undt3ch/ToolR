@@ -1775,7 +1775,9 @@ directory (<code>$XDG_CACHE_HOME/toolr/locks/</code>), not in <code>tools/</code
   every <code>tools/**/*.py</code> file. Drives static-layer rebuilds.</li>
 <li><strong><code>third_party_hash</code></strong> — blake3 over the sorted set of
   <code>toolr-manifest.json</code> files found under
-  <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>. Each entry's path
+  <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>
+  or <code>Lib/site-packages/*/</code> (the Windows layout, looked in on every
+  platform). Each entry's path
   and content go into the hash. Drives third-party-fragment
   rebuilds: installing an unrelated package no longer invalidates
   the manifest, only changes to packages that ship a toolr
@@ -1784,7 +1786,7 @@ directory (<code>$XDG_CACHE_HOME/toolr/locks/</code>), not in <code>tools/</code
   it built this manifest. A mismatch against the running binary means
   toolr itself was upgraded (parsing/classification behaviour may have
   changed with no <code>tools/*.py</code> edit at all) and always forces at least
-  a static rebuild; with a venv available to re-glob, it forces a full
+  a static rebuild; with a venv available to search again, it forces a full
   rebuild instead. Deserializes as <code>""</code> on older manifests, which also
   forces one rebuild.</li>
 <li><strong><code>groups</code></strong> / <strong><code>commands</code></strong> — the actual command tree. Each
@@ -1891,10 +1893,12 @@ match the running binary — an upgrade forces a static rebuild even if
 <h2 id="third-party-layer">Third-party layer<a class="headerlink" href="#third-party-layer" title="Permanent link">&para;</a></h2>
 <p>Contributed by installed packages that ship a static
 <code>toolr-manifest.json</code> fragment inside their wheel, discovered by
-globbing <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code> and merged into
+looking in <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>
+or <code>Lib/site-packages/*/</code> (the Windows layout, looked in on every
+platform) and merged into
 the static layer at build time (see
 <a href="../../third-party/">Third-party packages</a>). No Python import happens
-during discovery — it's an execution-free glob-and-parse, same as
+during discovery — it's an execution-free list-and-parse, same as
 the static layer.</p>
 <p>Toolr regenerates the manifest when:</p>
 <ul>
@@ -1903,7 +1907,7 @@ the static layer.</p>
 <li>The cached <code>toolr_version</code> doesn't match the running binary — an
   upgrade always forces at least a static rebuild regardless of
   <code>static_hash</code>, and forces a rebuild of both layers when a venv is
-  available to re-glob third-party fragments too.</li>
+  available to find third-party fragments again too.</li>
 <li>The user explicitly runs <code>toolr project manifest rebuild</code>.</li>
 </ul>
 <p>Automatic rebuilds are written to disk only in a trusted repository (see
@@ -1926,7 +1930,9 @@ includes new commands.</p>
   directories are not followed. Each entry is hashed as
   <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.</li>
 <li><code>third_party_hash</code> input: every <code>toolr-manifest.json</code> under
-  <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>, sorted by path,
+  <code>&lt;tools-venv&gt;/lib/python*/site-packages/*/</code>
+  or <code>Lib/site-packages/*/</code> (the Windows layout, looked in on every
+  platform), sorted by path,
   each entry hashed as
   <code>len(path_bytes) || path_bytes || len(contents) || contents</code>.
   Identical scheme to <code>static_hash</code> but over the third-party
@@ -1937,7 +1943,7 @@ machines and across CI / dev environments.</p>
 <p><code>toolr_version</code> costs no I/O to check, so a mismatch always wins over
 a matching hash — a toolr upgrade forces at least <code>StaticDrift</code>, and
 forces the stronger <code>ThirdPartyDrift</code> too when a venv is available to
-re-glob (see the <code>toolr_version</code> field description above for why a
+search again (see the <code>toolr_version</code> field description above for why a
 missing venv caps it at <code>StaticDrift</code> instead).</p>
 
 
