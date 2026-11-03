@@ -29,7 +29,7 @@ clap tree (F-31).
 2. **Help heading leaking.** `next_help_heading` is sticky; the root's reset to the default heading before the help
    arg must still happen inside `build_root_command`. Covered by the `toolr --help` diff.
 3. **Hidden commands stay hidden and absent from completions.** `builtin_completions` tests plus the dump diff.
-4. **A dispatcher group named `project` or `self`.** `user_group_collides` runs before the built-ins are added;
+4. **A user group named `project` or `self`.** `user_group_collides` runs before the built-ins are added;
    keep that loop in `build_command`. Main had no test for it; the new
    `user_groups_precede_built_ins_and_reserved_names_are_skipped` test in `cli.rs` covers it.
 5. **Comments that explain a neighbouring line** move with it, not to the new function's doc comment.
@@ -42,7 +42,7 @@ clap tree (F-31).
 
 - Modify: `crates/toolr/src/cli.rs` (`build_command`, lines 133-684 on main at `3a860f41`, and new functions
   above it)
-- Test: existing `cli.rs` `mod tests`, `crates/toolr/src/builtin_completions.rs` tests, `crates/toolr/tests/*`
+- Test: existing `cli.rs` `mod cli_tree_tests`, `crates/toolr/src/builtin_completions.rs` tests, `crates/toolr/tests/*`
 
 **Interfaces:**
 
@@ -52,7 +52,7 @@ clap tree (F-31).
   `fn build_self_build_manifest_subcommand() -> Command`; `fn build_self_cache_subcommand() -> Command`;
   `fn build_self_completion_subcommand() -> Command`; `fn build_hidden_subcommands() -> [Command; 3]`.
 
-- [ ] **Step 1: Capture the baseline.** Add a throwaway, uncommitted test to `cli.rs` `mod tests`:
+- [ ] **Step 1: Capture the baseline.** Add a throwaway, uncommitted test to `cli.rs` `mod cli_tree_tests`:
       `dump_builtin_tree`, which writes `format!("{:#?}", cmd)` for a built `build_command(&manifest)` to the path
       in `$TOOLR_TREE_DUMP` (skip when unset). The manifest holds a user group `ci` and a colliding group `self`,
       so the dump also covers group order and the reserved-name skip. `toolr` has no lib target, so run

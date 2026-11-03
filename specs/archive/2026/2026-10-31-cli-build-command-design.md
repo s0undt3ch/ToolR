@@ -36,7 +36,7 @@ New private functions in `cli.rs`, each returning the `Command` it used to build
 `build_command` becomes: `build_root_command()`, then the user-group loop, then `.subcommand(...)` for `project`,
 `self` and each hidden command. Comments move with the code they explain.
 
-Equality is checked three ways: a `{:#?}` dump of `build_command(&empty_manifest())` taken before and after (clap's
+Equality is checked three ways: a `{:#?}` dump of `build_command` over a manifest with a user group `ci` and a colliding `self` taken before and after (clap's
 `Command` derives `Debug`); `--help` from the old and new binaries for every built-in path; and the existing gates
 (`builtin_completions` tests, `toolr pre-commit regen-doc-snippets --check`, `cargo xtask build-skill-refs --check`).
 `builtin_completions.rs` walks the built tree, so an identical tree means identical completions.
