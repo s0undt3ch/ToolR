@@ -23,7 +23,7 @@ const DO_NOT_EDIT: &str =
 /// Rust source files whose region markers feed the packaging reference.
 const MANIFEST_MODEL: &str = include_str!("../../../toolr-core/src/manifest/model.rs");
 const FRAGMENT_MODEL: &str = include_str!("../../../toolr-core/src/third_party/model.rs");
-const GLOB_MODULE: &str = include_str!("../../../toolr-core/src/third_party/glob.rs");
+const FIND_MODULE: &str = include_str!("../../../toolr-core/src/third_party/find.rs");
 
 /// A `## <heading>` section of the rendered reference. Each section
 /// pairs hand-written narrative with a verbatim Rust extract.
@@ -113,18 +113,18 @@ pub fn packaging(repo_root: &Path) -> Result<Generated> {
 
     body.push_str("## Discovery\n\n");
     body.push_str(
-        "Toolr discovers your plugin by globbing every installed \
+        "Toolr discovers your plugin by looking in every installed \
         wheel's package root for a file named `toolr-manifest.json`.\n\
-        The exact globbing pattern is in the toolr repository's \
-        crates/toolr-core/src/third_party/glob.rs:\n\n",
+        The lookup is in the toolr repository's \
+        crates/toolr-core/src/third_party/find.rs:\n\n",
     );
     body.push_str("```text\n");
-    body.push_str(&glob_summary());
+    body.push_str(&find_summary());
     body.push_str("```\n\n");
     body.push_str(
         "Either layout works on every supported platform. If your \
         wheel installs `<pkg>/toolr-manifest.json` next to the \
-        package's `__init__.py`, the glob picks it up.\n\n",
+        package's `__init__.py`, toolr picks it up.\n\n",
     );
 
     for section in SECTIONS {
@@ -185,11 +185,11 @@ fn extract_region(source: &str, file: &str, tag: &str) -> Result<String> {
     Ok(extract)
 }
 
-fn glob_summary() -> String {
+fn find_summary() -> String {
     // Pull the first few lines of the module doc so the reference text
     // matches what the source itself documents.
     let mut lines = Vec::new();
-    for line in normalize_newlines(GLOB_MODULE).lines() {
+    for line in normalize_newlines(FIND_MODULE).lines() {
         if let Some(stripped) = line.strip_prefix("//! ") {
             lines.push(stripped.to_string());
         } else if line == "//!" {

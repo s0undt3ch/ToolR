@@ -19,6 +19,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Fake venvs pinning `third_party_hash` (crates/toolr-core/tests/third_party_hash_golden.rs).
+!crates/toolr-core/tests/fixtures/third-party-hash/*/lib/
+!crates/toolr-core/tests/fixtures/third-party-hash/*/Lib/
 lib64/
 parts/
 sdist/

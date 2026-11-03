@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::glob::glob_manifests;
+use super::find::find_manifests;
 use super::model::*;
 use crate::manifest::{
     ArgMetadata, Argument, ArgumentKind, Command, FRAGMENT_SHAPE_SCHEMA, Group,
@@ -41,7 +41,7 @@ fn package_names(paths: &[PathBuf]) -> Vec<String> {
 }
 
 #[test]
-fn glob_finds_fragments_under_bracketed_venv() {
+fn find_finds_fragments_under_bracketed_venv() {
     let tmp = TempDir::new().unwrap();
     // Canonical, so Windows sees the `\\?\` prefix an in-tree venv carries.
     let venv = tmp
@@ -51,25 +51,25 @@ fn glob_finds_fragments_under_bracketed_venv() {
         .join("[wip]")
         .join("venv");
     setup_fake_venv_at(&venv, &[("a_pkg", "{}"), ("b_pkg", "{}")]);
-    let found = glob_manifests(&venv).unwrap();
+    let found = find_manifests(&venv).unwrap();
     assert_eq!(package_names(&found), ["a_pkg", "b_pkg"]);
 }
 
 #[cfg(unix)]
 #[test]
-fn glob_ignores_sibling_matched_by_bracket_class() {
+fn find_ignores_sibling_matched_by_bracket_class() {
     let tmp = TempDir::new().unwrap();
     let venv = tmp.path().join("[ab]").join("venv");
     setup_fake_venv_at(&venv, &[("own_pkg", "{}")]);
     setup_fake_venv_at(&tmp.path().join("a").join("venv"), &[("sibling_pkg", "{}")]);
-    let found = glob_manifests(&venv).unwrap();
+    let found = find_manifests(&venv).unwrap();
     assert_eq!(package_names(&found), ["own_pkg"]);
 }
 
 // Needs a case-sensitive filesystem to create both siblings.
 #[cfg(target_os = "linux")]
 #[test]
-fn glob_ignores_sibling_venv_differing_only_in_case() {
+fn find_ignores_sibling_venv_differing_only_in_case() {
     let tmp = TempDir::new().unwrap();
     let venv = tmp.path().join("[WIP]").join("venv");
     setup_fake_venv_at(&venv, &[("own_pkg", "{}")]);
@@ -77,17 +77,17 @@ fn glob_ignores_sibling_venv_differing_only_in_case() {
         &tmp.path().join("[wip]").join("venv"),
         &[("sibling_pkg", "{}")],
     );
-    let found = glob_manifests(&venv).unwrap();
+    let found = find_manifests(&venv).unwrap();
     assert_eq!(package_names(&found), ["own_pkg"]);
 }
 
 #[cfg(unix)]
 #[test]
-fn glob_finds_fragments_under_star_and_question_venv() {
+fn find_finds_fragments_under_star_and_question_venv() {
     let tmp = TempDir::new().unwrap();
     let venv = tmp.path().join("x*y?").join("venv");
     setup_fake_venv_at(&venv, &[("a_pkg", "{}")]);
-    let found = glob_manifests(&venv).unwrap();
+    let found = find_manifests(&venv).unwrap();
     assert_eq!(package_names(&found), ["a_pkg"]);
 }
 
@@ -111,7 +111,7 @@ fn fragment_round_trips_through_json() {
 }
 
 #[test]
-fn glob_finds_only_toolr_manifest_files() {
+fn find_finds_only_toolr_manifest_files() {
     let tmp = setup_fake_venv(&[
         (
             "a_pkg",
@@ -122,7 +122,7 @@ fn glob_finds_only_toolr_manifest_files() {
             r#"{"toolr_schema_version": 1, "package": "b_pkg"}"#,
         ),
     ]);
-    // Drop a spurious file the glob must ignore.
+    // Drop a spurious file the lookup must ignore.
     let site = tmp
         .path()
         .join("lib")
@@ -130,16 +130,60 @@ fn glob_finds_only_toolr_manifest_files() {
         .join("site-packages");
     std::fs::write(site.join("a_pkg").join("README"), "ignored").unwrap();
 
-    let hits = glob_manifests(tmp.path()).unwrap();
+    let hits = find_manifests(tmp.path()).unwrap();
     assert_eq!(hits.len(), 2);
     assert!(hits[0].ends_with("a_pkg/toolr-manifest.json"));
     assert!(hits[1].ends_with("b_pkg/toolr-manifest.json"));
 }
 
+/// The Windows `Lib/site-packages` layout, found on every platform.
 #[test]
-fn glob_returns_empty_when_no_site_packages() {
+fn find_finds_fragments_in_windows_layout() {
     let tmp = TempDir::new().unwrap();
-    let hits = glob_manifests(tmp.path()).unwrap();
+    let pkg = tmp.path().join("Lib").join("site-packages").join("a_pkg");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::write(pkg.join("toolr-manifest.json"), "{}").unwrap();
+    let found = find_manifests(tmp.path()).unwrap();
+    assert_eq!(found, [pkg.join("toolr-manifest.json")]);
+}
+
+#[test]
+fn find_skips_package_dir_without_manifest() {
+    let tmp = setup_fake_venv(&[("a_pkg", "{}")]);
+    let site = tmp
+        .path()
+        .join("lib")
+        .join("python3.13")
+        .join("site-packages");
+    std::fs::create_dir_all(site.join("x")).unwrap();
+    std::fs::write(site.join("stray.json"), "{}").unwrap();
+    std::fs::create_dir_all(site.join("y").join("toolr-manifest.json")).unwrap();
+    let found = find_manifests(tmp.path()).unwrap();
+    assert_eq!(package_names(&found), ["a_pkg"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn find_reports_unreadable_venv_dirs_as_io_errors() {
+    let tmp = setup_fake_venv(&[("a_pkg", "{}")]);
+    let lib = tmp.path().join("lib");
+    // `lib` fails in `site_packages_dirs`; `site-packages` fails in the listing here.
+    for dir in [lib.clone(), lib.join("python3.13").join("site-packages")] {
+        let result = crate::test_fs::with_mode(&dir, 0o000, || find_manifests(tmp.path()));
+        assert!(
+            result.as_ref().is_none_or(|r| matches!(
+                r,
+                Err(ThirdPartyError::Io { path, .. }) if path.starts_with(&dir)
+            )),
+            "{dir:?}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn find_returns_empty_when_no_site_packages() {
+    let tmp = TempDir::new().unwrap();
+    let hits = find_manifests(tmp.path()).unwrap();
     assert!(hits.is_empty());
 }
 
@@ -658,7 +702,7 @@ fn warnings_run_skipped_then_shadowed_then_conflict() {
                        "arguments": [], "origin": "third_party"}]"#;
     let deploy = r#"[{"name": "deploy", "title": "Deploy", "origin": "third_party"}]"#;
     // Glob order is a_dup, b_dup, c_shadow, z_old. The conflict is seen first and the
-    // skipped plugin last, so the asserted order is not just glob order.
+    // skipped plugin last, so the asserted order is not just path order.
     let a_dup = v2_fragment_json("a_dup", deploy, rollout);
     let b_dup = v2_fragment_json("b_dup", deploy, rollout);
     let c_shadow = v2_fragment_json(
@@ -1014,7 +1058,7 @@ fn skipped_warnings_come_before_shadowed_ones() {
     let mut base = empty_base();
     base.groups.push(static_group("ci", None));
     base.commands.push(local_command("ci", "lint", "tools.ci"));
-    // `a_shadow` globs before `z_old`, so the order below is not just glob order.
+    // `a_shadow` sorts before `z_old`, so the order below is not just path order.
     let shadow = v2_fragment_json(
         "a_shadow",
         "[]",

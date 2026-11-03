@@ -20,9 +20,9 @@ pub struct RebuildOutcome {
 }
 
 /// Full rebuild: the static manifest (first-party AST parse plus the
-/// third-party fragments globbed from the venv), stamped with the
+/// third-party fragments found in the venv), stamped with the
 /// third-party hash, then written. Executes nothing — `venv_root` is
-/// only globbed for `site-packages/*/toolr-manifest.json` (via
+/// only searched for `site-packages/*/toolr-manifest.json` (via
 /// `build_static_manifest_with_venv`) and hashed via
 /// [`compute_third_party_hash`].
 pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<RebuildOutcome> {
@@ -34,7 +34,7 @@ pub fn rebuild_manifest_full(project_root: &Path, venv_root: &Path) -> Result<Re
     let mut manifest = build_static_manifest_with_venv(&tools, venv_root)
         .map_err(BuildError::into_anyhow)
         .map_err(|e| {
-            context_unless_symlinked(e, "building static manifest (incl. third-party glob-merge)")
+            context_unless_symlinked(e, "building static manifest (incl. third-party fragments)")
         })?;
     manifest.third_party_hash = compute_third_party_hash(venv_root)?;
     write_manifest(&manifest_path, &manifest)?;

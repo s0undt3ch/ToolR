@@ -4,7 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use walkdir::WalkDir;
+
+use super::layout::{SitePackagesError, preferred_site_packages_dirs};
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -15,29 +16,44 @@ pub enum ValidationError {
     ToolrPackageMissing,
     #[error("toolr: venv at {0} does not contain a python interpreter")]
     InterpreterMissing(PathBuf),
+    #[error("toolr: I/O error reading {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
-/// Walk the venv's `lib/python*/site-packages` and look for the toolr
-/// package directory. Returns its path on success.
+impl From<SitePackagesError> for ValidationError {
+    fn from(e: SitePackagesError) -> Self {
+        Self::Io {
+            path: e.path,
+            source: e.source,
+        }
+    }
+}
+
+/// Look in the venv's `site-packages` directories, its own Python's first (see
+/// [`preferred_site_packages_dirs`]), for the toolr package directory. Returns its path on success.
 ///
 /// Handles both regular installs (package directory in site-packages) and
 /// editable/direct-url installs where a `.pth` file adds the source root to
 /// `sys.path` (as maturin's editable mode does).
-pub fn locate_toolr_package(venv_dir: &Path) -> Option<PathBuf> {
-    for site_packages in candidate_site_packages(venv_dir) {
+pub fn locate_toolr_package(venv_dir: &Path) -> Result<Option<PathBuf>, SitePackagesError> {
+    for site_packages in preferred_site_packages_dirs(venv_dir)? {
         // Regular (non-editable) install: toolr/__init__.py is in site-packages.
         let init = site_packages.join("toolr").join("__init__.py");
         if init.is_file() {
-            return Some(site_packages.join("toolr"));
+            return Ok(Some(site_packages.join("toolr")));
         }
         // Editable / direct-url install: a .pth file adds the source root to
         // sys.path. Walk every .pth file and check if any pointed-to directory
         // contains toolr/__init__.py.
         if let Some(path) = locate_via_pth_files(&site_packages) {
-            return Some(path);
+            return Ok(Some(path));
         }
     }
-    None
+    Ok(None)
 }
 
 /// Read every `.pth` file in `site_packages` and return the `toolr` package
@@ -69,48 +85,25 @@ fn locate_via_pth_files(site_packages: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Iterate possible `site-packages` directories within a venv.
-/// Linux/macOS: `<venv>/lib/python*/site-packages/`.
-/// Windows: `<venv>/Lib/site-packages/`.
-pub fn candidate_site_packages(venv_dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    if cfg!(windows) {
-        out.push(venv_dir.join("Lib").join("site-packages"));
-    } else {
-        let lib = venv_dir.join("lib");
-        if lib.is_dir() {
-            for entry in WalkDir::new(&lib)
-                .max_depth(1)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                let name = entry.file_name().to_string_lossy();
-                if name.starts_with("python") {
-                    out.push(entry.path().join("site-packages"));
-                }
-            }
-        }
-    }
-    out
-}
-
 /// The `toolr-py` version installed in the venv, read from its
 /// `toolr_py-<version>.dist-info` directory name. Lists `site-packages`
 /// only: no file reads, no interpreter.
-pub fn installed_toolr_py_version(venv_dir: &Path) -> Option<String> {
-    candidate_site_packages(venv_dir).iter().find_map(|sp| {
-        fs::read_dir(sp)
-            .ok()?
-            .filter_map(Result::ok)
-            .find_map(|entry| {
-                let name = entry.file_name();
-                let version = name
-                    .to_str()?
-                    .strip_prefix("toolr_py-")?
-                    .strip_suffix(".dist-info")?;
-                Some(version.to_string())
-            })
-    })
+pub fn installed_toolr_py_version(venv_dir: &Path) -> Result<Option<String>, SitePackagesError> {
+    Ok(preferred_site_packages_dirs(venv_dir)?
+        .iter()
+        .find_map(|sp| {
+            fs::read_dir(sp)
+                .ok()?
+                .filter_map(Result::ok)
+                .find_map(|entry| {
+                    let name = entry.file_name();
+                    let version = name
+                        .to_str()?
+                        .strip_prefix("toolr_py-")?
+                        .strip_suffix(".dist-info")?;
+                    Some(version.to_string())
+                })
+        }))
 }
 
 /// Order two versions by `major.minor` alone. `None` when either is
@@ -128,7 +121,7 @@ pub fn validate_venv(venv_dir: &Path, python: &Path) -> Result<PathBuf, Validati
     if !python.is_file() {
         return Err(ValidationError::InterpreterMissing(venv_dir.to_path_buf()));
     }
-    locate_toolr_package(venv_dir).ok_or(ValidationError::ToolrPackageMissing)
+    locate_toolr_package(venv_dir)?.ok_or(ValidationError::ToolrPackageMissing)
 }
 
 #[cfg(test)]
@@ -229,7 +222,7 @@ mod tests {
         std::fs::create_dir_all(sp.join("toolr_py-0.32.0.dist-info")).unwrap();
         std::fs::create_dir_all(sp.join("toolr_example_plugin-1.0.0.dist-info")).unwrap();
         assert_eq!(
-            installed_toolr_py_version(tmp.path()).as_deref(),
+            installed_toolr_py_version(tmp.path()).unwrap().as_deref(),
             Some("0.32.0")
         );
     }
@@ -239,7 +232,88 @@ mod tests {
     fn no_toolr_py_dist_info_means_no_version() {
         let tmp = TempDir::new().unwrap();
         fake_unix_venv(tmp.path(), true, true);
-        assert_eq!(installed_toolr_py_version(tmp.path()), None);
+        assert_eq!(installed_toolr_py_version(tmp.path()).unwrap(), None);
+    }
+
+    /// The Windows `Lib/site-packages` layout is found on every platform.
+    #[test]
+    fn locates_toolr_package_and_version_in_windows_layout() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let sp = tmp.path().join("Lib").join("site-packages");
+        std::fs::create_dir_all(sp.join("toolr")).unwrap();
+        std::fs::write(sp.join("toolr").join("__init__.py"), b"").unwrap();
+        std::fs::create_dir_all(sp.join("toolr_py-0.40.0.dist-info")).unwrap();
+        assert_eq!(
+            super::locate_toolr_package(tmp.path()).unwrap(),
+            Some(sp.join("toolr"))
+        );
+        assert_eq!(
+            super::installed_toolr_py_version(tmp.path())
+                .unwrap()
+                .as_deref(),
+            Some("0.40.0")
+        );
+    }
+
+    /// A stale `python3.9` dir mustn't shadow the venv's `python3.13`, though it sorts first.
+    #[test]
+    fn toolr_py_version_comes_from_the_venvs_own_python() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        for (py, version) in [("python3.9", "0.30.0"), ("python3.13", "0.40.0")] {
+            let sp = tmp.path().join("lib").join(py).join("site-packages");
+            std::fs::create_dir_all(sp.join("toolr")).unwrap();
+            std::fs::write(sp.join("toolr").join("__init__.py"), b"").unwrap();
+            std::fs::create_dir_all(sp.join(format!("toolr_py-{version}.dist-info"))).unwrap();
+        }
+        let py313 = tmp.path().join("lib/python3.13/site-packages/toolr");
+        assert_eq!(
+            super::locate_toolr_package(tmp.path()).unwrap(),
+            Some(py313.clone())
+        );
+        assert_eq!(
+            super::installed_toolr_py_version(tmp.path())
+                .unwrap()
+                .as_deref(),
+            Some("0.40.0")
+        );
+
+        std::fs::write(tmp.path().join("pyvenv.cfg"), "version_info = 3.9.20\n").unwrap();
+        assert_eq!(
+            super::installed_toolr_py_version(tmp.path())
+                .unwrap()
+                .as_deref(),
+            Some("0.30.0")
+        );
+    }
+
+    /// A permissions problem names the path and the OS error, not a missing `toolr-py` pin.
+    /// The one test that pins this wording; others match on the error kind.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_lib_is_an_io_error() {
+        let tmp = TempDir::new().unwrap();
+        fake_unix_venv(tmp.path(), true, true);
+        let python = tmp.path().join("bin").join("python");
+        let lib = tmp.path().join("lib");
+        let result = crate::test_fs::with_mode(&lib, 0o000, || {
+            (
+                validate_venv(tmp.path(), &python),
+                installed_toolr_py_version(tmp.path()).map_err(ValidationError::from),
+            )
+        });
+        assert!(
+            result.as_ref().is_none_or(|(validated, version)| {
+                matches!(version, Err(ValidationError::Io { path, .. }) if path.starts_with(&lib))
+                    && validated.as_ref().is_err_and(|e| {
+                        e.to_string()
+                            == format!(
+                                "toolr: I/O error reading {}: Permission denied (os error 13)",
+                                lib.display()
+                            )
+                    })
+            }),
+            "{result:?}"
+        );
     }
 
     #[test]

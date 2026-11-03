@@ -418,8 +418,12 @@ fn sync_after_trust_prompt(
 fn warn_on_toolr_py_mismatch(venv_dir: &std::path::Path) {
     use std::cmp::Ordering;
     let binary = env!("CARGO_PKG_VERSION");
-    let Some(installed) = toolr_core::venv::installed_toolr_py_version(venv_dir) else {
-        return;
+    let installed = match toolr_core::venv::installed_toolr_py_version(venv_dir) {
+        Ok(Some(installed)) => installed,
+        Ok(None) => return,
+        Err(e) => {
+            return eprintln!("toolr: warning: can't check the tools venv's toolr-py version: {e}");
+        }
     };
     let remedy = match toolr_core::venv::compare_minor_versions(&installed, binary) {
         Some(Ordering::Less) => {

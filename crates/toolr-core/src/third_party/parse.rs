@@ -16,12 +16,6 @@ const MIN_READABLE_FRAGMENT_RELEASE: &str = "0.34.0";
 
 #[derive(Debug, Error)]
 pub enum ThirdPartyError {
-    #[error("non-UTF-8 path: {0}")]
-    NonUtf8Path(PathBuf),
-    #[error("glob pattern error: {0}")]
-    Pattern(#[from] glob::PatternError),
-    #[error("glob iteration error: {0}")]
-    Glob(#[from] glob::GlobError),
     #[error("I/O error reading {path}: {source}")]
     Io {
         path: PathBuf,
@@ -39,6 +33,15 @@ pub enum ThirdPartyError {
          this file is not a valid toolr manifest fragment"
     )]
     MissingVersion { path: PathBuf },
+}
+
+impl From<crate::venv::SitePackagesError> for ThirdPartyError {
+    fn from(e: crate::venv::SitePackagesError) -> Self {
+        Self::Io {
+            path: e.path,
+            source: e.source,
+        }
+    }
 }
 
 /// The outcome of reading one fragment that is at least a well-formed, versioned fragment.

@@ -1,16 +1,16 @@
 //! Third-party static manifest fragment discovery, parsing, and merging.
 //!
 //! Packages ship a `toolr-manifest.json` at the root of their installed
-//! Python package directory. This module globs for those files, applies the
+//! Python package directory. This module finds those files, applies the
 //! `toolr_schema_version` load rule, and merges the resulting fragments into
 //! the project's static manifest.
 
-pub mod glob;
+pub mod find;
 pub mod merge;
 pub mod model;
 pub mod parse;
 
-pub use glob::glob_manifests;
+pub use find::find_manifests;
 pub use merge::merge_into_manifest;
 pub use model::ManifestFragment;
 pub use parse::{ParsedFragment, ThirdPartyError, parse_fragment};
@@ -22,7 +22,7 @@ use std::path::Path;
 
 use crate::manifest::Manifest;
 
-/// Glob for fragments under `tools_venv`, parse each, and merge them
+/// Find the fragments under `tools_venv`, parse each, and merge them
 /// into `base`. Returns the augmented manifest, with every skipped plugin,
 /// then every shadowed plugin command, then every plugin-to-plugin conflict
 /// recorded in `plugin_warnings`.
@@ -36,7 +36,7 @@ pub fn discover_and_merge(
     tools_venv: &Path,
     mut base: Manifest,
 ) -> Result<Manifest, ThirdPartyError> {
-    let paths = glob_manifests(tools_venv)?;
+    let paths = find_manifests(tools_venv)?;
     let mut fragments = Vec::with_capacity(paths.len());
     for path in paths {
         match parse_fragment(&path)? {

@@ -39,7 +39,9 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   every `tools/**/*.py` file. Drives static-layer rebuilds.
 - **`third_party_hash`** — blake3 over the sorted set of
   `toolr-manifest.json` files found under
-  `<tools-venv>/lib/python*/site-packages/*/`. Each entry's path
+  `<tools-venv>/lib/python*/site-packages/*/`
+  or `Lib/site-packages/*/` (the Windows layout, looked in on every
+  platform). Each entry's path
   and content go into the hash. Drives third-party-fragment
   rebuilds: installing an unrelated package no longer invalidates
   the manifest, only changes to packages that ship a toolr
@@ -48,7 +50,7 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   it built this manifest. A mismatch against the running binary means
   toolr itself was upgraded (parsing/classification behaviour may have
   changed with no `tools/*.py` edit at all) and always forces at least
-  a static rebuild; with a venv available to re-glob, it forces a full
+  a static rebuild; with a venv available to search again, it forces a full
   rebuild instead. Deserializes as `""` on older manifests, which also
   forces one rebuild.
 - **`groups`** / **`commands`** — the actual command tree. Each
@@ -167,10 +169,12 @@ match the running binary — an upgrade forces a static rebuild even if
 
 Contributed by installed packages that ship a static
 `toolr-manifest.json` fragment inside their wheel, discovered by
-globbing `<tools-venv>/lib/python*/site-packages/*/` and merged into
+looking in `<tools-venv>/lib/python*/site-packages/*/`
+or `Lib/site-packages/*/` (the Windows layout, looked in on every
+platform) and merged into
 the static layer at build time (see
 [Third-party packages](../third-party.md)). No Python import happens
-during discovery — it's an execution-free glob-and-parse, same as
+during discovery — it's an execution-free list-and-parse, same as
 the static layer.
 
 Toolr regenerates the manifest when:
@@ -180,7 +184,7 @@ Toolr regenerates the manifest when:
 - The cached `toolr_version` doesn't match the running binary — an
   upgrade always forces at least a static rebuild regardless of
   `static_hash`, and forces a rebuild of both layers when a venv is
-  available to re-glob third-party fragments too.
+  available to find third-party fragments again too.
 - The user explicitly runs `toolr project manifest rebuild`.
 
 Automatic rebuilds are written to disk only in a trusted repository (see
@@ -209,7 +213,9 @@ Both hashes use blake3, written as lowercase hex.
   directories are not followed. Each entry is hashed as
   `len(path_bytes) || path_bytes || len(contents) || contents`.
 - `third_party_hash` input: every `toolr-manifest.json` under
-  `<tools-venv>/lib/python*/site-packages/*/`, sorted by path,
+  `<tools-venv>/lib/python*/site-packages/*/`
+  or `Lib/site-packages/*/` (the Windows layout, looked in on every
+  platform), sorted by path,
   each entry hashed as
   `len(path_bytes) || path_bytes || len(contents) || contents`.
   Identical scheme to `static_hash` but over the third-party
@@ -221,5 +227,5 @@ machines and across CI / dev environments.
 `toolr_version` costs no I/O to check, so a mismatch always wins over
 a matching hash — a toolr upgrade forces at least `StaticDrift`, and
 forces the stronger `ThirdPartyDrift` too when a venv is available to
-re-glob (see the `toolr_version` field description above for why a
+search again (see the `toolr_version` field description above for why a
 missing venv caps it at `StaticDrift` instead).

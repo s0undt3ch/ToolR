@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 
 use crate::uv::{UvBinary, UvError};
 
+use super::pyvenv_cfg::pyvenv_cfg_value;
 use super::resolve::ResolvedVenv;
 
 /// Marker file written into the venv after each successful sync.
@@ -101,15 +102,10 @@ pub fn check_freshness(resolved: &ResolvedVenv, tools_dir: &Path) -> Freshness {
 /// Whether `pyvenv.cfg`'s `home` is gone. Windows venvs hold a copied launcher,
 /// not a symlink, so their own interpreter outlives the base Python.
 fn base_python_removed(venv_dir: &Path) -> bool {
-    let Ok(cfg) = fs::read_to_string(venv_dir.join("pyvenv.cfg")) else {
-        return false;
-    };
     // Only a confirmed absence counts: an unreadable `home` would otherwise
     // re-sync a working venv on every dispatch.
-    cfg.lines()
-        .filter_map(|line| line.split_once('='))
-        .find(|(key, _)| key.trim() == "home")
-        .is_some_and(|(_, home)| matches!(Path::new(home.trim()).try_exists(), Ok(false)))
+    pyvenv_cfg_value(venv_dir, "home")
+        .is_some_and(|home| matches!(Path::new(&home).try_exists(), Ok(false)))
 }
 
 /// Run `uv sync --project <tools>` synchronously, inheriting stdio.

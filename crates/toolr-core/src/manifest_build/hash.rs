@@ -11,19 +11,19 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use blake3::Hasher;
 
-use crate::third_party::glob::glob_manifests;
+use crate::third_party::find::find_manifests;
 
 /// Compute a deterministic hash of the third-party plugin manifests
 /// installed under `venv_root`.
 ///
-/// The hash covers, in glob-sorted order, each
+/// The hash covers, in path-sorted order, each
 /// `site-packages/<pkg>/toolr-manifest.json` path together with the
 /// blake3 of its contents. Adds, removes, or content edits all change
 /// the hash. Unrelated `.dist-info` churn does not.
 pub fn compute_third_party_hash(venv_root: &Path) -> Result<String> {
-    let paths = glob_manifests(venv_root).with_context(|| {
+    let paths = find_manifests(venv_root).with_context(|| {
         format!(
-            "globbing third-party manifests under {}",
+            "finding third-party manifests under {}",
             venv_root.display()
         )
     })?;

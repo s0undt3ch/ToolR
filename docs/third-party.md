@@ -6,7 +6,7 @@ the tools venv.
 
 Commands are discovered via a static JSON manifest file
 (`toolr-manifest.json`) that lives at the root of the installed
-package. Toolr's Rust binary globs for these files at startup; no
+package. Toolr's Rust binary looks for these files at startup; no
 Python import is involved.
 
 ## Why ship a JSON manifest
@@ -18,12 +18,14 @@ approach that was removed in the 2025 rewrite), toolr had to spawn
 Python and import every registered module to learn what commands
 existed — one import per package, on every shell tab press.
 
-A `toolr-manifest.json` is a `glob()` + JSON parse,
+A `toolr-manifest.json` is a directory listing + JSON parse,
 no Python involved. For interactive use the difference is the
 boundary between "instant" and "noticeable lag".
 
-Command discovery globs
-`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`.
+Command discovery looks for
+`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`
+or `<tools-venv>/Lib/site-packages/*/toolr-manifest.json` (the Windows
+layout, looked in on every platform).
 Any installed package that ships the file is picked up
 automatically; no project-side configuration is needed.
 
@@ -139,8 +141,10 @@ To add commands to a group of the host repo, declare that group in the plugin wi
 path (see [Command resolution](#command-resolution)).
 
 The file lives at `<package_dir>/toolr-manifest.json` — i.e. next to
-`my_pkg/__init__.py`. Toolr's manifest builder finds it via the glob
-`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`.
+`my_pkg/__init__.py`. Toolr's manifest builder finds it as
+`<tools-venv>/lib/python*/site-packages/*/toolr-manifest.json`
+or `<tools-venv>/Lib/site-packages/*/toolr-manifest.json` (the Windows
+layout, looked in on every platform).
 
 ## Shipping the manifest
 
@@ -229,7 +233,7 @@ Add a step to your workflow to catch drift in pull requests:
 ## What happens if you skip it
 
 If `toolr-manifest.json` is not present in the installed package,
-toolr's discovery glob will not find it and your plugin's commands
+toolr's discovery will not find it and your plugin's commands
 will not appear in `toolr --help` or `toolr <group> --help`.
 
 To diagnose a missing manifest after installing a plugin, check
