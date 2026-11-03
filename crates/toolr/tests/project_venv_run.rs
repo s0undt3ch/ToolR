@@ -246,6 +246,31 @@ fn no_sync_signal_killed_child_exits_128_plus_signal() {
     );
 }
 
+/// `venv shell` maps a signal-killed `$SHELL` the same way `venv run` maps its child.
+#[cfg(unix)]
+#[test]
+fn shell_signal_killed_shell_exits_128_plus_signal() {
+    let fx = common::VenvFixture::new();
+    let shell = fx.bin_dir.join("killed-shell");
+    common::write_executable(&shell, "#!/bin/sh\nkill -TERM $$\n");
+    let output = common::toolr()
+        .current_dir(&fx.root)
+        .env("PATH", &fx.bin_dir)
+        .env("XDG_CACHE_HOME", fx.root.join("cache"))
+        .env_remove("TOOLR_AUTO_INSTALL_UV")
+        .env_remove("TOOLR_VENV_LOCATION")
+        .env("SHELL", &shell)
+        .args(["project", "venv", "shell"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(143),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn no_sync_passes_args_verbatim() {
