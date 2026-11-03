@@ -14,7 +14,7 @@ use std::path::Path;
 use anyhow::Context;
 use toolr_core::discovery::discover_project_root;
 use toolr_core::freshness::{FreshnessVerdict, compare};
-use toolr_core::hash::is_symlinked_modules;
+use toolr_core::hash::{build_to_persist, is_symlinked_modules};
 use toolr_core::manifest::{
     Manifest, ManifestError, Origin, load_manifest, rebuild_if_stale, write_manifest,
 };
@@ -65,12 +65,12 @@ pub(crate) fn ensure_manifest_present_or_bootstrap(
         // First-party is always available (pure AST). Add third-party only when
         // a venv already exists — globbing site-packages JSON executes nothing.
         let venv_dir = resolve_venv_path(&root).ok().map(|r| r.venv_dir);
-        let manifest = match venv_dir.as_deref() {
+        let manifest = build_to_persist(&tools, || match venv_dir.as_deref() {
             Some(v) if v.join("pyvenv.cfg").is_file() => {
-                build_static_manifest_with_venv(&tools, v).map_err(BuildError::into_anyhow)?
+                build_static_manifest_with_venv(&tools, v).map_err(BuildError::into_anyhow)
             }
-            _ => build_static_manifest(&tools)?,
-        };
+            _ => build_static_manifest(&tools),
+        })?;
         write_manifest(&manifest_path, &manifest)
             .with_context(|| format!("writing {}", manifest_path.display()))
     })?;
@@ -117,6 +117,11 @@ pub(crate) fn should_skip_auto_rebuild(argv: &[String]) -> bool {
 /// one that can only come from the project's manifest.
 pub(crate) fn names_user_command(argv: &[String]) -> bool {
     first_positional(argv).is_some_and(|name| !BUILTINS.contains(&name))
+}
+
+/// Whether `argv` is a shell's TAB request (`toolr __complete …`).
+pub(crate) fn is_tab_completion(argv: &[String]) -> bool {
+    first_positional(argv) == Some("__complete")
 }
 
 /// Root options whose value is the next argument, with their aliases.
@@ -199,25 +204,29 @@ pub(crate) fn ensure_manifest_fresh(
     };
     // `persist` gates both the write in `rebuild` and the lock below; the
     // in-memory path needs neither.
-    let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| match try_rebuild(
-        verdict,
-        &tools,
-        venv_dir.as_deref(),
-        cached.as_ref(),
-    ) {
-        Ok(fresh) => {
-            if persist {
-                write_manifest(&manifest_path, &fresh)
-                    .with_context(|| format!("writing {}", manifest_path.display()))?;
+    let rebuild = |(verdict, cached): (FreshnessVerdict, Option<Manifest>)| {
+        let build = || try_rebuild(verdict, &tools, venv_dir.as_deref(), cached.as_ref());
+        // Only a written manifest takes the clock: it creates a file in `tools/`.
+        let built = if persist {
+            build_to_persist(&tools, build)
+        } else {
+            build()
+        };
+        match built {
+            Ok(fresh) => {
+                if persist {
+                    write_manifest(&manifest_path, &fresh)
+                        .with_context(|| format!("writing {}", manifest_path.display()))?;
+                }
+                Ok(Some(fresh))
             }
-            Ok(Some(fresh))
-        }
-        // Symlinked modules are fatal: the cache would hide the links again,
-        // and the walk executes nothing, so untrusted repos get it too (F-17).
-        Err(e) if is_symlinked_modules(&e) => Err(e),
-        Err(e) => {
-            warn_and_keep_cache(&e, cached.is_some());
-            Ok(cached)
+            // Symlinked modules are fatal: the cache would hide the links again,
+            // and the walk executes nothing, so untrusted repos get it too (#642).
+            Err(e) if is_symlinked_modules(&e) => Err(e),
+            Err(e) => {
+                warn_and_keep_cache(&e, cached.is_some());
+                Ok(cached)
+            }
         }
     };
     let outcome = if persist {
@@ -345,7 +354,7 @@ fn warn_and_keep_cache(err: &anyhow::Error, had_cache: bool) {
 mod tests {
     use super::{
         carry_forward_cached_entries, ensure_manifest_fresh, ensure_manifest_present_or_bootstrap,
-        should_skip_auto_rebuild,
+        is_tab_completion, should_skip_auto_rebuild,
     };
     use toolr_core::freshness::FreshnessVerdict;
     use toolr_core::manifest::{
@@ -371,6 +380,7 @@ mod tests {
             groups,
             commands: vec![],
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         }
     }
 
@@ -412,6 +422,7 @@ mod tests {
             groups: Vec::new(),
             commands: Vec::new(),
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         });
         let mut from_cli: Vec<String> = command
             .get_arguments()
@@ -526,6 +537,8 @@ mod tests {
             "/tmp",
             "..."
         ])));
+        assert!(is_tab_completion(&args(&["__complete", "/tmp", "..."])));
+        assert!(!is_tab_completion(&args(&["project", "__complete"])));
     }
 
     #[test]

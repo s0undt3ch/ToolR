@@ -33,7 +33,8 @@ pub struct Manifest {
     pub schema_version: u32,
     /// Hash over the static build's inputs (`tools/**/*.py`, the argparse
     /// blocks in `tools/pyproject.toml` and the files they scan) —
-    /// used for fast freshness checks.
+    /// used for fast freshness checks. Derived from `input_records`; see
+    /// `hash::static_hash_of`.
     pub static_hash: String,
     /// Will hash the sorted list of `site-packages/*/toolr-manifest.json`
     /// files (path + content) discovered in the tools venv. Equals
@@ -53,8 +54,77 @@ pub struct Manifest {
     /// Plugins skipped, shadowed or in conflict at the last third-party merge, warned about on every run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugin_warnings: Vec<PluginWarning>,
+    /// What `static_hash` was computed from, so the freshness check rereads
+    /// only the inputs whose stat changed. Empty on older manifests.
+    #[serde(default, skip_serializing_if = "InputRecords::is_empty")]
+    pub input_records: InputRecords,
 }
 // endregion: SkillRefManifest
+
+/// The static build's inputs as last hashed; see `hash::snapshot_static_inputs`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputRecords {
+    /// One record per static input, sorted by key.
+    #[serde(default)]
+    pub files: Vec<InputRecord>,
+    /// Each `[tool.toolr.argparse.*]` block's `scan_paths`, as parsed from
+    /// the `tools/pyproject.toml` its record describes.
+    #[serde(default)]
+    pub scan_paths: Vec<Vec<String>>,
+    /// The filesystem's clock, in ns since the Unix epoch, taken just
+    /// before the snapshot's first stat. A record is reused only when its
+    /// mtime is strictly older. `0` reuses nothing.
+    #[serde(default)]
+    pub snapshot_at_ns: u64,
+    /// The device `snapshot_at_ns` was read on (Unix `st_dev`; `0`
+    /// elsewhere). Only records on this device are reused.
+    #[serde(default)]
+    pub snapshot_dev: u64,
+}
+
+impl InputRecords {
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+            && self.scan_paths.is_empty()
+            && self.snapshot_at_ns == 0
+            && self.snapshot_dev == 0
+    }
+}
+
+/// One static input's stat and what its contents hashed to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputRecord {
+    /// `hash::StaticInput::key`.
+    pub key: String,
+    pub size: u64,
+    /// Nanoseconds since the Unix epoch; `0` when unknown, which is never
+    /// reused.
+    pub mtime_ns: u64,
+    /// Unix only; `0` elsewhere.
+    #[serde(default)]
+    pub ctime_ns: u64,
+    /// Unix only; `0` elsewhere.
+    #[serde(default)]
+    pub ino: u64,
+    /// The device the file lives on. Unix only; `0` elsewhere.
+    #[serde(default)]
+    pub dev: u64,
+    /// Serialised inline, as `"digest": "<hex>"` or
+    /// `"unreadable": "<error kind>"`.
+    #[serde(flatten)]
+    pub content: Content,
+}
+
+/// What an [`InputRecord`]'s file hashed to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Content {
+    /// Lowercase hex blake3; see `hash::static_hash_of`.
+    Digest(String),
+    /// The read error's kind, for a non-module input that couldn't be
+    /// read. Never reused: fixing the permission changes no stat field.
+    Unreadable(String),
+}
 
 /// One plugin problem recorded at merge time so every later run can warn about it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

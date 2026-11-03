@@ -90,7 +90,8 @@ pub struct Manifest {
     pub schema_version: u32,
     /// Hash over the static build's inputs (`tools/**/*.py`, the argparse
     /// blocks in `tools/pyproject.toml` and the files they scan) —
-    /// used for fast freshness checks.
+    /// used for fast freshness checks. Derived from `input_records`; see
+    /// `hash::static_hash_of`.
     pub static_hash: String,
     /// Will hash the sorted list of `site-packages/*/toolr-manifest.json`
     /// files (path + content) discovered in the tools venv. Equals
@@ -110,6 +111,10 @@ pub struct Manifest {
     /// Plugins skipped, shadowed or in conflict at the last third-party merge, warned about on every run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugin_warnings: Vec<PluginWarning>,
+    /// What `static_hash` was computed from, so the freshness check rereads
+    /// only the inputs whose stat changed. Empty on older manifests.
+    #[serde(default, skip_serializing_if = "InputRecords::is_empty")]
+    pub input_records: InputRecords,
 }
 ```
 

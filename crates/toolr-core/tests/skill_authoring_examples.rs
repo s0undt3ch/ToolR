@@ -54,9 +54,11 @@ fn regenerate() {
 /// own `CARGO_PKG_VERSION`, which would otherwise drift this snapshot on
 /// every release even though the example tools/ tree hasn't changed.
 /// The snapshot documents manifest *shape*, not a pinned toolr version.
+/// `input_records` is dropped too: its stats are machine-local.
 fn serialise(manifest: &Manifest) -> String {
     let mut manifest = manifest.clone();
     manifest.toolr_version = "<toolr-version>".to_string();
+    manifest.input_records = Default::default();
     serde_json::to_string_pretty(&manifest).expect("serialising the example manifest")
 }
 

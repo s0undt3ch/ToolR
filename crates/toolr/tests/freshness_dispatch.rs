@@ -277,6 +277,49 @@ fn tab_completion_does_not_persist_manifest() {
     assert_eq!(mtime_before, mtime_after, "tab completion touched mtime");
 }
 
+/// #656: TAB never reports a corrupt manifest (completion scripts drop
+/// stderr) and never repairs it; the next non-TAB run warns once and
+/// rewrites it, and the run after that is silent.
+#[test]
+fn corrupt_manifest_is_reported_once_by_the_next_non_tab_run() {
+    let tmp = TempDir::new().unwrap();
+    write_minimal_project(tmp.path());
+    fs::write(tmp.path().join("tools").join("example.py"), EXAMPLE_PY).unwrap();
+    let manifest_path = tmp.path().join("tools").join(".toolr-manifest.json");
+    fs::write(&manifest_path, "{\"schema_ver").unwrap();
+
+    let tab = common::toolr()
+        .args(["__complete", tmp.path().to_str().unwrap(), ""])
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    assert!(tab.status.success(), "__complete failed: {tab:?}");
+    assert!(tab.stderr.is_empty(), "{tab:?}");
+    assert!(String::from_utf8_lossy(&tab.stdout).contains("example"));
+    assert_eq!(fs::read_to_string(&manifest_path).unwrap(), "{\"schema_ver");
+
+    let help = |expect_warning: bool| {
+        let out = common::toolr()
+            .arg("--help")
+            .current_dir(tmp.path())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{out:?}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            stderr.matches("ignoring unreadable").count(),
+            usize::from(expect_warning),
+            "{stderr}"
+        );
+    };
+    help(true);
+    let repaired = toolr_core::manifest::load_manifest(&manifest_path).unwrap();
+    // Written with the filesystem clock taken before the build, so the next
+    // check can reuse its records.
+    assert_ne!(repaired.input_records.snapshot_at_ns, 0);
+    help(false);
+}
+
 /// End-to-end through the real binary: a command imports an
 /// `Enum` from a sibling module (relative import) while an unrelated
 /// module elsewhere in the tree declares a same-named enum class. The

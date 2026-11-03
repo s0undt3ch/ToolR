@@ -38,6 +38,7 @@ fn empty_manifest() -> Manifest {
         groups: Vec::new(),
         commands: Vec::new(),
         plugin_warnings: Vec::new(),
+        input_records: Default::default(),
     }
 }
 
@@ -217,6 +218,7 @@ mod tests {
             groups,
             commands,
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         }
     }
 

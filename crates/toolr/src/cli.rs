@@ -985,6 +985,7 @@ mod cli_tree_tests {
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, runserver],
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         };
 
         let jenkins = build_for(manifest);
@@ -1013,6 +1014,7 @@ mod cli_tree_tests {
             groups: vec![group("docker")],
             commands: vec![build_cmd, image_cmd, build_child, image_child],
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         };
 
         let docker = build_for(manifest);
@@ -1039,6 +1041,7 @@ mod cli_tree_tests {
             groups: vec![group("jenkins")],
             commands: vec![dispatcher_cmd, migrate, status],
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         };
 
         let jenkins = build_for(manifest);
@@ -1355,6 +1358,7 @@ mod cli_tree_tests {
             groups: vec![group("django")],
             commands: vec![dispatcher_cmd, migrate],
             plugin_warnings: Vec::new(),
+            input_records: Default::default(),
         };
 
         let django = build_for(manifest);

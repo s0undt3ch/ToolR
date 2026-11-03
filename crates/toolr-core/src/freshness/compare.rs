@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::hash::{compute_static_hash, context_unless_symlinked};
+use crate::hash::{context_unless_symlinked, snapshot_static_inputs, static_hash_of};
 use crate::manifest::Manifest;
 use crate::manifest_build::compute_third_party_hash;
 
@@ -48,6 +48,10 @@ pub enum FreshnessVerdict {
 /// local change can shadow or unshadow a plugin command, which only a
 /// re-merge can reflect. So `StaticDrift` means local drift with no venv.
 ///
+/// Inputs whose stat matches their record in `cached.input_records` and
+/// that are older than its `snapshot_at_ns` are not reread; see
+/// [`snapshot_static_inputs`].
+///
 /// On `StaticDrift`, call `build_static_manifest` and preserve the cached
 /// third-party entries and plugin warnings. On `ThirdPartyDrift`, call
 /// `build_static_manifest_with_venv`; third-party entries come from the
@@ -75,7 +79,8 @@ pub fn compare(
         return Ok(verdict);
     }
 
-    let live_static = compute_static_hash(tools_dir)
+    let live_static = snapshot_static_inputs(tools_dir, Some(&cached.input_records))
+        .map(|records| static_hash_of(&records.files))
         .map_err(|e| context_unless_symlinked(e, format!("hashing {}", tools_dir.display())))?;
 
     // Third-party axis is only checked when the caller actually has a

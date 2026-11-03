@@ -27,7 +27,8 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   "third_party_hash": "<blake3 hex>",
   "toolr_version": "<CARGO_PKG_VERSION>",
   "groups": [...],
-  "commands": [...]
+  "commands": [...],
+  "input_records": {"files": [...], "scan_paths": [...], "snapshot_at_ns": <ns>, "snapshot_dev": <dev>}
 }
 ```
 
@@ -35,10 +36,19 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   manifest with a higher schema than it understands. Version 2 removed
   `path_constraints`. A cache with any other schema version is rebuilt
   on the next run.
-- **`static_hash`** — blake3 over the sorted `(path, contents)` of
+- **`static_hash`** — blake3 over the sorted per-file digests of
   every input of the static build: each `tools/**/*.py` file, the
   `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`, and every
   file an external command source scans. Drives static-layer rebuilds.
+- **`input_records`** — what `static_hash` was computed from: one
+  record per input (`key`, `size`, `mtime_ns`, `ctime_ns`, `ino`,
+  `dev`, and either `digest`, the hex blake3 of its contents, or
+  `unreadable`, the error kind for an input that couldn't be read),
+  each argparse block's `scan_paths`, and `snapshot_at_ns` and
+  `snapshot_dev`, the bound the stat gate compares mtimes against and
+  the device it was read on. The freshness check uses them to
+  skip rereading unchanged files. Absent on older manifests, which then
+  reread everything once.
 - **`third_party_hash`** — blake3 over the sorted set of
   `toolr-manifest.json` files found under
   `<tools-venv>/lib/python*/site-packages/*/`
@@ -219,19 +229,63 @@ Both hashes use blake3, written as lowercase hex.
   of being skipped, and symlinked directories there are not followed.
   Each file is keyed by its path relative to the project root, with `/`
   separators (a scanned file outside the project keeps its full path),
-  sorted by key, and hashed as
-  `key || 0x00 || len(contents) as u64 LE || contents`. The build reads
-  only the `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`,
-  so the hash takes those blocks as parsed, serialised in name order,
-  under a `0x02` tag instead of `0x00`: a dependency bump or `uv add`
-  doesn't trigger a rebuild. A `tools/pyproject.toml` whose blocks don't
-  parse is hashed whole, so fixing it does; it also adds no scanned
-  files, and neither does a block with an invalid glob. The check
-  doesn't fail on either; the build reports the error, and tab
-  completion keeps serving the cached manifest until it's fixed. A `tools/**/*.py` module that can't be read fails
-  the check, naming the file. Any other input that can't be read is
-  hashed as `key || 0x01 || <error kind>`, so an unreadable scanned file
-  doesn't break every command, and fixing it still triggers a rebuild.
+  sorted by key. Each file contributes
+  `len(key) as u64 LE || key || 0x00 || <hex blake3 of its contents>`.
+  The build reads only the `[tool.toolr.argparse.*]` blocks of
+  `tools/pyproject.toml`, so its digest is of `0x02` followed by those
+  blocks as parsed, serialised in name order: a dependency bump or
+  `uv add` doesn't trigger a rebuild. A `tools/pyproject.toml` whose
+  blocks don't parse is digested whole, so fixing it does; it also adds
+  no scanned files, and neither does a block with an invalid glob. The
+  check doesn't fail on either; the build reports the error, and tab
+  completion keeps serving the cached manifest until it's fixed. A
+  `tools/**/*.py` module that can't be read fails the check, naming the
+  file. Any other input that can't be read contributes
+  `len(key) as u64 LE || key || 0x01 || <error kind>`, so an unreadable
+  scanned file doesn't break every command, and fixing it still triggers
+  a rebuild.
+- The stat gate: the freshness check stats every input and reuses the
+  `digest` in `input_records` without reading the file when all of
+  these hold:
+    - its size, mtime, ctime, inode and device all match the record
+      (ctime, inode and device on Unix only);
+    - its mtime is strictly older than `input_records.snapshot_at_ns`.
+      That bound is the clock of `tools/`'s filesystem, read from a
+      temporary file in `tools/` just before the build's first stat, so
+      NFS clock skew doesn't affect inputs on that filesystem. A file
+      saved in the same timestamp tick as the build's stat is always
+      reread, as git does for its index, since it could have changed
+      again without changing its stat;
+    - it is under the project root and on `tools/`'s device
+      (`snapshot_dev`), since the bound can't be compared with another
+      filesystem's mtimes. Every other input is reread on every check;
+    - its record holds a `digest`: an `unreadable` record is never
+      reused, since fixing the permission changes no stat field.
+
+  More about the gate:
+
+    - Only runs that write the manifest take the bound; a manifest
+      without one reuses nothing.
+    - `tools/pyproject.toml` is read at most once per check, for both
+      its digest and its `scan_paths`, which are reused with its
+      digest. A `scan_paths` glob that also matches it makes it a
+      scanned file, recorded whole, so it is then read twice.
+    - The globs are expanded on every check, so a new or removed
+      scanned file is noticed.
+    - On an unchanged tree the check reads no input at all.
+    - A fresh manifest is never rewritten, so a file whose stat changed
+      without its contents (after `touch`), or that was saved in the
+      build's own tick, is reread on each check until the next rebuild.
+- Limits of the stat gate:
+    - Off Unix, ctime, inode and device aren't available, so a
+      same-size edit whose mtime is restored to an older value
+      (`cp -p`, unpacking an archive) goes unnoticed until that file
+      changes again.
+    - On NFS, a stat is answered from the client's attribute cache, and
+      an unchanged stat never opens the file, so close-to-open
+      revalidation never happens. An edit made from another NFS client
+      can go unnoticed until the attribute cache expires (typically 5
+      to 60 seconds).
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`
   or `Lib/site-packages/*/` (the Windows layout, looked in on every
