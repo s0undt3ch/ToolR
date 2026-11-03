@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import pathlib
 import shutil
+import sys
 from argparse import ArgumentParser
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -38,10 +39,12 @@ from toolr.utils._console import ConsoleVerbosity
 def status_to_exit_code(status: int) -> int:
     """Map a status to a process exit code the way a shell does.
 
-    A negative status (a `ctx.run` signal death) becomes `128 + N`; anything else outside
+    On Unix a negative status (a `ctx.run` signal death) becomes `128 + N`. Windows has no
+    signal deaths, so there a negative status is a real exit code. Anything still outside
     `0..=255` becomes 1, so a failure is never truncated to 0.
     """
-    if status < 0:
+    status = int(status)
+    if status < 0 and sys.platform != "win32":
         status = 128 - status
     return status if 0 <= status <= 255 else 1
 
@@ -209,8 +212,8 @@ class Context(Struct, frozen=True):
         """
         Exit the command execution.
 
-        A negative status, such as `ctx.run`'s `-N` for a child killed by signal `N`, exits
-        `128 + N`, as in a shell. Any other status outside `0..=255` exits 1.
+        On Unix, a negative status, such as `ctx.run`'s `-N` for a child killed by signal `N`,
+        exits `128 + N`, as in a shell. Any other status outside `0..=255` exits 1.
         """
         if message is not None:
             if status == 0:

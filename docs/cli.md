@@ -178,7 +178,8 @@ toolr project venv path --help
 
 Spawn a subshell with the tools venv activated. `$VIRTUAL_ENV` is set,
 `$PATH` is prepended with the venv's `bin/`, and `$TOOLR_VENV` carries
-the venv path for prompt customisation.
+the venv path for prompt customisation. toolr exits with the subshell's exit
+code, or 128 plus the signal number if a signal killed it.
 
 ```sh
 toolr project venv shell --help

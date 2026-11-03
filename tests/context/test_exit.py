@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from toolr._context import status_to_exit_code
@@ -56,16 +58,33 @@ def test_exit_with_custom_code(verbose_ctx):
     assert exc_info.value.code == 42
 
 
+IS_WINDOWS = sys.platform.startswith("win")
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
-    [(0, 0), (3, 3), (255, 255), (-15, 143), (-9, 137), (256, 1), (-1000, 1), (-1073741819, 1)],
+    [
+        (0, 0),
+        (3, 3),
+        (255, 255),
+        (True, 1),
+        (256, 1),
+        (-1000, 1),
+        (-1073741819, 1),
+        # A signal death on Unix; a real, out-of-range exit code on Windows.
+        (-15, 1 if IS_WINDOWS else 143),
+        (-9, 1 if IS_WINDOWS else 137),
+        (-1, 1 if IS_WINDOWS else 129),
+    ],
 )
 def test_status_to_exit_code(status, expected):
-    assert status_to_exit_code(status) == expected
+    result = status_to_exit_code(status)
+    assert result == expected
+    assert type(result) is int
 
 
 def test_exit_maps_negative_status_to_128_plus_signal(ctx, capfd):
     with pytest.raises(SystemExit) as exc_info:
         ctx.exit(-15, "killed")
-    assert exc_info.value.code == 143
+    assert exc_info.value.code == (1 if IS_WINDOWS else 143)
     assert "killed" in capfd.readouterr().err
