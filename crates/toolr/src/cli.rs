@@ -696,13 +696,9 @@ pub fn build_command(manifest: &Manifest) -> Command {
         root = root.subcommand(build_group_subtree(group, manifest, &children));
     }
 
-    root = root
-        .subcommand(build_project_subcommand())
-        .subcommand(build_self_subcommand());
-    for hidden in build_hidden_subcommands() {
-        root = root.subcommand(hidden);
-    }
-    root
+    root.subcommand(build_project_subcommand())
+        .subcommand(build_self_subcommand())
+        .subcommands(build_hidden_subcommands())
 }
 
 /// The literal default clap gets for `arg`, if any. Only an `Optional`
