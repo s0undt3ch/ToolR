@@ -31,7 +31,10 @@ toolr example hello --name Pedro
 subprocess. `capture_output=True` gives you a result object with
 `.stdout` and `.stderr`; default (no capture) streams the subprocess's
 output to the user's terminal. There is no `check=` kwarg — a nonzero
-exit does not raise. Inspect `result.returncode` yourself.
+exit does not raise. Inspect `result.returncode` yourself. As with
+`subprocess`, a child killed by signal N has `returncode` `-N`.
+`ctx.exit(result.returncode, ...)` turns that into exit code `128 + N`
+(143 for SIGTERM), as a shell would.
 
 ```python
 --8<-- "docs/writing-commands/files/example.py:34:45"

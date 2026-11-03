@@ -194,7 +194,8 @@ Run a command inside the managed tools venv. By default it syncs the venv
 first (freshness-gated, exactly like [`venv sync`](#project-venv-sync) and
 `venv shell`), then runs the command with `$VIRTUAL_ENV`, `$TOOLR_VENV`, and
 `$PATH` set so entry points such as `pytest` resolve from the venv. The child's
-stdout, stderr, and exit code pass straight through.
+stdout, stderr, and exit code pass straight through. A child killed by a signal
+exits with 128 plus the signal number, as in a shell.
 
 This is the one-liner for running a command-package's tests:
 
