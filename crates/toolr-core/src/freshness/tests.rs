@@ -35,11 +35,11 @@ fn make_venv(tmp: &Path, plugins: &[(&str, &str)]) {
 }
 
 fn manifest_for(tmp: &Path) -> Manifest {
-    use crate::hash::hash_tools_dir;
+    use crate::hash::compute_static_hash;
     use crate::manifest_build::compute_third_party_hash;
     Manifest {
         schema_version: crate::manifest::SCHEMA_VERSION,
-        static_hash: hash_tools_dir(&tmp.join("tools")).unwrap(),
+        static_hash: compute_static_hash(&tmp.join("tools")).unwrap(),
         third_party_hash: compute_third_party_hash(&tmp.join("venv")).unwrap(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: vec![],
@@ -171,7 +171,7 @@ fn missing_venv_skips_third_party_axis() {
     // under the new semantics this is ignored when venv_dir is None.
     let cached = Manifest {
         schema_version: crate::manifest::SCHEMA_VERSION,
-        static_hash: crate::hash::hash_tools_dir(&tmp.path().join("tools")).unwrap(),
+        static_hash: crate::hash::compute_static_hash(&tmp.path().join("tools")).unwrap(),
         third_party_hash: "arbitrary-non-empty-hash".to_string(),
         toolr_version: env!("CARGO_PKG_VERSION").to_string(),
         groups: vec![],
@@ -205,7 +205,7 @@ fn toolr_version_mismatch_without_venv_only_forces_static_drift() {
     make_tools(tmp.path(), &[("a.py", "x = 1\n")]);
     let cached = Manifest {
         schema_version: crate::manifest::SCHEMA_VERSION,
-        static_hash: crate::hash::hash_tools_dir(&tmp.path().join("tools")).unwrap(),
+        static_hash: crate::hash::compute_static_hash(&tmp.path().join("tools")).unwrap(),
         third_party_hash: "arbitrary-non-empty-hash".to_string(),
         toolr_version: "0.0.0-old".to_string(),
         groups: vec![],
@@ -284,5 +284,50 @@ fn hash_errors_name_the_tools_dir_except_symlinked_modules() {
     assert!(
         format!("{e:#}").starts_with("symlinked modules are not supported (1):"),
         "{e:#}"
+    );
+}
+
+/// #655: editing a file an argparse block scans is static drift, even
+/// though it lives outside `tools/`.
+#[test]
+fn returns_static_drift_when_scanned_file_changed_without_a_venv() {
+    let tmp = TempDir::new().unwrap();
+    make_tools(
+        tmp.path(),
+        &[
+            (
+                "pyproject.toml",
+                "[tool.toolr.argparse.django]\nscan_paths = [\"apps/*/management/commands/*.py\"]\n\n[[tool.toolr.argparse.django.attach]]\nparent = \"django\"\n",
+            ),
+            (
+                "dispatcher.py",
+                "from toolr import Context, command_group\nfrom toolr.sources import DispatchCommand\n\ngroup = command_group(\"django\", \"Django\")\n\n\n@group.command\ndef django(ctx: Context, *, dispatched: DispatchCommand) -> int:\n    \"\"\"Dispatch.\"\"\"\n",
+            ),
+        ],
+    );
+    let commands = tmp.path().join("apps/billing/management/commands");
+    fs::create_dir_all(&commands).unwrap();
+    let migrate = commands.join("migrate.py");
+    fs::write(
+        &migrate,
+        "def add_arguments(self, parser):\n    parser.add_argument('--check')\n",
+    )
+    .unwrap();
+    let tools = tmp.path().join("tools");
+    let cached = crate::parser::build_static_manifest(&tools).unwrap();
+    assert!(cached.commands.iter().any(|c| c.name == "migrate"));
+    assert_eq!(
+        compare(Some(&cached), &tools, None).unwrap(),
+        FreshnessVerdict::Fresh
+    );
+
+    fs::write(
+        &migrate,
+        "def add_arguments(self, parser):\n    parser.add_argument('--database')\n",
+    )
+    .unwrap();
+    assert_eq!(
+        compare(Some(&cached), &tools, None).unwrap(),
+        FreshnessVerdict::StaticDrift
     );
 }

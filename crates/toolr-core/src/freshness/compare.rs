@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::hash::{context_unless_symlinked, hash_tools_dir};
+use crate::hash::{compute_static_hash, context_unless_symlinked};
 use crate::manifest::Manifest;
 use crate::manifest_build::compute_third_party_hash;
 
@@ -75,7 +75,7 @@ pub fn compare(
         return Ok(verdict);
     }
 
-    let live_static = hash_tools_dir(tools_dir)
+    let live_static = compute_static_hash(tools_dir)
         .map_err(|e| context_unless_symlinked(e, format!("hashing {}", tools_dir.display())))?;
 
     // Third-party axis is only checked when the caller actually has a

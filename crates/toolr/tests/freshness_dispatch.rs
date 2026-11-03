@@ -198,7 +198,7 @@ fn version_mismatch_without_venv_preserves_third_party_entries() {
     )
     .unwrap();
 
-    let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
+    let static_hash = toolr_core::hash::compute_static_hash(&tools).unwrap();
     let manifest = format!(
         r#"{{
             "schema_version": 1,
@@ -507,4 +507,184 @@ fn concurrent_dispatches_rebuild_a_stale_manifest_under_the_lock() {
         .filter(|n| n.to_string_lossy().ends_with(".lock"))
         .collect();
     assert!(stray.is_empty(), "lock files leaked into tools/: {stray:?}");
+}
+
+const DJANGO_ARGPARSE_BLOCK: &str = r#"
+[tool.toolr.argparse.django]
+scan_paths = ["apps/*/management/commands/*.py"]
+django = true
+
+[[tool.toolr.argparse.django.attach]]
+parent = "django"
+"#;
+
+const DJANGO_DISPATCHER_PY: &str = r#"
+from toolr import Context, command_group
+from toolr.sources import DispatchCommand
+
+group = command_group("django", "Django", description="Run Django management commands")
+
+
+@group.command
+def django(ctx: Context, *, dispatched: DispatchCommand) -> int:
+    """Dispatch a Django management command."""
+    return ctx.run("django-admin", dispatched.command, *dispatched.argv).returncode
+"#;
+
+const MIGRATE_PY: &str = r#""""Migrate the database."""
+
+
+def add_arguments(self, parser):
+    parser.add_argument("--check", action="store_true", help="Dry run")
+"#;
+
+/// The worked example from `docs/writing-commands/external-sources.md`:
+/// a `django` dispatcher in `tools/` and a management command it scans
+/// from `apps/`. Returns the path of the scanned `migrate.py`.
+fn write_django_project(root: &std::path::Path) -> std::path::PathBuf {
+    let tools = common::write_project(root);
+    fs::write(
+        tools.join("pyproject.toml"),
+        format!("{}{DJANGO_ARGPARSE_BLOCK}", common::TOOLS_PYPROJECT),
+    )
+    .unwrap();
+    fs::write(tools.join("dispatcher.py"), DJANGO_DISPATCHER_PY).unwrap();
+    let commands = root.join("apps/billing/management/commands");
+    fs::create_dir_all(&commands).unwrap();
+    let migrate = commands.join("migrate.py");
+    fs::write(&migrate, MIGRATE_PY).unwrap();
+    migrate
+}
+
+fn help_stdout(root: &std::path::Path, args: &[&str]) -> String {
+    let output = common::toolr()
+        .args(args)
+        .arg("--help")
+        .current_dir(root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "toolr {args:?} --help failed: {output:?}"
+    );
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// #655: editing a scanned file must refresh the grafted command's
+/// arguments without `toolr project manifest rebuild`.
+#[test]
+fn grafted_command_help_reflects_scanned_file_edit() {
+    let tmp = TempDir::new().unwrap();
+    let migrate = write_django_project(tmp.path());
+
+    let before = help_stdout(tmp.path(), &["django", "migrate"]);
+    assert!(before.contains("--check"), "{before}");
+    assert!(!before.contains("--database"), "{before}");
+
+    let mut text = fs::read_to_string(&migrate).unwrap();
+    text.push_str(
+        "    parser.add_argument(\"--database\", default=\"default\", help=\"Target DB\")\n",
+    );
+    fs::write(&migrate, text).unwrap();
+
+    let after = help_stdout(tmp.path(), &["django", "migrate"]);
+    assert!(after.contains("--database"), "{after}");
+}
+
+/// #655: editing the `[tool.toolr.argparse.*]` table must refresh the
+/// grafted commands too; here pointing `scan_paths` nowhere drops them.
+#[test]
+fn removing_scan_paths_drops_grafted_commands() {
+    let tmp = TempDir::new().unwrap();
+    write_django_project(tmp.path());
+
+    let before = help_stdout(tmp.path(), &["django"]);
+    assert!(before.contains("migrate"), "{before}");
+
+    let pyproject = tmp.path().join("tools/pyproject.toml");
+    let text = fs::read_to_string(&pyproject).unwrap().replace(
+        r#"scan_paths = ["apps/*/management/commands/*.py"]"#,
+        r#"scan_paths = ["nowhere/*.py"]"#,
+    );
+    fs::write(&pyproject, text).unwrap();
+
+    let after = help_stdout(tmp.path(), &["django"]);
+    assert!(!after.contains("migrate"), "{after}");
+}
+
+/// An unreadable scanned file becomes a placeholder command with a
+/// warning; it must not fail `--help` or TAB through the freshness check.
+#[cfg(unix)]
+#[test]
+fn unreadable_scanned_file_does_not_break_help_or_completion() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let migrate = write_django_project(tmp.path());
+    help_stdout(tmp.path(), &["django"]);
+    fs::set_permissions(&migrate, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::read(&migrate).is_ok() {
+        eprintln!("skipping: running as root");
+        return;
+    }
+
+    let help = common::toolr()
+        .arg("--help")
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    let complete = common::toolr()
+        .args(["__complete", &tmp.path().to_string_lossy(), "django", ""])
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+    fs::set_permissions(&migrate, fs::Permissions::from_mode(0o644)).unwrap();
+
+    assert!(help.status.success(), "toolr --help failed: {help:?}");
+    assert!(
+        complete.status.success(),
+        "toolr __complete failed: {complete:?}"
+    );
+    let stdout = String::from_utf8_lossy(&complete.stdout);
+    assert!(stdout.contains("migrate"), "{stdout}");
+}
+
+/// `toolr __complete <root> <args...> ""`, which must succeed silently.
+fn complete_stdout(root: &std::path::Path, args: &[&str]) -> String {
+    let output = common::toolr()
+        .args(["__complete", &root.to_string_lossy()])
+        .args(args)
+        .arg("")
+        .current_dir(root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "toolr __complete failed: {output:?}"
+    );
+    assert!(output.stderr.is_empty(), "{output:?}");
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// #655 review: a pyproject mid-edit or a typo'd `scan_paths` glob fails
+/// the rebuild. TAB keeps serving the cached commands, silently.
+#[test]
+fn completion_serves_the_cache_when_the_pyproject_is_broken() {
+    let tmp = TempDir::new().unwrap();
+    write_django_project(tmp.path());
+    help_stdout(tmp.path(), &["django"]);
+    let pyproject = tmp.path().join("tools/pyproject.toml");
+    let valid = fs::read_to_string(&pyproject).unwrap();
+    let invalid_toml = valid.replace("[project]\n", "[project]\ndependencies = [\"django\"\n");
+    let bad_glob = valid.replace(
+        r#"scan_paths = ["apps/*/management/commands/*.py"]"#,
+        r#"scan_paths = ["apps/[/x.py"]"#,
+    );
+    for broken in [invalid_toml, bad_glob] {
+        assert_ne!(broken, valid);
+        fs::write(&pyproject, &broken).unwrap();
+        let groups = complete_stdout(tmp.path(), &[]);
+        assert!(groups.contains("django"), "{broken}\n{groups}");
+        let commands = complete_stdout(tmp.path(), &["django"]);
+        assert!(commands.contains("migrate"), "{broken}\n{commands}");
+    }
 }

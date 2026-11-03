@@ -897,6 +897,34 @@ fn preserves_third_party_entries_from_cache_when_reparsing() {
     );
 }
 
+/// A pyproject mid-edit (invalid TOML outside the argparse table) or a
+/// typo'd `scan_paths` glob fails the rebuild; TAB serves the cache, and
+/// without one the error reaches `run_complete`.
+#[test]
+fn failed_rebuild_serves_the_cache() {
+    let tmp = make_tree(&[(
+        "ci.py",
+        "group = command_group(\"ci\", \"CI utilities\")\n\n@group.command\ndef hello(ctx):\n    \"\"\"Do the thing.\"\"\"\n",
+    )]);
+    let tools = tmp.path().join("tools");
+    let mut built = crate::parser::build_static_manifest(&tools).unwrap();
+    built.third_party_hash = empty_third_party_hash();
+    let manifest_path = tools.join(".toolr-manifest.json");
+    for pyproject in [
+        "[project]\nname = \"tools\"\ndependencies = [\"django\"\n",
+        "[tool.toolr.argparse.django]\nscan_paths = [\"apps/[/x.py\"]\n",
+    ] {
+        std::fs::write(tools.join("pyproject.toml"), pyproject).unwrap();
+        write_manifest(&manifest_path, &built).unwrap();
+        let resolved = resolve_manifest_at_tab(tmp.path()).unwrap();
+        assert!(resolved.from_cache, "{pyproject}");
+        assert_eq!(resolved.manifest, built, "{pyproject}");
+
+        std::fs::remove_file(&manifest_path).unwrap();
+        assert!(resolve_manifest_at_tab(tmp.path()).is_err(), "{pyproject}");
+    }
+}
+
 /// F-17: a symlinked module fails the TAB-time resolve whether the walk is
 /// reached through the rebuild (no cache) or the freshness hash (cache);
 /// `run_complete` turns that into built-ins only.

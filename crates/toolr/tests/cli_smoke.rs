@@ -245,7 +245,7 @@ fn preflight_fixture(present_in_venv: &[&str]) -> tempfile::TempDir {
 
     // Stamp real hashes so ensure_manifest_fresh treats the manifest as
     // Fresh and doesn't rebuild it.
-    let static_hash = toolr_core::hash::hash_tools_dir(&tools).unwrap();
+    let static_hash = toolr_core::hash::compute_static_hash(&tools).unwrap();
     let venv_dir = tools.join(".venv");
     let third_party_hash = toolr_core::manifest_build::compute_third_party_hash(&venv_dir).unwrap();
     let toolr_version = env!("CARGO_PKG_VERSION");

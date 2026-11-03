@@ -318,7 +318,9 @@ pub fn write_fresh_manifest(root: &Path, manifest_json: &str) {
     let mut manifest: serde_json::Value = serde_json::from_str(manifest_json).unwrap();
     manifest["schema_version"] = toolr_core::manifest::SCHEMA_VERSION.into();
     manifest["toolr_version"] = env!("CARGO_PKG_VERSION").into();
-    manifest["static_hash"] = toolr_core::hash::hash_tools_dir(&tools).unwrap().into();
+    manifest["static_hash"] = toolr_core::hash::compute_static_hash(&tools)
+        .unwrap()
+        .into();
     manifest["third_party_hash"] =
         toolr_core::manifest_build::compute_third_party_hash(&tools.join(".venv"))
             .unwrap()

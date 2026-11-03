@@ -88,7 +88,9 @@ Your fragment is merged into the project's own `tools/.toolr-manifest.json`. The
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     pub schema_version: u32,
-    /// Hash over `tools/**/*.py` contents — used for fast freshness checks.
+    /// Hash over the static build's inputs (`tools/**/*.py`, the argparse
+    /// blocks in `tools/pyproject.toml` and the files they scan) —
+    /// used for fast freshness checks.
     pub static_hash: String,
     /// Will hash the sorted list of `site-packages/*/toolr-manifest.json`
     /// files (path + content) discovered in the tools venv. Equals

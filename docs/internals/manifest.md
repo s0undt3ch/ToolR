@@ -36,7 +36,9 @@ directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
   `path_constraints`. A cache with any other schema version is rebuilt
   on the next run.
 - **`static_hash`** — blake3 over the sorted `(path, contents)` of
-  every `tools/**/*.py` file. Drives static-layer rebuilds.
+  every input of the static build: each `tools/**/*.py` file, the
+  `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`, and every
+  file an external command source scans. Drives static-layer rebuilds.
 - **`third_party_hash`** — blake3 over the sorted set of
   `toolr-manifest.json` files found under
   `<tools-venv>/lib/python*/site-packages/*/`
@@ -161,9 +163,12 @@ without a working venv. Captures:
   files via a symbol table).
 
 The static layer is rebuilt when toolr detects `static_hash` drift
-against the on-disk files, or when the cached `toolr_version` doesn't
-match the running binary — an upgrade forces a static rebuild even if
-`tools/*.py` hasn't changed at all.
+against the on-disk files (a `tools/*.py` module, the
+`[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`, or a file an
+[external command source](../writing-commands/external-sources.md)
+scans), or when the cached `toolr_version` doesn't match the running
+binary — an upgrade forces a static rebuild even if none of those files
+changed.
 
 ## Third-party layer
 
@@ -208,18 +213,30 @@ includes new commands.
 Both hashes use blake3, written as lowercase hex.
 
 - `static_hash` input: every `*.py` file under `tools/` (skipping
-  `__pycache__` and dot-prefixed directories), sorted by path. A
-  symlinked `*.py` fails the hash instead of being skipped, and symlinked
-  directories are not followed. Each entry is hashed as
-  `len(path_bytes) || path_bytes || len(contents) || contents`.
+  `__pycache__` and dot-prefixed directories), `tools/pyproject.toml`,
+  and every file the `scan_paths` of its `[tool.toolr.argparse.*]`
+  blocks match. A symlinked `*.py` under `tools/` fails the hash instead
+  of being skipped, and symlinked directories there are not followed.
+  Each file is keyed by its path relative to the project root, with `/`
+  separators (a scanned file outside the project keeps its full path),
+  sorted by key, and hashed as
+  `key || 0x00 || len(contents) as u64 LE || contents`. The build reads
+  only the `[tool.toolr.argparse.*]` blocks of `tools/pyproject.toml`,
+  so the hash takes those blocks as parsed, serialised in name order,
+  under a `0x02` tag instead of `0x00`: a dependency bump or `uv add`
+  doesn't trigger a rebuild. A `tools/pyproject.toml` whose blocks don't
+  parse is hashed whole, so fixing it does; it also adds no scanned
+  files, and neither does a block with an invalid glob. The check
+  doesn't fail on either; the build reports the error, and tab
+  completion keeps serving the cached manifest until it's fixed. A `tools/**/*.py` module that can't be read fails
+  the check, naming the file. Any other input that can't be read is
+  hashed as `key || 0x01 || <error kind>`, so an unreadable scanned file
+  doesn't break every command, and fixing it still triggers a rebuild.
 - `third_party_hash` input: every `toolr-manifest.json` under
   `<tools-venv>/lib/python*/site-packages/*/`
   or `Lib/site-packages/*/` (the Windows layout, looked in on every
-  platform), sorted by path,
-  each entry hashed as
-  `len(path_bytes) || path_bytes || len(contents) || contents`.
-  Identical scheme to `static_hash` but over the third-party
-  fragment file set instead of `tools/**/*.py`.
+  platform), sorted by path, with each file's path and contents in the
+  hash.
 
 This gives stable, content-addressable rebuild decisions across
 machines and across CI / dev environments.
