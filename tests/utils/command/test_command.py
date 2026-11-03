@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 import tempfile
@@ -292,6 +293,14 @@ def test_timeout(sleep_command):
         run(sleep_command(1), timeout_secs=0.1)
     elapsed = time.time() - start
     assert elapsed < 1.0  # Verify timeout happened quickly
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="POSIX signals")
+def test_signal_killed_child_returncode():
+    argv = ["sh", "-c", "kill -TERM $$"]
+    result = run(argv)
+    assert result.returncode == -signal.SIGTERM
+    assert result.returncode == subprocess.run(argv, check=False).returncode  # noqa: S603
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="needs a POSIX shell")

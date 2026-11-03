@@ -497,9 +497,7 @@ pub fn run_command_internal(
     // Returned only now, so a write error doesn't leave the readers unjoined.
     stdin_result.map_err(Box::new)?;
 
-    // Get exit code and return it, regardless of value
-    let returncode = status.code().unwrap_or(-1);
-    Ok(returncode)
+    Ok(crate::exit_status::returncode(status))
 }
 
 #[cfg(test)]

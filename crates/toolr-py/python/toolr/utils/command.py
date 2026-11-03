@@ -77,7 +77,8 @@ def run(  # noqa: PLR0913, PLR0915
             and `input` — all of those require piping.
 
     Returns:
-        CommandResult object containing stdout, stderr, and return code
+        CommandResult object containing stdout, stderr, and return code. As with `subprocess`,
+        the return code is `-N` when signal `N` killed the child.
 
     Raises:
         CommandError: If any of the pre-run checks fail or an operational failure happens.
