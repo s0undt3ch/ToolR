@@ -62,6 +62,12 @@ For patch coverage, run `cargo xtask patch-coverage --base <base>` against that 
 under 99% and lists the missed changed lines. `<base>` is the PR's base branch, not always `main`
 for a stacked PR.
 
+Close a gap with a real test that drives the public API with real inputs, not a mock of internals
+that don't need mocking. If the code is awkward to reach, extract a small testable helper. A line
+holding only a closing `)?;` that `llvm-cov` reports as 0 hits is a tooling artefact: reformat the
+call so the `?` shares a line with real code, don't write a test for it. Never delete or gate code
+to dodge the metric.
+
 ### Where things live
 
 - Release notes queue: `release-notes/` (one file per note; folded into `CHANGELOG.md` on release).
