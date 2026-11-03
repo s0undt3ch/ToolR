@@ -10,6 +10,7 @@ use clap::ArgMatches;
 
 use crate::init_scaffold::{ScaffoldConflictsError, analyze_scaffold, execute_scaffold, scaffold};
 use crate::init_templates::{ScaffoldOptions, parse_venv_location};
+use toolr_core::exit_status::process_exit_code;
 use toolr_core::trust::{TrustError, TrustMode, TrustStore, require_trust, shown, trust_all_env};
 
 /// `root_quiet` is the root `toolr --quiet`. Under `project` it only stops the
@@ -664,7 +665,7 @@ fn venv_shell(root_quiet: bool) -> Result<ExitCode> {
         // Help shell prompts notice the activation.
         .env("TOOLR_VENV", &resolved.venv_dir)
         .status()?;
-    Ok(ExitCode::from(status.code().unwrap_or(1) as u8))
+    Ok(ExitCode::from(process_exit_code(status)))
 }
 
 fn venv_run(matches: &ArgMatches, root_quiet: bool) -> Result<ExitCode> {
@@ -750,7 +751,7 @@ fn run_command_in_venv(venv_dir: &Path, argv: &[String]) -> Result<ExitCode> {
         .status();
 
     match result {
-        Ok(status) => Ok(ExitCode::from(status.code().unwrap_or(1) as u8)),
+        Ok(status) => Ok(ExitCode::from(process_exit_code(status))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             eprintln!("toolr: couldn't find `{program}` in the tools venv.");
             eprintln!(

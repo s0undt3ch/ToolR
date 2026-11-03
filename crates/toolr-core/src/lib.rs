@@ -15,6 +15,7 @@ pub mod discovery;
 pub mod docstrings;
 #[cfg(feature = "full")]
 pub mod execute;
+pub mod exit_status;
 #[cfg(feature = "full")]
 pub mod freshness;
 #[cfg(feature = "full")]

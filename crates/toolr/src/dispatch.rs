@@ -12,6 +12,7 @@ use toolr_core::complete::{
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
+use toolr_core::exit_status::process_exit_code;
 use toolr_core::manifest::{Manifest, SCHEMA_VERSION};
 use toolr_core::trust::shown;
 use toolr_core::venv::resolve_venv_path;
@@ -345,21 +346,7 @@ pub fn dispatch(
         .with_context(|| format!("spawning Python runner at {}", python.display()))?;
     let status = wait_with_signals(&mut child)?;
 
-    // Map child status to a process exit code.
-    let code = status.code().unwrap_or_else(|| {
-        // Signal-terminated child on Unix: report 128 + signal.
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-            if let Some(sig) = status.signal() {
-                return 128 + sig;
-            }
-        }
-        1
-    });
-    // ExitCode only carries u8 — clamp anything outside 0..=255.
-    let clamped: u8 = code.clamp(0, 255).try_into().unwrap_or(1);
-    Ok(ExitCode::from(clamped))
+    Ok(ExitCode::from(process_exit_code(status)))
 }
 
 /// Re-sync a venv that a `tools/` file uv reads (see `check_freshness`)

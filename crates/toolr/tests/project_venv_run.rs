@@ -229,6 +229,25 @@ fn no_sync_fresh_passes_exit_code_through() {
 
 #[cfg(unix)]
 #[test]
+fn no_sync_signal_killed_child_exits_128_plus_signal() {
+    let tmp = TempDir::new().unwrap();
+    let venv = fake_in_tree_venv(tmp.path(), "#!/bin/sh\nkill -TERM $$\n");
+    mark_fresh(tmp.path(), &venv);
+    let output = common::toolr()
+        .current_dir(tmp.path())
+        .args(["project", "venv", "run", "--no-sync", "--", "python"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(143),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn no_sync_passes_args_verbatim() {
     let tmp = TempDir::new().unwrap();
     let arglog = tmp.path().join("arglog");
