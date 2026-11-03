@@ -640,9 +640,8 @@ def _append_repo_root(repo_root: str, path_list: list[str] | None = None) -> Non
 def run(spec: RunnerSpec) -> int:  # noqa: PLR0911
     """Execute the command described by ``spec``. Returns a process exit code.
 
-    ``ctx.exit(status, ...)`` raises :class:`SystemExit`; we honor its code, mapped the way
-    a shell would: on Unix a negative code exits ``128 + N``, and anything else outside ``0..=255``
-    exits 1.
+    ``ctx.exit(status, ...)`` raises :class:`SystemExit`; an int code goes through
+    :func:`status_to_exit_code`.
     Any other uncaught exception is logged to stderr and returns 1.
     """
     repo_root = Path(spec.context.repo_root)

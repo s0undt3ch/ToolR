@@ -8,27 +8,24 @@ use std::os::unix::process::ExitStatusExt as _;
 
 /// The exit code, or `-N` for a child killed by signal `N`. Windows statuses pass through unchanged.
 pub fn returncode(status: ExitStatus) -> i32 {
-    if let Some(code) = status.code() {
-        return code;
-    }
     #[cfg(unix)]
     if let Some(signal) = status.signal() {
         return -signal;
     }
-    -1
+    status.code().unwrap_or(-1)
 }
 
 /// The exit code if it fits in a byte, `128 + N` for a child killed by signal `N`, else 1, so a
 /// failing child never makes toolr exit 0.
 pub fn process_exit_code(status: ExitStatus) -> u8 {
-    if let Some(code) = status.code() {
-        return u8::try_from(code).unwrap_or(1);
-    }
     #[cfg(unix)]
     if let Some(signal) = status.signal() {
         return u8::try_from(128 + signal).unwrap_or(1);
     }
-    1
+    status
+        .code()
+        .and_then(|code| u8::try_from(code).ok())
+        .unwrap_or(1)
 }
 
 #[cfg(test)]
@@ -46,8 +43,14 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn returncode_is_negative_signal_for_signal_death() {
-        assert_eq!(returncode(ExitStatus::from_raw(libc::SIGTERM)), -15);
-        assert_eq!(returncode(ExitStatus::from_raw(libc::SIGKILL)), -9);
+        assert_eq!(
+            returncode(ExitStatus::from_raw(libc::SIGTERM)),
+            -libc::SIGTERM
+        );
+        assert_eq!(
+            returncode(ExitStatus::from_raw(libc::SIGKILL)),
+            -libc::SIGKILL
+        );
     }
 
     #[cfg(unix)]
@@ -68,19 +71,13 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn windows_crash_status_passes_through_returncode_and_exits_one() {
+    fn out_of_range_windows_code_passes_through_returncode_and_exits_one() {
         use std::os::windows::process::ExitStatusExt as _;
-        let status = ExitStatus::from_raw(0xC000_0005);
-        assert_eq!(returncode(status), 0xC000_0005_u32 as i32);
-        assert_eq!(process_exit_code(status), 1);
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn process_exit_code_maps_out_of_range_to_one() {
-        use std::os::windows::process::ExitStatusExt as _;
-        let status = ExitStatus::from_raw(256);
-        assert_eq!(returncode(status), 256);
-        assert_eq!(process_exit_code(status), 1);
+        // A crash NTSTATUS (negative as an `i32`) and a plain code above a byte.
+        for raw in [0xC000_0005_u32, 256] {
+            let status = ExitStatus::from_raw(raw);
+            assert_eq!(returncode(status), raw as i32);
+            assert_eq!(process_exit_code(status), 1);
+        }
     }
 }

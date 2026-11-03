@@ -296,7 +296,7 @@ def test_timeout(sleep_command):
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="POSIX signals")
-def test_signal_killed_child_returncode():
+def test_signal_killed_child_returncode_matches_subprocess():
     argv = ["sh", "-c", "kill -TERM $$"]
     result = run(argv)
     assert result.returncode == -signal.SIGTERM

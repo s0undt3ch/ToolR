@@ -8,6 +8,10 @@ import pytest
 
 from toolr._context import status_to_exit_code
 
+IS_WINDOWS = sys.platform.startswith("win")
+unix_only = pytest.mark.skipif(IS_WINDOWS, reason="POSIX signals")
+windows_only = pytest.mark.skipif(not IS_WINDOWS, reason="Windows has no signal deaths")
+
 
 def test_exit_with_message(ctx, capfd):
     """Test exit with message."""
@@ -58,23 +62,20 @@ def test_exit_with_custom_code(verbose_ctx):
     assert exc_info.value.code == 42
 
 
-IS_WINDOWS = sys.platform.startswith("win")
-
-
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        (0, 0),
-        (3, 3),
-        (255, 255),
-        (True, 1),
-        (256, 1),
-        (-1000, 1),
-        (-1073741819, 1),
-        # A signal death on Unix; a real, out-of-range exit code on Windows.
-        (-15, 1 if IS_WINDOWS else 143),
-        (-9, 1 if IS_WINDOWS else 137),
-        (-1, 1 if IS_WINDOWS else 129),
+        pytest.param(0, 0, id="success"),
+        pytest.param(3, 3, id="failure"),
+        pytest.param(255, 255, id="byte-max"),
+        pytest.param(True, 1, id="bool"),
+        pytest.param(256, 1, id="above-byte"),
+        pytest.param(-1073741819, 1, id="windows-crash-status"),
+        pytest.param(-1000, 1, id="negative-past-byte"),
+        pytest.param(-15, 143, id="sigterm", marks=unix_only),
+        pytest.param(-9, 137, id="sigkill", marks=unix_only),
+        pytest.param(-1, 129, id="sighup", marks=unix_only),
+        pytest.param(-15, 1, id="negative-is-out-of-range", marks=windows_only),
     ],
 )
 def test_status_to_exit_code(status, expected):
@@ -90,8 +91,9 @@ def test_exit_passes_non_int_status_to_sys_exit_unchanged(ctx, status, expected)
     assert exc_info.value.code == expected
 
 
+@unix_only
 def test_exit_maps_negative_status_to_128_plus_signal(ctx, capfd):
     with pytest.raises(SystemExit) as exc_info:
         ctx.exit(-15, "killed")
-    assert exc_info.value.code == (1 if IS_WINDOWS else 143)
+    assert exc_info.value.code == 143
     assert "killed" in capfd.readouterr().err
