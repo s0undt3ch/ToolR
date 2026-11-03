@@ -1754,7 +1754,10 @@ doesn't share its own venv with your tool scripts.</p>
 <p>Installs toolr from its signed <a href="https://packslip.dev/">packslip</a>
 manifest via mise's packslip backend — no plugin to register. mise
 verifies the release against the ToolR repository's signing identity
-and checks the digest and size of the downloaded archive. For
+and checks the digest and size of the downloaded archive. Pin the
+signer to ToolR's release workflow with
+<a href="mise/#pin-the-release-workflow"><code>workflow = "release.yml@refs/heads/main"</code></a>.
+For
 projects that already pin tool versions via <code>.mise.toml</code>, this
 is the most-natural fit — toolr's version becomes part of your
 project's reproducible tool set. Releases before 0.34.0
@@ -1775,14 +1778,18 @@ front-end rewrite; use the <code>toolr</code> executable instead.</p>
 <h3 id="curl-sh-linux-macos">curl | sh (Linux + macOS)<a class="headerlink" href="#curl-sh-linux-macos" title="Permanent link">&para;</a></h3>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/s0undt3ch/ToolR/main/installation/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </span></code></pre></div>
-<p>Verifies the SLSA attestation by default (requires the <code>gh</code> CLI; pass
-<code>--verify-attestation=skip</code> to bypass). Pin a version
+<p>Verifies the SLSA attestation by default (requires the <code>gh</code> CLI, 2.56
+or later; pass <code>--verify-attestation=skip</code> to bypass). See
+<a href="#supply-chain-verification-slsa-attestations">Supply-chain verification</a>.
+Pin a version
 with <code>sh -s -- --version X.Y.Z</code>. Custom prefix:
 <code>sh -s -- --prefix /opt/toolr/bin</code>. Default prefix is
 <code>$XDG_BIN_HOME</code> (or <code>~/.local/bin</code>).</p>
 <h3 id="powershell-windows">PowerShell (Windows)<a class="headerlink" href="#powershell-windows" title="Permanent link">&para;</a></h3>
 <div class="language-powershell highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">irm </span><span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">s0undt3ch</span><span class="p">/</span><span class="n">ToolR</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">installation</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="p">|</span> <span class="nb">iex</span>
 </span></code></pre></div>
+<p>Verifies the SLSA attestation the same way as <code>install.sh</code> (requires
+<code>gh</code> 2.56 or later; pass <code>-VerifyAttestation skip</code> to bypass).</p>
 <h3 id="github-release-archives">GitHub release archives<a class="headerlink" href="#github-release-archives" title="Permanent link">&para;</a></h3>
 <p>Download <code>toolr-&lt;version&gt;-&lt;target-triple&gt;.tar.gz</code> (or <code>.zip</code> for
 Windows) from <a href="https://github.com/s0undt3ch/ToolR/releases">https://github.com/s0undt3ch/ToolR/releases</a>, verify
@@ -1907,19 +1914,58 @@ runtime tracks each project's tools venv.</p>
 <p>Every release archive is signed with a SLSA build-provenance
 attestation produced by the GitHub-hosted release workflow. The
 <code>install.sh</code> and <code>install.ps1</code> scripts verify the attestation <strong>by
-default</strong> (<code>--verify-attestation=require</code>), which needs the <code>gh</code> CLI: if
-<code>gh</code> is missing the install <strong>fails</strong> rather than silently downgrading to
-a checksum-only install (the <code>.sha256</code> ships from the same release, so it
-catches transport corruption, not a tampered release asset).</p>
+default</strong> (<code>--verify-attestation=require</code>), which needs the <code>gh</code> CLI,
+2.56 or later (older <code>gh</code> can't load GitHub's current Sigstore trusted
+root). If <code>gh</code> is missing the install <strong>fails</strong> rather than silently
+downgrading to a checksum-only install (the <code>.sha256</code> ships from the same
+release, so it catches transport corruption, not a tampered release
+asset). With <code>--verify-attestation=auto</code> (<code>-VerifyAttestation auto</code>), a
+missing <code>gh</code> skips the check with a warning; an outdated one still fails.</p>
+<p>The check accepts an archive only when all of these hold:</p>
+<ul>
+<li>The attestation was signed by ToolR's archive-building workflow,
+  <code>_build-binary-archive.yml</code>, running on <code>main</code> on a GitHub-hosted
+  runner.</li>
+<li>That run was started by the release workflow, <code>release.yml</code>, on
+  <code>main</code>. CI calls the same archive-building workflow, so this is what
+  tells a release from a CI build of some branch.</li>
+<li>One subject of the attestation carries both the archive's exact file
+  name and its SHA-256, so a signed archive of another version or
+  platform can't be renamed into place.</li>
+</ul>
+<p>The Setup ToolR GitHub Action applies the same rules.</p>
+<p><code>TOOLR_REPO</code> (<code>install.sh</code>) and <code>-Repo</code> (<code>install.ps1</code>) move the whole
+trust anchor to another repository: the downloads, and the workflows the
+attestation must come from. Only set them for a fork you trust.</p>
 <p>To install without supply-chain verification (accepting the risk — e.g.
 on a host where you can't install <code>gh</code>):</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>sh<span class="w"> </span>installation/install.sh<span class="w"> </span>--verify-attestation<span class="o">=</span>skip<span class="w">   </span><span class="c1"># POSIX</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>./installation/install.ps1<span class="w"> </span>-VerifyAttestation<span class="w"> </span>skip<span class="w">     </span><span class="c1"># Windows</span>
 </span></code></pre></div>
-<p>Or verify a downloaded archive manually:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gh<span class="w"> </span>attestation<span class="w"> </span>verify<span class="w"> </span>toolr-1.2.3-aarch64-apple-darwin.tar.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--repo<span class="w"> </span>s0undt3ch/ToolR
+<p>Or verify a downloaded archive manually, from the directory you
+downloaded it to:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ARCHIVE_NAME</span><span class="o">=</span>toolr-1.2.3-aarch64-apple-darwin.tar.gz
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">RELEASE_WORKFLOW</span><span class="o">=</span>https://github.com/s0undt3ch/ToolR/.github/workflows/release.yml@refs/heads/main
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ARCHIVE_SHA256</span><span class="o">=</span><span class="k">$(</span>sha256sum<span class="w"> </span>&lt;<span class="w"> </span><span class="s2">"</span><span class="nv">$ARCHIVE_NAME</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>cut<span class="w"> </span>-d<span class="s1">' '</span><span class="w"> </span>-f1<span class="k">)</span><span class="w">    </span><span class="c1"># Linux</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># export ARCHIVE_SHA256=$(shasum -a 256 &lt; "$ARCHIVE_NAME" | cut -d' ' -f1)  # macOS</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>gh<span class="w"> </span>attestation<span class="w"> </span>verify<span class="w"> </span><span class="s2">"</span><span class="nv">$ARCHIVE_NAME</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>--repo<span class="w"> </span>s0undt3ch/ToolR<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span>--cert-identity<span class="w"> </span>https://github.com/s0undt3ch/ToolR/.github/workflows/_build-binary-archive.yml@refs/heads/main<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span>--deny-self-hosted-runners<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">  </span>--format<span class="w"> </span>json<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span>--jq<span class="w"> </span><span class="s1">'[.[].verificationResult</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="s1">         | select(.signature.certificate.buildConfigURI == env.RELEASE_WORKFLOW</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="s1">                  and any(.statement.subject[]; .name == env.ARCHIVE_NAME and .digest.sha256 == env.ARCHIVE_SHA256))]</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="s1">        | length'</span>
 </span></code></pre></div>
+<p>It prints <code>1</code> for a release archive. A non-zero exit means <code>gh</code> found no
+valid attestation from ToolR's archive-building workflow on <code>main</code>. <code>0</code>
+means the archive has one, but not from a release build of that exact
+file: a CI build, or another release's archive renamed. <code>gh attestation
+verify --repo s0undt3ch/ToolR</code> alone accepts both. <code>0</code> also appears when
+<code>ARCHIVE_SHA256</code> is empty; check it with <code>echo $ARCHIVE_SHA256</code>. The
+command is for a POSIX shell; on Windows, use Git Bash or WSL, or let
+<code>install.ps1</code> do the check.</p>
 <h2 id="verifying-the-install">Verifying the install<a class="headerlink" href="#verifying-the-install" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>toolr<span class="w"> </span>--version
 </span></code></pre></div>
