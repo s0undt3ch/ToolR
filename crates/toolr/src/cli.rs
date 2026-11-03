@@ -1387,4 +1387,40 @@ mod cli_tree_tests {
         let group_subs: Vec<&str> = django.get_subcommands().map(|c| c.get_name()).collect();
         assert_eq!(group_subs, vec!["migrate"]);
     }
+
+    #[test]
+    fn user_groups_precede_built_ins_and_reserved_names_are_skipped() {
+        let manifest = Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups: vec![group("ci"), group("self"), group("project")],
+            commands: vec![
+                normal_leaf("hello", "ci"),
+                normal_leaf("hijack", "self"),
+                normal_leaf("hijack", "project"),
+            ],
+            plugin_warnings: Vec::new(),
+            input_records: Default::default(),
+        };
+
+        let root = build_command(&manifest);
+        let names: Vec<&str> = root.get_subcommands().map(|c| c.get_name()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "ci",
+                "project",
+                "self",
+                "__build-static-manifest",
+                "__complete",
+                "__install-uv-now",
+            ]
+        );
+        for reserved in ["project", "self"] {
+            let built_in = root.find_subcommand(reserved).unwrap();
+            assert!(built_in.find_subcommand("hijack").is_none());
+        }
+    }
 }
