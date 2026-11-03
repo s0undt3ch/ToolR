@@ -2431,20 +2431,25 @@ reportable.</p>
 </span></code></pre></div>
 <h3 id="project-trust"><code>toolr project trust [PATH]</code><a class="headerlink" href="#project-trust" title="Permanent link">&para;</a></h3>
 <p>Trust the repository at <code>PATH</code> (default: the current directory's project
-root), so toolr will run its <code>tools/*.py</code> and sync its tools venv. Prints the
-trusted root. See <a href="../concepts/#repository-trust">Repository trust</a>.</p>
+root) and print the trusted root, then offer to sync its tools venv if it
+needs one. <code>--no-sync</code> only records the trust. When it asks, syncs or exits
+non-zero is in <a href="../concepts/#repository-trust">Repository trust</a>.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>trust<span class="w"> </span>--help
 </span></code></pre></div>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>Allow toolr to run this repository's code
+<div class="language-text highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>Allow toolr to run this repository's code, then sync its tools venv
 </span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>
-</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>Usage: toolr project trust [PATH]
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>Usage: toolr project trust [OPTIONS] [PATH]
 </span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>
 </span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>Arguments:
 </span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a>  [PATH]  A path inside the repository (defaults to the current directory)
 </span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a>
 </span><span id="__span-24-8"><a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a>Options:
-</span><span id="__span-24-9"><a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a>  -h, --help
-</span><span id="__span-24-10"><a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a>          Print help
+</span><span id="__span-24-9"><a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a>      --no-sync
+</span><span id="__span-24-10"><a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a>          Only record the trust; don't offer to sync the tools venv
+</span><span id="__span-24-11"><a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a>  -q, --quiet
+</span><span id="__span-24-12"><a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a>          Print only the trusted root and never prompt; sync only with TOOLR_AUTO_INSTALL_UV=1
+</span><span id="__span-24-13"><a id="__codelineno-24-13" name="__codelineno-24-13" href="#__codelineno-24-13"></a>  -h, --help
+</span><span id="__span-24-14"><a id="__codelineno-24-14" name="__codelineno-24-14" href="#__codelineno-24-14"></a>          Print help
 </span></code></pre></div>
 <h3 id="project-untrust"><code>toolr project untrust [PATH]</code><a class="headerlink" href="#project-untrust" title="Permanent link">&para;</a></h3>
 <p>Remove the trust record for the repository at <code>PATH</code>. Prints the root when a

@@ -1852,6 +1852,10 @@ overrides) lives in <a href="../installation/">Installation</a>.</p>
 </ul>
 <p>It then runs <code>uv sync</code> to materialise the tools venv. The next command
 you run uses that venv automatically.</p>
+<p>Working in a clone of a repo that already has <code>tools/</code>? Skip
+<code>toolr project init</code> and run <code>toolr project trust</code> instead. It trusts
+the repo, then asks whether to sync its tools venv (see
+<a href="../concepts/#repository-trust">Repository trust</a>).</p>
 <h2 id="3-run-your-first-command">3. Run your first command<a class="headerlink" href="#3-run-your-first-command" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>toolr<span class="w"> </span>example<span class="w"> </span>hello<span class="w"> </span>--name<span class="w"> </span>you
 </span></code></pre></div>

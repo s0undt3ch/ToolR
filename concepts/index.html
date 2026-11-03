@@ -1735,8 +1735,8 @@ your code. See <a href="../project-config/">Project configuration</a>.</p>
 materialised from <code>tools/pyproject.toml</code>. By default lives in
 <code>$XDG_CACHE_HOME/toolr/&lt;repo-key&gt;/venv/</code> (one per repo); opt into
 in-tree <code>tools/.venv/</code> via <code>[tool.toolr] venv-location = "in-tree"</code>.
-Created by <code>toolr project venv sync</code> (or automatically by
-<code>toolr project init</code>). See <a href="../project-config/">Project configuration</a>.</p>
+Created by <code>toolr project trust</code>, <code>toolr project venv sync</code> or
+<code>toolr project init</code>. See <a href="../project-config/">Project configuration</a>.</p>
 <h2 id="the-manifest">The manifest<a class="headerlink" href="#the-manifest" title="Permanent link">&para;</a></h2>
 <p><code>tools/.toolr-manifest.json</code> — the cached structure of every group
 and command the toolr binary knows about. Toolr regenerates it when
@@ -1763,12 +1763,27 @@ repository controls.</p>
 hashed, so a dependency bump never asks again.</p>
 <p>Trust a repository in either of two ways:</p>
 <ul>
+<li>Run <code>toolr project trust [PATH]</code>. <code>toolr project untrust [PATH]</code>
+  removes the record.</li>
 <li>Answer <code>y</code> at the prompt toolr shows on a terminal. Anything else,
   including bare Enter, refuses. With <code>--quiet</code> or no terminal, toolr
   never prompts and refuses.</li>
-<li>Run <code>toolr project trust [PATH]</code>. <code>toolr project untrust [PATH]</code>
-  removes the record.</li>
 </ul>
+<p>Trusting a repository is also when toolr offers to build its tools venv.
+After <code>toolr project trust</code>, or a <code>y</code> at the prompt when the venv
+is missing, out of date or broken, toolr asks a second question, <code>Sync it now? [y/N]</code>.
+It warns first that syncing may download uv and a Python, and installs
+the dependencies in <code>tools/pyproject.toml</code>.</p>
+<p>A <code>y</code> syncs the venv, installing uv first if needed without asking
+again, and the command you ran carries on. Anything else keeps the
+trust and leaves the venv alone: <code>toolr project trust</code> still exits 0,
+and a command run stops with an error. Run <code>toolr project venv sync</code>
+when you're ready. This prompt replaces the uv install prompt, so it follows
+the same rules. With <code>--quiet</code> (or the root <code>toolr -q</code>) or no terminal
+toolr doesn't ask and doesn't sync. <code>TOOLR_AUTO_INSTALL_UV=1</code> answers <code>y</code> without asking,
+including with <code>--quiet</code> or no terminal, so the sync runs.
+<code>toolr project trust --no-sync</code> only records the trust. If a sync you
+agreed to fails, the trust is kept and toolr exits non-zero.</p>
 <p><code>toolr self trusted</code> lists the trusted repositories and marks the ones
 whose path no longer exists. <code>toolr self trusted --prune</code> removes those.
 Records live in toolr's state directory, not in the cache, so

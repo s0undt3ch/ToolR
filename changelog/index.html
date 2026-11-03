@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev461-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev476-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev461 - 2026-11-02
+        0.35.2-dev476 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev461 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev476 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4491,15 +4491,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev461-2026-11-02" class="md-nav__link">
+  <a href="#0352-dev476-2026-11-02" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev461 - 2026-11-02
+        0.35.2-dev476 - 2026-11-02
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev461 - 2026-11-02">
+    <nav class="md-nav" aria-label="0.35.2-dev476 - 2026-11-02">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7517,7 +7517,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev461-2026-11-02">0.35.2-dev461 - 2026-11-02<a class="headerlink" href="#0352-dev461-2026-11-02" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev476-2026-11-02">0.35.2-dev476 - 2026-11-02<a class="headerlink" href="#0352-dev476-2026-11-02" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7562,6 +7562,8 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <p><strong>Breaking:</strong> a <code>*.py</code> under <code>tools/</code> (or in a plugin package passed to <code>toolr self build-manifest</code>) that is a symlink is now an error instead of being silently skipped, so toolr never picks up code from outside <code>tools/</code> by surprise. toolr lists every such link and stops; replace each with the file itself, or share the code as a Python package that <code>tools/pyproject.toml</code> depends on. <code>CommandsTester.discover()</code> raises the same error. Symlinked directories are still ignored.</p>
 <p><strong>Breaking:</strong> <code>ctx.run</code> timeouts now cover the whole call. If the command exits but something it started in the background keeps its output open, <code>ctx.run(..., timeout_secs=N)</code> raises <code>CommandTimeoutError</code> (or <code>CommandTimeoutNoOutputError</code>) when the limit runs out. It used to wait for that process with no limit and then return the command's exit code. Without a timeout, <code>ctx.run</code> still waits for the output to close.</p>
 <p>When a timeout fires, toolr now also kills the processes the command started, not just the command. It used to kill only the direct child, so <code>ctx.run("sh", "-c", "sleep 999; true", timeout_secs=1)</code> left <code>sleep</code> running. A process that detached itself first, such as a daemon that double-forks, can't be found and keeps running.</p>
+<p><strong>Breaking:</strong> <code>toolr project trust</code> now runs <code>uv sync</code> on the tools venv after trusting the repository, when the venv needs one and you accept on a terminal or <code>TOOLR_AUTO_INSTALL_UV=1</code> is set, and it exits non-zero if that sync fails. It used to only record the trust and always exit 0, so scripts and hooks that run it with <code>TOOLR_AUTO_INSTALL_UV=1</code> now sync too. Pass <code>--no-sync</code> to keep the old trust-only behaviour. The trust is kept either way.</p>
+<p>A fresh clone now needs one step before its commands run. On a terminal <code>toolr project trust</code> asks first (<code>Sync it now? [y/N]</code>); declining keeps the trust and points you at <code>toolr project venv sync</code>. Running a command in an untrusted repository works the same way: answer <code>y</code> to the trust prompt and, if the venv is missing, out of date or broken, toolr offers to sync it and then runs the command. The sync prompt replaces the uv install prompt for that sync, so you see at most two prompts. With <code>--quiet</code> or no terminal toolr doesn't ask and doesn't sync unless <code>TOOLR_AUTO_INSTALL_UV=1</code> is set.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7679,6 +7681,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(security)</em> Require repository trust before running repo code (<a href="https://github.com/s0undt3ch/ToolR/commit/747a3b678fbf03525d86fb32ed62f7b564b391a1"><code>747a3b6</code></a>)</li>
 <li><em>(security)</em> [<strong>breaking</strong>] Start with no trusted repositories (<a href="https://github.com/s0undt3ch/ToolR/commit/e33d125591f3414509faff6c63a437d2ec52409e"><code>e33d125</code></a>)</li>
 <li><em>(testing)</em> Export ConsoleVerbosity from toolr.testing (<a href="https://github.com/s0undt3ch/ToolR/commit/cb5731d1d5a4c60be9348cb4896ceccdc97eaf3a"><code>cb5731d</code></a>)</li>
+<li><em>(trust)</em> [<strong>breaking</strong>] Sync the tools venv right after trusting a repository (<a href="https://github.com/s0undt3ch/ToolR/commit/f9393c12ec2f0ebe80b9487e53e7bd2fa0eff239"><code>f9393c1</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7790,6 +7793,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Give ctx.run reader threads their own output fds (<a href="https://github.com/s0undt3ch/ToolR/commit/cf8edc77ceec668729d0790026f3f67270b3f6d8"><code>cf8edc7</code></a>)</li>
 <li><em>(command)</em> Vet each edge of the ctx.run tree walk (<a href="https://github.com/s0undt3ch/ToolR/commit/746b69933d85a8a048a0259fb0d793d5d9f0a1c5"><code>746b699</code></a>)</li>
 <li><em>(command)</em> Tell slow sinks from pipe holders in ctx.run timeouts (<a href="https://github.com/s0undt3ch/ToolR/commit/296bc0b04d33e9f1dd86ff8d24eebbd180ce4e95"><code>296bc0b</code></a>)</li>
+<li><em>(trust)</em> Prove trust with a token and keep the sync prompt the only one (<a href="https://github.com/s0undt3ch/ToolR/commit/757a9e354781609887f55a853882b8cbc5ec092b"><code>757a9e3</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7834,6 +7838,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Give infallible-in-practice branches no line of their own (<a href="https://github.com/s0undt3ch/ToolR/commit/db0fd60cbc9d3eb74dd237c3e5bca49041229939"><code>db0fd60</code></a>)</li>
 <li><em>(parser)</em> Call @group.command the binding form, not legacy (<a href="https://github.com/s0undt3ch/ToolR/commit/174cef5cdbe8e8e4cb8528b33789ee036db78670"><code>174cef5</code></a>)</li>
 <li><em>(parser)</em> Name the string-path decorator form StringPath (<a href="https://github.com/s0undt3ch/ToolR/commit/e0ee6bd63d750b0a00ccf2b359e5671f36cdbf40"><code>e0ee6bd</code></a>)</li>
+<li><em>(trust)</em> Mint trust proofs only from the default store (<a href="https://github.com/s0undt3ch/ToolR/commit/c0da33153b0a2ccb8ed2d95085a6a2c8f274ba74"><code>c0da331</code></a>)</li>
+<li><em>(trust)</em> Name the sync choice and the prompt-granted proof (<a href="https://github.com/s0undt3ch/ToolR/commit/391ebe7c5cb18d0e5dd61d2937e15eb3be203cda"><code>391ebe7</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7960,6 +7966,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive ctx-run timeout kills tree design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/fac27a36d0b979a37a53813635e579622b3a9044"><code>fac27a3</code></a>)</li>
 <li><em>(specs)</em> Spec and plan F-43 misc maintainability (<a href="https://github.com/s0undt3ch/ToolR/commit/e3cd0fe1f222242fc142c7e5cfcc8dd5cc4d5239"><code>e3cd0fe</code></a>)</li>
 <li><em>(specs)</em> Archive misc maintainability design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/174b00e8882a883273f16da3da8ee8e86d3c3d65"><code>174b00e</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-32 README venv first run (<a href="https://github.com/s0undt3ch/ToolR/commit/a0f08444b121711a98dfdcbb3128e9cae304599c"><code>a0f0844</code></a>)</li>
+<li><em>(specs)</em> Update F-32 spec to trust-then-sync (<a href="https://github.com/s0undt3ch/ToolR/commit/051c733e6b61cfa4732de1e6200659d2a08ad8e4"><code>051c733</code></a>)</li>
+<li><em>(trust)</em> Document the sync prompt's env var, quiet and exit code (<a href="https://github.com/s0undt3ch/ToolR/commit/7347e47344d61d558392ba7bd9570298b8563c72"><code>7347e47</code></a>)</li>
+<li><em>(trust)</em> Keep the sync consent rules in one place (<a href="https://github.com/s0undt3ch/ToolR/commit/9187eced30c4764dd7ef7438b188e2247a206811"><code>9187ece</code></a>)</li>
+<li><em>(specs)</em> Archive trust-then-sync design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/91e3f46b782dd178124ab87d12b8bf7427b3595a"><code>91e3f46</code></a>)</li>
 </ul>
 <h3 id="styling"><!-- 5 -->🎨 Styling<a class="headerlink" href="#styling" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8027,6 +8038,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Prove the timed-out grandchild was alive before it died (<a href="https://github.com/s0undt3ch/ToolR/commit/862d10ef91d5c843572f747b1adcb5925919b5e8"><code>862d10e</code></a>)</li>
 <li><em>(uv)</em> Drop offline install tests that duplicate unit tests (<a href="https://github.com/s0undt3ch/ToolR/commit/81aeb40c59d6491c739484fff2cf058a6272c510"><code>81aeb40</code></a>)</li>
 <li><em>(parser)</em> Compare the whole string-path decorator in the conflict test (<a href="https://github.com/s0undt3ch/ToolR/commit/8f773c2766e5d7fff12be845156c113de7d2c48d"><code>8f773c2</code></a>)</li>
+<li><em>(trust)</em> Assert dispatch outcomes and stop pty runs that hang (<a href="https://github.com/s0undt3ch/ToolR/commit/a3b8b79236d6163aa5faa4cb2190441ae121479f"><code>a3b8b79</code></a>)</li>
+<li><em>(trust)</em> Share the pty harness and its deadline across prompt tests (<a href="https://github.com/s0undt3ch/ToolR/commit/436b1a650bc74ad0baeaedd9be447d93bac4a188"><code>436b1a6</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
