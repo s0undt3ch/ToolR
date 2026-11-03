@@ -140,7 +140,7 @@ gh() {{
         wrapped = (
             "#!/bin/bash\n"
             "set -euo pipefail\n"
-            f"ARCHIVE_PATH={shlex.quote(str(archive))}\n"
+            f"ARCHIVE_PATH={shlex.quote(archive.as_posix())}\n"
             "export ARCHIVE_PATH\n" + exports + stub + script_body
         )
         script_path = tmp_path / "wrapped.sh"
