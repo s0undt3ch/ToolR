@@ -17,7 +17,7 @@ clap tree (F-31).
 
 - No behaviour change: subcommand order, args, help text, headings, `hide` flags and defaults stay identical.
 - `build_command(manifest: &Manifest) -> Command` keeps its signature.
-- Branch is stacked on `fix/path-default-repo-root`; don't touch `build_user_command`.
+- Don't touch `build_user_command`.
 - Conventional Commits; no `Co-Authored-By`. Stage by path; never `git add -A`. `rustfmt crates/toolr/src/cli.rs`
   only, never `cargo fmt -p`.
 - Baseline captures go in a scratch dir outside the repo (`$TMPDIR/cli-refactor/`).
@@ -39,7 +39,8 @@ clap tree (F-31).
 
 **Files:**
 
-- Modify: `crates/toolr/src/cli.rs` (`build_command` and new functions above it)
+- Modify: `crates/toolr/src/cli.rs` (`build_command`, lines 133-684 on main at `3a860f41`, and new functions
+  above it)
 - Test: existing `cli.rs` `mod tests`, `crates/toolr/src/builtin_completions.rs` tests, `crates/toolr/tests/*`
 
 **Interfaces:**
@@ -51,9 +52,10 @@ clap tree (F-31).
   `fn build_self_completion_subcommand() -> Command`; `fn build_hidden_subcommands() -> [Command; 3]`.
 
 - [ ] **Step 1: Capture the baseline.** Add a throwaway, uncommitted test to `cli.rs` `mod tests`:
-      `dump_builtin_tree`, which writes `format!("{:#?}", build_command(&empty_manifest()))` to the path in
-      `$TOOLR_TREE_DUMP` (skip when unset). Run
-      `TOOLR_TREE_DUMP=$TMPDIR/cli-refactor/before.txt cargo test -p toolr --lib dump_builtin_tree`. Then
+      `dump_builtin_tree`, which writes `format!("{:#?}", cmd)` for a built `build_command(&manifest)` to the path
+      in `$TOOLR_TREE_DUMP` (skip when unset). The manifest holds a user group `ci` and a colliding group `self`,
+      so the dump also covers group order and the reserved-name skip. `toolr` has no lib target, so run
+      `TOOLR_TREE_DUMP=$TMPDIR/cli-refactor/before.txt cargo test -p toolr --bin toolr dump_builtin_tree`. Then
       `cargo build -p toolr` and copy `target/debug/toolr` to `$TMPDIR/cli-refactor/toolr-before`.
 
 - [ ] **Step 2: Extract.** Move each block of `build_command` into the function named in the Interfaces block,
@@ -64,7 +66,7 @@ clap tree (F-31).
 - [ ] **Step 3: Run** `cargo test -p toolr` → PASS, every existing test unchanged.
 
 - [ ] **Step 4: Prove equality.**
-    - `TOOLR_TREE_DUMP=$TMPDIR/cli-refactor/after.txt cargo test -p toolr --lib dump_builtin_tree`, then
+    - `TOOLR_TREE_DUMP=$TMPDIR/cli-refactor/after.txt cargo test -p toolr --bin toolr dump_builtin_tree`, then
       `diff before.txt after.txt` → empty.
     - `cargo build -p toolr`. For each of `--help`, `project --help`, `project init --help`, `project venv --help`,
       `project venv {path,shell,run,sync,lock,add,remove} --help`, `project manifest rebuild --help`,

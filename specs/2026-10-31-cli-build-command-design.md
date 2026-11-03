@@ -3,18 +3,17 @@
 - **Status:** design agreed, not implemented
 - **Origin:** whole-project review finding F-31 (medium).
 - **Plan:** [`2026-10-31-cli-build-command-plan.md`](./2026-10-31-cli-build-command-plan.md)
-- **Stacks on:** `fix/path-default-repo-root` (F-11, `specs/2026-10-31-path-default-repo-root-design.md`); merge
-  that first.
 
 ## Problem
 
-`crates/toolr/src/cli.rs::build_command` is about 540 lines. It builds, inline and in this order:
+`crates/toolr/src/cli.rs::build_command` is about 550 lines (lines 133-684 on main at `3a860f41`). It builds,
+inline and in this order:
 
 1. the root `toolr` command, its "Output Options" flags and the combined `-h`/`--help` arg;
 2. the user group subtrees from the manifest (already delegated to `build_group_subtree`);
 3. the `project` subtree (`init`, hidden `deps`, `venv {path,shell,run,sync,lock,add,remove}`, `manifest rebuild`,
-   `trust`, `untrust`), about 245 lines;
-4. the `self` subtree (`build-manifest`, `cache {list,prune}`, `trusted`, `completion {print,install}`), about 150
+   `trust`, `untrust`), about 255 lines;
+4. the `self` subtree (`build-manifest`, `cache {list,prune}`, `trusted`, `completion {print,install}`), about 145
    lines;
 5. the hidden `__build-static-manifest`, `__complete` and `__install-uv-now` commands.
 
@@ -53,13 +52,7 @@ Rejected alternatives:
   The finding lists them as "also large". Each needs its own PR so this one stays a diff a reviewer can check
   hunk by hunk.
 
-## Stacking
-
-F-11 changes `build_user_command` (a path-default parser swap) and adds nothing to `build_command`. Its signature
-doesn't change. This branch touches only `build_command` and the new functions above them, so the hunks don't
-overlap and the restack is mechanical.
-
 ## Scope and compatibility
 
 - No schema change, no user-visible change, no docs change.
-- `UNRELEASED.md`: none.
+- Release note: none (`Release-Notes: skip`).
