@@ -447,17 +447,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#pin-the-release-workflow" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pin the release workflow
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#aqua-fallback" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1820,17 +1809,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#pin-the-release-workflow" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pin the release workflow
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#aqua-fallback" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2113,9 +2091,7 @@ backend instead; see "Aqua fallback" below.</p>
 <li><strong>Supply-chain verified.</strong> mise verifies the release against the
   ToolR repository's signing identity, remembering the release
   workflow after the first install, and checks the digest and size
-  of the archive for your platform before unpacking it. Pin that
-  workflow from the first install with the
-  <a href="#pin-the-release-workflow"><code>workflow</code> option</a>.</li>
+  of the archive for your platform before unpacking it.</li>
 </ul>
 <h2 id="install-toolr">Install toolr<a class="headerlink" href="#install-toolr" title="Permanent link">&para;</a></h2>
 <h3 id="pin-per-project-recommended">Pin per project (recommended)<a class="headerlink" href="#pin-per-project-recommended" title="Permanent link">&para;</a></h3>
@@ -2148,72 +2124,47 @@ global config with a tool you mostly use inside specific repos.</p>
 <h3 id="verify">Verify<a class="headerlink" href="#verify" title="Permanent link">&para;</a></h3>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>toolr<span class="w"> </span>--version
 </span></code></pre></div>
-<h3 id="pin-the-release-workflow">Pin the release workflow<a class="headerlink" href="#pin-the-release-workflow" title="Permanent link">&para;</a></h3>
-<p>Pin the workflow that signs ToolR's packslip with mise's per-tool
-<code>workflow</code> option (mise 2026.10.5 or later):</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[tools]</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="s2">"packslip:github.com/s0undt3ch/ToolR"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"X.Y.Z"</span><span class="p">,</span><span class="w"> </span><span class="n">workflow</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"release.yml@refs/heads/main"</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p>Without it, mise accepts a packslip signed by any workflow in the ToolR
-repository on the first install, then remembers that signer. With it,
-mise accepts only a packslip signed by <code>release.yml</code> running on <code>main</code>
-in <code>s0undt3ch/ToolR</code>, from the first install on, and refuses anything
-else, such as a CI workflow or a copy of <code>release.yml</code> on another
-branch. The ref is matched exactly.</p>
-<p>Keep the <code>@refs/heads/main</code> suffix. A bare <code>workflow = "release.yml"</code>
-means "<code>release.yml</code> running on a tag" to mise, and ToolR releases are
-signed on <code>main</code>, so every install would fail with
-<code>expected an identity starting with ".../release.yml@refs/tags/"</code>.</p>
-<p>What the pin doesn't cover: which workflow built the archives. The
-signed packslip lists each archive's digest and size, and mise checks
-them, so you get exactly the archives <code>release.yml</code> signed for. But
-packslip only links the archives' build provenance by digest, and
-neither mise nor <code>packslip verify</code> checks it. To check that an archive
-was built by ToolR's release workflow, verify it with
-<a href="../#supply-chain-verification-slsa-attestations"><code>gh attestation verify</code></a>.</p>
 <h3 id="aqua-fallback">Aqua fallback<a class="headerlink" href="#aqua-fallback" title="Permanent link">&para;</a></h3>
 <p>Releases before 0.34.0 have no packslip manifest to install
 from. For those, use mise's aqua backend, unchanged from before
 packslip landed:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@&lt;version&gt;
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mise<span class="w"> </span>use<span class="w"> </span>aqua:s0undt3ch/ToolR@&lt;version&gt;
 </span></code></pre></div>
 <p>The aqua registry entry pulls the same signed GitHub release archives
 with SHA-256 verification built in; it just can't check the packslip
 signature a pre-packslip release never published.</p>
 <h2 id="project-configuration">Project configuration<a class="headerlink" href="#project-configuration" title="Permanent link">&para;</a></h2>
 <h3 id="misetoml-recommended"><code>.mise.toml</code> (recommended)<a class="headerlink" href="#misetoml-recommended" title="Permanent link">&para;</a></h3>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[tools]</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="s2">"packslip:github.com/s0undt3ch/ToolR"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"X.Y.Z"</span><span class="p">,</span><span class="w"> </span><span class="n">workflow</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"release.yml@refs/heads/main"</span><span class="w"> </span><span class="p">}</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">[tools]</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="s2">"packslip:github.com/s0undt3ch/ToolR"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"X.Y.Z"</span>
 </span></code></pre></div>
-<p><code>"packslip:github.com/s0undt3ch/ToolR" = "X.Y.Z"</code> works too, without
-the <a href="#pin-the-release-workflow">release workflow pin</a>.</p>
 <p>Then run <code>mise install</code> from the project root. mise resolves the
 version from <code>.mise.toml</code> and installs it on demand.</p>
 <h3 id="tool-versions-asdf-style-legacy"><code>.tool-versions</code> (asdf-style, legacy)<a class="headerlink" href="#tool-versions-asdf-style-legacy" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>packslip:github.com/s0undt3ch/ToolR X.Y.Z
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>packslip:github.com/s0undt3ch/ToolR X.Y.Z
 </span></code></pre></div>
 <p>mise also reads asdf's <code>.tool-versions</code> files, so existing asdf
 users can keep their pin format unchanged.</p>
 <h2 id="combining-with-mise-tasks">Combining with mise tasks<a class="headerlink" href="#combining-with-mise-tasks" title="Permanent link">&para;</a></h2>
 <p><code>mise</code> can run repo-scoped tasks. Once <code>toolr</code> is on PATH via the
 packslip backend, wire it into tasks like any other binary:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">[tools]</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="s2">"packslip:github.com/s0undt3ch/ToolR"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"X.Y.Z"</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">[tasks.test]</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run tests"</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">run</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolr test run"</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="k">[tasks.lint]</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run linters"</span>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="n">run</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolr lint check"</span>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="k">[tasks.ci]</span>
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run CI checks"</span>
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="n">depends</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"lint"</span><span class="p">,</span><span class="w"> </span><span class="s2">"test"</span><span class="p">]</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">[tools]</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="s2">"packslip:github.com/s0undt3ch/ToolR"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"X.Y.Z"</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="k">[tasks.test]</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run tests"</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">run</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolr test run"</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="k">[tasks.lint]</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run linters"</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="n">run</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolr lint check"</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="k">[tasks.ci]</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Run CI checks"</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="n">depends</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"lint"</span><span class="p">,</span><span class="w"> </span><span class="s2">"test"</span><span class="p">]</span>
 </span></code></pre></div>
 <p>Then:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mise<span class="w"> </span>run<span class="w"> </span>ci
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mise<span class="w"> </span>run<span class="w"> </span>ci
 </span></code></pre></div>
 <h2 id="auto-sync-the-tools-venv-on-shell-enter">Auto-sync the tools venv on shell-enter<a class="headerlink" href="#auto-sync-the-tools-venv-on-shell-enter" title="Permanent link">&para;</a></h2>
 <p>When <code>tools/uv.lock</code>, <code>tools/pyproject.toml</code>, <code>tools/uv.toml</code> or
@@ -2227,9 +2178,9 @@ reason.</p>
 enters this project's directory, before you've typed anything else.
 Wiring it to <code>toolr project venv sync --quiet</code> gives you a tools
 venv that's already fresh by the time your prompt returns:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># In this project's mise.toml</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">[hooks]</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">enter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolr project venv sync --quiet"</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># In this project's mise.toml</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">[hooks]</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">enter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolr project venv sync --quiet"</span>
 </span></code></pre></div>
 <p>That's the entire recipe. No <code>[tasks]</code> block, no
 <code>sources</code>/<code>outputs</code> configuration — <code>toolr project venv sync</code>
@@ -2269,8 +2220,8 @@ trust the repository.</p>
 <strong>without</strong> <code>--quiet</code>. It trusts the repository, then asks whether to
 sync the tools venv; a <code>y</code> installs uv if needed and materialises the
 venv. From then on the enter-hook keeps it fresh:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>trust<span class="w">         </span><span class="c1"># one-time, interactive</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nb">cd</span><span class="w"> </span>..<span class="p">;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>back<span class="w">              </span><span class="c1"># enter-hook now keeps it fresh</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>trust<span class="w">         </span><span class="c1"># one-time, interactive</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nb">cd</span><span class="w"> </span>..<span class="p">;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>back<span class="w">              </span><span class="c1"># enter-hook now keeps it fresh</span>
 </span></code></pre></div>
 <h3 id="project-vs-machine-scoped">Project- vs. machine-scoped<a class="headerlink" href="#project-vs-machine-scoped" title="Permanent link">&para;</a></h3>
 <p>The hook lives in the project's own <code>mise.toml</code>. It is <strong>not</strong> a
@@ -2278,28 +2229,28 @@ global setting — every project that wants this behaviour opts in by
 adding the line. That keeps non-toolr projects free of unexpected
 post-<code>cd</code> work.</p>
 <h2 id="common-commands">Common commands<a class="headerlink" href="#common-commands" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># List all upstream versions</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mise<span class="w"> </span>ls-remote<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># List locally installed versions</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>mise<span class="w"> </span>ls<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># Show the active version in the current directory</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>mise<span class="w"> </span>current<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
-</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
-</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="c1"># Show the install dir for a version</span>
-</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>mise<span class="w"> </span>where<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
-</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>
-</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="c1"># Uninstall a version</span>
-</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@X.Y.Z
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># List all upstream versions</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>mise<span class="w"> </span>ls-remote<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># List locally installed versions</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>mise<span class="w"> </span>ls<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Show the active version in the current directory</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>mise<span class="w"> </span>current<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="c1"># Show the install dir for a version</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>mise<span class="w"> </span>where<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="c1"># Uninstall a version</span>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@X.Y.Z
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="toolr-command-not-found"><code>toolr: command not found</code><a class="headerlink" href="#toolr-command-not-found" title="Permanent link">&para;</a></h3>
 <p>Make sure mise's shim/activate hook is wired into your shell:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>mise<span class="w"> </span>activate<span class="w"> </span>bash<span class="k">)</span><span class="s2">"</span><span class="w">   </span><span class="c1"># or zsh / fish</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>mise<span class="w"> </span>activate<span class="w"> </span>bash<span class="k">)</span><span class="s2">"</span><span class="w">   </span><span class="c1"># or zsh / fish</span>
 </span></code></pre></div>
 <p>Or invoke through mise directly:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>mise<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>packslip:github.com/s0undt3ch/ToolR<span class="w"> </span>--<span class="w"> </span>toolr<span class="w"> </span>--help
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>mise<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>packslip:github.com/s0undt3ch/ToolR<span class="w"> </span>--<span class="w"> </span>toolr<span class="w"> </span>--help
 </span></code></pre></div>
 <h3 id="no-aqua-registry-found-for-s0undt3chtoolr"><code>no aqua-registry found for s0undt3ch/ToolR</code><a class="headerlink" href="#no-aqua-registry-found-for-s0undt3chtoolr" title="Permanent link">&para;</a></h3>
 <p>This applies to the aqua fallback only. mise's aqua backend resolves
@@ -2310,11 +2261,11 @@ a release tag. Check
 and bump mise (or wait for its registry cache to refresh) once a
 release containing the entry has shipped.</p>
 <h3 id="debug-an-install">Debug an install<a class="headerlink" href="#debug-an-install" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>mise<span class="w"> </span>--verbose<span class="w"> </span>use<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>mise<span class="w"> </span>--verbose<span class="w"> </span>use<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR
 </span></code></pre></div>
 <h3 id="reinstall">Reinstall<a class="headerlink" href="#reinstall" title="Permanent link">&para;</a></h3>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@X.Y.Z
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>mise<span class="w"> </span>install<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@X.Y.Z
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>mise<span class="w"> </span>uninstall<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@X.Y.Z
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>mise<span class="w"> </span>install<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@X.Y.Z
 </span></code></pre></div>
 <h2 id="migrating-from-the-in-tree-plugin">Migrating from the in-tree plugin<a class="headerlink" href="#migrating-from-the-in-tree-plugin" title="Permanent link">&para;</a></h2>
 <p>Earlier toolr revisions shipped an asdf-style plugin at
@@ -2323,10 +2274,10 @@ release containing the entry has shipped.</p>
 That plugin has been <strong>removed</strong> in favour of the backends described
 above: packslip for current releases, aqua as the fallback for
 releases before 0.34.0. Migrate with:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>uninstall<span class="w"> </span>toolr
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>mise<span class="w"> </span>use<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@latest<span class="w">         </span><span class="c1"># per-project</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="c1"># or:</span>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>mise<span class="w"> </span>use<span class="w"> </span>-g<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@latest<span class="w">   </span><span class="c1"># machine-wide</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>mise<span class="w"> </span>plugin<span class="w"> </span>uninstall<span class="w"> </span>toolr
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>mise<span class="w"> </span>use<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@latest<span class="w">         </span><span class="c1"># per-project</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># or:</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>mise<span class="w"> </span>use<span class="w"> </span>-g<span class="w"> </span>packslip:github.com/s0undt3ch/ToolR@latest<span class="w">   </span><span class="c1"># machine-wide</span>
 </span></code></pre></div>
 <p>Both backends install the <strong>same standalone binary</strong> the in-tree
 plugin used to fetch (the GitHub release archives), so the runtime
