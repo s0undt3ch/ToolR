@@ -1606,9 +1606,10 @@ parent = "django"
     fn nanos_is_zero_before_the_epoch_or_on_error() {
         assert_eq!(nanos(Ok(UNIX_EPOCH - std::time::Duration::from_secs(1))), 0);
         assert_eq!(nanos(Err(std::io::ErrorKind::Unsupported.into())), 0);
+        // Windows `SystemTime` ticks in 100 ns, so a smaller offset rounds to 0.
         assert_eq!(
-            nanos(Ok(UNIX_EPOCH + std::time::Duration::from_nanos(5))),
-            5
+            nanos(Ok(UNIX_EPOCH + std::time::Duration::from_micros(5))),
+            5_000
         );
     }
 
