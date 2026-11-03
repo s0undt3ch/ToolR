@@ -30,7 +30,8 @@ clap tree (F-31).
    arg must still happen inside `build_root_command`. Covered by the `toolr --help` diff.
 3. **Hidden commands stay hidden and absent from completions.** `builtin_completions` tests plus the dump diff.
 4. **A dispatcher group named `project` or `self`.** `user_group_collides` runs before the built-ins are added;
-   keep that loop in `build_command`. Covered by the existing collision tests.
+   keep that loop in `build_command`. Main had no test for it; the new
+   `user_groups_precede_built_ins_and_reserved_names_are_skipped` test in `cli.rs` covers it.
 5. **Comments that explain a neighbouring line** move with it, not to the new function's doc comment.
 
 ---
