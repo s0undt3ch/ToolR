@@ -35,7 +35,7 @@ def git(repo: Path, *args: str) -> str:
         cwd=repo,
         env=git_env(),
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
 
