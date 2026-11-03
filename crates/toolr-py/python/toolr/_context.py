@@ -221,7 +221,8 @@ class Context(Struct, frozen=True):
             else:
                 style = "exit-failure"
             self._console_stderr.print(message, style=style)
-        self.parser.exit(status_to_exit_code(status))
+        # `sys.exit` semantics for anything else, so `None` still exits 0 and a string still prints.
+        self.parser.exit(status_to_exit_code(status) if isinstance(status, int) else status)
 
     def run(
         self,

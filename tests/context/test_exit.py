@@ -83,6 +83,13 @@ def test_status_to_exit_code(status, expected):
     assert type(result) is int
 
 
+@pytest.mark.parametrize(("status", "expected"), [(None, None), ("boom", "boom")])
+def test_exit_passes_non_int_status_to_sys_exit_unchanged(ctx, status, expected):
+    with pytest.raises(SystemExit) as exc_info:
+        ctx.exit(status)
+    assert exc_info.value.code == expected
+
+
 def test_exit_maps_negative_status_to_128_plus_signal(ctx, capfd):
     with pytest.raises(SystemExit) as exc_info:
         ctx.exit(-15, "killed")

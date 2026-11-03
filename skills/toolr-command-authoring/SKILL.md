@@ -130,8 +130,7 @@ rename it once (`colour = not no_colour`). For more than two states, use
   for TTY-aware tools and propagates timeouts. It does not raise on a
   nonzero exit — check `result.returncode`. A signal-killed child has
   `returncode` `-N`, and `ctx.exit(result.returncode)` exits `128 + N`.
-  Full signature (timeouts,
-  `capture_output`, streaming) in
+  Full signature (timeouts, `capture_output`, streaming) in
   [`references/commands.md#run`](references/commands.md#run).
 - **Referencing the repo root.** Use `ctx.repo_root` (a
   [`pathlib.Path`](references/commands.md#context)). It is toolr's
