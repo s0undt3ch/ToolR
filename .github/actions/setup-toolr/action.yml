@@ -1,0 +1,32 @@
+name: Setup ToolR (pinned)
+description: >-
+  Run the in-repo Setup ToolR action with the toolr version pinned by
+  `TOOLR_VERSION` in `.github/env`, which matches the toolr-py in
+  `tools/uv.lock`. Needs the repository checked out.
+
+inputs:
+  cache-prefix:
+    description: Prefix for the Setup ToolR cache keys.
+    required: true
+
+runs:
+  using: composite
+
+  steps:
+    - name: Read the toolr pin
+      id: pin
+      shell: bash
+      run: |
+        # Setup ToolR installs `latest` when `version` is empty, which would undo the pin.
+        version=$(sed -n 's/^TOOLR_VERSION=//p' .github/env)
+        if [ -z "$version" ]; then
+          echo "::error file=.github/env::TOOLR_VERSION is missing or empty in .github/env"
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Setup ToolR
+      uses: ./
+      with:
+        version: ${{ steps.pin.outputs.version }}
+        cache-prefix: ${{ inputs.cache-prefix }}

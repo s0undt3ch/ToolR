@@ -92,9 +92,8 @@ jobs:
         # tools dependency group) doesn't have to rebuild the venv on
         # every release.
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: latest
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|prepare-release
 
       - name: Generate Build Matrix

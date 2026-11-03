@@ -115,9 +115,8 @@ jobs:
         # caches the in-tree `tools/.venv` for the prepare-release
         # job's `toolr` invocations.
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: latest
           cache-prefix: ${{ inputs.cache-seed }}|setup-toolr|prepare-release
 
       - name: Setup Prek

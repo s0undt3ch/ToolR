@@ -7,3 +7,10 @@
 # `MISE_VERSION` sets every workflow's mise install. Renovate bumps it
 # (see the regex manager in renovate.json5).
 MISE_VERSION=v2026.10.25
+#
+# `TOOLR_VERSION` is the toolr binary .github/actions/setup-toolr installs.
+# It must match the `aqua:s0undt3ch/ToolR` pin in mise.toml and the `toolr-py`
+# in tools/uv.lock, or the binary can emit a runner schema the tools venv
+# rejects. Renovate's "toolr release" group bumps all three together, and
+# tests/test_dogfood_toolr_pin.py fails when they drift.
+TOOLR_VERSION=0.35.1

@@ -92,9 +92,8 @@ jobs:
         # on `tools/{pyproject.toml,uv.lock}` so subsequent runs skip
         # the `uv sync` toolr would otherwise run on first invocation.
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: latest
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|prepare-ci
 
       - name: Generate Build Matrix
@@ -149,9 +148,8 @@ jobs:
         # dispatch from the tools venv (see mise.toml for the local
         # equivalent).
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: latest
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|pre-commit
 
       - name: Run Prek
@@ -249,9 +247,8 @@ jobs:
 
       - name: Setup ToolR
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: latest
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|packslip-check
 
       - name: Install the packslip CLI
@@ -671,16 +668,12 @@ jobs:
           echo "path=$dest/toolr" >> "$GITHUB_OUTPUT"
 
       - name: Setup ToolR
-        # Dispatches `toolr pre-commit regen-doc-snippets`. The
-        # released binary from this action only drives the command —
-        # keeping the dispatcher's runner-schema contract aligned with
-        # the released toolr-py in the tools venv — while the freshly
-        # built binary under test is what the captures actually run,
-        # via TOOLR_REGEN_BINARY below.
+        # This pinned release binary dispatches `toolr pre-commit
+        # regen-doc-snippets` into the tools venv. The snippets capture
+        # the freshly built binary under test, via TOOLR_REGEN_BINARY.
         id: setup-toolr
-        uses: ./
+        uses: ./.github/actions/setup-toolr
         with:
-          version: latest
           cache-prefix: ${{ env.CACHE_SEED }}|setup-toolr|docs
 
       - name: Verify doc snippets are in sync
