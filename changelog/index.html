@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev654-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev666-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev654 - 2026-11-04
+        0.35.2-dev666 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev654 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev666 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev654-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev666-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev654 - 2026-11-04
+        0.35.2-dev666 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev654 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev666 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev654-2026-11-04">0.35.2-dev654 - 2026-11-04<a class="headerlink" href="#0352-dev654-2026-11-04" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev666-2026-11-04">0.35.2-dev666 - 2026-11-04<a class="headerlink" href="#0352-dev666-2026-11-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7586,6 +7586,7 @@ command, now names the <code>tools/</code> and says <code>tools/pyproject.toml</
 <p>When a timeout fires, toolr now also kills the processes the command started, not just the command. It used to kill only the direct child, so <code>ctx.run("sh", "-c", "sleep 999; true", timeout_secs=1)</code> left <code>sleep</code> running. A process that detached itself first, such as a daemon that double-forks, can't be found and keeps running.</p>
 <p><strong>Breaking:</strong> <code>toolr project trust</code> now runs <code>uv sync</code> on the tools venv after trusting the repository, when the venv needs one and you accept on a terminal or <code>TOOLR_AUTO_INSTALL_UV=1</code> is set, and it exits non-zero if that sync fails. It used to only record the trust and always exit 0, so scripts and hooks that run it with <code>TOOLR_AUTO_INSTALL_UV=1</code> now sync too. Pass <code>--no-sync</code> to keep the old trust-only behaviour. The trust is kept either way.</p>
 <p>A fresh clone now needs one step before its commands run. On a terminal <code>toolr project trust</code> asks first (<code>Sync it now? [y/N]</code>); declining keeps the trust and points you at <code>toolr project venv sync</code>. Running a command in an untrusted repository works the same way: answer <code>y</code> to the trust prompt and, if the venv is missing, out of date or broken, toolr offers to sync it and then runs the command. The sync prompt replaces the uv install prompt for that sync, so you see at most two prompts. With <code>--quiet</code> or no terminal toolr doesn't ask and doesn't sync unless <code>TOOLR_AUTO_INSTALL_UV=1</code> is set.</p>
+<p><strong>Breaking:</strong> <code>toolr</code> and <code>CommandsTester</code> now refuse three shapes they used to read differently. A command name defined twice in one group, in one file or across files of one <code>tools/</code> tree or plugin package, fails with "duplicate commands" listing every definition (it used to keep one silently); rename all but one, e.g. with <code>name="…"</code>. A command decorator on a nested <code>def</code> (inside another function, a class or an <code>if</code>) and a <code>group=</code> or command name that isn't a string literal fail with "unsupported command declarations"; move the <code>def</code> to module level and write the value as a literal. A local command shadowing a plugin's, or two plugins defining one command, still only warn.</p>
 <p>Both wheels now carry the <code>Development Status :: 4 - Beta</code> PyPI classifier instead of Alpha.</p>
 <p><code>toolr-py</code>'s dispatch-schema mismatch error now names the side to upgrade: run
 <code>toolr project venv sync -P toolr-py</code> when the binary is newer, or upgrade the binary when it is
@@ -7707,6 +7708,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>A streamed copy that fails for any other reason, such as a full disk behind <code>toolr cmd &gt; file</code>, raises <code>CommandError</code> too.</p>
 <p>The uv auto-install now checks the downloaded archive against the SHA-256 checksum published with the same uv release, and refuses to install it if the checksum is missing or doesn't match.</p>
 <p>Path-typed arguments (<code>pathlib.Path</code> and the <code>toolr.types</code> path types) now tab-complete files, or directories for <code>DirectoryPath</code>, <code>WritableDirectoryPath</code> and <code>NewPath</code>, in bash, zsh and fish. So do <code>toolr project trust</code>, <code>untrust</code> and <code>self build-manifest --source-dir</code> / <code>--output</code>. Re-run <code>toolr self completion install &lt;shell&gt; --force</code> to pick it up.</p>
+<p><code>@toolr.command(...)</code>, <code>@t.command(...)</code> after <code>import toolr as t</code>, and an alias from <code>from toolr import command as cmd</code> now register commands; <code>toolr</code> used to skip them while <code>CommandsTester</code> accepted them. A mistyped group equally close to several declared groups now always suggests the alphabetically first one.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7722,6 +7724,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(cli)</em> Signal path slots from toolr __complete (<a href="https://github.com/s0undt3ch/ToolR/commit/edcd04c8b3c4b03e260d0674e5bcc614de546e22"><code>edcd04c</code></a>)</li>
 <li><em>(complete)</em> Native file completion for path arguments in bash, zsh and fish (<a href="https://github.com/s0undt3ch/ToolR/commit/455f2192d49a1ae1338db213350a433e061a6628"><code>455f219</code></a>)</li>
 <li><em>(complete)</em> No space after any directory candidate in bash 4+ (<a href="https://github.com/s0undt3ch/ToolR/commit/84e536fa2a9ddb4e6bbe29eb914e73bc69da82a2"><code>84e536f</code></a>)</li>
+<li><em>(parser)</em> Recognise @toolr.command and aliased command imports (<a href="https://github.com/s0undt3ch/ToolR/commit/3afbba0ba8a920d550a355ea1b0d4248d9d76c1c"><code>3afbba0</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7868,6 +7871,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Keep a no-match directory probe clear of set -e (<a href="https://github.com/s0undt3ch/ToolR/commit/ea43f86cd5e5fd4e69c4885c0359380fcd54133c"><code>ea43f86</code></a>)</li>
 <li><em>(complete)</em> Mark bash directories in linear time (<a href="https://github.com/s0undt3ch/ToolR/commit/71e490a0f150159f8ca2342b1bdf7790230569f9"><code>71e490a</code></a>)</li>
 <li><em>(complete)</em> Survive nounset with no path candidates (<a href="https://github.com/s0undt3ch/ToolR/commit/4011395935082d49f999692df684665c73658157"><code>4011395</code></a>)</li>
+<li><em>(parser)</em> Break group-suggestion ties by the smallest name (<a href="https://github.com/s0undt3ch/ToolR/commit/3a558461c8cf81fd7a8df79740c4917c415e1ed1"><code>3a55846</code></a>)</li>
+<li><em>(parser)</em> [<strong>breaking</strong>] Reject duplicate commands in a group (<a href="https://github.com/s0undt3ch/ToolR/commit/a98eda6ee224d59b512a72816f55528a36760fcd"><code>a98eda6</code></a>)</li>
+<li><em>(parser)</em> [<strong>breaking</strong>] Reject nested and non-literal command declarations (<a href="https://github.com/s0undt3ch/ToolR/commit/5e6d7f2a92b4283c6cae612f77fb0a35f7f91678"><code>5e6d7f2</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8117,6 +8123,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Keep bash's nospace for every directory-only completion (<a href="https://github.com/s0undt3ch/ToolR/commit/19dfa50c66cad72a8b045cb822c34f2a853e11a3"><code>19dfa50</code></a>)</li>
 <li><em>(specs)</em> Archive the F-36 path completion design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/7f4180e6be51fc8bbee132d22def95c1c0b07fe8"><code>7f4180e</code></a>)</li>
 <li><em>(cli)</em> Say what older completion scripts do with path slots (<a href="https://github.com/s0undt3ch/ToolR/commit/2e3521484a26f8e6e41b600bfd3f697707d46c18"><code>2e35214</code></a>)</li>
+<li><em>(specs)</em> Spec and plan FU-1/2/3 parser and tester parity (<a href="https://github.com/s0undt3ch/ToolR/commit/49dc223d11080aa7486e402fa88dd7c2df041510"><code>49dc223</code></a>)</li>
+<li><em>(specs)</em> Record the decided parser and tester parity open points (<a href="https://github.com/s0undt3ch/ToolR/commit/add0267569bbc5de9962ef9e89899261aceec384"><code>add0267</code></a>)</li>
+<li><em>(writing-commands)</em> Document the accepted command forms and the new errors (<a href="https://github.com/s0undt3ch/ToolR/commit/d2c2be171bdc86f732e77397ab1cecf582a92667"><code>d2c2be1</code></a>)</li>
+<li><em>(concepts)</em> Keep command tests out of tools/ (<a href="https://github.com/s0undt3ch/ToolR/commit/edd6cbfebe7f17e9c8e794d09e93daadbb88114c"><code>edd6cbf</code></a>)</li>
+<li><em>(specs)</em> Archive the FU-1/2/3 parser and tester parity design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/26c60faa516c16703639839fa642813a84547d73"><code>26c60fa</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8218,6 +8229,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Run the zsh script for path slots (<a href="https://github.com/s0undt3ch/ToolR/commit/d867d35d1bb4ca61598b51772b7e86641617aae7"><code>d867d35</code></a>)</li>
 <li><em>(complete)</em> Read the ~user directory from the home dir instead of writing one (<a href="https://github.com/s0undt3ch/ToolR/commit/6d643fa01f896a9e799f56dd7001774639643c9b"><code>6d643fa</code></a>)</li>
 <li><em>(complete)</em> Reuse the fish driver (<a href="https://github.com/s0undt3ch/ToolR/commit/2bb6cdde76501f9c15f347ec422d972868939d89"><code>2bb6cdd</code></a>)</li>
+<li><em>(e2e)</em> Differential parser/tester corpus (<a href="https://github.com/s0undt3ch/ToolR/commit/51771c148954db4e3168931e6be102d4122d718b"><code>51771c1</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

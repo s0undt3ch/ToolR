@@ -1731,6 +1731,9 @@ argument:</p>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">check_snippets</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Context</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># → toolr ci snippet-checker</span>
 </span></code></pre></div>
+<p>Whichever file declares it, each command name is defined once per group:
+a second definition in another file fails the build with "duplicate
+commands".</p>
 <h2 id="when-to-choose-which-form">When to choose which form<a class="headerlink" href="#when-to-choose-which-form" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

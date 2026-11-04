@@ -2392,7 +2392,7 @@ first (freshness-gated, exactly like <a href="#project-venv-sync"><code>venv syn
 stdout, stderr, and exit code pass straight through. A child killed by a signal
 exits with 128 plus the signal number, as in a shell.</p>
 <p>This is the one-liner for running a command-package's tests:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>run<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>tools/
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>run<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>tests/tools/
 </span></code></pre></div>
 <p><code>--no-sync</code> never touches the venv — it errors if the venv is missing or stale
 instead of syncing. Use it in CI once the venv is known-synced, for

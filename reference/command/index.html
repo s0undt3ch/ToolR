@@ -1604,13 +1604,15 @@ file without importing a shared <code>CommandGroup</code> binding — the
 (<code>@command("snippet-checker", group=...)</code>) or by keyword
 (<code>@command(name="snippet-checker", group=...)</code>) — but not both;
 doing so raises <code>TypeError</code>.</p>
-<p>toolr reads this decorator from the source without running it, so
-only one shape counts: <code>from toolr import command</code>, then
-<code>@command(...)</code> on a top-level <code>def</code> with <code>group=</code> (and any
-name) as a string literal. <code>@toolr.command</code>, an aliased import, a
-nested <code>def</code> or <code>group=SOME_CONSTANT</code> run here, and pass under
-:class:<code>toolr.testing.CommandsTester</code>, but toolr doesn't register
-them or fails to build.</p>
+<p>toolr reads this decorator from the source without running it. It
+accepts <code>@command</code>, <code>@toolr.command</code> (also after
+<code>import toolr as t</code>) and an alias from
+<code>from toolr import command as cmd</code>, on a top-level <code>def</code> with
+<code>group=</code> and any name as string literals. A nested <code>def</code> (inside
+another function, a class or an <code>if</code>), <code>group=SOME_CONSTANT</code> or a
+non-literal name fails the build with "unsupported command
+declarations", and so does :class:<code>toolr.testing.CommandsTester</code>.
+A group's command names must be unique within <code>tools/</code>.</p>
 <p>Usage::</p>
 <div class="language-text highlight"><pre><span></span><code>from toolr import command, command_group
 
@@ -1737,39 +1739,7 @@ with a clear error.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>crates/toolr-py/python/toolr/_decorators.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#toolr.command--source--__codelineno-0-265">265</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-266">266</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-267">267</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-268">268</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-269">269</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-270">270</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-271">271</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-272">272</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-273">273</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-274">274</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-275">275</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-276">276</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-277">277</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-278">278</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-279">279</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-280">280</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-281">281</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-282">282</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-283">283</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-284">284</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-285">285</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-286">286</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-287">287</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-288">288</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-289">289</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-290">290</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-291">291</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-292">292</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-293">293</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-294">294</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-295">295</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-296">296</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-297">297</a></span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#toolr.command--source--__codelineno-0-297">297</a></span>
 <span class="normal"><a href="#toolr.command--source--__codelineno-0-298">298</a></span>
 <span class="normal"><a href="#toolr.command--source--__codelineno-0-299">299</a></span>
 <span class="normal"><a href="#toolr.command--source--__codelineno-0-300">300</a></span>
@@ -1818,88 +1788,124 @@ with a clear error.</p>
 <span class="normal"><a href="#toolr.command--source--__codelineno-0-343">343</a></span>
 <span class="normal"><a href="#toolr.command--source--__codelineno-0-344">344</a></span>
 <span class="normal"><a href="#toolr.command--source--__codelineno-0-345">345</a></span>
-<span class="normal"><a href="#toolr.command--source--__codelineno-0-346">346</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="toolr.command--source--__span-0-265"><a id="toolr.command--source--__codelineno-0-265" name="toolr.command--source--__codelineno-0-265"></a><span class="k">def</span><span class="w"> </span><span class="nf">command</span><span class="p">(</span>
-</span><span id="toolr.command--source--__span-0-266"><a id="toolr.command--source--__codelineno-0-266" name="toolr.command--source--__codelineno-0-266"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="toolr.command--source--__span-0-267"><a id="toolr.command--source--__codelineno-0-267" name="toolr.command--source--__codelineno-0-267"></a>    <span class="o">*</span><span class="p">,</span>
-</span><span id="toolr.command--source--__span-0-268"><a id="toolr.command--source--__codelineno-0-268" name="toolr.command--source--__codelineno-0-268"></a>    <span class="n">group</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="toolr.command--source--__span-0-269"><a id="toolr.command--source--__codelineno-0-269" name="toolr.command--source--__codelineno-0-269"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-</span><span id="toolr.command--source--__span-0-270"><a id="toolr.command--source--__codelineno-0-270" name="toolr.command--source--__codelineno-0-270"></a><span class="w">    </span><span class="sd">"""Register a function as a toolr CLI command.</span>
-</span><span id="toolr.command--source--__span-0-271"><a id="toolr.command--source--__codelineno-0-271" name="toolr.command--source--__codelineno-0-271"></a>
-</span><span id="toolr.command--source--__span-0-272"><a id="toolr.command--source--__codelineno-0-272" name="toolr.command--source--__codelineno-0-272"></a><span class="sd">    String-path attachment to a group, an alternative to the bound</span>
-</span><span id="toolr.command--source--__span-0-273"><a id="toolr.command--source--__codelineno-0-273" name="toolr.command--source--__codelineno-0-273"></a><span class="sd">    ``@&lt;binding&gt;.command`` form. Lets you declare commands in any</span>
-</span><span id="toolr.command--source--__span-0-274"><a id="toolr.command--source--__codelineno-0-274" name="toolr.command--source--__codelineno-0-274"></a><span class="sd">    file without importing a shared ``CommandGroup`` binding — the</span>
-</span><span id="toolr.command--source--__span-0-275"><a id="toolr.command--source--__codelineno-0-275" name="toolr.command--source--__codelineno-0-275"></a><span class="sd">    ``group=`` string is the only contract.</span>
-</span><span id="toolr.command--source--__span-0-276"><a id="toolr.command--source--__codelineno-0-276" name="toolr.command--source--__codelineno-0-276"></a>
-</span><span id="toolr.command--source--__span-0-277"><a id="toolr.command--source--__codelineno-0-277" name="toolr.command--source--__codelineno-0-277"></a><span class="sd">    The signature mirrors the bound :meth:`CommandGroup.command`</span>
-</span><span id="toolr.command--source--__span-0-278"><a id="toolr.command--source--__codelineno-0-278" name="toolr.command--source--__codelineno-0-278"></a><span class="sd">    (plus ``group=``). The command name may be passed positionally</span>
-</span><span id="toolr.command--source--__span-0-279"><a id="toolr.command--source--__codelineno-0-279" name="toolr.command--source--__codelineno-0-279"></a><span class="sd">    (``@command("snippet-checker", group=...)``) or by keyword</span>
-</span><span id="toolr.command--source--__span-0-280"><a id="toolr.command--source--__codelineno-0-280" name="toolr.command--source--__codelineno-0-280"></a><span class="sd">    (``@command(name="snippet-checker", group=...)``) — but not both;</span>
-</span><span id="toolr.command--source--__span-0-281"><a id="toolr.command--source--__codelineno-0-281" name="toolr.command--source--__codelineno-0-281"></a><span class="sd">    doing so raises ``TypeError``.</span>
-</span><span id="toolr.command--source--__span-0-282"><a id="toolr.command--source--__codelineno-0-282" name="toolr.command--source--__codelineno-0-282"></a>
-</span><span id="toolr.command--source--__span-0-283"><a id="toolr.command--source--__codelineno-0-283" name="toolr.command--source--__codelineno-0-283"></a><span class="sd">    toolr reads this decorator from the source without running it, so</span>
-</span><span id="toolr.command--source--__span-0-284"><a id="toolr.command--source--__codelineno-0-284" name="toolr.command--source--__codelineno-0-284"></a><span class="sd">    only one shape counts: ``from toolr import command``, then</span>
-</span><span id="toolr.command--source--__span-0-285"><a id="toolr.command--source--__codelineno-0-285" name="toolr.command--source--__codelineno-0-285"></a><span class="sd">    ``@command(...)`` on a top-level ``def`` with ``group=`` (and any</span>
-</span><span id="toolr.command--source--__span-0-286"><a id="toolr.command--source--__codelineno-0-286" name="toolr.command--source--__codelineno-0-286"></a><span class="sd">    name) as a string literal. ``@toolr.command``, an aliased import, a</span>
-</span><span id="toolr.command--source--__span-0-287"><a id="toolr.command--source--__codelineno-0-287" name="toolr.command--source--__codelineno-0-287"></a><span class="sd">    nested ``def`` or ``group=SOME_CONSTANT`` run here, and pass under</span>
-</span><span id="toolr.command--source--__span-0-288"><a id="toolr.command--source--__codelineno-0-288" name="toolr.command--source--__codelineno-0-288"></a><span class="sd">    :class:`toolr.testing.CommandsTester`, but toolr doesn't register</span>
-</span><span id="toolr.command--source--__span-0-289"><a id="toolr.command--source--__codelineno-0-289" name="toolr.command--source--__codelineno-0-289"></a><span class="sd">    them or fails to build.</span>
-</span><span id="toolr.command--source--__span-0-290"><a id="toolr.command--source--__codelineno-0-290" name="toolr.command--source--__codelineno-0-290"></a>
-</span><span id="toolr.command--source--__span-0-291"><a id="toolr.command--source--__codelineno-0-291" name="toolr.command--source--__codelineno-0-291"></a><span class="sd">    Usage::</span>
-</span><span id="toolr.command--source--__span-0-292"><a id="toolr.command--source--__codelineno-0-292" name="toolr.command--source--__codelineno-0-292"></a>
-</span><span id="toolr.command--source--__span-0-293"><a id="toolr.command--source--__codelineno-0-293" name="toolr.command--source--__codelineno-0-293"></a><span class="sd">        from toolr import command, command_group</span>
-</span><span id="toolr.command--source--__span-0-294"><a id="toolr.command--source--__codelineno-0-294" name="toolr.command--source--__codelineno-0-294"></a>
-</span><span id="toolr.command--source--__span-0-295"><a id="toolr.command--source--__codelineno-0-295" name="toolr.command--source--__codelineno-0-295"></a><span class="sd">        command_group("ci.helm-diff-pr-comment", docstring=__doc__)</span>
-</span><span id="toolr.command--source--__span-0-296"><a id="toolr.command--source--__codelineno-0-296" name="toolr.command--source--__codelineno-0-296"></a>
-</span><span id="toolr.command--source--__span-0-297"><a id="toolr.command--source--__codelineno-0-297" name="toolr.command--source--__codelineno-0-297"></a><span class="sd">        @command(group="ci.helm-diff-pr-comment")</span>
-</span><span id="toolr.command--source--__span-0-298"><a id="toolr.command--source--__codelineno-0-298" name="toolr.command--source--__codelineno-0-298"></a><span class="sd">        def backend(ctx, env): ...</span>
-</span><span id="toolr.command--source--__span-0-299"><a id="toolr.command--source--__codelineno-0-299" name="toolr.command--source--__codelineno-0-299"></a>
-</span><span id="toolr.command--source--__span-0-300"><a id="toolr.command--source--__codelineno-0-300" name="toolr.command--source--__codelineno-0-300"></a><span class="sd">        # Optional explicit command name (otherwise the function</span>
-</span><span id="toolr.command--source--__span-0-301"><a id="toolr.command--source--__codelineno-0-301" name="toolr.command--source--__codelineno-0-301"></a><span class="sd">        # name is hyphenated and used).</span>
-</span><span id="toolr.command--source--__span-0-302"><a id="toolr.command--source--__codelineno-0-302" name="toolr.command--source--__codelineno-0-302"></a><span class="sd">        @command("snippet-checker", group="ci.helm-diff-pr-comment")</span>
-</span><span id="toolr.command--source--__span-0-303"><a id="toolr.command--source--__codelineno-0-303" name="toolr.command--source--__codelineno-0-303"></a><span class="sd">        def check_snippets(ctx): ...</span>
-</span><span id="toolr.command--source--__span-0-304"><a id="toolr.command--source--__codelineno-0-304" name="toolr.command--source--__codelineno-0-304"></a>
-</span><span id="toolr.command--source--__span-0-305"><a id="toolr.command--source--__codelineno-0-305" name="toolr.command--source--__codelineno-0-305"></a><span class="sd">    Args:</span>
-</span><span id="toolr.command--source--__span-0-306"><a id="toolr.command--source--__codelineno-0-306" name="toolr.command--source--__codelineno-0-306"></a><span class="sd">        name: When called as a bare decorator (``@command``), this is</span>
-</span><span id="toolr.command--source--__span-0-307"><a id="toolr.command--source--__codelineno-0-307" name="toolr.command--source--__codelineno-0-307"></a><span class="sd">            the wrapped function. When called with parentheses</span>
-</span><span id="toolr.command--source--__span-0-308"><a id="toolr.command--source--__codelineno-0-308" name="toolr.command--source--__codelineno-0-308"></a><span class="sd">            (``@command("name", group=...)`` or</span>
-</span><span id="toolr.command--source--__span-0-309"><a id="toolr.command--source--__codelineno-0-309" name="toolr.command--source--__codelineno-0-309"></a><span class="sd">            ``@command(name="name", group=...)``), this is the override</span>
-</span><span id="toolr.command--source--__span-0-310"><a id="toolr.command--source--__codelineno-0-310" name="toolr.command--source--__codelineno-0-310"></a><span class="sd">            for the command's CLI name; the function name (hyphenated)</span>
-</span><span id="toolr.command--source--__span-0-311"><a id="toolr.command--source--__codelineno-0-311" name="toolr.command--source--__codelineno-0-311"></a><span class="sd">            is used otherwise.</span>
-</span><span id="toolr.command--source--__span-0-312"><a id="toolr.command--source--__codelineno-0-312" name="toolr.command--source--__codelineno-0-312"></a><span class="sd">        group: Dotted full path of the target group</span>
-</span><span id="toolr.command--source--__span-0-313"><a id="toolr.command--source--__codelineno-0-313" name="toolr.command--source--__codelineno-0-313"></a><span class="sd">            (e.g. ``"ci"`` or ``"ci.helm-diff-pr-comment"``). A</span>
-</span><span id="toolr.command--source--__span-0-314"><a id="toolr.command--source--__codelineno-0-314" name="toolr.command--source--__codelineno-0-314"></a><span class="sd">            matching ``command_group(...)`` declaration must exist</span>
-</span><span id="toolr.command--source--__span-0-315"><a id="toolr.command--source--__codelineno-0-315" name="toolr.command--source--__codelineno-0-315"></a><span class="sd">            elsewhere in ``tools/``; otherwise manifest-build fails</span>
-</span><span id="toolr.command--source--__span-0-316"><a id="toolr.command--source--__codelineno-0-316" name="toolr.command--source--__codelineno-0-316"></a><span class="sd">            with a clear error.</span>
-</span><span id="toolr.command--source--__span-0-317"><a id="toolr.command--source--__codelineno-0-317" name="toolr.command--source--__codelineno-0-317"></a>
-</span><span id="toolr.command--source--__span-0-318"><a id="toolr.command--source--__codelineno-0-318" name="toolr.command--source--__codelineno-0-318"></a><span class="sd">    Returns:</span>
-</span><span id="toolr.command--source--__span-0-319"><a id="toolr.command--source--__codelineno-0-319" name="toolr.command--source--__codelineno-0-319"></a><span class="sd">        The decorated function unchanged. With ``group=``, it is also</span>
-</span><span id="toolr.command--source--__span-0-320"><a id="toolr.command--source--__codelineno-0-320" name="toolr.command--source--__codelineno-0-320"></a><span class="sd">        recorded under that group, as ``@&lt;binding&gt;.command`` would, so</span>
-</span><span id="toolr.command--source--__span-0-321"><a id="toolr.command--source--__codelineno-0-321" name="toolr.command--source--__codelineno-0-321"></a><span class="sd">        :class:`toolr.testing.CommandsTester` sees it. At runtime toolr</span>
-</span><span id="toolr.command--source--__span-0-322"><a id="toolr.command--source--__codelineno-0-322" name="toolr.command--source--__codelineno-0-322"></a><span class="sd">        calls the function directly with the parsed args.</span>
-</span><span id="toolr.command--source--__span-0-323"><a id="toolr.command--source--__codelineno-0-323" name="toolr.command--source--__codelineno-0-323"></a><span class="sd">    """</span>
-</span><span id="toolr.command--source--__span-0-324"><a id="toolr.command--source--__codelineno-0-324" name="toolr.command--source--__codelineno-0-324"></a>    <span class="c1"># Bare form: @command def f(...) — no kwargs allowed in this shape.</span>
-</span><span id="toolr.command--source--__span-0-325"><a id="toolr.command--source--__codelineno-0-325" name="toolr.command--source--__codelineno-0-325"></a>    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
-</span><span id="toolr.command--source--__span-0-326"><a id="toolr.command--source--__codelineno-0-326" name="toolr.command--source--__codelineno-0-326"></a>        <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="toolr.command--source--__span-0-327"><a id="toolr.command--source--__codelineno-0-327" name="toolr.command--source--__codelineno-0-327"></a>            <span class="n">err_msg</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="toolr.command--source--__span-0-328"><a id="toolr.command--source--__codelineno-0-328" name="toolr.command--source--__codelineno-0-328"></a>                <span class="s1">'@command(...) with kwargs must be used as `@command(group="…")`'</span>
-</span><span id="toolr.command--source--__span-0-329"><a id="toolr.command--source--__codelineno-0-329" name="toolr.command--source--__codelineno-0-329"></a>                <span class="s2">" — drop the parens-less form or move the kwargs into them."</span>
-</span><span id="toolr.command--source--__span-0-330"><a id="toolr.command--source--__codelineno-0-330" name="toolr.command--source--__codelineno-0-330"></a>            <span class="p">)</span>
-</span><span id="toolr.command--source--__span-0-331"><a id="toolr.command--source--__codelineno-0-331" name="toolr.command--source--__codelineno-0-331"></a>            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">err_msg</span><span class="p">)</span>
-</span><span id="toolr.command--source--__span-0-332"><a id="toolr.command--source--__codelineno-0-332" name="toolr.command--source--__codelineno-0-332"></a>        <span class="n">_require_docstring</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
-</span><span id="toolr.command--source--__span-0-333"><a id="toolr.command--source--__codelineno-0-333" name="toolr.command--source--__codelineno-0-333"></a>        <span class="n">_record_standalone_command</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-</span><span id="toolr.command--source--__span-0-334"><a id="toolr.command--source--__codelineno-0-334" name="toolr.command--source--__codelineno-0-334"></a>        <span class="k">return</span> <span class="n">name</span>
-</span><span id="toolr.command--source--__span-0-335"><a id="toolr.command--source--__codelineno-0-335" name="toolr.command--source--__codelineno-0-335"></a>
-</span><span id="toolr.command--source--__span-0-336"><a id="toolr.command--source--__codelineno-0-336" name="toolr.command--source--__codelineno-0-336"></a>    <span class="c1"># Parameterised form: @command(...) — returns a decorator. The static</span>
-</span><span id="toolr.command--source--__span-0-337"><a id="toolr.command--source--__codelineno-0-337" name="toolr.command--source--__codelineno-0-337"></a>    <span class="c1"># parser reads the `group=` / `name` strings; the registry records them</span>
-</span><span id="toolr.command--source--__span-0-338"><a id="toolr.command--source--__codelineno-0-338" name="toolr.command--source--__codelineno-0-338"></a>    <span class="c1"># for `CommandsTester`.</span>
-</span><span id="toolr.command--source--__span-0-339"><a id="toolr.command--source--__codelineno-0-339" name="toolr.command--source--__codelineno-0-339"></a>    <span class="n">explicit_name</span> <span class="o">=</span> <span class="n">name</span>
-</span><span id="toolr.command--source--__span-0-340"><a id="toolr.command--source--__codelineno-0-340" name="toolr.command--source--__codelineno-0-340"></a>
-</span><span id="toolr.command--source--__span-0-341"><a id="toolr.command--source--__codelineno-0-341" name="toolr.command--source--__codelineno-0-341"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-</span><span id="toolr.command--source--__span-0-342"><a id="toolr.command--source--__codelineno-0-342" name="toolr.command--source--__codelineno-0-342"></a>        <span class="n">_require_docstring</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-</span><span id="toolr.command--source--__span-0-343"><a id="toolr.command--source--__codelineno-0-343" name="toolr.command--source--__codelineno-0-343"></a>        <span class="n">_record_standalone_command</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">explicit_name</span><span class="p">,</span> <span class="n">group</span><span class="p">)</span>
-</span><span id="toolr.command--source--__span-0-344"><a id="toolr.command--source--__codelineno-0-344" name="toolr.command--source--__codelineno-0-344"></a>        <span class="k">return</span> <span class="n">func</span>
-</span><span id="toolr.command--source--__span-0-345"><a id="toolr.command--source--__codelineno-0-345" name="toolr.command--source--__codelineno-0-345"></a>
-</span><span id="toolr.command--source--__span-0-346"><a id="toolr.command--source--__codelineno-0-346" name="toolr.command--source--__codelineno-0-346"></a>    <span class="k">return</span> <span class="n">decorator</span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-346">346</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-347">347</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-348">348</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-349">349</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-350">350</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-351">351</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-352">352</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-353">353</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-354">354</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-355">355</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-356">356</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-357">357</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-358">358</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-359">359</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-360">360</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-361">361</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-362">362</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-363">363</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-364">364</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-365">365</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-366">366</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-367">367</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-368">368</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-369">369</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-370">370</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-371">371</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-372">372</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-373">373</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-374">374</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-375">375</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-376">376</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-377">377</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-378">378</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-379">379</a></span>
+<span class="normal"><a href="#toolr.command--source--__codelineno-0-380">380</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="toolr.command--source--__span-0-297"><a id="toolr.command--source--__codelineno-0-297" name="toolr.command--source--__codelineno-0-297"></a><span class="k">def</span><span class="w"> </span><span class="nf">command</span><span class="p">(</span>
+</span><span id="toolr.command--source--__span-0-298"><a id="toolr.command--source--__codelineno-0-298" name="toolr.command--source--__codelineno-0-298"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="toolr.command--source--__span-0-299"><a id="toolr.command--source--__codelineno-0-299" name="toolr.command--source--__codelineno-0-299"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="toolr.command--source--__span-0-300"><a id="toolr.command--source--__codelineno-0-300" name="toolr.command--source--__codelineno-0-300"></a>    <span class="n">group</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="toolr.command--source--__span-0-301"><a id="toolr.command--source--__codelineno-0-301" name="toolr.command--source--__codelineno-0-301"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+</span><span id="toolr.command--source--__span-0-302"><a id="toolr.command--source--__codelineno-0-302" name="toolr.command--source--__codelineno-0-302"></a><span class="w">    </span><span class="sd">"""Register a function as a toolr CLI command.</span>
+</span><span id="toolr.command--source--__span-0-303"><a id="toolr.command--source--__codelineno-0-303" name="toolr.command--source--__codelineno-0-303"></a>
+</span><span id="toolr.command--source--__span-0-304"><a id="toolr.command--source--__codelineno-0-304" name="toolr.command--source--__codelineno-0-304"></a><span class="sd">    String-path attachment to a group, an alternative to the bound</span>
+</span><span id="toolr.command--source--__span-0-305"><a id="toolr.command--source--__codelineno-0-305" name="toolr.command--source--__codelineno-0-305"></a><span class="sd">    ``@&lt;binding&gt;.command`` form. Lets you declare commands in any</span>
+</span><span id="toolr.command--source--__span-0-306"><a id="toolr.command--source--__codelineno-0-306" name="toolr.command--source--__codelineno-0-306"></a><span class="sd">    file without importing a shared ``CommandGroup`` binding — the</span>
+</span><span id="toolr.command--source--__span-0-307"><a id="toolr.command--source--__codelineno-0-307" name="toolr.command--source--__codelineno-0-307"></a><span class="sd">    ``group=`` string is the only contract.</span>
+</span><span id="toolr.command--source--__span-0-308"><a id="toolr.command--source--__codelineno-0-308" name="toolr.command--source--__codelineno-0-308"></a>
+</span><span id="toolr.command--source--__span-0-309"><a id="toolr.command--source--__codelineno-0-309" name="toolr.command--source--__codelineno-0-309"></a><span class="sd">    The signature mirrors the bound :meth:`CommandGroup.command`</span>
+</span><span id="toolr.command--source--__span-0-310"><a id="toolr.command--source--__codelineno-0-310" name="toolr.command--source--__codelineno-0-310"></a><span class="sd">    (plus ``group=``). The command name may be passed positionally</span>
+</span><span id="toolr.command--source--__span-0-311"><a id="toolr.command--source--__codelineno-0-311" name="toolr.command--source--__codelineno-0-311"></a><span class="sd">    (``@command("snippet-checker", group=...)``) or by keyword</span>
+</span><span id="toolr.command--source--__span-0-312"><a id="toolr.command--source--__codelineno-0-312" name="toolr.command--source--__codelineno-0-312"></a><span class="sd">    (``@command(name="snippet-checker", group=...)``) — but not both;</span>
+</span><span id="toolr.command--source--__span-0-313"><a id="toolr.command--source--__codelineno-0-313" name="toolr.command--source--__codelineno-0-313"></a><span class="sd">    doing so raises ``TypeError``.</span>
+</span><span id="toolr.command--source--__span-0-314"><a id="toolr.command--source--__codelineno-0-314" name="toolr.command--source--__codelineno-0-314"></a>
+</span><span id="toolr.command--source--__span-0-315"><a id="toolr.command--source--__codelineno-0-315" name="toolr.command--source--__codelineno-0-315"></a><span class="sd">    toolr reads this decorator from the source without running it. It</span>
+</span><span id="toolr.command--source--__span-0-316"><a id="toolr.command--source--__codelineno-0-316" name="toolr.command--source--__codelineno-0-316"></a><span class="sd">    accepts ``@command``, ``@toolr.command`` (also after</span>
+</span><span id="toolr.command--source--__span-0-317"><a id="toolr.command--source--__codelineno-0-317" name="toolr.command--source--__codelineno-0-317"></a><span class="sd">    ``import toolr as t``) and an alias from</span>
+</span><span id="toolr.command--source--__span-0-318"><a id="toolr.command--source--__codelineno-0-318" name="toolr.command--source--__codelineno-0-318"></a><span class="sd">    ``from toolr import command as cmd``, on a top-level ``def`` with</span>
+</span><span id="toolr.command--source--__span-0-319"><a id="toolr.command--source--__codelineno-0-319" name="toolr.command--source--__codelineno-0-319"></a><span class="sd">    ``group=`` and any name as string literals. A nested ``def`` (inside</span>
+</span><span id="toolr.command--source--__span-0-320"><a id="toolr.command--source--__codelineno-0-320" name="toolr.command--source--__codelineno-0-320"></a><span class="sd">    another function, a class or an ``if``), ``group=SOME_CONSTANT`` or a</span>
+</span><span id="toolr.command--source--__span-0-321"><a id="toolr.command--source--__codelineno-0-321" name="toolr.command--source--__codelineno-0-321"></a><span class="sd">    non-literal name fails the build with "unsupported command</span>
+</span><span id="toolr.command--source--__span-0-322"><a id="toolr.command--source--__codelineno-0-322" name="toolr.command--source--__codelineno-0-322"></a><span class="sd">    declarations", and so does :class:`toolr.testing.CommandsTester`.</span>
+</span><span id="toolr.command--source--__span-0-323"><a id="toolr.command--source--__codelineno-0-323" name="toolr.command--source--__codelineno-0-323"></a><span class="sd">    A group's command names must be unique within ``tools/``.</span>
+</span><span id="toolr.command--source--__span-0-324"><a id="toolr.command--source--__codelineno-0-324" name="toolr.command--source--__codelineno-0-324"></a>
+</span><span id="toolr.command--source--__span-0-325"><a id="toolr.command--source--__codelineno-0-325" name="toolr.command--source--__codelineno-0-325"></a><span class="sd">    Usage::</span>
+</span><span id="toolr.command--source--__span-0-326"><a id="toolr.command--source--__codelineno-0-326" name="toolr.command--source--__codelineno-0-326"></a>
+</span><span id="toolr.command--source--__span-0-327"><a id="toolr.command--source--__codelineno-0-327" name="toolr.command--source--__codelineno-0-327"></a><span class="sd">        from toolr import command, command_group</span>
+</span><span id="toolr.command--source--__span-0-328"><a id="toolr.command--source--__codelineno-0-328" name="toolr.command--source--__codelineno-0-328"></a>
+</span><span id="toolr.command--source--__span-0-329"><a id="toolr.command--source--__codelineno-0-329" name="toolr.command--source--__codelineno-0-329"></a><span class="sd">        command_group("ci.helm-diff-pr-comment", docstring=__doc__)</span>
+</span><span id="toolr.command--source--__span-0-330"><a id="toolr.command--source--__codelineno-0-330" name="toolr.command--source--__codelineno-0-330"></a>
+</span><span id="toolr.command--source--__span-0-331"><a id="toolr.command--source--__codelineno-0-331" name="toolr.command--source--__codelineno-0-331"></a><span class="sd">        @command(group="ci.helm-diff-pr-comment")</span>
+</span><span id="toolr.command--source--__span-0-332"><a id="toolr.command--source--__codelineno-0-332" name="toolr.command--source--__codelineno-0-332"></a><span class="sd">        def backend(ctx, env): ...</span>
+</span><span id="toolr.command--source--__span-0-333"><a id="toolr.command--source--__codelineno-0-333" name="toolr.command--source--__codelineno-0-333"></a>
+</span><span id="toolr.command--source--__span-0-334"><a id="toolr.command--source--__codelineno-0-334" name="toolr.command--source--__codelineno-0-334"></a><span class="sd">        # Optional explicit command name (otherwise the function</span>
+</span><span id="toolr.command--source--__span-0-335"><a id="toolr.command--source--__codelineno-0-335" name="toolr.command--source--__codelineno-0-335"></a><span class="sd">        # name is hyphenated and used).</span>
+</span><span id="toolr.command--source--__span-0-336"><a id="toolr.command--source--__codelineno-0-336" name="toolr.command--source--__codelineno-0-336"></a><span class="sd">        @command("snippet-checker", group="ci.helm-diff-pr-comment")</span>
+</span><span id="toolr.command--source--__span-0-337"><a id="toolr.command--source--__codelineno-0-337" name="toolr.command--source--__codelineno-0-337"></a><span class="sd">        def check_snippets(ctx): ...</span>
+</span><span id="toolr.command--source--__span-0-338"><a id="toolr.command--source--__codelineno-0-338" name="toolr.command--source--__codelineno-0-338"></a>
+</span><span id="toolr.command--source--__span-0-339"><a id="toolr.command--source--__codelineno-0-339" name="toolr.command--source--__codelineno-0-339"></a><span class="sd">    Args:</span>
+</span><span id="toolr.command--source--__span-0-340"><a id="toolr.command--source--__codelineno-0-340" name="toolr.command--source--__codelineno-0-340"></a><span class="sd">        name: When called as a bare decorator (``@command``), this is</span>
+</span><span id="toolr.command--source--__span-0-341"><a id="toolr.command--source--__codelineno-0-341" name="toolr.command--source--__codelineno-0-341"></a><span class="sd">            the wrapped function. When called with parentheses</span>
+</span><span id="toolr.command--source--__span-0-342"><a id="toolr.command--source--__codelineno-0-342" name="toolr.command--source--__codelineno-0-342"></a><span class="sd">            (``@command("name", group=...)`` or</span>
+</span><span id="toolr.command--source--__span-0-343"><a id="toolr.command--source--__codelineno-0-343" name="toolr.command--source--__codelineno-0-343"></a><span class="sd">            ``@command(name="name", group=...)``), this is the override</span>
+</span><span id="toolr.command--source--__span-0-344"><a id="toolr.command--source--__codelineno-0-344" name="toolr.command--source--__codelineno-0-344"></a><span class="sd">            for the command's CLI name; the function name (hyphenated)</span>
+</span><span id="toolr.command--source--__span-0-345"><a id="toolr.command--source--__codelineno-0-345" name="toolr.command--source--__codelineno-0-345"></a><span class="sd">            is used otherwise.</span>
+</span><span id="toolr.command--source--__span-0-346"><a id="toolr.command--source--__codelineno-0-346" name="toolr.command--source--__codelineno-0-346"></a><span class="sd">        group: Dotted full path of the target group</span>
+</span><span id="toolr.command--source--__span-0-347"><a id="toolr.command--source--__codelineno-0-347" name="toolr.command--source--__codelineno-0-347"></a><span class="sd">            (e.g. ``"ci"`` or ``"ci.helm-diff-pr-comment"``). A</span>
+</span><span id="toolr.command--source--__span-0-348"><a id="toolr.command--source--__codelineno-0-348" name="toolr.command--source--__codelineno-0-348"></a><span class="sd">            matching ``command_group(...)`` declaration must exist</span>
+</span><span id="toolr.command--source--__span-0-349"><a id="toolr.command--source--__codelineno-0-349" name="toolr.command--source--__codelineno-0-349"></a><span class="sd">            elsewhere in ``tools/``; otherwise manifest-build fails</span>
+</span><span id="toolr.command--source--__span-0-350"><a id="toolr.command--source--__codelineno-0-350" name="toolr.command--source--__codelineno-0-350"></a><span class="sd">            with a clear error.</span>
+</span><span id="toolr.command--source--__span-0-351"><a id="toolr.command--source--__codelineno-0-351" name="toolr.command--source--__codelineno-0-351"></a>
+</span><span id="toolr.command--source--__span-0-352"><a id="toolr.command--source--__codelineno-0-352" name="toolr.command--source--__codelineno-0-352"></a><span class="sd">    Returns:</span>
+</span><span id="toolr.command--source--__span-0-353"><a id="toolr.command--source--__codelineno-0-353" name="toolr.command--source--__codelineno-0-353"></a><span class="sd">        The decorated function unchanged. With ``group=``, it is also</span>
+</span><span id="toolr.command--source--__span-0-354"><a id="toolr.command--source--__codelineno-0-354" name="toolr.command--source--__codelineno-0-354"></a><span class="sd">        recorded under that group, as ``@&lt;binding&gt;.command`` would, so</span>
+</span><span id="toolr.command--source--__span-0-355"><a id="toolr.command--source--__codelineno-0-355" name="toolr.command--source--__codelineno-0-355"></a><span class="sd">        :class:`toolr.testing.CommandsTester` sees it. At runtime toolr</span>
+</span><span id="toolr.command--source--__span-0-356"><a id="toolr.command--source--__codelineno-0-356" name="toolr.command--source--__codelineno-0-356"></a><span class="sd">        calls the function directly with the parsed args.</span>
+</span><span id="toolr.command--source--__span-0-357"><a id="toolr.command--source--__codelineno-0-357" name="toolr.command--source--__codelineno-0-357"></a><span class="sd">    """</span>
+</span><span id="toolr.command--source--__span-0-358"><a id="toolr.command--source--__codelineno-0-358" name="toolr.command--source--__codelineno-0-358"></a>    <span class="c1"># Bare form: @command def f(...) — no kwargs allowed in this shape.</span>
+</span><span id="toolr.command--source--__span-0-359"><a id="toolr.command--source--__codelineno-0-359" name="toolr.command--source--__codelineno-0-359"></a>    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+</span><span id="toolr.command--source--__span-0-360"><a id="toolr.command--source--__codelineno-0-360" name="toolr.command--source--__codelineno-0-360"></a>        <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="toolr.command--source--__span-0-361"><a id="toolr.command--source--__codelineno-0-361" name="toolr.command--source--__codelineno-0-361"></a>            <span class="n">err_msg</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="toolr.command--source--__span-0-362"><a id="toolr.command--source--__codelineno-0-362" name="toolr.command--source--__codelineno-0-362"></a>                <span class="s1">'@command(...) with kwargs must be used as `@command(group="…")`'</span>
+</span><span id="toolr.command--source--__span-0-363"><a id="toolr.command--source--__codelineno-0-363" name="toolr.command--source--__codelineno-0-363"></a>                <span class="s2">" — drop the parens-less form or move the kwargs into them."</span>
+</span><span id="toolr.command--source--__span-0-364"><a id="toolr.command--source--__codelineno-0-364" name="toolr.command--source--__codelineno-0-364"></a>            <span class="p">)</span>
+</span><span id="toolr.command--source--__span-0-365"><a id="toolr.command--source--__codelineno-0-365" name="toolr.command--source--__codelineno-0-365"></a>            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">err_msg</span><span class="p">)</span>
+</span><span id="toolr.command--source--__span-0-366"><a id="toolr.command--source--__codelineno-0-366" name="toolr.command--source--__codelineno-0-366"></a>        <span class="n">_require_docstring</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+</span><span id="toolr.command--source--__span-0-367"><a id="toolr.command--source--__codelineno-0-367" name="toolr.command--source--__codelineno-0-367"></a>        <span class="n">_record_standalone_command</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</span><span id="toolr.command--source--__span-0-368"><a id="toolr.command--source--__codelineno-0-368" name="toolr.command--source--__codelineno-0-368"></a>        <span class="k">return</span> <span class="n">name</span>
+</span><span id="toolr.command--source--__span-0-369"><a id="toolr.command--source--__codelineno-0-369" name="toolr.command--source--__codelineno-0-369"></a>
+</span><span id="toolr.command--source--__span-0-370"><a id="toolr.command--source--__codelineno-0-370" name="toolr.command--source--__codelineno-0-370"></a>    <span class="c1"># Parameterised form: @command(...) — returns a decorator. The static</span>
+</span><span id="toolr.command--source--__span-0-371"><a id="toolr.command--source--__codelineno-0-371" name="toolr.command--source--__codelineno-0-371"></a>    <span class="c1"># parser reads the `group=` / `name` strings; the registry records them</span>
+</span><span id="toolr.command--source--__span-0-372"><a id="toolr.command--source--__codelineno-0-372" name="toolr.command--source--__codelineno-0-372"></a>    <span class="c1"># for `CommandsTester`.</span>
+</span><span id="toolr.command--source--__span-0-373"><a id="toolr.command--source--__codelineno-0-373" name="toolr.command--source--__codelineno-0-373"></a>    <span class="n">explicit_name</span> <span class="o">=</span> <span class="n">name</span>
+</span><span id="toolr.command--source--__span-0-374"><a id="toolr.command--source--__codelineno-0-374" name="toolr.command--source--__codelineno-0-374"></a>
+</span><span id="toolr.command--source--__span-0-375"><a id="toolr.command--source--__codelineno-0-375" name="toolr.command--source--__codelineno-0-375"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+</span><span id="toolr.command--source--__span-0-376"><a id="toolr.command--source--__codelineno-0-376" name="toolr.command--source--__codelineno-0-376"></a>        <span class="n">_require_docstring</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+</span><span id="toolr.command--source--__span-0-377"><a id="toolr.command--source--__codelineno-0-377" name="toolr.command--source--__codelineno-0-377"></a>        <span class="n">_record_standalone_command</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">explicit_name</span><span class="p">,</span> <span class="n">group</span><span class="p">)</span>
+</span><span id="toolr.command--source--__span-0-378"><a id="toolr.command--source--__codelineno-0-378" name="toolr.command--source--__codelineno-0-378"></a>        <span class="k">return</span> <span class="n">func</span>
+</span><span id="toolr.command--source--__span-0-379"><a id="toolr.command--source--__codelineno-0-379" name="toolr.command--source--__codelineno-0-379"></a>
+</span><span id="toolr.command--source--__span-0-380"><a id="toolr.command--source--__codelineno-0-380" name="toolr.command--source--__codelineno-0-380"></a>    <span class="k">return</span> <span class="n">decorator</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>

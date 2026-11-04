@@ -1749,12 +1749,15 @@ the command manifest — <code>toolr --help</code>, tab-completion, and first-ru
 fresh clone are all execution-free. Your repository's Python runs only
 when you explicitly dispatch a command.</p>
 <p>The practical contract: declare <code>command_group(...)</code> at module top level
-and apply <code>@command</code> / <code>@group.command</code> to module-level functions.
-Commands registered dynamically — inside a <code>for</code> loop, behind an <code>if</code>, or
-returned from a factory invoked at import time — are <strong>not</strong> discovered
-and will not appear in <code>--help</code>, completion, or dispatch. If a command is
-missing, make its registration a top-level, statically-visible
+and apply <code>@command</code> / <code>@group.command</code> to module-level functions, with
+<code>group=</code> and any name as string literals. A command decorator on a nested
+<code>def</code> — inside another function, a class, a <code>for</code> loop or behind an <code>if</code> —
+or a non-literal <code>group=</code> or name fails the build with "unsupported command
+declarations". Make each registration a top-level, statically-visible
 declaration.</p>
+<p>Each command name is defined once per group: two functions registering the
+same name in one group, in one file or two, fail the build with "duplicate
+commands".</p>
 <h2 id="overriding-the-cli-name">Overriding the CLI name<a class="headerlink" href="#overriding-the-cli-name" title="Permanent link">&para;</a></h2>
 <p>To register a command under a name different from its function:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@example</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="s2">"snippet-checker"</span><span class="p">)</span>
