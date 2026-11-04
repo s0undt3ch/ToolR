@@ -638,24 +638,7 @@ fn fish_completion_never_executes_values() {
         return;
     }
     let fx = fixture();
-    let script = print_script("fish");
-    let out = StdCommand::new("fish")
-        .arg("--no-config")
-        .arg("-c")
-        .arg("source (echo $argv[1] | psub); complete -C \"toolr ci lint --mode \"")
-        .arg(script)
-        .current_dir(fx.tmp.path())
-        .env("PATH", path_with_toolr())
-        // The shell runs toolr itself, so mirror `common::toolr`'s cache isolation.
-        .env("XDG_CACHE_HOME", common::test_cache_home())
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stdout = fish_complete(&fx, "toolr ci lint --mode ");
     assert!(stdout.contains("fast"), "fish got no candidates: {stdout}");
     assert!(
         stdout.contains("$(touch"),

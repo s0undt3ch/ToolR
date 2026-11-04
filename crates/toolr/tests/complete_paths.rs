@@ -5,7 +5,7 @@ mod common;
 
 use tempfile::TempDir;
 
-/// The reproduction from the F-36 report, verbatim.
+/// A path-typed option with an empty value used to get no candidates at all.
 fn fixture() -> TempDir {
     let tmp = TempDir::new().unwrap();
     let tools = common::write_project(tmp.path());
