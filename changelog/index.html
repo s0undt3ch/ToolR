@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev563-2026-11-03" class="md-nav__link">
+  <a href="#0352-dev575-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev563 - 2026-11-03
+        0.35.2-dev575 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev563 - 2026-11-03">
+    <nav class="md-nav" aria-label="0.35.2-dev575 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev563-2026-11-03" class="md-nav__link">
+  <a href="#0352-dev575-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev563 - 2026-11-03
+        0.35.2-dev575 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev563 - 2026-11-03">
+    <nav class="md-nav" aria-label="0.35.2-dev575 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev563-2026-11-03">0.35.2-dev563 - 2026-11-03<a class="headerlink" href="#0352-dev563-2026-11-03" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev575-2026-11-04">0.35.2-dev575 - 2026-11-04<a class="headerlink" href="#0352-dev575-2026-11-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7701,6 +7701,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>The installers, the documented manual command and the Setup ToolR action now also require the attestation subject that names the archive to carry the archive's SHA-256. With <code>TOOLR_REPO</code> (<code>install.sh</code>) or <code>-Repo</code> (<code>install.ps1</code>) set, both the downloads and the attestation identities come from that repository, and a rejection names it.</p>
 <p>Editing the <code>[tool.toolr.argparse.*]</code> blocks in <code>tools/pyproject.toml</code>, or any file that an external command source scans, now refreshes the manifest on the next run. toolr used to keep showing the old commands and arguments until <code>toolr project manifest rebuild</code>. Other <code>tools/pyproject.toml</code> edits, such as a new dependency, don't trigger a rebuild, and tab completion keeps offering the cached commands while that file or a <code>scan_paths</code> glob is broken.</p>
 <p>Tab completion and the start-up freshness check no longer reread every file under <code>tools/</code>, and every file an external command source scans, each time. toolr now keeps each file's size and timestamps in the manifest and rereads only the files that changed, so completion stays fast with large <code>tools/</code> trees and large <code>scan_paths</code>. Files outside the project, or on another filesystem than <code>tools/</code>, are still reread every time. On NFS, an edit made from another machine can take up to the attribute-cache timeout (typically under a minute) to be noticed.</p>
+<p>A child killed by a signal is now reported consistently. <code>ctx.run(...).returncode</code> is <code>-N</code> for a child killed by signal <code>N</code>, as with <code>subprocess</code> (it used to be <code>-1</code> for every signal). On Unix, <code>ctx.exit()</code> turns a negative status into <code>128 + N</code>, as a shell does, so <code>ctx.exit(result.returncode)</code> after a SIGTERM'd child exits 143 rather than 255. <code>toolr project venv run</code> and <code>toolr project venv shell</code> now exit <code>128 + N</code> for a signal-killed child instead of 1. An exit code that doesn't fit in a byte (Windows crash statuses, or 256) now makes toolr exit 1; it used to be truncated, and could turn a failure into exit 0.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7838,6 +7839,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(freshness)</em> Bound record reuse by the snapshot, not the manifest write (<a href="https://github.com/s0undt3ch/ToolR/commit/64dbbf1e72bc58dec9d21b773d94655686d12edd"><code>64dbbf1</code></a>)</li>
 <li><em>(freshness)</em> Only reuse records from tools/'s filesystem (<a href="https://github.com/s0undt3ch/ToolR/commit/657b1823849c7da9e569534d65fed679e3434db5"><code>657b182</code></a>)</li>
 <li><em>(test)</em> Decode git-cliff output as UTF-8 on Windows (<a href="https://github.com/s0undt3ch/ToolR/commit/31ec83cefe95924f061a7b6085afb12ff486860a"><code>31ec83c</code></a>)</li>
+<li><em>(venv)</em> Exit 128 + signal for a signal-killed child, 1 for out-of-range codes (<a href="https://github.com/s0undt3ch/ToolR/commit/9cc614ff46ac593099de7824912c43e6992fac78"><code>9cc614f</code></a>)</li>
+<li><em>(run)</em> Return -N from ctx.run for a child killed by signal N (<a href="https://github.com/s0undt3ch/ToolR/commit/df938790e5d992f1e7c8dcad516b5f702b24d5bf"><code>df93879</code></a>)</li>
+<li><em>(context)</em> Exit 128 + N for a negative ctx.exit status (<a href="https://github.com/s0undt3ch/ToolR/commit/ca24a526aabcb07a9210c66c962500e75b495e29"><code>ca24a52</code></a>)</li>
+<li><em>(context)</em> Keep a negative Windows exit status out of the 128 + N rule (<a href="https://github.com/s0undt3ch/ToolR/commit/807d7b8086c9052f5ad2d79bca51614f7e9e5e39"><code>807d7b8</code></a>)</li>
+<li><em>(context)</em> Map only int statuses in ctx.exit, and correct the old exit code in the note (<a href="https://github.com/s0undt3ch/ToolR/commit/7251c134c1222cc29e9484c398734cafcce9060d"><code>7251c13</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7892,6 +7898,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(install)</em> Compare gh versions with [version] and drive install.ps1's filter env from one table (<a href="https://github.com/s0undt3ch/ToolR/commit/0ceb586c24d16398bd2ba7835bc01c468ebbfafb"><code>0ceb586</code></a>)</li>
 <li><em>(manifest)</em> Name static_hash input kinds and tags (<a href="https://github.com/s0undt3ch/ToolR/commit/4e24eea64b025d08dc27aab60d73440056341073"><code>4e24eea</code></a>)</li>
 <li><em>(freshness)</em> Type record contents and stamp the clock in one place (<a href="https://github.com/s0undt3ch/ToolR/commit/b2960c4626c6dbe5c9541990c886f871f024cd39"><code>b2960c4</code></a>)</li>
+<li><em>(exit-status)</em> Simplify the mappers and make platform-specific tests explicit (<a href="https://github.com/s0undt3ch/ToolR/commit/0134b8645e7557ce6e9deba1058f52b4805bd679"><code>0134b86</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8050,6 +8057,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(internals)</em> Split the stat gate into its rules and qualify the single pyproject read (<a href="https://github.com/s0undt3ch/ToolR/commit/24dfd9dab2573742c59ece5508087486987a69b9"><code>24dfd9d</code></a>)</li>
 <li><em>(specs)</em> Archive tab manifest freshness design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/d92bbe4e95d19fac65f3fc647c0a9049c33261b1"><code>d92bbe4</code></a>)</li>
 <li><em>(claude)</em> Say how to close a coverage gap (<a href="https://github.com/s0undt3ch/ToolR/commit/704cdc16392088cbdeb8414aafba563afe42b0c7"><code>704cdc1</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-20 exit codes for signal-killed children (<a href="https://github.com/s0undt3ch/ToolR/commit/9ae9ccecc30afb1d833ae4934cfbd697b163be4d"><code>9ae9cce</code></a>)</li>
+<li><em>(specs)</em> Update F-20 spec to the -N returncode decision (<a href="https://github.com/s0undt3ch/ToolR/commit/0c247ce712f131039b1454922fb600c80cde2a65"><code>0c247ce</code></a>)</li>
+<li>Document exit codes for signal-killed children (<a href="https://github.com/s0undt3ch/ToolR/commit/f3f87d3ebaed409e09eabdf04e6bd487fc120e77"><code>f3f87d3</code></a>)</li>
+<li><em>(specs)</em> Archive venv-run-signal-exit spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/64c35bbdc41e120b0942a6414813c3036215c7b9"><code>64c35bb</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8134,6 +8145,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(installation)</em> Write the gh stub and scripts so Git Bash on Windows can run them (<a href="https://github.com/s0undt3ch/ToolR/commit/c12ec2d008e3e033c617a16919143e05f18d8454"><code>c12ec2d</code></a>)</li>
 <li><em>(freshness)</em> Cover a pyproject edit outside the argparse blocks (<a href="https://github.com/s0undt3ch/ToolR/commit/653fcc6e6e18dcba882f847a1d7a375ffad486f8"><code>653fcc6</code></a>)</li>
 <li><em>(freshness)</em> Use a nanos offset Windows' 100 ns SystemTime can hold (<a href="https://github.com/s0undt3ch/ToolR/commit/ae6e982303875586ebb380cbf8a8ac7a97ee4918"><code>ae6e982</code></a>)</li>
+<li><em>(venv)</em> Cover venv shell exiting 128 + signal for a signal-killed shell (<a href="https://github.com/s0undt3ch/ToolR/commit/2eea9e1629ca03878f75fd0585949225d5f52b8f"><code>2eea9e1</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>

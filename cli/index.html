@@ -2372,7 +2372,8 @@ shell-scripting or sanity-checking <code>venv-location</code>.</p>
 <h3 id="project-venv-shell"><code>toolr project venv shell</code><a class="headerlink" href="#project-venv-shell" title="Permanent link">&para;</a></h3>
 <p>Spawn a subshell with the tools venv activated. <code>$VIRTUAL_ENV</code> is set,
 <code>$PATH</code> is prepended with the venv's <code>bin/</code>, and <code>$TOOLR_VENV</code> carries
-the venv path for prompt customisation.</p>
+the venv path for prompt customisation. toolr exits with the subshell's exit
+code, or 128 plus the signal number if a signal killed it.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>shell<span class="w"> </span>--help
 </span></code></pre></div>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>Spawn a subshell with the tools venv activated
@@ -2388,7 +2389,8 @@ the venv path for prompt customisation.</p>
 first (freshness-gated, exactly like <a href="#project-venv-sync"><code>venv sync</code></a> and
 <code>venv shell</code>), then runs the command with <code>$VIRTUAL_ENV</code>, <code>$TOOLR_VENV</code>, and
 <code>$PATH</code> set so entry points such as <code>pytest</code> resolve from the venv. The child's
-stdout, stderr, and exit code pass straight through.</p>
+stdout, stderr, and exit code pass straight through. A child killed by a signal
+exits with 128 plus the signal number, as in a shell.</p>
 <p>This is the one-liner for running a command-package's tests:</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>toolr<span class="w"> </span>project<span class="w"> </span>venv<span class="w"> </span>run<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>tools/
 </span></code></pre></div>

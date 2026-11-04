@@ -1726,7 +1726,10 @@ and <code>ctx.error(...)</code> write structured log records (respecting
 subprocess. <code>capture_output=True</code> gives you a result object with
 <code>.stdout</code> and <code>.stderr</code>; default (no capture) streams the subprocess's
 output to the user's terminal. There is no <code>check=</code> kwarg — a nonzero
-exit does not raise. Inspect <code>result.returncode</code> yourself.</p>
+exit does not raise. Inspect <code>result.returncode</code> yourself. As with
+<code>subprocess</code>, a child killed by signal N has <code>returncode</code> <code>-N</code>.
+<code>ctx.exit(result.returncode, ...)</code> turns that into exit code <code>128 + N</code>
+(143 for SIGTERM), as a shell would.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@example</span><span class="o">.</span><span class="n">command</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">commit</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Context</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="sd">"""Print the short SHA of the current git HEAD.</span>
