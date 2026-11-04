@@ -603,14 +603,15 @@ mod tests {
     }
 
     /// Points `XDG_CACHE_HOME` at a fresh temp dir, so a persisting rebuild
-    /// writes its lock there instead of the real cache.
-    fn temp_cache_home() -> (CacheHomeGuard, tempfile::TempDir) {
+    /// writes its lock there instead of the real cache. Bind as `(home, _guard)`
+    /// so the env is restored before the dir is deleted.
+    fn temp_cache_home() -> (tempfile::TempDir, CacheHomeGuard) {
         let lock = CACHE_HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev = std::env::var_os("XDG_CACHE_HOME");
         let home = tempfile::TempDir::new().unwrap();
         // SAFETY: as in `CacheHomeGuard::drop`.
         unsafe { std::env::set_var("XDG_CACHE_HOME", home.path()) };
-        (CacheHomeGuard { prev, _lock: lock }, home)
+        (home, CacheHomeGuard { prev, _lock: lock })
     }
 
     /// The rebuild lock landed in the temp cache home, proving the redirect.
@@ -624,7 +625,7 @@ mod tests {
     /// A missing manifest is rebuilt and written, not reported as unreadable.
     #[test]
     fn ensure_manifest_fresh_rebuilds_a_missing_manifest() {
-        let (_guard, home) = temp_cache_home();
+        let (home, _guard) = temp_cache_home();
         let tmp = tools_repo();
 
         let fresh = ensure_manifest_fresh(tmp.path(), &[], true).unwrap();
@@ -648,7 +649,7 @@ mod tests {
     /// The bootstrap step builds a missing manifest only when persisting.
     #[test]
     fn bootstrap_writes_a_missing_manifest_only_when_persisting() {
-        let (_guard, home) = temp_cache_home();
+        let (home, _guard) = temp_cache_home();
         let tmp = tools_repo();
         let manifest = tmp.path().join("tools/.toolr-manifest.json");
 

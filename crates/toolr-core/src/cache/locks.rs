@@ -1,7 +1,7 @@
 //! Sweep of manifest rebuild locks that no kept cache entry needs.
 
 use std::collections::HashSet;
-use std::fs::{OpenOptions, TryLockError};
+use std::fs::{File, TryLockError};
 use std::io::ErrorKind;
 use std::path::Path;
 
@@ -39,18 +39,29 @@ pub fn sweep_rebuild_locks(
         {
             continue;
         }
-        let file = OpenOptions::new().read(true).write(true).open(&path)?;
-        match file.try_lock() {
-            Err(TryLockError::WouldBlock) => sweep.held += 1,
-            locked => {
-                locked?;
-                sweep.removed += 1;
-                // Unlink while still holding the lock, so no rebuild starts on it meanwhile.
-                if !dry_run {
-                    std::fs::remove_file(&path)?;
-                }
+        sweep_one(&path, dry_run, &mut sweep)?;
+    }
+    Ok(sweep)
+}
+
+/// Tallies one lock into `sweep`. A lock gone since `read_dir`, as when two
+/// prunes overlap, counts as nothing. Opened read-only, all locking needs, so a
+/// dry run works on a read-only cache.
+pub(super) fn sweep_one(path: &Path, dry_run: bool, sweep: &mut LockSweep) -> std::io::Result<()> {
+    let file = match File::open(path) {
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(()),
+        other => other?,
+    };
+    match file.try_lock() {
+        Err(TryLockError::WouldBlock) => sweep.held += 1,
+        locked => {
+            locked?;
+            sweep.removed += 1;
+            // Unlink while still holding the lock, so no rebuild starts on it meanwhile.
+            if !dry_run {
+                std::fs::remove_file(path)?;
             }
         }
     }
-    Ok(sweep)
+    Ok(())
 }

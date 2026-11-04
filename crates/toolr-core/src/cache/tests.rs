@@ -1,4 +1,4 @@
-use super::locks::{LockSweep, sweep_rebuild_locks};
+use super::locks::{LockSweep, sweep_one, sweep_rebuild_locks};
 use super::meta::{Meta, MetaError, SCHEMA_VERSION};
 use crate::manifest::{LOCKS_DIR, lock_path_for_repo};
 use chrono::{TimeZone, Utc};
@@ -634,4 +634,29 @@ fn sweep_keeps_the_lock_of_a_repo_reached_through_a_symlink() {
     let sweep = sweep_rebuild_locks(cache.path(), &[link.as_path()], false).unwrap();
     assert!(lock.is_file());
     assert_eq!(sweep, LockSweep::default());
+}
+
+#[test]
+fn sweep_one_counts_nothing_for_a_lock_already_gone() {
+    let tmp = TempDir::new().unwrap();
+    let mut sweep = LockSweep::default();
+    sweep_one(&tmp.path().join("gone.lock"), false, &mut sweep).unwrap();
+    assert_eq!(sweep, LockSweep::default());
+}
+
+#[cfg(unix)]
+#[test]
+fn sweep_removes_a_read_only_lock_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let locks = tmp.path().join(LOCKS_DIR);
+    std::fs::create_dir_all(&locks).unwrap();
+    let lock = locks.join("0123abcd.lock");
+    std::fs::write(&lock, b"").unwrap();
+    std::fs::set_permissions(&lock, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+    let sweep = sweep_rebuild_locks(tmp.path(), &[], false).unwrap();
+
+    assert_eq!(sweep.removed, 1);
+    assert!(!lock.exists());
 }
