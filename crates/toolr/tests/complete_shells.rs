@@ -185,6 +185,8 @@ _init_completion() { words=("${TW[@]}"); cword=4; cur="${words[cword]}"; prev="$
 if type compopt >/dev/null 2>&1; then compopt() { printf 'COMPOPT:%s\n' "$*"; }; fi
 eval "$script"
 _toolr_complete; rc=$?
+# A script under test may turn on `set -u`, which bash 3.2 applies to an empty `"${a[@]}"`.
+set +u
 printf 'RC:%s\n' "$rc"
 for r in "${COMPREPLY[@]}"; do printf 'R:%s\n' "$r"; done
 for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
@@ -421,29 +423,35 @@ fn bash_path_keeps_a_typed_leading_tilde() {
     }
 }
 
-/// A user's `set -e` must not leak into Tab: a non-zero `__complete` exit
-/// would otherwise close their shell.
+/// A user's `set -e` or `set -u` must not leak into Tab: a non-zero
+/// `__complete` exit or an unset array would otherwise close their shell.
 #[test]
 fn bash_completion_survives_errexit() {
-    for bash in bashes() {
+    for (bash, opts) in bashes()
+        .into_iter()
+        .flat_map(|b| [(b.clone(), "-e"), (b, "-eu")])
+    {
         let fx = fixture();
-        let script = format!("set -e\n{}", print_script("bash"));
+        let script = format!("set {opts}\n{}", print_script("bash"));
         let run = run_bash_path(&bash, &script, &fx, "--out", "files/");
-        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
+        assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash} {opts}");
         let run = run_bash_path(&bash, &script, &fx, "--cfg", "files/s");
-        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
+        assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash} {opts}");
         // No directory matches, so the directory probe itself exits non-zero.
         let run = run_bash_path(&bash, &script, &fx, "--cfg", "files/w");
-        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-        assert_eq!(run.reply, vec![run.quoted[0].clone()], "{bash}");
+        assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
+        assert_eq!(run.reply, vec![run.quoted[0].clone()], "{bash} {opts}");
         let run = run_bash_path(&bash, &script, &fx, "--cfg", "nomatch");
-        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+        assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash} {opts}: {:?}", run.reply);
         let run = run_bash_script(&bash, &script, &fx, "--mode", "fa", "", &[]);
-        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-        assert_eq!(run.reply, vec!["fast".to_string()], "{bash}");
+        assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["fast".to_string()], "{bash} {opts}");
+        let run = run_bash_script(&bash, &script, &fx, "--mode", "zz", "", &[]);
+        assert_eq!(run.rc, "0", "{bash} {opts}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash} {opts}: {:?}", run.reply);
     }
 }
 

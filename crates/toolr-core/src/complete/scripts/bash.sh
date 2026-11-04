@@ -61,6 +61,8 @@ _toolr_complete() {
 # `%q` like a candidate value.
 _toolr_complete_paths() {
     local mode=$1 raw_cur=$2 name rest q bare_tilde tilde is_dir tilde_list='' dirs=0
+    # Bash 3.2 errors on `${#COMPREPLY[@]}` under `set -u` while it is unset.
+    COMPREPLY=()
     printf -v bare_tilde '%q' '~'
     # `[[ -d ]]` can't test `~user/...` without expanding it, but `compgen -d` resolves it.
     if [[ $mode == -f && $raw_cur == '~'* ]]; then
