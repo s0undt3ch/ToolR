@@ -1256,6 +1256,122 @@ mod test_suite {
         fn background_writer_is_waited_for_within_timeouts() -> Result<()> {
             background_writer_is_waited_for((Some(60.0), Some(60.0)))
         }
+
+        /// The write end of a pipe whose read end is already closed, like toolr's stdout after
+        /// `| head` exits.
+        #[cfg(unix)]
+        fn broken_pipe() -> Result<i32> {
+            let (read_fd, write_fd) = create_pipe()?;
+            unsafe { libc::close(read_fd) };
+            Ok(write_fd)
+        }
+
+        fn read_all(file: &mut NamedTempFile) -> Result<Vec<u8>> {
+            let mut data = Vec::new();
+            file.seek(SeekFrom::Start(0))?;
+            file.read_to_end(&mut data)?;
+            Ok(data)
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn capture_kept_when_stream_pipe_breaks() -> Result<()> {
+            require_python!(python, "capture_kept_when_stream_pipe_breaks");
+            let script = "import sys; sys.stdout.write('x'*300000); sys.stdout.flush()";
+            let (mut config, mut stdout_file, _stderr) =
+                capturing_config(vec![python, "-c".into(), script.into()]);
+            let (sys_stdout, sys_stderr) = (broken_pipe()?, broken_pipe()?);
+            config.sys_stdout_fd = Some(sys_stdout);
+            config.sys_stderr_fd = Some(sys_stderr);
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            unsafe {
+                libc::close(sys_stdout);
+                libc::close(sys_stderr);
+            }
+            assert_eq!(result.map_err(|e| anyhow!("{e}"))?, 0);
+            assert_eq!(read_all(&mut stdout_file)?.len(), 300000);
+            Ok(())
+        }
+
+        /// With nothing left to write to, the reader lets go of the pipe so the child dies
+        /// as it would in a shell pipeline, instead of running for ever.
+        #[cfg(unix)]
+        #[test]
+        fn stream_only_broken_pipe_ends_child_like_a_pipeline() -> Result<()> {
+            require_python!(python, "stream_only_broken_pipe_ends_child_like_a_pipeline");
+            let (sys_stdout, sys_stderr) = (broken_pipe()?, broken_pipe()?);
+            let config = CommandConfig {
+                args: vec![
+                    python,
+                    "-c".into(),
+                    "import sys\nwhile True: sys.stdout.write('y'*8192)".into(),
+                ],
+                sys_stdout_fd: Some(sys_stdout),
+                sys_stderr_fd: Some(sys_stderr),
+                timeout_secs: Some(8.0),
+                ..Default::default()
+            };
+            let start = Instant::now();
+            let result = bounded_run_command(config, TREE_BOUND)?;
+            unsafe {
+                libc::close(sys_stdout);
+                libc::close(sys_stderr);
+            }
+            let elapsed = start.elapsed();
+            assert!(elapsed < Duration::from_secs(3), "{elapsed:?}");
+            assert_ne!(result.map_err(|e| anyhow!("{e}"))?, 0);
+            Ok(())
+        }
+
+        /// A failed capture write is reported, and the child still runs to completion.
+        #[cfg(unix)]
+        #[test]
+        fn capture_write_failure_is_reported() -> Result<()> {
+            require_python!(python, "capture_write_failure_is_reported");
+            let dir = tempfile::tempdir()?;
+            let marker = dir.path().join("marker");
+            let script = format!(
+                "print('hello', flush=True); open({:?}, 'w').close()",
+                marker.to_str().expect("utf-8 temp path")
+            );
+            let stdout_file = NamedTempFile::new()?;
+            let read_only = File::open(stdout_file.path())?;
+            let stderr_file = NamedTempFile::new()?;
+            let config = CommandConfig {
+                args: vec![python, "-c".into(), script],
+                stdout_fd: Some(get_file_descriptor(&read_only)),
+                stderr_fd: Some(get_file_descriptor(stderr_file.as_file())),
+                ..Default::default()
+            };
+            let err = bounded_run_command(config, TREE_BOUND)?
+                .expect_err("a capture write to a read-only file must fail");
+            assert!(
+                err.to_string().contains("Failed to write captured stdout"),
+                "{err}"
+            );
+            assert!(marker.exists(), "the child was cut off before finishing");
+            Ok(())
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn stream_write_failure_other_than_broken_pipe_is_reported() -> Result<()> {
+            require_python!(
+                python,
+                "stream_write_failure_other_than_broken_pipe_is_reported"
+            );
+            let stream_file = NamedTempFile::new()?;
+            let read_only = File::open(stream_file.path())?;
+            let config = CommandConfig {
+                args: vec![python, "-c".into(), "print('hello')".into()],
+                sys_stdout_fd: Some(get_file_descriptor(&read_only)),
+                ..Default::default()
+            };
+            let err = bounded_run_command(config, TREE_BOUND)?
+                .expect_err("a stream write to a read-only file must fail");
+            assert!(err.to_string().contains("Failed to write stdout"), "{err}");
+            Ok(())
+        }
     }
 
     // --------------------------------------------------------------------
