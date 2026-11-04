@@ -63,7 +63,8 @@ _toolr_complete_paths() {
     local mode=$1 raw_cur=$2 name rest q bare_tilde tilde dirs_list dirs=0
     printf -v bare_tilde '%q' '~'
     # `compgen -d` resolves `~user` itself, so no expansion of typed text is needed.
-    [[ $mode == -f ]] && dirs_list=$'\n'$(compgen -d -- "$raw_cur")$'\n'
+    # `|| :` because `compgen` exits 1 on no match, which `set -e` would act on.
+    [[ $mode == -f ]] && dirs_list=$'\n'$(compgen -d -- "$raw_cur" || :)$'\n'
     while IFS= read -r name; do
         tilde=
         rest=$name

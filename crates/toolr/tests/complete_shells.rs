@@ -433,6 +433,13 @@ fn bash_completion_survives_errexit() {
         let run = run_bash_path(&bash, &script, &fx, "--cfg", "files/s");
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
+        // No directory matches, so the directory probe itself exits non-zero.
+        let run = run_bash_path(&bash, &script, &fx, "--cfg", "files/w");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec![run.quoted[0].clone()], "{bash}");
+        let run = run_bash_path(&bash, &script, &fx, "--cfg", "nomatch");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
         let run = run_bash_script(&bash, &script, &fx, "--mode", "fa", "", &[]);
         assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
         assert_eq!(run.reply, vec!["fast".to_string()], "{bash}");
