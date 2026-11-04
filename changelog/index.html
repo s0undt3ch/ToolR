@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev584-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev589-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev584 - 2026-11-04
+        0.35.2-dev589 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev584 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev589 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev584-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev589-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev584 - 2026-11-04
+        0.35.2-dev589 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev584 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev589 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev584-2026-11-04">0.35.2-dev584 - 2026-11-04<a class="headerlink" href="#0352-dev584-2026-11-04" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev589-2026-11-04">0.35.2-dev589 - 2026-11-04<a class="headerlink" href="#0352-dev589-2026-11-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -8154,6 +8154,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(freshness)</em> Use a nanos offset Windows' 100 ns SystemTime can hold (<a href="https://github.com/s0undt3ch/ToolR/commit/ae6e982303875586ebb380cbf8a8ac7a97ee4918"><code>ae6e982</code></a>)</li>
 <li><em>(venv)</em> Cover venv shell exiting 128 + signal for a signal-killed shell (<a href="https://github.com/s0undt3ch/ToolR/commit/2eea9e1629ca03878f75fd0585949225d5f52b8f"><code>2eea9e1</code></a>)</li>
 <li><em>(cli)</em> Pin top-level subcommand order and the reserved-group skip (<a href="https://github.com/s0undt3ch/ToolR/commit/1b417a00d007fd30a239aefea41e7c4b8e7f4445"><code>1b417a0</code></a>)</li>
+<li>Keep spawned toolr processes out of the real cache dir (<a href="https://github.com/s0undt3ch/ToolR/commit/813baa1c842d3515ca9013b32a2eb17cc3b66322"><code>813baa1</code></a>)</li>
+<li><em>(complete)</em> Route complete_shells through the isolated toolr helper (<a href="https://github.com/s0undt3ch/ToolR/commit/eca14036572c99907ff43310d83c4ee1aa830cb2"><code>eca1403</code></a>)</li>
+<li>Mute the orphan cache hint in the shared test cache home (<a href="https://github.com/s0undt3ch/ToolR/commit/7f55bb329023760c4a9069a549e157d0aff2df09"><code>7f55bb3</code></a>)</li>
+<li>Drop cache settings the new defaults already cover (<a href="https://github.com/s0undt3ch/ToolR/commit/752a729cc9b29d49f277453ee8a8de41c8db401f"><code>752a729</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
