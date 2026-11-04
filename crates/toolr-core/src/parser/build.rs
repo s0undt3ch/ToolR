@@ -572,7 +572,8 @@ fn nearest_group(target: &str, registered: &HashSet<String>) -> Option<String> {
         if d > max {
             continue;
         }
-        if best.map(|(bd, _)| d < bd).unwrap_or(true) {
+        // `HashSet` order is random, so a tie goes to the smallest name.
+        if best.is_none_or(|(bd, b)| d < bd || (d == bd && candidate < b)) {
             best = Some((d, candidate));
         }
     }
@@ -1215,6 +1216,22 @@ def backend(ctx):
         assert!(msg.contains("ci.helm-diff-pre-comment"), "got: {msg}");
         assert!(msg.contains("Did you mean"), "got: {msg}");
         assert!(msg.contains("ci.helm-diff-pr-comment"), "got: {msg}");
+    }
+
+    /// Equally close groups suggest the smallest name, whatever order the
+    /// set yields, as `toolr.testing` does.
+    #[test]
+    fn nearest_group_breaks_ties_by_smallest_name() {
+        for order in [["ab", "ca", "ac"], ["ca", "ac", "ab"], ["ac", "ab", "ca"]] {
+            for _ in 0..16 {
+                let registered: HashSet<String> = order.iter().map(|s| s.to_string()).collect();
+                assert_eq!(
+                    nearest_group("aa", &registered).as_deref(),
+                    Some("ab"),
+                    "{order:?}"
+                );
+            }
+        }
     }
 
     /// Several bad references list one per line, in source order.

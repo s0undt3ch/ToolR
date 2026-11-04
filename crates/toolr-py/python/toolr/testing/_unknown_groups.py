@@ -69,11 +69,9 @@ def _nearest_group(target: str, registered: list[str]) -> str | None:
     """The closest declared group to ``target`` within the threshold, if any.
 
     Mirrors ``crates/toolr-core/src/parser/build.rs::nearest_group``. The
-    threshold uses the UTF-8 length, as Rust's ``str::len`` does.
-
-    Ties differ from Rust: this takes the first of equally close groups in
-    ``registered`` (sorted), while Rust takes whichever its ``HashSet``
-    yields first. Parity fixtures must avoid ties.
+    threshold uses the UTF-8 length, as Rust's ``str::len`` does. Of equally
+    close groups, the first in ``registered`` (sorted) wins, as the smallest
+    name does in Rust.
     """
     limit = max(len(target.encode()) // 3, 2)
     best: tuple[int, str] | None = None
