@@ -76,8 +76,9 @@ _toolr_complete_paths() {
         fi
         COMPREPLY+=("$q")
     done < <(compgen "$mode" -- "$raw_cur")
-    # Bash 3.2 has no `compopt`, so a lone directory there gets a trailing space.
-    if ((${#COMPREPLY[@]} == 1 && dirs == 1)) && type compopt &>/dev/null; then
+    # Bash 3.2 has no `compopt`, so a directory there gets a trailing space.
+    if { [[ $mode == -d ]] || ((${#COMPREPLY[@]} == 1 && dirs == 1)); } &&
+        type compopt &>/dev/null; then
         compopt -o nospace 2>/dev/null
     fi
 }
