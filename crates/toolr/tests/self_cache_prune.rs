@@ -7,6 +7,7 @@ use std::path::Path;
 
 use chrono::{Duration, Utc};
 use tempfile::TempDir;
+use toolr_core::manifest::{LOCKS_DIR, lock_path_for_repo};
 
 fn write_entry(
     cache_root: &Path,
@@ -242,4 +243,126 @@ fn prune_all_refuses_without_yes_when_non_interactive() {
     assert!(!output.status.success());
 
     assert!(cache_root.join("a").exists());
+}
+
+/// A cache with one fresh entry for a live repo, that repo's rebuild lock,
+/// and one stray lock no entry needs. Returns `(tmp, kept_lock, stray_lock)`.
+fn cache_with_kept_and_stray_lock() -> (TempDir, std::path::PathBuf, std::path::PathBuf) {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr");
+    let live_repo = tmp.path().join("live-repo");
+    fs::create_dir_all(live_repo.join("tools")).unwrap();
+    write_entry(&cache_root, "live-key", &live_repo, Utc::now());
+    let kept = lock_path_for_repo(&cache_root, &live_repo);
+    let stray = cache_root.join(LOCKS_DIR).join("stray.lock");
+    fs::create_dir_all(cache_root.join(LOCKS_DIR)).unwrap();
+    fs::write(&kept, b"").unwrap();
+    fs::write(&stray, b"").unwrap();
+    (tmp, kept, stray)
+}
+
+fn run_prune(xdg_cache_home: &Path, args: &[&str]) -> String {
+    let output = common::toolr()
+        .env("XDG_CACHE_HOME", xdg_cache_home)
+        .env_remove("HOME")
+        .env("TOOLR_NO_CACHE_HINT", "1")
+        .args(["self", "cache", "prune"])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+#[test]
+fn prune_removes_stray_rebuild_locks() {
+    let (tmp, kept, stray) = cache_with_kept_and_stray_lock();
+    let stdout = run_prune(tmp.path(), &[]);
+    assert!(
+        stdout.contains("toolr: removed 1 rebuild lock\n"),
+        "stdout:\n{stdout}"
+    );
+    assert!(!stray.exists());
+    assert!(kept.exists());
+}
+
+#[test]
+fn prune_dry_run_reports_stray_locks() {
+    let (tmp, kept, stray) = cache_with_kept_and_stray_lock();
+    let stdout = run_prune(tmp.path(), &["--dry-run"]);
+    assert!(
+        stdout.contains("toolr: would remove 1 rebuild lock\n"),
+        "stdout:\n{stdout}"
+    );
+    assert!(stray.exists());
+    assert!(kept.exists());
+}
+
+#[test]
+fn prune_all_with_no_entries_still_removes_locks() {
+    let tmp = TempDir::new().unwrap();
+    let locks = tmp.path().join("toolr").join(LOCKS_DIR);
+    fs::create_dir_all(&locks).unwrap();
+    for name in ["a.lock", "b.lock"] {
+        fs::write(locks.join(name), b"").unwrap();
+    }
+    // No `--yes`: stray locks alone never prompt.
+    let stdout = run_prune(tmp.path(), &["--all"]);
+    assert!(
+        !stdout.contains("no cache entries to remove"),
+        "stdout:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("toolr: removed 2 rebuild locks\n"),
+        "stdout:\n{stdout}"
+    );
+    assert!(!locks.join("a.lock").exists());
+    assert!(!locks.join("b.lock").exists());
+}
+
+#[test]
+fn prune_all_removes_every_lock_alongside_entries() {
+    let (tmp, kept, stray) = cache_with_kept_and_stray_lock();
+    let stdout = run_prune(tmp.path(), &["--all", "--yes"]);
+    assert!(
+        stdout.contains("toolr: removed 2 rebuild locks\n"),
+        "stdout:\n{stdout}"
+    );
+    assert!(!kept.exists());
+    assert!(!stray.exists());
+}
+
+#[test]
+fn prune_with_nothing_to_prune_still_removes_stray_locks() {
+    let tmp = TempDir::new().unwrap();
+    let locks = tmp.path().join("toolr").join(LOCKS_DIR);
+    fs::create_dir_all(&locks).unwrap();
+    fs::write(locks.join("stray.lock"), b"").unwrap();
+    let stdout = run_prune(tmp.path(), &[]);
+    assert!(!stdout.contains("nothing to prune"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains("toolr: removed 1 rebuild lock\n"),
+        "stdout:\n{stdout}"
+    );
+    assert!(!locks.join("stray.lock").exists());
+}
+
+#[test]
+fn prune_warns_and_succeeds_when_lock_sweep_fails() {
+    let tmp = TempDir::new().unwrap();
+    let cache_root = tmp.path().join("toolr");
+    fs::create_dir_all(&cache_root).unwrap();
+    // A regular file where `locks/` should be makes the sweep's read_dir fail.
+    fs::write(cache_root.join(LOCKS_DIR), b"").unwrap();
+    for args in [&[][..], &["--all"][..]] {
+        let stdout = run_prune(tmp.path(), args);
+        assert!(
+            stdout.contains("toolr: warning: failed to sweep rebuild locks"),
+            "args {args:?}, stdout:\n{stdout}"
+        );
+    }
 }

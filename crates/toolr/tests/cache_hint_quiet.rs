@@ -92,3 +92,17 @@ fn quiet_suppresses_passive_cache_hint() {
         "--quiet must suppress the passive cache hint, got stderr:\n{stderr}"
     );
 }
+
+/// `self cache` commands are how the user acts on the hint, so they never show it.
+#[test]
+fn self_cache_commands_never_show_the_hint() {
+    let cache = dirty_cache();
+    let work = TempDir::new().unwrap();
+    let out = toolr(cache.path(), work.path(), &["self", "cache", "list"]);
+    assert!(out.status.success(), "{out:?}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("cache has"),
+        "`self cache list` must not show the passive cache hint, got stderr:\n{stderr}"
+    );
+}

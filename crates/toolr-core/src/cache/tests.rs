@@ -1,6 +1,8 @@
+use super::locks::{LockSweep, sweep_one, sweep_rebuild_locks};
 use super::meta::{Meta, MetaError, SCHEMA_VERSION};
+use crate::manifest::{LOCKS_DIR, lock_path_for_repo};
 use chrono::{TimeZone, Utc};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 fn sample_meta() -> Meta {
@@ -498,4 +500,163 @@ fn hint_is_none_when_cache_root_is_missing() {
     )
     .unwrap();
     assert!(hint.is_none());
+}
+
+/// A repo with a `tools/` dir, so its lock path canonicalises.
+fn make_repo(parent: &Path, name: &str) -> PathBuf {
+    let repo = parent.join(name);
+    std::fs::create_dir_all(repo.join("tools")).unwrap();
+    repo
+}
+
+fn write_lock(path: &Path) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, b"").unwrap();
+}
+
+fn stray_lock(cache: &Path, name: &str) -> PathBuf {
+    let path = cache.join(LOCKS_DIR).join(format!("{name}.lock"));
+    write_lock(&path);
+    path
+}
+
+#[test]
+fn sweep_keeps_the_lock_of_a_kept_repo() {
+    let cache = TempDir::new().unwrap();
+    let repos = TempDir::new().unwrap();
+    let repo = make_repo(repos.path(), "repo");
+    let lock = lock_path_for_repo(cache.path(), &repo);
+    write_lock(&lock);
+
+    let sweep = sweep_rebuild_locks(cache.path(), std::slice::from_ref(&repo), false).unwrap();
+    assert!(lock.is_file());
+    assert_eq!(
+        sweep,
+        LockSweep {
+            removed: 0,
+            held: 0
+        }
+    );
+}
+
+#[test]
+fn sweep_removes_locks_no_kept_repo_needs() {
+    let cache = TempDir::new().unwrap();
+    let a = stray_lock(cache.path(), "aaaa");
+    let b = stray_lock(cache.path(), "bbbb");
+
+    let sweep = sweep_rebuild_locks(cache.path(), &[], false).unwrap();
+    assert!(!a.exists());
+    assert!(!b.exists());
+    assert_eq!(
+        sweep,
+        LockSweep {
+            removed: 2,
+            held: 0
+        }
+    );
+    assert!(cache.path().join(LOCKS_DIR).is_dir(), "locks/ itself stays");
+}
+
+#[test]
+fn sweep_skips_a_lock_another_handle_holds() {
+    let cache = TempDir::new().unwrap();
+    let lock = stray_lock(cache.path(), "held");
+    let holder = std::fs::OpenOptions::new().write(true).open(&lock).unwrap();
+    holder.lock().unwrap();
+
+    let sweep = sweep_rebuild_locks(cache.path(), &[], false).unwrap();
+    assert!(lock.is_file());
+    assert_eq!(
+        sweep,
+        LockSweep {
+            removed: 0,
+            held: 1
+        }
+    );
+}
+
+#[test]
+fn sweep_dry_run_removes_nothing() {
+    let cache = TempDir::new().unwrap();
+    let lock = stray_lock(cache.path(), "stray");
+
+    let sweep = sweep_rebuild_locks(cache.path(), &[], true).unwrap();
+    assert!(lock.is_file());
+    assert_eq!(
+        sweep,
+        LockSweep {
+            removed: 1,
+            held: 0
+        }
+    );
+}
+
+#[test]
+fn sweep_without_a_locks_dir_is_a_no_op() {
+    let cache = TempDir::new().unwrap();
+    let sweep = sweep_rebuild_locks(cache.path(), &[], false).unwrap();
+    assert_eq!(sweep, LockSweep::default());
+}
+
+#[test]
+fn sweep_propagates_an_unreadable_locks_dir() {
+    let cache = TempDir::new().unwrap();
+    // `locks` as a regular file: read_dir fails with something other than NotFound.
+    std::fs::write(cache.path().join(LOCKS_DIR), b"").unwrap();
+    assert!(sweep_rebuild_locks(cache.path(), &[], false).is_err());
+}
+
+#[test]
+fn sweep_ignores_non_lock_entries() {
+    let cache = TempDir::new().unwrap();
+    let locks = cache.path().join(LOCKS_DIR);
+    std::fs::create_dir_all(locks.join("sub.lock")).unwrap();
+    std::fs::write(locks.join("notes.txt"), b"").unwrap();
+
+    let sweep = sweep_rebuild_locks(cache.path(), &[], false).unwrap();
+    assert!(locks.join("notes.txt").is_file());
+    assert!(locks.join("sub.lock").is_dir());
+    assert_eq!(sweep, LockSweep::default());
+}
+
+#[cfg(unix)]
+#[test]
+fn sweep_keeps_the_lock_of_a_repo_reached_through_a_symlink() {
+    let cache = TempDir::new().unwrap();
+    let repos = TempDir::new().unwrap();
+    let real = make_repo(repos.path(), "real");
+    let link = repos.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let lock = lock_path_for_repo(cache.path(), &real);
+    write_lock(&lock);
+
+    let sweep = sweep_rebuild_locks(cache.path(), std::slice::from_ref(&link), false).unwrap();
+    assert!(lock.is_file());
+    assert_eq!(sweep, LockSweep::default());
+}
+
+#[test]
+fn sweep_one_counts_nothing_for_a_lock_already_gone() {
+    let tmp = TempDir::new().unwrap();
+    let mut sweep = LockSweep::default();
+    sweep_one(&tmp.path().join("gone.lock"), false, &mut sweep).unwrap();
+    assert_eq!(sweep, LockSweep::default());
+}
+
+#[cfg(unix)]
+#[test]
+fn sweep_removes_a_read_only_lock_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let locks = tmp.path().join(LOCKS_DIR);
+    std::fs::create_dir_all(&locks).unwrap();
+    let lock = locks.join("0123abcd.lock");
+    std::fs::write(&lock, b"").unwrap();
+    std::fs::set_permissions(&lock, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+    let sweep = sweep_rebuild_locks(tmp.path(), &[], false).unwrap();
+
+    assert_eq!(sweep.removed, 1);
+    assert!(!lock.exists());
 }

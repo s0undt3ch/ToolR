@@ -80,6 +80,9 @@ toolr self cache prune --all --yes          # nuke everything
 toolr self cache prune --stale-after-days 7 # override threshold
 ```
 
+Every prune also removes the manifest rebuild locks under `locks/` that no
+remaining entry uses. A lock held by a running rebuild stays.
+
 See [CLI reference → `self cache prune`](../cli.md#self-cache-prune)
 for the full flag matrix.
 

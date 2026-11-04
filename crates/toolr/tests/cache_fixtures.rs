@@ -121,7 +121,7 @@ fn end_to_end_list_then_prune_then_prune_all() {
 }
 
 #[test]
-fn list_and_prune_leave_the_manifest_rebuild_locks_dir_alone() {
+fn list_ignores_the_manifest_rebuild_locks_dir() {
     let tmp = TempDir::new().unwrap();
     let lock = tmp.path().join("toolr").join("locks").join("0123abcd.lock");
     fs::create_dir_all(lock.parent().unwrap()).unwrap();
@@ -132,14 +132,4 @@ fn list_and_prune_leave_the_manifest_rebuild_locks_dir_alone() {
         .unwrap();
     assert!(out.status.success(), "list failed: {out:?}");
     assert_contains_in_stdout(&out, "no cached virtualenvs found");
-
-    let prunes: [&[&str]; 2] = [
-        &["self", "cache", "prune"],
-        &["self", "cache", "prune", "--all", "--yes"],
-    ];
-    for args in prunes {
-        let out = cmd_in(tmp.path(), args).output().unwrap();
-        assert!(out.status.success(), "{args:?} failed: {out:?}");
-        assert!(lock.is_file(), "{args:?} removed the lock file");
-    }
 }

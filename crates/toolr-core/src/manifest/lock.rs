@@ -32,8 +32,18 @@ pub fn rebuild_lock_path(manifest_path: &Path) -> Option<PathBuf> {
     toolr_cache_dir().map(|root| lock_path_in(&root, manifest_path))
 }
 
-/// `<cache_root>/locks/<blake3 of the canonical manifest path>.lock`. Never
-/// deleted: removing a lock file races with processes about to open it.
+/// Lock file guarding rebuilds of `repo_root`'s manifest, under `cache_root`
+/// (the toolr cache dir holding `locks/`). Shares one canonicalisation with rebuilds.
+pub fn lock_path_for_repo(cache_root: &Path, repo_root: &Path) -> PathBuf {
+    lock_path_in(
+        cache_root,
+        &repo_root.join("tools").join(".toolr-manifest.json"),
+    )
+}
+
+/// `<cache_root>/locks/<blake3 of the canonical manifest path>.lock`. Prune may
+/// delete one no kept entry needs; a process opening it just before the unlink
+/// can then rebuild alongside another, the same cost as the unlocked fallback.
 fn lock_path_in(cache_root: &Path, manifest_path: &Path) -> PathBuf {
     let canonical = canonical_manifest_path(manifest_path);
     let key = blake3::hash(canonical.as_os_str().as_encoded_bytes());

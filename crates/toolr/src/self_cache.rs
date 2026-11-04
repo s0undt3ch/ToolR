@@ -110,3 +110,26 @@ pub fn human_ago(now: DateTime<Utc>, then: DateTime<Utc>) -> String {
         format!("{}y ago", delta.num_days() / 365)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, TimeZone, Utc};
+
+    use super::human_ago;
+
+    #[test]
+    fn human_ago_picks_the_coarsest_bucket() {
+        let now = Utc.with_ymd_and_hms(2026, 11, 4, 12, 0, 0).unwrap();
+        let cases = [
+            (Duration::seconds(30), "just now"),
+            (Duration::minutes(5), "5m ago"),
+            (Duration::hours(3), "3h ago"),
+            (Duration::days(4), "4d ago"),
+            (Duration::days(90), "3mo ago"),
+            (Duration::days(800), "2y ago"),
+        ];
+        for (age, expected) in cases {
+            assert_eq!(human_ago(now, now - age), expected, "{age:?}");
+        }
+    }
+}
