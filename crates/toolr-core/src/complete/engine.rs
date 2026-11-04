@@ -1,6 +1,7 @@
 //! Pure prefix-matching completion engine. No I/O.
 
 use crate::manifest::{Argument, ArgumentKind, Command, Manifest};
+use crate::parser::{PathCompletion, SupportedType};
 use crate::text::{has_unsafe_name_chars, strip_control_chars};
 
 /// A single completion candidate: the word to insert, plus an optional
@@ -38,7 +39,44 @@ impl Candidate {
 ///
 /// The returned vector is sorted by `value` and deduplicated on it.
 pub fn serve_completions(manifest: &Manifest, tokens: &[String]) -> Vec<Candidate> {
-    let mut out = match classify(manifest, tokens) {
+    candidates(manifest, classify(manifest, tokens))
+}
+
+/// What the shell should offer at the cursor: candidate values, or its own
+/// file system completion for a path-typed slot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Completion {
+    Values(Vec<Candidate>),
+    Paths,
+    Directories,
+}
+
+/// Like [`serve_completions`], but a flag value or positional slot whose
+/// argument is path-typed, with no `allowed_values`, returns
+/// [`Completion::Paths`] or [`Completion::Directories`] instead.
+pub fn complete(manifest: &Manifest, tokens: &[String]) -> Completion {
+    let slot = classify(manifest, tokens);
+    if let Slot::FlagValue { argument, .. } | Slot::Positional { argument, .. } = &slot
+        && argument.allowed_values.is_empty()
+        && let Some(hint) = argument
+            .resolved_type
+            .as_ref()
+            .and_then(SupportedType::path_completion)
+    {
+        // Shells list directories alongside files, so `File` and
+        // `Executable` still let the user walk into subdirectories.
+        return match hint {
+            PathCompletion::Directory => Completion::Directories,
+            PathCompletion::Any | PathCompletion::File | PathCompletion::Executable => {
+                Completion::Paths
+            }
+        };
+    }
+    Completion::Values(candidates(manifest, slot))
+}
+
+fn candidates(manifest: &Manifest, slot: Slot<'_>) -> Vec<Candidate> {
+    let mut out = match slot {
         Slot::Group { prefix } => {
             if is_flag_prefix(&prefix) {
                 group_node_flags(&prefix)
