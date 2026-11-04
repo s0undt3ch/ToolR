@@ -178,6 +178,20 @@ jobs:
           chmod +x "$dest"/toolr* 2>/dev/null || true
           echo "$dest" >> "$GITHUB_PATH"
 
+      # The completion tests drive real shells, and fail on CI when one is missing.
+      - name: Install shells for the completion tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends fish zsh
+
+      # macOS ships zsh but no fish.
+      - name: Install shells for the completion tests (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install fish
+
       - id: rust-version-checksum
         shell: bash
         run: echo "version-sha256sum=$(rustc --version | sha256sum | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"

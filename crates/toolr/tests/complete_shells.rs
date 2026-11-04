@@ -510,6 +510,11 @@ fn bash_path_marks_a_tilde_user_directory() {
             && home.join(n).is_dir()
             && names.iter().filter(|m| m.starts_with(n.as_str())).count() == 1
     }) else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "no uniquely named plain directory in {} to complete `~{user}/` against",
+            home.display()
+        );
         eprintln!(
             "skipping: no uniquely named directory in {}",
             home.display()
@@ -617,9 +622,19 @@ fn have(shell: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether `shell` can run; on CI a missing shell fails its tests instead of skipping them.
+fn require(shell: &str) -> bool {
+    let found = have(shell);
+    assert!(
+        found || std::env::var_os("CI").is_none(),
+        "{shell} is not installed; CI must install it so its completion tests run"
+    );
+    found
+}
+
 #[test]
 fn fish_completion_never_executes_values() {
-    if !have("fish") {
+    if !require("fish") {
         return;
     }
     let fx = fixture();
@@ -672,7 +687,7 @@ fn fish_complete(fx: &Fixture, line: &str) -> String {
 
 #[test]
 fn fish_path_flag_completes_files_inert() {
-    if !have("fish") {
+    if !require("fish") {
         return;
     }
     let fx = fixture();
@@ -753,7 +768,7 @@ _toolr
 /// zsh's own `_files` quotes the names it inserts.
 #[test]
 fn zsh_path_slots_use_native_file_completion() {
-    if !have("zsh") {
+    if !require("zsh") {
         return;
     }
     let fx = fixture();
