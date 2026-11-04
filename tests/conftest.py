@@ -61,7 +61,10 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.fixture(scope="session")
 def _uv_cache_dir() -> str | None:
-    """The real uv cache, resolved before any test moves `XDG_CACHE_HOME`."""
+    """The real uv cache to pin, resolved before any test moves `XDG_CACHE_HOME`.
+
+    `None` means leave uv alone: `UV_CACHE_DIR` is already set, or uv isn't installed.
+    """
     if "UV_CACHE_DIR" in os.environ:
         return None
     uv = shutil.which("uv")
@@ -192,7 +195,6 @@ def make_tools_project(tmp_path: Path, toolr_bin: Path) -> Callable[..., ToolsPr
         env = {key: value for key, value in os.environ.items() if not key.startswith("TOOLR_")}
         env |= {
             "PATH": str(toolr_bin.parent) + os.pathsep + env.get("PATH", ""),
-            "XDG_CACHE_HOME": str(tmp_path / "cache"),
             "TOOLR_NO_CACHE_HINT": "1",
             "TOOLR_TRUST_ALL": "1",
         }

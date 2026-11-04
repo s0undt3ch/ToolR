@@ -180,8 +180,7 @@ impl Project {
         let mut cmd = toolr();
         cmd.args(args)
             .current_dir(&self.root)
-            .env("TOOLR_VENV_LOCATION", "in-tree")
-            .env("TOOLR_NO_CACHE_HINT", "1");
+            .env("TOOLR_VENV_LOCATION", "in-tree");
         cmd
     }
 
@@ -282,10 +281,8 @@ impl TrustEnv {
     }
 }
 
-/// `XDG_CACHE_HOME` for [`toolr`] and [`toolr_std`], under the target dir so a
-/// test that forgets its own cache dir can't write into the user's real cache.
-/// Shared by every test binary, so it fills with orphans; the helpers mute the
-/// orphan hint to keep stderr independent of test order.
+/// Keeps tests out of the user's cache. Shared by every test binary, so it
+/// fills with orphans; the helpers mute the orphan hint.
 pub fn test_cache_home() -> PathBuf {
     Path::new(env!("CARGO_TARGET_TMPDIR")).join("xdg-cache")
 }

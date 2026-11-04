@@ -146,6 +146,7 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
         .args(fx.choices())
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
+        // The shell runs toolr itself, so mirror `common::toolr`'s cache isolation.
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("TW_TAIL", tail)
         .output()
@@ -295,6 +296,7 @@ fn fish_completion_never_executes_values() {
         .arg(script)
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
+        // The shell runs toolr itself, so mirror `common::toolr`'s cache isolation.
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .output()
         .unwrap();
