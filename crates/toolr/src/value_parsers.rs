@@ -18,7 +18,7 @@ use pep440_rs::Version as Pep440Version;
 use uuid::Uuid;
 
 use toolr_core::manifest::Argument;
-use toolr_core::parser::SupportedType;
+use toolr_core::parser::{PathCompletion, SupportedType};
 
 /// Choices clap lists in `[possible values: ...]`. Values with control or
 /// invisible format characters are dropped, as the completion engine does,
@@ -46,8 +46,8 @@ pub fn apply_value_parser(arg: Arg, ty: &SupportedType) -> Arg {
     let inner = unwrap_optional(ty);
     // Path / Email types carry shell-completion hints derived from the
     // type itself (a `DirectoryPath` completes directories, a `FilePath` files).
-    let arg = match path_rule(inner) {
-        Some((_, check)) => arg.value_hint(path_hint(check)),
+    let arg = match inner.path_completion() {
+        Some(completion) => arg.value_hint(path_hint(completion)),
         None if matches!(inner, SupportedType::Email) => arg.value_hint(ValueHint::EmailAddress),
         None => arg,
     };
@@ -146,12 +146,12 @@ fn path_rule(ty: &SupportedType) -> Option<(PathForm, PathCheck)> {
     })
 }
 
-fn path_hint(check: PathCheck) -> ValueHint {
-    match check {
-        PathCheck::File => ValueHint::FilePath,
-        PathCheck::Dir | PathCheck::WritableDir => ValueHint::DirPath,
-        PathCheck::Executable => ValueHint::ExecutablePath,
-        PathCheck::None | PathCheck::Exists | PathCheck::New => ValueHint::AnyPath,
+fn path_hint(completion: PathCompletion) -> ValueHint {
+    match completion {
+        PathCompletion::Any => ValueHint::AnyPath,
+        PathCompletion::File => ValueHint::FilePath,
+        PathCompletion::Directory => ValueHint::DirPath,
+        PathCompletion::Executable => ValueHint::ExecutablePath,
     }
 }
 
@@ -642,7 +642,12 @@ mod tests {
         use clap::ValueHint;
         for (ty, hint) in [
             (SupportedType::Path, ValueHint::AnyPath),
-            (SupportedType::NewPath, ValueHint::AnyPath),
+            (SupportedType::NewPath, ValueHint::DirPath),
+            (SupportedType::AbsolutePath, ValueHint::AnyPath),
+            (
+                SupportedType::Optional(Box::new(SupportedType::FilePath)),
+                ValueHint::FilePath,
+            ),
             (SupportedType::ResolvedPath, ValueHint::AnyPath),
             (SupportedType::FilePath, ValueHint::FilePath),
             (SupportedType::DirectoryPath, ValueHint::DirPath),
