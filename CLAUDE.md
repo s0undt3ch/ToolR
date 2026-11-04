@@ -89,8 +89,7 @@ to dodge the metric.
   `tests/tools/precommit/foo/test_check_foo.py`. Keep tests out of `tools/`: toolr scans every `*.py`
   there for commands.
 - Every directory under `tests/` that holds a `.py` file has an `__init__.py` (no namespace packages), so
-  test modules import as `tests.…` and can't shadow real packages such as `tools`; the one exception is
-  `tests/support/coverage/`, whose `sitecustomize.py` is loaded via `PYTHONPATH`.
+  test modules import as `tests.…` and can't shadow real packages such as `tools`.
 - Test fixtures, Python or not, live in a `files/` directory next to the tests that use them; `files/`
   trees are data, not packages.
 - `toolr pre-commit check-tests-layout` enforces both.

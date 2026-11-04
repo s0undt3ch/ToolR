@@ -34,11 +34,6 @@ def test_reports_directories_without_init(make_tree: Callable[..., Path]) -> Non
     assert layout_problems(root) == ["add an `__init__.py` to tests/bad/nested"]
 
 
-def test_coverage_support_exemption_is_exact(make_tree: Callable[..., Path]) -> None:
-    root = make_tree("support/coverage/sitecustomize.py", "support/other/helper.py")
-    assert layout_problems(root) == ["add an `__init__.py` to tests/support/other"]
-
-
 def test_files_trees_are_data(make_tree: Callable[..., Path]) -> None:
     root = make_tree("x/files/repo/tools/cmd.py", "x/files/data.json", "x/files/deep/notes.txt")
     assert layout_problems(root) == []
