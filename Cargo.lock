@@ -2614,7 +2614,6 @@ dependencies = [
 name = "toolr-py"
 version = "0.35.1"
 dependencies = [
- "libc",
  "pyo3",
  "toolr-core",
 ]

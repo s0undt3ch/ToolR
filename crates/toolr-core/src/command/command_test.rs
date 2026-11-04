@@ -9,58 +9,35 @@ mod test_suite {
     use std::time::{Duration, Instant};
     use tempfile::NamedTempFile;
 
-    // Platform-specific imports
-    #[cfg(windows)]
-    #[cfg(windows)]
-    use crate::command::ThreadSafeHandle;
     #[cfg(unix)]
     use std::os::unix::io::AsRawFd;
     #[cfg(windows)]
     use std::os::windows::io::AsRawHandle;
-    #[cfg(windows)]
-    use winapi::um::fileapi::ReadFile;
-    #[cfg(windows)]
-    use winapi::um::handleapi::{DuplicateHandle, INVALID_HANDLE_VALUE};
-    #[cfg(windows)]
-    use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
-    #[cfg(windows)]
-    use winapi::um::namedpipeapi::CreatePipe;
-    #[cfg(windows)]
-    use winapi::um::processthreadsapi::GetCurrentProcess;
-    #[cfg(windows)]
-    use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 
     use crate::command::tree::terminate;
-    use crate::{CommandConfig, run_command_internal};
+    use crate::{CommandConfig, file_from_python_fd, run_command_internal};
 
-    // Helper function to get file descriptor/handle from File in a cross-platform way
-    #[cfg(unix)]
-    fn get_file_descriptor(file: &File) -> i32 {
-        file.as_raw_fd()
+    /// An owned copy of `file`, as `toolr-py` hands the config its output files.
+    fn get_file_descriptor(file: &File) -> File {
+        file.try_clone().expect("duplicate a test file")
     }
 
-    #[cfg(windows)]
-    fn get_file_descriptor(file: &File) -> ThreadSafeHandle {
-        // Get the actual Windows handle from the file
-        let handle = file.as_raw_handle();
-        // Ensure we duplicate the handle so it remains valid
-        unsafe {
-            let mut new_handle = INVALID_HANDLE_VALUE;
-            if DuplicateHandle(
-                GetCurrentProcess(),
-                handle as *mut _, // Let the compiler infer the void type
-                GetCurrentProcess(),
-                &mut new_handle,
-                0,
-                1,
-                DUPLICATE_SAME_ACCESS,
-            ) != 0
-            {
-                ThreadSafeHandle::new(new_handle as *mut _) // Convert to RawHandle
-            } else {
-                // For tests, fallback to a dummy handle if duplication fails
-                ThreadSafeHandle::new(handle as *mut _) // Convert to RawHandle
-            }
+    /// What a test hands the config as an output destination.
+    trait IntoSink {
+        fn into_sink(self) -> File;
+    }
+
+    impl IntoSink for File {
+        fn into_sink(self) -> File {
+            self
+        }
+    }
+
+    /// A raw pipe end stays the test's to close; the config gets its own copy.
+    #[cfg(unix)]
+    impl IntoSink for i32 {
+        fn into_sink(self) -> File {
+            file_from_python_fd(self).expect("duplicate a test pipe end")
         }
     }
 
@@ -104,65 +81,61 @@ mod test_suite {
         };
     }
 
-    // Helper function for Option wrapping to handle platform differences
+    fn wrap_fd(sink: impl IntoSink) -> Option<File> {
+        Some(sink.into_sink())
+    }
+
+    #[cfg(windows)]
+    fn create_pipe() -> Result<(std::io::PipeReader, File)> {
+        let (read, write) = std::io::pipe()?;
+        Ok((
+            read,
+            File::from(std::os::windows::io::OwnedHandle::from(write)),
+        ))
+    }
+
+    #[cfg(windows)]
+    fn read_pipe(mut pipe: std::io::PipeReader, buffer: &mut [u8]) -> i32 {
+        pipe.read(buffer).map_or(0, |n| n as i32)
+    }
+
+    #[test]
+    fn file_from_python_fd_duplicates_an_open_fd() -> Result<()> {
+        let mut original = NamedTempFile::new()?;
+        #[cfg(unix)]
+        let fd = original.as_file().as_raw_fd();
+        #[cfg(windows)]
+        let fd = unsafe {
+            libc::open_osfhandle(original.as_file().as_raw_handle() as libc::intptr_t, 0)
+        };
+        let mut duplicate = file_from_python_fd(fd)?;
+        #[cfg(unix)]
+        assert_ne!(duplicate.as_raw_fd(), fd);
+        #[cfg(windows)]
+        assert_ne!(
+            duplicate.as_raw_handle(),
+            original.as_file().as_raw_handle()
+        );
+        duplicate.write_all(b"through the copy")?;
+        drop(duplicate);
+        original.seek(SeekFrom::Start(0))?;
+        let mut read_back = String::new();
+        original.read_to_string(&mut read_back)?;
+        assert_eq!(read_back, "through the copy");
+        Ok(())
+    }
+
+    /// Past any fd limit, so no file another test opens can have reused it.
     #[cfg(unix)]
-    fn wrap_fd(fd: i32) -> Option<i32> {
-        Some(fd)
+    #[test]
+    fn file_from_python_fd_rejects_a_closed_fd() {
+        let err = file_from_python_fd(i32::MAX).expect_err("the fd is closed");
+        assert_eq!(err.raw_os_error(), Some(libc::EBADF));
     }
 
-    #[cfg(windows)]
-    fn wrap_fd(handle: ThreadSafeHandle) -> Option<ThreadSafeHandle> {
-        Some(handle)
-    }
-
-    #[cfg(windows)]
-    fn create_pipe() -> Result<(ThreadSafeHandle, ThreadSafeHandle)> {
-        unsafe {
-            let mut read_handle = INVALID_HANDLE_VALUE;
-            let mut write_handle = INVALID_HANDLE_VALUE;
-            let mut sa = SECURITY_ATTRIBUTES {
-                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-                lpSecurityDescriptor: std::ptr::null_mut(),
-                bInheritHandle: 1,
-            };
-
-            if CreatePipe(&mut read_handle, &mut write_handle, &mut sa, 0) == 0 {
-                // Fallback to temp file if pipe creation fails
-                let file = NamedTempFile::new()?;
-                let read = file.reopen()?;
-                let write = file.into_file();
-                Ok((
-                    ThreadSafeHandle::new(read.as_raw_handle() as *mut _),
-                    ThreadSafeHandle::new(write.as_raw_handle() as *mut _),
-                ))
-            } else {
-                Ok((
-                    ThreadSafeHandle::new(read_handle as *mut _),
-                    ThreadSafeHandle::new(write_handle as *mut _),
-                ))
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    fn read_pipe(handle: ThreadSafeHandle, buffer: &mut [u8]) -> i32 {
-        let mut bytes_read = 0;
-        unsafe {
-            let raw_handle = handle.raw() as *mut winapi::ctypes::c_void;
-            if raw_handle != INVALID_HANDLE_VALUE as *mut winapi::ctypes::c_void
-                && ReadFile(
-                    raw_handle,
-                    buffer.as_mut_ptr() as *mut winapi::ctypes::c_void,
-                    buffer.len() as u32,
-                    &mut bytes_read,
-                    std::ptr::null_mut(),
-                ) != 0
-            {
-                bytes_read as i32
-            } else {
-                0
-            }
-        }
+    #[test]
+    fn file_from_python_fd_rejects_a_negative_fd() {
+        assert!(file_from_python_fd(-1).is_err());
     }
 
     #[test]
@@ -517,7 +490,7 @@ mod test_suite {
         }
 
         #[cfg(windows)]
-        fn create_pipe() -> Result<(ThreadSafeHandle, ThreadSafeHandle)> {
+        fn create_pipe() -> Result<(std::io::PipeReader, File)> {
             super::create_pipe()
         }
 
@@ -528,8 +501,8 @@ mod test_suite {
         }
 
         #[cfg(windows)]
-        fn read_pipe(fd: ThreadSafeHandle, buffer: &mut [u8]) -> i32 {
-            super::read_pipe(fd, buffer)
+        fn read_pipe(pipe: std::io::PipeReader, buffer: &mut [u8]) -> i32 {
+            super::read_pipe(pipe, buffer)
         }
 
         #[test]
@@ -1001,20 +974,6 @@ mod test_suite {
             );
         }
 
-        #[cfg(unix)]
-        #[test]
-        fn closed_capture_fd_is_an_error() -> Result<()> {
-            // Past any fd limit, so no other test can have it open.
-            let config = CommandConfig {
-                args: vec!["true".into()],
-                stdout_fd: Some(i32::MAX),
-                ..Default::default()
-            };
-            let err = bounded_run_command(config, TREE_BOUND)?.expect_err("the fd is closed");
-            assert!(err.to_string().contains("Failed to duplicate"), "{err}");
-            Ok(())
-        }
-
         /// `; true` stops `sh` exec-ing `sleep`, so `sleep` is a grandchild, and it
         /// must not outlive the timeout.
         #[cfg(unix)]
@@ -1201,7 +1160,7 @@ mod test_suite {
             let (sink, drainer) = full_pipe(Duration::from_secs(3), PAYLOAD)?;
             let config = CommandConfig {
                 args: sh(&format!("printf '%0{PAYLOAD}d' 0")),
-                sys_stdout_fd: Some(sink),
+                sys_stdout_fd: wrap_fd(sink),
                 timeout_secs: timeouts.0,
                 no_output_timeout_secs: timeouts.1,
                 ..Default::default()
@@ -1282,8 +1241,8 @@ mod test_suite {
             let (mut config, mut stdout_file, _stderr) =
                 capturing_config(vec![python, "-c".into(), script.into()]);
             let (sys_stdout, sys_stderr) = (broken_pipe()?, broken_pipe()?);
-            config.sys_stdout_fd = Some(sys_stdout);
-            config.sys_stderr_fd = Some(sys_stderr);
+            config.sys_stdout_fd = wrap_fd(sys_stdout);
+            config.sys_stderr_fd = wrap_fd(sys_stderr);
             let result = bounded_run_command(config, TREE_BOUND)?;
             unsafe {
                 libc::close(sys_stdout);
@@ -1307,8 +1266,8 @@ mod test_suite {
                     "-c".into(),
                     "import sys\nwhile True: sys.stdout.write('y'*8192)".into(),
                 ],
-                sys_stdout_fd: Some(sys_stdout),
-                sys_stderr_fd: Some(sys_stderr),
+                sys_stdout_fd: wrap_fd(sys_stdout),
+                sys_stderr_fd: wrap_fd(sys_stderr),
                 timeout_secs: Some(8.0),
                 ..Default::default()
             };

@@ -239,6 +239,19 @@ def test_stream_output_both_fd_required(echo_command):
         )
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="a closed fd aborts the Windows CRT")
+def test_closed_fd_is_an_error_naming_the_argument(echo_command, tmp_path):
+    with (tmp_path / "out").open("w") as f:
+        closed_fd = f.fileno()
+    with pytest.raises(CommandError, match=rf"^invalid stdout_fd {closed_fd}: "):
+        run_command_impl(echo_command("test"), stdout_fd=closed_fd, stderr_fd=2)
+
+
+def test_negative_fd_is_an_error_naming_the_argument(echo_command):
+    with pytest.raises(CommandError, match=r"^invalid sys_stderr_fd -1: "):
+        run_command_impl(echo_command("test"), sys_stdout_fd=1, sys_stderr_fd=-1)
+
+
 def test_fd_streaming_works(echo_command):
     """Test that streaming with file descriptors works correctly"""
 
