@@ -19,8 +19,10 @@ use crate::manifest::{Command, Origin};
 
 type GlobalVars = HashMap<String, String>;
 
-/// Walk module body for functions decorated with `@<var>.command`
-/// (group-binding style) or `@command(group="…")` (string-path style).
+/// Walk module body for functions decorated with `@<var>.command` or
+/// `@<var>.command("name")` (group-binding style), or `@command(group="…")`
+/// (string-path style). `command` may be aliased, reached as `toolr.command`,
+/// re-exported or assigned; stacked decorators are scanned for the first match.
 /// Emit one Command per match.
 #[allow(clippy::too_many_arguments)] // each context parameter is distinct; bundling would obscure call sites.
 pub fn extract_commands(
@@ -395,12 +397,16 @@ impl<'a> ToolrNames<'a> {
 }
 
 /// Whether a name is toolr's `command`, as far as the parser can see.
+/// Keep in step with `_command_decorators` in `toolr/testing/_shapes.py`,
+/// which resolves it by runtime identity: change both together.
+// Variants run weakest to strongest: callers take `.max()` over candidates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Binding {
     /// A local `def`, another name, or a cycle.
     Other,
-    /// The chain reaches a module the parser doesn't read, such as one
-    /// outside `tools/`; the decorator call decides.
+    /// A module the parser can't read (outside `tools/`), or a star import
+    /// from a `toolr.*` submodule; the `group=` rule in `parse_string_path_command`
+    /// decides.
     Unknown,
     /// toolr's `command`.
     Toolr,
@@ -410,6 +416,20 @@ fn is_toolr_path(module: &str) -> bool {
     module == "toolr" || module.starts_with("toolr.")
 }
 
+/// What `attr` is when read from a `toolr` module: only `command` is toolr's.
+fn toolr_member(attr: &str) -> Binding {
+    if attr == "command" {
+        Binding::Toolr
+    } else {
+        Binding::Other
+    }
+}
+
+/// Re-export chains deeper than this are treated as cycles.
+const MAX_REEXPORT_DEPTH: usize = 8;
+
+/// Follow `name` in `module` through imports, re-exports and assignments to
+/// decide whether it is toolr's `command`. `depth` counts hops followed so far.
 fn binds_toolr_command(
     all_imports: &HashMap<String, ImportTable>,
     module: &str,
@@ -417,7 +437,7 @@ fn binds_toolr_command(
     depth: usize,
 ) -> Binding {
     // A re-export cycle can't bind toolr's `command`; the cap stops the walk.
-    if depth > 8 {
+    if depth > MAX_REEXPORT_DEPTH {
         return Binding::Other;
     }
     let Some(imports) = all_imports.get(module) else {
@@ -431,13 +451,7 @@ fn binds_toolr_command(
             Some(Assigned::Attribute { base, attr }) => {
                 match imports.resolve_module_binding(base) {
                     // `import toolr.types` binds `toolr`, not `toolr.types`.
-                    Some(m) if is_toolr_path(m) => {
-                        if attr == "command" {
-                            Binding::Toolr
-                        } else {
-                            Binding::Other
-                        }
-                    }
+                    Some(m) if is_toolr_path(m) => toolr_member(attr),
                     Some(m) => binds_toolr_command(all_imports, m, attr, depth + 1),
                     None => Binding::Other,
                 }
@@ -447,11 +461,7 @@ fn binds_toolr_command(
     }
     let follows = |from: &str, original: &str| {
         if is_toolr_path(from) {
-            if original == "command" {
-                Binding::Toolr
-            } else {
-                Binding::Other
-            }
+            toolr_member(original)
         } else {
             binds_toolr_command(all_imports, from, original, depth + 1)
         }
@@ -573,8 +583,8 @@ fn parse_string_path_command(expr: &Expr, names: ToolrNames) -> Option<CommandDe
     let Expr::Call(call) = expr else {
         return None;
     };
-    // A `command` from a module toolr can't read counts when called with
-    // `group=`, which toolr's requires and click's doesn't take.
+    // `group=` is required by toolr's `command` and not accepted by click's, so
+    // an unreadable `command` called with it is taken as toolr's.
     let has_group = call
         .arguments
         .keywords

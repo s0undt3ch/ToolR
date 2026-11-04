@@ -38,7 +38,8 @@ def _command_decorators(
     """Each decorator naming toolr's ``command`` or a group's, and whether it's standalone.
 
     Resolved against the module's globals, which is what the static parser's
-    import tables approximate.
+    import tables approximate. Rust resolves it by import chain (`Binding` in
+    `toolr-core/src/parser/commands.rs`): change both together.
     """
     found = []
     for decorator in node.decorator_list:
