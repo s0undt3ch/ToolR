@@ -108,7 +108,7 @@ def _unsupported_commands(tools_dir: Path) -> list[Unsupported]:
     found: list[Unsupported] = []
     for path in sorted(files, key=lambda path: path.relative_to(root).parts):
         name, namespace = files[path]
-        for node, top_level in _function_defs(ast.parse(path.read_text()), top_level=True):
+        for node, top_level in _function_defs(ast.parse(path.read_bytes()), top_level=True):
             found.extend(
                 (name, node.name, problem) for problem in _problems(node, top_level, namespace)
             )

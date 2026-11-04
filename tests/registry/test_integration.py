@@ -23,6 +23,7 @@ from toolr._exc import ToolrError
 from toolr.testing import CommandsTester
 from toolr.testing._discovery import _tester_sys_path
 
+FILES = Path(__file__).parent / "files"
 CI_MODULE = (
     "from toolr import command_group\n"
     'group = command_group("ci", "CI utils", "CI utilities")\n'
@@ -1300,6 +1301,18 @@ def test_unsupported_declarations_follow_file_order_and_come_first(tools_repo: T
         f"  - tools.a::other: {NESTED_LINE}\n"
         "  - tools.b::dup2: the command name must be a string literal."
     )
+
+
+def test_shape_check_reads_sources_as_python_does(tmp_path: Path) -> None:
+    """A UTF-8 byte order mark and a `# coding:` cookie don't break the shape check."""
+    shutil.copytree(FILES / "source_encodings", tmp_path, dirs_exist_ok=True)
+    (tmp_path / "tools" / "__init__.py").write_text("")
+    with CommandsTester(search_path=tmp_path) as tester:
+        tester.discover()
+        groups = tester.collected_command_groups()
+    group = groups["tools.grp"]
+    assert isinstance(group, CommandGroup)
+    assert sorted(group.get_commands()) == ["bom", "latin1"]
 
 
 def test_commands_outside_tools_are_not_shape_checked(tools_repo: ToolsRepo) -> None:
