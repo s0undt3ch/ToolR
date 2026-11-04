@@ -284,6 +284,8 @@ impl TrustEnv {
 
 /// `XDG_CACHE_HOME` for [`toolr`] and [`toolr_std`], under the target dir so a
 /// test that forgets its own cache dir can't write into the user's real cache.
+/// Shared by every test binary, so it fills with orphans; the helpers mute the
+/// orphan hint to keep stderr independent of test order.
 pub fn test_cache_home() -> PathBuf {
     Path::new(env!("CARGO_TARGET_TMPDIR")).join("xdg-cache")
 }
@@ -293,7 +295,8 @@ pub fn test_cache_home() -> PathBuf {
 pub fn toolr() -> assert_cmd::Command {
     let mut cmd = assert_cmd::Command::cargo_bin("toolr").unwrap();
     cmd.env("TOOLR_TRUST_ALL", "1")
-        .env("XDG_CACHE_HOME", test_cache_home());
+        .env("XDG_CACHE_HOME", test_cache_home())
+        .env("TOOLR_NO_CACHE_HINT", "1");
     cmd
 }
 
@@ -301,7 +304,8 @@ pub fn toolr() -> assert_cmd::Command {
 pub fn toolr_std() -> std::process::Command {
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
     cmd.env("TOOLR_TRUST_ALL", "1")
-        .env("XDG_CACHE_HOME", test_cache_home());
+        .env("XDG_CACHE_HOME", test_cache_home())
+        .env("TOOLR_NO_CACHE_HINT", "1");
     cmd
 }
 
