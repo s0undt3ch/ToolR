@@ -122,9 +122,13 @@ rename it once (`colour = not no_colour`). For more than two states, use
 - **What toolr can read.** It parses `tools/` without running it:
   decorate top-level `def`s, with `group=` and any name as string
   literals. `@command`, `@toolr.command` and
-  `from toolr import command as cmd` all work. A nested `def`, a
+  `from toolr import command as cmd` all work. Commands must be
+  top-level `def`s: put platform checks inside the command body. A
+  nested `def` (in a function, a class or any `if`, including
+  `if TYPE_CHECKING:`), a `def` with two command decorators, a
   non-literal `group=`/name or a command name defined twice in a group
-  fails the build, and `CommandsTester` the same way.
+  fails the build, and `CommandsTester` the same way, even when the
+  surrounding code never runs.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via
@@ -221,11 +225,13 @@ convention). `ctx.repo_root` always points there. Two consequences:
 toolr discovers commands **only by static analysis** of `tools/*.py` —
 it never imports or executes your modules to build the manifest. Declare
 `command_group(...)` at module top level and apply `@command` /
-`@group.command` to module-level functions. Commands registered
-dynamically — in a `for` loop, behind an `if`, or returned from a
-factory called at import time — are **not** discovered and will not
-appear in `--help`, completion, or dispatch. If a command is missing,
-make its registration a top-level, statically-visible declaration.
+`@group.command` to module-level functions. A decorated `def` behind
+an `if` or inside a factory fails the build, whether or not that code
+runs; put platform checks inside the command body. Commands registered
+imperatively, such as `group.command(...)` called in a `for` loop, are
+**not** discovered and will not appear in `--help`, completion, or
+dispatch. If a command is missing, make its registration a top-level,
+statically-visible declaration.
 
 ## Anti-patterns
 

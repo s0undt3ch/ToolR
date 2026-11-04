@@ -147,9 +147,10 @@ unknown group references (1):
 
 `CommandsTester` runs your code, but `toolr` reads it without running it, so the tester checks the source for what
 `toolr` can't read. `@command(...)`, `@toolr.command(...)` (also after `import toolr as t`) and an alias from
-`from toolr import command as cmd` all work, on a top-level `def` with `group=` and any name as string literals. A
-command on a nested `def` (inside another function, a class or an `if`), a `group=SOME_CONSTANT` or a non-literal name
-fails both:
+`from toolr import command as cmd` all work, on a top-level `def` with `group=` and any name as string literals.
+Commands must be top-level `def`s: put a platform check inside the command body, not around the `def`. A command on a
+nested `def` (inside another function, a class, an `if TYPE_CHECKING:` or any other `if`), a `def` carrying two command
+decorators, a `group=SOME_CONSTANT` or a non-literal name fails both:
 
 ```text
 unsupported command declarations (2):
@@ -157,8 +158,9 @@ unsupported command declarations (2):
   - tools.cmds::check: `group=` must be a string literal.
 ```
 
-A command a test body defines isn't checked. A nested command whose outer function never runs fails `toolr` but is
-invisible to the tester.
+The tester reads the source of every `tools` module, so a nested command fails it even when the code around it never
+runs, such as a factory nobody calls or an `if` that's false on this platform. A command a test body defines isn't
+checked.
 
 Two functions that define the same command in a group fail both too, listing every definition:
 
