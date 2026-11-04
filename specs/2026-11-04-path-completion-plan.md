@@ -17,6 +17,10 @@ completion. Old scripts treat a non-zero exit as no candidates, which is today's
 
 **Spec:** `specs/2026-11-04-path-completion-design.md`
 
+**Decisions (2026-11-04):** `NewPath` completes directories only (exit 11). `ExecutablePath`
+offers every file. Bash 4+ uses `compopt -o nospace` for directory candidates; bash 3.2 keeps
+the trailing space. `--opt=value` stays out of scope. See the spec's "Decisions".
+
 ## Global Constraints
 
 - Branch `feat/path-completion`, off `main`. Worktree `.worktrees/path-completion`.
@@ -67,7 +71,7 @@ completion. Old scripts treat a non-zero exit as no candidates, which is today's
       Rewrite `value_parsers::path_hint` to map `path_completion()` onto `ValueHint` (`Any` to
       `AnyPath`, `File` to `FilePath`, `Directory` to `DirPath`, `Executable` to
       `ExecutablePath`). Leave `PathCheck` for validation only. Existing `value_parsers` tests pin
-      the hints, and they must still pass unchanged.
+      the hints; only `NewPath` moves, from `AnyPath` to `DirPath` (decision 3).
 - [ ] **Step 4:** Add a step to CONTRIBUTING's compiler-enforced list:
       "`SupportedType::path_completion()`: say how TAB completes it."
 - [ ] **Step 5:** Run `cargo test -p toolr-core parser::types` and
@@ -126,8 +130,8 @@ completion. Old scripts treat a non-zero exit as no candidates, which is today's
 - [ ] **Step 1: Write the failing tests.**
     - `complete_paths.rs`: a project with `tools/demo.py` that matches the spec's repro command
       exactly (`src: pathlib.Path`, `cfg: FilePath | None`, `out: DirectoryPath | None`,
-      `new: NewPath | None`, `mode: Literal["a", "b"]`). Assert that `--cfg ""`, `""` and
-      `--new ""` exit 10, `--out ""` exits 11, all with empty stdout, and that `--mode ""` exits 0
+      `new: NewPath | None`, `mode: Literal["a", "b"]`). Assert that `--cfg ""` and `""` exit
+      10, `--out ""` and `--new ""` exit 11, all with empty stdout, and that `--mode ""` exits 0
       with `a` and `b`. Built-ins: `project trust ""` exits 10, and
       `self build-manifest --source-dir ""` exits 11. `--output ""` exits 10.
     - `builtin_completions`: `derive_argument` sets `resolved_type` from each `ValueHint`, and a
@@ -162,7 +166,8 @@ completion. Old scripts treat a non-zero exit as no candidates, which is today's
     - bash, on each `bashes()` entry, with a variant of `run_bash` that takes the flag and the
       word: `--cfg files/` holds the `%q` forms of all three entries, with `files/sub/` ending in
       `/`. `SENTINEL3` doesn't exist. `--out files/` holds only `files/sub/`. A `~/` prefix comes
-      back starting with `~/`, not `\~/`.
+      back starting with `~/`, not `\~/`. The driver records `compopt` calls only where the
+      bash has the builtin: `--out` requests `nospace` there, and bash 3.2 never calls it.
     - bash compatibility: run the script text from `main` (paste it into the test as a `const`)
       on `--cfg files/`. It returns rc 0 with an empty `COMPREPLY`.
     - fish: `complete -C "toolr ci lint --cfg files/"` lists `files/with space.txt` and
@@ -173,8 +178,9 @@ completion. Old scripts treat a non-zero exit as no candidates, which is today's
     - bash: capture `rc` without `|| return 0`. On 10 or 11, read `compgen -f -- "$raw_cur"`
       (or `-d`) with `while IFS= read -r`. Quote each name with `printf %q` and put the leading
       `~` back if `raw_cur` started with `~`. Add `/` when `[[ -d $name ]]`, after tilde
-      expansion for the test. If `type compopt &>/dev/null` and there is exactly one directory
-      match, run `compopt -o nospace`. Any other non-zero `rc` returns 0, as today.
+      expansion for the test. If bash has `compopt`, run `compopt -o nospace` on exit 11, and on
+      exit 10 when the only match is a directory. Bash 3.2 keeps the trailing space. Any
+      other non-zero `rc` returns 0, as today.
     - zsh: run `toolr __complete` once into `lines`, then read `$?`. On 10 call `_files`, on 11
       call `_files -/`, and return their status.
     - fish: `set -l out (toolr __complete … 2>/dev/null)` and then

@@ -66,13 +66,19 @@ CONTRIBUTING's "Adding a supported type" checklist gains a compiler-enforced ste
 
 | Type                                                 | `PathCompletion` |
 | ---------------------------------------------------- | ---------------- |
-| `Path`, `AbsolutePath`, `ResolvedPath`, `NewPath`    | `Any`            |
+| `Path`, `AbsolutePath`, `ResolvedPath`               | `Any`            |
 | `FilePath`                                           | `File`           |
 | `ExecutablePath`                                     | `Executable`     |
-| `DirectoryPath`, `WritableDirectoryPath`             | `Directory`      |
+| `DirectoryPath`, `WritableDirectoryPath`, `NewPath`  | `Directory`      |
+
+`NewPath` completes directories only, since its target must not exist yet: the user picks the
+parent directory and types the new name (decision 3). `ExecutablePath` offers every file,
+without exec-bit filtering (decision 2).
 
 `value_parsers::path_hint` is rewritten to map `PathCompletion` onto `ValueHint`, so clap's
-hint and TAB come from one table. The hints clap reports today stay the same.
+hint and TAB come from one table. The hints clap reports today stay the same, except
+`NewPath`, which moves from `AnyPath` to `DirPath`. Nothing in toolr reads clap's hint other
+than `value_parsers` itself, so the change only affects the one table.
 
 ### Engine
 
@@ -128,9 +134,11 @@ in-progress word. On any other non-zero status it returns nothing, as today.
   result line by line. Quote each name with `printf %q`, as values are quoted today, and add a
   `/` to directories. `compgen` returns a typed leading `~` as written (`~/.zsh` gives
   `~/.zshrc`), so the `~` escaping applied to values must skip a leading `~` the user typed,
-  or tilde expansion breaks. When `compopt` exists (bash 4+) and the only match is a
-  directory, add `compopt -o nospace`. `complete -o default` is rejected: it would fall back
-  to files on every empty result, not just path slots.
+  or tilde expansion breaks. When `compopt` exists (bash 4+), request `compopt -o nospace`
+  for directory candidates: always on exit 11, and on exit 10 when the only match is a
+  directory. Bash 3.2 has no `compopt`, so it inserts a space after `dir/`; that is accepted
+  (decision 1). `complete -o default` is rejected: it would fall back to files on every empty
+  result, not just path slots.
 - **zsh.** `_files` for 10 and `_files -/` for 11. zsh quotes the inserted names itself.
 - **fish.** `__fish_complete_path "$current"` for 10 and `__fish_complete_directories "$current"`
   for 11 (both exist in fish 3.x and 4.x; checked on 4.9.3). `complete -c toolr -f` stays, so
@@ -150,8 +158,8 @@ Users get the feature only after reinstalling the script. The release note says 
 completion hardening note did:
 
 > Path-typed arguments (`pathlib.Path` and the `toolr.types` path types) now tab-complete
-> files, or directories for `DirectoryPath` and `WritableDirectoryPath`, in bash, zsh and
-> fish. So do `toolr project trust`, `untrust` and `self build-manifest --source-dir` /
+> files, or directories for `DirectoryPath`, `WritableDirectoryPath` and `NewPath`, in bash,
+> zsh and fish. So do `toolr project trust`, `untrust` and `self build-manifest --source-dir` /
 > `--output`. Re-run `toolr self completion install <shell> --force` to pick it up.
 
 ### Docs
@@ -176,7 +184,8 @@ completion hardening note did:
 - **Shells** (`crates/toolr/tests/complete_shells.rs`). The fixture gains a path argument
   and a directory holding `with space.txt`, `sub/` and a file named `$(touch SENTINEL3)`.
   bash, on every `bashes()` entry: candidates present, quoted, inert, `sub/` has the slash,
-  and `~/` keeps its tilde. Fish: `complete -C "toolr ci lint --cfg "` lists the files,
+  and `~/` keeps its tilde. Directory candidates request `nospace` where the bash has
+  `compopt`, and never where it doesn't. Fish: `complete -C "toolr ci lint --cfg "` lists the files,
   inert. zsh: source inspection (zpty isn't workable here), so check that `_files` and
   `_files -/` are present and there is no `eval`.
 - **Compatibility.** Run the *current* bash script (kept as a test fixture string) against
@@ -184,9 +193,12 @@ completion hardening note did:
 - Patch coverage of 99% on `supported.rs`, `engine.rs`, `value_parsers.rs`, `dispatch.rs`,
   `builtin_completions.rs` and `cli.rs`. Scripts and `crates/*/tests` are excluded.
 
-## Open questions
+## Decisions
 
-1. Is bash 3.2's directory completion acceptable (trailing space after `dir/`)?
-2. Should `ExecutablePath` filter on the exec bit (`_files -g '*(-*)'`, `compgen -c`-style),
-   or offer all files as planned?
-3. Should `NewPath` complete directories only, since the target must not exist yet?
+Recorded 2026-11-04, closing the open questions.
+
+1. Bash 3.2 (no `compopt`) keeps the trailing space after `dir/`. On bash 4+ directory
+   candidates use `compopt -o nospace`. Tests cover every bash the machine has.
+2. `ExecutablePath` offers every file, with no exec-bit filtering.
+3. `NewPath` completes directories only (exit 11).
+4. `--opt=value` completion stays out of scope; a follow-up is logged separately.
