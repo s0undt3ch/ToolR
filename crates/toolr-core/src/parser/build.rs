@@ -164,7 +164,11 @@ fn build_commands_inner(
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
-        name_conflicts.extend(detect_name_conflicts(&module, &module_path));
+        name_conflicts.extend(detect_name_conflicts(
+            &module,
+            &module_path,
+            &all_imports[&module_path],
+        ));
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         let type_imports = TypeImports::from_module(&module);
         let sources_imports = SourcesImports::from_module(&module);
@@ -1396,6 +1400,135 @@ def dup(ctx):
             "duplicate commands (1):\n  - `grp dup` is defined more than once: my_plugin.m1::dup, \
              my_plugin.m2::dup. Rename all but one, e.g. with `name=\"…\"`."
         );
+    }
+
+    /// `(group, name)` of every command the tree builds, sorted.
+    fn built_commands(files: &[(&str, &str)]) -> Vec<(String, String)> {
+        let tmp = TempDir::new().unwrap();
+        for (name, contents) in files {
+            write(tmp.path(), name, contents);
+        }
+        let m = build_static_manifest(&tmp.path().join("tools")).expect("expected a build");
+        let mut out: Vec<_> = m.commands.into_iter().map(|c| (c.group, c.name)).collect();
+        out.sort();
+        out
+    }
+
+    fn grp(names: &[&str]) -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|n| ("grp".to_string(), n.to_string()))
+            .collect()
+    }
+
+    /// Scratch `a`: `@toolr.command` next to the plain form.
+    #[test]
+    fn toolr_attribute_command_builds() {
+        let src = r#"import toolr
+from toolr import command
+
+toolr.command_group("grp", "Grp", "Grp")
+
+
+@command(group="grp")
+def plain(ctx):
+    """Plain."""
+
+
+@toolr.command(group="grp")
+def attr(ctx):
+    """Attribute."""
+
+
+@toolr.command("named", group="grp")
+def other(ctx):
+    """Named."""
+"#;
+        assert_eq!(
+            built_commands(&[("tools/m.py", src)]),
+            grp(&["attr", "named", "plain"])
+        );
+    }
+
+    #[test]
+    fn toolr_module_alias_command_builds() {
+        let src = r#"import toolr as t
+from toolr import command
+
+t.command_group("grp", "Grp", "Grp")
+
+
+@command(group="grp")
+def plain(ctx):
+    """Plain."""
+
+
+@t.command(name="aliased", group="grp")
+def attr(ctx):
+    """Alias."""
+"#;
+        assert_eq!(
+            built_commands(&[("tools/m.py", src)]),
+            grp(&["aliased", "plain"])
+        );
+    }
+
+    /// `import toolr.types` binds `toolr` itself, so `toolr.command` works.
+    #[test]
+    fn toolr_submodule_import_still_binds_toolr() {
+        let src = "import toolr.types\n\ntoolr.command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@toolr.command(group=\"grp\")\ndef attr(ctx):\n    \"\"\"Attribute.\"\"\"\n";
+        assert_eq!(built_commands(&[("tools/m.py", src)]), grp(&["attr"]));
+    }
+
+    /// Scratch `b`: `from toolr import command as cmd`.
+    #[test]
+    fn aliased_command_import_builds() {
+        let src = r#"from toolr import command, command_group
+from toolr import command as cmd
+
+command_group("grp", "Grp", "Grp")
+
+
+@command(group="grp")
+def plain(ctx):
+    """Plain."""
+
+
+@cmd(group="grp")
+def aliased(ctx):
+    """Aliased."""
+"#;
+        assert_eq!(
+            built_commands(&[("tools/m.py", src)]),
+            grp(&["aliased", "plain"])
+        );
+    }
+
+    #[test]
+    fn bare_toolr_attribute_and_alias_without_group_are_reported() {
+        let src = "import toolr\nfrom toolr import command as cmd\n\n\n@toolr.command\ndef attr(ctx):\n    \"\"\"A.\"\"\"\n\n\n@cmd\ndef aliased(ctx):\n    \"\"\"B.\"\"\"\n";
+        assert_eq!(
+            build_error_for(&[("tools/m.py", src)]),
+            "unknown group references (2):\n  - tools.m::attr: `@command` is missing a \
+             `group=...` kwarg.\n  - tools.m::aliased: `@command` is missing a `group=...` kwarg."
+        );
+    }
+
+    #[test]
+    fn toolr_attribute_name_conflict_is_reported() {
+        let src = "import toolr\n\ntoolr.command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@toolr.command(\"x\", name=\"y\", group=\"grp\")\ndef f(ctx):\n    \"\"\"F.\"\"\"\n";
+        assert!(
+            build_error_for(&[("tools/m.py", src)])
+                .starts_with("conflicting command name (1):\n  - tools.m::f: "),
+        );
+    }
+
+    /// `@other.command` where `other` is neither a group nor `toolr`, and an
+    /// alias of some other library's `command`, stay ignored.
+    #[test]
+    fn foreign_command_decorators_stay_ignored() {
+        let src = "import click as other\nfrom click import command as cmd\nfrom toolr import command_group\n\ng = command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@other.command(group=\"grp\")\ndef a(ctx):\n    pass\n\n\n@cmd(group=\"grp\")\ndef b(ctx):\n    pass\n\n\n@g.command\ndef kept(ctx):\n    \"\"\"Kept.\"\"\"\n";
+        assert_eq!(built_commands(&[("tools/m.py", src)]), grp(&["kept"]));
     }
 
     /// Several bad references list one per line, in source order.

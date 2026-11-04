@@ -43,12 +43,14 @@ pub fn extract_commands(
     for b in bindings {
         by_var.insert(b.var.clone(), b.group.full_path());
     }
+    let empty = ImportTable::default();
+    let names = ToolrNames(all_imports.get(module_path).unwrap_or(&empty));
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
             continue;
         };
-        let Some(target) = command_decorator(&func.decorator_list) else {
+        let Some(target) = command_decorator(&func.decorator_list, names) else {
             continue;
         };
         let (group_full_path, override_name) = match target {
@@ -184,13 +186,18 @@ fn resolve_explicit_name(args: &Arguments) -> (Option<String>, bool) {
 /// Walk a module for `@command`/`@<var>.command` decorators that passed
 /// the name both positionally and via `name=`, returning one
 /// [`CommandNameConflict`] per offender.
-pub fn detect_name_conflicts(module: &ModModule, module_path: &str) -> Vec<CommandNameConflict> {
+pub fn detect_name_conflicts(
+    module: &ModModule,
+    module_path: &str,
+    imports: &ImportTable,
+) -> Vec<CommandNameConflict> {
+    let names = ToolrNames(imports);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
             continue;
         };
-        let Some(target) = command_decorator(&func.decorator_list) else {
+        let Some(target) = command_decorator(&func.decorator_list, names) else {
             continue;
         };
         let conflict = match target {
@@ -207,9 +214,32 @@ pub fn detect_name_conflicts(module: &ModModule, module_path: &str) -> Vec<Comma
     out
 }
 
-fn command_decorator(decorators: &[Decorator]) -> Option<CommandDecorator> {
+/// Which of a module's names are toolr's `command` or the `toolr` module.
+#[derive(Clone, Copy)]
+struct ToolrNames<'a>(&'a ImportTable);
+
+impl ToolrNames<'_> {
+    /// `import toolr [as t]`; `import toolr.types` binds `toolr` too.
+    fn is_toolr_module(self, name: &str) -> bool {
+        self.0
+            .resolve_module_binding(name)
+            .is_some_and(|m| m == "toolr" || (name == "toolr" && m.starts_with("toolr.")))
+    }
+
+    /// `command`, or a name `from toolr import command as …` binds.
+    fn is_command(self, name: &str) -> bool {
+        name == "command"
+            || self
+                .0
+                .candidates(name)
+                .iter()
+                .any(|c| c.module == "toolr" && c.original_name == "command")
+    }
+}
+
+fn command_decorator(decorators: &[Decorator], names: ToolrNames) -> Option<CommandDecorator> {
     for d in decorators {
-        if let Some(meta) = parse_string_path_command(&d.expression) {
+        if let Some(meta) = parse_string_path_command(&d.expression, names) {
             return Some(meta);
         }
         if let Some(meta) = parse_binding_command(&d.expression) {
@@ -283,27 +313,29 @@ fn keyword_str(args: &Arguments, name: &str) -> Option<String> {
         .and_then(|k| literal_str(&k.value))
 }
 
-/// Recognise the string-path `@command` / `@command("name", group="…")` shape.
-fn parse_string_path_command(expr: &Expr) -> Option<CommandDecorator> {
-    // Bare `@command` — Name expression on the decorator.
-    if let Expr::Name(n) = expr {
-        if n.id.as_str() == "command" {
-            return Some(CommandDecorator::StringPath {
-                explicit_name: None,
-                group: None,
-                name_conflict: false,
-            });
+/// Recognise the string-path `@command` / `@command("name", group="…")` shape,
+/// also spelt `@toolr.command`, `@t.command` or an alias of `command`.
+fn parse_string_path_command(expr: &Expr, names: ToolrNames) -> Option<CommandDecorator> {
+    let is_toolr_command = |callee: &Expr| match callee {
+        Expr::Name(n) => names.is_command(n.id.as_str()),
+        Expr::Attribute(attr) => {
+            attr.attr.as_str() == "command"
+                && matches!(attr.value.as_ref(), Expr::Name(n) if names.is_toolr_module(n.id.as_str()))
         }
-        return None;
+        _ => false,
+    };
+    // Bare `@command` / `@toolr.command`.
+    if is_toolr_command(expr) {
+        return Some(CommandDecorator::StringPath {
+            explicit_name: None,
+            group: None,
+            name_conflict: false,
+        });
     }
-    // `@command(...)` — Call whose func is a Name "command".
     let Expr::Call(call) = expr else {
         return None;
     };
-    let Expr::Name(callee) = call.func.as_ref() else {
-        return None;
-    };
-    if callee.id.as_str() != "command" {
+    if !is_toolr_command(&call.func) {
         return None;
     }
     // The explicit name may be the first positional string literal
@@ -642,7 +674,7 @@ def check_snippets(ctx):
             &HashMap::new(),
             &mut Vec::new(),
         );
-        assert!(detect_name_conflicts(&m, "tools.ci").is_empty());
+        assert!(detect_name_conflicts(&m, "tools.ci", &ImportTable::default()).is_empty());
         assert_eq!(commands.len(), 1);
         // The `name=` keyword wins over the `check-snippets` function name.
         assert_eq!(commands[0].name, "snippet-checker");
@@ -800,14 +832,14 @@ def do_thing(ctx):
             .unwrap();
         // The decorator resolves to no explicit name, flagged as a conflict.
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(&m, "tools.ci");
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &ImportTable::default());
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].module, "tools.ci");
         assert_eq!(conflicts[0].function, "do_thing");
@@ -831,14 +863,14 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::StringPath {
                 explicit_name: None,
                 group: Some("ci".to_string()),
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(&m, "tools.ci");
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &ImportTable::default());
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].function, "do_thing");
     }
@@ -906,7 +938,7 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
@@ -951,7 +983,7 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: Some("hello".to_string()),
@@ -997,7 +1029,7 @@ def collect_data(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: Some("collect".to_string()),
@@ -1044,7 +1076,7 @@ def do_thing(ctx):
             })
             .unwrap();
         assert_eq!(
-            command_decorator(&func.decorator_list).unwrap(),
+            command_decorator(&func.decorator_list, ToolrNames(&ImportTable::default())).unwrap(),
             CommandDecorator::Binding {
                 var: "group".to_string(),
                 explicit_name: None,
