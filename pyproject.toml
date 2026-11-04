@@ -206,6 +206,7 @@ combine-as-imports = false
 force-single-line = true
 known-first-party = [
   "toolr",
+  "tools",
 ]
 forced-separate = [
   "tests"
