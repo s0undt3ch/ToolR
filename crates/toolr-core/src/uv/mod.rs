@@ -151,6 +151,9 @@ impl UvError {
                  yourself from https://docs.astral.sh/uv/getting-started/installation/ \
                  and rerun."
                 .into(),
+            Self::Http(_) => "toolr couldn't download and install uv. Install uv yourself from \
+                 https://docs.astral.sh/uv/getting-started/installation/ and rerun."
+                .into(),
             Self::Unverified { .. } | Self::ChecksumMismatch { .. } => {
                 "toolr didn't install uv because it couldn't verify the download. \
                  Install uv yourself from \
@@ -364,6 +367,16 @@ mod tests {
         // Anti-regression: must not double-prefix `toolr: ` — main.rs
         // adds that once at the CLI surface.
         assert!(!s.starts_with("toolr:"), "actual: {s}");
+    }
+
+    #[test]
+    fn user_message_for_http_points_at_a_manual_install() {
+        let s = UvError::Http("unreachable".into()).user_message();
+        assert!(
+            s.contains("couldn't download and install uv"),
+            "actual: {s}"
+        );
+        assert!(s.contains("https://docs.astral.sh/uv/"), "actual: {s}");
     }
 
     #[test]

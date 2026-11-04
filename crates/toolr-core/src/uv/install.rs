@@ -450,14 +450,26 @@ fn download_and_extract(
         ))
     })?;
 
-    // Stage beside `dest` and rename over it, so a failed write never leaves a
-    // truncated uv; the staged file is removed on drop if we bail out.
+    install_staged(src, parent, dest)
+}
+
+/// Stage beside `dest` and rename over it, so a failed write never leaves a
+/// truncated uv; the staged file is removed on drop if we bail out.
+fn install_staged(src: &Path, parent: &Path, dest: &Path) -> Result<(), UvError> {
     let mut staged = tempfile::Builder::new()
         .prefix(".uv-")
         .tempfile_in(parent)?;
     std::io::copy(&mut fs::File::open(src)?, staged.as_file_mut())?;
     set_executable(staged.path())?;
-    staged.persist(dest).map_err(|e| e.error)?;
+    // Name the path: on Windows a running uv.exe (a parallel install won) refuses the rename.
+    staged.persist(dest).map_err(|e| {
+        let msg = format!(
+            "couldn't move uv into place at {}: {}",
+            dest.display(),
+            e.error
+        );
+        UvError::Io(std::io::Error::new(e.error.kind(), msg))
+    })?;
     Ok(())
 }
 
@@ -500,6 +512,31 @@ mod tests {
     use std::io::Write;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn install_staged_names_the_destination_when_the_rename_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("uv-src");
+        fs::write(&src, b"uv").unwrap();
+        // A non-empty directory can't be renamed over on any platform.
+        let dest = dir.path().join("uv");
+        fs::create_dir(&dest).unwrap();
+        fs::write(dest.join("keep"), b"").unwrap();
+
+        let err = install_staged(&src, dir.path(), &dest).unwrap_err();
+
+        assert!(
+            err.to_string().contains(&dest.display().to_string()),
+            "{err}"
+        );
+        assert!(dest.join("keep").is_file());
+        let leftovers: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with(".uv-"))
+            .collect();
+        assert!(leftovers.is_empty(), "staged file left behind");
+    }
 
     #[test]
     fn read_consent_eof_is_no_answer() {
