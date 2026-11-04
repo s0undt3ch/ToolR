@@ -12,7 +12,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
-use std::os::unix::io::{FromRawFd, OwnedFd, RawFd};
+use std::os::unix::io::{FromRawFd, OwnedFd};
 
 #[cfg(windows)]
 use std::os::windows::io::{BorrowedHandle, RawHandle};
@@ -91,50 +91,19 @@ impl CommandNoOutputTimeoutError {
     }
 }
 
-#[cfg(windows)]
-#[derive(Debug, Clone)]
-pub struct ThreadSafeHandle {
-    raw_handle: RawHandle,
-}
-
-#[cfg(windows)]
-unsafe impl Send for ThreadSafeHandle {}
-
-#[cfg(windows)]
-unsafe impl Sync for ThreadSafeHandle {}
-
-#[cfg(windows)]
-impl ThreadSafeHandle {
-    pub fn new(handle: RawHandle) -> Self {
-        Self { raw_handle: handle }
-    }
-
-    pub fn raw(&self) -> RawHandle {
-        self.raw_handle
-    }
-}
-
 // Pure Rust implementation - available always
 pub struct CommandConfig {
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub input: Option<Vec<u8>>,
-    #[cfg(unix)]
-    pub stdout_fd: Option<RawFd>, // For capturing output to file
-    #[cfg(unix)]
-    pub stderr_fd: Option<RawFd>, // For capturing output to file
-    #[cfg(unix)]
-    pub sys_stdout_fd: Option<RawFd>, // For streaming to output
-    #[cfg(unix)]
-    pub sys_stderr_fd: Option<RawFd>, // For streaming to error
-    #[cfg(windows)]
-    pub stdout_fd: Option<ThreadSafeHandle>, // For capturing output to file
-    #[cfg(windows)]
-    pub stderr_fd: Option<ThreadSafeHandle>, // For capturing output to file
-    #[cfg(windows)]
-    pub sys_stdout_fd: Option<ThreadSafeHandle>, // For streaming to output
-    #[cfg(windows)]
-    pub sys_stderr_fd: Option<ThreadSafeHandle>, // For streaming to error
+    /// Capture file for the child's stdout, set for `capture_output=True`.
+    pub stdout_capture: Option<File>,
+    /// Capture file for the child's stderr, set for `capture_output=True`.
+    pub stderr_capture: Option<File>,
+    /// Where the child's stdout streams to: toolr's own stdout.
+    pub stdout_stream: Option<File>,
+    /// Where the child's stderr streams to: toolr's own stderr.
+    pub stderr_stream: Option<File>,
     pub timeout_secs: Option<f64>,
     pub no_output_timeout_secs: Option<f64>,
     pub cwd: Option<PathBuf>, // Current working directory
@@ -150,22 +119,10 @@ impl Default for CommandConfig {
             args: Vec::new(),
             env: HashMap::new(),
             input: None,
-            #[cfg(unix)]
-            stdout_fd: None,
-            #[cfg(unix)]
-            stderr_fd: None,
-            #[cfg(unix)]
-            sys_stdout_fd: None,
-            #[cfg(unix)]
-            sys_stderr_fd: None,
-            #[cfg(windows)]
-            stdout_fd: None,
-            #[cfg(windows)]
-            stderr_fd: None,
-            #[cfg(windows)]
-            sys_stdout_fd: None,
-            #[cfg(windows)]
-            sys_stderr_fd: None,
+            stdout_capture: None,
+            stderr_capture: None,
+            stdout_stream: None,
+            stderr_stream: None,
             timeout_secs: None,
             no_output_timeout_secs: None,
             cwd: env::current_dir().ok(), // Default to current working directory
@@ -216,23 +173,36 @@ fn spawn_stdin_writer<W: Write + Send + 'static>(
     })
 }
 
-#[cfg(unix)]
-type Sink = RawFd;
-#[cfg(windows)]
-type Sink = ThreadSafeHandle;
-
-/// Duplicate a caller-owned fd (or handle) so the reader thread owns and closes its copy.
-fn own_sink(sink: Option<&Sink>) -> io::Result<Option<File>> {
+/// Duplicate a C-runtime file descriptor, so the caller owns and closes its own copy.
+///
+/// The copy shares the file description, offset included, so output written through it is
+/// visible to whoever holds the original. On Windows a closed fd aborts the process in the CRT's
+/// invalid-parameter handler, so pass only fds just taken from an open file.
+pub fn file_from_fd(fd: i32) -> io::Result<File> {
     // `fcntl` rather than `BorrowedFd`, so a closed fd is an error, not a broken contract.
     #[cfg(unix)]
-    let owned = |fd: &RawFd| match unsafe { libc::fcntl(*fd, libc::F_DUPFD_CLOEXEC, 0) } {
-        -1 => Err(io::Error::last_os_error()),
-        dup => Ok(unsafe { OwnedFd::from_raw_fd(dup) }),
+    let owned = match unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) } {
+        -1 => return Err(io::Error::last_os_error()),
+        dup => unsafe { OwnedFd::from_raw_fd(dup) },
     };
     #[cfg(windows)]
-    let owned =
-        |h: &ThreadSafeHandle| unsafe { BorrowedHandle::borrow_raw(h.raw()) }.try_clone_to_owned();
-    sink.map(|sink| owned(sink).map(File::from)).transpose()
+    let owned = {
+        // A negative fd would abort in the CRT's invalid-parameter handler; reject it up front.
+        let handle = if fd < 0 {
+            -1
+        } else {
+            unsafe { libc::get_osfhandle(fd) }
+        };
+        // `-1` for a bad fd, `-2` for a std stream with no console: neither is a handle.
+        if handle < 0 {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "Bad file descriptor",
+            ));
+        }
+        unsafe { BorrowedHandle::borrow_raw(handle as RawHandle) }.try_clone_to_owned()?
+    };
+    Ok(File::from(owned))
 }
 
 /// State the reader threads share with the call.
@@ -413,23 +383,10 @@ pub fn run_command_internal(
         command.stderr(Stdio::piped());
     }
 
-    // Owned copies, made before the spawn: a thread detached on timeout keeps writing to its
-    // own fd, never to a number the caller has closed and the OS has handed out again.
-    let own = |sink| {
-        own_sink(sink).map_err(|e| {
-            Box::new(CommandExecutionError::new(format!(
-                "Failed to duplicate an output handle: {e}"
-            )))
-        })
-    };
-    let (stdout_capture, stdout_stream) = (
-        own(config.stdout_fd.as_ref())?,
-        own(config.sys_stdout_fd.as_ref())?,
-    );
-    let (stderr_capture, stderr_stream) = (
-        own(config.stderr_fd.as_ref())?,
-        own(config.sys_stderr_fd.as_ref())?,
-    );
+    let (stdout_capture, stdout_stream) =
+        (config.stdout_capture.take(), config.stdout_stream.take());
+    let (stderr_capture, stderr_stream) =
+        (config.stderr_capture.take(), config.stderr_stream.take());
 
     // Start the command
     let mut child = command.spawn().map_err(|e| {

@@ -9,59 +9,23 @@ mod test_suite {
     use std::time::{Duration, Instant};
     use tempfile::NamedTempFile;
 
-    // Platform-specific imports
-    #[cfg(windows)]
-    #[cfg(windows)]
-    use crate::command::ThreadSafeHandle;
     #[cfg(unix)]
     use std::os::unix::io::AsRawFd;
     #[cfg(windows)]
     use std::os::windows::io::AsRawHandle;
-    #[cfg(windows)]
-    use winapi::um::fileapi::ReadFile;
-    #[cfg(windows)]
-    use winapi::um::handleapi::{DuplicateHandle, INVALID_HANDLE_VALUE};
-    #[cfg(windows)]
-    use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
-    #[cfg(windows)]
-    use winapi::um::namedpipeapi::CreatePipe;
-    #[cfg(windows)]
-    use winapi::um::processthreadsapi::GetCurrentProcess;
-    #[cfg(windows)]
-    use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 
     use crate::command::tree::terminate;
-    use crate::{CommandConfig, run_command_internal};
+    use crate::{CommandConfig, file_from_fd, run_command_internal};
 
-    // Helper function to get file descriptor/handle from File in a cross-platform way
-    #[cfg(unix)]
-    fn get_file_descriptor(file: &File) -> i32 {
-        file.as_raw_fd()
+    /// An owned copy of `file`, as `toolr-py` hands the config its output files.
+    fn sink(file: &File) -> Option<File> {
+        Some(file.try_clone().expect("duplicate a test file"))
     }
 
-    #[cfg(windows)]
-    fn get_file_descriptor(file: &File) -> ThreadSafeHandle {
-        // Get the actual Windows handle from the file
-        let handle = file.as_raw_handle();
-        // Ensure we duplicate the handle so it remains valid
-        unsafe {
-            let mut new_handle = INVALID_HANDLE_VALUE;
-            if DuplicateHandle(
-                GetCurrentProcess(),
-                handle as *mut _, // Let the compiler infer the void type
-                GetCurrentProcess(),
-                &mut new_handle,
-                0,
-                1,
-                DUPLICATE_SAME_ACCESS,
-            ) != 0
-            {
-                ThreadSafeHandle::new(new_handle as *mut _) // Convert to RawHandle
-            } else {
-                // For tests, fallback to a dummy handle if duplication fails
-                ThreadSafeHandle::new(handle as *mut _) // Convert to RawHandle
-            }
-        }
+    /// An owned copy of a raw pipe end, which stays the test's to close.
+    #[cfg(unix)]
+    fn dup_sink(fd: std::os::unix::io::RawFd) -> Option<File> {
+        Some(file_from_fd(fd).expect("duplicate a test pipe end"))
     }
 
     /// Resolve a usable Python interpreter for the subprocess-based tests
@@ -104,65 +68,57 @@ mod test_suite {
         };
     }
 
-    // Helper function for Option wrapping to handle platform differences
+    #[cfg(windows)]
+    fn create_pipe() -> Result<(std::io::PipeReader, File)> {
+        let (read, write) = std::io::pipe()?;
+        Ok((
+            read,
+            File::from(std::os::windows::io::OwnedHandle::from(write)),
+        ))
+    }
+
+    #[cfg(windows)]
+    fn read_pipe(mut pipe: std::io::PipeReader, buffer: &mut [u8]) -> i32 {
+        pipe.read(buffer).map_or(0, |n| n as i32)
+    }
+
+    #[test]
+    fn file_from_fd_duplicates_an_open_fd() -> Result<()> {
+        let mut original = NamedTempFile::new()?;
+        #[cfg(unix)]
+        let fd = original.as_file().as_raw_fd();
+        #[cfg(windows)]
+        let fd = unsafe {
+            libc::open_osfhandle(original.as_file().as_raw_handle() as libc::intptr_t, 0)
+        };
+        let mut duplicate = file_from_fd(fd)?;
+        #[cfg(unix)]
+        assert_ne!(duplicate.as_raw_fd(), fd);
+        #[cfg(windows)]
+        assert_ne!(
+            duplicate.as_raw_handle(),
+            original.as_file().as_raw_handle()
+        );
+        duplicate.write_all(b"through the copy")?;
+        drop(duplicate);
+        original.seek(SeekFrom::Start(0))?;
+        let mut read_back = String::new();
+        original.read_to_string(&mut read_back)?;
+        assert_eq!(read_back, "through the copy");
+        Ok(())
+    }
+
+    /// Past any fd limit, so no file another test opens can have reused it.
     #[cfg(unix)]
-    fn wrap_fd(fd: i32) -> Option<i32> {
-        Some(fd)
+    #[test]
+    fn file_from_fd_rejects_a_closed_fd() {
+        let err = file_from_fd(i32::MAX).expect_err("the fd is closed");
+        assert_eq!(err.raw_os_error(), Some(libc::EBADF));
     }
 
-    #[cfg(windows)]
-    fn wrap_fd(handle: ThreadSafeHandle) -> Option<ThreadSafeHandle> {
-        Some(handle)
-    }
-
-    #[cfg(windows)]
-    fn create_pipe() -> Result<(ThreadSafeHandle, ThreadSafeHandle)> {
-        unsafe {
-            let mut read_handle = INVALID_HANDLE_VALUE;
-            let mut write_handle = INVALID_HANDLE_VALUE;
-            let mut sa = SECURITY_ATTRIBUTES {
-                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-                lpSecurityDescriptor: std::ptr::null_mut(),
-                bInheritHandle: 1,
-            };
-
-            if CreatePipe(&mut read_handle, &mut write_handle, &mut sa, 0) == 0 {
-                // Fallback to temp file if pipe creation fails
-                let file = NamedTempFile::new()?;
-                let read = file.reopen()?;
-                let write = file.into_file();
-                Ok((
-                    ThreadSafeHandle::new(read.as_raw_handle() as *mut _),
-                    ThreadSafeHandle::new(write.as_raw_handle() as *mut _),
-                ))
-            } else {
-                Ok((
-                    ThreadSafeHandle::new(read_handle as *mut _),
-                    ThreadSafeHandle::new(write_handle as *mut _),
-                ))
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    fn read_pipe(handle: ThreadSafeHandle, buffer: &mut [u8]) -> i32 {
-        let mut bytes_read = 0;
-        unsafe {
-            let raw_handle = handle.raw() as *mut winapi::ctypes::c_void;
-            if raw_handle != INVALID_HANDLE_VALUE as *mut winapi::ctypes::c_void
-                && ReadFile(
-                    raw_handle,
-                    buffer.as_mut_ptr() as *mut winapi::ctypes::c_void,
-                    buffer.len() as u32,
-                    &mut bytes_read,
-                    std::ptr::null_mut(),
-                ) != 0
-            {
-                bytes_read as i32
-            } else {
-                0
-            }
-        }
+    #[test]
+    fn file_from_fd_rejects_a_negative_fd() {
+        assert!(file_from_fd(-1).is_err());
     }
 
     #[test]
@@ -316,8 +272,6 @@ mod test_suite {
         let stderr_file = NamedTempFile::new()?;
 
         // Get file descriptors in a cross-platform way
-        let stdout_fd = get_file_descriptor(stdout_file.as_file());
-        let stderr_fd = get_file_descriptor(stderr_file.as_file());
 
         let config = CommandConfig {
             args: vec![
@@ -326,8 +280,8 @@ mod test_suite {
                 "import os; print('TEST_VAR=' + os.environ['TEST_VAR']); print('ANOTHER_VAR=' + os.environ['ANOTHER_VAR'])".to_string(),
             ],
             env,
-            stdout_fd: wrap_fd(stdout_fd),
-            stderr_fd: wrap_fd(stderr_fd),
+            stdout_capture: sink(stdout_file.as_file()),
+            stderr_capture: sink(stderr_file.as_file()),
             ..Default::default()
         };
 
@@ -380,9 +334,6 @@ mod test_suite {
         let mut stdout_file = NamedTempFile::new()?;
         let stderr_file = NamedTempFile::new()?;
 
-        let stdout_fd = get_file_descriptor(stdout_file.as_file());
-        let stderr_fd = get_file_descriptor(stderr_file.as_file());
-
         // Create a command config that runs 'pwd' with the temp directory as working directory
         let config = CommandConfig {
             args: vec![
@@ -391,8 +342,8 @@ mod test_suite {
                 "import os; print(os.getcwd())".to_string(),
             ],
             cwd: Some(temp_path.clone()),
-            stdout_fd: wrap_fd(stdout_fd),
-            stderr_fd: wrap_fd(stderr_fd),
+            stdout_capture: sink(stdout_file.as_file()),
+            stderr_capture: sink(stderr_file.as_file()),
             ..Default::default()
         };
 
@@ -437,9 +388,6 @@ mod test_suite {
         let mut stdout_file2 = NamedTempFile::new()?;
         let stderr_file2 = NamedTempFile::new()?;
 
-        let stdout_fd2 = get_file_descriptor(stdout_file2.as_file());
-        let stderr_fd2 = get_file_descriptor(stderr_file2.as_file());
-
         // Create a command config that runs 'pwd' without setting the working directory
         let config2 = CommandConfig {
             args: vec![
@@ -447,8 +395,8 @@ mod test_suite {
                 "-c".to_string(),
                 "import os; print(os.getcwd())".to_string(),
             ],
-            stdout_fd: wrap_fd(stdout_fd2),
-            stderr_fd: wrap_fd(stderr_fd2),
+            stdout_capture: sink(stdout_file2.as_file()),
+            stderr_capture: sink(stderr_file2.as_file()),
             ..Default::default()
         };
 
@@ -517,7 +465,7 @@ mod test_suite {
         }
 
         #[cfg(windows)]
-        fn create_pipe() -> Result<(ThreadSafeHandle, ThreadSafeHandle)> {
+        fn create_pipe() -> Result<(std::io::PipeReader, File)> {
             super::create_pipe()
         }
 
@@ -528,8 +476,8 @@ mod test_suite {
         }
 
         #[cfg(windows)]
-        fn read_pipe(fd: ThreadSafeHandle, buffer: &mut [u8]) -> i32 {
-            super::read_pipe(fd, buffer)
+        fn read_pipe(pipe: std::io::PipeReader, buffer: &mut [u8]) -> i32 {
+            super::read_pipe(pipe, buffer)
         }
 
         #[test]
@@ -540,6 +488,10 @@ mod test_suite {
             rt.block_on(async {
                 let (stdout_read, stdout_write) = create_pipe()?;
                 let (stderr_read, stderr_write) = create_pipe()?;
+                #[cfg(unix)]
+                let (stream_stdout, stream_stderr) = (dup_sink(stdout_write), dup_sink(stderr_write));
+                #[cfg(windows)]
+                let (stream_stdout, stream_stderr) = (Some(stdout_write), Some(stderr_write));
 
                 let config = CommandConfig {
                     args: vec![
@@ -547,8 +499,8 @@ mod test_suite {
                         "-c".to_string(),
                         "import sys; sys.stdout.write('to sys stdout'); sys.stdout.flush(); sys.stderr.write('to sys stderr'); sys.stderr.flush()".to_string(),
                     ],
-                    sys_stdout_fd: wrap_fd(stdout_write),
-                    sys_stderr_fd: wrap_fd(stderr_write),
+                    stdout_stream: stream_stdout,
+                    stderr_stream: stream_stderr,
                     ..Default::default()
                 };
 
@@ -613,12 +565,14 @@ mod test_suite {
             rt.block_on(async {
                 let (stdout_read, stdout_write) = create_pipe()?;
                 let (stderr_read, stderr_write) = create_pipe()?;
+                #[cfg(unix)]
+                let (stream_stdout, stream_stderr) = (dup_sink(stdout_write), dup_sink(stderr_write));
+                #[cfg(windows)]
+                let (stream_stdout, stream_stderr) = (Some(stdout_write), Some(stderr_write));
 
                 let mut stdout_capture = NamedTempFile::new()?;
                 let mut stderr_capture = NamedTempFile::new()?;
 
-                let stdout_fd = get_file_descriptor(stdout_capture.as_file());
-                let stderr_fd = get_file_descriptor(stderr_capture.as_file());
 
                 let config = CommandConfig {
                     args: vec![
@@ -626,10 +580,10 @@ mod test_suite {
                         "-c".to_string(),
                         "import sys; sys.stdout.write('captured stdout'); sys.stdout.flush(); sys.stderr.write('captured stderr'); sys.stderr.flush()".to_string(),
                     ],
-                    stdout_fd: wrap_fd(stdout_fd),
-                    stderr_fd: wrap_fd(stderr_fd),
-                    sys_stdout_fd: wrap_fd(stdout_write),
-                    sys_stderr_fd: wrap_fd(stderr_write),
+                    stdout_capture: sink(stdout_capture.as_file()),
+                    stderr_capture: sink(stderr_capture.as_file()),
+                    stdout_stream: stream_stdout,
+                    stderr_stream: stream_stderr,
                     ..Default::default()
                 };
 
@@ -729,7 +683,7 @@ mod test_suite {
             require_python!(python, "test_no_output_timeout");
             // Create a command that outputs once then waits, triggering no-output timeout.
             //
-            // We intentionally do not wire up a `sys_stdout_fd` pipe here: the no-output
+            // We intentionally do not wire up a `stdout_stream` pipe here: the no-output
             // watchdog updates `last_output` from the stdout-forwarder thread's read
             // against `child.stdout` (the parent-owned pipe), which works whether or not
             // a sys-fd consumer is present. Earlier revisions of this test passed a
@@ -784,14 +738,12 @@ mod test_suite {
             );
             let mut stdout_file = NamedTempFile::new()?;
             let stderr_file = NamedTempFile::new()?;
-            let stdout_fd = get_file_descriptor(stdout_file.as_file());
-            let stderr_fd = get_file_descriptor(stderr_file.as_file());
 
             let config = CommandConfig {
                 args: vec![python, "-c".to_string(), output_first_script()],
                 input: Some(vec![b'y'; PAST_PIPE_BUFFER]),
-                stdout_fd: wrap_fd(stdout_fd),
-                stderr_fd: wrap_fd(stderr_fd),
+                stdout_capture: sink(stdout_file.as_file()),
+                stderr_capture: sink(stderr_file.as_file()),
                 timeout_secs: Some(30.0),
                 ..Default::default()
             };
@@ -978,8 +930,8 @@ mod test_suite {
             let stderr_file = NamedTempFile::new().expect("stderr temp file");
             let config = CommandConfig {
                 args,
-                stdout_fd: wrap_fd(get_file_descriptor(stdout_file.as_file())),
-                stderr_fd: wrap_fd(get_file_descriptor(stderr_file.as_file())),
+                stdout_capture: sink(stdout_file.as_file()),
+                stderr_capture: sink(stderr_file.as_file()),
                 ..Default::default()
             };
             (config, stdout_file, stderr_file)
@@ -999,20 +951,6 @@ mod test_suite {
                 err.to_string().contains(expected),
                 "expected {expected:?}, got: {err}"
             );
-        }
-
-        #[cfg(unix)]
-        #[test]
-        fn closed_capture_fd_is_an_error() -> Result<()> {
-            // Past any fd limit, so no other test can have it open.
-            let config = CommandConfig {
-                args: vec!["true".into()],
-                stdout_fd: Some(i32::MAX),
-                ..Default::default()
-            };
-            let err = bounded_run_command(config, TREE_BOUND)?.expect_err("the fd is closed");
-            assert!(err.to_string().contains("Failed to duplicate"), "{err}");
-            Ok(())
         }
 
         /// `; true` stops `sh` exec-ing `sleep`, so `sleep` is a grandchild, and it
@@ -1201,7 +1139,7 @@ mod test_suite {
             let (sink, drainer) = full_pipe(Duration::from_secs(3), PAYLOAD)?;
             let config = CommandConfig {
                 args: sh(&format!("printf '%0{PAYLOAD}d' 0")),
-                sys_stdout_fd: Some(sink),
+                stdout_stream: dup_sink(sink),
                 timeout_secs: timeouts.0,
                 no_output_timeout_secs: timeouts.1,
                 ..Default::default()
@@ -1282,8 +1220,8 @@ mod test_suite {
             let (mut config, mut stdout_file, _stderr) =
                 capturing_config(vec![python, "-c".into(), script.into()]);
             let (sys_stdout, sys_stderr) = (broken_pipe()?, broken_pipe()?);
-            config.sys_stdout_fd = Some(sys_stdout);
-            config.sys_stderr_fd = Some(sys_stderr);
+            config.stdout_stream = dup_sink(sys_stdout);
+            config.stderr_stream = dup_sink(sys_stderr);
             let result = bounded_run_command(config, TREE_BOUND)?;
             unsafe {
                 libc::close(sys_stdout);
@@ -1307,8 +1245,8 @@ mod test_suite {
                     "-c".into(),
                     "import sys\nwhile True: sys.stdout.write('y'*8192)".into(),
                 ],
-                sys_stdout_fd: Some(sys_stdout),
-                sys_stderr_fd: Some(sys_stderr),
+                stdout_stream: dup_sink(sys_stdout),
+                stderr_stream: dup_sink(sys_stderr),
                 timeout_secs: Some(8.0),
                 ..Default::default()
             };
@@ -1343,8 +1281,8 @@ mod test_suite {
             let stderr_file = NamedTempFile::new()?;
             let config = CommandConfig {
                 args: vec![python, "-c".into(), script],
-                stdout_fd: Some(get_file_descriptor(&read_only)),
-                stderr_fd: Some(get_file_descriptor(stderr_file.as_file())),
+                stdout_capture: sink(&read_only),
+                stderr_capture: sink(stderr_file.as_file()),
                 ..Default::default()
             };
             let err = bounded_run_command(config, TREE_BOUND)?
@@ -1367,7 +1305,7 @@ mod test_suite {
             let read_only = File::open(stream_file.path())?;
             let config = CommandConfig {
                 args: vec![python, "-c".into(), "print('hello')".into()],
-                sys_stdout_fd: Some(get_file_descriptor(&read_only)),
+                stdout_stream: sink(&read_only),
                 ..Default::default()
             };
             let err = bounded_run_command(config, TREE_BOUND)?
@@ -1489,14 +1427,12 @@ mod test_suite {
 
         let mut stdout_file = NamedTempFile::new()?;
         let stderr_file = NamedTempFile::new()?;
-        let stdout_fd = get_file_descriptor(stdout_file.as_file());
-        let stderr_fd = get_file_descriptor(stderr_file.as_file());
 
         let config = CommandConfig {
             args: vec![python, "-c".to_string(), "print('hello')".to_string()],
             interactive: true,
-            stdout_fd: wrap_fd(stdout_fd),
-            stderr_fd: wrap_fd(stderr_fd),
+            stdout_capture: sink(stdout_file.as_file()),
+            stderr_capture: sink(stderr_file.as_file()),
             ..Default::default()
         };
 

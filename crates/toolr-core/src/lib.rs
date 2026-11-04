@@ -50,11 +50,8 @@ pub mod venv;
 // Re-export the core functionality for direct Rust usage
 pub use command::{
     CommandConfig, CommandExecutionError, CommandNoOutputTimeoutError, CommandTimeoutExceededError,
-    run_command_internal,
+    file_from_fd, run_command_internal,
 };
-
-#[cfg(windows)]
-pub use command::ThreadSafeHandle;
 
 // Re-export docstring parsing functionality
 pub use docstrings::{Docstring, Example, ParseError, SimpleDocstringParser};
