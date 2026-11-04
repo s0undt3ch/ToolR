@@ -62,16 +62,19 @@ pub enum UvError {
     },
     #[error("HTTP error during uv install: {0}")]
     Http(String),
-    /// The archive couldn't be decoded or unpacked. A download that unpacks
-    /// but lacks the binary is still `Http`.
+    /// The install failed for a reason other than the network: no uv for this
+    /// host, nowhere to put it, or a download that unpacks but lacks the binary.
+    #[error("couldn't install uv: {0}")]
+    Install(String),
+    /// The archive couldn't be decoded or unpacked.
     #[error("couldn't extract the downloaded uv archive {archive}")]
     Extract {
         archive: PathBuf,
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
-    /// The download couldn't be checked: the release tag didn't resolve, or
-    /// its checksum file was missing or malformed.
+    /// The download couldn't be checked: the release tag didn't resolve, its
+    /// checksum file was missing or malformed, or a file exceeded its size cap.
     #[error("couldn't verify the uv download {asset}: {reason}")]
     Unverified { asset: String, reason: String },
     #[error(
@@ -151,8 +154,12 @@ impl UvError {
                  yourself from https://docs.astral.sh/uv/getting-started/installation/ \
                  and rerun."
                 .into(),
-            Self::Http(_) => "toolr couldn't download and install uv. Install uv yourself from \
+            Self::Http(_) => "toolr couldn't download uv. Install uv yourself from \
                  https://docs.astral.sh/uv/getting-started/installation/ and rerun."
+                .into(),
+            Self::Install(_) => "toolr couldn't install the uv it downloaded. Install uv \
+                 yourself from https://docs.astral.sh/uv/getting-started/installation/ \
+                 and rerun."
                 .into(),
             Self::Unverified { .. } | Self::ChecksumMismatch { .. } => {
                 "toolr didn't install uv because it couldn't verify the download. \
@@ -372,8 +379,17 @@ mod tests {
     #[test]
     fn user_message_for_http_points_at_a_manual_install() {
         let s = UvError::Http("unreachable".into()).user_message();
+        assert!(s.contains("couldn't download uv"), "actual: {s}");
+        assert!(s.contains("https://docs.astral.sh/uv/"), "actual: {s}");
+    }
+
+    #[test]
+    fn install_error_names_the_cause_and_points_at_manual_install() {
+        let err = UvError::Install("no uv binary".into());
+        assert!(err.to_string().contains("no uv binary"), "{err}");
+        let s = err.user_message();
         assert!(
-            s.contains("couldn't download and install uv"),
+            s.contains("couldn't install the uv it downloaded"),
             "actual: {s}"
         );
         assert!(s.contains("https://docs.astral.sh/uv/"), "actual: {s}");
