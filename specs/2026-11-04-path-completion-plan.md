@@ -178,8 +178,8 @@ the trailing space. `--opt=value` stays out of scope. See the spec's "Decisions"
     - bash: capture `rc` without `|| return 0`. On 10 or 11, read `compgen -f -- "$raw_cur"`
       (or `-d`) with `while IFS= read -r`. Quote each name with `printf %q` and put the leading
       `~` back if `raw_cur` started with `~`. Add `/` when `[[ -d $name ]]`, after tilde
-      expansion for the test. If bash has `compopt`, run `compopt -o nospace` when the only
-      candidate is a directory. Bash 3.2 keeps the trailing space. Any
+      expansion for the test. If bash has `compopt`, run `compopt -o nospace` on exit 11, and on
+      exit 10 when the only candidate is a directory. Bash 3.2 keeps the trailing space. Any
       other non-zero `rc` returns 0, as today.
     - zsh: run `toolr __complete` once into `lines`, then read `$?`. On 10 call `_files`, on 11
       call `_files -/`, and return their status.

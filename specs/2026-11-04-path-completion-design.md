@@ -135,8 +135,8 @@ in-progress word. On any other non-zero status it returns nothing, as today.
   `/` to directories. `compgen` returns a typed leading `~` as written (`~/.zsh` gives
   `~/.zshrc`), so the `~` escaping applied to values must skip a leading `~` the user typed,
   or tilde expansion breaks. When `compopt` exists (bash 4+), request `compopt -o nospace`
-  when the only candidate is a directory, on exit 10 or 11. With several candidates bash
-  inserts only their common prefix, so there is no space to drop. Bash 3.2 has no `compopt`,
+  always on exit 11, and on exit 10 when the only candidate is a directory (several
+  candidates there may include files, which want the space). Bash 3.2 has no `compopt`,
   so it inserts a space after `dir/`; that is accepted (decision 1). `complete -o default` is
   rejected: it would fall back to files on every empty result, not just path slots.
 - **zsh.** `_files` for 10 and `_files -/` for 11. zsh quotes the inserted names itself.
