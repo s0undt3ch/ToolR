@@ -1,6 +1,6 @@
 # Parser and `CommandsTester` parity (FU-1, FU-2, FU-3)
 
-- **Status:** proposed
+- **Status:** accepted (open points decided 2026-11-04)
 - **Plan:** [`2026-11-04-parser-tester-parity-plan.md`](./2026-11-04-parser-tester-parity-plan.md)
 - **Prior work:** `archive/2026/2026-10-31-tester-standalone-group-design.md` (unknown-group parity),
   `archive/2026/2026-11-02-symlinked-tools-files-design.md` (same-text errors in both walks),
@@ -30,6 +30,20 @@ Python mirror (`testing/_unknown_groups.py:66-82`) takes the first in sorted ord
 to avoid ties.
 
 ## Decisions
+
+### Decided open points (2026-11-04)
+
+- **New error kind.** Nested-`def` commands, a non-literal `group=` and a non-literal command name share one new
+  error, "unsupported command declarations", and `CommandsTester` raises it with identical text.
+- **Duplicates.** A duplicate `(group, command)` is an error within one source tree: the manifest build (a project's
+  `tools/` or one plugin package) and `CommandsTester`. Cross-tree duplicates (first-party against plugin, plugin
+  against plugin) keep today's warnings.
+- **Plain import.** Outside the tester, importing a module with a duplicate keeps last-one-wins.
+- **Nested command whose outer function never runs.** Stays as described below: the build fails, the tester can't
+  see it.
+- **Tie fixture.** Groups `ab`, `ca` and `ac`, target `aa`, expects `ab`.
+- **Release notes.** The duplicate and rejection note starts `**Breaking:**`; a second, non-breaking note covers the
+  new decorator forms.
 
 ### FU-3: smallest name wins a tie
 
