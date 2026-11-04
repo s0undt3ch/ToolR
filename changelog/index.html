@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev575-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev584-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev575 - 2026-11-04
+        0.35.2-dev584 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev575 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev584 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev575-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev584-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev575 - 2026-11-04
+        0.35.2-dev584 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev575 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev584 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev575-2026-11-04">0.35.2-dev575 - 2026-11-04<a class="headerlink" href="#0352-dev575-2026-11-04" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev584-2026-11-04">0.35.2-dev584 - 2026-11-04<a class="headerlink" href="#0352-dev584-2026-11-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7899,6 +7899,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(manifest)</em> Name static_hash input kinds and tags (<a href="https://github.com/s0undt3ch/ToolR/commit/4e24eea64b025d08dc27aab60d73440056341073"><code>4e24eea</code></a>)</li>
 <li><em>(freshness)</em> Type record contents and stamp the clock in one place (<a href="https://github.com/s0undt3ch/ToolR/commit/b2960c4626c6dbe5c9541990c886f871f024cd39"><code>b2960c4</code></a>)</li>
 <li><em>(exit-status)</em> Simplify the mappers and make platform-specific tests explicit (<a href="https://github.com/s0undt3ch/ToolR/commit/0134b8645e7557ce6e9deba1058f52b4805bd679"><code>0134b86</code></a>)</li>
+<li><em>(cli)</em> Build each built-in subtree in its own function (<a href="https://github.com/s0undt3ch/ToolR/commit/ffa6ea0f641fdc3aaa0a267d67c6e75df5c2c857"><code>ffa6ea0</code></a>)</li>
+<li><em>(cli)</em> Attach the hidden commands with Command::subcommands (<a href="https://github.com/s0undt3ch/ToolR/commit/48bbc82a0ec439c578c87e30593f5bf265e9acd0"><code>48bbc82</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8061,6 +8063,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Update F-20 spec to the -N returncode decision (<a href="https://github.com/s0undt3ch/ToolR/commit/0c247ce712f131039b1454922fb600c80cde2a65"><code>0c247ce</code></a>)</li>
 <li>Document exit codes for signal-killed children (<a href="https://github.com/s0undt3ch/ToolR/commit/f3f87d3ebaed409e09eabdf04e6bd487fc120e77"><code>f3f87d3</code></a>)</li>
 <li><em>(specs)</em> Archive venv-run-signal-exit spec and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/64c35bbdc41e120b0942a6414813c3036215c7b9"><code>64c35bb</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-31 cli build command split (<a href="https://github.com/s0undt3ch/ToolR/commit/93eb291412de61ab36b197d02f8a9d10e798acad"><code>93eb291</code></a>)</li>
+<li><em>(specs)</em> Refresh cli build command spec for current main (<a href="https://github.com/s0undt3ch/ToolR/commit/fa800091593e1ffc28106ecc1c39a6c0e401788e"><code>fa80009</code></a>)</li>
+<li><em>(specs)</em> Archive cli build command design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/92b7f0447aecda8d087dadf0652293baf9b7e06d"><code>92b7f04</code></a>)</li>
+<li><em>(specs)</em> Note the reserved-group skip had no test on main (<a href="https://github.com/s0undt3ch/ToolR/commit/3077e5006aaa341d10eaf57eac1efa565156f972"><code>3077e50</code></a>)</li>
+<li><em>(specs)</em> Correct the dump manifest, test module and group wording (<a href="https://github.com/s0undt3ch/ToolR/commit/ec04a70ccc89337d4cb5afaca3c363ebac0b9e32"><code>ec04a70</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8146,6 +8153,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(freshness)</em> Cover a pyproject edit outside the argparse blocks (<a href="https://github.com/s0undt3ch/ToolR/commit/653fcc6e6e18dcba882f847a1d7a375ffad486f8"><code>653fcc6</code></a>)</li>
 <li><em>(freshness)</em> Use a nanos offset Windows' 100 ns SystemTime can hold (<a href="https://github.com/s0undt3ch/ToolR/commit/ae6e982303875586ebb380cbf8a8ac7a97ee4918"><code>ae6e982</code></a>)</li>
 <li><em>(venv)</em> Cover venv shell exiting 128 + signal for a signal-killed shell (<a href="https://github.com/s0undt3ch/ToolR/commit/2eea9e1629ca03878f75fd0585949225d5f52b8f"><code>2eea9e1</code></a>)</li>
+<li><em>(cli)</em> Pin top-level subcommand order and the reserved-group skip (<a href="https://github.com/s0undt3ch/ToolR/commit/1b417a00d007fd30a239aefea41e7c4b8e7f4445"><code>1b417a0</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
