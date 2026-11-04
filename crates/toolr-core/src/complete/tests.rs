@@ -1,8 +1,9 @@
-use crate::complete::{Candidate, serve_completions};
+use crate::complete::{Candidate, Completion, complete, serve_completions};
 use crate::manifest::{
     Argument, ArgumentKind, Command, Group, Manifest, Origin, PluginWarning, PluginWarningKind,
     SCHEMA_VERSION,
 };
+use crate::parser::SupportedType;
 
 /// Most existing assertions only care about candidate values, not their
 /// descriptions; keep them terse by projecting down to `Vec<String>`.
@@ -1386,4 +1387,181 @@ fn preserve_non_static_carries_cached_plugin_warnings() {
     cached.plugin_warnings = vec![warning.clone()];
     super::freshness::preserve_non_static_entries(&mut fresh, cached);
     assert_eq!(fresh.plugin_warnings, [warning]);
+}
+
+// --- `complete`: path-typed slots hand off to the shell ---
+
+fn typed_arg(name: &str, kind: ArgumentKind, ty: SupportedType, values: &[&str]) -> Argument {
+    Argument {
+        name: name.into(),
+        kind,
+        help: String::new(),
+        default: None,
+        type_annotation: None,
+        resolved_type: Some(ty),
+        metadata: crate::manifest::ArgMetadata::default(),
+        long_flag: None,
+        allowed_values: values.iter().map(|s| (*s).to_string()).collect(),
+    }
+}
+
+fn leaf(name: &str, group: &str, arguments: Vec<Argument>, is_dispatcher: bool) -> Command {
+    Command {
+        name: name.into(),
+        group: group.into(),
+        module: "tools.ci".into(),
+        function: name.into(),
+        summary: String::new(),
+        description: String::new(),
+        arguments,
+        origin: Origin::Static,
+        dispatched_from: None,
+        is_dispatcher,
+    }
+}
+
+fn path_fixture() -> Manifest {
+    use ArgumentKind::{Optional, Positional, VarPositional};
+    let boxed = |t| Box::new(t);
+    Manifest {
+        schema_version: SCHEMA_VERSION,
+        static_hash: "h".into(),
+        third_party_hash: String::new(),
+        toolr_version: String::new(),
+        groups: vec![Group {
+            name: "ci".into(),
+            title: String::new(),
+            description: String::new(),
+            parent: None,
+            origin: Origin::Static,
+        }],
+        commands: vec![
+            leaf(
+                "build",
+                "ci",
+                vec![
+                    typed_arg(
+                        "cfg",
+                        Optional,
+                        SupportedType::Optional(boxed(SupportedType::FilePath)),
+                        &[],
+                    ),
+                    typed_arg("out", Optional, SupportedType::DirectoryPath, &[]),
+                    typed_arg("exe", Optional, SupportedType::ExecutablePath, &[]),
+                    typed_arg("pick", Optional, SupportedType::Path, &["x", "y"]),
+                    typed_arg(
+                        "mode",
+                        Optional,
+                        SupportedType::Literal(vec!["a".into(), "b".into()]),
+                        &["a", "b"],
+                    ),
+                    typed_arg("src", Positional, SupportedType::Path, &[]),
+                    typed_arg(
+                        "rest",
+                        VarPositional,
+                        SupportedType::List(boxed(SupportedType::Path)),
+                        &[],
+                    ),
+                ],
+                false,
+            ),
+            leaf("job", "ci", vec![], true),
+            leaf(
+                "run",
+                "ci.job",
+                vec![typed_arg("cfg", Optional, SupportedType::FilePath, &[])],
+                false,
+            ),
+        ],
+        plugin_warnings: vec![],
+        input_records: Default::default(),
+    }
+}
+
+fn complete_values(c: Completion) -> Vec<String> {
+    match c {
+        Completion::Values(v) => values(v),
+        other => panic!("expected values, got {other:?}"),
+    }
+}
+
+#[test]
+fn complete_flag_values_by_path_type() {
+    let m = path_fixture();
+    for (flag, want) in [
+        ("--cfg", Completion::Paths),
+        ("--out", Completion::Directories),
+        ("--exe", Completion::Paths),
+    ] {
+        assert_eq!(
+            complete(&m, &tokens(&["ci", "build", flag, ""])),
+            want,
+            "{flag}"
+        );
+    }
+}
+
+#[test]
+fn complete_positional_and_variadic_path_slots() {
+    let m = path_fixture();
+    assert_eq!(
+        complete(&m, &tokens(&["ci", "build", ""])),
+        Completion::Paths
+    );
+    assert_eq!(
+        complete(&m, &tokens(&["ci", "build", "a", "b", ""])),
+        Completion::Paths
+    );
+}
+
+#[test]
+fn complete_literal_still_offers_values() {
+    let m = path_fixture();
+    let got = complete_values(complete(&m, &tokens(&["ci", "build", "--mode", ""])));
+    assert_eq!(got, vec!["a", "b"]);
+}
+
+#[test]
+fn complete_flag_names_after_a_path_argument() {
+    let m = path_fixture();
+    let got = complete_values(complete(
+        &m,
+        &tokens(&["ci", "build", "--cfg", "x.toml", "--"]),
+    ));
+    assert!(got.contains(&"--cfg".to_string()), "{got:?}");
+    assert!(got.contains(&"--out".to_string()), "{got:?}");
+}
+
+#[test]
+fn complete_allowed_values_win_over_a_path_type() {
+    let m = path_fixture();
+    let got = complete_values(complete(&m, &tokens(&["ci", "build", "--pick", ""])));
+    assert_eq!(got, vec!["x", "y"]);
+}
+
+#[test]
+fn complete_dispatcher_child_path_flag() {
+    let m = path_fixture();
+    assert_eq!(
+        complete(&m, &tokens(&["ci", "job", "run", "--cfg", ""])),
+        Completion::Paths
+    );
+}
+
+#[test]
+fn complete_matches_serve_completions_outside_path_slots() {
+    let m = path_fixture();
+    for words in [
+        &["ci", ""][..],
+        &["ci", "b"],
+        &["nope", ""],
+        &["ci", "job", ""],
+    ] {
+        let t = tokens(words);
+        assert_eq!(
+            complete(&m, &t),
+            Completion::Values(serve_completions(&m, &t)),
+            "{words:?}"
+        );
+    }
 }

@@ -25,7 +25,7 @@ pub use bool_flag::BoolFlagError;
 pub use imports::{SourcesImports, TypeImports};
 pub use resolve::{resolve, resolve_arguments};
 pub use supported::{
-    SupportedType, SupportedTypeKind, TypeDoc, TypeResolutionError, UnsupportedType,
+    PathCompletion, SupportedType, SupportedTypeKind, TypeDoc, TypeResolutionError, UnsupportedType,
 };
 
 use ruff_python_ast::{Expr, ExprCall};

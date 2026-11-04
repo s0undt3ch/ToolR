@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use clap::builder::styling::{AnsiColor, Effects, Styles};
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, ValueHint};
 
 /// Palette for `--help` output. Yellow + bold for section headers and
 /// `Usage:`, green for arg names and choice values.
@@ -509,6 +509,7 @@ fn build_self_build_manifest_subcommand() -> Command {
             Arg::new("source-dir")
                 .long("source-dir")
                 .value_name("PATH")
+                .value_hint(ValueHint::DirPath)
                 .conflicts_with("package_positional")
                 .help("Path to the package's source tree (bypasses the tools-venv lookup)"),
         )
@@ -526,6 +527,7 @@ fn build_self_build_manifest_subcommand() -> Command {
             Arg::new("output")
                 .long("output")
                 .value_name("PATH")
+                .value_hint(ValueHint::FilePath)
                 .help("Override the output path"),
         )
         .arg(

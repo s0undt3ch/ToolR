@@ -17,11 +17,12 @@
 //! `.hide(true)` in the CLI builder and are skipped — they don't appear
 //! in `--help` and shouldn't be tab-completed either.
 
-use clap::{Arg, ArgAction, Command as ClapCommand};
+use clap::{Arg, ArgAction, Command as ClapCommand, ValueHint};
 use toolr_core::complete::Candidate;
 use toolr_core::manifest::{
     ArgMetadata, Argument, ArgumentKind, Command, Group, Manifest, Origin, SCHEMA_VERSION,
 };
+use toolr_core::parser::SupportedType;
 
 /// The two top-level builtin subtrees, walked out of the clap command.
 const BUILTIN_ROOTS: &[&str] = &["project", "self"];
@@ -163,11 +164,23 @@ fn derive_argument(arg: &Arg) -> Option<Argument> {
         help: arg.get_help().map(ToString::to_string).unwrap_or_default(),
         default: None,
         type_annotation: None,
-        resolved_type: None,
+        resolved_type: path_type(arg.get_value_hint()),
         allowed_values,
         metadata: ArgMetadata::default(),
         long_flag: None,
     })
+}
+
+/// The path type a built-in's clap hint stands for, so its value completes
+/// from the file system like a user command's path argument.
+fn path_type(hint: ValueHint) -> Option<SupportedType> {
+    match hint {
+        ValueHint::AnyPath => Some(SupportedType::Path),
+        ValueHint::FilePath => Some(SupportedType::FilePath),
+        ValueHint::DirPath => Some(SupportedType::DirectoryPath),
+        ValueHint::ExecutablePath => Some(SupportedType::ExecutablePath),
+        _ => None,
+    }
 }
 
 /// clap's `about` rendered to a plain string (empty when unset).
@@ -260,6 +273,29 @@ mod tests {
             .action(ArgAction::SetTrue)
             .hide(true);
         assert!(derive_argument(&hidden).is_none());
+    }
+
+    #[test]
+    fn derive_argument_maps_value_hints_to_path_types() {
+        for (hint, want) in [
+            (ValueHint::AnyPath, Some(SupportedType::Path)),
+            (ValueHint::FilePath, Some(SupportedType::FilePath)),
+            (ValueHint::DirPath, Some(SupportedType::DirectoryPath)),
+            (
+                ValueHint::ExecutablePath,
+                Some(SupportedType::ExecutablePath),
+            ),
+            (ValueHint::Url, None),
+        ] {
+            let arg = Arg::new("p").long("p").value_hint(hint);
+            assert_eq!(
+                derive_argument(&arg).unwrap().resolved_type,
+                want,
+                "{hint:?}"
+            );
+        }
+        let plain = Arg::new("name").long("name");
+        assert_eq!(derive_argument(&plain).unwrap().resolved_type, None);
     }
 
     // --- Behavioural: the derived tree drives real completion output ---

@@ -70,6 +70,10 @@ Shell scripts for bash, zsh, and fish that call a hidden
 `toolr __complete` endpoint on every Tab press. Install once per
 shell with `toolr self completion install <shell>`.
 
+Path-typed arguments complete from the file system, using each shell's
+own file completion. A script installed by an older toolr doesn't do
+this: re-run `toolr self completion install <shell> --force`.
+
 ## The per-repo cache
 
 `$XDG_CACHE_HOME/toolr/` — one entry per repo, each holding its

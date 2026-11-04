@@ -74,7 +74,50 @@ pub enum SupportedType {
     Optional(Box<SupportedType>),
 }
 
+/// What TAB offers for a path-typed argument's value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathCompletion {
+    Any,
+    File,
+    Directory,
+    Executable,
+}
+
 impl SupportedType {
+    /// How TAB completes this type's value, or `None` for a non-path type.
+    /// Exhaustive, so a new variant must decide; clap's `ValueHint` comes from
+    /// the same table.
+    pub fn path_completion(&self) -> Option<PathCompletion> {
+        match self {
+            SupportedType::Path | SupportedType::AbsolutePath | SupportedType::ResolvedPath => {
+                Some(PathCompletion::Any)
+            }
+            SupportedType::FilePath => Some(PathCompletion::File),
+            SupportedType::ExecutablePath => Some(PathCompletion::Executable),
+            // A `NewPath` must not exist yet, so only its parent directory can be picked.
+            SupportedType::NewPath
+            | SupportedType::DirectoryPath
+            | SupportedType::WritableDirectoryPath => Some(PathCompletion::Directory),
+            SupportedType::Optional(inner) | SupportedType::List(inner) => inner.path_completion(),
+            SupportedType::Str
+            | SupportedType::Int
+            | SupportedType::Float
+            | SupportedType::Bool
+            | SupportedType::DateTime
+            | SupportedType::Date
+            | SupportedType::Time
+            | SupportedType::Uuid
+            | SupportedType::Ipv4
+            | SupportedType::Ipv6
+            | SupportedType::Email
+            | SupportedType::Version
+            | SupportedType::Count
+            | SupportedType::Literal(_)
+            | SupportedType::Enum { .. }
+            | SupportedType::Tuple(_) => None,
+        }
+    }
+
     /// Strip an `Optional(T)` wrapper to `T`, returning whether the
     /// original was wrapped. Helps the CLI-build path treat
     /// `T | None` as "T with required=false".
@@ -576,6 +619,54 @@ impl std::fmt::Display for UnsupportedType {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn path_completion_maps_every_path_type() {
+        for (ty, want) in [
+            (SupportedType::Path, PathCompletion::Any),
+            (SupportedType::AbsolutePath, PathCompletion::Any),
+            (SupportedType::ResolvedPath, PathCompletion::Any),
+            (SupportedType::NewPath, PathCompletion::Directory),
+            (SupportedType::FilePath, PathCompletion::File),
+            (SupportedType::ExecutablePath, PathCompletion::Executable),
+            (SupportedType::DirectoryPath, PathCompletion::Directory),
+            (
+                SupportedType::WritableDirectoryPath,
+                PathCompletion::Directory,
+            ),
+        ] {
+            assert_eq!(ty.path_completion(), Some(want), "{ty:?}");
+        }
+    }
+
+    #[test]
+    fn path_completion_unwraps_optional_and_list() {
+        let optional = SupportedType::Optional(Box::new(SupportedType::FilePath));
+        assert_eq!(optional.path_completion(), Some(PathCompletion::File));
+        let list = SupportedType::List(Box::new(SupportedType::DirectoryPath));
+        assert_eq!(list.path_completion(), Some(PathCompletion::Directory));
+    }
+
+    #[test]
+    fn path_completion_is_none_for_non_path_types() {
+        // A tuple's slots complete one by one, which the engine doesn't track.
+        for ty in [
+            SupportedType::Str,
+            SupportedType::Literal(vec!["a".into()]),
+            SupportedType::Tuple(vec![SupportedType::Path]),
+        ] {
+            assert_eq!(ty.path_completion(), None, "{ty:?}");
+        }
+        let non_paths = SupportedTypeKind::ALL
+            .iter()
+            .map(|k| k.representative())
+            .filter(|t| {
+                !t.is_path() && !matches!(t, SupportedType::Optional(_) | SupportedType::List(_))
+            });
+        for ty in non_paths {
+            assert_eq!(ty.path_completion(), None, "{ty:?}");
+        }
+    }
 
     #[test]
     fn is_path_is_true_exactly_for_the_path_kinds() {

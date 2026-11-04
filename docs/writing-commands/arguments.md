@@ -228,6 +228,11 @@ while it parses the command line, before any Python starts. Your function always
 "Canonical" means absolute, with symlinks and `..` resolved, so a symlink to a directory counts as
 a `DirectoryPath`.
 
+Tab completion offers files and directories for every path type. `DirectoryPath`,
+`WritableDirectoryPath` and `NewPath` offer directories only: a `NewPath` must not exist yet, so
+you pick its parent and type the new name. Completion doesn't apply the type's check, so
+`ExecutablePath` offers every file.
+
 ```python
 from toolr import Context
 from toolr.types import FilePath, NewPath

@@ -30,7 +30,8 @@ pub use symbols::{ArgSectionEntry, ArgSectionTable, EnumTable, TypeAliasTable};
 
 pub mod types;
 pub use types::{
-    SourcesImports, SupportedType, TypeImports, UnsupportedType, resolve as resolve_type,
+    PathCompletion, SourcesImports, SupportedType, TypeImports, UnsupportedType,
+    resolve as resolve_type,
 };
 
 pub mod names;

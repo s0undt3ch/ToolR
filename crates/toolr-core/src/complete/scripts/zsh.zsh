@@ -23,6 +23,13 @@ _toolr() {
     # its candidate.
     local -a lines values descriptions
     lines=("${(@f)$(toolr __complete "$PWD" "${passthrough[@]}" 2>/dev/null)}")
+    # 10 = COMPLETE_PATHS, 11 = COMPLETE_DIRECTORIES in crates/toolr/src/dispatch.rs.
+    case $? in
+        0) ;;
+        10) _files; return ;;
+        11) _files -/; return ;;
+        *) return ;;
+    esac
     # `compadd -d` uses the description array as the *displayed* text for
     # each match, not just an annotation - an empty description would show
     # as a blank row, so fall back to the value itself when none exists.
