@@ -9,9 +9,10 @@ from pathlib import Path
 from rich.markup import escape
 
 from toolr import Context
-from tools.ci import REPO_ROOT
 
 from ._common import group
+
+from tools.ci import REPO_ROOT
 
 FIXTURES_DIR = "files"
 

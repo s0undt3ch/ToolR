@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from toolr.testing import make_context
+
 from tools.release_notes import NOTE_NAME_RE
 from tools.release_notes import _note_filename
 from tools.release_notes import _slug_from_branch

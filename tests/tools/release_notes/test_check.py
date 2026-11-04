@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from toolr.testing import make_context
+
 from tools.release_notes import Commit
 from tools.release_notes import _file_problems
 from tools.release_notes import _has_skip_trailer

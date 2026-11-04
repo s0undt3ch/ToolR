@@ -13,13 +13,14 @@ from typing import NamedTuple
 from rich.markup import escape
 
 from toolr import Context
+
+from ._common import group
+
 from tools.ci import ABI3_WHEEL_PYTHONS
 from tools.ci import BINARY_WHEEL_PYTHONS
 from tools.ci import REPO_ROOT
 from tools.ci import python3_floor
 from tools.ci import supported_minors
-
-from ._common import group
 
 REQUIRES_PYTHON_SOURCE = "requires-python in crates/toolr-py/pyproject.toml"
 

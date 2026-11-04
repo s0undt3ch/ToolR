@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from toolr.testing import make_context
+
 from tools.release_notes import _github_env_block
 from tools.release_notes import _render
 from tools.release_notes import render
