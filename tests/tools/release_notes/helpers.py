@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
+
+from tests._git import git
 
 VALID_NOTE_NAME = "2026-11-01.14-03-27.foo.md"
 FEATURE_NOTE_PATH = "release-notes/2026-11-01.15-00-00.bar.md"
@@ -12,20 +13,6 @@ LONG_NOTE = (
     + "word " * 30
     + "end :smile:"
 )
-
-
-def git(repo: Path, *args: str) -> str:
-    cmd = [
-        "git",
-        "-C",
-        str(repo),
-        "-c",
-        "commit.gpgsign=false",
-        "-c",
-        "core.hooksPath=/dev/null",
-        *args,
-    ]
-    return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout  # noqa: S603
 
 
 def staged(repo: Path) -> list[str]:

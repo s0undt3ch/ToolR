@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from tests._git import configure_identity
+from tests._git import git
 from tests.tools.release_notes.helpers import VALID_NOTE_NAME
 from tests.tools.release_notes.helpers import commit
-from tests.tools.release_notes.helpers import git
 
 
 @pytest.fixture
@@ -34,9 +35,7 @@ def git_repo(tmp_path: Path) -> Callable[..., Path]:
 
     def _make(branch: str = "main") -> Path:
         git(tmp_path, "init", "-b", "main")
-        git(tmp_path, "config", "user.name", "Test")
-        git(tmp_path, "config", "user.email", "test@example.com")
-        git(tmp_path, "config", "commit.gpgsign", "false")
+        configure_identity(tmp_path)
         git(tmp_path, "commit", "--allow-empty", "-m", "init")
         if branch != "main":
             git(tmp_path, "checkout", "-b", branch)

@@ -16,7 +16,7 @@ from tools.release_notes import _note_filename
 from tools.release_notes import _slug_from_branch
 from tools.release_notes import add
 
-from tests.tools.release_notes.helpers import git
+from tests._git import git
 from tests.tools.release_notes.helpers import notes
 from tests.tools.release_notes.helpers import staged
 

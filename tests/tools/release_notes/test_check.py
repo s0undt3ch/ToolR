@@ -18,10 +18,10 @@ from tools.release_notes import _scan_markdown
 from tools.release_notes import check
 from tools.release_notes import clear
 
+from tests._git import git
 from tests.tools.release_notes.helpers import FEATURE_NOTE_PATH
 from tests.tools.release_notes.helpers import VALID_NOTE_NAME
 from tests.tools.release_notes.helpers import commit
-from tests.tools.release_notes.helpers import git
 
 
 def test_valid_tree_no_problems(
