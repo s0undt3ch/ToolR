@@ -70,6 +70,19 @@ pub enum UvError {
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+    /// The download couldn't be checked: the release tag didn't resolve, or
+    /// its checksum file was missing or malformed.
+    #[error("couldn't verify the uv download {asset}: {reason}")]
+    Unverified { asset: String, reason: String },
+    #[error(
+        "checksum mismatch for uv {asset} from release {tag}: expected SHA-256 {expected}, got {actual}"
+    )]
+    ChecksumMismatch {
+        asset: String,
+        tag: String,
+        expected: String,
+        actual: String,
+    },
     #[error("uv sync failed with exit code {0:?}")]
     SyncFailed(Option<i32>),
 }
@@ -138,6 +151,12 @@ impl UvError {
                  yourself from https://docs.astral.sh/uv/getting-started/installation/ \
                  and rerun."
                 .into(),
+            Self::Unverified { .. } | Self::ChecksumMismatch { .. } => {
+                "toolr didn't install uv because it couldn't verify the download. \
+                 Install uv yourself from \
+                 https://docs.astral.sh/uv/getting-started/installation/ and rerun."
+                    .into()
+            }
             other => other.to_string(),
         }
     }
@@ -367,5 +386,32 @@ mod tests {
         let s = UvError::NotAvailable.user_message();
         assert_eq!(s, UvError::NotAvailable.to_string());
         assert!(!s.starts_with("toolr:"), "actual: {s}");
+    }
+
+    #[test]
+    fn verification_errors_name_the_details_and_point_at_manual_install() {
+        let unverified = UvError::Unverified {
+            asset: "uv-a.tar.gz".into(),
+            reason: "no checksum".into(),
+        };
+        let mismatch = UvError::ChecksumMismatch {
+            asset: "uv-a.tar.gz".into(),
+            tag: "9.9.9".into(),
+            expected: "aa".into(),
+            actual: "bb".into(),
+        };
+        assert!(unverified.to_string().contains("uv-a.tar.gz"));
+        assert!(unverified.to_string().contains("no checksum"));
+        for needle in ["uv-a.tar.gz", "9.9.9", "aa", "bb"] {
+            assert!(mismatch.to_string().contains(needle), "{mismatch}");
+        }
+        for err in [unverified, mismatch] {
+            let s = err.user_message();
+            assert!(
+                s.contains("https://docs.astral.sh/uv/getting-started/installation/"),
+                "actual: {s}"
+            );
+            assert!(!s.starts_with("toolr:"), "actual: {s}");
+        }
     }
 }

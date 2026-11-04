@@ -249,15 +249,96 @@ fn ldd_reports_musl_in(path: Option<std::ffi::OsString>) -> bool {
     stdout.to_lowercase().contains("musl") || stderr.to_lowercase().contains("musl")
 }
 
-/// Where to download from. Parametrised so tests can override.
-pub fn asset_url(asset: &str, ext: &str) -> String {
-    format!("https://github.com/astral-sh/uv/releases/latest/download/{asset}.{ext}")
+/// Where uv's GitHub releases live.
+const UV_RELEASES: &str = "https://github.com/astral-sh/uv";
+
+fn latest_asset_url(base: &str, file: &str) -> String {
+    format!("{base}/releases/latest/download/{file}")
+}
+
+fn tagged_asset_url(base: &str, tag: &str, file: &str) -> String {
+    format!("{base}/releases/download/{tag}/{file}")
+}
+
+fn unverified(file: &str, reason: impl Into<String>) -> UvError {
+    UvError::Unverified {
+        asset: file.to_string(),
+        reason: reason.into(),
+    }
+}
+
+/// Read the release tag from the `/latest` redirect without following it, so
+/// the checksum and the archive both come from that one release.
+fn resolve_tag(base: &str, file: &str) -> Result<String, UvError> {
+    let url = latest_asset_url(base, file);
+    // `Client::builder()` keeps reqwest's HTTP(S)_PROXY handling.
+    let client = reqwest::blocking::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| UvError::Http(e.to_string()))?;
+    // A 4xx/5xx is a failed request, like an unreachable host, not a bad redirect.
+    let response = client.get(&url).send().and_then(|r| r.error_for_status());
+    let response = response.map_err(|e| UvError::Http(e.to_string()))?;
+    if !response.status().is_redirection() {
+        let status = response.status();
+        return Err(unverified(
+            file,
+            format!("{url} answered {status}, not a redirect"),
+        ));
+    }
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| unverified(file, format!("{url} redirected without a Location")))?;
+    let target = response
+        .url()
+        .join(location)
+        .map_err(|e| unverified(file, format!("bad redirect {location:?}: {e}")))?;
+    tag_from_path(target.path(), file)
+        .map(str::to_string)
+        .ok_or_else(|| unverified(file, format!("unexpected redirect to {target}")))
+}
+
+fn tag_from_path<'a>(path: &'a str, file: &str) -> Option<&'a str> {
+    let (rest, tag) = path
+        .strip_suffix(file)?
+        .strip_suffix('/')?
+        .rsplit_once('/')?;
+    let valid = !tag.is_empty()
+        && tag != "."
+        && tag != ".."
+        && tag
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._+-".contains(c));
+    (valid && rest.ends_with("/releases/download")).then_some(tag)
+}
+
+/// Parse a `sha256sum`-format sidecar for `file` into its lowercase digest.
+fn parse_sidecar(text: &str, file: &str) -> Result<String, UvError> {
+    let mut tokens = text.split_whitespace();
+    let digest = tokens
+        .next()
+        .filter(|d| d.len() == 64 && d.chars().all(|c| c.is_ascii_hexdigit()))
+        .ok_or_else(|| unverified(file, "the checksum file holds no SHA-256 digest"))?;
+    match (tokens.next(), tokens.next()) {
+        (None, _) => {}
+        (Some(name), None) if name.strip_prefix('*').unwrap_or(name) == file => {}
+        _ => return Err(unverified(file, "the checksum file names another file")),
+    }
+    Ok(digest.to_ascii_lowercase())
 }
 
 /// Download + extract uv into the managed location.
 pub fn perform_install() -> Result<UvBinary, UvError> {
     let dest = managed_uv_path()
         .ok_or_else(|| UvError::Http("could not resolve $XDG_DATA_HOME/toolr/bin".into()))?;
+    perform_install_from(UV_RELEASES, &dest)
+}
+
+/// Install the host's uv from the latest release under `base`, after checking
+/// it against the `.sha256` file published in that same release.
+pub(crate) fn perform_install_from(base: &str, dest: &Path) -> Result<UvBinary, UvError> {
     let (asset, ext) = host_asset().ok_or_else(|| {
         UvError::Http(format!(
             "no prebuilt uv asset for {}-{}",
@@ -265,17 +346,35 @@ pub fn perform_install() -> Result<UvBinary, UvError> {
             std::env::consts::ARCH
         ))
     })?;
-    let url = asset_url(asset, ext);
-    download_and_extract(&url, asset, ext, &dest)?;
-    probe(&dest, UvSource::FreshlyInstalled)
+    let file = format!("{asset}.{ext}");
+    let tag = resolve_tag(base, &file)?;
+    let sidecar_url = tagged_asset_url(base, &tag, &format!("{file}.sha256"));
+    let sidecar = reqwest::blocking::get(&sidecar_url)
+        .and_then(|r| r.error_for_status())
+        .and_then(|r| r.text());
+    let sidecar = sidecar.map_err(|e| unverified(&file, format!("no checksum file: {e}")))?;
+    let expected = parse_sidecar(&sidecar, &file)?;
+    let url = tagged_asset_url(base, &tag, &file);
+    download_and_extract(&url, asset, ext, dest, &expected, &tag)?;
+    probe(dest, UvSource::FreshlyInstalled)
 }
 
-fn download_and_extract(url: &str, asset: &str, ext: &str, dest: &Path) -> Result<(), UvError> {
-    let parent = dest
-        .parent()
-        .ok_or_else(|| UvError::Http("managed uv path has no parent directory".into()))?;
-    fs::create_dir_all(parent)?;
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
 
+fn download_and_extract(
+    url: &str,
+    asset: &str,
+    ext: &str,
+    dest: &Path,
+    expected_sha256: &str,
+    tag: &str,
+) -> Result<(), UvError> {
     let response = reqwest::blocking::get(url)
         .map_err(|e| UvError::Http(e.to_string()))?
         .error_for_status()
@@ -283,6 +382,21 @@ fn download_and_extract(url: &str, asset: &str, ext: &str, dest: &Path) -> Resul
     let bytes = response.bytes().map_err(|e| UvError::Http(e.to_string()))?;
 
     let archive_name = format!("{asset}.{ext}");
+    // Hash the exact bytes we unpack, before anything reaches the disk.
+    let actual = sha256_hex(&bytes);
+    if actual != expected_sha256 {
+        return Err(UvError::ChecksumMismatch {
+            asset: archive_name,
+            tag: tag.to_string(),
+            expected: expected_sha256.to_string(),
+            actual,
+        });
+    }
+
+    let parent = dest
+        .parent()
+        .ok_or_else(|| UvError::Http("managed uv path has no parent directory".into()))?;
+    fs::create_dir_all(parent)?;
     let tmp = tempfile::tempdir()?;
     let archive_path = tmp.path().join(&archive_name);
     fs::write(&archive_path, &bytes)?;
@@ -701,13 +815,122 @@ mod tests {
         assert!(!ldd_reports_musl_in(None));
     }
 
+    const HEX: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const FILE: &str = "uv-x86_64-apple-darwin.tar.gz";
+
     #[test]
-    fn asset_url_points_at_latest_download() {
-        let url = asset_url("uv-x86_64-apple-darwin", "tar.gz");
+    fn url_builders_point_at_latest_and_tagged_downloads() {
         assert_eq!(
-            url,
+            latest_asset_url(UV_RELEASES, FILE),
             "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-apple-darwin.tar.gz"
         );
+        assert_eq!(
+            tagged_asset_url(UV_RELEASES, "0.13.7", FILE),
+            "https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-apple-darwin.tar.gz"
+        );
+    }
+
+    #[test]
+    fn parse_sidecar_accepts_sha256sum_shapes() {
+        for text in [
+            format!("{HEX}  {FILE}\n"),
+            format!("{HEX} *{FILE}"),
+            format!("{HEX}\n"),
+            format!("{}  {FILE}\n", HEX.to_uppercase()),
+        ] {
+            assert_eq!(parse_sidecar(&text, FILE).unwrap(), HEX, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn parse_sidecar_rejects_malformed_checksums() {
+        for text in [
+            String::new(),
+            format!("{}  {FILE}", &HEX[1..]),
+            format!("{}g  {FILE}", &HEX[1..]),
+            format!("{HEX}  uv-other.tar.gz"),
+            format!("{HEX}  {FILE} extra"),
+        ] {
+            let err = parse_sidecar(&text, FILE).unwrap_err();
+            assert!(
+                matches!(&err, UvError::Unverified { asset, .. } if asset == FILE),
+                "{text:?}: {err:?}"
+            );
+        }
+    }
+
+    fn redirect(location: Option<&str>) -> Route {
+        Route {
+            status: 302,
+            headers: location
+                .map(|l| vec![("Location".to_string(), l.to_string())])
+                .unwrap_or_default(),
+            body: Vec::new(),
+        }
+    }
+
+    fn latest_path(file: &str) -> String {
+        format!("/releases/latest/download/{file}")
+    }
+
+    #[test]
+    fn resolve_tag_reads_the_tag_from_the_latest_redirect() {
+        let server = serve(HashMap::from([(
+            latest_path(FILE),
+            redirect(Some(&format!("/releases/download/v9.9.9/{FILE}"))),
+        )]));
+        let base = format!("http://{}", server.addr);
+        assert_eq!(resolve_tag(&base, FILE).unwrap(), "v9.9.9");
+        // The redirect itself is never followed.
+        assert_eq!(*server.hits.lock().unwrap(), [latest_path(FILE)]);
+    }
+
+    #[test]
+    fn resolve_tag_accepts_an_absolute_location() {
+        let location = format!("{UV_RELEASES}/releases/download/0.13.7/{FILE}");
+        let server = serve(HashMap::from([(
+            latest_path(FILE),
+            redirect(Some(&location)),
+        )]));
+        let base = format!("http://{}", server.addr);
+        assert_eq!(resolve_tag(&base, FILE).unwrap(), "0.13.7");
+    }
+
+    #[test]
+    fn resolve_tag_rejects_anything_but_a_tagged_redirect() {
+        let routes = [
+            Route::ok(b"archive".to_vec()),
+            redirect(None),
+            redirect(Some("/releases/download/v1/uv-other.tar.gz")),
+            redirect(Some(&format!("/elsewhere/v1/{FILE}"))),
+            redirect(Some(&format!("/releases/download/{FILE}"))),
+            redirect(Some(&format!("/releases/download//{FILE}"))),
+            redirect(Some(&format!("/releases/download/../{FILE}"))),
+            redirect(Some(&format!("/releases/download/./{FILE}"))),
+            redirect(Some(&format!("/releases/download/a%2Fb/{FILE}"))),
+            redirect(Some(&format!("/releases/download/a b/{FILE}"))),
+            redirect(Some("http://[::1")),
+        ];
+        for route in routes {
+            let status = route.status;
+            let headers = route.headers.clone();
+            let server = serve(HashMap::from([(latest_path(FILE), route)]));
+            let base = format!("http://{}", server.addr);
+            let err = resolve_tag(&base, FILE).unwrap_err();
+            assert!(
+                matches!(&err, UvError::Unverified { asset, .. } if asset == FILE),
+                "{status} {headers:?}: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_tag_reports_a_failed_request_as_http() {
+        let server = serve(HashMap::new());
+        let err = resolve_tag(&format!("http://{}", server.addr), FILE).unwrap_err();
+        assert!(matches!(err, UvError::Http(_)), "got {err:?}");
+        let err = resolve_tag("http://this-host-cannot-exist.invalid", FILE).unwrap_err();
+        assert!(matches!(err, UvError::Http(_)), "got {err:?}");
     }
 
     #[cfg(unix)]
@@ -848,21 +1071,127 @@ mod tests {
 
     #[test]
     fn perform_install_surfaces_http_failure_for_unreachable_host() {
-        // Drive `download_and_extract` directly with a guaranteed-bad URL so
-        // we exercise the reqwest error path without touching the network's
-        // real DNS / firewall behaviour. Using a `.invalid` TLD per RFC 2606.
+        // `.invalid` never resolves (RFC 2606).
         let tmp = tempfile::tempdir().unwrap();
         let dest = tmp.path().join("bin").join("uv");
-        let err = download_and_extract(
-            "http://this-host-cannot-exist.invalid/uv-x86_64-apple-darwin.tar.gz",
-            "uv-x86_64-apple-darwin",
-            "tar.gz",
-            &dest,
-        )
-        .unwrap_err();
+        let err = perform_install_from("http://this-host-cannot-exist.invalid", &dest).unwrap_err();
+        assert!(matches!(err, UvError::Http(_)), "got {err:?}");
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn sha256_hex_matches_the_known_vector() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    const TAG: &str = "v9.9.9";
+
+    fn host_file() -> (&'static str, &'static str, String) {
+        let (asset, ext) = host_asset().expect("tests run on a host uv publishes for");
+        (asset, ext, format!("{asset}.{ext}"))
+    }
+
+    /// A fake uv release: `/latest` redirects to `TAG`, which holds the
+    /// archive and, when given, its checksum file.
+    fn fake_release(file: &str, archive: Vec<u8>, sidecar: Option<String>) -> TestServer {
+        let tagged = format!("/releases/download/{TAG}/{file}");
+        let mut routes = HashMap::from([
+            (latest_path(file), redirect(Some(&tagged))),
+            (tagged.clone(), Route::ok(archive)),
+        ]);
+        if let Some(sidecar) = sidecar {
+            routes.insert(format!("{tagged}.sha256"), Route::ok(sidecar));
+        }
+        serve(routes)
+    }
+
+    /// The host's archive holding a `uv` that reports `uv 9.9.9`.
+    fn host_archive(dir: &Path) -> Vec<u8> {
+        let (asset, ext, file) = host_file();
+        let binary = super::super::uv_basename();
+        let script: &[u8] = b"#!/bin/sh\necho 'uv 9.9.9'\n";
+        let archive = dir.join(&file);
+        let entry = format!("{asset}/{binary}");
+        match ext {
+            "zip" => write_zip(&archive, &[(&entry, script)]),
+            _ => write_tar_gz(&archive, &[(&entry, script)]),
+        }
+        fs::read(&archive).unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn perform_install_from_installs_a_verified_release() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, _, file) = host_file();
+        let archive = host_archive(tmp.path());
+        let sidecar = format!("{}  {file}\n", sha256_hex(&archive));
+        let server = fake_release(&file, archive, Some(sidecar));
+        let dest = tmp.path().join("bin").join("uv");
+
+        let uv = perform_install_from(&format!("http://{}", server.addr), &dest).unwrap();
+
+        assert_eq!(uv.version, (9, 9, 9));
+        assert_eq!(uv.source, UvSource::FreshlyInstalled);
+        let mode = fs::metadata(&dest).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755);
+        let tagged = format!("/releases/download/{TAG}/{file}");
+        assert_eq!(
+            *server.hits.lock().unwrap(),
+            [latest_path(&file), format!("{tagged}.sha256"), tagged]
+        );
+    }
+
+    #[test]
+    fn perform_install_from_refuses_a_checksum_mismatch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, _, file) = host_file();
+        let archive = host_archive(tmp.path());
+        let actual_digest = sha256_hex(&archive);
+        let server = fake_release(&file, archive, Some(format!("{HEX}  {file}\n")));
+        let dest = tmp.path().join("bin").join("uv");
+
+        let err = perform_install_from(&format!("http://{}", server.addr), &dest).unwrap_err();
+
         match err {
-            UvError::Http(_) => {}
-            other => panic!("expected Http error, got {other:?}"),
+            UvError::ChecksumMismatch {
+                asset,
+                tag,
+                expected,
+                actual,
+            } => {
+                assert_eq!(asset, file);
+                assert_eq!(tag, TAG);
+                assert_eq!(expected, HEX);
+                assert_eq!(actual, actual_digest);
+            }
+            other => panic!("expected ChecksumMismatch, got {other:?}"),
+        }
+        assert!(!dest.parent().unwrap().exists());
+    }
+
+    #[test]
+    fn perform_install_from_refuses_a_missing_or_malformed_checksum() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, _, file) = host_file();
+        for sidecar in [None, Some(format!("{HEX}  uv-other.tar.gz\n"))] {
+            let server = fake_release(&file, host_archive(tmp.path()), sidecar.clone());
+            let dest = tmp.path().join("bin").join("uv");
+
+            let err = perform_install_from(&format!("http://{}", server.addr), &dest).unwrap_err();
+
+            assert!(
+                matches!(&err, UvError::Unverified { asset, .. } if *asset == file),
+                "{sidecar:?}: {err:?}"
+            );
+            assert!(!dest.parent().unwrap().exists());
+            // The archive is never fetched without a usable checksum.
+            let tagged = format!("/releases/download/{TAG}/{file}");
+            assert!(!server.hits.lock().unwrap().contains(&tagged));
         }
     }
 
@@ -877,6 +1206,7 @@ mod tests {
         let archive = tmp.path().join("uv.tar.gz");
         write_tar_gz(&archive, &[("uv-fake-asset/not-uv", b"placeholder")]);
         let payload = std::fs::read(&archive).unwrap();
+        let digest = sha256_hex(&payload);
 
         let server = serve_one("/uv.tar.gz", payload);
         let dest = tmp.path().join("bin").join("uv");
@@ -885,6 +1215,8 @@ mod tests {
             "uv-fake-asset",
             "tar.gz",
             &dest,
+            &digest,
+            TAG,
         )
         .unwrap_err();
         match err {
@@ -912,6 +1244,7 @@ mod tests {
         let archive = tmp.path().join("uv.tar.gz");
         write_tar_gz(&archive, &[("uv-asset-x/uv", b"#!/bin/sh\necho fake-uv\n")]);
         let payload = std::fs::read(&archive).unwrap();
+        let digest = sha256_hex(&payload);
 
         let server = serve_one("/uv.tar.gz", payload);
         let dest = tmp.path().join("dest").join("uv");
@@ -920,6 +1253,8 @@ mod tests {
             asset_name,
             "tar.gz",
             &dest,
+            &digest,
+            TAG,
         )
         .expect("happy path should succeed");
         assert!(dest.is_file(), "destination uv should exist");
@@ -935,18 +1270,23 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("uv.zip");
         write_zip(&archive, &[(binary_name, b"fake-uv")]);
-        let server = serve_one("/uv.zip", fs::read(&archive).unwrap());
+        let payload = fs::read(&archive).unwrap();
+        let digest = sha256_hex(&payload);
+        let server = serve_one("/uv.zip", payload);
         let dest = tmp.path().join("dest").join(binary_name);
         download_and_extract(
             &format!("http://{}/uv.zip", server.addr),
             "uv-x86_64-pc-windows-msvc",
             "zip",
             &dest,
+            &digest,
+            TAG,
         )
         .expect("zip asset should install");
         assert_eq!(fs::read(&dest).unwrap(), b"fake-uv");
     }
 
+    #[derive(Clone)]
     struct Route {
         status: u16,
         headers: Vec<(String, String)>,

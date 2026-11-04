@@ -35,6 +35,7 @@ full = [
     "dep:flate2",
     "dep:tar",
     "dep:zip",
+    "dep:sha2",
 ]
 
 [dependencies]
@@ -63,6 +64,7 @@ reqwest = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
 tar = { workspace = true, optional = true }
 zip = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
 # `command` walks and kills the child's process tree with it.

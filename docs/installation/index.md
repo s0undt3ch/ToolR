@@ -158,6 +158,12 @@ macOS (x86_64 and Apple silicon) and Windows (x86_64). On other hosts,
 install uv yourself. Toolr unpacks the download itself, so the host
 needs no `tar` or `unzip`.
 
+Before unpacking, toolr checks the download against the SHA-256
+checksum published with the same uv release. If the checksum is
+missing or doesn't match, toolr installs nothing and stops with an
+error. Install uv yourself in that case. The checksum catches a
+corrupted or altered download, not a compromised uv release.
+
 On Linux, toolr downloads the glibc or musl build of uv to match the
 host. If it guesses wrong, set `TOOLR_UV_LIBC=gnu` or
 `TOOLR_UV_LIBC=musl`.
