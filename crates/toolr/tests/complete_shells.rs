@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use tempfile::TempDir;
 
+/// Files under the fixture root that path slots complete. `files/sub/` is a directory.
+const PATH_FILES: [&str; 2] = ["files/with space.txt", "files/$(touch sentinel-three)"];
+
 /// `SENTINEL` and `SENTINEL2` stand for paths the fixture fills in.
 const CHOICES: [&str; 7] = [
     "fast",
@@ -23,6 +26,8 @@ struct Fixture {
     tmp: TempDir,
     sentinel: PathBuf,
     sentinel2: PathBuf,
+    /// Created only if the file named `$(touch sentinel-three)` runs.
+    sentinel3: PathBuf,
 }
 
 impl Fixture {
@@ -41,11 +46,18 @@ fn fixture() -> Fixture {
     let tmp = TempDir::new().unwrap();
     let sentinel = tmp.path().join("sentinel-one");
     let sentinel2 = tmp.path().join("sentinel-two");
+    let sentinel3 = tmp.path().join("sentinel-three");
     common::write_project(tmp.path());
+    let files = tmp.path().join("files");
+    std::fs::create_dir_all(files.join("sub")).unwrap();
+    for name in PATH_FILES {
+        std::fs::write(tmp.path().join(name), "").unwrap();
+    }
     let fx = Fixture {
         tmp,
         sentinel,
         sentinel2,
+        sentinel3,
     };
     let literal = fx
         .choices()
@@ -55,16 +67,26 @@ fn fixture() -> Fixture {
         .join(", ");
     let src = format!(
         r#""""CI utilities."""
+import pathlib
 from typing import Literal
+
+from toolr.types import DirectoryPath
 
 group = command_group("ci", "CI utilities", docstring=__doc__)
 
 @group.command
-def lint(ctx, mode: Literal[{literal}] = "fast"):
+def lint(
+    ctx,
+    mode: Literal[{literal}] = "fast",
+    cfg: pathlib.Path | None = None,
+    out: DirectoryPath | None = None,
+):
     """Lint things.
 
     Args:
         mode: Lint mode.
+        cfg: Config path.
+        out: Output directory.
     """
     pass
 "#
@@ -108,6 +130,8 @@ struct BashRun {
     stderr: String,
     reply: Vec<String>,
     quoted: Vec<String>,
+    /// Arguments of each `compopt` call, recorded only where bash has the builtin.
+    compopt: Vec<String>,
 }
 
 impl BashRun {
@@ -125,12 +149,34 @@ fn run_bash(bash: &str, fx: &Fixture, cur: &str) -> BashRun {
 
 /// `tail` holds words typed after the cursor's word, so `cword` is not last.
 fn run_bash_with_tail(bash: &str, fx: &Fixture, cur: &str, tail: &str) -> BashRun {
+    let script = print_script("bash");
+    run_bash_script(bash, &script, fx, "--mode", cur, tail, &fx.choices())
+}
+
+/// Complete `cur` as the value of a path flag; `quote` lists the raw names
+/// whose `%q` forms land in [`BashRun::quoted`].
+fn run_bash_path(bash: &str, script: &str, fx: &Fixture, flag: &str, cur: &str) -> BashRun {
+    let quote: Vec<String> = PATH_FILES.iter().map(|f| (*f).to_string()).collect();
+    run_bash_script(bash, script, fx, flag, cur, "", &quote)
+}
+
+fn run_bash_script(
+    bash: &str,
+    script: &str,
+    fx: &Fixture,
+    flag: &str,
+    cur: &str,
+    tail: &str,
+    quote: &[String],
+) -> BashRun {
     const DRIVER: &str = r#"
-script=$1; cur=$2; shift 2
+script=$1; flag=$2; cur=$3; shift 3
 if [ "$cur" = @QDRY ]; then cur=$(printf '%q' "dry "); fi
-TW=(toolr ci lint --mode "$cur")
+TW=(toolr ci lint "$flag" "$cur")
 for t in $TW_TAIL; do TW+=("$t"); done
 _init_completion() { words=("${TW[@]}"); cword=4; cur="${words[cword]}"; prev="${words[cword-1]}"; return 0; }
+# The builtin only works inside a live completion, so record its calls instead.
+if type compopt >/dev/null 2>&1; then compopt() { printf 'COMPOPT:%s\n' "$*"; }; fi
 eval "$script"
 _toolr_complete; rc=$?
 printf 'RC:%s\n' "$rc"
@@ -141,11 +187,14 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
         .arg("-c")
         .arg(DRIVER)
         .arg("driver")
-        .arg(print_script("bash"))
+        .arg(script)
+        .arg(flag)
         .arg(cur)
-        .args(fx.choices())
+        .args(quote)
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
+        // `~/` completes inside the fixture.
+        .env("HOME", fx.tmp.path())
         // The shell runs toolr itself, so mirror `common::toolr`'s cache isolation.
         .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("TW_TAIL", tail)
@@ -163,7 +212,16 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
         stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
         reply: pick("R:"),
         quoted: pick("Q:"),
+        compopt: pick("COMPOPT:"),
     }
+}
+
+fn bash_has_compopt(bash: &str) -> bool {
+    StdCommand::new(bash)
+        .args(["-c", "type compopt"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 fn bashes() -> Vec<String> {
@@ -274,6 +332,147 @@ fn bash_completes_the_cursor_word_when_it_is_not_last() {
     }
 }
 
+#[test]
+fn bash_path_flag_completes_files_quoted_and_inert() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.stderr, "", "{bash}");
+        let mut want = run.quoted.clone();
+        want.push("files/sub/".to_string());
+        want.sort();
+        let mut got = run.reply.clone();
+        got.sort();
+        assert_eq!(got, want, "{bash}");
+        assert!(!fx.sentinel3.exists(), "{bash}: file name executed");
+        // Several matches: bash inserts only their common prefix, so no space to drop.
+        assert!(run.compopt.is_empty(), "{bash}: {:?}", run.compopt);
+    }
+}
+
+#[test]
+fn bash_directory_flag_completes_only_directories() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--out", "files/");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
+        // Bash 3.2 has no `compopt` and keeps the space after `sub/`.
+        let want: Vec<String> = if bash_has_compopt(&bash) {
+            vec!["-o nospace".to_string()]
+        } else {
+            vec![]
+        };
+        assert_eq!(run.compopt, want, "{bash}");
+    }
+}
+
+#[test]
+fn bash_single_directory_match_on_a_path_flag_drops_the_space() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/s");
+        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
+        let want: Vec<String> = if bash_has_compopt(&bash) {
+            vec!["-o nospace".to_string()]
+        } else {
+            vec![]
+        };
+        assert_eq!(run.compopt, want, "{bash}");
+        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/w");
+        assert_eq!(
+            run.reply,
+            vec!["files/with\\ space.txt".to_string()],
+            "{bash}"
+        );
+        assert!(run.compopt.is_empty(), "{bash}: {:?}", run.compopt);
+    }
+}
+
+#[test]
+fn bash_path_keeps_a_typed_leading_tilde() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "~/files/");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert!(
+            run.reply.contains(&"~/files/sub/".to_string()),
+            "{bash}: {:?}",
+            run.reply
+        );
+        assert!(
+            run.reply.contains(&"~/files/with\\ space.txt".to_string()),
+            "{bash}: {:?}",
+            run.reply
+        );
+        assert!(
+            run.reply.iter().all(|r| r.starts_with("~/")),
+            "{bash}: {:?}",
+            run.reply
+        );
+        assert!(!fx.sentinel3.exists(), "{bash}: file name executed");
+    }
+}
+
+/// The bash script shipped before path completion, as an installed copy would hold it.
+const OLD_BASH_SCRIPT: &str = r#"# shellcheck shell=bash
+# toolr bash completion - delegates to `toolr __complete`.
+#
+# Install via `toolr self completion install bash`, or source this file
+# directly. Re-source on every shell start; manifest contents are read
+# at Tab time, not when this script is sourced.
+
+_toolr_complete() {
+    local cur prev words cword
+    _init_completion || return
+
+    # `prev` is populated by `_init_completion` per bash-completion
+    # convention but unused below.
+    : "$prev"
+
+    # A prefix bash inserted earlier arrives backslash-escaped (`dry\ `),
+    # while the engine matches raw values.
+    local raw_cur=${cur//\\/}
+
+    # Words after the cursor are dropped; `raw_cur` stands in for words[cword].
+    local args=("${words[@]:1:cword-1}" "$raw_cur")
+
+    local raw
+    raw=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null) || return 0
+    [[ -z "$raw" ]] && return 0
+
+    # Each line is `value<TAB>description` - bash has no per-candidate
+    # description support, so drop everything from the tab onward.
+    # Candidates are repo-derived data: `compgen -W` would expand `$(...)`
+    # inside a value, so compare literally and quote with `printf %q`.
+    local value q bare_tilde
+    # Bash < 5 `%q` leaves `~` bare, and bash tilde-expands it at a word start or after `=`.
+    printf -v bare_tilde '%q' '~'
+    while IFS=$'\t' read -r value _; do
+        printf -v q '%q' "$value"
+        [[ $bare_tilde == '~' ]] && q=${q//\~/\\~}
+        # `cur` may already hold the quoted form from an earlier insertion.
+        if [[ $value == "$raw_cur"* || $q == "$cur"* ]]; then
+            COMPREPLY+=("$q")
+        fi
+    done <<< "$raw"
+}
+
+complete -F _toolr_complete toolr
+"#;
+
+#[test]
+fn old_bash_script_offers_nothing_on_a_path_slot() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(&bash, OLD_BASH_SCRIPT, &fx, "--cfg", "files/");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.stderr, "", "{bash}");
+        assert!(run.reply.is_empty(), "{bash}: {:?}", run.reply);
+    }
+}
+
 fn have(shell: &str) -> bool {
     StdCommand::new(shell)
         .arg("--version")
@@ -315,6 +514,54 @@ fn fish_completion_never_executes_values() {
     assert!(!fx.sentinel2.exists());
 }
 
+fn fish_complete(fx: &Fixture, line: &str) -> String {
+    let out = StdCommand::new("fish")
+        .arg("--no-config")
+        .arg("-c")
+        .arg("source (echo $argv[1] | psub); complete -C $argv[2]")
+        .arg(print_script("fish"))
+        .arg(line)
+        .current_dir(fx.tmp.path())
+        .env("PATH", path_with_toolr())
+        .env("XDG_CACHE_HOME", common::test_cache_home())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+fn fish_path_flag_completes_files_inert() {
+    if !have("fish") {
+        return;
+    }
+    let fx = fixture();
+    let stdout = fish_complete(&fx, "toolr ci lint --cfg files/");
+    let names: Vec<&str> = stdout
+        .lines()
+        .map(|l| l.split('\t').next().unwrap())
+        .collect();
+    for want in [
+        "files/with space.txt",
+        "files/sub/",
+        "files/$(touch sentinel-three)",
+    ] {
+        assert!(names.contains(&want), "{want:?} not in {names:?}");
+    }
+    assert!(!fx.sentinel3.exists(), "fish executed a file name");
+
+    let stdout = fish_complete(&fx, "toolr ci lint --out files/");
+    let names: Vec<&str> = stdout
+        .lines()
+        .map(|l| l.split('\t').next().unwrap())
+        .collect();
+    assert_eq!(names, vec!["files/sub/"]);
+}
+
 /// A real zpty-driven run is not workable in a non-interactive harness, so
 /// check the source: candidates must go through `compadd -a` without `-Q`,
 /// which keeps zsh quoting them on insertion.
@@ -331,4 +578,22 @@ fn zsh_completion_never_executes_values() {
         assert!(!l.contains("-Q"), "{l}");
     }
     assert!(!script.contains("eval "), "zsh script must not eval values");
+}
+
+/// zsh's own `_files` quotes the names it inserts.
+#[test]
+fn zsh_path_slots_use_native_file_completion() {
+    let script = print_script("zsh");
+    let calls: Vec<&str> = script
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.contains("_files"))
+        .collect();
+    assert!(calls.iter().any(|l| l.contains("_files -/")), "{calls:?}");
+    assert!(
+        calls
+            .iter()
+            .any(|l| l.contains("_files") && !l.contains("-/")),
+        "{calls:?}"
+    );
 }

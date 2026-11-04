@@ -20,8 +20,16 @@ _toolr_complete() {
     # Words after the cursor are dropped; `raw_cur` stands in for words[cword].
     local args=("${words[@]:1:cword-1}" "$raw_cur")
 
-    local raw
-    raw=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null) || return 0
+    local raw rc
+    raw=$(toolr __complete "$PWD" "${args[@]}" 2>/dev/null)
+    rc=$?
+    # Exit 10 and 11 ask for file system paths and directories.
+    case $rc in
+        0) ;;
+        10) _toolr_complete_paths -f "$raw_cur"; return 0 ;;
+        11) _toolr_complete_paths -d "$raw_cur"; return 0 ;;
+        *) return 0 ;;
+    esac
     [[ -z "$raw" ]] && return 0
 
     # Each line is `value<TAB>description` - bash has no per-candidate
@@ -39,6 +47,39 @@ _toolr_complete() {
             COMPREPLY+=("$q")
         fi
     done <<< "$raw"
+}
+
+# File names are data too: `compgen` only lists them, and each is quoted with
+# `%q` like a candidate value.
+_toolr_complete_paths() {
+    local mode=$1 raw_cur=$2 name rest q bare_tilde tilde dir dirs=0
+    printf -v bare_tilde '%q' '~'
+    while IFS= read -r name; do
+        tilde=
+        rest=$name
+        # `compgen` echoes a typed leading `~`; it must stay bare to expand.
+        if [[ $raw_cur == '~'* && $name == '~'* ]]; then
+            tilde='~'
+            rest=${name#\~}
+        fi
+        q=
+        if [[ -n $rest ]]; then
+            printf -v q '%q' "$rest"
+            [[ $bare_tilde == '~' ]] && q=${q//\~/\\~}
+        fi
+        q=$tilde$q
+        dir=$name
+        [[ $name == \~ || $name == \~/* ]] && dir=$HOME${name#\~}
+        if [[ -d $dir ]]; then
+            q+=/
+            dirs=$((dirs + 1))
+        fi
+        COMPREPLY+=("$q")
+    done < <(compgen "$mode" -- "$raw_cur")
+    # Bash 3.2 has no `compopt`, so a lone directory there gets a trailing space.
+    if ((${#COMPREPLY[@]} == 1 && dirs == 1)) && type compopt &>/dev/null; then
+        compopt -o nospace 2>/dev/null
+    fi
 }
 
 complete -F _toolr_complete toolr

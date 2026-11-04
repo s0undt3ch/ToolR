@@ -16,7 +16,18 @@ function __toolr_complete
     # append, not an end-of-options marker, which would inject a spurious
     # `--` token into the call and trip clap's option-terminator logic.
     set -a args $current
-    toolr __complete "$PWD" $args 2>/dev/null
+    set -l out (toolr __complete "$PWD" $args 2>/dev/null)
+    # Exit 10 and 11 ask for file system paths and directories.
+    switch $status
+        case 0
+            for line in $out
+                printf '%s\n' $line
+            end
+        case 10
+            __fish_complete_path "$current"
+        case 11
+            __fish_complete_directories "$current"
+    end
 end
 
 complete -c toolr -f -a "(__toolr_complete)"
