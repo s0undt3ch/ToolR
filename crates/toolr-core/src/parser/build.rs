@@ -1664,6 +1664,13 @@ def aliased(ctx):
                 module("command = make()", "command(\"n5\", group=\"grp\")"),
             ),
             (
+                "tools/n10.py",
+                module(
+                    "import toolr.types\ncommand = toolr.types.command",
+                    "command(\"n10\", group=\"grp\")",
+                ),
+            ),
+            (
                 "tools/n6.py",
                 module(
                     "a = b\nb = a\ncommand = a",
