@@ -3,6 +3,8 @@ branch = True
 cover_pylib = False
 parallel = True
 concurrency = multiprocessing
+# Measure child Pythons too (toolr._runner, plugin smokes) without a sitecustomize shim.
+patch = subprocess
 
 # `source` is a *package name* for toolr (not a path) so coverage
 # instruments every file reachable via the `toolr.*` import
