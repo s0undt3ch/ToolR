@@ -9,16 +9,17 @@ from __future__ import annotations
 
 import re
 import tomllib
+from pathlib import Path
 from typing import Any
 from typing import NamedTuple
 
 import pytest
-from packaging.specifiers import SpecifierSet
-from packaging.version import Version
 from tools.ci import ABI3_WHEEL_PYTHONS
-from tools.ci import ALL_CPYTHONS
 from tools.ci import BINARY_WHEEL_PYTHONS
 from tools.ci import REPO_ROOT
+from tools.ci import _requires_python
+from tools.ci import python3_floor
+from tools.ci import supported_minors
 
 REQUIRES_PYTHON_SOURCE = "requires-python in crates/toolr-py/pyproject.toml"
 
@@ -43,44 +44,6 @@ CP_TAG_WORKFLOWS = [
 CP_TAG_PATTERN = re.compile(r"""\b(?:cp-tag=|cptag=)["']?(cp\d+)""")
 # A `#` at the start of a line or after whitespace opens a YAML or shell comment.
 COMMENT_PATTERN = re.compile(r"(?:^|\s)#.*$", re.MULTILINE)
-
-
-def python3_floor(requires_python: str) -> int:
-    """Return ``N`` from the ``>=3.N`` clause, rejecting a patch-level floor as the Rust lockstep test does."""
-    for specifier in SpecifierSet(requires_python):
-        release = Version(specifier.version).release
-        if specifier.operator == ">=" and release[0] == 3 and len(release) > 1:
-            # Same rule as `python3_floor` in crates/toolr-core/tests/python_floor_lockstep.rs; change both.
-            if len(release) > 2 and release[2] != 0:
-                msg = (
-                    f"requires-python {requires_python!r} sets a patch-level floor, which the "
-                    "version lists (and MIN_PYTHON_MINOR) can't express; use `>=3.N`"
-                )
-                raise ValueError(msg)
-            return release[1]
-    msg = f"requires-python {requires_python!r} has no `>=3.N` clause"
-    raise ValueError(msg)
-
-
-def supported_minors(requires_python: str) -> list[int]:
-    """Return the CPython 3 minors ``requires_python`` admits; it needs both a floor and a `<3.N` ceiling."""
-    spec = SpecifierSet(requires_python)
-    ceilings = [
-        Version(specifier.version).release
-        for specifier in spec
-        if specifier.operator in {"<", "<="}
-    ]
-    ceiling = min(
-        (release[1] for release in ceilings if release[0] == 3 and len(release) > 1), default=None
-    )
-    if ceiling is None:
-        msg = (
-            f"requires-python {requires_python!r} needs an explicit `<3.N` upper bound; "
-            "the version lists are derived from it"
-        )
-        raise ValueError(msg)
-    floor = python3_floor(requires_python)
-    return [minor for minor in range(floor, ceiling + 1) if f"3.{minor}" in spec]
 
 
 class FloorSetting(NamedTuple):
@@ -141,12 +104,13 @@ def test_python3_floor_reads_the_lower_bound(requires_python: str, expected: int
     assert python3_floor(requires_python) == expected
 
 
-def test_all_cpythons_match(supported: list[int]) -> None:
-    # Equality with the ascending `supported` also keeps the list sorted, which TEST_PYTHONS_NARROW relies on.
-    actual = [int(tag.removeprefix("cp3")) for tag in ALL_CPYTHONS]
-    assert actual == supported, (
-        f"tools/ci.py ALL_CPYTHONS is {ALL_CPYTHONS}; {REQUIRES_PYTHON_SOURCE} implies minors {supported}"
+def test_requires_python_reads_project_table(tmp_path: Path) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\nname = "x"\nrequires-python = ">=3.12,<3.14"\n\n[tool.x]\nrequires-python = "nope"\n',
+        encoding="utf-8",
     )
+    assert _requires_python(pyproject) == ">=3.12,<3.14"
 
 
 def test_classifiers_match(config_tomls: dict[str, dict[str, Any]], supported: list[int]) -> None:
