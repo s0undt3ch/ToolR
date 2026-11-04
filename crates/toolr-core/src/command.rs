@@ -96,10 +96,12 @@ pub struct CommandConfig {
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub input: Option<Vec<u8>>,
-    pub stdout_fd: Option<File>,     // For capturing output to file
-    pub stderr_fd: Option<File>,     // For capturing output to file
-    pub sys_stdout_fd: Option<File>, // For streaming to output
-    pub sys_stderr_fd: Option<File>, // For streaming to error
+    /// Capture files: the child's output is copied here for `capture_output=True`.
+    pub stdout_fd: Option<File>,
+    pub stderr_fd: Option<File>,
+    /// Stream targets: toolr's own stdout and stderr.
+    pub sys_stdout_fd: Option<File>,
+    pub sys_stderr_fd: Option<File>,
     pub timeout_secs: Option<f64>,
     pub no_output_timeout_secs: Option<f64>,
     pub cwd: Option<PathBuf>, // Current working directory
@@ -172,7 +174,8 @@ fn spawn_stdin_writer<W: Write + Send + 'static>(
 /// Duplicate a file descriptor Python hands over, so the caller owns and closes its own copy.
 ///
 /// The copy shares the file description, offset included, so output written through it is
-/// visible to Python's file object.
+/// visible to Python's file object. On Windows a closed fd aborts the process in the CRT's
+/// invalid-parameter handler, so pass only fds just taken from an open file.
 pub fn file_from_python_fd(fd: i32) -> io::Result<File> {
     // `fcntl` rather than `BorrowedFd`, so a closed fd is an error, not a broken contract.
     #[cfg(unix)]
