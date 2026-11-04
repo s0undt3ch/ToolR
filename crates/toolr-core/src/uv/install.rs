@@ -1180,6 +1180,43 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn perform_install_from_follows_the_asset_redirects() {
+        // GitHub answers asset downloads with a 302 to its object store.
+        let tmp = tempfile::tempdir().unwrap();
+        let (_, _, file) = host_file();
+        let archive = host_archive(tmp.path());
+        let sidecar = format!("{}  {file}\n", sha256_hex(&archive));
+        let tagged = format!("/releases/download/{TAG}/{file}");
+        let server = serve(HashMap::from([
+            (latest_path(&file), redirect(Some(&tagged))),
+            (tagged.clone(), redirect(Some("/objects/archive"))),
+            (
+                format!("{tagged}.sha256"),
+                redirect(Some("/objects/sidecar")),
+            ),
+            ("/objects/archive".to_string(), Route::ok(archive)),
+            ("/objects/sidecar".to_string(), Route::ok(sidecar)),
+        ]));
+        let dest = tmp.path().join("bin").join("uv");
+
+        let uv = perform_install_from(&format!("http://{}", server.addr), &dest).unwrap();
+
+        assert_eq!(uv.version, (9, 9, 9));
+        // The `/latest` redirect is read, not followed; the asset ones are followed.
+        assert_eq!(
+            *server.hits.lock().unwrap(),
+            [
+                latest_path(&file),
+                format!("{tagged}.sha256"),
+                "/objects/sidecar".to_string(),
+                tagged,
+                "/objects/archive".to_string(),
+            ]
+        );
+    }
+
     #[test]
     fn perform_install_from_refuses_a_checksum_mismatch() {
         let tmp = tempfile::tempdir().unwrap();
