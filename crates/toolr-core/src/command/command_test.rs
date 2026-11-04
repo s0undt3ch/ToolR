@@ -1266,6 +1266,7 @@ mod test_suite {
             Ok(write_fd)
         }
 
+        #[cfg(unix)]
         fn read_all(file: &mut NamedTempFile) -> Result<Vec<u8>> {
             let mut data = Vec::new();
             file.seek(SeekFrom::Start(0))?;
@@ -1324,7 +1325,6 @@ mod test_suite {
         }
 
         /// A failed capture write is reported, and the child still runs to completion.
-        #[cfg(unix)]
         #[test]
         fn capture_write_failure_is_reported() -> Result<()> {
             require_python!(python, "capture_write_failure_is_reported");
@@ -1356,7 +1356,6 @@ mod test_suite {
             Ok(())
         }
 
-        #[cfg(unix)]
         #[test]
         fn stream_write_failure_other_than_broken_pipe_is_reported() -> Result<()> {
             require_python!(
