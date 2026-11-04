@@ -6,126 +6,76 @@
 **Goal:** A failed write to one `ctx.run` output destination no longer stops the other, and a failed capture write
 raises instead of returning truncated output (F-40).
 
-**Architecture:** A `Sink` type replaces the eight copy blocks in the reader threads. Each sink fails on its own; the
-first recorded error goes into shared state and is returned after the child exits.
+**Architecture:** `spawn_reader` takes its capture and stream files by role and handles a failure on each separately.
+The first recorded error goes into `ReaderState` and `run_command_internal` returns it after the readers are joined.
 
-**Tech Stack:** Rust, `libc` (test pipes).
+**Tech Stack:** Rust, `libc` (test pipes), `tempfile`.
 
 **Spec:** [`specs/2026-10-31-ctx-run-reader-drain-design.md`](./2026-10-31-ctx-run-reader-drain-design.md)
+(revised 2026-11-04 against #645).
 
 ## Global Constraints
 
-- Branch stacks on `fix/ctx-run-timeout-kills-tree` (F-21), which stacks on `fix/ctx-run-input-deadlock` (F-08).
-  Keep F-08's `stdin_thread`, F-21's `tree::kill_tree` and `drain_threads` as they are. The reader threads still
-  return `()`.
-- `Sink::write` keeps the existing `from_raw_fd`/`from_raw_handle` + `mem::forget` code. Replacing it is F-41.
-- Every new test that spawns a child goes through `bounded_run_command(config, Duration::from_secs(10))`.
+- Branch `fix/ctx-run-reader-drain` on `main`; F-41 (`refactor/ctx-run-owned-fds`) stacks on it.
+- Keep `own_sink`, `ReaderState`'s existing fields, `DetachOnDrop`, `Timeouts` and the three-phase wait as they are.
+  The reader threads still return `()`.
+- Tests that spawn a child go through the existing bounded helper in `command_test.rs` (look for `bounded_run_command`
+  or the timeout wrapper the stdin deadlock tests use), so a regression fails instead of hanging the suite.
 - Broken-pipe tests build stream fds with `libc::pipe` and close the read end, so they are `#[cfg(unix)]`.
-- Conventional Commits; no `Co-Authored-By`. Stage by path; never `git add -A`. `rustfmt <file>` on touched files only.
+- 99% patch coverage on changed lines. No mocks: real children (`python -c`), real pipes and temp files.
+- Conventional Commits, no `Co-Authored-By`, British English. Stage by path, never `git add -A`, never `audit/`.
+  `rustfmt --edition 2024 <file>` on touched files only.
 
 ## Review Focus
 
-1. **The capture survives a broken stream.** Task 2, `capture_kept_when_stream_pipe_breaks`.
+1. **The capture survives a broken stream.** `capture_kept_when_stream_pipe_breaks`.
 2. **A broken pipe with nothing else to write to still ends the child.** Draining for ever is the regression to
-   avoid. Task 2, `stream_only_broken_pipe_ends_child_like_a_pipeline`.
-3. **Error precedence.** A timeout error beats a sink error, and a sink error beats F-08's stdin error.
-4. **One sink type, eight call sites gone.** No copy-pasted `write_all`/`flush`/`break` blocks are left.
+   avoid. `stream_only_broken_pipe_ends_child_like_a_pipeline`.
+3. **No sinks at all still drains**, so the no-output timeout keeps seeing output. The existing timeout tests cover
+   this; they must stay green.
+4. **Error precedence.** A timeout beats a sink error, and a sink error beats the stdin writer's error.
+5. **A capture failure lets the child finish.** `capture_write_failure_is_reported` checks the child's side effect
+   (it writes a marker file after its output) happened.
 
 ---
 
-### Task 1: Reproduce the reported shape (plausible finding)
+### Task 1: Reproduce, then fix per-sink failure handling
 
 **Files:**
 
-- Test: `crates/toolr-core/src/command/command_test.rs` (`mod tokio_tests`)
-
-**Interfaces:** test helper `fn broken_pipe() -> i32` (`#[cfg(unix)]`): `libc::pipe`, close the read end, return the
-write end.
-
-- [ ] **Step 1: Write the tests.**
-    - `reported_shape_sink_write_error_does_not_hang` (`#[cfg(unix)]`): `sys_stdout_fd`/`sys_stderr_fd` from
-      `broken_pipe()`, args `[python, "-c", "import sys; sys.stdout.write('x'*300000); sys.stdout.flush()"]`,
-      `timeout_secs: Some(4.0)` → returns within 2 s and is not a timeout error. This is the audit's shape.
-    - `capture_kept_when_stream_pipe_breaks` (`#[cfg(unix)]`): the same child and broken stream fds, plus capture fds
-      from two `NamedTempFile`s → `Ok(Ok(0))`, and the stdout capture holds exactly 300000 bytes.
-    - `capture_write_failure_is_reported` (`#[cfg(unix)]`): `stdout_fd` from a file opened read-only
-      (`File::open(tmp)`), `stderr_fd` from a normal temp file, args
-      `[python, "-c", "print('hello')"]` → inner `Err` whose message contains `"Failed to write captured stdout"`.
-
-- [ ] **Step 2: Run** `cargo test -p toolr-core --lib command::` and record the result.
-      Expected: the reported-shape test passes (no hang: dropping the reader closes the child's pipe), the other two
-      fail (`Ok(120)` with a short capture; `Ok(0)` with no error).
-      **Close criteria:** if the reported-shape test hangs, the audit's mechanism is real; carry on, the fix covers it.
-      If all three pass on the stacked base, a failed write already surfaces; commit only the tests as
-      `test(command): cover ctx.run sink write failures`, set the design's status to "closed: not reproducible",
-      archive both specs (Task 3, Step 3) and stop.
-
-- [ ] **Step 3:** Commit the failing tests with Task 2's fix.
-
-### Task 2: Per-sink failure handling
-
-**Files:**
-
-- Modify: `crates/toolr-core/src/command.rs` (reader threads in `run_command_internal`)
+- Modify: `crates/toolr-core/src/command.rs` (`ReaderState`, `spawn_reader`, `run_command_internal`)
 - Test: `crates/toolr-core/src/command/command_test.rs`
 
 **Interfaces:**
 
-```rust
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SinkKind { Capture, Stream }
+- `ReaderState` gains `error: Mutex<Option<String>>` and `fn record(&self, msg: String)` (keeps the first).
+- `fn spawn_reader<R: Read + Send + 'static>(pipe: R, name: &'static str, capture: Option<File>, stream:
+  Option<File>, state: Arc<ReaderState>) -> JoinHandle<()>`.
+- [ ] **Step 1: Write the failing tests** (all `#[cfg(unix)]`; add a helper `fn broken_pipe() -> RawFd` that makes a
+  `libc::pipe`, closes the read end and returns the write end):
+    - `capture_kept_when_stream_pipe_breaks`: stream fds from `broken_pipe()`, capture fds from two temp files, child
+      `import sys; sys.stdout.write('x'*300000); sys.stdout.flush()` → `Ok(0)`, and the stdout capture holds exactly
+      300000 bytes.
+    - `stream_only_broken_pipe_ends_child_like_a_pipeline`: broken stream fds, no capture, child
+      `import sys\nwhile True: sys.stdout.write('y'*8192)`, `timeout_secs: Some(8.0)` → returns within 3 s, not a
+      timeout error, exit code non-zero. (Expected to pass before the fix too: it pins today's behaviour.)
+    - `capture_write_failure_is_reported`: `stdout_fd` from a temp file opened read-only, `stderr_fd` from a normal
+      temp file, child prints `hello` then writes a marker file → `Err` whose message contains
+      `Failed to write captured stdout`, and the marker file exists.
+    - `stream_write_failure_other_than_broken_pipe_is_reported`: `sys_stdout_fd` from a read-only temp file → `Err`
+      containing `Failed to write stdout`.
+- [ ] **Step 2: Run** `cargo test -p toolr-core --lib command::` → the first, third and fourth tests fail.
+- [ ] **Step 3: Implement** per the spec's Decision. Build each reader's `capture`/`stream` from
+  `own(config.stdout_fd)`/`own(config.sys_stdout_fd)` (likewise stderr) and pass `"stdout"`/`"stderr"`. In the
+  loop, track whether a capture write failed; stop reading only when the reader started with at least one sink, has
+  none left, and no capture write failed. After the readers are joined, return the recorded error as
+  `CommandExecutionError` before `stdin_result`.
+- [ ] **Step 4: Run** `cargo test -p toolr-core --lib command::` and
+  `uv run pytest tests/utils/command tests/context` → PASS.
+- [ ] **Step 5: Commit** `fix(command): keep ctx.run capture when the stream target fails`.
 
-struct Sink {
-    kind: SinkKind,
-    stream_name: &'static str, // "stdout" | "stderr", for the error text
-    #[cfg(unix)] fd: RawFd,
-    #[cfg(windows)] handle: ThreadSafeHandle,
-    open: bool,
-}
+### Task 2: Release note, verification, archive
 
-impl Sink {
-    fn write(&mut self, buf: &[u8]) -> io::Result<()>; // write_all + flush, the existing unsafe code
-}
-
-type SinkError = Arc<Mutex<Option<String>>>;
-
-fn pump(reader: impl Read, sinks: Vec<Sink>, last_output: Arc<Mutex<Instant>>, sink_error: SinkError);
-```
-
-`pump` is the body of one reader thread: read into an 8 KiB buffer; update `last_output`; write to each open sink. On
-error, `Capture` → record `"Failed to write captured {stream_name}: {e}"` (if none yet) and close the sink; `Stream`
-with `ErrorKind::BrokenPipe` → close the sink silently; `Stream` otherwise → record
-`"Failed to stream {stream_name}: {e}"` and close. Before each read, if no sink is open and at least one sink existed,
-return (drops the pipe). With no sinks configured at all, keep draining as today, so `last_output` still feeds the
-no-output watchdog.
-
-- [ ] **Step 1: Add** `stream_only_broken_pipe_ends_child_like_a_pipeline` (`#[cfg(unix)]`): broken stream fds, no
-      capture, args `[python, "-c", "import sys\nwhile True: sys.stdout.write('y'*8192)"]`, `timeout_secs:
-      Some(8.0)` → returns within 3 s with `Ok(Ok(code))`, `code != 0`, and not a timeout error.
-
-- [ ] **Step 2: Implement.** Build the stdout `Vec<Sink>` from `stdout_fd` (`Capture`) and `sys_stdout_fd`
-      (`Stream`), the same for stderr, and spawn both reader threads as `thread::spawn(move || pump(..))`. Delete the
-      eight inline blocks and the `*_fd_clone` locals they needed. After the child exits and `drain_threads` returns
-      `Finished`, check `sink_error`: if set, return `CommandExecutionError::new(msg)`. Then F-08's stdin result. On
-      the timeout paths, return the timeout error as now.
-
-- [ ] **Step 3: Run** `cargo test -p toolr-core --lib command::` → PASS, including Task 1's tests and the existing
-      `test_sys_fd_streaming`, `test_sys_fd_with_capture` and `interactive_mode_ignores_capture_fds`.
-      `uv run pytest tests/utils/command tests/context` → PASS.
-
-- [ ] **Step 4: Commit.** `fix(command): keep ctx.run capture when the stream target fails`
-
-### Task 3: Release notes, verification, archive
-
-- [ ] **Step 1:** Add the spec's `UNRELEASED.md` text verbatim. Commit
-      `docs(command): note ctx.run sink failure handling`.
-- [ ] **Step 2:** `mise run test`, polling every 30-60 s → green. `prek run --all-files` → green.
-- [ ] **Step 3:** Move both specs:
-
-    ```sh
-    git mv specs/2026-10-31-ctx-run-reader-drain-design.md \
-        specs/2026-10-31-ctx-run-reader-drain-plan.md specs/archive/2026/
-    ```
-
-  Then fix the plan's `Spec:` link and set the design's status to implemented. Commit
-  `docs(specs): archive ctx.run reader drain design and plan`.
+- [ ] **Step 1:** `toolr release-notes add --text "<the spec's note>"`. Commit `docs(release-notes): …`.
+- [ ] **Step 2:** `mise run test` → green. `cargo llvm-cov …` then `cargo xtask patch-coverage --base main` → ≥ 99%.
+- [ ] **Step 3:** `git mv` both specs to `specs/archive/2026/` as the last commit.
