@@ -1,5 +1,8 @@
 # Bash completion word handling: design
 
+**Status:** Approved (2026-11-04). Decisions recorded under "Decisions"; the bash 4.4 floor
+supersedes the bash 3.2 parts of the design below.
+
 Follow-up findings FU-16 (low, bug) and FU-17 (low, bug), fixed together because both live in
 how `crates/toolr-core/src/complete/scripts/bash.sh` builds the words it sends to
 `toolr __complete`.
@@ -64,26 +67,31 @@ The Linux runs used a stub `toolr` that logs its argv, because the dev binary is
 
 ## Goals
 
-- Names and values containing `:` or `=` complete in bash 3.2 and 5, as values and as file names,
+- Names and values containing `:` or `=` complete in bash 4.4 and 5, as values and as file names,
   without duplicating the typed prefix.
 - A word typed earlier that contains a wordbreak reaches the engine as one word.
-- A user `IFS` without a space changes nothing.
 - The script runs without bash-completion.
+- On a bash older than 4.4, sourcing prints one warning line and registers nothing.
 - Hardening stays: no `eval`, values and file names are never executed, and the script stays
   `set -e`- and `set -u`-safe.
 
 ## Scope
 
-- In: `bash.sh`, `complete_shells.rs`, a release note.
+- In: `bash.sh`, `complete_shells.rs`, the macOS CI job (it installs a bash 4.4+), `docs/cli.md`
+  (bash floor, and the install path at line 283, which named `~/.bash_completion.d/` while
+  `install.rs` writes `~/.local/share/bash-completion/completions/`), a release note.
+- Bash floor: completion needs bash 4.4 or newer. On an older bash, sourcing the script prints
+  one platform-neutral line to stderr and registers nothing. FU-17 was bash 3.2-only and is
+  closed as unsupported.
 - Out: `--opt=value` completion (FU-15). An `--opt=` word is rebuilt whole and sent to the
   engine, which returns nothing for it, as today.
 - FU-15 builds on this: it reuses `raw_cur` (the whole word) and `raw_prefix` (the part readline
   keeps) to split `--opt=` from the value.
 - Out: words with an unescaped `'` or `"`. Readline does not break inside a quote, and such words
   match nothing today either.
-- Out: where `toolr self completion install bash` writes the script. Only bash-completion loads
-  that directory, so without the package the user sources the script from `~/.bashrc`, as its
-  header says.
+- Out: changing where `toolr self completion install bash` writes the script. Only
+  bash-completion's lazy loader reads that directory, so without the package the user sources the
+  script from `~/.bashrc`, as its header says. Changing the location is a follow-up decision.
 
 ## Design
 
@@ -130,6 +138,8 @@ The script keeps three separate variables: `cur` (typed), `raw_cur` and `raw_pre
 
 ### `IFS`
 
+Superseded by decision 5: FU-17 needs bash 3.2, so this section no longer applies.
+
 `_toolr_complete` starts with `local IFS=$' \t\n'`. `_toolr_complete_paths` inherits it through
 bash's dynamic scope. The `read` loops already set `IFS` per command (`IFS=$'\t' read`,
 `IFS= read`), so they are unaffected. With the slice gone this is belt and braces, but it also
@@ -155,10 +165,11 @@ The 3.2 runs used no `_init_completion` at all.
 ### Release note
 
 > Bash completion now works for file names and choice values containing `:` or `=` (bash split
-> them into separate words or duplicated the typed prefix). It also works when your `IFS` has no
-> space, and on macOS's `/bin/bash` 3.2 without the bash-completion package, which the script no
-> longer needs. Re-run `toolr self completion install bash --force`, or re-source the script, to
-> pick it up.
+> them into separate words), and without the bash-completion package, which the script no longer
+> needs. It now needs bash 4.4 or newer: on an older bash, sourcing the script prints one warning
+> line and registers nothing. Completion never worked on bash 3.2, so nothing that worked stops
+> working. Re-run `toolr self completion install bash --force`, or re-source the script, to pick
+> it up.
 
 ## Testing
 
@@ -190,8 +201,24 @@ The 3.2 runs used no `_init_completion` at all.
 
 ## Decisions
 
-Open for the user:
+Taken 2026-11-04:
 
-1. Drop the bash-completion dependency (recommended; the alternative cannot fix bash 3.2).
-2. Keep the pty end-to-end test (recommended) or rely on the driver alone.
-3. Leave words with an unescaped quote untrimmed and documented (recommended), or handle them.
+1. The script drops the bash-completion dependency (`_init_completion`). Bash 5 without the
+   package hits the same `command not found`. Tests run the real script with nothing
+   pre-defined, and one named test fails on the old script for exactly that error.
+2. An end-to-end test presses Tab in a real interactive bash on a pty, next to the driver tests.
+3. A word with an unescaped open quote is left untrimmed, and the limitation is documented.
+4. `docs/cli.md` gets the install path the code uses. `install.rs` is unchanged.
+5. Completion needs bash 4.4 or newer. On an older bash the script prints one line, for example
+   `toolr: tab completion needs bash >= 4.4 (this is 3.2.57(1)-release); upgrade bash to enable
+   it.`, and does not register the function. The version check uses bash 3.2-safe syntax, so
+   sourcing never errors. User-facing text names no package manager. Every bash 3.2 workaround
+   goes: the newline-string `~` scan (an associative array replaces it), the `compopt` guards,
+   the empty-array `set -u` handling. FU-17 and its `local IFS` go with them, because nothing
+   on 4.4+ depends on `IFS` once the array slice is gone. Shell tests run on bash 4.4+ only and
+   fail under `CI` when none is found. The macOS CI job installs bash with Homebrew, as it does
+   fish. One test sources the script under `/bin/bash` 3.2, when present, and checks for the
+   single warning line and no registration.
+
+Not breaking: stock macOS bash 3.2 never completed anything, because every Tab failed on the
+missing `_init_completion` (bash-completion 2.x doesn't load on 3.2).

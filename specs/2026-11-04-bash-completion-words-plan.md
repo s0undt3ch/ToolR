@@ -15,8 +15,11 @@ readline keeps, and quotes only the remainder of each reply. A `local IFS` pins 
 
 **Spec:** `specs/2026-11-04-bash-completion-words-design.md`
 
-**Decisions:** see the spec's "Decisions". This plan assumes the recommended answers. If the user
-rejects the pty test, skip Task 3.
+**Decisions:** taken 2026-11-04, see the spec's "Decisions". Decision 5 (bash 4.4 floor) overrides
+the bash 3.2 and FU-17 steps below: drop `local IFS` and the IFS tests, drop the 3.2 workarounds,
+add the version guard and its `/bin/bash` 3.2 test, filter `bashes()` to 4.4+, and install bash
+on the macOS CI job. Also fix `docs/cli.md`'s install path. Task 5 step 4 (archive) is left to
+the PR owner.
 
 ## Global Constraints
 
