@@ -1,6 +1,7 @@
 """`toolr` and `CommandsTester` read every corpus fixture the same way.
 
-Each directory under `files/parity_corpus/` is copied into `tools/`. An `ok_*` case
+Each directory under `files/parity_corpus/` is copied into `tools/`, or into the
+project root when it has its own `tools/`, so a module can sit outside `tools/`. An `ok_*` case
 must build on both sides with the same groups and commands; an `err_*` case
 must fail on both with the same message.
 """
@@ -32,7 +33,9 @@ def corpus_project(
 
     def _make(case: str) -> ToolsProject:
         project = make_tools_project()
-        shutil.copytree(CORPUS / case, project.root / "tools", dirs_exist_ok=True)
+        source = CORPUS / case
+        target = project.root if (source / "tools").is_dir() else project.root / "tools"
+        shutil.copytree(source, target, dirs_exist_ok=True)
         return project
 
     return _make

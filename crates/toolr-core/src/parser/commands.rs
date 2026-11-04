@@ -9,6 +9,7 @@ use super::groups::GroupBinding;
 use super::parse_docstring;
 use super::signatures::extract_arguments;
 use super::symbols::ArgSectionTable;
+use super::symbols::Assigned;
 use super::symbols::ConstTable;
 use super::symbols::EnumTable;
 use super::symbols::ImportTable;
@@ -385,11 +386,28 @@ impl<'a> ToolrNames<'a> {
             .is_some_and(|m| m == "toolr" || (name == "toolr" && m.starts_with("toolr.")))
     }
 
-    /// Whether `name` is toolr's `command`, imported from `toolr` directly or
-    /// re-exported by other scanned modules. A click `command` or a local `def` isn't.
-    fn is_command(self, name: &str) -> bool {
+    /// Whether `name` is toolr's `command`, imported from `toolr` or a `toolr.*`
+    /// submodule, re-exported by other scanned modules or assigned from one.
+    /// A click `command` or a local `def` isn't.
+    fn command(self, name: &str) -> Binding {
         binds_toolr_command(self.all_imports, self.module, name, 0)
     }
+}
+
+/// Whether a name is toolr's `command`, as far as the parser can see.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Binding {
+    /// A local `def`, another name, or a cycle.
+    Other,
+    /// The chain reaches a module the parser doesn't read, such as one
+    /// outside `tools/`; the decorator call decides.
+    Unknown,
+    /// toolr's `command`.
+    Toolr,
+}
+
+fn is_toolr_path(module: &str) -> bool {
+    module == "toolr" || module.starts_with("toolr.")
 }
 
 fn binds_toolr_command(
@@ -397,28 +415,66 @@ fn binds_toolr_command(
     module: &str,
     name: &str,
     depth: usize,
-) -> bool {
+) -> Binding {
     // A re-export cycle can't bind toolr's `command`; the cap stops the walk.
-    let Some(imports) = all_imports.get(module).filter(|_| depth <= 8) else {
-        return false;
+    if depth > 8 {
+        return Binding::Other;
+    }
+    let Some(imports) = all_imports.get(module) else {
+        return Binding::Unknown;
     };
     if imports.local_binding_wins(name) {
-        return false;
+        return match imports.assigned(name) {
+            Some(Assigned::Name(other)) => {
+                binds_toolr_command(all_imports, module, other, depth + 1)
+            }
+            Some(Assigned::Attribute { base, attr }) => {
+                match imports.resolve_module_binding(base) {
+                    // `import toolr.types` binds `toolr`, not `toolr.types`.
+                    Some(m) if is_toolr_path(m) => {
+                        if attr == "command" {
+                            Binding::Toolr
+                        } else {
+                            Binding::Other
+                        }
+                    }
+                    Some(m) => binds_toolr_command(all_imports, m, attr, depth + 1),
+                    None => Binding::Other,
+                }
+            }
+            None => Binding::Other,
+        };
     }
     let follows = |from: &str, original: &str| {
-        (from == "toolr" && original == "command")
-            || binds_toolr_command(all_imports, from, original, depth + 1)
+        if is_toolr_path(from) {
+            if original == "command" {
+                Binding::Toolr
+            } else {
+                Binding::Other
+            }
+        } else {
+            binds_toolr_command(all_imports, from, original, depth + 1)
+        }
     };
     let candidates = imports.candidates(name);
     if candidates.is_empty() {
+        // `from toolr.x import *` may or may not carry `command`.
         return imports
             .star_import_modules()
             .iter()
-            .any(|from| follows(from, name));
+            .map(|from| match from.as_str() {
+                "toolr" => follows(from, name),
+                f if is_toolr_path(f) => Binding::Unknown,
+                f => binds_toolr_command(all_imports, f, name, depth + 1),
+            })
+            .max()
+            .unwrap_or(Binding::Other);
     }
     candidates
         .iter()
-        .any(|c| follows(&c.module, &c.original_name))
+        .map(|c| follows(&c.module, &c.original_name))
+        .max()
+        .unwrap_or(Binding::Other)
 }
 
 /// The first decorator toolr reads as a command, and what it read.
@@ -496,16 +552,18 @@ fn keyword_str(args: &Arguments, name: &str) -> Option<String> {
 /// Recognise the string-path `@command` / `@command("name", group="…")` shape,
 /// also spelt `@toolr.command`, `@t.command` or an alias of `command`.
 fn parse_string_path_command(expr: &Expr, names: ToolrNames) -> Option<CommandDecorator> {
-    let is_toolr_command = |callee: &Expr| match callee {
-        Expr::Name(n) => names.is_command(n.id.as_str()),
-        Expr::Attribute(attr) => {
-            attr.attr.as_str() == "command"
-                && matches!(attr.value.as_ref(), Expr::Name(n) if names.is_toolr_module(n.id.as_str()))
+    let binding = |callee: &Expr| match callee {
+        Expr::Name(n) => names.command(n.id.as_str()),
+        Expr::Attribute(attr)
+            if attr.attr.as_str() == "command"
+                && matches!(attr.value.as_ref(), Expr::Name(n) if names.is_toolr_module(n.id.as_str())) =>
+        {
+            Binding::Toolr
         }
-        _ => false,
+        _ => Binding::Other,
     };
     // Bare `@command` / `@toolr.command`.
-    if is_toolr_command(expr) {
+    if binding(expr) == Binding::Toolr {
         return Some(CommandDecorator::StringPath {
             explicit_name: None,
             group: None,
@@ -515,8 +573,17 @@ fn parse_string_path_command(expr: &Expr, names: ToolrNames) -> Option<CommandDe
     let Expr::Call(call) = expr else {
         return None;
     };
-    if !is_toolr_command(&call.func) {
-        return None;
+    // A `command` from a module toolr can't read counts when called with
+    // `group=`, which toolr's requires and click's doesn't take.
+    let has_group = call
+        .arguments
+        .keywords
+        .iter()
+        .any(|k| k.arg.as_ref().is_some_and(|a| a.as_str() == "group"));
+    match binding(&call.func) {
+        Binding::Toolr => {}
+        Binding::Unknown if has_group => {}
+        _ => return None,
     }
     // The explicit name may be the first positional string literal
     // (`@command("name", group=…)`) or the `name=` keyword
