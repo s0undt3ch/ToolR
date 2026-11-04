@@ -272,8 +272,6 @@ jobs:
         shell: bash
         env:
           INPUTS_OS: ${{ inputs.os }}
-          PYTHONPATH: "${{ github.workspace }}/tests/support/coverage"
-          COVERAGE_PROCESS_START: "${{ github.workspace }}${{ runner.os == 'Windows' && '\\' || '/' }}.coveragerc"
         # `--no-sync`: the .venv is already provisioned by the
         # setup-virtualenv step above (workspace deps + dev group,
         # excluding toolr-py and toolr-plugin-example) and the
