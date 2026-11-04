@@ -380,6 +380,17 @@ Completion endpoint called by the installed shell scripts. Reads the
 current repo's manifest, prefix-matches against subcommands and arg
 values, writes candidates to stdout. Never starts Python.
 
+The exit code tells the script what to do:
+
+| Exit | Meaning |
+|---|---|
+| 0 | Candidates on stdout, one `value<TAB>description` line each (possibly none) |
+| 1 | Error; offer nothing |
+| 10 | A path-typed slot: complete file system paths. Stdout is empty |
+| 11 | A directory-typed slot: complete directories. Stdout is empty |
+
+A script installed by an older toolr treats 10 and 11 like 1 and offers nothing.
+
 ### `toolr __build-static-manifest` {#__build-static-manifest}
 
 Regenerate only the static layer of the manifest (no Python
