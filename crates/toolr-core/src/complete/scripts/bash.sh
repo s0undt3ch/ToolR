@@ -42,7 +42,9 @@ _toolr_complete() {
     # A prefix bash inserted earlier arrives backslash-escaped (`dry\ `),
     # while the engine matches raw values: `\x` stands for `x`. Readline replaces
     # only the text after the last unescaped wordbreak, so keep the raw text up to it.
-    # Readline doesn't break inside an open quote, so such a word is left untrimmed.
+    # `$` and `@` are bash's readline special prefixes: the replaced text starts at them,
+    # so they stay in the reply. Readline doesn't break inside an open quote, so such a
+    # word is left untrimmed.
     local breaks=${COMP_WORDBREAKS-}
     breaks=${breaks//[$' \t\n\'"']/}
     local raw_cur='' raw_prefix='' c
@@ -54,7 +56,12 @@ _toolr_complete() {
             continue
         fi
         raw_cur+=$c
-        [[ -n $breaks && $breaks == *"$c"* ]] && raw_prefix=$raw_cur
+        if [[ -n $breaks && $breaks == *"$c"* ]]; then
+            raw_prefix=$raw_cur
+            if [[ $c == [\$@] ]]; then
+                raw_prefix=${raw_cur%?}
+            fi
+        fi
     done
 
     # Words after the cursor are dropped; `raw_cur` stands in for the cursor's word.

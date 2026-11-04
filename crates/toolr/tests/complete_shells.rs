@@ -11,16 +11,17 @@ use std::time::Instant;
 use tempfile::TempDir;
 
 /// Files under the fixture root that path slots complete. `files/sub/` is a directory.
-const PATH_FILES: [&str; 5] = [
+const PATH_FILES: [&str; 6] = [
     "files/with space.txt",
     "files/$(touch sentinel-three)",
     "files/back\\slash",
     "files/host:port.txt",
     "files/a:b c.txt",
+    "files/v@2x.png",
 ];
 
 /// `SENTINEL` and `SENTINEL2` stand for paths the fixture fills in.
-const CHOICES: [&str; 8] = [
+const CHOICES: [&str; 10] = [
     "fast",
     "a:b",
     "dry run",
@@ -29,6 +30,8 @@ const CHOICES: [&str; 8] = [
     "`touch SENTINEL2`",
     "~root",
     "x=~root",
+    "u@h",
+    "a$b",
 ];
 
 struct Fixture {
@@ -161,9 +164,12 @@ enum Split {
 
 const SPLITS: [Split; 2] = [Split::Whole, Split::AtBreaks];
 
+/// The non-blank characters of readline's default `COMP_WORDBREAKS` a test word can hold.
+const BREAKS: &str = ":=@";
+
 /// `a:b` becomes `a`, `:`, `b`, and a run of breaks stays one piece, as bash 5 splits them.
-fn comp_pieces(word: &str, split: Split) -> Vec<String> {
-    let is_break = |c: char| c == ':' || c == '=';
+fn comp_pieces(word: &str, split: Split, breaks: &str) -> Vec<String> {
+    let is_break = |c: char| breaks.contains(c);
     if matches!(split, Split::Whole) || word.is_empty() {
         return vec![word.to_string()];
     }
@@ -189,6 +195,8 @@ struct Drive<'a> {
     tail: Vec<&'a str>,
     quote: Vec<String>,
     split: Split,
+    /// The break characters [`comp_pieces`] splits at; the script must set the same.
+    breaks: &'static str,
     /// Define bash-completion's `_init_completion`, which only the old script calls.
     legacy: bool,
 }
@@ -202,12 +210,18 @@ impl<'a> Drive<'a> {
             tail: Vec::new(),
             quote: Vec::new(),
             split: Split::Whole,
+            breaks: BREAKS,
             legacy: false,
         }
     }
 
     fn split(mut self, split: Split) -> Self {
         self.split = split;
+        self
+    }
+
+    fn breaks(mut self, breaks: &'static str) -> Self {
+        self.breaks = breaks;
         self
     }
 
@@ -259,11 +273,11 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
             .join(" ");
         let mut comp_words = Vec::new();
         for w in &head {
-            comp_words.extend(comp_pieces(w, self.split));
+            comp_words.extend(comp_pieces(w, self.split, self.breaks));
         }
         let cword = comp_words.len() - 1;
         for w in &self.tail {
-            comp_words.extend(comp_pieces(w, self.split));
+            comp_words.extend(comp_pieces(w, self.split, self.breaks));
         }
         let out = StdCommand::new(bash)
             .arg("-c")
@@ -669,6 +683,38 @@ fn bash_colon_in_a_choice_completes_after_the_colon() {
     }
 }
 
+/// Readline replaces text from a `@` or `$` break, bash's special prefixes, not after it,
+/// so the reply keeps the typed `@` or `$`.
+#[test]
+fn bash_special_prefix_break_stays_in_the_reply() {
+    for bash in bashes() {
+        for split in SPLITS {
+            let fx = fixture();
+            let script = print_script("bash");
+            let run = Drive::new(&script, &["--mode"], "u@")
+                .split(split)
+                .run(&bash, &fx);
+            assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
+            assert_eq!(run.reply, vec!["@h".to_string()], "{bash} {split:?}");
+            let run = run_bash_path_split(&bash, &script, &fx, "--cfg", "files/v@", split);
+            assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
+            assert_eq!(run.reply, vec!["@2x.png".to_string()], "{bash} {split:?}");
+            // `$` isn't a default break, so only a user who adds it gets the split.
+            let run = Drive::new(&script, &["--mode"], "a$")
+                .split(split)
+                .run(&bash, &fx);
+            assert_eq!(run.reply, vec!["a\\$b".to_string()], "{bash} {split:?}");
+            let dollar = format!("COMP_WORDBREAKS+='$'\n{script}");
+            let run = Drive::new(&dollar, &["--mode"], "a$")
+                .split(split)
+                .breaks(":=@$")
+                .run(&bash, &fx);
+            assert_eq!(run.rc, "0", "{bash} {split:?}: {}", run.stderr);
+            assert_eq!(run.reply, vec!["\\$b".to_string()], "{bash} {split:?}");
+        }
+    }
+}
+
 /// Bash 4+ splits an earlier `files/host:port.txt` into three `COMP_WORDS`; the
 /// engine must still see one word, or `--mode` is parsed as a stray value.
 #[test]
@@ -908,27 +954,53 @@ fn bash_tab_completes_words_with_a_colon_end_to_end() {
         let fx = fixture();
         let script = fx.tmp.path().join("toolr.bash");
         std::fs::write(&script, print_script("bash")).unwrap();
+        let rc = format!(
+            "source '{}'\n\
+             toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
+             else printf 'LINE:%s\\n' \"$*\"; fi; }}\n",
+            script.display()
+        );
         let rcfile = fx.tmp.path().join("bashrc");
+        std::fs::write(&rcfile, &rc).unwrap();
+        // `$` isn't a default break, but a user may add it. The whole value, since `+=` in a
+        // bashrc appends to an empty one: readline only sets the default later.
+        let dollar_rcfile = fx.tmp.path().join("bashrc-dollar");
         std::fs::write(
-            &rcfile,
-            format!(
-                "source '{}'\n\
-                 toolr() {{ if [[ ${{1-}} == __complete ]]; then command toolr \"$@\"; \
-                 else printf 'LINE:%s\\n' \"$*\"; fi; }}\n",
-                script.display()
-            ),
+            &dollar_rcfile,
+            format!("{rc}COMP_WORDBREAKS=$' \\t\\n\"\\'@><=;|&(:$'\n"),
         )
         .unwrap();
-        for (typed, want) in [
+        for (rcfile, typed, want) in [
             (
+                &rcfile,
                 "toolr ci lint --cfg files/host:p",
                 "LINE:ci lint --cfg files/host:port.txt",
             ),
-            ("toolr ci lint --mode a:", "LINE:ci lint --mode a:b"),
+            (
+                &rcfile,
+                "toolr ci lint --mode a:",
+                "LINE:ci lint --mode a:b",
+            ),
+            // Readline replaces from a `@` or `$` break, so the reply must keep it.
+            (
+                &rcfile,
+                "toolr ci lint --mode u@",
+                "LINE:ci lint --mode u@h",
+            ),
+            (
+                &rcfile,
+                "toolr ci lint --cfg files/v@",
+                "LINE:ci lint --cfg files/v@2x.png",
+            ),
+            (
+                &dollar_rcfile,
+                "toolr ci lint --mode a$",
+                "LINE:ci lint --mode a$b",
+            ),
         ] {
             let mut cmd = StdCommand::new(&bash);
             cmd.args(["--noprofile", "--rcfile"])
-                .arg(&rcfile)
+                .arg(rcfile)
                 .arg("-i")
                 .current_dir(fx.tmp.path())
                 .env("PATH", path_with_toolr())
