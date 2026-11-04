@@ -1,71 +1,26 @@
-"""Check every hand-kept Python version list against ``requires-python``.
+"""Tests for the ``requires-python`` derivation and the Python version-list checks.
 
 ``project.requires-python`` in ``crates/toolr-py/pyproject.toml`` is the source of truth for the supported
-CPython range. The lists below repeat it, in full or as a floor, and nothing else ties them together.
-``MIN_PYTHON_MINOR`` is checked by ``crates/toolr-core/tests/python_floor_lockstep.rs`` instead.
+CPython range. ``tools/ci.py`` derives ``ALL_CPYTHONS`` from it, and ``toolr pre-commit check-python-versions``
+checks the hand-kept lists that repeat it. ``MIN_PYTHON_MINOR`` is checked by
+``crates/toolr-core/tests/python_floor_lockstep.rs`` instead.
 """
 
 from __future__ import annotations
 
 import re
-import tomllib
+import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
-from typing import NamedTuple
 
 import pytest
-from tools.ci import ABI3_WHEEL_PYTHONS
-from tools.ci import BINARY_WHEEL_PYTHONS
 from tools.ci import REPO_ROOT
 from tools.ci import _requires_python
 from tools.ci import python3_floor
 from tools.ci import supported_minors
-
-REQUIRES_PYTHON_SOURCE = "requires-python in crates/toolr-py/pyproject.toml"
-
-CONFIG_TOML_FILES = {
-    "toolr-py": "crates/toolr-py/pyproject.toml",
-    "toolr": "crates/toolr/pyproject.toml",
-    "tools": "tools/pyproject.toml",
-    "example-plugin": "examples/plugin-package/pyproject.toml",
-    "skill-example": "skills/toolr-command-packaging/examples/pyproject.toml",
-    "root": "pyproject.toml",
-    "mise": "mise.toml",
-    "cargo": "Cargo.toml",
-}
-
-# Workflow steps that hard-code the abi3 wheel's cp-tag to find the downloaded artefact, either as
-# `echo "cp-tag=cp311"` or as a `cptag="cp311"` shell variable.
-CP_TAG_WORKFLOWS = [
-    ".github/workflows/ci.yml",
-    ".github/workflows/_bench.yml",
-    ".github/workflows/_test.yml",
-]
-CP_TAG_PATTERN = re.compile(r"""\b(?:cp-tag=|cptag=)["']?(cp\d+)""")
-# A `#` at the start of a line or after whitespace opens a YAML or shell comment.
-COMMENT_PATTERN = re.compile(r"(?:^|\s)#.*$", re.MULTILINE)
-
-
-class FloorSetting(NamedTuple):
-    label: str
-    location: str
-    actual: object
-    expected: object
-
-
-@pytest.fixture(scope="module")
-def config_tomls() -> dict[str, dict[str, Any]]:
-    return {
-        key: tomllib.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
-        for key, path in CONFIG_TOML_FILES.items()
-    }
-
-
-@pytest.fixture(scope="module")
-def supported(config_tomls: dict[str, dict[str, Any]]) -> list[int]:
-    minors = supported_minors(config_tomls["toolr-py"]["project"]["requires-python"])
-    assert minors, f"{REQUIRES_PYTHON_SOURCE} admits no CPython 3 minor"
-    return minors
+from tools.precommit.python_versions import CONFIG_TOML_FILES
+from tools.precommit.python_versions import CP_TAG_WORKFLOWS
+from tools.precommit.python_versions import python_version_mismatches
 
 
 @pytest.mark.parametrize(
@@ -113,104 +68,63 @@ def test_requires_python_reads_project_table(tmp_path: Path) -> None:
     assert _requires_python(pyproject) == ">=3.12,<3.14"
 
 
-def test_classifiers_match(config_tomls: dict[str, dict[str, Any]], supported: list[int]) -> None:
-    prefix = "Programming Language :: Python :: 3."
-    actual = sorted(
-        int(classifier.removeprefix(prefix))
-        for classifier in config_tomls["toolr-py"]["project"]["classifiers"]
-        if classifier.startswith(prefix) and classifier.removeprefix(prefix).isdigit()
-    )
-    assert actual == supported, (
-        f"crates/toolr-py/pyproject.toml project.classifiers lists minors {actual}; "
-        f"{REQUIRES_PYTHON_SOURCE} implies {supported}"
-    )
+def test_repo_python_versions_agree() -> None:
+    assert python_version_mismatches(REPO_ROOT) == []
 
 
-def test_mise_pythons_match(config_tomls: dict[str, dict[str, Any]], supported: list[int]) -> None:
-    versions = config_tomls["mise"]["tools"]["python"]
-    # Only the second dot-separated field matters, so "3.15.2" and "3.16.0rc1" both parse.
-    actual = sorted({int(version.split(".")[1]) for version in versions})
-    assert actual == supported, (
-        f"mise.toml [tools] python is {versions}; {REQUIRES_PYTHON_SOURCE} implies minors {supported}"
-    )
+@pytest.fixture
+def make_python_versions_tree(tmp_path: Path) -> Callable[[], Path]:
+    """Copy every checker input into ``tmp_path``, keeping repo-relative paths."""
+
+    def factory() -> Path:
+        for relative in [*CONFIG_TOML_FILES.values(), *CP_TAG_WORKFLOWS]:
+            destination = tmp_path / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO_ROOT / relative, destination)
+        return tmp_path
+
+    return factory
 
 
-def _floor_settings(config_tomls: dict[str, dict[str, Any]], floor: int) -> list[FloorSetting]:
-    pyo3_features = config_tomls["cargo"]["workspace"]["dependencies"]["pyo3"]["features"]
-    settings = [
-        FloorSetting(
-            "pyo3-abi3",
-            "Cargo.toml workspace.dependencies.pyo3.features abi3-*",
-            [feature for feature in pyo3_features if feature.startswith("abi3-")],
-            [f"abi3-py3{floor}"],
+@pytest.mark.parametrize(
+    ("path", "old", "new", "expected_fragment"),
+    [
+        ("mise.toml", '"3.11.16"', "", "mise.toml [tools] python"),
+        (
+            "crates/toolr-py/pyproject.toml",
+            '"Programming Language :: Python :: 3.15",',
+            "",
+            "crates/toolr-py/pyproject.toml project.classifiers",
         ),
-        FloorSetting(
-            "abi3-wheel-pythons",
-            "tools/ci.py ABI3_WHEEL_PYTHONS",
-            ABI3_WHEEL_PYTHONS,
-            [f"cp3{floor}"],
+        (
+            "Cargo.toml",
+            '"abi3-py311"',
+            '"abi3-py312"',
+            "Cargo.toml workspace.dependencies.pyo3.features",
         ),
-        FloorSetting(
-            "binary-wheel-pythons",
-            "tools/ci.py BINARY_WHEEL_PYTHONS",
-            BINARY_WHEEL_PYTHONS,
-            [f"cp3{floor}"],
+        (
+            ".github/workflows/_test.yml",
+            'cptag="cp311"',
+            'cptag="cp312"',
+            ".github/workflows/_test.yml cp-tag",
         ),
-        FloorSetting(
-            "toolr-py-cibuildwheel",
-            "crates/toolr-py/pyproject.toml tool.cibuildwheel.build",
-            config_tomls["toolr-py"]["tool"]["cibuildwheel"]["build"],
-            f"cp3{floor}-*",
-        ),
-        FloorSetting(
-            "toolr-cibuildwheel",
-            "crates/toolr/pyproject.toml tool.cibuildwheel.build",
-            config_tomls["toolr"]["tool"]["cibuildwheel"]["build"],
-            f"cp3{floor}-*",
-        ),
-        FloorSetting(
-            "ruff",
-            "pyproject.toml tool.ruff.target-version",
-            config_tomls["root"]["tool"]["ruff"]["target-version"],
-            f"py3{floor}",
-        ),
-        FloorSetting(
-            "mypy",
-            "pyproject.toml tool.mypy.python_version",
-            config_tomls["root"]["tool"]["mypy"]["python_version"],
-            f"3.{floor}",
-        ),
-    ]
-    for workflow in CP_TAG_WORKFLOWS:
-        live = COMMENT_PATTERN.sub("", (REPO_ROOT / workflow).read_text(encoding="utf-8"))
-        settings.append(
-            FloorSetting(
-                f"cp-tag:{workflow}",
-                f"{workflow} cp-tag assignments outside comments (expected exactly one)",
-                CP_TAG_PATTERN.findall(live),
-                [f"cp3{floor}"],
-            )
-        )
-    return settings
-
-
-def test_floor_settings_match(
-    config_tomls: dict[str, dict[str, Any]], supported: list[int], subtests: pytest.Subtests
+    ],
+    ids=["mise", "classifier", "pyo3-abi3", "workflow-cp-tag"],
+)
+def test_mismatch_reported(
+    make_python_versions_tree: Callable[[], Path],
+    path: str,
+    old: str,
+    new: str,
+    expected_fragment: str,
 ) -> None:
-    for setting in _floor_settings(config_tomls, min(supported)):
-        with subtests.test(setting.label):
-            assert setting.actual == setting.expected, (
-                f"{setting.location} is {setting.actual!r}; {REQUIRES_PYTHON_SOURCE} implies {setting.expected!r}"
-            )
+    root = make_python_versions_tree()
+    target = root / path
+    text = target.read_text(encoding="utf-8")
+    assert old in text
+    target.write_text(text.replace(old, new, 1), encoding="utf-8")
 
+    mismatches = python_version_mismatches(root)
 
-# Parsed inside each case, so a malformed floor fails only its own file.
-@pytest.mark.parametrize("key", ["toolr", "tools", "example-plugin", "skill-example"])
-def test_requires_python_floors_match(
-    key: str, config_tomls: dict[str, dict[str, Any]], supported: list[int]
-) -> None:
-    actual = python3_floor(config_tomls[key]["project"]["requires-python"])
-    assert actual == min(supported), (
-        f"{CONFIG_TOML_FILES[key]} project.requires-python floor is 3.{actual}; "
-        f"{REQUIRES_PYTHON_SOURCE} implies 3.{min(supported)}"
-    )
+    assert len(mismatches) == 1, mismatches
+    assert expected_fragment in mismatches[0]
