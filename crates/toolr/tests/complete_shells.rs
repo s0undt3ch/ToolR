@@ -460,15 +460,33 @@ fn passwd_entry() -> (String, PathBuf) {
 
 #[test]
 fn bash_path_marks_a_tilde_user_directory() {
+    // `~user` ignores `$HOME`, so read (never write) a directory already in the real home whose
+    // name is a prefix of nothing else there, so the reply is exactly that one directory.
     let (user, home) = passwd_entry();
-    let base = tempfile::Builder::new()
-        .prefix(".toolr-complete-")
-        .tempdir_in(&home)
-        .unwrap();
-    std::fs::create_dir(base.path().join("sub")).unwrap();
-    let rel = base.path().strip_prefix(&home).unwrap().to_str().unwrap();
-    let cur = format!("~{user}/{rel}/s");
-    let want = format!("~{user}/{rel}/sub/");
+    let names: Vec<String> = std::fs::read_dir(&home)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok()?.file_name().into_string().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    let plain = |n: &str| {
+        n.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+    };
+    let Some(dir) = names.iter().find(|n| {
+        !n.starts_with('.')
+            && plain(n)
+            && home.join(n).is_dir()
+            && names.iter().filter(|m| m.starts_with(n.as_str())).count() == 1
+    }) else {
+        eprintln!(
+            "skipping: no uniquely named directory in {}",
+            home.display()
+        );
+        return;
+    };
+    let cur = format!("~{user}/{dir}");
+    let want = format!("~{user}/{dir}/");
     for bash in bashes() {
         let fx = fixture();
         let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", &cur);
