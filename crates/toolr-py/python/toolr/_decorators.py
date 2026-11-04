@@ -312,13 +312,15 @@ def command(
     (``@command(name="snippet-checker", group=...)``) — but not both;
     doing so raises ``TypeError``.
 
-    toolr reads this decorator from the source without running it, so
-    only one shape counts: ``from toolr import command``, then
-    ``@command(...)`` on a top-level ``def`` with ``group=`` (and any
-    name) as a string literal. ``@toolr.command``, an aliased import, a
-    nested ``def`` or ``group=SOME_CONSTANT`` run here, and pass under
-    :class:`toolr.testing.CommandsTester`, but toolr doesn't register
-    them or fails to build.
+    toolr reads this decorator from the source without running it. It
+    accepts ``@command``, ``@toolr.command`` (also after
+    ``import toolr as t``) and an alias from
+    ``from toolr import command as cmd``, on a top-level ``def`` with
+    ``group=`` and any name as string literals. A nested ``def`` (inside
+    another function, a class or an ``if``), ``group=SOME_CONSTANT`` or a
+    non-literal name fails the build with "unsupported command
+    declarations", and so does :class:`toolr.testing.CommandsTester`.
+    A group's command names must be unique within ``tools/``.
 
     Usage::
 

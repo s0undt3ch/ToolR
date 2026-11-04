@@ -43,12 +43,16 @@ fresh clone are all execution-free. Your repository's Python runs only
 when you explicitly dispatch a command.
 
 The practical contract: declare `command_group(...)` at module top level
-and apply `@command` / `@group.command` to module-level functions.
-Commands registered dynamically — inside a `for` loop, behind an `if`, or
-returned from a factory invoked at import time — are **not** discovered
-and will not appear in `--help`, completion, or dispatch. If a command is
-missing, make its registration a top-level, statically-visible
+and apply `@command` / `@group.command` to module-level functions, with
+`group=` and any name as string literals. A command decorator on a nested
+`def` — inside another function, a class, a `for` loop or behind an `if` —
+or a non-literal `group=` or name fails the build with "unsupported command
+declarations". Make each registration a top-level, statically-visible
 declaration.
+
+Each command name is defined once per group: two functions registering the
+same name in one group, in one file or two, fail the build with "duplicate
+commands".
 
 ## Overriding the CLI name
 

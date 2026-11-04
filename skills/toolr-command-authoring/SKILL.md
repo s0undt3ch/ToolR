@@ -119,6 +119,12 @@ rename it once (`colour = not no_colour`). For more than two states, use
 - **Group across files.** Pass `group="ci.build"` to `@command` from
   any file; only one file needs to call `command_group("ci.build",
   ...)`.
+- **What toolr can read.** It parses `tools/` without running it:
+  decorate top-level `def`s, with `group=` and any name as string
+  literals. `@command`, `@toolr.command` and
+  `from toolr import command as cmd` all work. A nested `def`, a
+  non-literal `group=`/name or a command name defined twice in a group
+  fails the build, and `CommandsTester` the same way.
 - **Nested subgroups.** A dotted name (`command_group("docker.image",
   ...)`) attaches under the parent named before the last dot.
 - **Help sections.** Build an `ArgSection` at module scope via
