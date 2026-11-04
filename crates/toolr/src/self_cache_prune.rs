@@ -1,7 +1,7 @@
 //! `toolr self cache prune` implementation.
 
 use std::io::{self, IsTerminal, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::Result;
@@ -11,6 +11,7 @@ use humansize::{BINARY, format_size};
 
 use toolr_core::cache::{
     CachedVenv, Candidate, Classification, PruneReason, classify_entries, enumerate_caches,
+    sweep_rebuild_locks,
 };
 
 pub fn run(cache_root: &Path, matches: &ArgMatches) -> Result<ExitCode> {
@@ -28,7 +29,7 @@ pub fn run(cache_root: &Path, matches: &ArgMatches) -> Result<ExitCode> {
         return prune_all(cache_root, entries, dry_run, yes, &mut out);
     }
     let classification = classify_entries(entries, Utc::now(), stale_after_days);
-    prune_classified(classification, dry_run, &mut out)
+    prune_classified(cache_root, classification, dry_run, &mut out)
 }
 
 fn prune_all(
@@ -44,6 +45,8 @@ fn prune_all(
             "toolr: no cache entries to remove under {}",
             cache_root.display()
         )?;
+        // Leftover locks are empty files holding no data, so they need no confirmation.
+        sweep_locks(cache_root, &[], dry_run, out)?;
         return Ok(ExitCode::SUCCESS);
     }
     if !yes && !dry_run && !confirm_destroy_all(&entries)? {
@@ -73,14 +76,22 @@ fn prune_all(
         entries.len(),
         if entries.len() == 1 { "y" } else { "ies" },
     )?;
+    sweep_locks(cache_root, &[], dry_run, out)?;
     Ok(ExitCode::SUCCESS)
 }
 
 fn prune_classified(
+    cache_root: &Path,
     classification: Classification,
     dry_run: bool,
     out: &mut dyn Write,
 ) -> Result<ExitCode> {
+    let keep_repos: Vec<PathBuf> = classification
+        .keep
+        .iter()
+        .map(|e| e.meta.repo_path.clone())
+        .collect();
+    let keep_repos: Vec<&Path> = keep_repos.iter().map(PathBuf::as_path).collect();
     let candidates: Vec<Candidate> = classification
         .orphan
         .into_iter()
@@ -88,6 +99,7 @@ fn prune_classified(
         .collect();
     if candidates.is_empty() {
         writeln!(out, "toolr: nothing to prune")?;
+        sweep_locks(cache_root, &keep_repos, dry_run, out)?;
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -123,7 +135,31 @@ fn prune_classified(
         candidates.len(),
         if candidates.len() == 1 { "y" } else { "ies" },
     )?;
+    sweep_locks(cache_root, &keep_repos, dry_run, out)?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// Remove rebuild locks none of `keep_repos` needs. A failure only warns, like `remove_entry`.
+fn sweep_locks(
+    cache_root: &Path,
+    keep_repos: &[&Path],
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> Result<()> {
+    match sweep_rebuild_locks(cache_root, keep_repos, dry_run) {
+        Ok(sweep) if sweep.removed > 0 => {
+            let action = if dry_run { "would remove" } else { "removed" };
+            let plural = if sweep.removed == 1 { "" } else { "s" };
+            writeln!(
+                out,
+                "toolr: {action} {} rebuild lock{plural}",
+                sweep.removed
+            )?;
+        }
+        Ok(_) => {}
+        Err(e) => writeln!(out, "toolr: warning: failed to sweep rebuild locks: {e}")?,
+    }
+    Ok(())
 }
 
 fn remove_entry(cache_dir: &Path, out: &mut dyn Write) -> Result<()> {
@@ -164,7 +200,6 @@ fn confirm_destroy_all(entries: &[CachedVenv]) -> Result<bool> {
 mod tests {
     use super::*;
     use chrono::TimeZone;
-    use std::path::PathBuf;
     use tempfile::TempDir;
     use toolr_core::cache::CachedVenv;
 
@@ -245,9 +280,10 @@ mod tests {
 
     #[test]
     fn prune_classified_empty_reports_nothing_to_prune() {
+        let tmp = TempDir::new().unwrap();
         let mut out: Vec<u8> = Vec::new();
         let classification = Classification::default();
-        let rc = prune_classified(classification, false, &mut out).unwrap();
+        let rc = prune_classified(tmp.path(), classification, false, &mut out).unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("nothing to prune"));
@@ -273,7 +309,7 @@ mod tests {
         };
 
         let mut out: Vec<u8> = Vec::new();
-        let rc = prune_classified(classification, true, &mut out).unwrap();
+        let rc = prune_classified(tmp.path(), classification, true, &mut out).unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         assert!(s.contains("DRY-RUN ORPHAN"));
@@ -299,7 +335,7 @@ mod tests {
             }],
         };
         let mut out: Vec<u8> = Vec::new();
-        let rc = prune_classified(classification, false, &mut out).unwrap();
+        let rc = prune_classified(tmp.path(), classification, false, &mut out).unwrap();
         assert_eq!(rc, ExitCode::SUCCESS);
         let s = String::from_utf8(out).unwrap();
         // Singular "entry" — the entries.len() == 1 branch.
