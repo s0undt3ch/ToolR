@@ -282,18 +282,26 @@ impl TrustEnv {
     }
 }
 
+/// `XDG_CACHE_HOME` for [`toolr`] and [`toolr_std`], under the target dir so a
+/// test that forgets its own cache dir can't write into the user's real cache.
+pub fn test_cache_home() -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR")).join("xdg-cache")
+}
+
 /// The toolr binary as tests run it. Every test drives a throwaway repository,
 /// so the trust check is off; trust tests use [`TrustEnv`] instead.
 pub fn toolr() -> assert_cmd::Command {
     let mut cmd = assert_cmd::Command::cargo_bin("toolr").unwrap();
-    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd.env("TOOLR_TRUST_ALL", "1")
+        .env("XDG_CACHE_HOME", test_cache_home());
     cmd
 }
 
 /// [`toolr`] for tests that need a `std::process::Command`.
 pub fn toolr_std() -> std::process::Command {
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
-    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd.env("TOOLR_TRUST_ALL", "1")
+        .env("XDG_CACHE_HOME", test_cache_home());
     cmd
 }
 

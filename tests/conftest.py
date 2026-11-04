@@ -59,6 +59,33 @@ def pytest_configure(config: pytest.Config) -> None:
         os.environ.setdefault("COVERAGE_PROCESS_START", str(_COVERAGERC))
 
 
+@pytest.fixture(scope="session")
+def _uv_cache_dir() -> str | None:
+    """The real uv cache, resolved before any test moves `XDG_CACHE_HOME`."""
+    if "UV_CACHE_DIR" in os.environ:
+        return None
+    uv = shutil.which("uv")
+    if uv is None:
+        return None
+    proc = subprocess.run([uv, "cache", "dir"], capture_output=True, text=True, check=False)  # noqa: S603
+    return proc.stdout.strip() or None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_toolr_cache(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+    _uv_cache_dir: str | None,
+) -> None:
+    """Keep every toolr a test spawns out of the user's real cache dir.
+
+    uv also reads `XDG_CACHE_HOME`, so pin it to its real cache to keep it warm.
+    """
+    if _uv_cache_dir is not None:
+        monkeypatch.setenv("UV_CACHE_DIR", _uv_cache_dir)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path_factory.mktemp("xdg-cache")))
+
+
 @pytest.fixture
 def commands_tester(tmp_path: Path) -> Iterator[CommandsTester]:
     """Create a commands tester."""
