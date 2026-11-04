@@ -389,7 +389,8 @@ The exit code tells the script what to do:
 | 10 | A path-typed slot: complete file system paths. Stdout is empty |
 | 11 | A directory-typed slot: complete directories. Stdout is empty |
 
-A script installed by an older toolr treats 10 and 11 like 1 and offers nothing.
+A script installed by an older toolr doesn't know these codes and offers
+nothing for path slots, as it always did.
 
 ### `toolr __build-static-manifest` {#__build-static-manifest}
 
