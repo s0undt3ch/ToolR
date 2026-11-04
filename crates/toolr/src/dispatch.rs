@@ -6,9 +6,8 @@ use clap::ArgMatches;
 
 use crate::help::{self, HelpMode};
 use toolr_core::complete::{
-    Candidate, InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell,
-    completion_script, install_script, resolve_manifest_at_tab, serve_completions,
-    sort_and_dedup_by_value,
+    Candidate, Completion, InstallOptions, InstallOutcome, PriorState, Shell as CompletionShell,
+    complete, completion_script, install_script, resolve_manifest_at_tab, sort_and_dedup_by_value,
 };
 use toolr_core::discovery::discover_project_root;
 use toolr_core::execute::{ExecutionSpec, spawn_runner, wait_with_signals, write_spec_to_tempfile};
@@ -612,6 +611,12 @@ fn run_completion_print(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> 
     Ok(ExitCode::SUCCESS)
 }
 
+/// `toolr __complete` exits with this, printing nothing, to have the shell
+/// complete file system paths. Old scripts treat it as "no candidates".
+const COMPLETE_PATHS: u8 = 10;
+/// As [`COMPLETE_PATHS`], for directories only.
+const COMPLETE_DIRECTORIES: u8 = 11;
+
 fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     // Tab completion must be quiet: any error produces a silent exit
     // code 1 so the shell falls back to its default completion. We do
@@ -644,7 +649,11 @@ fn run_complete(matches: &clap::ArgMatches) -> anyhow::Result<ExitCode> {
     let (extra_groups, extra_commands) = crate::builtin_completions::built_in_completion_entries();
     manifest.groups.extend(extra_groups);
     manifest.commands.extend(extra_commands);
-    let mut candidates = serve_completions(&manifest, &tokens);
+    let mut candidates = match complete(&manifest, &tokens) {
+        Completion::Values(candidates) => candidates,
+        Completion::Paths => return Ok(ExitCode::from(COMPLETE_PATHS)),
+        Completion::Directories => return Ok(ExitCode::from(COMPLETE_DIRECTORIES)),
+    };
     // The engine emits `--help` at every group node (it's universal for
     // clap subcommands), but the binary's other root-level flags
     // (`--debug`, `--quiet`, `--timestamps`, …) live only in
