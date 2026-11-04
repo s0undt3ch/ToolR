@@ -1319,6 +1319,7 @@ mod test_suite {
                 libc::close(sys_stderr);
             }
             let elapsed = start.elapsed();
+            // Well inside `timeout_secs`: the dropped pipe ended the child, not the timeout.
             assert!(elapsed < Duration::from_secs(3), "{elapsed:?}");
             assert_ne!(result.map_err(|e| anyhow!("{e}"))?, 0);
             Ok(())

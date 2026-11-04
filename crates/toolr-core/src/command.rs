@@ -283,11 +283,9 @@ impl Drop for DetachOnDrop {
     }
 }
 
-/// Copy `pipe` into the capture and stream files until EOF, stamping the output clock after each
-/// read and write. A failed file is dropped and the other kept; a capture failure is recorded and
-/// the pipe drained so the child finishes. A broken stream with nothing else to write to drops the
-/// pipe, as a shell pipeline would. A detached reader stops at its next read and drops the pipe,
-/// so a writer that escaped the kill gets EPIPE rather than feeding it forever.
+/// Copy `pipe` into the capture and stream files until EOF. With a capture the pipe is drained to
+/// EOF even after a failed write, so the child finishes; a lost stream with no capture, or a
+/// detached reader, drops the pipe so the writer gets EPIPE rather than feeding it forever.
 fn spawn_reader<R: Read + Send + 'static>(
     mut pipe: R,
     name: &'static str,
@@ -296,9 +294,8 @@ fn spawn_reader<R: Read + Send + 'static>(
     state: Arc<ReaderState>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
-        // A reader with no sinks still drains, so the no-output timeout keeps seeing output.
-        let had_sinks = capture.is_some() || stream.is_some();
-        let mut capture_failed = false;
+        // A reader with no sinks also drains, so the no-output timeout keeps seeing output.
+        let drain_to_eof = capture.is_some() || stream.is_none();
         let mut buffer = [0; 8192];
         while let Ok(n @ 1..) = pipe.read(&mut buffer)
             && !state.detached.load(Ordering::SeqCst)
@@ -309,7 +306,6 @@ fn spawn_reader<R: Read + Send + 'static>(
             if let Some(Err(e)) = capture.as_mut().map(write) {
                 state.record(format!("Failed to write captured {name}: {e}"));
                 capture = None;
-                capture_failed = true;
             }
             if let Some(Err(e)) = stream.as_mut().map(write) {
                 // The reader of toolr's output went away, as after `| head`: not an error.
@@ -320,7 +316,7 @@ fn spawn_reader<R: Read + Send + 'static>(
             }
             state.stamp();
             state.writing.fetch_sub(1, Ordering::SeqCst);
-            if had_sinks && !capture_failed && capture.is_none() && stream.is_none() {
+            if !drain_to_eof && stream.is_none() {
                 break;
             }
         }
