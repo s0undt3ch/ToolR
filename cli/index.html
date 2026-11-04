@@ -2616,6 +2616,35 @@ user-facing surface; documented here for completeness.</p>
 <p>Completion endpoint called by the installed shell scripts. Reads the
 current repo's manifest, prefix-matches against subcommands and arg
 values, writes candidates to stdout. Never starts Python.</p>
+<p>The exit code tells the script what to do:</p>
+<table>
+<thead>
+<tr>
+<th>Exit</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Candidates on stdout, one <code>value&lt;TAB&gt;description</code> line each (possibly none)</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Error; offer nothing</td>
+</tr>
+<tr>
+<td>10</td>
+<td>A path-typed slot: complete file system paths. Stdout is empty</td>
+</tr>
+<tr>
+<td>11</td>
+<td>A directory-typed slot: complete directories. Stdout is empty</td>
+</tr>
+</tbody>
+</table>
+<p>A script installed by an older toolr doesn't know these codes and offers
+nothing for path slots, as it always did.</p>
 <h3 id="__build-static-manifest"><code>toolr __build-static-manifest</code><a class="headerlink" href="#__build-static-manifest" title="Permanent link">&para;</a></h3>
 <p>Regenerate only the static layer of the manifest (no Python
 introspection). Faster than <code>toolr project manifest rebuild</code> but

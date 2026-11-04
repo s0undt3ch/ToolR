@@ -1749,6 +1749,9 @@ never have to start Python. Has two layers (static + dynamic). It's a pure cache
 <p>Shell scripts for bash, zsh, and fish that call a hidden
 <code>toolr __complete</code> endpoint on every Tab press. Install once per
 shell with <code>toolr self completion install &lt;shell&gt;</code>.</p>
+<p>Path-typed arguments complete from the file system, using each shell's
+own file completion. A script installed by an older toolr doesn't do
+this: re-run <code>toolr self completion install &lt;shell&gt; --force</code>.</p>
 <h2 id="the-per-repo-cache">The per-repo cache<a class="headerlink" href="#the-per-repo-cache" title="Permanent link">&para;</a></h2>
 <p><code>$XDG_CACHE_HOME/toolr/</code> — one entry per repo, each holding its
 venv + a <code>meta.json</code> sidecar with timestamps. Inspect with

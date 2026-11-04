@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev631-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev654-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev631 - 2026-11-04
+        0.35.2-dev654 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev631 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev654 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev631-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev654-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev631 - 2026-11-04
+        0.35.2-dev654 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev631 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev654 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev631-2026-11-04">0.35.2-dev631 - 2026-11-04<a class="headerlink" href="#0352-dev631-2026-11-04" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev654-2026-11-04">0.35.2-dev654 - 2026-11-04<a class="headerlink" href="#0352-dev654-2026-11-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7706,6 +7706,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p><code>ctx.run(..., capture_output=True)</code> keeps capturing when whatever reads its streamed copy of the output goes away, for example when toolr's output is piped into <code>head</code>. Both copies used to stop together, so the command was cut off and <code>result.stdout</code> came back truncated without a warning. A failure to write the captured output itself now raises <code>CommandError</code> instead of returning partial output.</p>
 <p>A streamed copy that fails for any other reason, such as a full disk behind <code>toolr cmd &gt; file</code>, raises <code>CommandError</code> too.</p>
 <p>The uv auto-install now checks the downloaded archive against the SHA-256 checksum published with the same uv release, and refuses to install it if the checksum is missing or doesn't match.</p>
+<p>Path-typed arguments (<code>pathlib.Path</code> and the <code>toolr.types</code> path types) now tab-complete files, or directories for <code>DirectoryPath</code>, <code>WritableDirectoryPath</code> and <code>NewPath</code>, in bash, zsh and fish. So do <code>toolr project trust</code>, <code>untrust</code> and <code>self build-manifest --source-dir</code> / <code>--output</code>. Re-run <code>toolr self completion install &lt;shell&gt; --force</code> to pick it up.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7716,6 +7717,11 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(trust)</em> [<strong>breaking</strong>] Sync the tools venv right after trusting a repository (<a href="https://github.com/s0undt3ch/ToolR/commit/f9393c12ec2f0ebe80b9487e53e7bd2fa0eff239"><code>f9393c1</code></a>)</li>
 <li><em>(cache)</em> Sweep rebuild locks no cached repo needs (<a href="https://github.com/s0undt3ch/ToolR/commit/41d671b294bf704a6e4634720f381d73273367d4"><code>41d671b</code></a>)</li>
 <li><em>(cache)</em> Prune leftover rebuild locks (<a href="https://github.com/s0undt3ch/ToolR/commit/445a418cf496d5c1ee30f70c915d8a962106bd5d"><code>445a418</code></a>)</li>
+<li><em>(types)</em> One path completion hint per supported type (<a href="https://github.com/s0undt3ch/ToolR/commit/4282aed8f0148b3f63e43baebc56715598de58a3"><code>4282aed</code></a>)</li>
+<li><em>(complete)</em> Report path slots from the completion engine (<a href="https://github.com/s0undt3ch/ToolR/commit/0ea109a052152d1b934ada69dd54205f3205e298"><code>0ea109a</code></a>)</li>
+<li><em>(cli)</em> Signal path slots from toolr __complete (<a href="https://github.com/s0undt3ch/ToolR/commit/edcd04c8b3c4b03e260d0674e5bcc614de546e22"><code>edcd04c</code></a>)</li>
+<li><em>(complete)</em> Native file completion for path arguments in bash, zsh and fish (<a href="https://github.com/s0undt3ch/ToolR/commit/455f2192d49a1ae1338db213350a433e061a6628"><code>455f219</code></a>)</li>
+<li><em>(complete)</em> No space after any directory candidate in bash 4+ (<a href="https://github.com/s0undt3ch/ToolR/commit/84e536fa2a9ddb4e6bbe29eb914e73bc69da82a2"><code>84e536f</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7858,6 +7864,10 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(uv)</em> Cap uv download sizes and install atomically (<a href="https://github.com/s0undt3ch/ToolR/commit/139cca607b56f318b2b67e37a51a682310475d8f"><code>139cca6</code></a>)</li>
 <li><em>(uv)</em> Point download failures at a manual install, and name the path (<a href="https://github.com/s0undt3ch/ToolR/commit/68995018a6a50d1cf1b7d8ff5ebb03f5a33b3133"><code>6899501</code></a>)</li>
 <li><em>(venv)</em> Report a uv sync that can't start without the install-uv hint (<a href="https://github.com/s0undt3ch/ToolR/commit/1060a661b56972d0f7a723673935948c9a251562"><code>1060a66</code></a>)</li>
+<li><em>(complete)</em> Harden bash path completion (<a href="https://github.com/s0undt3ch/ToolR/commit/0806253e7be4621ba94149250147eba8b71e57ca"><code>0806253</code></a>)</li>
+<li><em>(complete)</em> Keep a no-match directory probe clear of set -e (<a href="https://github.com/s0undt3ch/ToolR/commit/ea43f86cd5e5fd4e69c4885c0359380fcd54133c"><code>ea43f86</code></a>)</li>
+<li><em>(complete)</em> Mark bash directories in linear time (<a href="https://github.com/s0undt3ch/ToolR/commit/71e490a0f150159f8ca2342b1bdf7790230569f9"><code>71e490a</code></a>)</li>
+<li><em>(complete)</em> Survive nounset with no path candidates (<a href="https://github.com/s0undt3ch/ToolR/commit/4011395935082d49f999692df684665c73658157"><code>4011395</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7921,6 +7931,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Pass ctx.run output destinations as owned files (<a href="https://github.com/s0undt3ch/ToolR/commit/4bed4f5cbc6de02e1423a717eedcacf8184b5a40"><code>4bed4f5</code></a>)</li>
 <li><em>(command)</em> Name ctx.run's output files by role (<a href="https://github.com/s0undt3ch/ToolR/commit/41a5b8580cabc7262477bfccc06a758d3f24ffb9"><code>41a5b85</code></a>)</li>
 <li><em>(uv)</em> Share the capped fetch and name install failures (<a href="https://github.com/s0undt3ch/ToolR/commit/cc2241c87438d7accdee19626281fa5349570ebc"><code>cc2241c</code></a>)</li>
+<li><em>(complete)</em> Share bash quoting and drop the bash 4 lookup branch (<a href="https://github.com/s0undt3ch/ToolR/commit/c69f5abdba07d4c14f53754aba250937abf89684"><code>c69f5ab</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8099,6 +8110,13 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Spec and plan F-06 uv install artefact verification (<a href="https://github.com/s0undt3ch/ToolR/commit/f0e1f9424c820d00e01ca8cf622e8f45dce1a34a"><code>f0e1f94</code></a>)</li>
 <li><em>(specs)</em> Record the confirmed uv install verification decisions (<a href="https://github.com/s0undt3ch/ToolR/commit/c6b4b6faf930225eb2181ff907d208be31ccd1a0"><code>c6b4b6f</code></a>)</li>
 <li><em>(specs)</em> Archive the F-06 uv install verification design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/293160759517b88e6ca60b525be7bb8e8289fe5f"><code>2931607</code></a>)</li>
+<li><em>(specs)</em> Spec and plan F-36 path argument completion (<a href="https://github.com/s0undt3ch/ToolR/commit/bcbaa3678fe622971456a74910b9bf79bc2ff240"><code>bcbaa36</code></a>)</li>
+<li><em>(specs)</em> Record the path completion decisions (<a href="https://github.com/s0undt3ch/ToolR/commit/e66ce35ad727fb88667a3ffd674b2dbb2f6d9800"><code>e66ce35</code></a>)</li>
+<li><em>(specs)</em> Drop the space only after a lone directory candidate (<a href="https://github.com/s0undt3ch/ToolR/commit/bd8d7cd4995ec0f73e011e2c5e21a329649a364d"><code>bd8d7cd</code></a>)</li>
+<li><em>(complete)</em> Document path argument completion (<a href="https://github.com/s0undt3ch/ToolR/commit/15f4aa4c073f50a9e03be670e47d93d29eb6f131"><code>15f4aa4</code></a>)</li>
+<li><em>(specs)</em> Keep bash's nospace for every directory-only completion (<a href="https://github.com/s0undt3ch/ToolR/commit/19dfa50c66cad72a8b045cb822c34f2a853e11a3"><code>19dfa50</code></a>)</li>
+<li><em>(specs)</em> Archive the F-36 path completion design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/7f4180e6be51fc8bbee132d22def95c1c0b07fe8"><code>7f4180e</code></a>)</li>
+<li><em>(cli)</em> Say what older completion scripts do with path slots (<a href="https://github.com/s0undt3ch/ToolR/commit/2e3521484a26f8e6e41b600bfd3f697707d46c18"><code>2e35214</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8197,6 +8215,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(command)</em> Use an fd no one can reuse, and document the Windows abort (<a href="https://github.com/s0undt3ch/ToolR/commit/439bad992f7fca79e58361fd84d909bb02b08e52"><code>439bad9</code></a>)</li>
 <li><em>(uv)</em> Serve several routes from the install test server (<a href="https://github.com/s0undt3ch/ToolR/commit/544acfa4f75b3bead0ef7a15816d9b71283f2c72"><code>544acfa</code></a>)</li>
 <li><em>(uv)</em> Follow GitHub's asset redirect (<a href="https://github.com/s0undt3ch/ToolR/commit/3de5c9670eb64f799463db84d3deecd46e6abf51"><code>3de5c96</code></a>)</li>
+<li><em>(complete)</em> Run the zsh script for path slots (<a href="https://github.com/s0undt3ch/ToolR/commit/d867d35d1bb4ca61598b51772b7e86641617aae7"><code>d867d35</code></a>)</li>
+<li><em>(complete)</em> Read the ~user directory from the home dir instead of writing one (<a href="https://github.com/s0undt3ch/ToolR/commit/6d643fa01f896a9e799f56dd7001774639643c9b"><code>6d643fa</code></a>)</li>
+<li><em>(complete)</em> Reuse the fish driver (<a href="https://github.com/s0undt3ch/ToolR/commit/2bb6cdde76501f9c15f347ec422d972868939d89"><code>2bb6cdd</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8243,6 +8264,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(renovate)</em> Correct why the CI toolr pin uses github-tags (<a href="https://github.com/s0undt3ch/ToolR/commit/e13a4b399197e0482cc48906e2fe0df5f2e50b60"><code>e13a4b3</code></a>)</li>
 <li><em>(renovate)</em> Name the setup-toolr wrapper in the CI toolr pin manager (<a href="https://github.com/s0undt3ch/ToolR/commit/3d99559fb15641ba057c44a8958b45d05ff7ee1b"><code>3d99559</code></a>)</li>
 <li><em>(install-smoke)</em> Run install.ps1 under Windows PowerShell 5.1 too (<a href="https://github.com/s0undt3ch/ToolR/commit/aae88487892b3384f18735509a189310ca5e5d7c"><code>aae8848</code></a>)</li>
+<li><em>(test)</em> Install fish so the fish completion tests run (<a href="https://github.com/s0undt3ch/ToolR/commit/170515864e3356b80802623778ab226f13d93501"><code>1705158</code></a>)</li>
 </ul>
 <h2 id="0351-2026-10-27">0.35.1 - 2026-10-27<a class="headerlink" href="#0351-2026-10-27" title="Permanent link">&para;</a></h2>
 <h3 id="notes_1">Notes<a class="headerlink" href="#notes_1" title="Permanent link">&para;</a></h3>

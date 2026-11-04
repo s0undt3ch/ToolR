@@ -1881,6 +1881,8 @@ each <code>non-exhaustive patterns: … not covered</code> error names the next 
 <li><code>SupportedType::is_path()</code>: say whether clap stores the value as a <code>PathBuf</code>. For a path type,
    also add its <code>(PathForm, PathCheck)</code> to <code>path_rule</code> in <code>crates/toolr/src/value_parsers.rs</code>.
    A test fails if the two disagree.</li>
+<li><code>SupportedType::path_completion()</code>: say how TAB completes it (any path, files, directories or
+   executables), or <code>None</code> for a non-path type. clap's <code>ValueHint</code> comes from the same answer.</li>
 </ol>
 <p>The compiler doesn't check the rest. Tests catch some of it, but not all:</p>
 <ol>

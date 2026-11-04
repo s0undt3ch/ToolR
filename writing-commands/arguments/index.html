@@ -2442,6 +2442,10 @@ while it parses the command line, before any Python starts. Your function always
 </table>
 <p>"Canonical" means absolute, with symlinks and <code>..</code> resolved, so a symlink to a directory counts as
 a <code>DirectoryPath</code>.</p>
+<p>Tab completion offers files and directories for every path type. <code>DirectoryPath</code>,
+<code>WritableDirectoryPath</code> and <code>NewPath</code> offer directories only: a <code>NewPath</code> must not exist yet, so
+you pick its parent and type the new name. Completion doesn't apply the type's check, so
+<code>ExecutablePath</code> offers every file.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr</span><span class="w"> </span><span class="kn">import</span> <span class="n">Context</span>
 </span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">toolr.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">FilePath</span><span class="p">,</span> <span class="n">NewPath</span>
 </span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
