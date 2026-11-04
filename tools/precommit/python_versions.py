@@ -11,13 +11,13 @@ from typing import Any
 from typing import NamedTuple
 
 from rich.markup import escape
+
+from toolr import Context
 from tools.ci import ABI3_WHEEL_PYTHONS
 from tools.ci import BINARY_WHEEL_PYTHONS
 from tools.ci import REPO_ROOT
 from tools.ci import python3_floor
 from tools.ci import supported_minors
-
-from toolr import Context
 
 from ._common import group
 
@@ -100,7 +100,11 @@ def _floor_settings(
 
 
 def python_version_mismatches(repo_root: Path) -> list[str]:
-    """Return one message per version list under ``repo_root`` that disagrees with its ``requires-python``."""
+    """Return one message per version list under ``repo_root`` that disagrees with its ``requires-python``.
+
+    TOML and workflow inputs are read from ``repo_root``; ``ABI3_WHEEL_PYTHONS`` and
+    ``BINARY_WHEEL_PYTHONS`` come from the imported ``tools.ci``, whatever ``repo_root`` is.
+    """
     config_tomls = {
         key: tomllib.loads((repo_root / path).read_text(encoding="utf-8"))
         for key, path in CONFIG_TOML_FILES.items()

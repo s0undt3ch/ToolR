@@ -119,9 +119,15 @@ repos:
             Cargo\.toml|
             \.github/workflows/(ci|_bench|_test)\.yml|
             tools/ci\.py|
-            tools/precommit/(python_versions|_common)\.py|
-            tests/test_python_versions\.py
+            tools/precommit/(python_versions|_common)\.py
           )$
+
+      - id: check-test-layout
+        name: Check the tests/ layout (packages and files/ fixtures)
+        entry: toolr pre-commit check-test-layout
+        language: system
+        pass_filenames: false
+        files: ^tests/
 
       - id: release-notes
         name: Validate queued release notes

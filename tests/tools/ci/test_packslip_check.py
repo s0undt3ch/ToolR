@@ -19,16 +19,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tools.ci import REPO_ROOT
-from tools.ci import PackslipFailure
-from tools.ci import _packslip_statement_failures
-from tools.ci import _skill_frontmatter_name
-from tools.ci import packslip_check
 
 from toolr.testing import make_command_result
 from toolr.testing import make_context
 from toolr.types import ResolvedPath
 from toolr.utils.command import CommandResult
+from tools.ci import REPO_ROOT
+from tools.ci import PackslipFailure
+from tools.ci import _packslip_statement_failures
+from tools.ci import _skill_frontmatter_name
+from tools.ci import packslip_check
 
 SKILL_NAMES = ("alpha", "beta")
 

@@ -83,6 +83,17 @@ to dodge the metric.
 - Tab-completion freshness: `crates/toolr-core/src/complete/freshness.rs`.
 - Reference plugin / example: `examples/plugin-package/`.
 - Pre-commit hook commands (project-local): `tools/precommit/` (`toolr pre-commit <command>`).
+- Tests for project-local tools live in `tests/tools/`, one directory per module mirroring `tools/`, one
+  file per command as a rule of thumb: `tools/release_notes.py`'s `add` →
+  `tests/tools/release_notes/test_add.py`, `tools/precommit/foo.py`'s `check-foo` →
+  `tests/tools/precommit/foo/test_check_foo.py`. Keep tests out of `tools/`: toolr scans every `*.py`
+  there for commands.
+- Every directory under `tests/` that holds a `.py` file has an `__init__.py` (no namespace packages), so
+  test modules import as `tests.…` and can't shadow real packages such as `tools`; the one exception is
+  `tests/support/coverage/`, whose `sitecustomize.py` is loaded via `PYTHONPATH`.
+- Test fixtures, Python or not, live in a `files/` directory next to the tests that use them; `files/`
+  trees are data, not packages.
+- `toolr pre-commit check-test-layout` enforces both.
 - Skills shipped from this repo:
   `skills/toolr-ci-setup/`, `skills/toolr-command-authoring/`, `skills/toolr-command-packaging/`.
 
