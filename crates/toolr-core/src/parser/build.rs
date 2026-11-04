@@ -166,16 +166,12 @@ fn build_commands_inner(
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
         let module_doc = module_docstring(&module);
-        name_conflicts.extend(detect_name_conflicts(
-            &module,
-            &module_path,
-            &all_imports[&module_path],
-        ));
+        name_conflicts.extend(detect_name_conflicts(&module, &module_path, &all_imports));
         let bindings = extract_groups(&module, &module_doc, &global_vars);
         unsupported.extend(detect_unsupported_commands(
             &module,
             &module_path,
-            &all_imports[&module_path],
+            &all_imports,
             &binding_vars(&bindings, &global_vars),
         ));
         let type_imports = TypeImports::from_module(&module);
@@ -1671,6 +1667,46 @@ def other():
             .map(|c| c.function.as_str())
             .collect();
         assert_eq!(names, ["star"]);
+    }
+
+    /// A `command` re-exported through other `tools` modules is still toolr's.
+    #[test]
+    fn reexported_command_is_followed() {
+        let tmp = TempDir::new().unwrap();
+        let doc = "    \"\"\"Doc.\"\"\"\n";
+        let files = [
+            (
+                "tools/_common.py",
+                "from toolr import command, command_group\n\ncommand_group(\"grp\", \"G\", \"G\")\n".to_string(),
+            ),
+            (
+                "tools/a.py",
+                format!("from ._common import command\n\n\n@command(group=\"grp\")\ndef relative(ctx):\n{doc}"),
+            ),
+            (
+                "tools/b.py",
+                format!("from tools._common import *\n\n\n@command(group=\"grp\")\ndef star(ctx):\n{doc}"),
+            ),
+            (
+                "tools/c.py",
+                format!("from toolr import *\nfrom click import command\n\n\ndef make():\n    @command()\n    def cli():\n    {doc}"),
+            ),
+            (
+                "tools/d.py",
+                format!("from tools.e import command\n\n\ndef make():\n    @command\n    def cycle():\n    {doc}"),
+            ),
+            ("tools/e.py", "from tools.d import command\n".to_string()),
+        ];
+        for (name, contents) in &files {
+            write(tmp.path(), name, contents);
+        }
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let names: Vec<_> = manifest
+            .commands
+            .iter()
+            .map(|c| c.function.as_str())
+            .collect();
+        assert_eq!(names, ["relative", "star"]);
     }
 
     /// A group binding from an earlier file counts in a nested `def`, and the

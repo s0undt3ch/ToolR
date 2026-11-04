@@ -41,8 +41,7 @@ pub fn extract_commands(
     // over an inherited one; otherwise the global cross-file map
     // covers `from ._common import group; @group.command` style.
     let by_var = binding_vars(bindings, global_vars);
-    let empty = ImportTable::default();
-    let names = ToolrNames(all_imports.get(module_path).unwrap_or(&empty));
+    let names = ToolrNames::new(all_imports, module_path);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
@@ -144,12 +143,12 @@ pub struct UnsupportedCommand {
 pub fn detect_unsupported_commands(
     module: &ModModule,
     module_path: &str,
-    imports: &ImportTable,
+    all_imports: &HashMap<String, ImportTable>,
     by_var: &GlobalVars,
 ) -> Vec<UnsupportedCommand> {
     let mut finder = UnsupportedFinder {
         module_path,
-        names: ToolrNames(imports),
+        names: ToolrNames::new(all_imports, module_path),
         by_var,
         depth: 0,
         out: Vec::new(),
@@ -338,9 +337,9 @@ fn resolve_explicit_name(args: &Arguments) -> (Option<String>, bool) {
 pub fn detect_name_conflicts(
     module: &ModModule,
     module_path: &str,
-    imports: &ImportTable,
+    all_imports: &HashMap<String, ImportTable>,
 ) -> Vec<CommandNameConflict> {
-    let names = ToolrNames(imports);
+    let names = ToolrNames::new(all_imports, module_path);
     let mut out = Vec::new();
     for stmt in &module.body {
         let Stmt::FunctionDef(func) = stmt else {
@@ -365,28 +364,61 @@ pub fn detect_name_conflicts(
 
 /// Which of a module's names are toolr's `command` or the `toolr` module.
 #[derive(Clone, Copy)]
-struct ToolrNames<'a>(&'a ImportTable);
+struct ToolrNames<'a> {
+    all_imports: &'a HashMap<String, ImportTable>,
+    module: &'a str,
+}
 
-impl ToolrNames<'_> {
+impl<'a> ToolrNames<'a> {
+    fn new(all_imports: &'a HashMap<String, ImportTable>, module: &'a str) -> Self {
+        Self {
+            all_imports,
+            module,
+        }
+    }
+
     /// `import toolr [as t]`; `import toolr.types` binds `toolr` too.
     fn is_toolr_module(self, name: &str) -> bool {
-        self.0
-            .resolve_module_binding(name)
+        self.all_imports
+            .get(self.module)
+            .and_then(|imports| imports.resolve_module_binding(name))
             .is_some_and(|m| m == "toolr" || (name == "toolr" && m.starts_with("toolr.")))
     }
 
-    /// A name `from toolr import command [as …]` or `from toolr import *` binds.
-    /// Any other `command` (click's, a local `def`) isn't toolr's.
+    /// Whether `name` is toolr's `command`, imported from `toolr` directly or
+    /// re-exported by other scanned modules. A click `command` or a local `def` isn't.
     fn is_command(self, name: &str) -> bool {
-        if self.0.local_binding_wins(name) {
-            return false;
-        }
-        self.0
-            .candidates(name)
-            .iter()
-            .any(|c| c.module == "toolr" && c.original_name == "command")
-            || (name == "command" && self.0.star_import_modules().iter().any(|m| m == "toolr"))
+        binds_toolr_command(self.all_imports, self.module, name, 0)
     }
+}
+
+fn binds_toolr_command(
+    all_imports: &HashMap<String, ImportTable>,
+    module: &str,
+    name: &str,
+    depth: usize,
+) -> bool {
+    // A re-export cycle can't bind toolr's `command`; the cap stops the walk.
+    let Some(imports) = all_imports.get(module).filter(|_| depth <= 8) else {
+        return false;
+    };
+    if imports.local_binding_wins(name) {
+        return false;
+    }
+    let follows = |from: &str, original: &str| {
+        (from == "toolr" && original == "command")
+            || binds_toolr_command(all_imports, from, original, depth + 1)
+    };
+    let candidates = imports.candidates(name);
+    if candidates.is_empty() {
+        return imports
+            .star_import_modules()
+            .iter()
+            .any(|from| follows(from, name));
+    }
+    candidates
+        .iter()
+        .any(|c| follows(&c.module, &c.original_name))
 }
 
 /// The first decorator toolr reads as a command, and what it read.
@@ -833,14 +865,7 @@ def check_snippets(ctx):
             &HashMap::new(),
             &mut Vec::new(),
         );
-        assert!(
-            detect_name_conflicts(
-                &m,
-                "tools.ci",
-                &ImportTable::from_module(&m, "tools.ci", false)
-            )
-            .is_empty()
-        );
+        assert!(detect_name_conflicts(&m, "tools.ci", &imports_of(&m)).is_empty());
         assert_eq!(commands.len(), 1);
         // The `name=` keyword wins over the `check-snippets` function name.
         assert_eq!(commands[0].name, "snippet-checker");
@@ -1003,7 +1028,7 @@ def do_thing(ctx):
         assert_eq!(
             command_decorator(
                 &func.decorator_list,
-                ToolrNames(&ImportTable::from_module(&m, "tools.ci", false))
+                ToolrNames::new(&imports_of(&m), "tools.ci")
             )
             .unwrap(),
             CommandDecorator::Binding {
@@ -1012,11 +1037,7 @@ def do_thing(ctx):
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(
-            &m,
-            "tools.ci",
-            &ImportTable::from_module(&m, "tools.ci", false),
-        );
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &imports_of(&m));
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].module, "tools.ci");
         assert_eq!(conflicts[0].function, "do_thing");
@@ -1043,7 +1064,7 @@ def do_thing(ctx):
         assert_eq!(
             command_decorator(
                 &func.decorator_list,
-                ToolrNames(&ImportTable::from_module(&m, "tools.ci", false))
+                ToolrNames::new(&imports_of(&m), "tools.ci")
             )
             .unwrap(),
             CommandDecorator::StringPath {
@@ -1052,11 +1073,7 @@ def do_thing(ctx):
                 name_conflict: true,
             }
         );
-        let conflicts = detect_name_conflicts(
-            &m,
-            "tools.ci",
-            &ImportTable::from_module(&m, "tools.ci", false),
-        );
+        let conflicts = detect_name_conflicts(&m, "tools.ci", &imports_of(&m));
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].function, "do_thing");
     }
@@ -1126,7 +1143,7 @@ def do_thing(ctx):
         assert_eq!(
             command_decorator(
                 &func.decorator_list,
-                ToolrNames(&ImportTable::from_module(&m, "tools.ci", false))
+                ToolrNames::new(&imports_of(&m), "tools.ci")
             )
             .unwrap(),
             CommandDecorator::Binding {
@@ -1175,7 +1192,7 @@ def do_thing(ctx):
         assert_eq!(
             command_decorator(
                 &func.decorator_list,
-                ToolrNames(&ImportTable::from_module(&m, "tools.ci", false))
+                ToolrNames::new(&imports_of(&m), "tools.ci")
             )
             .unwrap(),
             CommandDecorator::Binding {
@@ -1225,7 +1242,7 @@ def collect_data(ctx):
         assert_eq!(
             command_decorator(
                 &func.decorator_list,
-                ToolrNames(&ImportTable::from_module(&m, "tools.ci", false))
+                ToolrNames::new(&imports_of(&m), "tools.ci")
             )
             .unwrap(),
             CommandDecorator::Binding {
@@ -1276,7 +1293,7 @@ def do_thing(ctx):
         assert_eq!(
             command_decorator(
                 &func.decorator_list,
-                ToolrNames(&ImportTable::from_module(&m, "tools.ci", false))
+                ToolrNames::new(&imports_of(&m), "tools.ci")
             )
             .unwrap(),
             CommandDecorator::Binding {
