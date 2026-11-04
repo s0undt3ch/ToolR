@@ -626,7 +626,7 @@ jobs:
         # `regen-doc-snippets.py` runs `toolr project manifest rebuild`,
         # which dispatches to a Python that must `import toolr`. The dev
         # venv (.venv) gets toolr-py via this pip install — no per-job
-        # maturin rebuild. tests/test_python_versions.py pins the cp-tag to
+        # maturin rebuild. `toolr pre-commit check-python-versions` pins the cp-tag to
         # the requires-python floor.
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

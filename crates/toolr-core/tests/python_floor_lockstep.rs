@@ -27,7 +27,7 @@ fn min_python_minor_matches_toolr_py_requires_python() {
     let (floor, patch) = python3_floor(requires_python)
         .unwrap_or_else(|| panic!("no `>=3.N` clause in requires-python {requires_python:?}"));
 
-    // Same rule as `python3_floor` in tests/test_python_versions.py; change both.
+    // Same rule as `python3_floor` in tools/ci.py; change both.
     assert_eq!(
         patch, 0,
         "requires-python {requires_python:?} sets a patch-level floor, which \

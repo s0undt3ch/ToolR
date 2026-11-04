@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "toolr-py"
 description = "Python bindings for the toolr framework (import as `toolr`)"
 readme = "README.md"
-# Adding or dropping a CPython? tests/test_python_versions.py and python_floor_lockstep.rs enforce the
+# Adding or dropping a CPython? `toolr pre-commit check-python-versions` and python_floor_lockstep.rs enforce the
 # version lists; neither reads prose, so grep for 3.11/cp311 too.
 requires-python = ">=3.11,<3.16"
 license = { file = "LICENSE" }

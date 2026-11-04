@@ -100,6 +100,29 @@ repos:
             tools/precommit/(workflows|_common)\.py$
           )$
 
+      - id: check-python-versions
+        name: Check Python version lists against requires-python
+        # Catches a stale classifier, mise.toml interpreter or floor setting at commit time,
+        # instead of in the pytest job that waits for the wheel build.
+        entry: toolr pre-commit check-python-versions
+        language: system
+        pass_filenames: false
+        files: >
+          (?x)^(
+            crates/toolr-py/pyproject\.toml|
+            crates/toolr/pyproject\.toml|
+            tools/pyproject\.toml|
+            examples/plugin-package/pyproject\.toml|
+            skills/toolr-command-packaging/examples/pyproject\.toml|
+            pyproject\.toml|
+            mise\.toml|
+            Cargo\.toml|
+            \.github/workflows/(ci|_bench|_test)\.yml|
+            tools/ci\.py|
+            tools/precommit/(python_versions|_common)\.py|
+            tests/test_python_versions\.py
+          )$
+
       - id: release-notes
         name: Validate queued release notes
         entry: toolr release-notes check

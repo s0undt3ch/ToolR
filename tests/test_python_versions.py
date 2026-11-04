@@ -14,6 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import yaml
 from tools.ci import REPO_ROOT
 from tools.ci import _requires_python
 from tools.ci import python3_floor
@@ -128,3 +129,25 @@ def test_mismatch_reported(
 
     assert len(mismatches) == 1, mismatches
     assert expected_fragment in mismatches[0]
+
+
+def test_hook_files_cover_inputs() -> None:
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    hooks = [
+        hook
+        for repo in config["repos"]
+        if repo["repo"] == "local"
+        for hook in repo["hooks"]
+        if hook["id"] == "check-python-versions"
+    ]
+    assert len(hooks) == 1, hooks
+    files = re.compile(hooks[0]["files"])
+    inputs = [
+        *CONFIG_TOML_FILES.values(),
+        *CP_TAG_WORKFLOWS,
+        "tools/ci.py",
+        "tools/precommit/python_versions.py",
+        "tests/test_python_versions.py",
+    ]
+    assert [path for path in inputs if not files.search(path)] == []
+    assert not files.search("README.md")
