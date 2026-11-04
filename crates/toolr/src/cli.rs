@@ -128,16 +128,16 @@ fn build_dispatcher_command(
     c
 }
 
-/// Construct the full clap Command tree, given a loaded manifest.
-/// User-defined groups appear as top-level subcommands.
-pub fn build_command(manifest: &Manifest) -> Command {
-    // All root-level "output" flags live under a single `--help` heading
-    // so users see them as a coherent block. They tweak how toolr's own
-    // output renders *and* how `ctx.run(...)` subprocesses behave by
-    // default (timeouts, output watchdog). Per-call `ctx.run(timeout_secs=)`
-    // / `no_output_timeout_secs=` arguments still override these.
-    const OUTPUT_HEADING: &str = "Output Options";
-    let mut root = Command::new("toolr")
+// All root-level "output" flags live under a single `--help` heading
+// so users see them as a coherent block. They tweak how toolr's own
+// output renders *and* how `ctx.run(...)` subprocesses behave by
+// default (timeouts, output watchdog). Per-call `ctx.run(timeout_secs=)`
+// / `no_output_timeout_secs=` arguments still override these.
+const OUTPUT_HEADING: &str = "Output Options";
+
+/// The root `toolr` command: its output flags and the combined `-h`/`--help` arg.
+fn build_root_command() -> Command {
+    Command::new("toolr")
         // Without this, clap infers the usage-string binary name from
         // `argv[0]` — `toolr.exe` on Windows vs `toolr` elsewhere — so
         // help output (and tests asserting on it) would differ by platform.
@@ -223,438 +223,438 @@ pub fn build_command(manifest: &Manifest) -> Command {
                 .action(ArgAction::SetTrue)
                 .global(true)
                 .help("Print help"),
-        );
+        )
+}
 
-    let children = children_by_parent(manifest);
-    for group in children.get(&None).cloned().unwrap_or_default() {
-        if user_group_collides(&group.name) {
-            eprintln!(
-                "toolr: warning: ignoring user-defined group `{}` — \
-                 this name is reserved by toolr itself.",
-                group.name
-            );
-            continue;
-        }
-        root = root.subcommand(build_group_subtree(group, manifest, &children));
-    }
+/// `toolr project init`.
+fn build_project_init_subcommand() -> Command {
+    Command::new("init")
+        .disable_help_flag(true)
+        .about("Scaffold tools/ in the current directory")
+        .arg(
+            Arg::new("force")
+                .long("force")
+                .action(ArgAction::SetTrue)
+                .help("Overwrite an existing tools/ directory"),
+        )
+        .arg(
+            Arg::new("no-sync")
+                .long("no-sync")
+                .action(ArgAction::SetTrue)
+                .help("Skip the automatic `uv sync` after scaffolding"),
+        )
+        .arg(
+            Arg::new("venv-location")
+                .long("venv-location")
+                .value_name("LOCATION")
+                .value_parser(["cache", "in-tree"])
+                .default_value("cache")
+                .help("Where the tools venv should live"),
+        )
+        .arg(
+            Arg::new("no-example")
+                .long("no-example")
+                .action(ArgAction::SetTrue)
+                .help("Skip generating tools/example.py"),
+        )
+        .arg(
+            Arg::new("python")
+                .long("python")
+                .value_name("VERSION")
+                .help(
+                    "`requires-python` value for tools/pyproject.toml \
+                     (defaults to python3's >=major.minor, never below the \
+                     oldest Python toolr supports)",
+                ),
+        )
+        .arg(
+            Arg::new("yes")
+                .long("yes")
+                .short('y')
+                .action(ArgAction::SetTrue)
+                .help("Auto-approve overwriting any conflicting scaffold files"),
+        )
+        .arg(
+            Arg::new("quiet")
+                .long("quiet")
+                .short('q')
+                .action(ArgAction::SetTrue)
+                .help("Suppress informational output and never prompt to install uv"),
+        )
+}
 
-    root = root.subcommand(
-        Command::new("project")
-            .disable_help_flag(true)
-            .about("Operations on the current repo's tools/ directory")
-            .subcommand_required(true)
-            .subcommand(
-                Command::new("init")
-                    .disable_help_flag(true)
-                    .about("Scaffold tools/ in the current directory")
-                    .arg(
-                        Arg::new("force")
-                            .long("force")
-                            .action(ArgAction::SetTrue)
-                            .help("Overwrite an existing tools/ directory"),
-                    )
-                    .arg(
-                        Arg::new("no-sync")
-                            .long("no-sync")
-                            .action(ArgAction::SetTrue)
-                            .help("Skip the automatic `uv sync` after scaffolding"),
-                    )
-                    .arg(
-                        Arg::new("venv-location")
-                            .long("venv-location")
-                            .value_name("LOCATION")
-                            .value_parser(["cache", "in-tree"])
-                            .default_value("cache")
-                            .help("Where the tools venv should live"),
-                    )
-                    .arg(
-                        Arg::new("no-example")
-                            .long("no-example")
-                            .action(ArgAction::SetTrue)
-                            .help("Skip generating tools/example.py"),
-                    )
-                    .arg(
-                        Arg::new("python")
-                            .long("python")
-                            .value_name("VERSION")
-                            .help(
-                                "`requires-python` value for tools/pyproject.toml \
-                                 (defaults to python3's >=major.minor, never below the \
-                                 oldest Python toolr supports)",
-                            ),
-                    )
-                    .arg(
-                        Arg::new("yes")
-                            .long("yes")
-                            .short('y')
-                            .action(ArgAction::SetTrue)
-                            .help("Auto-approve overwriting any conflicting scaffold files"),
-                    )
-                    .arg(
-                        Arg::new("quiet")
-                            .long("quiet")
-                            .short('q')
-                            .action(ArgAction::SetTrue)
-                            .help("Suppress informational output and never prompt to install uv"),
-                    ),
-            )
-            .subcommand(
-                // Migration shim: parses `toolr project deps <anything>` so we
-                // can emit a tailored "removed in 0.22; use `project venv`"
-                // error from `dispatch_project`. Hidden from `--help`. Drop
-                // this subcommand after 0.23 once users have migrated.
-                Command::new("deps")
-                    .disable_help_flag(true)
-                    .hide(true)
-                    .allow_external_subcommands(true)
-                    .about("(removed in 0.22) use `toolr project venv` instead"),
-            )
-            .subcommand(
-                Command::new("venv")
-                    .disable_help_flag(true)
-                    .about("Inspect, sync, and operate on the tools venv")
-                    .subcommand_required(true)
-                    .subcommand(
-                        Command::new("path")
-                            .disable_help_flag(true)
-                            .about("Print the absolute path to the tools venv"),
-                    )
-                    .subcommand(
-                        Command::new("shell")
-                            .disable_help_flag(true)
-                            .about("Spawn a subshell with the tools venv activated"),
-                    )
-                    .subcommand(
-                        Command::new("run")
-                            .disable_help_flag(true)
-                            .about("Run a command inside the managed tools venv (auto-syncs first; use --no-sync in CI)")
-                            .arg(
-                                Arg::new("no-sync")
-                                    .long("no-sync")
-                                    .action(ArgAction::SetTrue)
-                                    .help("Do not sync first; run against the existing venv and error if it is missing or stale (CI-deterministic)"),
-                            )
-                            .arg(
-                                Arg::new("quiet")
-                                    .long("quiet")
-                                    .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to the auto-sync step and never prompt to install uv (no effect with --no-sync)"),
-                            )
-                            .arg(
-                                Arg::new("command")
-                                    .value_name("CMD")
-                                    .required(true)
-                                    .num_args(1..)
-                                    .trailing_var_arg(true)
-                                    .allow_hyphen_values(true)
-                                    .help("Command to run in the venv, e.g. `pytest tools/`. toolr's own flags must come before the command (or a `--`)."),
-                            ),
-                    )
-                    .subcommand(
-                        Command::new("sync")
-                            .disable_help_flag(true)
-                            .about("Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed since the last sync)")
-                            .arg(
-                                Arg::new("force")
-                                    .long("force")
-                                    .short('f')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Re-run `uv sync` even when none of those files changed (e.g. after changing UV_* environment variables or user-level uv config)"),
-                            )
-                            .arg(
-                                Arg::new("quiet")
-                                    .long("quiet")
-                                    .short('q')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Silent on success and on benign unattended-mode exits (no toolr/uv output)"),
-                            )
-                            .arg(
-                                Arg::new("upgrade")
-                                    .long("upgrade")
-                                    .short('U')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific packages."),
-                            )
-                            .arg(
-                                Arg::new("upgrade-package")
-                                    .long("upgrade-package")
-                                    .short('P')
-                                    .value_name("PACKAGE")
-                                    .action(ArgAction::Append)
-                                    .help("Re-resolve a single package; pass repeatedly for multiple. Each <PACKAGE> must be declared in tools/pyproject.toml."),
-                            ),
-                    )
-                    .subcommand(
-                        Command::new("lock")
-                            .disable_help_flag(true)
-                            .about("Refresh tools/uv.lock without applying (wraps `uv lock`)")
-                            .arg(
-                                Arg::new("quiet")
-                                    .long("quiet")
-                                    .short('q')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to uv and never prompt to install it"),
-                            )
-                            .arg(
-                                Arg::new("upgrade")
-                                    .long("upgrade")
-                                    .short('U')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Re-resolve every package (--upgrade)"),
-                            )
-                            .arg(
-                                Arg::new("upgrade-package")
-                                    .long("upgrade-package")
-                                    .short('P')
-                                    .value_name("PACKAGE")
-                                    .action(ArgAction::Append)
-                                    .help("Re-resolve a single package; pass repeatedly for multiple"),
-                            ),
-                    )
-                    .subcommand(
-                        Command::new("add")
-                            .disable_help_flag(true)
-                            .about("Add one or more packages to tools/pyproject.toml (wraps `uv add`)")
-                            .arg(
-                                Arg::new("packages")
-                                    .value_name("PACKAGE")
-                                    .num_args(1..)
-                                    .required(true)
-                                    .help("Package spec (`name`, `name@version`, `name>=1.2`, …) — passed through to uv"),
-                            )
-                            .arg(
-                                Arg::new("quiet")
-                                    .long("quiet")
-                                    .short('q')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to uv and never prompt to install it"),
-                            ),
-                    )
-                    .subcommand(
-                        Command::new("remove")
-                            .disable_help_flag(true)
-                            .about("Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)")
-                            .arg(
-                                Arg::new("packages")
-                                    .value_name("PACKAGE")
-                                    .num_args(1..)
-                                    .required(true)
-                                    .help("Package name to remove (must already appear in tools/pyproject.toml)"),
-                            )
-                            .arg(
-                                Arg::new("quiet")
-                                    .long("quiet")
-                                    .short('q')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Pass --quiet to uv and never prompt to install it"),
-                            ),
-                    ),
-            )
-            .subcommand(
-                Command::new("manifest")
-                    .disable_help_flag(true)
-                    .about("Manage the project's toolr manifest")
-                    .subcommand_required(true)
-                    .subcommand(
-                        Command::new("rebuild")
-                            .disable_help_flag(true)
-                            .about("Regenerate the static + dynamic manifest in place"),
-                    ),
-            )
-            .subcommand(
-                Command::new("trust")
-                    .disable_help_flag(true)
-                    .about("Allow toolr to run this repository's code, then sync its tools venv")
-                    .arg(
-                        Arg::new("path")
-                            .value_name("PATH")
-                            .value_parser(clap::value_parser!(std::path::PathBuf))
-                            .help("A path inside the repository (defaults to the current directory)"),
-                    )
-                    .arg(
-                        Arg::new("no-sync")
-                            .long("no-sync")
-                            .action(ArgAction::SetTrue)
-                            .help("Only record the trust; don't offer to sync the tools venv"),
-                    )
-                    .arg(
-                        Arg::new("quiet")
-                            .long("quiet")
-                            .short('q')
-                            .action(ArgAction::SetTrue)
-                            .help("Print only the trusted root and never prompt; sync only with TOOLR_AUTO_INSTALL_UV=1"),
-                    ),
-            )
-            .subcommand(
-                Command::new("untrust")
-                    .disable_help_flag(true)
-                    .about("Revoke trust in this repository")
-                    .arg(
-                        Arg::new("path")
-                            .value_name("PATH")
-                            .value_parser(clap::value_parser!(std::path::PathBuf))
-                            .help("A path inside the repository (defaults to the current directory)"),
-                    ),
-            ),
-    );
+/// `toolr project venv` and its subcommands.
+fn build_project_venv_subcommand() -> Command {
+    Command::new("venv")
+        .disable_help_flag(true)
+        .about("Inspect, sync, and operate on the tools venv")
+        .subcommand_required(true)
+        .subcommand(
+            Command::new("path")
+                .disable_help_flag(true)
+                .about("Print the absolute path to the tools venv"),
+        )
+        .subcommand(
+            Command::new("shell")
+                .disable_help_flag(true)
+                .about("Spawn a subshell with the tools venv activated"),
+        )
+        .subcommand(
+            Command::new("run")
+                .disable_help_flag(true)
+                .about("Run a command inside the managed tools venv (auto-syncs first; use --no-sync in CI)")
+                .arg(
+                    Arg::new("no-sync")
+                        .long("no-sync")
+                        .action(ArgAction::SetTrue)
+                        .help("Do not sync first; run against the existing venv and error if it is missing or stale (CI-deterministic)"),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .long("quiet")
+                        .action(ArgAction::SetTrue)
+                        .help("Pass --quiet to the auto-sync step and never prompt to install uv (no effect with --no-sync)"),
+                )
+                .arg(
+                    Arg::new("command")
+                        .value_name("CMD")
+                        .required(true)
+                        .num_args(1..)
+                        .trailing_var_arg(true)
+                        .allow_hyphen_values(true)
+                        .help("Command to run in the venv, e.g. `pytest tools/`. toolr's own flags must come before the command (or a `--`)."),
+                ),
+        )
+        .subcommand(
+            Command::new("sync")
+                .disable_help_flag(true)
+                .about("Sync the tools venv (no-op unless tools/pyproject.toml, uv.lock, uv.toml or .python-version changed since the last sync)")
+                .arg(
+                    Arg::new("force")
+                        .long("force")
+                        .short('f')
+                        .action(ArgAction::SetTrue)
+                        .help("Re-run `uv sync` even when none of those files changed (e.g. after changing UV_* environment variables or user-level uv config)"),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .long("quiet")
+                        .short('q')
+                        .action(ArgAction::SetTrue)
+                        .help("Silent on success and on benign unattended-mode exits (no toolr/uv output)"),
+                )
+                .arg(
+                    Arg::new("upgrade")
+                        .long("upgrade")
+                        .short('U')
+                        .action(ArgAction::SetTrue)
+                        .help("Re-resolve every package (passes --upgrade to uv). Combine with -P to also force specific packages."),
+                )
+                .arg(
+                    Arg::new("upgrade-package")
+                        .long("upgrade-package")
+                        .short('P')
+                        .value_name("PACKAGE")
+                        .action(ArgAction::Append)
+                        .help("Re-resolve a single package; pass repeatedly for multiple. Each <PACKAGE> must be declared in tools/pyproject.toml."),
+                ),
+        )
+        .subcommand(
+            Command::new("lock")
+                .disable_help_flag(true)
+                .about("Refresh tools/uv.lock without applying (wraps `uv lock`)")
+                .arg(
+                    Arg::new("quiet")
+                        .long("quiet")
+                        .short('q')
+                        .action(ArgAction::SetTrue)
+                        .help("Pass --quiet to uv and never prompt to install it"),
+                )
+                .arg(
+                    Arg::new("upgrade")
+                        .long("upgrade")
+                        .short('U')
+                        .action(ArgAction::SetTrue)
+                        .help("Re-resolve every package (--upgrade)"),
+                )
+                .arg(
+                    Arg::new("upgrade-package")
+                        .long("upgrade-package")
+                        .short('P')
+                        .value_name("PACKAGE")
+                        .action(ArgAction::Append)
+                        .help("Re-resolve a single package; pass repeatedly for multiple"),
+                ),
+        )
+        .subcommand(
+            Command::new("add")
+                .disable_help_flag(true)
+                .about("Add one or more packages to tools/pyproject.toml (wraps `uv add`)")
+                .arg(
+                    Arg::new("packages")
+                        .value_name("PACKAGE")
+                        .num_args(1..)
+                        .required(true)
+                        .help("Package spec (`name`, `name@version`, `name>=1.2`, …) — passed through to uv"),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .long("quiet")
+                        .short('q')
+                        .action(ArgAction::SetTrue)
+                        .help("Pass --quiet to uv and never prompt to install it"),
+                ),
+        )
+        .subcommand(
+            Command::new("remove")
+                .disable_help_flag(true)
+                .about("Remove one or more packages from tools/pyproject.toml (wraps `uv remove`)")
+                .arg(
+                    Arg::new("packages")
+                        .value_name("PACKAGE")
+                        .num_args(1..)
+                        .required(true)
+                        .help("Package name to remove (must already appear in tools/pyproject.toml)"),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .long("quiet")
+                        .short('q')
+                        .action(ArgAction::SetTrue)
+                        .help("Pass --quiet to uv and never prompt to install it"),
+                ),
+        )
+}
 
-    root = root.subcommand(
-        Command::new("self")
-            .disable_help_flag(true)
-            .about("Operations on toolr itself")
-            .subcommand_required(true)
-            .arg_required_else_help(true)
-            .subcommand(
-                Command::new("build-manifest")
-                    .disable_help_flag(true)
-                    .about("Generate a third-party manifest fragment for a package")
-                    .arg(
-                        Arg::new("package_positional")
-                            .value_name("PACKAGE")
-                            .required(false)
-                            .conflicts_with("source-dir")
-                            .help("Dotted Python package name to introspect (looked up in the tools venv)"),
-                    )
-                    .arg(
-                        Arg::new("source-dir")
-                            .long("source-dir")
-                            .value_name("PATH")
-                            .conflicts_with("package_positional")
-                            .help(
-                                "Path to the package's source tree (bypasses the tools-venv lookup)",
-                            ),
-                    )
-                    .arg(
-                        Arg::new("package")
-                            .long("package")
-                            .value_name("PKG")
-                            .requires("source-dir")
-                            .help(
-                                "Package name to embed in the fragment when using --source-dir \
-                                 (defaults to the leaf directory name)",
-                            ),
-                    )
-                    .arg(
-                        Arg::new("output")
-                            .long("output")
-                            .value_name("PATH")
-                            .help("Override the output path"),
-                    )
-                    .arg(
-                        Arg::new("check")
-                            .long("check")
-                            .action(ArgAction::SetTrue)
-                            .help("Verify the on-disk manifest matches regeneration"),
-                    ),
-            )
-            .subcommand(
-                Command::new("cache")
-                    .disable_help_flag(true)
-                    .about("Manage the cache of per-repo virtualenvs")
-                    .subcommand_required(true)
-                    .arg_required_else_help(true)
-                    .subcommand(
-                        Command::new("list")
-                            .disable_help_flag(true)
-                            .about(
-                            "List every cached virtualenv with size and last-use timestamp",
+/// The `toolr project` subtree.
+fn build_project_subcommand() -> Command {
+    Command::new("project")
+        .disable_help_flag(true)
+        .about("Operations on the current repo's tools/ directory")
+        .subcommand_required(true)
+        .subcommand(build_project_init_subcommand())
+        .subcommand(
+            // Migration shim: parses `toolr project deps <anything>` so we
+            // can emit a tailored "removed in 0.22; use `project venv`"
+            // error from `dispatch_project`. Hidden from `--help`. Drop
+            // this subcommand after 0.23 once users have migrated.
+            Command::new("deps")
+                .disable_help_flag(true)
+                .hide(true)
+                .allow_external_subcommands(true)
+                .about("(removed in 0.22) use `toolr project venv` instead"),
+        )
+        .subcommand(build_project_venv_subcommand())
+        .subcommand(
+            Command::new("manifest")
+                .disable_help_flag(true)
+                .about("Manage the project's toolr manifest")
+                .subcommand_required(true)
+                .subcommand(
+                    Command::new("rebuild")
+                        .disable_help_flag(true)
+                        .about("Regenerate the static + dynamic manifest in place"),
+                ),
+        )
+        .subcommand(
+            Command::new("trust")
+                .disable_help_flag(true)
+                .about("Allow toolr to run this repository's code, then sync its tools venv")
+                .arg(
+                    Arg::new("path")
+                        .value_name("PATH")
+                        .value_parser(clap::value_parser!(std::path::PathBuf))
+                        .help("A path inside the repository (defaults to the current directory)"),
+                )
+                .arg(
+                    Arg::new("no-sync")
+                        .long("no-sync")
+                        .action(ArgAction::SetTrue)
+                        .help("Only record the trust; don't offer to sync the tools venv"),
+                )
+                .arg(
+                    Arg::new("quiet")
+                        .long("quiet")
+                        .short('q')
+                        .action(ArgAction::SetTrue)
+                        .help("Print only the trusted root and never prompt; sync only with TOOLR_AUTO_INSTALL_UV=1"),
+                ),
+        )
+        .subcommand(
+            Command::new("untrust")
+                .disable_help_flag(true)
+                .about("Revoke trust in this repository")
+                .arg(
+                    Arg::new("path")
+                        .value_name("PATH")
+                        .value_parser(clap::value_parser!(std::path::PathBuf))
+                        .help("A path inside the repository (defaults to the current directory)"),
+                ),
+        )
+}
+
+/// `toolr self build-manifest`.
+fn build_self_build_manifest_subcommand() -> Command {
+    Command::new("build-manifest")
+        .disable_help_flag(true)
+        .about("Generate a third-party manifest fragment for a package")
+        .arg(
+            Arg::new("package_positional")
+                .value_name("PACKAGE")
+                .required(false)
+                .conflicts_with("source-dir")
+                .help("Dotted Python package name to introspect (looked up in the tools venv)"),
+        )
+        .arg(
+            Arg::new("source-dir")
+                .long("source-dir")
+                .value_name("PATH")
+                .conflicts_with("package_positional")
+                .help("Path to the package's source tree (bypasses the tools-venv lookup)"),
+        )
+        .arg(
+            Arg::new("package")
+                .long("package")
+                .value_name("PKG")
+                .requires("source-dir")
+                .help(
+                    "Package name to embed in the fragment when using --source-dir \
+                     (defaults to the leaf directory name)",
+                ),
+        )
+        .arg(
+            Arg::new("output")
+                .long("output")
+                .value_name("PATH")
+                .help("Override the output path"),
+        )
+        .arg(
+            Arg::new("check")
+                .long("check")
+                .action(ArgAction::SetTrue)
+                .help("Verify the on-disk manifest matches regeneration"),
+        )
+}
+
+/// `toolr self cache` and its subcommands.
+fn build_self_cache_subcommand() -> Command {
+    Command::new("cache")
+        .disable_help_flag(true)
+        .about("Manage the cache of per-repo virtualenvs")
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .subcommand(
+            Command::new("list")
+                .disable_help_flag(true)
+                .about("List every cached virtualenv with size and last-use timestamp"),
+        )
+        .subcommand(
+            Command::new("prune")
+                .disable_help_flag(true)
+                .about("Remove orphan and stale cache entries")
+                .arg(
+                    Arg::new("all")
+                        .long("all")
+                        .action(ArgAction::SetTrue)
+                        .help("Remove every cache entry"),
+                )
+                .arg(
+                    Arg::new("stale-after-days")
+                        .long("stale-after-days")
+                        .value_name("DAYS")
+                        .default_value("30")
+                        .value_parser(clap::value_parser!(u32))
+                        .help("Override the staleness threshold"),
+                )
+                .arg(
+                    Arg::new("dry-run")
+                        .long("dry-run")
+                        .action(ArgAction::SetTrue)
+                        .help("Show what would be deleted without deleting"),
+                )
+                .arg(
+                    Arg::new("yes")
+                        .long("yes")
+                        .short('y')
+                        .action(ArgAction::SetTrue)
+                        .help("Skip confirmation when used with --all"),
+                ),
+        )
+}
+
+/// `toolr self completion` and its subcommands.
+fn build_self_completion_subcommand() -> Command {
+    Command::new("completion")
+        .disable_help_flag(true)
+        .about("Manage shell completion scripts")
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .subcommand(
+            Command::new("print")
+                .disable_help_flag(true)
+                .about("Print the completion script for a shell to stdout")
+                .arg(
+                    Arg::new("shell")
+                        .required(true)
+                        .value_parser(["bash", "zsh", "fish"])
+                        .help("Shell to emit a completion script for"),
+                ),
+        )
+        .subcommand(
+            Command::new("install")
+                .disable_help_flag(true)
+                .about(
+                    "Install the completion script for a shell into its \
+                     standard location",
+                )
+                .arg(
+                    Arg::new("shell")
+                        .required(true)
+                        .value_parser(["bash", "zsh", "fish"])
+                        .help("Shell to install the completion script for"),
+                )
+                .arg(
+                    Arg::new("force")
+                        .long("force")
+                        .action(ArgAction::SetTrue)
+                        .help(
+                            "Overwrite an existing differing file \
+                             without prompting",
                         ),
-                    )
-                    .subcommand(
-                        Command::new("prune")
-                            .disable_help_flag(true)
-                            .about("Remove orphan and stale cache entries")
-                            .arg(
-                                Arg::new("all")
-                                    .long("all")
-                                    .action(ArgAction::SetTrue)
-                                    .help("Remove every cache entry"),
-                            )
-                            .arg(
-                                Arg::new("stale-after-days")
-                                    .long("stale-after-days")
-                                    .value_name("DAYS")
-                                    .default_value("30")
-                                    .value_parser(clap::value_parser!(u32))
-                                    .help("Override the staleness threshold"),
-                            )
-                            .arg(
-                                Arg::new("dry-run")
-                                    .long("dry-run")
-                                    .action(ArgAction::SetTrue)
-                                    .help("Show what would be deleted without deleting"),
-                            )
-                            .arg(
-                                Arg::new("yes")
-                                    .long("yes")
-                                    .short('y')
-                                    .action(ArgAction::SetTrue)
-                                    .help("Skip confirmation when used with --all"),
-                            ),
-                    ),
-            )
-            .subcommand(
-                Command::new("trusted")
-                    .disable_help_flag(true)
-                    .about("List the repositories toolr trusts to run code")
-                    .arg(
-                        Arg::new("prune")
-                            .long("prune")
-                            .action(ArgAction::SetTrue)
-                            .help("Forget repositories whose path no longer exists"),
-                    ),
-            )
-            .subcommand(
-                Command::new("completion")
-                    .disable_help_flag(true)
-                    .about("Manage shell completion scripts")
-                    .subcommand_required(true)
-                    .arg_required_else_help(true)
-                    .subcommand(
-                        Command::new("print")
-                            .disable_help_flag(true)
-                            .about("Print the completion script for a shell to stdout")
-                            .arg(
-                                Arg::new("shell")
-                                    .required(true)
-                                    .value_parser(["bash", "zsh", "fish"])
-                                    .help("Shell to emit a completion script for"),
-                            ),
-                    )
-                    .subcommand(
-                        Command::new("install")
-                            .disable_help_flag(true)
-                            .about(
-                                "Install the completion script for a shell into its \
-                                 standard location",
-                            )
-                            .arg(
-                                Arg::new("shell")
-                                    .required(true)
-                                    .value_parser(["bash", "zsh", "fish"])
-                                    .help("Shell to install the completion script for"),
-                            )
-                            .arg(
-                                Arg::new("force")
-                                    .long("force")
-                                    .action(ArgAction::SetTrue)
-                                    .help(
-                                        "Overwrite an existing differing file \
-                                         without prompting",
-                                    ),
-                            ),
-                    ),
-            ),
-    );
+                ),
+        )
+}
 
-    root = root.subcommand(
+/// The `toolr self` subtree.
+fn build_self_subcommand() -> Command {
+    Command::new("self")
+        .disable_help_flag(true)
+        .about("Operations on toolr itself")
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .subcommand(build_self_build_manifest_subcommand())
+        .subcommand(build_self_cache_subcommand())
+        .subcommand(
+            Command::new("trusted")
+                .disable_help_flag(true)
+                .about("List the repositories toolr trusts to run code")
+                .arg(
+                    Arg::new("prune")
+                        .long("prune")
+                        .action(ArgAction::SetTrue)
+                        .help("Forget repositories whose path no longer exists"),
+                ),
+        )
+        .subcommand(build_self_completion_subcommand())
+}
+
+/// The hidden internal commands, in the order they join the root.
+fn build_hidden_subcommands() -> [Command; 3] {
+    [
         Command::new("__build-static-manifest")
             .disable_help_flag(true)
             .hide(true)
             .about("(internal) Regenerate the static manifest in place"),
-    );
-
-    root = root.subcommand(
         Command::new("__complete")
             .disable_help_flag(true)
             .hide(true)
@@ -671,16 +671,34 @@ pub fn build_command(manifest: &Manifest) -> Command {
                     .allow_hyphen_values(true)
                     .help("The user's argv minus the leading `toolr`"),
             ),
-    );
-
-    root = root.subcommand(
         Command::new("__install-uv-now")
             .disable_help_flag(true)
             .hide(true)
             .about("(internal) Force-install toolr-managed uv now"),
-    );
+    ]
+}
 
-    root
+/// Construct the full clap Command tree, given a loaded manifest.
+/// User-defined groups appear as top-level subcommands.
+pub fn build_command(manifest: &Manifest) -> Command {
+    let mut root = build_root_command();
+
+    let children = children_by_parent(manifest);
+    for group in children.get(&None).cloned().unwrap_or_default() {
+        if user_group_collides(&group.name) {
+            eprintln!(
+                "toolr: warning: ignoring user-defined group `{}` — \
+                 this name is reserved by toolr itself.",
+                group.name
+            );
+            continue;
+        }
+        root = root.subcommand(build_group_subtree(group, manifest, &children));
+    }
+
+    root.subcommand(build_project_subcommand())
+        .subcommand(build_self_subcommand())
+        .subcommands(build_hidden_subcommands())
 }
 
 /// The literal default clap gets for `arg`, if any. Only an `Optional`
@@ -1364,5 +1382,41 @@ mod cli_tree_tests {
         let django = build_for(manifest);
         let group_subs: Vec<&str> = django.get_subcommands().map(|c| c.get_name()).collect();
         assert_eq!(group_subs, vec!["migrate"]);
+    }
+
+    #[test]
+    fn user_groups_precede_built_ins_and_reserved_names_are_skipped() {
+        let manifest = Manifest {
+            schema_version: 1,
+            static_hash: String::new(),
+            third_party_hash: String::new(),
+            toolr_version: String::new(),
+            groups: vec![group("ci"), group("self"), group("project")],
+            commands: vec![
+                normal_leaf("hello", "ci"),
+                normal_leaf("hijack", "self"),
+                normal_leaf("hijack", "project"),
+            ],
+            plugin_warnings: Vec::new(),
+            input_records: Default::default(),
+        };
+
+        let root = build_command(&manifest);
+        let names: Vec<&str> = root.get_subcommands().map(|c| c.get_name()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "ci",
+                "project",
+                "self",
+                "__build-static-manifest",
+                "__complete",
+                "__install-uv-now",
+            ]
+        );
+        for reserved in ["project", "self"] {
+            let built_in = root.find_subcommand(reserved).unwrap();
+            assert!(built_in.find_subcommand("hijack").is_none());
+        }
     }
 }
