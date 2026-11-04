@@ -191,8 +191,11 @@ pub fn sync_if_needed(
     if !bypass_stamp && matches!(check_freshness(resolved, tools_dir), Freshness::Fresh) {
         return Ok(());
     }
-    let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet)
-        .map_err(|e| UvError::Http(e.to_string()))?;
+    // Not `Http`: its message tells the user to install uv, which they already have.
+    let status = run_uv_sync(uv, tools_dir, resolved, upgrade, quiet).map_err(|e| {
+        let msg = format!("couldn't run `uv sync` with {}: {e:#}", uv.path.display());
+        UvError::Io(std::io::Error::other(msg))
+    })?;
     if !status.success() {
         return Err(UvError::SyncFailed(status.code()));
     }
@@ -455,8 +458,7 @@ mod tests {
     #[test]
     fn sync_if_needed_translates_spawn_failure_to_uv_error() {
         // `UvBinary` pointed at a nonexistent path → run_uv_sync's
-        // status() returns Err → sync_if_needed maps that via
-        // `map_err(|e| UvError::Http(e.to_string()))`.
+        // status() returns Err → sync_if_needed reports which uv failed to start.
         let tmp = TempDir::new().unwrap();
         let venv = tmp.path().join("venv");
         let uv = UvBinary {
@@ -467,7 +469,10 @@ mod tests {
         let resolved = dummy_resolved(venv);
         let err = sync_if_needed(&uv, tmp.path(), &resolved, true, false, &UpgradeMode::None)
             .expect_err("spawn failure should surface");
-        assert!(matches!(err, UvError::Http(_)));
+        assert!(
+            matches!(&err, UvError::Io(_)) && err.to_string().contains("definitely-not-uv"),
+            "{err:?}"
+        );
     }
 
     #[cfg(unix)]
