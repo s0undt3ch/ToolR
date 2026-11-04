@@ -185,16 +185,19 @@ a body for each.
 The `asset_url_points_at_latest_download` test is replaced by URL-builder
 tests. Changed lines need 99% patch coverage.
 
+## Decisions
+
+Confirmed on 2026-11-04:
+
+1. **Bypass variable.** No `TOOLR_UV_SKIP_VERIFY`. Installing uv yourself is
+   the escape hatch.
+2. **Mirror or base-URL variable.** No `TOOLR_UV_DOWNLOAD_URL`. The base URL
+   stays hard-coded.
+3. **Checksum source.** Verify against the same-release `<asset>.sha256`
+   sidecar and fail closed.
+
 ## Open questions
 
-1. **Bypass variable.** Should there be a `TOOLR_UV_SKIP_VERIFY=1`? The
-   default proposal is no, because installing uv yourself is the escape
-   hatch.
-2. **Mirror or base-URL variable.** Should there be a documented
-   `TOOLR_UV_DOWNLOAD_URL` for proxied or air-gapped mirrors? It would have to
-   copy GitHub's `/releases/latest/download` redirect layout, and the checksum
-   would then only be as trustworthy as the mirror. The default proposal is no,
-   for now.
-3. **Attestation later.** Should a follow-up add Sigstore verification once a
+1. **Attestation later.** Should a follow-up add Sigstore verification once a
    light Rust verifier exists? This design leaves room for it as a second step
    after the checksum.
