@@ -1331,7 +1331,10 @@ mod test_suite {
             let dir = tempfile::tempdir()?;
             let marker = dir.path().join("marker");
             let script = format!(
-                "print('hello', flush=True); open({:?}, 'w').close()",
+                // More than a pipe buffer after the failure: a dropped pipe would kill the child
+                // before the marker.
+                "import sys; print('hello', flush=True); sys.stdout.write('x' * 300000); \
+                 sys.stdout.flush(); open({:?}, 'w').close()",
                 marker.to_str().expect("utf-8 temp path")
             );
             let stdout_file = NamedTempFile::new()?;

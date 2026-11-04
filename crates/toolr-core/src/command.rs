@@ -527,7 +527,7 @@ pub fn run_command_internal(
     }
 
     // Returned only now, so a write error doesn't leave the readers unjoined. Lost output
-    // matters more than a stdin the child stopped reading.
+    // matters more than a stdin the child stopped reading; a timeout returned earlier and wins.
     if let Some(msg) = readers.error.lock().unwrap().take() {
         return Err(Box::new(CommandExecutionError::new(msg)));
     }
