@@ -4,7 +4,6 @@
 
 mod common;
 
-use assert_cmd::Command;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use tempfile::TempDir;
@@ -72,8 +71,7 @@ def lint(ctx, mode: Literal[{literal}] = "fast"):
     );
     std::fs::write(fx.tmp.path().join("tools/ci.py"), src).unwrap();
 
-    Command::cargo_bin("toolr")
-        .unwrap()
+    common::toolr()
         .current_dir(fx.tmp.path())
         .arg("__build-static-manifest")
         .assert()
@@ -89,8 +87,7 @@ fn toolr_dir() -> PathBuf {
 }
 
 fn print_script(shell: &str) -> String {
-    let out = Command::cargo_bin("toolr")
-        .unwrap()
+    let out = common::toolr()
         .args(["self", "completion", "print", shell])
         .output()
         .unwrap();
@@ -149,6 +146,8 @@ for v in "$@"; do printf 'Q:%s\n' "$(printf '%q' "$v")"; done
         .args(fx.choices())
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
+        // The shell runs toolr itself, so mirror `common::toolr`'s cache isolation.
+        .env("XDG_CACHE_HOME", common::test_cache_home())
         .env("TW_TAIL", tail)
         .output()
         .unwrap();
@@ -297,6 +296,8 @@ fn fish_completion_never_executes_values() {
         .arg(script)
         .current_dir(fx.tmp.path())
         .env("PATH", path_with_toolr())
+        // The shell runs toolr itself, so mirror `common::toolr`'s cache isolation.
+        .env("XDG_CACHE_HOME", common::test_cache_home())
         .output()
         .unwrap();
     assert!(

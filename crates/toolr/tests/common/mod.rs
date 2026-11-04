@@ -180,8 +180,7 @@ impl Project {
         let mut cmd = toolr();
         cmd.args(args)
             .current_dir(&self.root)
-            .env("TOOLR_VENV_LOCATION", "in-tree")
-            .env("TOOLR_NO_CACHE_HINT", "1");
+            .env("TOOLR_VENV_LOCATION", "in-tree");
         cmd
     }
 
@@ -282,18 +281,28 @@ impl TrustEnv {
     }
 }
 
+/// Keeps tests out of the user's cache. Shared by every test binary, so it
+/// fills with orphans; the helpers mute the orphan hint.
+pub fn test_cache_home() -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR")).join("xdg-cache")
+}
+
 /// The toolr binary as tests run it. Every test drives a throwaway repository,
 /// so the trust check is off; trust tests use [`TrustEnv`] instead.
 pub fn toolr() -> assert_cmd::Command {
     let mut cmd = assert_cmd::Command::cargo_bin("toolr").unwrap();
-    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd.env("TOOLR_TRUST_ALL", "1")
+        .env("XDG_CACHE_HOME", test_cache_home())
+        .env("TOOLR_NO_CACHE_HINT", "1");
     cmd
 }
 
 /// [`toolr`] for tests that need a `std::process::Command`.
 pub fn toolr_std() -> std::process::Command {
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("toolr"));
-    cmd.env("TOOLR_TRUST_ALL", "1");
+    cmd.env("TOOLR_TRUST_ALL", "1")
+        .env("XDG_CACHE_HOME", test_cache_home())
+        .env("TOOLR_NO_CACHE_HINT", "1");
     cmd
 }
 
