@@ -348,7 +348,10 @@ fn extract_zip(archive: &Path, into: &Path) -> Result<(), UvError> {
 mod tests {
     use super::*;
     use crate::test_env::EnvGuard;
+    use std::collections::HashMap;
     use std::io::Write;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn read_consent_eof_is_no_answer() {
@@ -865,8 +868,7 @@ mod tests {
 
     #[test]
     fn download_and_extract_against_local_http_with_missing_binary_in_archive() {
-        // Stands up a one-shot HTTP/1.1 server on 127.0.0.1:<auto> that
-        // serves a tar.gz lacking the `uv` binary, then asserts that
+        // Stands up a local HTTP/1.1 server that serves a tar.gz lacking the `uv` binary, then asserts that
         // `download_and_extract` walks the pipeline and surfaces the
         // "extracted archive did not contain a uv binary" Http error.
         // This covers the post-fetch / post-extract branch that the
@@ -876,7 +878,7 @@ mod tests {
         write_tar_gz(&archive, &[("uv-fake-asset/not-uv", b"placeholder")]);
         let payload = std::fs::read(&archive).unwrap();
 
-        let server = serve_once(payload);
+        let server = serve_one("/uv.tar.gz", payload);
         let dest = tmp.path().join("bin").join("uv");
         let err = download_and_extract(
             &format!("http://{}/uv.tar.gz", server.addr),
@@ -911,7 +913,7 @@ mod tests {
         write_tar_gz(&archive, &[("uv-asset-x/uv", b"#!/bin/sh\necho fake-uv\n")]);
         let payload = std::fs::read(&archive).unwrap();
 
-        let server = serve_once(payload);
+        let server = serve_one("/uv.tar.gz", payload);
         let dest = tmp.path().join("dest").join("uv");
         download_and_extract(
             &format!("http://{}/uv.tar.gz", server.addr),
@@ -923,6 +925,7 @@ mod tests {
         assert!(dest.is_file(), "destination uv should exist");
         let mode = std::fs::metadata(&dest).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o755, "set_executable should mark dest 0o755");
+        assert_eq!(*server.hits.lock().unwrap(), ["/uv.tar.gz"]);
     }
 
     #[test]
@@ -932,7 +935,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("uv.zip");
         write_zip(&archive, &[(binary_name, b"fake-uv")]);
-        let server = serve_once(fs::read(&archive).unwrap());
+        let server = serve_one("/uv.zip", fs::read(&archive).unwrap());
         let dest = tmp.path().join("dest").join(binary_name);
         download_and_extract(
             &format!("http://{}/uv.zip", server.addr),
@@ -944,33 +947,87 @@ mod tests {
         assert_eq!(fs::read(&dest).unwrap(), b"fake-uv");
     }
 
-    /// Minimal one-shot HTTP/1.1 server for the install tests. Binds an
-    /// ephemeral port, replies to the first request with the supplied
-    /// `payload` as `application/octet-stream`, then exits. Lives in a
-    /// background thread; the JoinHandle is detached on drop.
-    struct OneShotServer {
-        addr: String,
-        _join: std::thread::JoinHandle<()>,
+    struct Route {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
     }
 
-    fn serve_once(payload: Vec<u8>) -> OneShotServer {
-        use std::io::{Read, Write};
+    impl Route {
+        fn ok(body: impl Into<Vec<u8>>) -> Self {
+            Self {
+                status: 200,
+                headers: Vec::new(),
+                body: body.into(),
+            }
+        }
+    }
+
+    /// HTTP/1.1 server for the install tests: answers each request by its
+    /// path (404 for unknown ones) and records every path it saw.
+    struct TestServer {
+        addr: String,
+        hits: Arc<Mutex<Vec<String>>>,
+        stop: Arc<AtomicBool>,
+    }
+
+    impl Drop for TestServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            // Wake the blocking `accept` so the thread sees `stop`.
+            let _ = std::net::TcpStream::connect(&self.addr);
+        }
+    }
+
+    fn serve(routes: HashMap<String, Route>) -> TestServer {
+        use std::io::Read;
         use std::net::TcpListener;
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap().to_string();
-        let join = std::thread::spawn(move || {
-            let (mut sock, _) = listener.accept().unwrap();
-            let mut buf = [0u8; 4096];
-            // Drain the request headers — we don't care about the body.
-            let _ = sock.read(&mut buf);
-            let header = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n",
-                payload.len()
-            );
-            sock.write_all(header.as_bytes()).unwrap();
-            sock.write_all(&payload).unwrap();
-            let _ = sock.flush();
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (thread_hits, thread_stop) = (Arc::clone(&hits), Arc::clone(&stop));
+        std::thread::spawn(move || {
+            for sock in listener.incoming() {
+                if thread_stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Ok(mut sock) = sock else { continue };
+                let mut request = Vec::new();
+                let mut buf = [0u8; 4096];
+                while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match sock.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => request.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let request = String::from_utf8_lossy(&request);
+                let path = request.split_whitespace().nth(1).unwrap_or("").to_string();
+                thread_hits.lock().unwrap().push(path.clone());
+                let not_found = Route {
+                    status: 404,
+                    headers: Vec::new(),
+                    body: b"not found".to_vec(),
+                };
+                let route = routes.get(&path).unwrap_or(&not_found);
+                let mut head = format!(
+                    "HTTP/1.1 {} X\r\nContent-Length: {}\r\nConnection: close\r\n",
+                    route.status,
+                    route.body.len()
+                );
+                for (name, value) in &route.headers {
+                    head.push_str(&format!("{name}: {value}\r\n"));
+                }
+                head.push_str("\r\n");
+                let _ = sock.write_all(head.as_bytes());
+                let _ = sock.write_all(&route.body);
+                let _ = sock.flush();
+            }
         });
-        OneShotServer { addr, _join: join }
+        TestServer { addr, hits, stop }
+    }
+
+    fn serve_one(path: &str, body: Vec<u8>) -> TestServer {
+        serve(HashMap::from([(path.to_string(), Route::ok(body))]))
     }
 }
