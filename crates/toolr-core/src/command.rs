@@ -243,6 +243,8 @@ struct ReaderState {
     writing: AtomicUsize,
     /// Set when the call gives up on the readers; each stops at its next read.
     detached: AtomicBool,
+    /// The first failed write a reader hit, returned once the readers are joined.
+    error: Mutex<Option<String>>,
 }
 
 impl ReaderState {
@@ -251,7 +253,12 @@ impl ReaderState {
             last_output: Mutex::new(Instant::now()),
             writing: AtomicUsize::new(0),
             detached: AtomicBool::new(false),
+            error: Mutex::new(None),
         })
+    }
+
+    fn record(&self, msg: String) {
+        self.error.lock().unwrap().get_or_insert(msg);
     }
 
     fn stamp(&self) {
@@ -276,29 +283,40 @@ impl Drop for DetachOnDrop {
     }
 }
 
-/// Copy `pipe` into each sink until EOF, stamping the output clock after each read and write. A
-/// failed write stops the copy. A detached reader stops at its next read and drops the
-/// pipe, so a writer that escaped the kill gets EPIPE rather than feeding it forever.
+/// Copy `pipe` into the capture and stream files until EOF. With a capture the pipe is drained to
+/// EOF even after a failed write, so the child finishes; a lost stream with no capture, or a
+/// detached reader, drops the pipe so the writer gets EPIPE rather than feeding it forever.
 fn spawn_reader<R: Read + Send + 'static>(
     mut pipe: R,
-    sinks: [Option<File>; 2],
+    name: &'static str,
+    mut capture: Option<File>,
+    mut stream: Option<File>,
     state: Arc<ReaderState>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
-        let mut sinks: Vec<File> = sinks.into_iter().flatten().collect();
+        // A reader with no sinks also drains, so the no-output timeout keeps seeing output.
+        let drain_to_eof = capture.is_some() || stream.is_none();
         let mut buffer = [0; 8192];
-        while let Ok(n @ 1..) = pipe.read(&mut buffer) {
+        while let Ok(n @ 1..) = pipe.read(&mut buffer)
+            && !state.detached.load(Ordering::SeqCst)
+        {
             state.writing.fetch_add(1, Ordering::SeqCst);
             state.stamp();
-            let failed = state.detached.load(Ordering::SeqCst)
-                || sinks.iter_mut().any(|sink| {
-                    sink.write_all(&buffer[..n])
-                        .and_then(|()| sink.flush())
-                        .is_err()
-                });
+            let write = |sink: &mut File| sink.write_all(&buffer[..n]).and_then(|()| sink.flush());
+            if let Some(Err(e)) = capture.as_mut().map(write) {
+                state.record(format!("Failed to write captured {name}: {e}"));
+                capture = None;
+            }
+            if let Some(Err(e)) = stream.as_mut().map(write) {
+                // The reader of toolr's output went away, as after `| head`: not an error.
+                if e.kind() != ErrorKind::BrokenPipe {
+                    state.record(format!("Failed to write {name}: {e}"));
+                }
+                stream = None;
+            }
             state.stamp();
             state.writing.fetch_sub(1, Ordering::SeqCst);
-            if failed {
+            if !drain_to_eof && stream.is_none() {
                 break;
             }
         }
@@ -404,14 +422,14 @@ pub fn run_command_internal(
             )))
         })
     };
-    let stdout_sinks = [
+    let (stdout_capture, stdout_stream) = (
         own(config.stdout_fd.as_ref())?,
         own(config.sys_stdout_fd.as_ref())?,
-    ];
-    let stderr_sinks = [
+    );
+    let (stderr_capture, stderr_stream) = (
         own(config.stderr_fd.as_ref())?,
         own(config.sys_stderr_fd.as_ref())?,
-    ];
+    );
 
     // Start the command
     let mut child = command.spawn().map_err(|e| {
@@ -428,14 +446,24 @@ pub fn run_command_internal(
     let _detach = DetachOnDrop(Arc::clone(&readers));
 
     // `None` in interactive mode, where stdio was inherited above rather than piped.
-    let stdout_thread = child
-        .stdout
-        .take()
-        .map(|pipe| spawn_reader(pipe, stdout_sinks, Arc::clone(&readers)));
-    let stderr_thread = child
-        .stderr
-        .take()
-        .map(|pipe| spawn_reader(pipe, stderr_sinks, Arc::clone(&readers)));
+    let stdout_thread = child.stdout.take().map(|pipe| {
+        spawn_reader(
+            pipe,
+            "stdout",
+            stdout_capture,
+            stdout_stream,
+            Arc::clone(&readers),
+        )
+    });
+    let stderr_thread = child.stderr.take().map(|pipe| {
+        spawn_reader(
+            pipe,
+            "stderr",
+            stderr_capture,
+            stderr_stream,
+            Arc::clone(&readers),
+        )
+    });
 
     // Spawned after the readers. On timeout the kill closes the pipe and the
     // thread ends on its own, or is detached after `KILL_GRACE`.
@@ -494,7 +522,11 @@ pub fn run_command_internal(
         let _ = t.join();
     }
 
-    // Returned only now, so a write error doesn't leave the readers unjoined.
+    // Returned only now, so a write error doesn't leave the readers unjoined. Lost output
+    // matters more than a stdin the child stopped reading; a timeout returned earlier and wins.
+    if let Some(msg) = readers.error.lock().unwrap().take() {
+        return Err(Box::new(CommandExecutionError::new(msg)));
+    }
     stdin_result.map_err(Box::new)?;
 
     Ok(crate::exit_status::returncode(status))
