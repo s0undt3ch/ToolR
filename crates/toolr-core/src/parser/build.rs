@@ -1106,7 +1106,7 @@ def hello(ctx):
         assert_eq!(errs[0].value, "--bad flag");
     }
 
-    const DIRTY_GROUP_REF_SRC: &str = "group = command_group(\"g\", \"T\", \"D\")\n\n@command(group=\"no\\x1b]0;PWN\\x07pe\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n";
+    const DIRTY_GROUP_REF_SRC: &str = "from toolr import command\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@command(group=\"no\\x1b]0;PWN\\x07pe\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n";
 
     #[test]
     fn command_group_ref_with_esc_rejected() {
@@ -1144,7 +1144,7 @@ def hello(ctx):
         write(
             tmp.path(),
             "tools/g.py",
-            "@command(name=\"x\\x1b]0;PWN\\x07\", group=\"nope\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
+            "from toolr import command\n@command(name=\"x\\x1b]0;PWN\\x07\", group=\"nope\")\ndef hi(ctx):\n    \"\"\"Hi.\"\"\"\n",
         );
         let msg = build_static_manifest_inner(&tmp.path().join("tools"))
             .unwrap_err()
@@ -1183,7 +1183,7 @@ def hello(ctx):
         write(
             tmp.path(),
             "tools/g.py",
-            "from typing import Literal\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@command(group=\"no\\x1b[2Jpe\")\ndef orphan(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"bad\\x1b[2J\"]):\n    \"\"\"Hi.\"\"\"\n",
+            "from typing import Literal\nfrom toolr import command\n\ngroup = command_group(\"g\", \"T\", \"D\")\n\n@group.command(name=\"a\\nb\")\ndef named(ctx):\n    \"\"\"Hi.\"\"\"\n\n@command(group=\"no\\x1b[2Jpe\")\ndef orphan(ctx):\n    \"\"\"Hi.\"\"\"\n\n@group.command\ndef pick(ctx, mode: Literal[\"ok\", \"bad\\x1b[2J\"]):\n    \"\"\"Hi.\"\"\"\n",
         );
         let msg = BuildError::InvalidNames(expect_invalid_names(
             build_commands(&tmp.path().join("tools"), "tools").unwrap_err(),
@@ -1288,6 +1288,7 @@ command_group("ci", docstring=__doc__)
             tmp.path(),
             "tools/gh_actions.py",
             r#""""GH Actions helpers."""
+from toolr import command
 @command(group="ci")
 def check_run_build(ctx):
     """Check."""
@@ -1309,6 +1310,7 @@ def check_run_build(ctx):
             tmp.path(),
             "tools/c.py",
             r#""""CI utilities."""
+from toolr import command
 command_group("ci.helm-diff-pr-comment", docstring=__doc__)
 
 @command(group="ci.helm-diff-pre-comment")
@@ -1632,6 +1634,45 @@ def other():
         );
     }
 
+    #[test]
+    fn stacked_command_decorators_fail_the_build() {
+        let src = "import functools\nimport toolr\nfrom toolr import command as cmd\n\ng1 = toolr.command_group(\"g1\", \"G\", \"G\")\ng2 = toolr.command_group(\"g2\", \"G\", \"G\")\n\n\n@g1.command\n@g2.command\ndef both(ctx):\n    \"\"\"Both.\"\"\"\n\n\n@g1.command\n@cmd(group=\"g2\")\ndef mixed(ctx):\n    \"\"\"Mixed.\"\"\"\n\n\n@functools.lru_cache\n@g1.command\ndef cached(ctx):\n    \"\"\"Cached.\"\"\"\n";
+        assert_eq!(
+            build_error_for(&[("tools/m.py", src)]),
+            "unsupported command declarations (2):\n\
+             \x20 - tools.m::both: a function can carry only one command decorator.\n\
+             \x20 - tools.m::mixed: a function can carry only one command decorator."
+        );
+    }
+
+    /// Only a `command` bound by `from toolr import …` is toolr's.
+    #[test]
+    fn foreign_command_decorators_are_ignored() {
+        let tmp = TempDir::new().unwrap();
+        write(
+            tmp.path(),
+            "tools/m.py",
+            "from click import command\nfrom toolr import command_group\n\ng = command_group(\"grp\", \"G\", \"G\")\n\n\ndef make():\n    @command()\n    def cli():\n        \"\"\"Click.\"\"\"\n",
+        );
+        write(
+            tmp.path(),
+            "tools/n.py",
+            "from toolr import *\n\n\ndef command(f):\n    return f\n\n\nclass Helper:\n    @command\n    def method(self):\n        \"\"\"Local.\"\"\"\n",
+        );
+        write(
+            tmp.path(),
+            "tools/o.py",
+            "from toolr import *\n\n\n@command(group=\"grp\")\ndef star(ctx):\n    \"\"\"Star.\"\"\"\n",
+        );
+        let manifest = build_static_manifest_inner(&tmp.path().join("tools")).unwrap();
+        let names: Vec<_> = manifest
+            .commands
+            .iter()
+            .map(|c| c.function.as_str())
+            .collect();
+        assert_eq!(names, ["star"]);
+    }
+
     /// A group binding from an earlier file counts in a nested `def`, and the
     /// check runs before the unknown-group one.
     #[test]
@@ -1669,6 +1710,7 @@ def other():
             tmp.path(),
             "tools/c.py",
             r#""""CI utilities."""
+from toolr import command
 @command(group="nope")
 def first(ctx):
     """First."""
@@ -1798,6 +1840,7 @@ def django(ctx, *, cpu: str = "1", dispatched: DispatchCommand) -> int:
             tmp.path(),
             "tools/c.py",
             r#""""CI utilities."""
+from toolr import command
 command_group("ci", docstring=__doc__)
 
 @command
@@ -2938,6 +2981,7 @@ def read(ctx: Context, {signature}) -> None:
             tmp.path(),
             "tools/demo.py",
             r#""""Demo commands."""
+from toolr import command
 
 from toolr import Context, command, command_group
 
