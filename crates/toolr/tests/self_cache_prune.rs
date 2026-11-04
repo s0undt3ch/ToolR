@@ -313,7 +313,7 @@ fn prune_all_with_no_entries_still_removes_locks() {
     // No `--yes`: stray locks alone never prompt.
     let stdout = run_prune(tmp.path(), &["--all"]);
     assert!(
-        stdout.contains("no cache entries to remove"),
+        !stdout.contains("no cache entries to remove"),
         "stdout:\n{stdout}"
     );
     assert!(
@@ -343,7 +343,7 @@ fn prune_with_nothing_to_prune_still_removes_stray_locks() {
     fs::create_dir_all(&locks).unwrap();
     fs::write(locks.join("stray.lock"), b"").unwrap();
     let stdout = run_prune(tmp.path(), &[]);
-    assert!(stdout.contains("nothing to prune"), "stdout:\n{stdout}");
+    assert!(!stdout.contains("nothing to prune"), "stdout:\n{stdout}");
     assert!(
         stdout.contains("toolr: removed 1 rebuild lock\n"),
         "stdout:\n{stdout}"

@@ -307,7 +307,8 @@ toolr self cache list --help
 
 ### `toolr self cache prune` {#self-cache-prune}
 
-Remove orphan and stale cache entries.
+Remove orphan and stale cache entries, and the manifest rebuild locks that no
+remaining entry uses.
 
 **Flags:**
 

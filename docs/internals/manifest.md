@@ -16,7 +16,8 @@ Python imports involved in the hot path.
 
 Rebuilds take a lock, so concurrent `toolr` processes that find the
 manifest stale rebuild it once. The lock file lives in toolr's cache
-directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`.
+directory (`$XDG_CACHE_HOME/toolr/locks/`), not in `tools/`. `toolr self cache prune` removes
+the locks no remaining cache entry uses.
 
 ## File shape
 

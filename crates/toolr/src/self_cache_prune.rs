@@ -40,13 +40,14 @@ fn prune_all(
     out: &mut dyn Write,
 ) -> Result<ExitCode> {
     if entries.is_empty() {
-        writeln!(
-            out,
-            "toolr: no cache entries to remove under {}",
-            cache_root.display()
-        )?;
         // Leftover locks are empty files holding no data, so they need no confirmation.
-        sweep_locks(cache_root, &[], dry_run, out)?;
+        if sweep_locks(cache_root, &[], dry_run, out)? == 0 {
+            writeln!(
+                out,
+                "toolr: no cache entries to remove under {}",
+                cache_root.display()
+            )?;
+        }
         return Ok(ExitCode::SUCCESS);
     }
     if !yes && !dry_run && !confirm_destroy_all(&entries)? {
@@ -98,8 +99,9 @@ fn prune_classified(
         .chain(classification.stale)
         .collect();
     if candidates.is_empty() {
-        writeln!(out, "toolr: nothing to prune")?;
-        sweep_locks(cache_root, &keep_repos, dry_run, out)?;
+        if sweep_locks(cache_root, &keep_repos, dry_run, out)? == 0 {
+            writeln!(out, "toolr: nothing to prune")?;
+        }
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -145,7 +147,7 @@ fn sweep_locks(
     keep_repos: &[&Path],
     dry_run: bool,
     out: &mut dyn Write,
-) -> Result<()> {
+) -> Result<usize> {
     match sweep_rebuild_locks(cache_root, keep_repos, dry_run) {
         Ok(sweep) if sweep.removed > 0 => {
             let action = if dry_run { "would remove" } else { "removed" };
@@ -155,11 +157,14 @@ fn sweep_locks(
                 "toolr: {action} {} rebuild lock{plural}",
                 sweep.removed
             )?;
+            Ok(sweep.removed)
         }
-        Ok(_) => {}
-        Err(e) => writeln!(out, "toolr: warning: failed to sweep rebuild locks: {e}")?,
+        Ok(_) => Ok(0),
+        Err(e) => {
+            writeln!(out, "toolr: warning: failed to sweep rebuild locks: {e}")?;
+            Ok(0)
+        }
     }
-    Ok(())
 }
 
 fn remove_entry(cache_dir: &Path, out: &mut dyn Write) -> Result<()> {
@@ -184,7 +189,7 @@ fn confirm_destroy_all(entries: &[CachedVenv]) -> Result<bool> {
         );
     }
     eprint!(
-        "toolr: about to remove {} cache entries. continue? [y/N] ",
+        "toolr: about to remove {} cache entries and every rebuild lock. continue? [y/N] ",
         entries.len(),
     );
     io::stderr().flush().ok();

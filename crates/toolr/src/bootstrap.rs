@@ -614,12 +614,13 @@ mod tests {
         (home, CacheHomeGuard { prev, _lock: lock })
     }
 
-    /// The rebuild lock landed in the temp cache home, proving the redirect.
-    fn assert_one_lock_in(home: &std::path::Path) {
+    /// The rebuild lock landed in the temp cache home, proving the redirect, under
+    /// the name `self cache prune` keeps for this repo.
+    fn assert_one_lock_in(home: &std::path::Path, repo: &std::path::Path) {
         let locks = std::fs::read_dir(home.join("toolr/locks")).unwrap();
         let names: Vec<_> = locks.map(|e| e.unwrap().path()).collect();
-        assert_eq!(names.len(), 1, "{names:?}");
-        assert_eq!(names[0].extension().unwrap(), "lock");
+        let expected = toolr_core::manifest::lock_path_for_repo(&home.join("toolr"), repo);
+        assert_eq!(names, [expected]);
     }
 
     /// A missing manifest is rebuilt and written, not reported as unreadable.
@@ -632,7 +633,7 @@ mod tests {
 
         assert!(fresh.is_some());
         assert!(tmp.path().join("tools/.toolr-manifest.json").is_file());
-        assert_one_lock_in(home.path());
+        assert_one_lock_in(home.path(), tmp.path());
     }
 
     /// An untrusted repository gets the rebuilt manifest in memory only.
@@ -658,6 +659,6 @@ mod tests {
 
         ensure_manifest_present_or_bootstrap(tmp.path(), &[], true).unwrap();
         assert!(manifest.is_file());
-        assert_one_lock_in(home.path());
+        assert_one_lock_in(home.path(), tmp.path());
     }
 }
