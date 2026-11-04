@@ -280,9 +280,16 @@ toolr self completion print --help
 ### `toolr self completion install <shell> [--force]` {#self-completion-install}
 
 Write the completion script for `<shell>` into its standard location
-(`~/.bash_completion.d/`, `~/.zsh/completions/`, or
+(`~/.local/share/bash-completion/completions/`, `~/.zfunc/`, or
 `~/.config/fish/completions/`). `--force` overwrites an existing file
 without prompting.
+
+Bash completion needs bash 4.4 or newer; on an older bash, sourcing the
+script prints one warning and registers nothing. The script itself doesn't
+need the bash-completion package, but only that package loads the install
+directory. Without it, source the script from `~/.bashrc` instead:
+`source <(toolr self completion print bash)`. A word with an unclosed
+quote (`--cfg 'a:b`) completes nothing.
 
 ```sh
 toolr self completion install --help
