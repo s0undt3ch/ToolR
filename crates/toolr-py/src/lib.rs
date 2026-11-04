@@ -15,11 +15,11 @@ pyo3::create_exception!(_command, CommandError, PyException);
 pyo3::create_exception!(_command, CommandTimeoutError, CommandError);
 pyo3::create_exception!(_command, CommandTimeoutNoOutputError, CommandError);
 
-/// Own a copy of `fd`, naming the argument if it isn't an open file descriptor.
+/// Own a copy of `fd`, naming the argument if it can't be copied (closed, or no fds left).
 fn owned_file(name: &str, fd: Option<i32>) -> PyResult<Option<File>> {
     fd.map(|fd| {
         file_from_python_fd(fd)
-            .map_err(|e| CommandError::new_err(format!("invalid {name} {fd}: {e}")))
+            .map_err(|e| CommandError::new_err(format!("cannot duplicate {name} {fd}: {e}")))
     })
     .transpose()
 }

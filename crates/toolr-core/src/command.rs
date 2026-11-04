@@ -182,13 +182,15 @@ pub fn file_from_python_fd(fd: i32) -> io::Result<File> {
     };
     #[cfg(windows)]
     let owned = {
-        // A negative fd trips the CRT's invalid-parameter handler, which aborts the process.
+        // A negative fd trips the CRT's invalid-parameter handler, which aborts the process. So
+        // does a closed one; Python only passes fds it just got from `fileno()`.
         let handle = if fd < 0 {
             -1
         } else {
             unsafe { libc::get_osfhandle(fd) }
         };
-        if handle == -1 {
+        // `-1` for a bad fd, `-2` for a std stream with no console: neither is a handle.
+        if handle < 0 {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
                 "Bad file descriptor",

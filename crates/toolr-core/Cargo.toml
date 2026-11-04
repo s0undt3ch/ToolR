@@ -76,4 +76,4 @@ assert_cmd.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies]
 # Test-only features, on top of the normal dependency's.
-winapi = { version = "0.3", features = ["namedpipeapi", "fileapi", "minwinbase"] }
+winapi = { version = "0.3", features = ["minwinbase"] }
