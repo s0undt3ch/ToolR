@@ -4,12 +4,17 @@
 
 mod common;
 
+use std::ffi::CStr;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use tempfile::TempDir;
 
 /// Files under the fixture root that path slots complete. `files/sub/` is a directory.
-const PATH_FILES: [&str; 2] = ["files/with space.txt", "files/$(touch sentinel-three)"];
+const PATH_FILES: [&str; 3] = [
+    "files/with space.txt",
+    "files/$(touch sentinel-three)",
+    "files/back\\slash",
+];
 
 /// `SENTINEL` and `SENTINEL2` stand for paths the fixture fills in.
 const CHOICES: [&str; 7] = [
@@ -412,6 +417,81 @@ fn bash_path_keeps_a_typed_leading_tilde() {
             run.reply
         );
         assert!(!fx.sentinel3.exists(), "{bash}: file name executed");
+    }
+}
+
+/// A user's `set -e` must not leak into Tab: a non-zero `__complete` exit
+/// would otherwise close their shell.
+#[test]
+fn bash_completion_survives_errexit() {
+    for bash in bashes() {
+        let fx = fixture();
+        let script = format!("set -e\n{}", print_script("bash"));
+        let run = run_bash_path(&bash, &script, &fx, "--out", "files/");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
+        let run = run_bash_path(&bash, &script, &fx, "--cfg", "files/s");
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["files/sub/".to_string()], "{bash}");
+        let run = run_bash_script(&bash, &script, &fx, "--mode", "fa", "", &[]);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec!["fast".to_string()], "{bash}");
+    }
+}
+
+/// The login name and home directory `~user` expands to, which ignore `$HOME`.
+fn passwd_entry() -> (String, PathBuf) {
+    // SAFETY: getpwuid returns static storage, copied out before any other call.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        assert!(!pw.is_null(), "no passwd entry");
+        let name = CStr::from_ptr((*pw).pw_name).to_str().unwrap().to_string();
+        let dir = CStr::from_ptr((*pw).pw_dir).to_str().unwrap().to_string();
+        (name, PathBuf::from(dir))
+    }
+}
+
+#[test]
+fn bash_path_marks_a_tilde_user_directory() {
+    let (user, home) = passwd_entry();
+    let base = tempfile::Builder::new()
+        .prefix(".toolr-complete-")
+        .tempdir_in(&home)
+        .unwrap();
+    std::fs::create_dir(base.path().join("sub")).unwrap();
+    let rel = base.path().strip_prefix(&home).unwrap().to_str().unwrap();
+    let cur = format!("~{user}/{rel}/s");
+    let want = format!("~{user}/{rel}/sub/");
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", &cur);
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec![want.clone()], "{bash}");
+        let nospace: Vec<String> = if bash_has_compopt(&bash) {
+            vec!["-o nospace".to_string()]
+        } else {
+            vec![]
+        };
+        assert_eq!(run.compopt, nospace, "{bash}");
+    }
+}
+
+/// A typed `\\` stands for one literal backslash in the name.
+#[test]
+fn bash_path_unescapes_a_typed_backslash() {
+    for bash in bashes() {
+        let fx = fixture();
+        let run = run_bash_path(
+            &bash,
+            &print_script("bash"),
+            &fx,
+            "--cfg",
+            "files/back\\\\s",
+        );
+        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
+        assert_eq!(run.reply, vec![run.quoted[2].clone()], "{bash}");
+        let run = run_bash_path(&bash, &print_script("bash"), &fx, "--cfg", "files/with\\ s");
+        assert_eq!(run.reply, vec![run.quoted[0].clone()], "{bash}");
     }
 }
 
