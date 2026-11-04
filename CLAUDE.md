@@ -93,7 +93,7 @@ to dodge the metric.
   `tests/support/coverage/`, whose `sitecustomize.py` is loaded via `PYTHONPATH`.
 - Test fixtures, Python or not, live in a `files/` directory next to the tests that use them; `files/`
   trees are data, not packages.
-- `toolr pre-commit check-test-layout` enforces both.
+- `toolr pre-commit check-tests-layout` enforces both.
 - Skills shipped from this repo:
   `skills/toolr-ci-setup/`, `skills/toolr-command-authoring/`, `skills/toolr-command-packaging/`.
 

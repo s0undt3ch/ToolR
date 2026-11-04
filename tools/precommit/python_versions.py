@@ -128,7 +128,7 @@ def python_version_mismatches(repo_root: Path) -> list[str]:
         )
 
     mise_versions = config_tomls["mise"]["tools"]["python"]
-    # Only the second dot-separated field matters, so "3.15.2" and "3.16.0rc1" both parse.
+    # The minor is the second field of "3.15.2" and "3.16.0rc1" alike.
     mise_minors = sorted({int(version.split(".")[1]) for version in mise_versions})
     if mise_minors != supported:
         mismatches.append(
@@ -173,4 +173,5 @@ def check_python_versions(ctx: Context) -> None:
         # Messages quote TOML keys like `[tools]`, which rich would eat as markup.
         ctx.error(escape(mismatch))
     if mismatches:
+        ctx.error(f"Update the values listed above to match {REQUIRES_PYTHON_SOURCE}.")
         ctx.exit(1)

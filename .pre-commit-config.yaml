@@ -101,6 +101,7 @@ repos:
           )$
 
       - id: check-python-versions
+        # keep in sync with test_hook_files_cover_inputs
         name: Check Python version lists against requires-python
         # Catches a stale classifier, mise.toml interpreter or floor setting at commit time,
         # instead of in the pytest job that waits for the wheel build.
@@ -122,12 +123,12 @@ repos:
             tools/precommit/(python_versions|_common)\.py
           )$
 
-      - id: check-test-layout
+      - id: check-tests-layout
         name: Check the tests/ layout (packages and files/ fixtures)
-        entry: toolr pre-commit check-test-layout
+        entry: toolr pre-commit check-tests-layout
         language: system
         pass_filenames: false
-        files: ^tests/
+        files: ^(tests/|tools/precommit/(tests_layout|_common)\.py$)
 
       - id: release-notes
         name: Validate queued release notes

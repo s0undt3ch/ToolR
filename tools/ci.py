@@ -85,11 +85,11 @@ def _requires_python(pyproject: Path) -> str:
     return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["requires-python"]
 
 
-# An unbounded or malformed `requires-python` fails at import, on purpose: the wheel build would fail anyway.
 # Every supported CPython, dotted form derived below. This drives the
 # *test* matrix only — the toolr-py wheel itself is now a single abi3
 # build (see ABI3_WHEEL_PYTHONS). Derived from `requires-python` in
 # `crates/toolr-py/pyproject.toml`.
+# An unbounded or malformed `requires-python` fails at import, on purpose: the wheel build would fail anyway.
 ALL_CPYTHONS = [f"cp3{minor}" for minor in supported_minors(_requires_python(TOOLR_PY_PYPROJECT))]
 
 # CPython ABI tags cibuildwheel builds for the toolr-py (pyo3) wheel.

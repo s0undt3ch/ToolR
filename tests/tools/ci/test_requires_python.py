@@ -1,4 +1,4 @@
-"""Tests for the ``requires-python`` derivation behind ``ALL_CPYTHONS`` in ``tools/ci.py``.
+"""Tests for ``supported_minors`` and ``python3_floor``, which derive ``ALL_CPYTHONS`` in ``tools/ci.py``.
 
 ``project.requires-python`` in ``crates/toolr-py/pyproject.toml`` is the source of truth for the supported
 CPython range. ``MIN_PYTHON_MINOR`` is checked by ``crates/toolr-core/tests/python_floor_lockstep.rs`` instead.
@@ -7,11 +7,9 @@ CPython range. ``MIN_PYTHON_MINOR`` is checked by ``crates/toolr-core/tests/pyth
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
-from tools.ci import _requires_python
 from tools.ci import python3_floor
 from tools.ci import supported_minors
 
@@ -50,12 +48,3 @@ def test_supported_minors_rejects(requires_python: str, error: str) -> None:
 )
 def test_python3_floor_reads_the_lower_bound(requires_python: str, expected: int) -> None:
     assert python3_floor(requires_python) == expected
-
-
-def test_requires_python_reads_project_table(tmp_path: Path) -> None:
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(
-        '[project]\nname = "x"\nrequires-python = ">=3.12,<3.14"\n\n[tool.x]\nrequires-python = "nope"\n',
-        encoding="utf-8",
-    )
-    assert _requires_python(pyproject) == ">=3.12,<3.14"

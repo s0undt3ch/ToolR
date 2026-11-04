@@ -42,12 +42,12 @@ def layout_problems(tests_dir: Path) -> list[str]:
     paths = [path for path in _test_tree_paths(tests_dir) if FIXTURES_DIR not in path.parts[:-1]]
     package_dirs = {path.parent for path in paths if path.suffix == ".py"}
     problems = [
-        f"tests/{directory} has no __init__.py"
+        f"add an `__init__.py` to tests/{directory}"
         for directory in sorted(package_dirs)
         if directory not in NOT_PACKAGES and not (tests_dir / directory / "__init__.py").is_file()
     ]
     problems.extend(
-        f"tests/{path} is not a .py file and is outside a {FIXTURES_DIR}/ directory"
+        f"move tests/{path} under a `{FIXTURES_DIR}/` directory next to the tests that use it"
         for path in paths
         if path.suffix != ".py"
     )
@@ -55,7 +55,7 @@ def layout_problems(tests_dir: Path) -> list[str]:
 
 
 @group.command
-def check_test_layout(ctx: Context) -> None:
+def check_tests_layout(ctx: Context) -> None:
     """Check the ``tests/`` layout rules.
 
     Every directory holding a ``.py`` file has an ``__init__.py`` (no namespace packages), so test
