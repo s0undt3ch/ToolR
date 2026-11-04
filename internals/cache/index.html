@@ -1758,6 +1758,8 @@ configured threshold (default 30 days). Override with
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>toolr<span class="w"> </span>self<span class="w"> </span>cache<span class="w"> </span>prune<span class="w"> </span>--all<span class="w"> </span>--yes<span class="w">          </span><span class="c1"># nuke everything</span>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>toolr<span class="w"> </span>self<span class="w"> </span>cache<span class="w"> </span>prune<span class="w"> </span>--stale-after-days<span class="w"> </span><span class="m">7</span><span class="w"> </span><span class="c1"># override threshold</span>
 </span></code></pre></div>
+<p>Every prune also removes the manifest rebuild locks under <code>locks/</code> that no
+remaining entry uses. A lock held by a running rebuild stays.</p>
 <p>See <a href="../../cli/#self-cache-prune">CLI reference → <code>self cache prune</code></a>
 for the full flag matrix.</p>
 <h2 id="passive-size-hint">Passive size hint<a class="headerlink" href="#passive-size-hint" title="Permanent link">&para;</a></h2>

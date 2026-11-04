@@ -1460,15 +1460,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev589-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev601-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev589 - 2026-11-04
+        0.35.2-dev601 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev589 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev601 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -4502,15 +4502,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#0352-dev589-2026-11-04" class="md-nav__link">
+  <a href="#0352-dev601-2026-11-04" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.35.2-dev589 - 2026-11-04
+        0.35.2-dev601 - 2026-11-04
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.35.2-dev589 - 2026-11-04">
+    <nav class="md-nav" aria-label="0.35.2-dev601 - 2026-11-04">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -7539,7 +7539,7 @@
 <p>This project uses <a href="https://git-cliff.org/"><em>git-cliff</em></a> to automatically generate changelog entries
 from <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>, and this project adheres
 to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="0352-dev589-2026-11-04">0.35.2-dev589 - 2026-11-04<a class="headerlink" href="#0352-dev589-2026-11-04" title="Permanent link">&para;</a></h2>
+<h2 id="0352-dev601-2026-11-04">0.35.2-dev601 - 2026-11-04<a class="headerlink" href="#0352-dev601-2026-11-04" title="Permanent link">&para;</a></h2>
 <h3 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h3>
 <p><strong>Breaking:</strong> a <code>bool</code> parameter on a native command must now be a flag that defaults to <code>False</code>.
 Every other shape fails the manifest build with "invalid parameter declarations", and all offending
@@ -7702,6 +7702,7 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <p>Editing the <code>[tool.toolr.argparse.*]</code> blocks in <code>tools/pyproject.toml</code>, or any file that an external command source scans, now refreshes the manifest on the next run. toolr used to keep showing the old commands and arguments until <code>toolr project manifest rebuild</code>. Other <code>tools/pyproject.toml</code> edits, such as a new dependency, don't trigger a rebuild, and tab completion keeps offering the cached commands while that file or a <code>scan_paths</code> glob is broken.</p>
 <p>Tab completion and the start-up freshness check no longer reread every file under <code>tools/</code>, and every file an external command source scans, each time. toolr now keeps each file's size and timestamps in the manifest and rereads only the files that changed, so completion stays fast with large <code>tools/</code> trees and large <code>scan_paths</code>. Files outside the project, or on another filesystem than <code>tools/</code>, are still reread every time. On NFS, an edit made from another machine can take up to the attribute-cache timeout (typically under a minute) to be noticed.</p>
 <p>A child killed by a signal is now reported consistently. <code>ctx.run(...).returncode</code> is <code>-N</code> for a child killed by signal <code>N</code>, as with <code>subprocess</code> (it used to be <code>-1</code> for every signal). On Unix, <code>ctx.exit()</code> turns a negative status into <code>128 + N</code>, as a shell does, so <code>ctx.exit(result.returncode)</code> after a SIGTERM'd child exits 143 rather than 255. <code>toolr project venv run</code> and <code>toolr project venv shell</code> now exit <code>128 + N</code> for a signal-killed child instead of 1. An exit code that doesn't fit in a byte (Windows crash statuses, or 256) now makes toolr exit 1; it used to be truncated, and could turn a failure into exit 0.</p>
+<p><code>toolr self cache prune</code> now also removes leftover manifest rebuild locks under the cache's <code>locks/</code> dir that no cached project still uses.</p>
 <h3 id="features"><!-- 0 -->🚀 Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
 <ul>
 <li><em>(parser)</em> [<strong>breaking</strong>] Boolean parameters must be flags defaulting to False (<a href="https://github.com/s0undt3ch/ToolR/commit/51d6afad68ddba344c2f1e090acb78b667001335"><code>51d6afa</code></a>)</li>
@@ -7710,6 +7711,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(security)</em> [<strong>breaking</strong>] Start with no trusted repositories (<a href="https://github.com/s0undt3ch/ToolR/commit/e33d125591f3414509faff6c63a437d2ec52409e"><code>e33d125</code></a>)</li>
 <li><em>(testing)</em> Export ConsoleVerbosity from toolr.testing (<a href="https://github.com/s0undt3ch/ToolR/commit/cb5731d1d5a4c60be9348cb4896ceccdc97eaf3a"><code>cb5731d</code></a>)</li>
 <li><em>(trust)</em> [<strong>breaking</strong>] Sync the tools venv right after trusting a repository (<a href="https://github.com/s0undt3ch/ToolR/commit/f9393c12ec2f0ebe80b9487e53e7bd2fa0eff239"><code>f9393c1</code></a>)</li>
+<li><em>(cache)</em> Sweep rebuild locks no cached repo needs (<a href="https://github.com/s0undt3ch/ToolR/commit/41d671b294bf704a6e4634720f381d73273367d4"><code>41d671b</code></a>)</li>
+<li><em>(cache)</em> Prune leftover rebuild locks (<a href="https://github.com/s0undt3ch/ToolR/commit/445a418cf496d5c1ee30f70c915d8a962106bd5d"><code>445a418</code></a>)</li>
 </ul>
 <h3 id="bug-fixes"><!-- 1 -->🐛 Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7844,6 +7847,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(context)</em> Exit 128 + N for a negative ctx.exit status (<a href="https://github.com/s0undt3ch/ToolR/commit/ca24a526aabcb07a9210c66c962500e75b495e29"><code>ca24a52</code></a>)</li>
 <li><em>(context)</em> Keep a negative Windows exit status out of the 128 + N rule (<a href="https://github.com/s0undt3ch/ToolR/commit/807d7b8086c9052f5ad2d79bca51614f7e9e5e39"><code>807d7b8</code></a>)</li>
 <li><em>(context)</em> Map only int statuses in ctx.exit, and correct the old exit code in the note (<a href="https://github.com/s0undt3ch/ToolR/commit/7251c134c1222cc29e9484c398734cafcce9060d"><code>7251c13</code></a>)</li>
+<li><em>(cache)</em> Keep sweeping past a vanished lock, and lock read-only (<a href="https://github.com/s0undt3ch/ToolR/commit/08bb614de7ce414f71720c32ecae7fd20e394d5e"><code>08bb614</code></a>)</li>
+<li><em>(cache)</em> Report swept locks instead of "nothing to prune" (<a href="https://github.com/s0undt3ch/ToolR/commit/f33d1cc39fdc8e0b40aaa97674dee89ad5f0f6b1"><code>f33d1cc</code></a>)</li>
 </ul>
 <h3 id="other"><!-- 10 -->💼 Other<a class="headerlink" href="#other" title="Permanent link">&para;</a></h3>
 <ul>
@@ -7901,6 +7906,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(exit-status)</em> Simplify the mappers and make platform-specific tests explicit (<a href="https://github.com/s0undt3ch/ToolR/commit/0134b8645e7557ce6e9deba1058f52b4805bd679"><code>0134b86</code></a>)</li>
 <li><em>(cli)</em> Build each built-in subtree in its own function (<a href="https://github.com/s0undt3ch/ToolR/commit/ffa6ea0f641fdc3aaa0a267d67c6e75df5c2c857"><code>ffa6ea0</code></a>)</li>
 <li><em>(cli)</em> Attach the hidden commands with Command::subcommands (<a href="https://github.com/s0undt3ch/ToolR/commit/48bbc82a0ec439c578c87e30593f5bf265e9acd0"><code>48bbc82</code></a>)</li>
+<li><em>(cache)</em> Take kept repos as PathBufs and drop a duplicate test (<a href="https://github.com/s0undt3ch/ToolR/commit/d76760dce31e4fe7e62509374ee7556b82b26d0d"><code>d76760d</code></a>)</li>
+<li><em>(cache)</em> Keep prune's output calls on one line, restore the --all prompt (<a href="https://github.com/s0undt3ch/ToolR/commit/835b1f54267d2ef367edda619e6684aab8aa0ab4"><code>835b1f5</code></a>)</li>
 </ul>
 <h3 id="documentation"><!-- 3 -->📚 Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8068,6 +8075,8 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(specs)</em> Archive cli build command design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/92b7f0447aecda8d087dadf0652293baf9b7e06d"><code>92b7f04</code></a>)</li>
 <li><em>(specs)</em> Note the reserved-group skip had no test on main (<a href="https://github.com/s0undt3ch/ToolR/commit/3077e5006aaa341d10eaf57eac1efa565156f972"><code>3077e50</code></a>)</li>
 <li><em>(specs)</em> Correct the dump manifest, test module and group wording (<a href="https://github.com/s0undt3ch/ToolR/commit/ec04a70ccc89337d4cb5afaca3c363ebac0b9e32"><code>ec04a70</code></a>)</li>
+<li><em>(specs)</em> Design and plan for the rebuild lock leak (<a href="https://github.com/s0undt3ch/ToolR/commit/4f104346e7d5f1846d68d6d2f94f5acf14f0cde7"><code>4f10434</code></a>)</li>
+<li><em>(specs)</em> Archive the rebuild lock leak design and plan (<a href="https://github.com/s0undt3ch/ToolR/commit/617b2bdc8b92eb927e268ff2cd17fd1e529d78b9"><code>617b2bd</code></a>)</li>
 </ul>
 <h3 id="performance"><!-- 4 -->⚡ Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <ul>
@@ -8158,6 +8167,9 @@ leading <code>v</code> is accepted) before writing anything.</p>
 <li><em>(complete)</em> Route complete_shells through the isolated toolr helper (<a href="https://github.com/s0undt3ch/ToolR/commit/eca14036572c99907ff43310d83c4ee1aa830cb2"><code>eca1403</code></a>)</li>
 <li>Mute the orphan cache hint in the shared test cache home (<a href="https://github.com/s0undt3ch/ToolR/commit/7f55bb329023760c4a9069a549e157d0aff2df09"><code>7f55bb3</code></a>)</li>
 <li>Drop cache settings the new defaults already cover (<a href="https://github.com/s0undt3ch/ToolR/commit/752a729cc9b29d49f277453ee8a8de41c8db401f"><code>752a729</code></a>)</li>
+<li><em>(cache)</em> Cover the hint's self-cache exit and every human_ago bucket (<a href="https://github.com/s0undt3ch/ToolR/commit/bedac067ac88ea880b99f79adef9dfdf3427c99c"><code>bedac06</code></a>)</li>
+<li><em>(bootstrap)</em> Rebuild in a temp cache home, not the real one (<a href="https://github.com/s0undt3ch/ToolR/commit/c936ef2481b54ac6165a6636db6c0f5151dec43e"><code>c936ef2</code></a>)</li>
+<li><em>(cache)</em> Expect prune to sweep stray rebuild locks (<a href="https://github.com/s0undt3ch/ToolR/commit/92382e2e3c0876d616e60d773869051287de8692"><code>92382e2</code></a>)</li>
 </ul>
 <h3 id="miscellaneous-tasks"><!-- 7 -->⚙️ Miscellaneous Tasks<a class="headerlink" href="#miscellaneous-tasks" title="Permanent link">&para;</a></h3>
 <ul>
