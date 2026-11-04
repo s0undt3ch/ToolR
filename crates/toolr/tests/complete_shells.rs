@@ -7,7 +7,7 @@ mod common;
 use std::ffi::CStr;
 use std::path::PathBuf;
 use std::process::Command as StdCommand;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tempfile::TempDir;
 
 /// Files under the fixture root that path slots complete. `files/sub/` is a directory.
@@ -689,25 +689,49 @@ fn bash_earlier_word_with_a_colon_stays_one_word() {
     }
 }
 
-/// Marking directories must not rescan the whole listing for every name.
+/// Marking directories must not rescan the whole listing for every name. Wall-clock
+/// bounds flake under load, so compare 4x the entries against 1x in the same run:
+/// linear work grows about 4x, a per-name rescan about 16x.
 #[test]
-fn bash_path_completion_of_a_large_directory_is_fast() {
+fn bash_path_completion_scales_linearly_with_the_listing() {
     for bash in bashes() {
         let fx = fixture();
-        let big = fx.tmp.path().join("big");
-        for i in 0..3000 {
-            std::fs::create_dir_all(big.join(format!("d{i:04}"))).unwrap();
-            std::fs::write(big.join(format!("f{i:04}")), "").unwrap();
+        let script = print_script("bash");
+        for (name, n) in [("small", 1000), ("large", 4000), ("empty", 0)] {
+            let dir = fx.tmp.path().join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            for i in 0..n {
+                std::fs::create_dir_all(dir.join(format!("d{i:04}"))).unwrap();
+                std::fs::write(dir.join(format!("f{i:04}")), "").unwrap();
+            }
         }
-        let start = Instant::now();
-        let run = Drive::new(&print_script("bash"), &["--cfg"], "big/").run(&bash, &fx);
-        let took = start.elapsed();
-        assert_eq!(run.rc, "0", "{bash}: {}", run.stderr);
-        assert_eq!(run.reply.len(), 6000, "{bash}");
-        let dirs = run.reply.iter().filter(|r| r.ends_with('/')).count();
-        assert_eq!(dirs, 3000, "{bash}");
-        // The quadratic scan took over 3 s on bash 3.2; the linear one about 0.2 s.
-        assert!(took < Duration::from_secs(2), "{bash}: took {took:?}");
+        // The fastest of three runs, so a burst of load on one doesn't count.
+        let time = |cur: &str, n: usize| {
+            (0..3)
+                .map(|_| {
+                    let start = Instant::now();
+                    let run = Drive::new(&script, &["--cfg"], cur).run(&bash, &fx);
+                    let took = start.elapsed();
+                    assert_eq!(run.rc, "0", "{bash} {cur}: {}", run.stderr);
+                    assert_eq!(run.reply.len(), 2 * n, "{bash} {cur}");
+                    let dirs = run.reply.iter().filter(|r| r.ends_with('/')).count();
+                    assert_eq!(dirs, n, "{bash} {cur}");
+                    took
+                })
+                .min()
+                .unwrap()
+        };
+        // `~/` takes the path that looks directories up in `compgen -d`'s output.
+        for prefix in ["", "~/"] {
+            let base = time(&format!("{prefix}empty/"), 0);
+            let small = time(&format!("{prefix}small/"), 1000).saturating_sub(base);
+            let large = time(&format!("{prefix}large/"), 4000).saturating_sub(base);
+            let ratio = large.as_secs_f64() / small.as_secs_f64().max(0.001);
+            assert!(
+                ratio < 8.0,
+                "{bash} {prefix:?}: 4x the entries took {ratio:.1}x as long ({small:?} -> {large:?})"
+            );
+        }
     }
 }
 
