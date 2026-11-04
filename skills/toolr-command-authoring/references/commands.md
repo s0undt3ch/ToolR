@@ -249,6 +249,9 @@ def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
 
 Exit the command execution.
 
+On Unix, a negative status, such as `ctx.run`'s `-N` for a child killed by signal `N`,
+exits `128 + N`, as in a shell. Any other status outside `0..=255` exits 1.
+
 ```
 
 #### `run`

@@ -356,6 +356,18 @@ mod test_suite {
         Ok(())
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_signal_killed_child_returncode_is_negative() -> Result<()> {
+        let config = CommandConfig {
+            args: vec!["sh".into(), "-c".into(), "kill -TERM $$".into()],
+            ..Default::default()
+        };
+        let returncode = run_command_internal(config).map_err(|e| anyhow!("{e}"))?;
+        assert_eq!(returncode, -libc::SIGTERM);
+        Ok(())
+    }
+
     #[test]
     fn test_command_respects_cwd() -> Result<()> {
         require_python!(python, "test_command_respects_cwd");

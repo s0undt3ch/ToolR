@@ -178,7 +178,8 @@ toolr project venv path --help
 
 Spawn a subshell with the tools venv activated. `$VIRTUAL_ENV` is set,
 `$PATH` is prepended with the venv's `bin/`, and `$TOOLR_VENV` carries
-the venv path for prompt customisation.
+the venv path for prompt customisation. toolr exits with the subshell's exit
+code, or 128 plus the signal number if a signal killed it.
 
 ```sh
 toolr project venv shell --help
@@ -194,7 +195,8 @@ Run a command inside the managed tools venv. By default it syncs the venv
 first (freshness-gated, exactly like [`venv sync`](#project-venv-sync) and
 `venv shell`), then runs the command with `$VIRTUAL_ENV`, `$TOOLR_VENV`, and
 `$PATH` set so entry points such as `pytest` resolve from the venv. The child's
-stdout, stderr, and exit code pass straight through.
+stdout, stderr, and exit code pass straight through. A child killed by a signal
+exits with 128 plus the signal number, as in a shell.
 
 This is the one-liner for running a command-package's tests:
 

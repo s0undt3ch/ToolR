@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import pathlib
 import shutil
+import sys
 from argparse import ArgumentParser
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -33,6 +34,19 @@ if TYPE_CHECKING:
 
 from toolr._exc import NoCurrentContextError
 from toolr.utils._console import ConsoleVerbosity
+
+
+def status_to_exit_code(status: int) -> int:
+    """Map a status to a process exit code the way a shell does.
+
+    On Unix a negative status `-N` (a `ctx.run` signal death) becomes `128 + N`; Windows has no
+    signal deaths, so there it is a real exit code. Anything still outside `0..=255` becomes 1,
+    so a failure is never truncated to 0.
+    """
+    status = int(status)
+    if status < 0 and sys.platform != "win32":
+        status = 128 - status
+    return status if 0 <= status <= 255 else 1
 
 
 class Context(Struct, frozen=True):
@@ -197,6 +211,9 @@ class Context(Struct, frozen=True):
     def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
         """
         Exit the command execution.
+
+        On Unix, a negative status, such as `ctx.run`'s `-N` for a child killed by signal `N`,
+        exits `128 + N`, as in a shell. Any other status outside `0..=255` exits 1.
         """
         if message is not None:
             if status == 0:
@@ -204,7 +221,8 @@ class Context(Struct, frozen=True):
             else:
                 style = "exit-failure"
             self._console_stderr.print(message, style=style)
-        self.parser.exit(status)
+        # `sys.exit` semantics for anything else, so `None` still exits 0 and a string still prints.
+        self.parser.exit(status_to_exit_code(status) if isinstance(status, int) else status)
 
     def run(
         self,
