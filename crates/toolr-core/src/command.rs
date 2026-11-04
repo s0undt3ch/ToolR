@@ -96,12 +96,14 @@ pub struct CommandConfig {
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub input: Option<Vec<u8>>,
-    /// Capture files: the child's output is copied here for `capture_output=True`.
-    pub stdout_fd: Option<File>,
-    pub stderr_fd: Option<File>,
-    /// Stream targets: toolr's own stdout and stderr.
-    pub sys_stdout_fd: Option<File>,
-    pub sys_stderr_fd: Option<File>,
+    /// Capture file for the child's stdout, set for `capture_output=True`.
+    pub stdout_capture: Option<File>,
+    /// Capture file for the child's stderr, set for `capture_output=True`.
+    pub stderr_capture: Option<File>,
+    /// Where the child's stdout streams to: toolr's own stdout.
+    pub stdout_stream: Option<File>,
+    /// Where the child's stderr streams to: toolr's own stderr.
+    pub stderr_stream: Option<File>,
     pub timeout_secs: Option<f64>,
     pub no_output_timeout_secs: Option<f64>,
     pub cwd: Option<PathBuf>, // Current working directory
@@ -117,10 +119,10 @@ impl Default for CommandConfig {
             args: Vec::new(),
             env: HashMap::new(),
             input: None,
-            stdout_fd: None,
-            stderr_fd: None,
-            sys_stdout_fd: None,
-            sys_stderr_fd: None,
+            stdout_capture: None,
+            stderr_capture: None,
+            stdout_stream: None,
+            stderr_stream: None,
             timeout_secs: None,
             no_output_timeout_secs: None,
             cwd: env::current_dir().ok(), // Default to current working directory
@@ -171,12 +173,12 @@ fn spawn_stdin_writer<W: Write + Send + 'static>(
     })
 }
 
-/// Duplicate a file descriptor Python hands over, so the caller owns and closes its own copy.
+/// Duplicate a C-runtime file descriptor, so the caller owns and closes its own copy.
 ///
 /// The copy shares the file description, offset included, so output written through it is
-/// visible to Python's file object. On Windows a closed fd aborts the process in the CRT's
+/// visible to whoever holds the original. On Windows a closed fd aborts the process in the CRT's
 /// invalid-parameter handler, so pass only fds just taken from an open file.
-pub fn file_from_python_fd(fd: i32) -> io::Result<File> {
+pub fn file_from_fd(fd: i32) -> io::Result<File> {
     // `fcntl` rather than `BorrowedFd`, so a closed fd is an error, not a broken contract.
     #[cfg(unix)]
     let owned = match unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) } {
@@ -185,8 +187,7 @@ pub fn file_from_python_fd(fd: i32) -> io::Result<File> {
     };
     #[cfg(windows)]
     let owned = {
-        // A negative fd trips the CRT's invalid-parameter handler, which aborts the process. So
-        // does a closed one; Python only passes fds it just got from `fileno()`.
+        // A negative fd would abort in the CRT's invalid-parameter handler; reject it up front.
         let handle = if fd < 0 {
             -1
         } else {
@@ -382,8 +383,10 @@ pub fn run_command_internal(
         command.stderr(Stdio::piped());
     }
 
-    let (stdout_capture, stdout_stream) = (config.stdout_fd.take(), config.sys_stdout_fd.take());
-    let (stderr_capture, stderr_stream) = (config.stderr_fd.take(), config.sys_stderr_fd.take());
+    let (stdout_capture, stdout_stream) =
+        (config.stdout_capture.take(), config.stdout_stream.take());
+    let (stderr_capture, stderr_stream) =
+        (config.stderr_capture.take(), config.stderr_stream.take());
 
     // Start the command
     let mut child = command.spawn().map_err(|e| {

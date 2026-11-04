@@ -50,7 +50,7 @@ pub mod venv;
 // Re-export the core functionality for direct Rust usage
 pub use command::{
     CommandConfig, CommandExecutionError, CommandNoOutputTimeoutError, CommandTimeoutExceededError,
-    file_from_python_fd, run_command_internal,
+    file_from_fd, run_command_internal,
 };
 
 // Re-export docstring parsing functionality

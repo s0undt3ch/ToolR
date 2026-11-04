@@ -7,7 +7,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use toolr_core::{
     CommandConfig, CommandExecutionError, CommandNoOutputTimeoutError, CommandTimeoutExceededError,
-    SimpleDocstringParser, file_from_python_fd, run_command_internal,
+    SimpleDocstringParser, file_from_fd, run_command_internal,
 };
 
 // Define Python-specific exceptions
@@ -18,7 +18,7 @@ pyo3::create_exception!(_command, CommandTimeoutNoOutputError, CommandError);
 /// Own a copy of `fd`, naming the argument if it can't be copied (closed, or no fds left).
 fn owned_file(name: &str, fd: Option<i32>) -> PyResult<Option<File>> {
     fd.map(|fd| {
-        file_from_python_fd(fd)
+        file_from_fd(fd)
             .map_err(|e| CommandError::new_err(format!("cannot duplicate {name} {fd}: {e}")))
     })
     .transpose()
@@ -78,10 +78,10 @@ pub(crate) fn run_command_impl(
         args,
         env,
         input: input_vec,
-        stdout_fd: owned_file("stdout_fd", stdout_fd)?,
-        stderr_fd: owned_file("stderr_fd", stderr_fd)?,
-        sys_stdout_fd: owned_file("sys_stdout_fd", sys_stdout_fd)?,
-        sys_stderr_fd: owned_file("sys_stderr_fd", sys_stderr_fd)?,
+        stdout_capture: owned_file("stdout_fd", stdout_fd)?,
+        stderr_capture: owned_file("stderr_fd", stderr_fd)?,
+        stdout_stream: owned_file("sys_stdout_fd", sys_stdout_fd)?,
+        stderr_stream: owned_file("sys_stderr_fd", sys_stderr_fd)?,
         timeout_secs,
         no_output_timeout_secs,
         cwd: cwd_path,
