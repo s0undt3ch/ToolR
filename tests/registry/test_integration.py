@@ -16,6 +16,7 @@ import pytest
 
 from toolr import Context
 from toolr import _decorators
+from toolr import command
 from toolr import command_group
 from toolr._decorators import CommandGroup
 from toolr._exc import ToolrError
@@ -1190,3 +1191,185 @@ def test_duplicate_commands_do_not_leak_between_testers(tools_repo: ToolsRepo) -
     with CommandsTester(search_path=other) as second:
         second.discover()
         assert set(second.collected_command_groups()) == {"tools.ci"}
+
+
+UNSUPPORTED_MODULE = '''\
+from toolr import command, command_group
+
+GROUP = "grp"
+NAME = "renamed"
+g = command_group("grp", "Grp", "Grp")
+
+
+def register():
+    @g.command
+    def nested(ctx):
+        """Nested."""
+
+
+register()
+
+
+if True:
+
+    @command(group="grp")
+    def guarded(ctx):
+        """Guarded."""
+
+
+class Holder:
+    @g.command
+    def method(self, ctx):
+        """Method."""
+
+
+@command(group=GROUP)
+def nonlit(ctx):
+    """Non-literal group."""
+
+
+@command(NAME, group="grp")
+def renamed(ctx):
+    """Non-literal name."""
+
+
+@g.command(name=NAME)
+def renamed_kw(ctx):
+    """Non-literal name keyword."""
+
+
+def other():
+    @cli.command  # noqa: F821
+    def ignored(ctx):
+        pass
+'''
+NESTED_LINE = "`@command` must decorate a top-level `def`, which toolr reads without running it."
+
+
+def _unsupported_error(repo: Path) -> str:
+    """Discover `repo` and return the unsupported-declarations message."""
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        with pytest.raises(ValueError, match="unsupported command declarations") as excinfo:
+            tester.collected_command_groups()
+    return str(excinfo.value)
+
+
+def test_collected_command_groups_rejects_unsupported_declarations(tools_repo: ToolsRepo) -> None:
+    """Nested defs and non-literal `group=`/names fail with the manifest build's text."""
+    repo = tools_repo({"tools/m.py": UNSUPPORTED_MODULE})
+    assert _unsupported_error(repo) == (
+        "unsupported command declarations (6):\n"
+        f"  - tools.m::nested: {NESTED_LINE}\n"
+        f"  - tools.m::guarded: {NESTED_LINE}\n"
+        f"  - tools.m::method: {NESTED_LINE}\n"
+        "  - tools.m::nonlit: `group=` must be a string literal.\n"
+        "  - tools.m::renamed: the command name must be a string literal.\n"
+        "  - tools.m::renamed_kw: the command name must be a string literal."
+    )
+
+
+def test_unsupported_declarations_follow_file_order_and_come_first(tools_repo: ToolsRepo) -> None:
+    """Pending and duplicate commands are checked too, in file order, before unknown groups."""
+    repo = tools_repo(
+        {
+            "tools/a.py": (
+                "import toolr\n"
+                "from tools import b  # noqa: F401\n"
+                "def register():\n"
+                '    @toolr.command(group="nope")\n'
+                "    async def other(ctx):\n"
+                '        """Other."""\n'
+                "register()\n"
+            ),
+            "tools/b.py": (
+                "from toolr import command_group\n"
+                'g = command_group("grp", "Grp", "Grp")\n'
+                "NAME = 'dup'\n"
+                "@g.command\n"
+                "def dup(ctx):\n"
+                '    """Dup."""\n'
+                "@g.command(NAME)\n"
+                "def dup2(ctx):\n"
+                '    """Dup."""\n'
+            ),
+        }
+    )
+    assert _unsupported_error(repo) == (
+        "unsupported command declarations (2):\n"
+        f"  - tools.a::other: {NESTED_LINE}\n"
+        "  - tools.b::dup2: the command name must be a string literal."
+    )
+
+
+def test_commands_outside_tools_are_not_shape_checked(tools_repo: ToolsRepo) -> None:
+    """A command a test body defines, nested and with a non-literal group, still registers."""
+    repo = tools_repo({"tools/ci.py": CI_MODULE})
+    group_name = "ci"
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+
+        @command(group=group_name)
+        def extra(ctx: Context) -> None:
+            """Extra."""
+
+        group = tester.collected_command_groups()["tools.ci"]
+    assert isinstance(group, CommandGroup)
+    assert set(group.get_commands()) == {"hello", "extra"}
+
+
+def test_imperative_registration_is_not_shape_checked(tools_repo: ToolsRepo) -> None:
+    """`g.command("x")(func)` has no command decorator to read; the tester registers it unreported.
+
+    Registering one function twice under its name isn't a duplicate.
+    """
+    repo = tools_repo(
+        {
+            "tools/m.py": (
+                "import types\n"
+                "from toolr import command_group\n"
+                'g = command_group("grp", "Grp", "Grp")\n'
+                "helper = types.SimpleNamespace(command=lambda f: f)\n"
+                "def passthrough(f):\n"
+                "    return f\n"
+                "@passthrough\n"
+                "@helper.command\n"
+                "def build(ctx):\n"
+                '    """Build."""\n'
+                'g.command("make")(build)\n'
+                'g.command("make")(build)\n'
+            ),
+        }
+    )
+    with CommandsTester(search_path=repo) as tester:
+        tester.discover()
+        group = tester.collected_command_groups()["tools.grp"]
+    assert isinstance(group, CommandGroup)
+    assert set(group.get_commands()) == {"make"}
+
+
+def test_wrapped_command_is_shape_checked(tools_repo: ToolsRepo) -> None:
+    """A `functools.wraps` decorator under `@command` doesn't hide its `group=` from the check."""
+    repo = tools_repo(
+        {
+            "tools/m.py": (
+                "import functools\n"
+                "from toolr import command, command_group\n"
+                'GROUP = "grp"\n'
+                "command_group(GROUP, 'Grp', 'Grp')\n"
+                "def logged(f):\n"
+                "    @functools.wraps(f)\n"
+                "    def wrapper(*args, **kwargs):\n"
+                "        return f(*args, **kwargs)\n"
+                "    return wrapper\n"
+                "@command(group=GROUP)\n"
+                "@logged\n"
+                "def deploy(ctx):\n"
+                '    """Deploy."""\n'
+            ),
+        }
+    )
+    assert _unsupported_error(repo) == (
+        "unsupported command declarations (1):\n"
+        "  - tools.m::deploy: `group=` must be a string literal."
+    )

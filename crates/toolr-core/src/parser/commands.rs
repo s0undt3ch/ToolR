@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use ruff_python_ast::statement_visitor::{StatementVisitor, walk_body, walk_stmt};
 use ruff_python_ast::{Arguments, Decorator, Expr, ModModule, Stmt, StmtFunctionDef};
 
 use super::groups::GroupBinding;
@@ -39,10 +40,7 @@ pub fn extract_commands(
     // global map so a same-named variable defined in this file wins
     // over an inherited one; otherwise the global cross-file map
     // covers `from ._common import group; @group.command` style.
-    let mut by_var: HashMap<String, String> = global_vars.clone();
-    for b in bindings {
-        by_var.insert(b.var.clone(), b.group.full_path());
-    }
+    let by_var = binding_vars(bindings, global_vars);
     let empty = ImportTable::default();
     let names = ToolrNames(all_imports.get(module_path).unwrap_or(&empty));
     let mut out = Vec::new();
@@ -91,6 +89,139 @@ pub fn extract_commands(
         ));
     }
     out
+}
+
+/// `binding_var → group_full_path` for one module: its own bindings shadow
+/// the ones earlier files made visible.
+pub fn binding_vars(bindings: &[GroupBinding], global_vars: &GlobalVars) -> GlobalVars {
+    let mut by_var = global_vars.clone();
+    for b in bindings {
+        by_var.insert(b.var.clone(), b.group.full_path());
+    }
+    by_var
+}
+
+/// Why toolr can't read a command declaration without running it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnsupportedCommandKind {
+    /// The decorated `def` isn't directly in the module body.
+    Nested,
+    /// `group=` isn't a string literal.
+    NonLiteralGroup,
+    /// The positional name or `name=` isn't a string literal.
+    NonLiteralName,
+}
+
+impl std::fmt::Display for UnsupportedCommandKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Nested => {
+                "`@command` must decorate a top-level `def`, which toolr reads without running it."
+            }
+            Self::NonLiteralGroup => "`group=` must be a string literal.",
+            Self::NonLiteralName => "the command name must be a string literal.",
+        })
+    }
+}
+
+/// A command declaration the static parser can't read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedCommand {
+    /// Dotted python module the command lives in (`tools.foo.bar`).
+    pub module: String,
+    /// Python function name of the offending command.
+    pub function: String,
+    pub kind: UnsupportedCommandKind,
+}
+
+/// Every unsupported command declaration in `module`, in source order.
+///
+/// `toolr.testing._shapes._unsupported_commands` mirrors this in Python;
+/// change both together.
+pub fn detect_unsupported_commands(
+    module: &ModModule,
+    module_path: &str,
+    imports: &ImportTable,
+    by_var: &GlobalVars,
+) -> Vec<UnsupportedCommand> {
+    let mut finder = UnsupportedFinder {
+        module_path,
+        names: ToolrNames(imports),
+        by_var,
+        depth: 0,
+        out: Vec::new(),
+    };
+    for stmt in &module.body {
+        finder.visit_stmt(stmt);
+    }
+    finder.out
+}
+
+struct UnsupportedFinder<'a> {
+    module_path: &'a str,
+    names: ToolrNames<'a>,
+    by_var: &'a GlobalVars,
+    /// How many bodies deep the walk is; module-level statements are at 0.
+    depth: usize,
+    out: Vec<UnsupportedCommand>,
+}
+
+impl UnsupportedFinder<'_> {
+    fn check(&mut self, func: &StmtFunctionDef) {
+        let Some((decorator, target)) = matched_decorator(&func.decorator_list, self.names) else {
+            return;
+        };
+        let string_path = match target {
+            CommandDecorator::Binding { var, .. } if !self.by_var.contains_key(&var) => return,
+            CommandDecorator::Binding { .. } => false,
+            CommandDecorator::StringPath { .. } => true,
+        };
+        let mut push = |kind| {
+            self.out.push(UnsupportedCommand {
+                module: self.module_path.to_string(),
+                function: func.name.as_str().to_string(),
+                kind,
+            });
+        };
+        if self.depth > 0 {
+            push(UnsupportedCommandKind::Nested);
+            return;
+        }
+        let Expr::Call(call) = &decorator.expression else {
+            return;
+        };
+        let non_literal = |e: &Expr| !matches!(e, Expr::StringLiteral(_));
+        let keyword = |name: &str| {
+            call.arguments
+                .keywords
+                .iter()
+                .find(|k| k.arg.as_ref().map(ruff_python_ast::Identifier::as_str) == Some(name))
+                .map(|k| &k.value)
+        };
+        if string_path && keyword("group").is_some_and(non_literal) {
+            push(UnsupportedCommandKind::NonLiteralGroup);
+        }
+        if call.arguments.args.first().is_some_and(non_literal)
+            || keyword("name").is_some_and(non_literal)
+        {
+            push(UnsupportedCommandKind::NonLiteralName);
+        }
+    }
+}
+
+impl<'a> StatementVisitor<'a> for UnsupportedFinder<'_> {
+    fn visit_body(&mut self, body: &'a [Stmt]) {
+        self.depth += 1;
+        walk_body(self, body);
+        self.depth -= 1;
+    }
+
+    fn visit_stmt(&mut self, stmt: &'a Stmt) {
+        if let Stmt::FunctionDef(func) = stmt {
+            self.check(func);
+        }
+        walk_stmt(self, stmt);
+    }
 }
 
 /// Which flavour of `@command` decorator we saw on a function, plus the
@@ -238,15 +369,19 @@ impl ToolrNames<'_> {
 }
 
 fn command_decorator(decorators: &[Decorator], names: ToolrNames) -> Option<CommandDecorator> {
-    for d in decorators {
-        if let Some(meta) = parse_string_path_command(&d.expression, names) {
-            return Some(meta);
-        }
-        if let Some(meta) = parse_binding_command(&d.expression) {
-            return Some(meta);
-        }
-    }
-    None
+    matched_decorator(decorators, names).map(|(_, target)| target)
+}
+
+/// The first decorator toolr reads as a command, and what it read.
+fn matched_decorator<'d>(
+    decorators: &'d [Decorator],
+    names: ToolrNames,
+) -> Option<(&'d Decorator, CommandDecorator)> {
+    decorators.iter().find_map(|d| {
+        parse_string_path_command(&d.expression, names)
+            .or_else(|| parse_binding_command(&d.expression))
+            .map(|target| (d, target))
+    })
 }
 
 /// Recognise the group-binding `@<var>.command` shape, as well as the call form

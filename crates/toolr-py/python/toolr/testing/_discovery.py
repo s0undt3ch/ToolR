@@ -31,8 +31,11 @@ from unittest.mock import patch
 from attrs import define
 from attrs import field
 
+from toolr._decorators import CommandGroup
 from toolr._exc import ToolrError
 from toolr.testing._duplicates import _format_duplicate_commands
+from toolr.testing._shapes import _format_unsupported_commands
+from toolr.testing._shapes import _unsupported_commands
 from toolr.testing._unknown_groups import _escape_control_chars
 from toolr.testing._unknown_groups import _format_unknown_groups
 
@@ -319,18 +322,35 @@ class CommandsTester:
         Get the collected command groups.
 
         Raises:
-            ValueError: A standalone ``@command(group=...)`` names a group
-                that no ``command_group(...)`` declares, or passes
-                ``group=""``; or two functions define the same command in
-                a group. The message is the one the manifest build gives,
-                which fails the same way.
+            ValueError: A command under ``tools/`` decorates a nested
+                ``def`` or passes a non-literal ``group=`` or name; a
+                standalone ``@command(group=...)`` names a group that no
+                ``command_group(...)`` declares, or passes ``group=""``; or
+                two functions define the same command in a group. The
+                message is the one the manifest build gives, which fails
+                the same way.
         """
+        tools_dir = self.search_path / "tools"
+        funcs = [
+            func
+            for group in self.command_group_collector.values()
+            if isinstance(group, CommandGroup)
+            for func in group.get_commands().values()
+        ]
+        funcs += [entry.func for entry in self.pending_command_collector]
+        funcs += [
+            f for entry in self.duplicate_command_collector for f in (entry.first, entry.second)
+        ]
+        # Checked first, as the manifest build does: these hide what the others report.
+        unsupported = _unsupported_commands(funcs, tools_dir)
+        if unsupported:
+            raise ValueError(_format_unsupported_commands(unsupported))
         if self.pending_command_collector:
             raise ValueError(
                 _format_unknown_groups(
                     self.pending_command_collector,
                     self.command_group_collector,
-                    self.search_path / "tools",
+                    tools_dir,
                 )
             )
         if self.duplicate_command_collector:

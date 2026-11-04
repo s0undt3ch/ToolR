@@ -11,7 +11,8 @@ use crate::parser::names::{InvalidName, validate_names};
 use crate::parser::types::{SourcesImports, SupportedType, TypeImports, TypeResolutionError};
 use crate::parser::{
     commands::{
-        CommandNameConflict, MissingDocstring, detect_name_conflicts, extract_commands,
+        CommandNameConflict, MissingDocstring, UnsupportedCommand, binding_vars,
+        detect_name_conflicts, detect_unsupported_commands, extract_commands,
         format_missing_docstrings, missing_docstrings,
     },
     groups::extract_groups,
@@ -160,6 +161,7 @@ fn build_commands_inner(
         std::collections::HashMap::new();
     let mut type_errors: Vec<TypeResolutionError> = Vec::new();
     let mut name_conflicts: Vec<CommandNameConflict> = Vec::new();
+    let mut unsupported: Vec<UnsupportedCommand> = Vec::new();
     for path in py_files {
         let module = parse_python_file(path).map_err(BuildError::Build)?;
         let module_path = module_path_for_prefix(source_root, path, module_prefix);
@@ -170,6 +172,12 @@ fn build_commands_inner(
             &all_imports[&module_path],
         ));
         let bindings = extract_groups(&module, &module_doc, &global_vars);
+        unsupported.extend(detect_unsupported_commands(
+            &module,
+            &module_path,
+            &all_imports[&module_path],
+            &binding_vars(&bindings, &global_vars),
+        ));
         let type_imports = TypeImports::from_module(&module);
         let sources_imports = SourcesImports::from_module(&module);
         let consts = super::symbols::ConstTable::from_module(&module);
@@ -204,6 +212,10 @@ fn build_commands_inner(
 
     if !name_conflicts.is_empty() {
         return Err(BuildError::ConflictingCommandName(name_conflicts));
+    }
+
+    if !unsupported.is_empty() {
+        return Err(BuildError::UnsupportedCommands(unsupported));
     }
 
     if !type_errors.is_empty() {
@@ -303,6 +315,24 @@ fn duplicate_commands(commands: &[Command]) -> Vec<DuplicateCommand> {
     all
 }
 
+/// `toolr.testing._shapes._format_unsupported_commands` mirrors this in
+/// Python; change both together.
+fn format_unsupported_commands(unsupported: &[UnsupportedCommand]) -> String {
+    use crate::text::escape_control_chars;
+    unsupported
+        .iter()
+        .map(|u| {
+            format!(
+                "  - {}::{}: {}",
+                escape_control_chars(&u.module),
+                escape_control_chars(&u.function),
+                u.kind
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// `toolr.testing._duplicates._format_duplicate_commands` mirrors this in
 /// Python; change both together.
 fn format_duplicate_commands(duplicates: &[DuplicateCommand]) -> String {
@@ -374,6 +404,10 @@ pub enum BuildError {
     ConflictingCommandName(Vec<CommandNameConflict>),
     #[error("invalid names ({count}):\n{details}", count = .0.len(), details = format_invalid_names(.0))]
     InvalidNames(Vec<InvalidName>),
+    /// `toolr.testing._shapes._format_unsupported_commands` mirrors this
+    /// message in Python; change both together.
+    #[error("unsupported command declarations ({count}):\n{details}", count = .0.len(), details = format_unsupported_commands(.0))]
+    UnsupportedCommands(Vec<UnsupportedCommand>),
     /// `toolr.testing._duplicates._format_duplicate_commands` mirrors this
     /// message in Python; change both together.
     #[error("duplicate commands ({count}):\n{details}", count = .0.len(), details = format_duplicate_commands(.0))]
@@ -728,6 +762,7 @@ fn module_docstring(module: &ruff_python_ast::ModModule) -> String {
 mod tests {
     use super::*;
     use crate::manifest::{ArgMetadata, Argument, Command, Origin};
+    use crate::parser::commands::UnsupportedCommandKind;
     use crate::parser::names::{CONTROL, NameItem, WHITESPACE};
     use crate::parser::types::{BoolFlagError, UnsupportedType};
     use tempfile::TempDir;
@@ -1529,6 +1564,101 @@ def aliased(ctx):
     fn foreign_command_decorators_stay_ignored() {
         let src = "import click as other\nfrom click import command as cmd\nfrom toolr import command_group\n\ng = command_group(\"grp\", \"Grp\", \"Grp\")\n\n\n@other.command(group=\"grp\")\ndef a(ctx):\n    pass\n\n\n@cmd(group=\"grp\")\ndef b(ctx):\n    pass\n\n\n@g.command\ndef kept(ctx):\n    \"\"\"Kept.\"\"\"\n";
         assert_eq!(built_commands(&[("tools/m.py", src)]), grp(&["kept"]));
+    }
+
+    /// Every shape toolr can't read without running it: nested `def`s
+    /// (another `def`, an `if`, a class) and non-literal `group=`/names.
+    const UNSUPPORTED_PY: &str = r#"from toolr import command, command_group
+
+GROUP = "grp"
+NAME = "renamed"
+g = command_group("grp", "Grp", "Grp")
+
+
+def register():
+    @g.command
+    def nested(ctx):
+        """Nested."""
+
+
+register()
+
+
+if True:
+
+    @command(group="grp")
+    def guarded(ctx):
+        """Guarded."""
+
+
+class Holder:
+    @g.command
+    def method(self, ctx):
+        """Method."""
+
+
+@command(group=GROUP)
+def nonlit(ctx):
+    """Non-literal group."""
+
+
+@command(NAME, group="grp")
+def renamed(ctx):
+    """Non-literal name."""
+
+
+@g.command(name=NAME)
+def renamed_kw(ctx):
+    """Non-literal name keyword."""
+
+
+def other():
+    @cli.command  # noqa: F821
+    def ignored(ctx):
+        pass
+"#;
+
+    #[test]
+    fn unsupported_command_declarations_fail_the_build() {
+        assert_eq!(
+            build_error_for(&[("tools/m.py", UNSUPPORTED_PY)]),
+            "unsupported command declarations (6):\n\
+             \x20 - tools.m::nested: `@command` must decorate a top-level `def`, which toolr reads without running it.\n\
+             \x20 - tools.m::guarded: `@command` must decorate a top-level `def`, which toolr reads without running it.\n\
+             \x20 - tools.m::method: `@command` must decorate a top-level `def`, which toolr reads without running it.\n\
+             \x20 - tools.m::nonlit: `group=` must be a string literal.\n\
+             \x20 - tools.m::renamed: the command name must be a string literal.\n\
+             \x20 - tools.m::renamed_kw: the command name must be a string literal."
+        );
+    }
+
+    /// A group binding from an earlier file counts in a nested `def`, and the
+    /// check runs before the unknown-group one.
+    #[test]
+    fn nested_command_on_an_imported_binding_is_reported_first() {
+        let common =
+            "from toolr import command_group\n\ng = command_group(\"grp\", \"Grp\", \"Grp\")\n";
+        let user = "import toolr\nfrom tools._common import g\n\n\ndef register():\n    @g.command\n    def inner(ctx):\n        \"\"\"Inner.\"\"\"\n\n    @toolr.command(group=\"nope\")\n    async def other(ctx):\n        \"\"\"Other.\"\"\"\n\n\n@toolr.command(group=\"typo\")\ndef typo(ctx):\n    \"\"\"Typo.\"\"\"\n";
+        assert_eq!(
+            build_error_for(&[("tools/_common.py", common), ("tools/user.py", user)]),
+            "unsupported command declarations (2):\n\
+             \x20 - tools.user::inner: `@command` must decorate a top-level `def`, which toolr reads without running it.\n\
+             \x20 - tools.user::other: `@command` must decorate a top-level `def`, which toolr reads without running it."
+        );
+    }
+
+    #[test]
+    fn unsupported_message_escapes_control_chars() {
+        let msg = BuildError::UnsupportedCommands(vec![UnsupportedCommand {
+            module: "tools.m\x1b".into(),
+            function: "f\x07".into(),
+            kind: UnsupportedCommandKind::NonLiteralGroup,
+        }])
+        .to_string();
+        assert_eq!(
+            msg,
+            "unsupported command declarations (1):\n  - tools.m\\u{1b}::f\\u{7}: `group=` must be a string literal."
+        );
     }
 
     /// Several bad references list one per line, in source order.
