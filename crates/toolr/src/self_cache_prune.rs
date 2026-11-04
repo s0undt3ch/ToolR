@@ -42,11 +42,8 @@ fn prune_all(
     if entries.is_empty() {
         // Leftover locks are empty files holding no data, so they need no confirmation.
         if sweep_locks(cache_root, &[], dry_run, out)? == 0 {
-            writeln!(
-                out,
-                "toolr: no cache entries to remove under {}",
-                cache_root.display()
-            )?;
+            let root = cache_root.display();
+            writeln!(out, "toolr: no cache entries to remove under {root}")?;
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -151,11 +148,8 @@ fn sweep_locks(
         Ok(sweep) if sweep.removed > 0 => {
             let action = if dry_run { "would remove" } else { "removed" };
             let plural = if sweep.removed == 1 { "" } else { "s" };
-            writeln!(
-                out,
-                "toolr: {action} {} rebuild lock{plural}",
-                sweep.removed
-            )?;
+            let n = sweep.removed;
+            writeln!(out, "toolr: {action} {n} rebuild lock{plural}")?;
             Ok(sweep.removed)
         }
         Ok(_) => Ok(0),
@@ -188,7 +182,7 @@ fn confirm_destroy_all(entries: &[CachedVenv]) -> Result<bool> {
         );
     }
     eprint!(
-        "toolr: about to remove {} cache entries and every rebuild lock. continue? [y/N] ",
+        "toolr: about to remove {} cache entries. continue? [y/N] ",
         entries.len(),
     );
     io::stderr().flush().ok();
